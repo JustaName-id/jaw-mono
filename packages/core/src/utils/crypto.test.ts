@@ -1,5 +1,5 @@
 import { decrypt, deriveSharedSecret, encrypt, generateKeyPair } from './crypto.js';
-import {describe, it} from "node:test";
+import {describe, it, expect} from "bun:test";
 
 describe('Crypto', () => {
     describe('generateKeyPair', () => {
