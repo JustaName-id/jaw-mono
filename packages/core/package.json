@@ -1,5 +1,5 @@
 {
-  "name": "@jaw/core",
+  "name": "@jaw.id/core",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -18,7 +18,33 @@
     "dist",
     "!**/*.tsbuildinfo"
   ],
+  "scripts": {
+    "generate-sdk-info": "bun run scripts/generate-sdk-info.ts"
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "dependsOn": ["generate-sdk-info"]
+      },
+      "test": {
+        "cache": true,
+        "inputs": [
+          "default",
+          "^production",
+          "{workspaceRoot}/bunfig.toml"
+        ],
+        "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "packages/core",
+          "command": "bun test"
+        }
+      }
+    }
+  },
   "dependencies": {
-    "tslib": "^2.3.0"
+    "tslib": "^2.3.0",
+    "viem": "^2.38.2",
+    "ox": "0.9.6"
   }
 }
