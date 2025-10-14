@@ -54,7 +54,7 @@ export class Communicator {
             .then(() => {
                 this.disconnect();
             })
-            .catch(() => {});
+            .catch(() => { /* empty */ });
 
 
         return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded')

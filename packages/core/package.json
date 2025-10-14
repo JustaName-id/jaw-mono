@@ -45,6 +45,7 @@
   "dependencies": {
     "tslib": "^2.3.0",
     "viem": "^2.38.2",
-    "ox": "0.9.6"
+    "ox": "0.9.6",
+    "eventemitter3": "5.0.1"
   }
 }
