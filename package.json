@@ -11,6 +11,8 @@
     "viem": "^2.38.2"
   },
   "devDependencies": {
+    "@babel/core": "^7.14.5",
+    "@babel/preset-react": "^7.14.5",
     "@eslint/compat": "^1.1.1",
     "@eslint/eslintrc": "^2.1.1",
     "@eslint/js": "^9.8.0",
@@ -19,6 +21,9 @@
     "@nx/eslint-plugin": "21.6.4",
     "@nx/js": "21.6.4",
     "@nx/next": "21.6.4",
+    "@nx/react": "21.6.4",
+    "@nx/vite": "21.6.4",
+    "@nx/web": "21.6.4",
     "@swc-node/register": "~1.9.1",
     "@swc/cli": "~0.6.0",
     "@swc/core": "~1.5.7",
@@ -27,6 +32,9 @@
     "@types/node": "20.19.9",
     "@types/react": "19.0.0",
     "@types/react-dom": "19.0.0",
+    "@vitejs/plugin-react": "^4.2.0",
+    "@vitest/ui": "^3.0.0",
+    "ajv": "^8.0.0",
     "autoprefixer": "10.4.13",
     "eslint": "^9.8.0",
     "eslint-config-next": "^15.2.4",
@@ -35,6 +43,8 @@
     "eslint-plugin-jsx-a11y": "6.10.1",
     "eslint-plugin-react": "7.35.0",
     "eslint-plugin-react-hooks": "5.0.0",
+    "jiti": "2.4.2",
+    "jsdom": "~22.1.0",
     "jsonc-eslint-parser": "^2.1.0",
     "nx": "21.6.4",
     "postcss": "8.4.38",
@@ -42,7 +52,10 @@
     "tslib": "^2.3.0",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.40.0",
-    "verdaccio": "^6.0.5"
+    "verdaccio": "^6.0.5",
+    "vite": "^7.0.0",
+    "vite-plugin-dts": "~4.5.0",
+    "vitest": "^3.0.0"
   },
   "workspaces": [
     "packages/*",
