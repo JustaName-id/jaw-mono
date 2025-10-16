@@ -81,6 +81,7 @@ export class KeyManager {
     private ownPublicKey: CryptoKey | null = null;
     private peerPublicKey: CryptoKey | null = null;
     private sharedSecret: CryptoKey | null = null;
+    private loadingPromise: Promise<void> | null = null;
 
     constructor(storage?: KeyStorage) {
         this.storage = storage ?? new LocalKeyStorage();
@@ -123,6 +124,7 @@ export class KeyManager {
         this.ownPublicKey = null;
         this.peerPublicKey = null;
         this.sharedSecret = null;
+        this.loadingPromise = null;
         this.storage.clear();
     }
 
@@ -139,8 +141,28 @@ export class KeyManager {
 
     /**
      * Load keys from storage if not in memory
+     * Protected against concurrent calls to prevent race conditions
      */
     private async loadKeysIfNeeded(): Promise<void> {
+        // If already loading, wait for that operation to complete
+        if (this.loadingPromise) {
+            return this.loadingPromise;
+        }
+
+        // Start loading operation
+        this.loadingPromise = this._loadKeysIfNeeded();
+
+        try {
+            await this.loadingPromise;
+        } finally {
+            this.loadingPromise = null;
+        }
+    }
+
+    /**
+     * Internal implementation of key loading
+     */
+    private async _loadKeysIfNeeded(): Promise<void> {
         // Load own keys
         if (this.ownPrivateKey === null) {
             this.ownPrivateKey = await this.loadKey(OWN_PRIVATE_KEY);
@@ -174,7 +196,12 @@ export class KeyManager {
         const key = this.storage.get(item.storageKey);
         if (!key) return null;
 
-        return importKeyFromHexString(item.keyType, key);
+        try {
+            return await importKeyFromHexString(item.keyType, key);
+        } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            throw new Error(`Failed to load ${item.keyType} key '${item.storageKey}' from storage: ${message}`);
+        }
     }
 
     /**

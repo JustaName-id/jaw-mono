@@ -22,8 +22,11 @@ export * from './provider/index.js';
 /** Utils exports **/
 export * from './utils/index.js';
 
-/** KeyManager exports **/
-export { KeyManager, LocalKeyStorage, type KeyStorage } from './keyManager/keyManager.js';
+/** KeyvManager exports **/
+export * from './key-manager/index.js';
+
+/** Storage Manager exports **/
+export * from './storage-manager/index.js'
 
 /** Store exports **/
 export * from './store/index.js';

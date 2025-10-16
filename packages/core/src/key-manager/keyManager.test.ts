@@ -149,6 +149,28 @@ describe('KeyManager', () => {
     // Keys should be different after regeneration
     expect(publicKey1).not.toBe(publicKey2);
   });
+
+  it('should handle concurrent key loading without race conditions', async () => {
+    const storage = new MockStorage();
+    const keyManager = new KeyManager(storage);
+
+    // Call getOwnPublicKey multiple times concurrently
+    const [key1, key2, key3] = await Promise.all([
+      keyManager.getOwnPublicKey(),
+      keyManager.getOwnPublicKey(),
+      keyManager.getOwnPublicKey(),
+    ]);
+
+    // All should be the same instance (no duplicate key generation)
+    expect(key1).toBe(key2);
+    expect(key2).toBe(key3);
+
+    // Verify only one key pair was stored
+    const storedPrivateKey = storage.get('ownPrivateKey');
+    const storedPublicKey = storage.get('ownPublicKey');
+    expect(storedPrivateKey).toBeDefined();
+    expect(storedPublicKey).toBeDefined();
+  });
 });
 
 describe('LocalKeyStorage', () => {
