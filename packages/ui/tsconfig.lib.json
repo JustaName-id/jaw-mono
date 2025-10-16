@@ -31,5 +31,5 @@
     "src/**/*.jsx",
     "src/**/*.ts",
     "src/**/*.tsx"
-  ]
+, "../../apps/keys-jaw-id/src/utils/constants.ts"  ]
 }
