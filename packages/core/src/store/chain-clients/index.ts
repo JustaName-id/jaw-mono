@@ -1,17 +1,10 @@
-export { ChainClients, chainClientStore, type ChainConfig, type ChainClientState } from './store.js';
+export { ChainClients, type ChainClientState } from './store.js';
 
 export {
-  createChainConfigs,
-  getChainConfig,
-  getRpcUrl,
-  hasChainConfig,
-  addChainConfig,
-  removeChainConfig,
-  getAllChainConfigs,
-  clearChainConfigs,
+  createClients,
+  getClient,
+  getBundlerClient,
+  getPaymasterClient,
   type SDKChain,
 } from './utils.js';
-
-// Re-export from messages to avoid duplication
-export type { RPCResponseNativeCurrency } from '../../messages/rpcMessage.js';
 

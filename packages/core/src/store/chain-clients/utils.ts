@@ -1,100 +1,66 @@
-/**
- * Chain client utilities
- */
+import { createPublicClient, defineChain, http, PublicClient } from 'viem';
+import { BundlerClient, createBundlerClient, createPaymasterClient, PaymasterClient } from 'viem/account-abstraction';
 
-import { ChainClients, type ChainConfig } from './store.js';
-import type { RPCResponseNativeCurrency } from '../../messages/rpcMessage.js';
+import { ChainClients } from './store.js';
+import { RPCResponseNativeCurrency } from '../../messages/rpcMessage.js';
 
-/**
- * SDK Chain type
- */
 export type SDKChain = {
   id: number;
   rpcUrl?: string;
   nativeCurrency?: RPCResponseNativeCurrency;
 };
 
-/**
- * Create and store chain configurations
- */
-export function createChainConfigs(chains: SDKChain[]): void {
-  const configs: ChainConfig[] = chains
-    .filter((c) => c.rpcUrl) // Only chains with RPC URLs
-    .map((c) => ({
+export function createClients(chains: SDKChain[]) {
+  chains.forEach((c) => {
+    if (!c.rpcUrl) {
+      return;
+    }
+    const viemchain = defineChain({
       id: c.id,
-      rpcUrl: c.rpcUrl!,
-      name: c.nativeCurrency?.name,
-      nativeCurrency: c.nativeCurrency
-        ? {
-            name: c.nativeCurrency.name,
-            symbol: c.nativeCurrency.symbol,
-            decimals: c.nativeCurrency.decimal ?? 18,
-          }
-        : undefined,
-    }));
+      rpcUrls: {
+        default: {
+          http: [c.rpcUrl],
+        },
+      },
+      name: c.nativeCurrency?.name ?? '',
+      nativeCurrency: {
+        name: c.nativeCurrency?.name ?? '',
+        symbol: c.nativeCurrency?.symbol ?? '',
+        decimals: c.nativeCurrency?.decimal ?? 18,
+      },
+    });
 
-  ChainClients.set(configs);
-}
+    const client = createPublicClient({
+      chain: viemchain,
+      transport: http(c.rpcUrl),
+    });
+    const bundlerClient = createBundlerClient({
+      client,
+      transport: http(c.rpcUrl),
+    });
 
-/**
- * Get chain configuration by ID
- */
-export function getChainConfig(chainId: number): ChainConfig | undefined {
-  return ChainClients.get(chainId);
-}
+    const paymasterClient = createPaymasterClient({
+      transport: http(c.rpcUrl),
+    });
 
-/**
- * Get RPC URL for a chain
- */
-export function getRpcUrl(chainId: number): string | undefined {
-  return ChainClients.get(chainId)?.rpcUrl;
-}
-
-/**
- * Check if a chain is configured
- */
-export function hasChainConfig(chainId: number): boolean {
-  return ChainClients.has(chainId);
-}
-
-/**
- * Add a single chain configuration
- */
-export function addChainConfig(chain: SDKChain): void {
-  if (!chain.rpcUrl) return;
-
-  ChainClients.add({
-    id: chain.id,
-    rpcUrl: chain.rpcUrl,
-    name: chain.nativeCurrency?.name,
-    nativeCurrency: chain.nativeCurrency
-      ? {
-          name: chain.nativeCurrency.name,
-          symbol: chain.nativeCurrency.symbol,
-          decimals: chain.nativeCurrency.decimal ?? 18,
-        }
-      : undefined,
+    ChainClients.setState({
+      [c.id]: {
+        client,
+        bundlerClient,
+        paymasterClient,
+      },
+    });
   });
 }
 
-/**
- * Remove a chain configuration
- */
-export function removeChainConfig(chainId: number): void {
-  ChainClients.remove(chainId);
+export function getClient(chainId: number): PublicClient | undefined {
+  return ChainClients.getState()[chainId]?.client;
 }
 
-/**
- * Get all configured chains
- */
-export function getAllChainConfigs(): Record<number, ChainConfig> {
-  return ChainClients.getAll();
+export function getBundlerClient(chainId: number): BundlerClient | undefined {
+  return ChainClients.getState()[chainId]?.bundlerClient;
 }
 
-/**
- * Clear all chain configurations
- */
-export function clearChainConfigs(): void {
-  ChainClients.clear();
+export function getPaymasterClient(chainId: number): PaymasterClient | undefined {
+  return ChainClients.getState()[chainId]?.paymasterClient;
 }
-
