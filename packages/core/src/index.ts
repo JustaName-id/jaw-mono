@@ -27,6 +27,3 @@ export * from './key-manager/index.js';
 
 /** Storage Manager exports **/
 export * from './storage-manager/index.js'
-
-/** Store exports **/
-export * from './store/index.js';
