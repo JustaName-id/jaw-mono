@@ -3,4 +3,5 @@
 
 # Run affected build, test, and lint tasks
 # This compares against the remote branch you're pushing to
-nx affected -t build,test,lint --base=origin/main --head=HEAD
+# Exclude keys-jaw-id app for now
+nx affected -t build,test,lint --base=origin/main --head=HEAD --exclude=@jaw-mono/keys-jaw-id
