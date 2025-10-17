@@ -8,7 +8,8 @@
     "next": "~15.2.4",
     "react": "19.0.0",
     "react-dom": "19.0.0",
-    "viem": "^2.38.2"
+    "viem": "^2.38.2",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@babel/core": "^7.14.5",

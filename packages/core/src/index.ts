@@ -21,3 +21,9 @@ export * from './provider/index.js';
 
 /** Utils exports **/
 export * from './utils/index.js';
+
+/** KeyvManager exports **/
+export * from './key-manager/index.js';
+
+/** Storage Manager exports **/
+export * from './storage-manager/index.js'

@@ -103,7 +103,7 @@ export async function exportKeyToHexString(
     key: CryptoKey
 ): Promise<string> {
     const format = type === 'private' ? 'pkcs8' : 'spki';
-    const exported = await window.crypto.subtle.exportKey(format, key);
+    const exported = await crypto.subtle.exportKey(format, key);
     return bytesToHex(new Uint8Array(exported));
 }
 
@@ -117,7 +117,7 @@ export async function importKeyFromHexString(
     const format = type === 'private' ? 'pkcs8' : 'spki';
     const keyData = hexToBytes(hexString) as BufferSource;
 
-    return await window.crypto.subtle.importKey(
+    return await crypto.subtle.importKey(
         format,
         keyData,
         {
@@ -125,7 +125,7 @@ export async function importKeyFromHexString(
             namedCurve: 'P-256',
         },
         true,
-        type === 'private' ? ['deriveKey', 'deriveBits'] : []
+        type === 'private' ? ['deriveKey'] : []
     );
 }
 
@@ -137,6 +137,19 @@ function bytesToHex(bytes: Uint8Array): string {
 }
 
 function hexToBytes(hex: string): Uint8Array {
+    // Validate hex string format
+    if (hex.length === 0) {
+        throw new Error('Invalid hex string: empty string');
+    }
+
+    if (hex.length % 2 !== 0) {
+        throw new Error('Invalid hex string: odd length (must have even number of characters)');
+    }
+
+    if (!/^[0-9a-fA-F]*$/.test(hex)) {
+        throw new Error('Invalid hex string: contains non-hexadecimal characters');
+    }
+
     const buffer = new ArrayBuffer(hex.length / 2);
     const bytes = new Uint8Array(buffer);
     for (let i = 0; i < hex.length; i += 2) {
