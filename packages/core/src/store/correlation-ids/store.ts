@@ -1,96 +1,35 @@
-/**
- * Correlation IDs store for tracking request/response pairs
- * Helps with logging and debugging by correlating related operations
- */
-
-import { createMemoryStore, type Store } from '../../store/store.js';
+import { createStore } from 'zustand/vanilla';
 
 type CorrelationIdsState = {
   correlationIds: Map<object, string>;
 };
 
-const defaultState: CorrelationIdsState = {
+export const correlationIdsStore = createStore<CorrelationIdsState>(() => ({
   correlationIds: new Map<object, string>(),
-};
+}));
 
-/**
- * In-memory store for correlation IDs
- * Note: Uses memory store since correlation IDs don't need persistence
- */
-export const correlationIdsStore: Store<CorrelationIdsState> = createMemoryStore(defaultState);
-
-/**
- * Correlation IDs manager
- */
 export const correlationIds = {
-  /**
-   * Get correlation ID for a request
-   */
-  get: (key: object): string | undefined => {
-    return correlationIdsStore.get().correlationIds.get(key);
-  },
-
-  /**
-   * Set correlation ID for a request
-   */
-  set: (key: object, correlationId: string): void => {
-    const current = correlationIdsStore.get().correlationIds;
-    const newMap = new Map(current);
-    newMap.set(key, correlationId);
-    correlationIdsStore.set({ correlationIds: newMap });
-  },
-
-  /**
-   * Delete correlation ID for a request
-   */
-  delete: (key: object): void => {
-    const current = correlationIdsStore.get().correlationIds;
-    const newMap = new Map(current);
-    newMap.delete(key);
-    correlationIdsStore.set({ correlationIds: newMap });
-  },
-
-  /**
-   * Clear all correlation IDs
-   */
-  clear: (): void => {
-    correlationIdsStore.clear();
-  },
-
-  /**
-   * Get or create a correlation ID for a request
-   */
-  getOrCreate: (key: object): string => {
-    let correlationId = correlationIdsStore.get().correlationIds.get(key);
-    if (!correlationId) {
-      correlationId = crypto.randomUUID();
-      const current = correlationIdsStore.get().correlationIds;
-      const newMap = new Map(current);
-      newMap.set(key, correlationId);
-      correlationIdsStore.set({ correlationIds: newMap });
-    }
+  get: (key: object) => {
+    const correlationId = correlationIdsStore.getState().correlationIds.get(key);
     return correlationId;
   },
-
-  /**
-   * Check if a correlation ID exists for a request
-   */
-  has: (key: object): boolean => {
-    return correlationIdsStore.get().correlationIds.has(key);
+  set: (key: object, correlationId: string) => {
+    correlationIdsStore.setState((state) => {
+      const newMap = new Map(state.correlationIds);
+      newMap.set(key, correlationId);
+      return { correlationIds: newMap };
+    });
   },
-
-  /**
-   * Get all correlation IDs
-   */
-  getAll: (): Map<object, string> => {
-    return new Map(correlationIdsStore.get().correlationIds);
+  delete: (key: object) => {
+    correlationIdsStore.setState((state) => {
+      const newMap = new Map(state.correlationIds);
+      newMap.delete(key);
+      return { correlationIds: newMap };
+    });
   },
-
-  /**
-   * Get count of tracked correlation IDs
-   */
-  size: (): number => {
-    return correlationIdsStore.get().correlationIds.size;
+  clear: () => {
+    correlationIdsStore.setState({
+      correlationIds: new Map<object, string>(),
+    });
   },
 };
-
