@@ -1,3 +1,3 @@
-export { KeyManager, LocalKeyStorage, type KeyStorage } from './keyManager.js';
-  
+export { KeyManager } from './keyManager.js';
+
   

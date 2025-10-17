@@ -1,33 +1,13 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { KeyManager, LocalKeyStorage, KeyStorage } from './keyManager.js';
-
-// Mock localStorage for testing
-class MockStorage implements KeyStorage {
-  private storage = new Map<string, string | null>();
-
-  get(key: string): string | null {
-    return this.storage.get(key) ?? null;
-  }
-
-  set(key: string, value: string | null): void {
-    if (value === null) {
-      this.storage.delete(key);
-    } else {
-      this.storage.set(key, value);
-    }
-  }
-
-  clear(): void {
-    this.storage.clear();
-  }
-}
+import { KeyManager } from './keyManager.js';
+import { createMemoryStorage, type SyncStorage } from '../storage-manager/index.js';
 
 describe('KeyManager', () => {
-  let storage: KeyStorage;
+  let storage: SyncStorage;
   let keyManager: KeyManager;
 
   beforeEach(() => {
-    storage = new MockStorage();
+    storage = createMemoryStorage();
     keyManager = new KeyManager(storage);
   });
 
@@ -52,7 +32,7 @@ describe('KeyManager', () => {
 
   it('should derive shared secret after setting peer public key', async () => {
     // Create a second key manager to act as peer
-    const peerKeyManager = new KeyManager(new MockStorage());
+    const peerKeyManager = new KeyManager(createMemoryStorage());
     const peerPublicKey = await peerKeyManager.getOwnPublicKey();
 
     // Set peer's public key
@@ -65,8 +45,8 @@ describe('KeyManager', () => {
   });
 
   it('should derive same shared secret on both sides', async () => {
-    const storage1 = new MockStorage();
-    const storage2 = new MockStorage();
+    const storage1 = createMemoryStorage();
+    const storage2 = createMemoryStorage();
     
     const manager1 = new KeyManager(storage1);
     const manager2 = new KeyManager(storage2);
@@ -95,8 +75,8 @@ describe('KeyManager', () => {
     const publicKey = await keyManager.getOwnPublicKey();
     
     // Verify keys were stored
-    const ownPrivateKey = storage.get('ownPrivateKey');
-    const ownPublicKey = storage.get('ownPublicKey');
+    const ownPrivateKey = storage.getItem('ownPrivateKey');
+    const ownPublicKey = storage.getItem('ownPublicKey');
 
     expect(ownPrivateKey).toBeDefined();
     expect(ownPrivateKey).not.toBeNull();
@@ -120,7 +100,7 @@ describe('KeyManager', () => {
   it('should clear all keys', async () => {
     // Generate keys and set peer
     await keyManager.getOwnPublicKey();
-    const peerManager = new KeyManager(new MockStorage());
+    const peerManager = new KeyManager(createMemoryStorage());
     const peerKey = await peerManager.getOwnPublicKey();
     await keyManager.setPeerPublicKey(peerKey);
 
@@ -132,9 +112,9 @@ describe('KeyManager', () => {
     await keyManager.clear();
 
     // Verify storage is cleared
-    expect(storage.get('ownPrivateKey')).toBeNull();
-    expect(storage.get('ownPublicKey')).toBeNull();
-    expect(storage.get('peerPublicKey')).toBeNull();
+    expect(storage.getItem('ownPrivateKey')).toBeNull();
+    expect(storage.getItem('ownPublicKey')).toBeNull();
+    expect(storage.getItem('peerPublicKey')).toBeNull();
 
     // Shared secret should be null
     const secretAfter = await keyManager.getSharedSecret();
@@ -151,14 +131,14 @@ describe('KeyManager', () => {
   });
 
   it('should handle concurrent key loading without race conditions', async () => {
-    const storage = new MockStorage();
-    const keyManager = new KeyManager(storage);
+    const testStorage = createMemoryStorage();
+    const testKeyManager = new KeyManager(testStorage);
 
     // Call getOwnPublicKey multiple times concurrently
     const [key1, key2, key3] = await Promise.all([
-      keyManager.getOwnPublicKey(),
-      keyManager.getOwnPublicKey(),
-      keyManager.getOwnPublicKey(),
+      testKeyManager.getOwnPublicKey(),
+      testKeyManager.getOwnPublicKey(),
+      testKeyManager.getOwnPublicKey(),
     ]);
 
     // All should be the same instance (no duplicate key generation)
@@ -166,25 +146,10 @@ describe('KeyManager', () => {
     expect(key2).toBe(key3);
 
     // Verify only one key pair was stored
-    const storedPrivateKey = storage.get('ownPrivateKey');
-    const storedPublicKey = storage.get('ownPublicKey');
+    const storedPrivateKey = testStorage.getItem('ownPrivateKey');
+    const storedPublicKey = testStorage.getItem('ownPublicKey');
     expect(storedPrivateKey).toBeDefined();
     expect(storedPublicKey).toBeDefined();
-  });
-});
-
-describe('LocalKeyStorage', () => {
-  // Note: These tests require a DOM environment with localStorage
-  // They are skipped in non-browser environments
-
-  it('should create storage with default prefix', () => {
-    const storage = new LocalKeyStorage();
-    expect(storage).toBeDefined();
-  });
-
-  it('should create storage with custom prefix', () => {
-    const storage = new LocalKeyStorage('custom-prefix');
-    expect(storage).toBeDefined();
   });
 });
 

@@ -4,47 +4,7 @@ import {
     generateKeyPair,
     importKeyFromHexString,
 } from '../utils/crypto.js';
-
-/**
- * Storage interface for key persistence
- */
-export interface KeyStorage {
-    get(key: string): string | null;
-    set(key: string, value: string | null): void;
-    clear(): void;
-}
-
-/**
- * Default localStorage-based implementation
- */
-export class LocalKeyStorage implements KeyStorage {
-    private readonly prefix: string;
-
-    constructor(prefix = 'jaw-keys') {
-        this.prefix = prefix;
-    }
-
-    get(key: string): string | null {
-        return localStorage.getItem(`${this.prefix}:${key}`);
-    }
-
-    set(key: string, value: string | null): void {
-        if (value === null) {
-            localStorage.removeItem(`${this.prefix}:${key}`);
-        } else {
-            localStorage.setItem(`${this.prefix}:${key}`, value);
-        }
-    }
-
-    clear(): void {
-        const keys = Object.keys(localStorage);
-        for (const key of keys) {
-            if (key.startsWith(`${this.prefix}:`)) {
-                localStorage.removeItem(key);
-            }
-        }
-    }
-}
+import { createLocalStorage, type SyncStorage } from '../storage-manager/index.js';
 
 interface StorageItem {
     storageKey: string;
@@ -76,15 +36,15 @@ const PEER_PUBLIC_KEY: StorageItem = {
  * - Manages peer public keys
  */
 export class KeyManager {
-    private storage: KeyStorage;
+    private storage: SyncStorage;
     private ownPrivateKey: CryptoKey | null = null;
     private ownPublicKey: CryptoKey | null = null;
     private peerPublicKey: CryptoKey | null = null;
     private sharedSecret: CryptoKey | null = null;
     private loadingPromise: Promise<void> | null = null;
 
-    constructor(storage?: KeyStorage) {
-        this.storage = storage ?? new LocalKeyStorage();
+    constructor(storage?: SyncStorage) {
+        this.storage = storage ?? createLocalStorage('jaw', 'keys');
     }
 
     /**
@@ -125,7 +85,10 @@ export class KeyManager {
         this.peerPublicKey = null;
         this.sharedSecret = null;
         this.loadingPromise = null;
-        this.storage.clear();
+        // Clear all key storage items
+        this.storage.removeItem(OWN_PRIVATE_KEY.storageKey);
+        this.storage.removeItem(OWN_PUBLIC_KEY.storageKey);
+        this.storage.removeItem(PEER_PUBLIC_KEY.storageKey);
     }
 
     /**
@@ -193,7 +156,7 @@ export class KeyManager {
      * Load key from storage
      */
     private async loadKey(item: StorageItem): Promise<CryptoKey | null> {
-        const key = this.storage.get(item.storageKey);
+        const key = this.storage.getItem<string>(item.storageKey);
         if (!key) return null;
 
         try {
@@ -209,6 +172,6 @@ export class KeyManager {
      */
     private async storeKey(item: StorageItem, key: CryptoKey): Promise<void> {
         const hexString = await exportKeyToHexString(item.keyType, key);
-        this.storage.set(item.storageKey, hexString);
+        this.storage.setItem(item.storageKey, hexString);
     }
 }
