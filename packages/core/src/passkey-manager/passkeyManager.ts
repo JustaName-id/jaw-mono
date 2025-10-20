@@ -16,7 +16,6 @@ import {
  * 
  * Storage Keys:
  * - authState: Current authentication state
- * - passkeyCredential: Active passkey credential
  * - accounts: Array of all passkey accounts
  */
 export class PasskeyManager {
@@ -33,10 +32,6 @@ export class PasskeyManager {
    */
   checkAuth(): AuthCheckResult {
     try {
-      if (typeof window === 'undefined') {
-        return { isAuthenticated: false };
-      }
-
       const authState = this.storage.getItem<AuthState>('authState');
       if (!authState?.isLoggedIn || !authState?.address) {
         return { isAuthenticated: false };
