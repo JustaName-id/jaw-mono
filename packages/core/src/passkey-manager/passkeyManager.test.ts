@@ -64,11 +64,13 @@ describe('PasskeyManager', () => {
         getItem: () => {
           throw new Error('Storage error');
         },
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         setItem: () => {},
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         removeItem: () => {},
       };
 
-      const testManager = new PasskeyManager(brokenStorage as any);
+      const testManager = new PasskeyManager(brokenStorage as unknown as any);
       const result = testManager.checkAuth();
       expect(result.isAuthenticated).toBe(false);
     });
@@ -119,13 +121,14 @@ describe('PasskeyManager', () => {
     it('should throw error if storage fails', () => {
       const brokenStorage = {
         getItem: () => null,
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         setItem: () => {},
         removeItem: () => {
           throw new Error('Storage error');
         },
       };
 
-      const testManager = new PasskeyManager(brokenStorage as any);
+      const testManager = new PasskeyManager(brokenStorage as unknown as any);
       expect(() => testManager.logout()).toThrow('Storage error');
     });
   });
@@ -165,11 +168,13 @@ describe('PasskeyManager', () => {
         getItem: () => {
           throw new Error('Storage error');
         },
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         setItem: () => {},
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         removeItem: () => {},
       };
 
-      const testManager = new PasskeyManager(brokenStorage as any);
+      const testManager = new PasskeyManager(brokenStorage as unknown as any);
       const accounts = testManager.fetchAccounts();
       expect(accounts).toEqual([]);
     });
@@ -202,11 +207,13 @@ describe('PasskeyManager', () => {
         getItem: () => {
           throw new Error('Storage error');
         },
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         setItem: () => {},
+        // eslint-disable-next-line @typescript-eslint/no-empty-function
         removeItem: () => {},
       };
 
-      const testManager = new PasskeyManager(brokenStorage as any);
+      const testManager = new PasskeyManager(brokenStorage as unknown as any);
       const credentialId = testManager.fetchActiveCredentialId();
       expect(credentialId).toBeNull();
     });

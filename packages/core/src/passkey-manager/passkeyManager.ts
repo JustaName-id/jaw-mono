@@ -127,7 +127,7 @@ export class PasskeyManager {
     name: string,
     credentialId: string,
     address: string,
-    isImported: boolean = false
+    isImported = false
   ): void {
     // Store auth state
     this.storeAuthState(address, credentialId);
