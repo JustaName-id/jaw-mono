@@ -4,7 +4,6 @@ export {
   createClients,
   getClient,
   getBundlerClient,
-  getPaymasterClient,
   type SDKChain,
 } from './utils.js';
 

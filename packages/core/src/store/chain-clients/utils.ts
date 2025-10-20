@@ -1,5 +1,5 @@
 import { createPublicClient, defineChain, http, PublicClient } from 'viem';
-import { BundlerClient, createBundlerClient, createPaymasterClient, PaymasterClient } from 'viem/account-abstraction';
+import { BundlerClient, createBundlerClient } from 'viem/account-abstraction';
 
 import { ChainClients } from './store.js';
 import { RPCResponseNativeCurrency } from '../../messages/rpcMessage.js';
@@ -38,15 +38,12 @@ export function createClients(chains: SDKChain[]) {
       client,
       transport: http(c.rpcUrl),
     });
-    const paymasterClient = createPaymasterClient({
-      transport: http(c.rpcUrl),
-    });
+
 
     ChainClients.setState({
       [c.id]: {
         client,
         bundlerClient,
-      paymasterClient,
       },
     });
   });
@@ -59,7 +56,3 @@ export function getClient(chainId: number): PublicClient | undefined {
 export function getBundlerClient(chainId: number): BundlerClient | undefined {
   return ChainClients.getState()[chainId]?.bundlerClient;
 }
-
-export function getPaymasterClient(chainId: number): PaymasterClient | undefined {
-  return ChainClients.getState()[chainId]?.paymasterClient;
-} 

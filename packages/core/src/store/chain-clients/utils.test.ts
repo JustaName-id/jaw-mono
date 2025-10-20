@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { sepolia, optimismSepolia } from 'viem/chains';
 
 import { ChainClients } from './store.js';
-import { createClients, getClient, getBundlerClient, getPaymasterClient } from './utils.js';
+import { createClients, getClient, getBundlerClient } from './utils.js';
 
 describe('chain-clients/utils', () => {
   beforeEach(() => {
@@ -28,7 +28,6 @@ describe('chain-clients/utils', () => {
     expect(state[sepolia.id]).toBeDefined();
     expect(state[sepolia.id].client).toBeDefined();
     expect(state[sepolia.id].bundlerClient).toBeDefined();
-    expect(state[sepolia.id].paymasterClient).toBeDefined();
   });
 
   it('should create clients for multiple chains', () => {
@@ -62,8 +61,6 @@ describe('chain-clients/utils', () => {
     expect(state[sepolia.id].bundlerClient).toBeDefined();
     expect(state[optimismSepolia.id].bundlerClient).toBeDefined();
     
-    expect(state[sepolia.id].paymasterClient).toBeDefined();
-    expect(state[optimismSepolia.id].paymasterClient).toBeDefined();
   });
 
   it('should skip chains without rpcUrl', () => {
@@ -114,18 +111,6 @@ describe('chain-clients/utils', () => {
     expect(bundlerClient).toBeDefined();
   });
 
-  it('should get paymaster client by chain id', () => {
-    createClients([
-      {
-        id: sepolia.id,
-        rpcUrl: sepolia.rpcUrls.default.http[0],
-      },
-    ]);
-
-    const paymasterClient = getPaymasterClient(sepolia.id);
-    expect(paymasterClient).toBeDefined();
-  });
-
   it('should handle native currency with default decimals', () => {
     createClients([
       {
@@ -147,11 +132,9 @@ describe('chain-clients/utils', () => {
   it('should return undefined for missing clients', () => {
     const client = getClient(999);
     const bundlerClient = getBundlerClient(999);
-    const paymasterClient = getPaymasterClient(999);
 
     expect(client).toBeUndefined();
     expect(bundlerClient).toBeUndefined();
-    expect(paymasterClient).toBeUndefined();
   });
 
   it('should properly configure client with chain details', () => {
