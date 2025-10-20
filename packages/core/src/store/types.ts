@@ -1,28 +1,6 @@
+import { Address , AppMetadata , JawProviderPreference} from "../provider/interface.js";
 
-export type Address = `0x${string}`;
 
-export interface AppMetadata {
-    /** Application name */
-    appName: string;
-    /** Application logo image URL; favicon is used if unspecified */
-    appLogoUrl: string | null;
-    /** Array of chainIds your dapp supports */
-    appChainIds: number[];
-  }
-
-export type Preference = {
-    /**
-     * The URL for the keys popup.
-     * By default, `https://keys.jaw.id/` is used for production
-     * @type {string}
-     */
-    keysUrl?: string;
-    /**
-     * @param mode 'cross-platform' | 'app-specific'
-     */
-    mode: 'cross-platform' | 'app-specific';
-
-  } & Record<string, unknown>;
 
 
 export type Chain = {
@@ -45,7 +23,7 @@ export type Account = {
 
 export type Config = {
     metadata?: AppMetadata;
-    preference?: Preference;
+    preference?: JawProviderPreference;
     version: string;
     deviceId?: string;
     paymasterUrls?: Record<number, string>;

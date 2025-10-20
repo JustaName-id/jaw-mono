@@ -5,6 +5,7 @@ export interface RequestArguments {
     readonly params?: readonly unknown[] | object;
 }
 
+export type Address = `0x${string}`;
 export interface ProviderRpcError extends Error {
     message: string;
     code: number;

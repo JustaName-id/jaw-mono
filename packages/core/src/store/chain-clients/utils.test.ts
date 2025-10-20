@@ -174,4 +174,64 @@ describe('chain-clients/utils', () => {
     expect(client?.chain?.nativeCurrency.symbol).toBe(testChain.nativeCurrency.symbol);
     expect(client?.chain?.nativeCurrency.decimals).toBe(testChain.nativeCurrency.decimal);
   });
+
+  it('should accumulate clients when called multiple times with different chains', () => {
+    // First call with sepolia
+    createClients([
+      {
+        id: sepolia.id,
+        rpcUrl: sepolia.rpcUrls.default.http[0],
+      },
+    ]);
+
+    let state = ChainClients.getState();
+    expect(Object.keys(state).length).toBe(1);
+    expect(state[sepolia.id]).toBeDefined();
+
+    // Second call with optimismSepolia - should ADD to existing state
+    createClients([
+      {
+        id: optimismSepolia.id,
+        rpcUrl: optimismSepolia.rpcUrls.default.http[0],
+      },
+    ]);
+
+    state = ChainClients.getState();
+    expect(Object.keys(state).length).toBe(2);
+    expect(state[sepolia.id]).toBeDefined();
+    expect(state[optimismSepolia.id]).toBeDefined();
+  });
+
+  it('should replace client when called multiple times with same chain', () => {
+    const firstRpcUrl = sepolia.rpcUrls.default.http[0];
+    const secondRpcUrl = 'https://different-rpc-url.com';
+
+    // First call
+    createClients([
+      {
+        id: sepolia.id,
+        rpcUrl: firstRpcUrl,
+      },
+    ]);
+
+    const firstClient = getClient(sepolia.id);
+    expect(firstClient).toBeDefined();
+
+    // Second call with same chain but different RPC URL
+    createClients([
+      {
+        id: sepolia.id,
+        rpcUrl: secondRpcUrl,
+      },
+    ]);
+
+    const secondClient = getClient(sepolia.id);
+    expect(secondClient).toBeDefined();
+    // Client should be replaced (different instance)
+    expect(secondClient).not.toBe(firstClient);
+    
+    // Should still only have one chain in state
+    const state = ChainClients.getState();
+    expect(Object.keys(state).length).toBe(1);
+  });
 });
