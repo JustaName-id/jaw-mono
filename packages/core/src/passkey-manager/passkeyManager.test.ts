@@ -68,15 +68,21 @@ describe('PasskeyManager', () => {
     });
 
     it('should handle storage errors gracefully', () => {
-      const brokenStorage = {
+      interface MockStorage {
+        getItem: () => void;
+        setItem: () => void;
+        removeItem: () => void;
+      }
+
+      const brokenStorage: MockStorage = {
         getItem: () => {
           throw new Error('Storage error');
         },
-        setItem: () => {},
-        removeItem: () => {},
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
       };
 
-      const testManager = new PasskeyManager(brokenStorage as unknown as any);
+      const testManager = new PasskeyManager(brokenStorage as never);
       const result = testManager.checkAuth();
       expect(result.isAuthenticated).toBe(false);
     });
@@ -125,15 +131,21 @@ describe('PasskeyManager', () => {
     });
 
     it('should throw error if storage fails', () => {
-      const brokenStorage = {
+      interface MockStorage {
+        getItem: () => null;
+        setItem: () => void;
+        removeItem: () => void;
+      }
+
+      const brokenStorage: MockStorage = {
         getItem: () => null,
-        setItem: () => {},
+        setItem: vi.fn(),
         removeItem: () => {
           throw new Error('Storage error');
         },
       };
 
-      const testManager = new PasskeyManager(brokenStorage as unknown as any);
+      const testManager = new PasskeyManager(brokenStorage as never);
       expect(() => testManager.logout()).toThrow('Storage error');
     });
   });
@@ -171,15 +183,21 @@ describe('PasskeyManager', () => {
     });
 
     it('should handle storage errors gracefully', () => {
-      const brokenStorage = {
+      interface MockStorage {
+        getItem: () => void;
+        setItem: () => void;
+        removeItem: () => void;
+      }
+
+      const brokenStorage: MockStorage = {
         getItem: () => {
           throw new Error('Storage error');
         },
-        setItem: () => {},
-        removeItem: () => {},
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
       };
 
-      const testManager = new PasskeyManager(brokenStorage as unknown as any);
+      const testManager = new PasskeyManager(brokenStorage as never);
       const accounts = testManager.fetchAccounts();
       expect(accounts).toEqual([]);
     });
@@ -208,15 +226,21 @@ describe('PasskeyManager', () => {
     });
 
     it('should handle storage errors gracefully', () => {
-      const brokenStorage = {
+      interface MockStorage {
+        getItem: () => void;
+        setItem: () => void;
+        removeItem: () => void;
+      }
+
+      const brokenStorage: MockStorage = {
         getItem: () => {
           throw new Error('Storage error');
         },
-        setItem: () => {},
-        removeItem: () => {},
+        setItem: vi.fn(),
+        removeItem: vi.fn(),
       };
 
-      const testManager = new PasskeyManager(brokenStorage as unknown as any);
+      const testManager = new PasskeyManager(brokenStorage as never);
       const credentialId = testManager.fetchActiveCredentialId();
       expect(credentialId).toBeNull();
     });
