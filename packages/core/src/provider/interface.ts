@@ -53,3 +53,11 @@ export interface JawProviderPreference {
     /** Enable telemetry (default: true) */
     telemetry?: boolean;
 }
+
+export type ProviderEventCallback = ProviderInterface['emit'];
+
+export interface ConstructorOptions {
+    metadata: AppMetadata;
+    preference: JawProviderPreference;
+    paymasterUrls?: Record<number, string>;
+}
