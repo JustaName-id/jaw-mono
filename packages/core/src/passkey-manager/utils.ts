@@ -1,92 +1,47 @@
-import {BackendResponse, PasskeyLookupResponse, PasskeyRegistrationRequest, PasskeysByCredIdsResponse} from "./types.js"
+import { restCall } from "../api/index.js";
+import type { PasskeyRegistrationRequest, PasskeyLookupResponse } from "./types.js";
 
-
+/**
+ * Register a passkey with the backend
+ */
 export async function registerPasskeyInBackend(
-    request: PasskeyRegistrationRequest,
-    apiKey:string,
-    serverUrl:string
-  ): Promise<void> {
-    const headers: HeadersInit = {
-      "Content-Type": "application/json",
-    };
-  
-    if (apiKey) {
-      headers["x-api-key"] = apiKey;
-    }
-  
-    const response = await fetch(serverUrl!, {
-      method: "POST",
-      headers,
-      body: JSON.stringify(request),
-    });
-  
-    if (!response.ok) {
-      const errorText = await response.text();
-      throw new Error(
-        `Registration failed: ${response.status} - ${
-          errorText || response.statusText
-        }`
-      );
-    }
+  request: PasskeyRegistrationRequest,
+  apiKey?: string,
+  dev?: boolean
+): Promise<void> {
+  await restCall(
+    'REGISTER_PASSKEY',
+    'POST',
+    request,
+    apiKey ? { 'x-api-key': apiKey } : {},
+    dev
+  );
+}
+
+/**
+ * Lookup a single passkey by credential ID from the backend
+ */
+export async function lookupPasskeyFromBackend(
+  credentialId: string,
+  apiKey?: string,
+  dev?: boolean
+): Promise<PasskeyLookupResponse> {
+  const response = await restCall(
+    'LOOKUP_PASSKEYS',
+    'GET',
+    { credentialIds: [credentialId] },
+    apiKey ? { 'x-api-key': apiKey } : {},
+    dev
+  );
+
+  if (!response.passkeys || response.passkeys.length === 0) {
+    throw new Error('Passkey not found');
   }
 
-  async function lookupPasskeysFromBackend(
-    credentialIds: string[],
-    apiKey : string,
-    serverUrl:string
-  ): Promise<PasskeyLookupResponse[]> {
-    const params = new URLSearchParams();
-    credentialIds.forEach((id) => params.append("credentialIds", id));
-  
-    const headers: HeadersInit = {};
-    if (apiKey) {
-      headers["x-api-key"] = apiKey;
-    }
-  
-    const response = await fetch(`${serverUrl}?${params}`, {
-      headers,
-    });
-  
-    if (!response.ok) {
-      if (response.status === 404) {
-        throw new Error("Passkeys not found");
-      }
-      const errorText = await response.text();
-      throw new Error(
-        `Failed to lookup passkeys: ${response.status} - ${
-          errorText || response.statusText
-        }`
-      );
-    }
-  
-    const backendResponse: BackendResponse<PasskeysByCredIdsResponse> =
-      await response.json();
-  
-    if (backendResponse.result?.data?.passkeys) {
-      return backendResponse.result.data.passkeys;
-    } else if (backendResponse.result?.error) {
-      throw new Error(`Backend error: ${backendResponse.result.error}`);
-    } else {
-      throw new Error("Invalid response structure from backend");
-    }
+  const passkey = response.passkeys[0];
+  if (!passkey) {
+    throw new Error('Passkey not found');
   }
-  
-  export async function lookupPasskeyFromBackend(
-    credentialId: string,
-    apiKey:string,
-    serverUrl:string
-  ): Promise<PasskeyLookupResponse> {
-    const passkeys = await lookupPasskeysFromBackend([credentialId],apiKey,serverUrl);
-  
-    if (passkeys.length === 0) {
-      throw new Error("Passkey not found");
-    }
-  
-    const passkey = passkeys[0];
-    if (!passkey) {
-      throw new Error("Passkey not found");
-    }
-  
-    return passkey;
-  }
-  
+
+  return passkey;
+}

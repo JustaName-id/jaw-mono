@@ -36,6 +36,10 @@ export interface PasskeyRegistrationRequest {
   displayName: string
 }
 
+export interface LookupPasskeysRequest {
+  credentialIds: string[];
+}
+
 export interface PasskeyLookupResponse {
   credentialId: string
   publicKey: string
