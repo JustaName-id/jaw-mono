@@ -9,11 +9,13 @@ export function getBaseUrl(dev = false) {
 }
 
 /**
- * The instance of axios with the base URL of JustaName API.
+ * The instance of axios with the base URL of Backend API.
+ * @param dev - Whether to use the staging environment
+ * @param customBaseUrl - Optional custom base URL to override the default
  */
-export const justANameInstance = (dev = false) =>
+export const backendInstance = (dev = false, customBaseUrl?: string) =>
   axios.create({
-    baseURL: getBaseUrl(dev),
+    baseURL: customBaseUrl ?? getBaseUrl(dev),
   });
 
 /**

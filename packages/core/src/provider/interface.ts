@@ -50,6 +50,13 @@ export interface JawProviderPreference {
     keysUrl?: string;
     /** Backend server URL for passkey storage (default: https://api.justaname.id/wallet/v2/passkeys) */
     serverUrl?: string;
-    /** Enable telemetry (default: true) */
-    telemetry?: boolean;
+    apiKey?: string;
+}
+
+export type ProviderEventCallback = ProviderInterface['emit'];
+
+export interface ConstructorOptions {
+    metadata: AppMetadata;
+    preference: JawProviderPreference;
+    paymasterUrls?: Record<number, string>;
 }

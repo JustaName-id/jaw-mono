@@ -8,7 +8,12 @@ export type {
   PasskeyLookupResponse,
   BackendResponse,
   PasskeysByCredIdsResponse,
-  PasskeyConfig,
-  ExtendedWebAuthnAccount,
+  LookupPasskeysRequest,
 } from './types.js';
+export {
+  registerPasskeyInBackend,
+  lookupPasskeyFromBackend,
+  PasskeyRegistrationError,
+  PasskeyLookupError,
+} from './utils.js';
 

@@ -1,30 +1,35 @@
 import { createLocalStorage, type SyncStorage } from '../storage-manager/index.js';
+import {Address} from 'viem';
 import {
   PasskeyAccount,
   AuthCheckResult,
   AuthState,
-  PasskeyConfig,
 } from './types.js';
+import type { JawProviderPreference } from '../provider/index.js';
+import { registerPasskeyInBackend, lookupPasskeyFromBackend } from './utils.js';
+import {JAW_BACKEND_URL} from "../constants.js";
 
 /**
  * PasskeyManager handles passkey authentication and account management
- * 
+ *
  * Features:
  * - Manages passkey authentication state
  * - Stores and retrieves passkey credentials and accounts
  * - Supports multiple passkey accounts per user
- * 
+ * - Validates credential IDs, addresses, and input formats
+ *
  * Storage Keys:
  * - authState: Current authentication state
  * - accounts: Array of all passkey accounts
  */
 export class PasskeyManager {
   private storage: SyncStorage;
-  private config: PasskeyConfig;
+  private preference: JawProviderPreference;
+  private static readonly CREDENTIAL_ID_REGEX = /^[A-Za-z0-9_-]+$/;
 
-  constructor(storage?: SyncStorage, config?: PasskeyConfig) {
+  constructor(storage?: SyncStorage, preference?: JawProviderPreference) {
     this.storage = storage ?? createLocalStorage('jaw', 'passkey');
-    this.config = config ?? {};
+    this.preference = preference ?? {};
   }
 
   /**
@@ -50,12 +55,13 @@ export class PasskeyManager {
   /**
    * Store authentication state
    */
-  storeAuthState(address: string, credentialId: string): void {
+  storeAuthState(address: Address, credentialId: string): void {
+    this.validateCredentialId(credentialId);
+
     const authState: AuthState = {
       isLoggedIn: true,
       address,
       credentialId,
-      timestamp: Date.now(),
     };
 
     this.storage.setItem('authState', authState);
@@ -117,18 +123,38 @@ export class PasskeyManager {
   }
 
   /**
-   * Store a new passkey account (after registration)
+   * Register and store a new passkey account
+   * Registers the passkey with the backend, then stores locally
    * @param name - Username or display name
    * @param credentialId - The passkey credential ID
+   * @param publicKey - The public key associated with the passkey
    * @param address - Wallet address associated with the passkey
-   * @param isImported - Whether this was imported (default: false)
+   * @param dev - Whether to use the staging environment (default: false)
+   * @throws {PasskeyRegistrationError} If backend registration fails
    */
-  storePasskeyAccount(
+  async storePasskeyAccount(
     name: string,
     credentialId: string,
-    address: string,
-    isImported = false
-  ): void {
+    publicKey: `0x${string}`,
+    address: Address,
+    dev = false
+  ): Promise<void> {
+    this.validateDisplayName(name);
+    this.validateCredentialId(credentialId);
+
+    // Register with backend
+    const serverUrl = this.preference.serverUrl ?? JAW_BACKEND_URL;
+    await registerPasskeyInBackend(
+      {
+        credentialId,
+        publicKey,
+        displayName: name.trim(),
+      },
+      this.preference.apiKey,
+      dev,
+      serverUrl
+    );
+
     // Store auth state
     this.storeAuthState(address, credentialId);
 
@@ -136,8 +162,9 @@ export class PasskeyManager {
     const newAccount: PasskeyAccount = {
       username: name.trim(),
       credentialId,
+      publicKey,
       creationDate: new Date().toISOString(),
-      isImported,
+      isImported: false,
     };
 
     // Add to accounts list
@@ -145,23 +172,35 @@ export class PasskeyManager {
   }
 
   /**
-   * Store a passkey account for login (imported credential)
-   * @param username - Username or display name
-   * @param credentialId - The passkey credential ID
+   * Lookup and store a passkey account for login (import existing credential)
+   * Looks up the passkey from the backend by credentialId, then stores locally
+   * @param credentialId - The passkey credential ID to lookup
    * @param address - Wallet address associated with the passkey
+   * @param dev - Whether to use the staging environment (default: false)
+   * @throws {PasskeyLookupError} If backend lookup fails or passkey not found
    */
-  storePasskeyAccountForLogin(
-    username: string,
+  async storePasskeyAccountForLogin(
     credentialId: string,
-    address: string
-  ): void {
-    // Store auth state
+    address: Address,
+    dev = false
+  ): Promise<void> {
+    // Lookup from backend first
+    const serverUrl = this.preference.serverUrl ?? JAW_BACKEND_URL;
+    const passkeyData = await lookupPasskeyFromBackend(
+      credentialId,
+      this.preference.apiKey,
+      dev,
+      serverUrl
+    );
+
+    // Store auth state (validates inputs)
     this.storeAuthState(address, credentialId);
 
-    // Create account metadata (marked as imported)
+    // Create account metadata (marked as imported) using backend data
     const newAccount: PasskeyAccount = {
-      username,
-      credentialId,
+      username: passkeyData.displayName.trim(),
+      credentialId: passkeyData.credentialId,
+      publicKey: passkeyData.publicKey as `0x${string}`,
       creationDate: new Date().toISOString(),
       isImported: true,
     };
@@ -172,6 +211,7 @@ export class PasskeyManager {
 
   /**
    * Remove a passkey account from the stored list
+   * If the removed account is currently active, logout the user
    * @param credentialId - The credential ID to remove
    */
   removeAccount(credentialId: string): void {
@@ -180,6 +220,12 @@ export class PasskeyManager {
       (account) => account.credentialId !== credentialId
     );
     this.storage.setItem('accounts', filteredAccounts);
+
+    // If removing the currently active credential, clear auth state
+    const activeCredentialId = this.fetchActiveCredentialId();
+    if (activeCredentialId === credentialId) {
+      this.logout();
+    }
   }
 
   /**
@@ -199,6 +245,17 @@ export class PasskeyManager {
   }
 
   /**
+   * Get the currently active account
+   */
+  getCurrentAccount(): PasskeyAccount | undefined {
+    const credentialId = this.fetchActiveCredentialId();
+    if (!credentialId) {
+      return undefined;
+    }
+    return this.getAccountByCredentialId(credentialId);
+  }
+
+  /**
    * Check if an account exists
    */
   hasAccount(credentialId: string): boolean {
@@ -206,16 +263,38 @@ export class PasskeyManager {
   }
 
   /**
-   * Get configuration
+   * Get provider preference configuration
    */
-  getConfig(): PasskeyConfig {
-    return { ...this.config };
+  getPreference(): JawProviderPreference {
+    return { ...this.preference };
   }
 
   /**
-   * Update configuration
+   * Update provider preference configuration
    */
-  updateConfig(config: Partial<PasskeyConfig>): void {
-    this.config = { ...this.config, ...config };
+  updatePreference(preference: Partial<JawProviderPreference>): void {
+    this.preference = { ...this.preference, ...preference };
+  }
+
+  /**
+   * Validate credential ID format
+   */
+  private validateCredentialId(credentialId: string): void {
+    if (!credentialId || !PasskeyManager.CREDENTIAL_ID_REGEX.test(credentialId)) {
+      throw new Error(`Invalid credential ID format: ${credentialId}`);
+    }
+  }
+
+  /**
+   * Validate display name
+   */
+  private validateDisplayName(name: string): void {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
+      throw new Error('Display name cannot be empty');
+    }
+    if (trimmedName.length > 100) {
+      throw new Error('Display name cannot exceed 100 characters');
+    }
   }
 }
