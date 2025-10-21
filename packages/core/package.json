@@ -19,7 +19,7 @@
     "!**/*.tsbuildinfo"
   ],
   "scripts": {
-    "generate-sdk-info": "bun run scripts/generate-sdk-info.ts"
+    "generate-sdk-info": "npx tsx scripts/generate-sdk-info.ts"
   },
   "nx": {
     "targets": {
@@ -31,13 +31,13 @@
         "inputs": [
           "default",
           "^production",
-          "{workspaceRoot}/vitest.config.ts"
+          "{projectRoot}/vitest.config.ts"
         ],
         "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
         "executor": "nx:run-commands",
         "options": {
-          "cwd": "{workspaceRoot}",
-          "command": "npx vitest run packages/core/src"
+          "cwd": "{projectRoot}",
+          "command": "npx vitest run"
         }
       }
     }
@@ -47,6 +47,10 @@
     "ox": "0.9.6",
     "viem": "^2.38.2",
     "tslib": "^2.3.0",
-    "zustand": "^5.0.8"
+    "zustand": "^5.0.8",
+    "vitest": "^3.0.0"
+  },
+  "devDependencies": {
+    "vitest": "^3.0.0"
   }
 }
