@@ -1,5 +1,5 @@
 import { decrypt, deriveSharedSecret, encrypt, generateKeyPair, importKeyFromHexString } from './crypto.js';
-import {describe, it, expect} from "bun:test";
+import { describe, it, expect } from 'vitest';
 
 describe('Crypto', () => {
     describe('generateKeyPair', () => {

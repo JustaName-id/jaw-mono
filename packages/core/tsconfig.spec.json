@@ -2,7 +2,7 @@
   "extends": "./tsconfig.json",
   "compilerOptions": {
     "outDir": "../../dist/out-tsc",
-    "types": ["bun:test", "bun", "node"],
+    "types": ["vitest/globals", "node"],
     "lib": ["es2022", "DOM"]
   },
   "include": [
