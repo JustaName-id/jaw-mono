@@ -8,3 +8,7 @@ export {
     type ProviderEventCallback,
     type ConstructorOptions
 } from "./interface.js"
+
+export {
+    JAWProvider
+} from "./JAWProvider.js"

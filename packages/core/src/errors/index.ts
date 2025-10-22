@@ -20,3 +20,7 @@ export {
     serialize,
     type SerializedEthereumRpcError,
 } from "./utils.js"
+
+export {
+    serializeError,
+} from "./serializeError.js"

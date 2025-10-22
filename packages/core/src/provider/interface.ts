@@ -55,6 +55,8 @@ export interface JawProviderPreference {
 
 export type ProviderEventCallback = ProviderInterface['emit'];
 
+export class ProviderEventEmitter extends EventEmitter<keyof ProviderEventMap> {}
+
 export interface ConstructorOptions {
     metadata: AppMetadata;
     preference: JawProviderPreference;

@@ -12,3 +12,10 @@ export {
     getCachedWalletConnectResponse,
     injectRequestCapabilities
 } from "./SignerUtils.js"
+
+export {
+    createSigner,
+    fetchSignerType,
+    loadSignerType,
+    storeSignerType
+} from "./utils.js"
