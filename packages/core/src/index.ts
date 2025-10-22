@@ -27,3 +27,6 @@ export * from './key-manager/index.js';
 
 /** Storage Manager exports **/
 export * from './storage-manager/index.js'
+
+/** Passkey Manager exports **/
+export * from './passkey-manager/index.js';
