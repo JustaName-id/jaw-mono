@@ -1,6 +1,3 @@
-#!/usr/bin/env sh
-. "$(dirname -- "$0")/_/husky.sh"
-
 # Run affected build, test, and lint tasks
 # This compares against the remote branch you're pushing to
 # Exclude keys-jaw-id app for now

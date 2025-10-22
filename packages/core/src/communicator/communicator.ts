@@ -112,12 +112,10 @@ export class Communicator {
     /**
      * Post request and wait for response
      * @param request - The request message with an ID
-     * @param timeout - Optional timeout in milliseconds
      * @returns Promise resolving to the response message
      */
     async postRequestAndWaitForResponse<M extends Message>(
-        request: Message & { id: MessageID },
-        timeout?: number
+        request: Message & { id: MessageID }
     ): Promise<M> {
         const responsePromise = this.onMessage<M>(({ requestId }) => requestId === request.id);
         await this.postMessage(request);

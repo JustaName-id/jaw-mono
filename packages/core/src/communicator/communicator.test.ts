@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach, mock } from 'bun:test';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
 
 import type { AppMetadata, JawProviderPreference } from '../provider/interface.js';
@@ -93,20 +93,20 @@ describe('Communicator', () => {
         urlOrigin = new URL(JAW_KEYS_URL).origin;
 
         mockPopup = {
-            postMessage: mock(() => {
+            postMessage: vi.fn(() => {
                 // Mock implementation
             }),
-            close: mock(() => {
+            close: vi.fn(() => {
                 // Mock implementation
             }),
             closed: false,
-            focus: mock(() => {
+            focus: vi.fn(() => {
                 // Mock implementation
             }),
         };
 
         // Mock window.open
-        window.open = mock(() => mockPopup as Window);
+        window.open = vi.fn(() => mockPopup as Window);
     });
 
     afterEach(() => {
@@ -146,7 +146,7 @@ describe('Communicator', () => {
 
             const response = await communicator.postRequestAndWaitForResponse(mockRequest);
 
-            expect((mockPopup.postMessage as ReturnType<typeof mock>).mock.calls[0]).toEqual([
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
                 {
                     data: {
                         version: SDK_VERSION,
@@ -157,7 +157,7 @@ describe('Communicator', () => {
                 },
                 urlOrigin,
             ]);
-            expect((mockPopup.postMessage as ReturnType<typeof mock>).mock.calls[1]).toEqual([
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([
                 mockRequest,
                 urlOrigin,
             ]);
@@ -176,7 +176,7 @@ describe('Communicator', () => {
 
             await communicator.postMessage(mockResponse);
 
-            expect((mockPopup.postMessage as ReturnType<typeof mock>).mock.calls[0]).toEqual([
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
                 {
                     data: {
                         version: SDK_VERSION,
@@ -187,7 +187,7 @@ describe('Communicator', () => {
                 },
                 urlOrigin,
             ]);
-            expect((mockPopup.postMessage as ReturnType<typeof mock>).mock.calls[1]).toEqual([
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([
                 mockResponse,
                 urlOrigin,
             ]);
@@ -201,11 +201,11 @@ describe('Communicator', () => {
             const popup = await communicator.waitForPopupLoaded();
 
             expect(window.open).toHaveBeenCalled();
-            const openCall = (window.open as ReturnType<typeof mock>).mock.calls[0];
+            const openCall = (window.open as ReturnType<typeof vi.fn>).mock.calls[0];
             // URL might have a trailing slash when converted to string
             expect(openCall[0]).toMatch(/^https:\/\/keys\.jaw\.id\/?$/);
 
-            expect((mockPopup.postMessage as ReturnType<typeof mock>).mock.calls[0]).toEqual([
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
                 {
                     data: {
                         version: SDK_VERSION,
@@ -221,20 +221,20 @@ describe('Communicator', () => {
 
         it('should re-focus and return the existing popup window if one is already open', async () => {
             mockPopup = {
-                postMessage: mock(() => {
+                postMessage: vi.fn(() => {
                     // Mock implementation
                 }),
-                close: mock(() => {
+                close: vi.fn(() => {
                     // Mock implementation
                 }),
                 closed: false,
-                focus: mock(() => {
+                focus: vi.fn(() => {
                     // Mock implementation
                 }),
             };
 
             let callCount = 0;
-            window.open = mock(() => {
+            window.open = vi.fn(() => {
                 callCount++;
                 return mockPopup as Window;
             });
@@ -245,7 +245,7 @@ describe('Communicator', () => {
             // Call again - should reuse existing popup
             await communicator.waitForPopupLoaded();
 
-            expect((mockPopup.focus as ReturnType<typeof mock>).mock.calls.length).toBeGreaterThanOrEqual(1);
+            expect((mockPopup.focus as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1);
             expect(callCount).toBe(1);
         });
 
@@ -253,18 +253,18 @@ describe('Communicator', () => {
             let callCount = 0;
             let currentPopup = mockPopup;
 
-            window.open = mock(() => {
+            window.open = vi.fn(() => {
                 callCount++;
                 // Return a new popup each time
                 const newPopup = {
-                    postMessage: mock(() => {
+                    postMessage: vi.fn(() => {
                         // Mock implementation
                     }),
-                    close: mock(() => {
+                    close: vi.fn(() => {
                         // Mock implementation
                     }),
                     closed: false,
-                    focus: mock(() => {
+                    focus: vi.fn(() => {
                         // Mock implementation
                     }),
                 };
@@ -304,7 +304,7 @@ describe('Communicator', () => {
             communicator.disconnect();
 
             // Verify popup was closed
-            expect((mockPopup.close as ReturnType<typeof mock>).mock.calls.length).toBe(1);
+            expect((mockPopup.close as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
 
             // Verify the pending message listener was rejected
             try {
@@ -321,19 +321,19 @@ describe('Communicator', () => {
         it('should handle disconnect when popup is already closed', () => {
             // Create a mock with closed=true
             const closedPopup = {
-                postMessage: mock(() => {
+                postMessage: vi.fn(() => {
                     // Mock implementation
                 }),
-                close: mock(() => {
+                close: vi.fn(() => {
                     // Mock implementation
                 }),
                 closed: true,
-                focus: mock(() => {
+                focus: vi.fn(() => {
                     // Mock implementation
                 }),
             };
 
-            window.open = mock(() => closedPopup as unknown as Window);
+            window.open = vi.fn(() => closedPopup as unknown as Window);
 
             // Should not throw
             expect(() => communicator.disconnect()).not.toThrow();
@@ -381,7 +381,7 @@ describe('Communicator', () => {
             await new Promise((resolve) => setTimeout(resolve, 300));
 
             // After PopupUnload, the popup should be closed
-            expect((mockPopup.close as ReturnType<typeof mock>).mock.calls.length).toBeGreaterThanOrEqual(1);
+            expect((mockPopup.close as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1);
         });
 
         it('should clean up listeners when PopupUnload is received', async () => {
@@ -401,7 +401,7 @@ describe('Communicator', () => {
             expect(removeEventListenerCallCount).toBeGreaterThan(initialRemoveCount);
 
             // Popup should be closed
-            expect((mockPopup.close as ReturnType<typeof mock>).mock.calls.length).toBeGreaterThanOrEqual(1);
+            expect((mockPopup.close as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1);
         });
     });
 });
