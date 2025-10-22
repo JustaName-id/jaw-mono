@@ -4,6 +4,9 @@ export { JAW_KEYS_URL, JAW_PASSKEYS_URL, JAW_RPC_URL, FACTORY_ADDRESS, CONTRACT_
 /**  SDK Info **/
 export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
 
+/** SDK exports **/
+export * from './sdk/index.js';
+
 /**  Account exports **/
 export * from './account/index.js';
 
@@ -30,3 +33,6 @@ export * from './storage-manager/index.js'
 
 /** Passkey Manager exports **/
 export * from './passkey-manager/index.js';
+
+/** Default export **/
+export { createJAWSDK as default } from './sdk/createJAWSDK.js';
