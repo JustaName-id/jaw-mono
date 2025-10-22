@@ -224,6 +224,7 @@ export class JAWSigner implements Signer {
                 this.accounts = accounts;
                 store.account.set({
                     accounts,
+                    chain: this.chain,
                 });
 
                 const accounts_ = [this.accounts[0]];
