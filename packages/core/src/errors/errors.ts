@@ -221,3 +221,25 @@ export function viemHttpErrorToProviderError(error: HttpRequestError) {
         return null;
     }
 }
+
+/**
+ * Exception for invalid configuration or missing required parameters
+ */
+export class InvalidConfigurationException extends Error {
+    constructor(message: string) {
+        super(message);
+        this.name = 'InvalidConfigurationException';
+    }
+
+    static missingParameters(fields: string[]): InvalidConfigurationException {
+        return new InvalidConfigurationException(
+            `Missing required parameters: ${fields.join(', ')}`
+        );
+    }
+
+    static missingHeaders(headers: string[]): InvalidConfigurationException {
+        return new InvalidConfigurationException(
+            `Missing required headers: ${headers.join(', ')}`
+        );
+    }
+}

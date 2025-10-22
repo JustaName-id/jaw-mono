@@ -8,6 +8,7 @@ export {
     isActionableHttpRequestError,
     isViemError,
     viemHttpErrorToProviderError,
+    InvalidConfigurationException,
     type InsufficientBalanceErrorData
 } from './errors.js'
 

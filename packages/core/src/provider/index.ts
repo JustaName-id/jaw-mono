@@ -4,5 +4,7 @@ export {
     type ProviderConnectInfo,
     type ProviderInterface,
     type AppMetadata,
-    type JawProviderPreference
+    type JawProviderPreference,
+    type ProviderEventCallback,
+    type ConstructorOptions
 } from "./interface.js"
