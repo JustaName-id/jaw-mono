@@ -635,4 +635,982 @@ describe('JAWSigner', () => {
       expect(store.chains.clear).toHaveBeenCalled();
     });
   });
+
+  describe('eth_requestAccounts Flow', () => {
+    it('should trigger wallet_connect automatically when unauthenticated', async () => {
+      // Arrange - Create new signer without handshake
+      const unauthenticatedSigner = new JAWSigner({
+        metadata: mockMetadata,
+        communicator: mockCommunicator,
+        callback: mockCallback,
+      });
+
+      const mockWalletConnectResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockWalletConnectResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      // Act
+      const result = await unauthenticatedSigner.request({
+        method: 'eth_requestAccounts',
+      });
+
+      // Assert
+      expect(result).toEqual(['0x1234567890123456789012345678901234567890']);
+      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+      expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+    });
+
+    it('should trigger accountsChanged callback after eth_requestAccounts', async () => {
+      // Arrange - Create new signer without handshake
+      const unauthenticatedSigner = new JAWSigner({
+        metadata: mockMetadata,
+        communicator: mockCommunicator,
+        callback: mockCallback,
+      });
+
+      const mockWalletConnectResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockWalletConnectResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      // Act
+      await unauthenticatedSigner.request({
+        method: 'eth_requestAccounts',
+      });
+
+      // Assert
+      expect(mockCallback).toHaveBeenCalledWith('accountsChanged', ['0x1234567890123456789012345678901234567890']);
+    });
+  });
+
+  describe('Simple RPC Methods', () => {
+    beforeEach(async () => {
+      // Perform handshake first
+      const handshakeRequest: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      const mockHandshakeResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockHandshakeResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      await signer.handshake(handshakeRequest);
+
+      // Reset mock call history
+      vi.clearAllMocks();
+    });
+
+    it('should return first account for eth_coinbase', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'eth_coinbase',
+      };
+
+      // Act
+      const result = await signer.request(request);
+
+      // Assert
+      expect(result).toBe('0x1234567890123456789012345678901234567890');
+    });
+
+    it('should return chain id number for net_version', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'net_version',
+      };
+
+      // Act
+      const result = await signer.request(request);
+
+      // Assert
+      expect(result).toBe(1);
+    });
+  });
+
+  describe('Error Handling: Critical Paths', () => {
+    beforeEach(async () => {
+      // Perform handshake first
+      const handshakeRequest: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      const mockHandshakeResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockHandshakeResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      await signer.handshake(handshakeRequest);
+
+      // Reset mock call history
+      vi.clearAllMocks();
+    });
+
+    it('should throw error when forwarding to RPC without rpcUrl', async () => {
+      // Arrange - Create new signer with chain that has no rpcUrl
+      const signerWithNoRpc = new JAWSigner({
+        metadata: mockMetadata,
+        communicator: mockCommunicator,
+        callback: mockCallback,
+      });
+
+      // Set up authenticated state but with no rpcUrl
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          chain: { id: 1 }, // No rpcUrl
+          capabilities: undefined,
+        },
+        chains: [{ id: 1 }], // No rpcUrl in chains either
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
+      });
+
+      // Manually set authenticated state for the signer
+      (signerWithNoRpc as any).accounts = ['0x1234567890123456789012345678901234567890'];
+      (signerWithNoRpc as any).chain = { id: 1 }; // No rpcUrl
+
+      const rpcRequest: RequestArguments = {
+        method: 'eth_getBalance',
+        params: ['0x1234567890123456789012345678901234567890', 'latest'],
+      };
+
+      // Act & Assert
+      await expect(signerWithNoRpc.request(rpcRequest)).rejects.toThrow('No RPC URL set for chain');
+    });
+
+    it('should throw error when encrypting without shared secret', async () => {
+      // Arrange
+      mockKeyManager.getSharedSecret.mockResolvedValue(null);
+
+      const request: RequestArguments = {
+        method: 'personal_sign',
+        params: ['0x48656c6c6f', '0x1234567890123456789012345678901234567890'],
+      };
+
+      // Act & Assert
+      await expect(signer.request(request)).rejects.toThrow('No shared secret found when encrypting request');
+    });
+
+    it('should throw error when decrypting without shared secret', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'personal_sign',
+        params: ['0x48656c6c6f', '0x1234567890123456789012345678901234567890'],
+      };
+
+      const mockSignResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockSignResponse);
+
+      // Mock shared secret to be null on decrypt (but present on encrypt)
+      let encryptCallCount = 0;
+      mockKeyManager.getSharedSecret.mockImplementation(async () => {
+        encryptCallCount++;
+        return encryptCallCount === 1 ? mockCryptoKey : null;
+      });
+
+      // Act & Assert
+      await expect(signer.request(request)).rejects.toThrow('Invalid session: no shared secret found when decrypting response');
+    });
+  });
+
+  describe('wallet_connect Caching', () => {
+    beforeEach(async () => {
+      // Perform handshake first
+      const handshakeRequest: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      const mockHandshakeResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockHandshakeResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      await signer.handshake(handshakeRequest);
+
+      // Reset mock call history
+      vi.clearAllMocks();
+    });
+
+    it('should return cached wallet_connect response if available', async () => {
+      // Arrange
+      vi.spyOn(store.account, 'get').mockReturnValue({
+        accounts: ['0x1234567890123456789012345678901234567890'],
+        chain: { id: 1 },
+        capabilities: undefined,
+      });
+
+      const request: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      // Act
+      const result = await signer.request(request);
+
+      // Assert
+      expect(result).toEqual({
+        accounts: [
+          {
+            address: '0x1234567890123456789012345678901234567890',
+            capabilities: {},
+          },
+        ],
+      });
+      expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
+    });
+
+    it('should trigger connect callback when wallet_connect is not cached', async () => {
+      // Arrange - Mock store to return undefined accounts (no cache)
+      // Note: empty array [] is truthy, so getCachedWalletConnectResponse needs undefined
+      vi.spyOn(store.account, 'get').mockReturnValue({
+        accounts: undefined,
+        chain: undefined,
+        capabilities: undefined,
+      });
+
+      // Clear previous callback calls from beforeEach handshake
+      vi.mocked(mockCallback).mockClear();
+
+      const mockWalletConnectResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockWalletConnectResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      const request: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      // Act
+      await signer.request(request);
+
+      // Assert
+      expect(mockCallback).toHaveBeenCalledWith('connect', { chainId: '0x1' });
+    });
+  });
+
+  describe('Unauthenticated Scenarios', () => {
+    it('should allow wallet_switchEthereumChain when unauthenticated', async () => {
+      // Arrange - Create new signer without handshake
+      const unauthenticatedSigner = new JAWSigner({
+        metadata: mockMetadata,
+        communicator: mockCommunicator,
+        callback: mockCallback,
+      });
+
+      const request: RequestArguments = {
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x89' }],
+      };
+
+      // Act
+      const result = await unauthenticatedSigner.request(request);
+
+      // Assert - Should not throw and should update local chain
+      expect(result).toBeUndefined();
+    });
+
+    it('should allow wallet_sendCalls when unauthenticated', async () => {
+      // Arrange - Create new signer without handshake
+      const unauthenticatedSigner = new JAWSigner({
+        metadata: mockMetadata,
+        communicator: mockCommunicator,
+        callback: mockCallback,
+      });
+
+      const mockResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: '0xbatchId',
+        },
+      } as RPCResponse);
+
+      const request: RequestArguments = {
+        method: 'wallet_sendCalls',
+        params: [{ calls: [] }],
+      };
+
+      // Act
+      const result = await unauthenticatedSigner.request(request);
+
+      // Assert
+      expect(result).toBe('0xbatchId');
+      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+    });
+
+    it('should allow wallet_sign when unauthenticated', async () => {
+      // Arrange - Create new signer without handshake
+      const unauthenticatedSigner = new JAWSigner({
+        metadata: mockMetadata,
+        communicator: mockCommunicator,
+        callback: mockCallback,
+      });
+
+      const mockResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: '0xsignature',
+        },
+      } as RPCResponse);
+
+      const request: RequestArguments = {
+        method: 'wallet_sign',
+        params: ['0x1234567890123456789012345678901234567890', '0x48656c6c6f'],
+      };
+
+      // Act
+      const result = await unauthenticatedSigner.request(request);
+
+      // Assert
+      expect(result).toBe('0xsignature');
+      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+    });
+
+    it('should allow wallet_connect when unauthenticated', async () => {
+      // Arrange - Create new signer without handshake
+      const unauthenticatedSigner = new JAWSigner({
+        metadata: mockMetadata,
+        communicator: mockCommunicator,
+        callback: mockCallback,
+      });
+
+      const mockResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      const request: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      // Act
+      const result = await unauthenticatedSigner.request(request);
+
+      // Assert
+      expect(result).toEqual({
+        accounts: [
+          { address: '0x1234567890123456789012345678901234567890' },
+        ],
+      });
+      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+    });
+  });
+
+  describe('wallet_getCapabilities Edge Cases', () => {
+    beforeEach(async () => {
+      // Perform handshake first
+      const handshakeRequest: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      const mockHandshakeResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockHandshakeResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      await signer.handshake(handshakeRequest);
+
+      // Reset mock call history
+      vi.clearAllMocks();
+    });
+
+    it('should throw unauthorized for non-owned account', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x0987654321098765432109876543210987654321'], // Different account
+      };
+
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          chain: { id: 1 },
+          capabilities: {
+            '0x1': { paymasterService: { supported: true } },
+          },
+        },
+        chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
+      });
+
+      // Act & Assert
+      await expect(signer.request(request)).rejects.toThrow('no active account found when getting capabilities');
+    });
+
+    it('should return empty object when capabilities undefined', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890'],
+      };
+
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          chain: { id: 1 },
+          capabilities: undefined,
+        },
+        chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
+      });
+
+      // Act
+      const result = await signer.request(request);
+
+      // Assert
+      expect(result).toEqual({});
+    });
+
+    it('should filter capabilities by chainIds parameter', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890', ['0x1']], // Only request chain 1
+      };
+
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          chain: { id: 1 },
+          capabilities: {
+            '0x1': { paymasterService: { supported: true } },
+            '0x89': { atomicBatch: { supported: true } },
+            '0xa': { otherFeature: { supported: true } },
+          },
+        },
+        chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
+      });
+
+      // Act
+      const result = await signer.request(request);
+
+      // Assert
+      expect(result).toEqual({
+        '0x1': { paymasterService: { supported: true } },
+      });
+    });
+
+    it('should filter capabilities by multiple chainIds', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890', ['0x1', '0x89']],
+      };
+
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          chain: { id: 1 },
+          capabilities: {
+            '0x1': { paymasterService: { supported: true } },
+            '0x89': { atomicBatch: { supported: true } },
+            '0xa': { otherFeature: { supported: true } },
+          },
+        },
+        chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
+      });
+
+      // Act
+      const result = await signer.request(request);
+
+      // Assert
+      expect(result).toEqual({
+        '0x1': { paymasterService: { supported: true } },
+        '0x89': { atomicBatch: { supported: true } },
+      });
+    });
+  });
+
+  describe('Chain & Capabilities Updates', () => {
+    it('should update chains and capabilities from response data', async () => {
+      // Arrange - Create new signer without handshake
+      const unauthenticatedSigner = new JAWSigner({
+        metadata: mockMetadata,
+        communicator: mockCommunicator,
+        callback: mockCallback,
+      });
+
+      const mockResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+            137: 'https://polygon-mainnet.rpc.com',
+          },
+          capabilities: {
+            '0x1': { paymasterService: { supported: true } },
+          },
+        },
+      } as RPCResponse);
+
+      const request: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      // Act
+      await unauthenticatedSigner.request(request);
+
+      // Assert
+      expect(store.chains.set).toHaveBeenCalledWith([
+        { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+        { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
+      ]);
+      expect(store.account.set).toHaveBeenCalledWith({
+        capabilities: {
+          '0x1': { paymasterService: { supported: true } },
+        },
+      });
+    });
+
+    it('should handle nativeCurrencies in chain updates', async () => {
+      // Arrange - Create new signer without handshake
+      const unauthenticatedSigner = new JAWSigner({
+        metadata: mockMetadata,
+        communicator: mockCommunicator,
+        callback: mockCallback,
+      });
+
+      const mockResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+            137: 'https://polygon-mainnet.rpc.com',
+          },
+          nativeCurrencies: {
+            1: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
+            137: { name: 'Polygon', symbol: 'MATIC', decimals: 18 },
+          },
+        },
+      } as RPCResponse);
+
+      const request: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      // Act
+      await unauthenticatedSigner.request(request);
+
+      // Assert
+      expect(store.chains.set).toHaveBeenCalledWith([
+        {
+          id: 1,
+          rpcUrl: 'https://eth-mainnet.rpc.com',
+          nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
+        },
+        {
+          id: 137,
+          rpcUrl: 'https://polygon-mainnet.rpc.com',
+          nativeCurrency: { name: 'Polygon', symbol: 'MATIC', decimals: 18 },
+        },
+      ]);
+    });
+  });
+
+  describe('updateChain Edge Cases', () => {
+    beforeEach(async () => {
+      // Perform handshake first
+      const handshakeRequest: RequestArguments = {
+        method: 'wallet_connect',
+        params: [{ version: '1.0', capabilities: {} }],
+      };
+
+      const mockHandshakeResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockHandshakeResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: {
+            accounts: [
+              { address: '0x1234567890123456789012345678901234567890' },
+            ],
+          },
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+            137: 'https://polygon-mainnet.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      await signer.handshake(handshakeRequest);
+
+      // Reset mock call history
+      vi.clearAllMocks();
+    });
+
+    it('should send request to popup when chain not found in available chains', async () => {
+      // Arrange
+      const switchRequest: RequestArguments = {
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x2a' }], // Chain 42 (not in available chains)
+      };
+
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          chain: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+          capabilities: undefined,
+        },
+        chains: [
+          { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+          { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
+        ],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
+      });
+
+      const mockSwitchResponse: RPCResponseMessage = {
+        id: mockMessageId,
+        requestId: mockMessageId,
+        correlationId: mockCorrelationId,
+        sender: 'peer-public-key-hex',
+        content: {
+          encrypted: mockEncryptedData,
+        },
+        timestamp: new Date(),
+      };
+
+      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockSwitchResponse);
+
+      (decryptContent as Mock).mockResolvedValue({
+        result: {
+          value: null,
+        },
+        data: {
+          chains: {
+            1: 'https://eth-mainnet.rpc.com',
+            137: 'https://polygon-mainnet.rpc.com',
+            42: 'https://kovan.rpc.com',
+          },
+        },
+      } as RPCResponse);
+
+      // Act
+      const result = await signer.request(switchRequest);
+
+      // Assert
+      expect(result).toBeNull();
+      expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+    });
+
+    it('should not trigger chainChanged callback if chain is already current', async () => {
+      // Arrange
+      const switchRequest: RequestArguments = {
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x1' }], // Already on chain 1
+      };
+
+      const currentChain = { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' };
+
+      // Set the signer's internal chain to the same object reference
+      (signer as any).chain = currentChain;
+
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          chain: currentChain,
+          capabilities: undefined,
+        },
+        chains: [
+          currentChain,
+          { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
+        ],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
+      });
+
+      // Clear previous callback calls from beforeEach
+      vi.mocked(mockCallback).mockClear();
+
+      // Act
+      const result = await signer.request(switchRequest);
+
+      // Assert
+      expect(result).toBeNull();
+      expect(mockCallback).not.toHaveBeenCalled();
+    });
+  });
 });
