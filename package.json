@@ -2,6 +2,7 @@
   "name": "@jaw-mono/source",
   "version": "0.0.0",
   "license": "MIT",
+  "packageManager": "bun@latest",
   "scripts": {
     "prepare": "husky"
   },
