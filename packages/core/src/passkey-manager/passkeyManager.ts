@@ -7,7 +7,7 @@ import {
 } from './types.js';
 import type { JawProviderPreference } from '../provider/index.js';
 import { registerPasskeyInBackend, lookupPasskeyFromBackend } from './utils.js';
-import {JAW_BACKEND_URL} from "../constants.js";
+import {JAW_PASSKEYS_URL} from "../constants.js";
 
 /**
  * PasskeyManager handles passkey authentication and account management
@@ -143,7 +143,7 @@ export class PasskeyManager {
     this.validateCredentialId(credentialId);
 
     // Register with backend
-    const serverUrl = this.preference.serverUrl ?? JAW_BACKEND_URL;
+    const serverUrl = this.preference.serverUrl ?? JAW_PASSKEYS_URL;
     await registerPasskeyInBackend(
       {
         credentialId,
@@ -185,7 +185,7 @@ export class PasskeyManager {
     dev = false
   ): Promise<void> {
     // Lookup from backend first
-    const serverUrl = this.preference.serverUrl ?? JAW_BACKEND_URL;
+    const serverUrl = this.preference.serverUrl ?? JAW_PASSKEYS_URL;
     const passkeyData = await lookupPasskeyFromBackend(
       credentialId,
       this.preference.apiKey,

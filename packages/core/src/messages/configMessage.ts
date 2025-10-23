@@ -7,5 +7,6 @@ export interface ConfigMessage extends Message {
 export type ConfigEvent =
     | 'PopupLoaded'
     | 'PopupUnload'
+    | 'selectSignerType'
 
 export type SignerType = 'scw'; // Replace with JawSigner || AppSpecificSigner
