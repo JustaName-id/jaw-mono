@@ -88,7 +88,12 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         const ephemeralSigner = this.initSigner('scw');
                         await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
                         const result = await ephemeralSigner.request(args); // send diffie-hellman encrypted request
-                        await ephemeralSigner.cleanup(); // clean up (rotate) the ephemeral session keys
+                        try {
+                            await ephemeralSigner.cleanup(); // clean up (rotate) the ephemeral session keys
+                        } catch (cleanupError) {
+                            // Log cleanup error but don't fail the request
+                            console.warn('Ephemeral signer cleanup failed:', cleanupError);
+                        }
                         return result as T;
                     }
                     case 'wallet_getCallsStatus': {
@@ -114,7 +119,9 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             return result as T;
         } catch (error) {
             const { code } = error as { code?: number };
-            if (code === standardErrorCodes.provider.unauthorized) this.disconnect();
+            if (code === standardErrorCodes.provider.unauthorized) {
+                await this.disconnect();
+            }
             return Promise.reject(serializeError(error));
         }
     }
