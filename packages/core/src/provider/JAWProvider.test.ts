@@ -969,6 +969,423 @@ describe('JAWProvider', () => {
       expect(createSigner).toHaveBeenCalledTimes(2); // Once for each connection
     });
   });
+
+  describe('Parallel Requests and CorrelationId Management', () => {
+    beforeEach(() => {
+      provider = new JAWProvider(mockConstructorOptions);
+      (provider as any).signer = mockSigner;
+    });
+
+    it('should handle parallel requests with unique correlationIds', async () => {
+      // Arrange
+      const request1: RequestArguments = { method: 'eth_accounts' };
+      const request2: RequestArguments = { method: 'eth_chainId' };
+      const request3: RequestArguments = { method: 'net_version' };
+
+      const mockUUIDs = [
+        '11111111-1111-1111-1111-111111111111',
+        '22222222-2222-2222-2222-222222222222',
+        '33333333-3333-3333-3333-333333333333',
+      ];
+
+      let uuidCallCount = 0;
+      vi.spyOn(crypto, 'randomUUID').mockImplementation(() => mockUUIDs[uuidCallCount++] as `${string}-${string}-${string}-${string}-${string}`);
+
+      // Mock signer to add delay to simulate parallel execution
+      (mockSigner.request as Mock).mockImplementation(async (req: RequestArguments) => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        if (req.method === 'eth_accounts') return ['0x1234567890123456789012345678901234567890'];
+        if (req.method === 'eth_chainId') return '0x1';
+        if (req.method === 'net_version') return 1;
+        return null;
+      });
+
+      // Act - Execute requests in parallel
+      const results = await Promise.all([
+        provider.request(request1),
+        provider.request(request2),
+        provider.request(request3),
+      ]);
+
+      // Assert
+      expect(correlationIds.set).toHaveBeenCalledTimes(3);
+      expect(correlationIds.set).toHaveBeenNthCalledWith(1, request1, mockUUIDs[0]);
+      expect(correlationIds.set).toHaveBeenNthCalledWith(2, request2, mockUUIDs[1]);
+      expect(correlationIds.set).toHaveBeenNthCalledWith(3, request3, mockUUIDs[2]);
+
+      expect(correlationIds.delete).toHaveBeenCalledTimes(3);
+      expect(correlationIds.delete).toHaveBeenCalledWith(request1);
+      expect(correlationIds.delete).toHaveBeenCalledWith(request2);
+      expect(correlationIds.delete).toHaveBeenCalledWith(request3);
+
+      expect(results).toEqual([
+        ['0x1234567890123456789012345678901234567890'],
+        '0x1',
+        1,
+      ]);
+    });
+
+    it('should handle many parallel requests without conflicts', async () => {
+      // Arrange
+      const numRequests = 10;
+
+      // Reset the mock to clear previous calls from beforeEach
+      (correlationIds.set as Mock).mockClear();
+      (correlationIds.delete as Mock).mockClear();
+
+      // Track request order
+      let requestCount = 0;
+      (mockSigner.request as Mock).mockImplementation(async () => {
+        const currentRequest = requestCount++;
+        // Simulate some async work
+        await new Promise(resolve => setTimeout(resolve, Math.random() * 10));
+        return [`0x${currentRequest.toString().padStart(40, '0')}`];
+      });
+
+      // Act - Execute many requests in parallel with different request objects
+      const promises = Array.from({ length: numRequests }, () =>
+        provider.request<string[]>({ method: 'eth_accounts' })
+      );
+
+      const results = await Promise.all(promises);
+
+      // Assert - All requests should complete successfully
+      expect(results).toHaveLength(numRequests);
+      expect(mockSigner.request).toHaveBeenCalledTimes(numRequests);
+
+      // Each request should have been tracked with correlationIds
+      expect(correlationIds.set).toHaveBeenCalledTimes(numRequests);
+      expect(correlationIds.delete).toHaveBeenCalledTimes(numRequests);
+
+      // All results should be valid ethereum addresses
+      results.forEach((result) => {
+        expect(result).toHaveLength(1);
+        expect(result[0]).toMatch(/^0x[0-9a-f]{40}$/i);
+      });
+    });
+
+    it('should cleanup correlationId even when parallel request fails', async () => {
+      // Arrange
+      const request1: RequestArguments = { method: 'eth_accounts' };
+      const request2: RequestArguments = { method: 'personal_sign', params: ['0x', '0x'] };
+
+      (mockSigner.request as Mock).mockImplementation(async (req: RequestArguments) => {
+        await new Promise(resolve => setTimeout(resolve, 50));
+        if (req.method === 'eth_accounts') {
+          return ['0x1234567890123456789012345678901234567890'];
+        }
+        throw new Error('Signing failed');
+      });
+
+      // Act
+      const results = await Promise.allSettled([
+        provider.request(request1),
+        provider.request(request2),
+      ]);
+
+      // Assert
+      expect(results[0].status).toBe('fulfilled');
+      expect(results[1].status).toBe('rejected');
+      expect(correlationIds.delete).toHaveBeenCalledTimes(2);
+      expect(correlationIds.delete).toHaveBeenCalledWith(request1);
+      expect(correlationIds.delete).toHaveBeenCalledWith(request2);
+    });
+  });
+
+  describe('Event Listener Lifecycle', () => {
+    beforeEach(() => {
+      provider = new JAWProvider(mockConstructorOptions);
+    });
+
+    it('should add and remove event listeners', () => {
+      // Arrange
+      const connectHandler = vi.fn();
+      const chainChangedHandler = vi.fn();
+
+      // Act - Add listeners
+      provider.on('connect', connectHandler);
+      provider.on('chainChanged', chainChangedHandler);
+
+      provider.emit('connect', { chainId: '0x1' });
+      provider.emit('chainChanged', '0x89');
+
+      // Assert
+      expect(connectHandler).toHaveBeenCalledWith({ chainId: '0x1' });
+      expect(chainChangedHandler).toHaveBeenCalledWith('0x89');
+
+      // Act - Remove listeners
+      provider.off('connect', connectHandler);
+      provider.off('chainChanged', chainChangedHandler);
+
+      connectHandler.mockClear();
+      chainChangedHandler.mockClear();
+
+      provider.emit('connect', { chainId: '0x1' });
+      provider.emit('chainChanged', '0x89');
+
+      // Assert - Handlers should not be called after removal
+      expect(connectHandler).not.toHaveBeenCalled();
+      expect(chainChangedHandler).not.toHaveBeenCalled();
+    });
+
+    it('should handle once listeners that auto-remove after first call', () => {
+      // Arrange
+      const handler = vi.fn();
+
+      // Act
+      provider.once('connect', handler);
+      provider.emit('connect', { chainId: '0x1' });
+      provider.emit('connect', { chainId: '0x89' });
+
+      // Assert - Handler should only be called once
+      expect(handler).toHaveBeenCalledTimes(1);
+      expect(handler).toHaveBeenCalledWith({ chainId: '0x1' });
+    });
+
+    it('should remove all listeners for a specific event', () => {
+      // Arrange
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+      const handler3 = vi.fn();
+      const otherHandler = vi.fn();
+
+      provider.on('connect', handler1);
+      provider.on('connect', handler2);
+      provider.on('connect', handler3);
+      provider.on('chainChanged', otherHandler);
+
+      // Act - Remove all connect listeners
+      provider.removeAllListeners('connect');
+      provider.emit('connect', { chainId: '0x1' });
+      provider.emit('chainChanged', '0x89');
+
+      // Assert
+      expect(handler1).not.toHaveBeenCalled();
+      expect(handler2).not.toHaveBeenCalled();
+      expect(handler3).not.toHaveBeenCalled();
+      expect(otherHandler).toHaveBeenCalledWith('0x89');
+    });
+
+    it('should remove all listeners for all events', () => {
+      // Arrange
+      const connectHandler = vi.fn();
+      const chainChangedHandler = vi.fn();
+      const accountsChangedHandler = vi.fn();
+
+      provider.on('connect', connectHandler);
+      provider.on('chainChanged', chainChangedHandler);
+      provider.on('accountsChanged', accountsChangedHandler);
+
+      // Act
+      provider.removeAllListeners();
+      provider.emit('connect', { chainId: '0x1' });
+      provider.emit('chainChanged', '0x89');
+      provider.emit('accountsChanged', ['0x123']);
+
+      // Assert
+      expect(connectHandler).not.toHaveBeenCalled();
+      expect(chainChangedHandler).not.toHaveBeenCalled();
+      expect(accountsChangedHandler).not.toHaveBeenCalled();
+    });
+
+    it('should support multiple handlers for the same event', () => {
+      // Arrange
+      const handler1 = vi.fn();
+      const handler2 = vi.fn();
+      const handler3 = vi.fn();
+
+      // Act
+      provider.on('connect', handler1);
+      provider.on('connect', handler2);
+      provider.on('connect', handler3);
+      provider.emit('connect', { chainId: '0x1' });
+
+      // Assert
+      expect(handler1).toHaveBeenCalledWith({ chainId: '0x1' });
+      expect(handler2).toHaveBeenCalledWith({ chainId: '0x1' });
+      expect(handler3).toHaveBeenCalledWith({ chainId: '0x1' });
+    });
+
+    it('should call all handlers even if one is removed during iteration', () => {
+      // Arrange
+      const handler1 = vi.fn();
+      const handler2 = vi.fn(() => {
+        // Remove handler3 while iterating
+        provider.off('connect', handler3);
+      });
+      const handler3 = vi.fn();
+
+      // Act
+      provider.on('connect', handler1);
+      provider.on('connect', handler2);
+      provider.on('connect', handler3);
+      provider.emit('connect', { chainId: '0x1' });
+
+      // Assert - handler1 and handler2 should be called, handler3 behavior depends on EventEmitter implementation
+      expect(handler1).toHaveBeenCalledWith({ chainId: '0x1' });
+      expect(handler2).toHaveBeenCalledWith({ chainId: '0x1' });
+    });
+  });
+
+  describe('Chain Switching', () => {
+    beforeEach(() => {
+      provider = new JAWProvider(mockConstructorOptions);
+      (provider as any).signer = mockSigner;
+    });
+
+    it('should emit chainChanged event when chain switches', async () => {
+      // Arrange
+      const chainChangedHandler = vi.fn();
+      provider.on('chainChanged', chainChangedHandler);
+
+      const request: RequestArguments = {
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x89' }],
+      };
+
+      (mockSigner.request as Mock).mockImplementation(async () => {
+        // Simulate signer emitting chainChanged event
+        const callback = (provider as any).emit.bind(provider);
+        callback('chainChanged', '0x89');
+        return null;
+      });
+
+      // Act
+      await provider.request(request);
+
+      // Assert
+      expect(chainChangedHandler).toHaveBeenCalledWith('0x89');
+    });
+
+    it('should handle wallet_addEthereumChain request', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_addEthereumChain',
+        params: [
+          {
+            chainId: '0x89',
+            chainName: 'Polygon',
+            rpcUrls: ['https://polygon-rpc.com'],
+            nativeCurrency: { name: 'MATIC', symbol: 'MATIC', decimals: 18 },
+            blockExplorerUrls: ['https://polygonscan.com'],
+          },
+        ],
+      };
+
+      (mockSigner.request as Mock).mockResolvedValue(null);
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(mockSigner.request).toHaveBeenCalledWith(request);
+      expect(result).toBeNull();
+    });
+
+    it('should maintain state across chain switches', async () => {
+      // Arrange
+      const accountsRequest: RequestArguments = { method: 'eth_accounts' };
+      const switchChainRequest: RequestArguments = {
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x89' }],
+      };
+
+      const mockAccounts = ['0x1234567890123456789012345678901234567890'];
+
+      (mockSigner.request as Mock).mockImplementation(async (req: RequestArguments) => {
+        if (req.method === 'eth_accounts') return mockAccounts;
+        if (req.method === 'wallet_switchEthereumChain') {
+          const callback = (provider as any).emit.bind(provider);
+          callback('chainChanged', '0x89');
+          return null;
+        }
+        return null;
+      });
+
+      // Act
+      const accountsBefore = await provider.request(accountsRequest);
+      await provider.request(switchChainRequest);
+      const accountsAfter = await provider.request(accountsRequest);
+
+      // Assert - Accounts should remain the same after chain switch
+      expect(accountsBefore).toEqual(mockAccounts);
+      expect(accountsAfter).toEqual(mockAccounts);
+      expect((provider as any).signer).toBe(mockSigner); // Signer should not change
+    });
+
+    it('should handle chain switch failure', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x999' }],
+      };
+
+      const error = {
+        code: 4902,
+        message: 'Unrecognized chain ID',
+      };
+
+      (mockSigner.request as Mock).mockRejectedValue(error);
+
+      // Act & Assert
+      await expect(provider.request(request)).rejects.toMatchObject(error);
+      expect((provider as any).signer).toBe(mockSigner); // Signer should remain
+    });
+
+    it('should emit chainChanged only once during switch', async () => {
+      // Arrange
+      const chainChangedHandler = vi.fn();
+      provider.on('chainChanged', chainChangedHandler);
+
+      const request: RequestArguments = {
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId: '0x89' }],
+      };
+
+      (mockSigner.request as Mock).mockImplementation(async () => {
+        const callback = (provider as any).emit.bind(provider);
+        callback('chainChanged', '0x89');
+        return null;
+      });
+
+      // Act
+      await provider.request(request);
+
+      // Assert
+      expect(chainChangedHandler).toHaveBeenCalledTimes(1);
+      expect(chainChangedHandler).toHaveBeenCalledWith('0x89');
+    });
+
+    it('should support multiple chain switches in sequence', async () => {
+      // Arrange
+      const chainChangedHandler = vi.fn();
+      provider.on('chainChanged', chainChangedHandler);
+
+      const chains = ['0x89', '0xa', '0x1'];
+      const requests = chains.map(chainId => ({
+        method: 'wallet_switchEthereumChain',
+        params: [{ chainId }],
+      }));
+
+      (mockSigner.request as Mock).mockImplementation(async (req: RequestArguments) => {
+        const chainId = (req.params as any)?.[0]?.chainId;
+        const callback = (provider as any).emit.bind(provider);
+        callback('chainChanged', chainId);
+        return null;
+      });
+
+      // Act
+      for (const req of requests) {
+        await provider.request(req);
+      }
+
+      // Assert
+      expect(chainChangedHandler).toHaveBeenCalledTimes(3);
+      expect(chainChangedHandler).toHaveBeenNthCalledWith(1, '0x89');
+      expect(chainChangedHandler).toHaveBeenNthCalledWith(2, '0xa');
+      expect(chainChangedHandler).toHaveBeenNthCalledWith(3, '0x1');
+    });
+  });
 });
 
 describe('createJAWProvider', () => {
