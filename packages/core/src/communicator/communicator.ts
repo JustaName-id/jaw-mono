@@ -82,7 +82,7 @@ export class Communicator {
         const left = Math.max(0, (window.screen.width - POPUP_WIDTH) / 2);
         const top = Math.max(0, (window.screen.height - POPUP_HEIGHT) / 2);
 
-        const popupId = `jaw${crypto.randomUUID()}`;
+        const popupId = `jaw_${crypto.randomUUID()}`;
 
         const popup = window.open(
             this.url.toString(),

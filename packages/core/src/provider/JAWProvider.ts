@@ -15,7 +15,7 @@ import {
 
 import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest } from '../utils/index.js';
 
-import { correlationIds  } from '../store/index.js';
+import { correlationIds } from '../store/index.js';
 
 import { Signer } from '../signer/index.js';
 

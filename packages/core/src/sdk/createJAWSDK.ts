@@ -1,9 +1,11 @@
 import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
 import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
+import { store } from '../store/index.js';
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   preference?: Partial<JawProviderPreference>;
+  paymasterUrls?: Record<number, string>;
 };
 
 const DEFAULT_PREFERENCE: JawProviderPreference = {
@@ -43,7 +45,11 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
       ...DEFAULT_PREFERENCE,
       ...params.preference,
     },
+    paymasterUrls: params.paymasterUrls,
   };
+
+  // Store the config
+  store.config.set(options);
 
   let provider: ProviderInterface | null = null;
 
