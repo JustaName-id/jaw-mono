@@ -1,9 +1,4 @@
-import type { WalletRpcSchema, TransactionRequest } from 'viem';
-
-/**
- * Transaction object for eth_sendTransaction and eth_signTransaction
- */
-export type Transaction = TransactionRequest;
+import type { WalletRpcSchema } from 'viem';
 
 /**
  * Utility type to extract a method entry from WalletRpcSchema
