@@ -17,5 +17,7 @@ export {
     createSigner,
     fetchSignerType,
     loadSignerType,
-    storeSignerType
+    storeSignerType,
+    findOwnerIndex,
+    type FindOwnerIndexParams
 } from "./utils.js"
