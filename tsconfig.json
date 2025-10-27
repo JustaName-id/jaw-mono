@@ -4,12 +4,6 @@
   "files": [],
   "references": [
     {
-      "path": "./core"
-    },
-    {
-      "path": "./packages/core"
-    },
-    {
       "path": "./packages/core"
     },
     {

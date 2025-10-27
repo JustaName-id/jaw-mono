@@ -1,0 +1,1 @@
+export { createJAWSDK, type CreateJAWSDKOptions } from './createJAWSDK.js';
