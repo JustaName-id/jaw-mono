@@ -22,6 +22,9 @@ export * from './communicator/index.js';
 /** Provider exports **/
 export * from './provider/index.js';
 
+/** Events exports **/
+export * from './events/index.js';
+
 /** Utils exports **/
 export * from './utils/index.js';
 
