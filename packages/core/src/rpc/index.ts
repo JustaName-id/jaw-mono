@@ -5,4 +5,4 @@ export {
     type WalletConnectResponse
 } from "./wallet_connect.js"
 
-export * from './methodTypes.js';
+export { type Transaction, type ViemRPCParams, type ViemRPCReturnType } from './methodTypes.js';
