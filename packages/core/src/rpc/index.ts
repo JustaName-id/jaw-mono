@@ -4,3 +4,5 @@ export {
     type WalletConnectRequest,
     type WalletConnectResponse
 } from "./wallet_connect.js"
+
+export * from './methodTypes.js';
