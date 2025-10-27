@@ -7,6 +7,9 @@ export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
 /** SDK exports **/
 export * from './sdk/index.js';
 
+/**  RPC exports **/
+export * from './rpc/index.js';
+
 /**  Account exports **/
 export * from './account/index.js';
 
