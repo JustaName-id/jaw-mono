@@ -1,4 +1,5 @@
 import './global.css';
+import { ReactQueryProvider } from './providers/react-query';
 
 export const metadata = {
   title: 'Welcome to keys-jaw-id',
@@ -12,7 +13,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <ReactQueryProvider>
+        <body>{children}</body>
+      </ReactQueryProvider>
     </html>
   )
 }

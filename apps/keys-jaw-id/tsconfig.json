@@ -25,6 +25,9 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@jaw/ui": [
+        "../../packages/ui/src/*"
       ]
     },
     "outDir": "dist",
@@ -52,5 +55,10 @@
     "eslint.config.js",
     "eslint.config.cjs",
     "eslint.config.mjs"
+  ],
+  "references": [
+    {
+      "path": "../../packages/ui"
+    }
   ]
 }

@@ -1,12 +1,12 @@
-import { Records, useAddressSubnames } from '@justaname.id/react'
+// import { Records, useAddressSubnames } from '@justaname.id/react'
 import { useMemo } from 'react'
 import { useAuth } from '../useAuth'
-import { ChainId } from '@/utils/types'
+import { ChainId } from '../../utils/types'
 
 interface UseSubnameCheckResult {
     hasRequiredSubname: boolean
-    connectedSubname: Records | null
-    allSubnames: Records[]
+    connectedSubname: any | null
+    allSubnames: any[]
     isLoading: boolean
     isError: boolean
     walletAddress: string | null
@@ -22,38 +22,37 @@ export const useSubnameCheck = (): UseSubnameCheckResult => {
 
     const shouldFetchSubnames = isAuthenticated && !!walletAddress
 
-    const { 
-        addressSubnames, 
-        isAddressSubnamesPending, 
-        isAddressSubnamesFetching,
-        refetchAddressSubnames 
-    } = useAddressSubnames({
-        address: walletAddress || undefined,
-        chainId: chainId,
-        isClaimed: true,
-        enabled: shouldFetchSubnames
-    })
+    // const { 
+    //     addressSubnames, 
+    //     isAddressSubnamesPending, 
+    //     isAddressSubnamesFetching,
+    //     refetchAddressSubnames 
+    // } = useAddressSubnames({
+    //     address: walletAddress || undefined,
+    //     chainId: chainId,
+    //     isClaimed: true,
+    //     enabled: shouldFetchSubnames
+    // })
 
 
     const processedSubnames = useMemo(() => {
-        const requiredSubnames = addressSubnames?.filter(subname => 
-            subname.ens.endsWith(`.${ensName}`)
-        ) || []
+        const requiredSubnames: any[] = [];
+        // ) || []
 
         return {
-            allSubnames: addressSubnames,
-            requiredSubnames,
-            hasRequiredSubname: requiredSubnames.length > 0
+            allSubnames: [] as any[],
+            requiredSubnames: requiredSubnames as any[],
+            hasRequiredSubname: false
         }
-    }, [addressSubnames, ensName])
+    }, [ensName])
 
     const isLoading = useMemo(() => {
         if (!isAuthenticated || isAuthLoading) return true
         if (walletAddress && shouldFetchSubnames) {
-            return isAddressSubnamesPending || isAddressSubnamesFetching
+            return false
         }
         return false
-    }, [isAuthenticated, isAuthLoading, walletAddress, shouldFetchSubnames, isAddressSubnamesPending, isAddressSubnamesFetching])
+    }, [isAuthenticated, isAuthLoading, walletAddress, shouldFetchSubnames])
 
     const isError = !isAuthenticated && !isLoading
 
@@ -64,6 +63,6 @@ export const useSubnameCheck = (): UseSubnameCheckResult => {
         isLoading,
         isError,
         walletAddress: walletAddress || null,
-        refetch: refetchAddressSubnames
+        refetch: () => {}
     }
 }

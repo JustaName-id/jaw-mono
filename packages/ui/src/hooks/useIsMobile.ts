@@ -22,7 +22,7 @@ export function useIsMobile(breakpoint = 768) {
     if (mediaQuery.addEventListener) {
       mediaQuery.addEventListener('change', handleMediaQueryChange)
       return () => mediaQuery.removeEventListener('change', handleMediaQueryChange)
-    } 
+    }
     // Legacy browsers
     else if (mediaQuery.addListener) {
       mediaQuery.addListener(handleMediaQueryChange)
