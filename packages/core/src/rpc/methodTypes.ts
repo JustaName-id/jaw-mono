@@ -1,26 +1,11 @@
 import { Address } from '../provider/interface.js';
 import { WalletConnectRequest } from './wallet_connect.js';
+import type { WalletRpcSchema, TransactionRequest } from 'viem';
 
 /**
  * Transaction object for eth_sendTransaction and eth_signTransaction
  */
-export interface Transaction {
-    from: Address;
-    to?: Address;
-    value?: string;
-    gas?: string;
-    gasPrice?: string;
-    nonce?: string;
-    data?: string;
-    maxFeePerGas?: string;
-    maxPriorityFeePerGas?: string;
-    chainId?: string;
-    type?: string;
-    accessList?: Array<{
-        address: Address;
-        storageKeys: string[];
-    }>;
-}
+export type Transaction = TransactionRequest;
 
 /**
  * EIP-712 Domain for typed data signing
@@ -214,3 +199,35 @@ export type MethodParamsValidator = {
     ) => asserts params is RPCParamsMap[K];
 };
 
+/**
+ * Utility type to extract a method entry from WalletRpcSchema
+ */
+type ExtractMethod<T extends readonly any[], M extends string> = {
+  [K in keyof T]: T[K] extends { Method: M } ? T[K] : never;
+}[number];
+
+/**
+ * Utility type to extract parameter types from WalletRpcSchema
+ */
+export type ExtractParams<T extends readonly any[], M extends string> = 
+  ExtractMethod<T, M> extends { Parameters?: infer P } 
+    ? P 
+    : never;
+
+/**
+ * Utility type to extract return types from WalletRpcSchema
+ */
+export type ExtractReturnType<T extends readonly any[], M extends string> = 
+  ExtractMethod<T, M> extends { ReturnType: infer R } 
+    ? R 
+    : never;
+
+/**
+ * Helper type to get parameter types for any method in WalletRpcSchema
+ */
+export type ViemRPCParams<M extends string> = ExtractParams<WalletRpcSchema, M>;
+
+/**
+ * Helper type to get return types for any method in WalletRpcSchema
+ */
+export type ViemRPCReturnType<M extends string> = ExtractReturnType<WalletRpcSchema, M>;
