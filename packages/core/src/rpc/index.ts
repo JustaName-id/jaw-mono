@@ -6,7 +6,6 @@ export {
 } from "./wallet_connect.js"
 
 export { 
-    type Transaction, 
     type ViemRPCParams, 
     type ViemRPCReturnType,
     SUPPORTED_METHODS,
