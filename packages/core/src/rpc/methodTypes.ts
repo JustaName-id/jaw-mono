@@ -37,3 +37,35 @@ export type ViemRPCParams<M extends string> = ExtractParams<WalletRpcSchema, M>;
  * Helper type to get return types for any method in WalletRpcSchema
  */
 export type ViemRPCReturnType<M extends string> = ExtractReturnType<WalletRpcSchema, M>;
+
+/**
+ * Supported RPC method names from WalletRpcSchema
+ */
+export const SUPPORTED_METHODS = [
+  'eth_accounts',
+  'eth_chainId',
+  'eth_coinbase',
+  'eth_ecRecover',
+  'eth_requestAccounts',
+  'eth_sendTransaction',
+  'eth_sendRawTransaction',
+  'eth_sign',
+  'eth_signTransaction',
+  'eth_signTypedData',
+  'eth_signTypedData_v1',
+  'eth_signTypedData_v3',
+  'eth_signTypedData_v4',
+  'net_version',
+  'personal_ecRecover',
+  'personal_sign',
+  'wallet_addEthereumChain',
+  'wallet_connect',
+  'wallet_getCallsStatus',
+  'wallet_getCapabilities',
+  'wallet_grantPermissions',
+  'wallet_sendCalls',
+  'wallet_sign',
+  'wallet_showCallsStatus',
+  'wallet_switchEthereumChain',
+  'wallet_watchAsset',
+] as const;
