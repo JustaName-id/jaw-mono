@@ -41,7 +41,7 @@ export function OnboardingDialog({
         <div className="flex flex-col gap-1">
           {accounts.map((account) => (
             <Button
-              key={account.username}
+              key={account.credentialId || account.username || Math.random().toString()}
               onClick={() => onAccountSelect(account)}
               variant="ghost"
               className="w-full h-auto !py-2 !px-3 flex items-center justify-between hover:bg-muted/50"
@@ -51,7 +51,7 @@ export function OnboardingDialog({
                 <WalletIcon className='!w-6 !h-6' />
                 <div className="text-left">
                   <p className="text-sm font-normal text-foreground">
-                    {account.username}
+                    {account.username || 'Unnamed Account'}
                   </p>
                   <p className="text-xs font-semibold text-muted-foreground">
                     {new Date(account.creationDate).toLocaleDateString('en-US', {
@@ -92,7 +92,7 @@ export function OnboardingDialog({
               value={username}
               onChange={(e) => onUsernameChange(e.target.value)}
               className="flex-1"
-              right={<span className="text-sm font-bold text-foreground">{`.${ensDomain}`}</span>}
+            // right={<span className="text-sm font-bold text-foreground">{`.${ensDomain}`}</span>}
             />
             {isCreating ? (
               <Spinner className="w-10 h-10 animate-spin" />
@@ -105,11 +105,11 @@ export function OnboardingDialog({
               </Button>
             )}
           </div>
-          {username.length > 0 && (
+          {/* {username.length > 0 && (
             <span className="text-sm font-medium text-foreground">
               {usernameValidation.message}
             </span>
-          )}
+          )} */}
         </div>
       </CardContent>
     </Card>

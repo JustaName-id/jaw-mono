@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSubnameCheck, useAuth, usePasskeys, useCreatePasskey, usePasskeyLogin } from '../hooks';
+import { useSubnameCheck, useAuth, usePasskeys } from '../hooks';
 import { SignInScreen } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
 import { TransactionModal } from '../components/TransactionModal';
@@ -9,6 +9,7 @@ import { SDKRequestType, type AppMetadata } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator } from '../lib/popup-communicator';
 import { CryptoHandler, type RPCRequestMessage } from '../lib/crypto-handler';
+import { PasskeyService } from '../lib/passkey-service';
 
 // Simple state types
 type PopupState =
@@ -50,8 +51,6 @@ export default function KeysJawIdApp() {
   // Use hooks for passkey operations
   const authQuery = useAuth();
   const passkeyQuery = usePasskeys();
-  const createPasskeyMutation = useCreatePasskey();
-  const loginMutation = usePasskeyLogin();
 
   // Service instances (created once)
   const [communicator] = useState(() => new PopupCommunicator());
@@ -64,7 +63,6 @@ export default function KeysJawIdApp() {
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [username, setUsername] = useState('');
   const [showOnboarding, setShowOnboarding] = useState(true);
 
   // Single useEffect for all message handling
@@ -78,6 +76,11 @@ export default function KeysJawIdApp() {
 
     console.log('🚀 Running in SDK popup mode');
     setIsSDKMode(true);
+
+    // Clear auth state for fresh connection (user must select account each time)
+    const passkeyService = new PasskeyService({ localOnly: true });
+    passkeyService.logout();
+    console.log('🔓 Auth state cleared - user will need to select account');
 
     // Initialize crypto handler
     cryptoHandler.initialize().then(() => {
@@ -132,27 +135,36 @@ export default function KeysJawIdApp() {
     };
   }, []);
 
+  // Handle late-arriving handshake requests
+  // This fixes the race condition where user authenticates before handshake arrives
+  useEffect(() => {
+    // If we're stuck in processing state and a connect request arrives late
+    if (
+      state === 'processing' &&
+      pendingRequest?.type === SDKRequestType.CONNECT &&
+      authQuery.isAuthenticated &&
+      currentAccount
+    ) {
+      console.log('✅ Late handshake received, transitioning to account-selection');
+      setState('account-selection');
+    }
+  }, [pendingRequest, state, authQuery.isAuthenticated, currentAccount]);
+
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
     console.log('🔍 Checking for existing passkeys...');
     setState('passkey-check');
 
     try {
-      // Refetch to get latest data
-      await passkeyQuery.refetchAccounts();
-      await authQuery.refetch();
+      // Refetch and use the returned fresh data (not the cached hook values)
+      const accountsResult = await passkeyQuery.refetchAccounts();
 
-      const accounts = passkeyQuery.accounts;
-      const isAuthenticated = authQuery.isAuthenticated;
-      const walletAddr = authQuery.walletAddress;
+      const accounts = accountsResult.data || [];
 
-      if (isAuthenticated && walletAddr) {
-        // User is already logged in
-        console.log('✅ User already authenticated');
-        setCurrentAccount(accounts[0] || null);
-        setState('account-selection');
-      } else if (accounts.length > 0) {
-        // Has accounts but not logged in - show auth
+      console.log('📊 Fresh data - accounts:', accounts.length);
+
+      if (accounts.length > 0) {
+        // Has accounts - show account selection/auth screen
         console.log('🔑 Found existing passkeys, showing auth screen');
         setState('passkey-auth');
       } else {
@@ -385,23 +397,34 @@ export default function KeysJawIdApp() {
               onComplete={async () => {
                 setState('processing');
                 try {
-                  console.log('🔑 Creating passkey with username:', username);
-                  const result = await createPasskeyMutation.mutateAsync(username);
-                  console.log('✅ Passkey created successfully');
+                  console.log('✅ Passkey creation completed in SignInScreen');
 
-                  // Refetch to get updated account list
+                  // SignInScreen already created the passkey, just refetch and proceed
                   await passkeyQuery.refetchAccounts();
-                  setCurrentAccount(passkeyQuery.accounts[0] || null);
-                  setState('account-selection');
+                  await authQuery.refetch();
+
+                  const accounts = passkeyQuery.accounts;
+                  const newestAccount = accounts[accounts.length - 1] || null;
+                  setCurrentAccount(newestAccount);
+                  console.log('✅ Set current account:', newestAccount?.username);
+
+                  // If there's a pending connect request, show approval screen
+                  if (pendingRequest?.type === SDKRequestType.CONNECT) {
+                    console.log('✅ Moving to account-selection for connection approval');
+                    setState('account-selection');
+                  } else {
+                    // No pending request yet, wait for it
+                    console.log('⏳ No pending request yet, waiting...');
+                    setState('processing');
+                  }
                 } catch (err) {
-                  console.error('❌ Failed to create passkey:', err);
-                  setError(err instanceof Error ? err.message : 'Failed to create passkey');
+                  console.error('❌ Failed after passkey creation:', err);
+                  setError(err instanceof Error ? err.message : 'Failed to proceed');
                   setState('error');
                 }
               }}
               onCreateAccount={() => {
-                // Same as onComplete for now
-                console.log('Create account flow');
+                console.log('Create account flow triggered');
               }}
             />
 
@@ -434,15 +457,29 @@ export default function KeysJawIdApp() {
               onComplete={async () => {
                 setState('processing');
                 try {
-                  console.log('🔓 Authenticating with passkey...');
-                  const result = await loginMutation.mutateAsync();
-                  console.log('✅ Authentication successful');
-                  setCurrentAccount(result.account);
-                  setState('account-selection');
+                  console.log('✅ Authentication completed in SignInScreen');
+
+                  // SignInScreen already handled login, just proceed
+                  await authQuery.refetch();
+                  await passkeyQuery.refetchAccounts();
+
+                  const accounts = passkeyQuery.accounts;
+                  setCurrentAccount(accounts[0] || null);
+                  console.log('✅ Set current account:', accounts[0]?.username);
+
+                  // If there's a pending connect request, show approval screen
+                  if (pendingRequest?.type === SDKRequestType.CONNECT) {
+                    console.log('✅ Moving to account-selection for connection approval');
+                    setState('account-selection');
+                  } else {
+                    // No pending request yet, wait for it
+                    console.log('⏳ No pending request yet, waiting...');
+                    setState('processing');
+                  }
                 } catch (err) {
-                  console.error('❌ Authentication failed:', err);
+                  console.error('❌ Failed after authentication:', err);
                   setError(err instanceof Error ? err.message : 'Authentication failed');
-                  setState('passkey-auth'); // Stay on auth screen
+                  setState('passkey-auth');
                 }
               }}
               onCreateAccount={() => {

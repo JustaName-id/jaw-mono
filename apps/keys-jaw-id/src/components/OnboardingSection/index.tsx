@@ -1,7 +1,7 @@
 'use client'
 
 import { LocalStorageAccount, OnboardingDialog } from '@jaw/ui';
-import { useLogin, usePasskeyLogin, usePasskeys, useSubnameCheck, useCreatePasskey } from '../../hooks';
+import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey } from '../../hooks';
 import { useState } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
 // import { ChainId } from '@/utils/types';
@@ -14,13 +14,17 @@ interface SignInScreenProps {
 }
 
 export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps) {
-    const { accounts } = usePasskeys();
+    const { accounts, refetchAccounts } = usePasskeys();
     const { mutateAsync: login } = useLogin();
     const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
     const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
 
     const [username, setUsername] = useState('')
-    const { hasRequiredSubname, refetch: refetchSubnames, walletAddress } = useSubnameCheck();
+    // TODO: Re-enable subname check when implementing ENS subname registration
+    // const { hasRequiredSubname, refetch: refetchSubnames, walletAddress } = useSubnameCheck();
+
+    // Debug: Log accounts whenever they change
+    console.log('📋 SignInScreen - Current accounts:', accounts);
     // const [debouncedUsername, setDebouncedUsername] = useDebounceValue(username, 500)
     // const { isSubnameAvailable, isSubnameAvailableLoading } = useIsSubnameAvailable({
     //     username,
@@ -37,6 +41,7 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
 
     const handleAccountSelect = async (account: LocalStorageAccount) => {
         try {
+            console.log('🔑 handleAccountSelect called with:', account);
             if (!account.credentialId) {
                 throw new Error('Credential ID is required');
             }
@@ -45,58 +50,70 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
                 credentialId: account.credentialId,
                 isImported: account.isImported,
             })
+            console.log('✅ Login successful');
             onComplete()
         } catch (error) {
-            console.error("Login failed:", error)
+            console.error("❌ Login failed:", error)
             setLoggingInAccount(null);
         }
     }
 
     const handleCreateAccount = async () => {
-        let resultWallet = "";
         try {
-            if (!walletAddress) {
-                const result = await register(`${username}.${process.env.NEXT_PUBLIC_ENS_NAME}`)
-                resultWallet = result.address;
-            } else {
-                resultWallet = walletAddress;
+            console.log('➕ handleCreateAccount called with username:', username);
+
+            // Validate username
+            if (!username || username.trim().length === 0) {
+                console.error('❌ Username is required');
+                return;
             }
 
-            if (!!resultWallet) {
-                // await justaname.subnames.addSubname(
-                //     {
-                //         username: username,
-                //         ensDomain: process.env.NEXT_PUBLIC_ENS_NAME ?? '',
-                //         chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID!) as ChainId,
-                //         addresses: SUPPORTED_CHAINS.map(chain => ({
-                //             address: resultWallet,
-                //             coinType: (+chain.id + 2147483648).toString(),
-                //         })),
-                //         overrideSignatureCheck: true,
-                //     },
-                //     {
-                //         xApiKey: process.env.NEXT_PUBLIC_API_KEY!,
-                //         xAddress: resultWallet,
-                //         xMessage: "",
-                //     }
-                // )
+            // Always create passkey with username (don't check walletAddress)
+            const result = await register(username.trim())
+            console.log('✅ Passkey created with address:', result.address);
 
-                await refetchSubnames()
-            }
+            // TODO: Subname registration - implement later
+            // if (!!result.address) {
+            //     await justaname.subnames.addSubname(
+            //         {
+            //             username: username,
+            //             ensDomain: process.env.NEXT_PUBLIC_ENS_NAME ?? '',
+            //             chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID!) as ChainId,
+            //             addresses: SUPPORTED_CHAINS.map(chain => ({
+            //                 address: result.address,
+            //                 coinType: (+chain.id + 2147483648).toString(),
+            //             })),
+            //             overrideSignatureCheck: true,
+            //         },
+            //         {
+            //             xApiKey: process.env.NEXT_PUBLIC_API_KEY!,
+            //             xAddress: result.address,
+            //             xMessage: "",
+            //         }
+            //     )
+            //     await refetchSubnames()
+            // }
+
+            // Refetch accounts to update the UI with the newly created passkey
+            console.log('🔄 Refetching accounts...');
+            await refetchAccounts();
+            console.log('✅ Accounts refetched');
 
             // Call onComplete after successful account creation
             onComplete();
         } catch (error) {
-            console.error('Failed to create account:', error)
+            console.error('❌ Failed to create account:', error)
         }
     }
 
     const handleImportAccount = async () => {
         try {
-            await passkeyLogin();
+            console.log('📥 handleImportAccount called - attempting to import passkey');
+            const result = await passkeyLogin();
+            console.log('✅ Import successful:', result);
             onComplete();
         } catch (error) {
-            console.error('Import failed:', error);
+            console.error('❌ Import failed:', error);
         }
     };
 
