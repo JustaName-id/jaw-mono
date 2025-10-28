@@ -1,15 +1,28 @@
-
+import { useMutation } from "@tanstack/react-query";
+import { PasskeyService } from "../../lib/passkey-service";
 
 export interface UseCreatePasskeyResult {
   address: string;
+  credentialId: string;
 }
 
 export function useCreatePasskey() {
- 
-  return {
-    mutateAsync: async (username: string): Promise<UseCreatePasskeyResult> => {
-      throw new Error('useCreatePasskey not implemented yet');
+  const mutation = useMutation({
+    mutationFn: async (username: string): Promise<UseCreatePasskeyResult> => {
+      const service = new PasskeyService({ localOnly: true });
+      const result = await service.createPasskey(username);
+
+      return {
+        address: result.address,
+        credentialId: result.credentialId,
+      };
     },
-    isPending: false,
+  });
+
+  return {
+    mutateAsync: mutation.mutateAsync,
+    isPending: mutation.isPending,
+    isError: mutation.isError,
+    error: mutation.error,
   };
 }

@@ -1,72 +1,290 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSDKCommunicator, useSDKState, useSDKPasskey, useSubnameCheck } from '../hooks';
+import { useSubnameCheck, useAuth, usePasskeys, useCreatePasskey, usePasskeyLogin } from '../hooks';
 import { SignInScreen } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
 import { TransactionModal } from '../components/TransactionModal';
-import { SDKRequestType } from '../lib/sdk-types';
-import type { PasskeyAccount } from '@jaw.id/passkeys';
+import { SDKRequestType, type AppMetadata } from '../lib/sdk-types';
+import type { PasskeyAccount } from '@jaw.id/core';
+import { PopupCommunicator } from '../lib/popup-communicator';
+import { CryptoHandler, type RPCRequestMessage } from '../lib/crypto-handler';
+
+// Simple state types
+type PopupState =
+  | 'initializing'
+  | 'passkey-check'
+  | 'passkey-create'
+  | 'passkey-auth'
+  | 'account-selection'
+  | 'processing'
+  | 'success'
+  | 'error';
+
+interface PopupConfig {
+  version: string;
+  metadata: AppMetadata;
+  preference: {
+    options: string;
+    keysUrl: string;
+    attribution?: Record<string, unknown>;
+  };
+  location: string;
+}
+
+interface PendingRequest {
+  type: SDKRequestType;
+  requestId: string;
+  correlationId: string;
+  metadata: AppMetadata | null;
+  method: string;
+  params: unknown[];
+  chainId?: number;
+  onApprove: (result: unknown) => Promise<void>;
+  onReject: (error: string) => Promise<void>;
+}
 
 export default function KeysJawIdApp() {
   const { walletAddress } = useSubnameCheck();
-  const { isSDKMode, pendingRequest, sdkState } = useSDKCommunicator();
-  const { state, setState, error, setError, clearError, isLoading } = useSDKState();
-  const sdkPasskey = useSDKPasskey();
 
-  const [showOnboarding, setShowOnboarding] = useState(true);
+  // Use hooks for passkey operations
+  const authQuery = useAuth();
+  const passkeyQuery = usePasskeys();
+  const createPasskeyMutation = useCreatePasskey();
+  const loginMutation = usePasskeyLogin();
+
+  // Service instances (created once)
+  const [communicator] = useState(() => new PopupCommunicator());
+  const [cryptoHandler] = useState(() => new CryptoHandler());
+
+  // Simple state
+  const [isSDKMode, setIsSDKMode] = useState(false);
+  const [state, setState] = useState<PopupState>('initializing');
+  const [config, setConfig] = useState<PopupConfig | null>(null);
+  const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(null);
+  const [error, setError] = useState<string | null>(null);
   const [username, setUsername] = useState('');
+  const [showOnboarding, setShowOnboarding] = useState(true);
 
-  // Initialize SDK state machine when SDK is ready
+  // Single useEffect for all message handling
   useEffect(() => {
-    if (isSDKMode && sdkState.isInitialized && state === 'initializing') {
-      console.log('🔄 SDK initialized, checking for existing passkeys...');
-      setState('passkey-check');
+    // Check if running in popup mode
+    if (!communicator.hasOpener()) {
+      console.log('📱 Running in normal mode (no opener)');
+      setIsSDKMode(false);
+      return;
+    }
 
-      // Check for existing passkeys
-      sdkPasskey.checkPasskeys().then(result => {
-        console.log('📋 Passkey check result:', result);
+    console.log('🚀 Running in SDK popup mode');
+    setIsSDKMode(true);
 
-        if (result.isAuthenticated && result.currentAddress) {
-          // User is already logged in
-          console.log('✅ User already authenticated');
-          const account = sdkPasskey.getCurrentAccount();
-          setCurrentAccount(account);
-          setState('account-selection');
-        } else if (result.hasAccounts) {
-          // Has accounts but not logged in - show auth
-          console.log('🔑 Found existing passkeys, showing auth screen');
-          setState('passkey-auth');
-        } else {
-          // No accounts - need to create
-          console.log('➕ No passkeys found, showing create screen');
-          setState('passkey-create');
+    // Initialize crypto handler
+    cryptoHandler.initialize().then(() => {
+      console.log('✅ CryptoHandler initialized');
+      // Send PopupLoaded event
+      communicator.sendPopupLoaded();
+    }).catch(err => {
+      console.error('❌ Failed to initialize CryptoHandler:', err);
+      setError('Failed to initialize');
+      setState('error');
+    });
+
+    // Listen for messages
+    const cleanup = communicator.onMessage<PopupConfig>((message: any) => {
+      console.log('📥 Received message:', message);
+
+      // Handle config message
+      if (message.data?.version) {
+        console.log('📋 Received config:', message.data);
+        setConfig(message.data);
+        checkForPasskeys();
+      }
+
+      // Handle selectSignerType event
+      if (message.event === 'selectSignerType') {
+        console.log('🔑 Received selectSignerType request');
+        communicator.sendResponse(message.id, 'scw');
+      }
+
+      // Handle RPC requests
+      if (message.id && message.sender && message.content) {
+        const rpcMessage = message as RPCRequestMessage;
+
+        // Handle handshake (unencrypted initial request)
+        if (rpcMessage.content.handshake) {
+          console.log('🤝 Received handshake request');
+          handleHandshakeRequest(rpcMessage);
         }
-      }).catch(err => {
-        console.error('❌ Error checking passkeys:', err);
-        setError('Failed to check for passkeys');
-      });
-    }
-  }, [isSDKMode, sdkState.isInitialized, state, setState, sdkPasskey, setError]);
 
-  // When we have both account and pending connect request, show approval UI
-  useEffect(() => {
-    if (
-      currentAccount &&
-      pendingRequest?.type === SDKRequestType.CONNECT &&
-      state === 'account-selection'
-    ) {
-      console.log('✅ Ready to show connection approval UI');
+        // Handle encrypted request
+        if (rpcMessage.content.encrypted) {
+          console.log('🔐 Received encrypted request');
+          handleEncryptedRequest(rpcMessage);
+        }
+      }
+    });
+
+    // Send PopupUnload on unmount
+    return () => {
+      communicator.sendPopupUnload();
+      cleanup();
+    };
+  }, []);
+
+  // Check for existing passkeys using hooks
+  const checkForPasskeys = async () => {
+    console.log('🔍 Checking for existing passkeys...');
+    setState('passkey-check');
+
+    try {
+      // Refetch to get latest data
+      await passkeyQuery.refetchAccounts();
+      await authQuery.refetch();
+
+      const accounts = passkeyQuery.accounts;
+      const isAuthenticated = authQuery.isAuthenticated;
+      const walletAddr = authQuery.walletAddress;
+
+      if (isAuthenticated && walletAddr) {
+        // User is already logged in
+        console.log('✅ User already authenticated');
+        setCurrentAccount(accounts[0] || null);
+        setState('account-selection');
+      } else if (accounts.length > 0) {
+        // Has accounts but not logged in - show auth
+        console.log('🔑 Found existing passkeys, showing auth screen');
+        setState('passkey-auth');
+      } else {
+        // No accounts - need to create
+        console.log('➕ No passkeys found, showing create screen');
+        setState('passkey-create');
+      }
+    } catch (err) {
+      console.error('❌ Error checking passkeys:', err);
+      setError('Failed to check for passkeys');
+      setState('error');
     }
-  }, [currentAccount, pendingRequest, state]);
+  };
+
+  // Handle handshake request (unencrypted)
+  const handleHandshakeRequest = async (request: RPCRequestMessage) => {
+    try {
+      console.log('🤝 Processing handshake...');
+
+      // Clear old keys and process new handshake
+      await cryptoHandler.clear();
+      await cryptoHandler.processHandshakeRequest(request);
+
+      const handshake = request.content.handshake;
+      if (!handshake) return;
+
+      // Determine request type
+      const method = handshake.method;
+      const params = handshake.params;
+
+      console.log('📋 Handshake method:', method, 'params:', params);
+
+      // For eth_requestAccounts, we need to show approval UI
+      if (method === 'eth_requestAccounts') {
+        setPendingRequest({
+          type: SDKRequestType.CONNECT,
+          requestId: request.id,
+          correlationId: request.correlationId,
+          metadata: config?.metadata || null,
+          method,
+          params,
+          onApprove: async (result: unknown) => {
+            console.log('✅ User approved connection, sending response...');
+            const accounts = result as string[];
+            const response = await cryptoHandler.createHandshakeResponse(request.id, accounts);
+            communicator.sendMessage(response);
+          },
+          onReject: async (error: string) => {
+            console.log('❌ User rejected connection');
+            // TODO: Send error response
+            throw new Error(error);
+          },
+        });
+      }
+    } catch (err) {
+      console.error('❌ Failed to handle handshake:', err);
+      setError(err instanceof Error ? err.message : 'Handshake failed');
+      setState('error');
+    }
+  };
+
+  // Handle encrypted request
+  const handleEncryptedRequest = async (request: RPCRequestMessage) => {
+    try {
+      console.log('🔐 Processing encrypted request...');
+
+      // Restore shared secret from message
+      await cryptoHandler.restoreSharedSecretFromMessage(request);
+
+      // Decrypt the request
+      const decrypted = await cryptoHandler.decryptRequest(request);
+
+      const method = decrypted.action.method;
+      const params = decrypted.action.params;
+      const chainId = decrypted.chainId;
+
+      console.log('📋 Decrypted method:', method, 'params:', params, 'chainId:', chainId);
+
+      // Determine request type and show appropriate UI
+      let requestType: SDKRequestType;
+
+      if (method === 'personal_sign') {
+        requestType = SDKRequestType.SIGN_MESSAGE;
+      } else if (method === 'wallet_sendCalls') {
+        requestType = SDKRequestType.SEND_TRANSACTION;
+      } else if (method === 'eth_chainId') {
+        requestType = SDKRequestType.CHAIN_ID;
+      } else if (method === 'wallet_getSubAccounts') {
+        requestType = SDKRequestType.GET_SUB_ACCOUNTS;
+      } else if (method === 'wallet_importSubAccount') {
+        requestType = SDKRequestType.IMPORT_SUB_ACCOUNT;
+      } else {
+        console.warn('⚠️ Unknown method:', method);
+        requestType = SDKRequestType.CONNECT; // fallback
+      }
+
+      setPendingRequest({
+        type: requestType,
+        requestId: request.id,
+        correlationId: request.correlationId,
+        metadata: config?.metadata || null,
+        method,
+        params,
+        chainId,
+        onApprove: async (result: unknown) => {
+          console.log('✅ User approved, sending encrypted response...');
+          const response = await cryptoHandler.createEncryptedResponse(
+            request.id,
+            request.correlationId,
+            result
+          );
+          communicator.sendMessage(response);
+        },
+        onReject: async (error: string) => {
+          console.log('❌ User rejected request');
+          // TODO: Send error response
+          throw new Error(error);
+        },
+      });
+    } catch (err) {
+      console.error('❌ Failed to handle encrypted request:', err);
+      setError(err instanceof Error ? err.message : 'Failed to decrypt request');
+      setState('error');
+    }
+  };
 
   // ==========================================
   // SDK MODE - When opened by Coinbase SDK
   // ==========================================
   if (isSDKMode) {
-    // Show loading while SDK initializes or checking passkeys
-    if (!sdkState.isInitialized || state === 'initializing' || state === 'passkey-check') {
+    // Show loading while initializing or checking passkeys
+    if (state === 'initializing' || state === 'passkey-check') {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="text-center">
@@ -74,11 +292,10 @@ export default function KeysJawIdApp() {
             <p className="text-gray-600">
               {state === 'initializing' && 'Connecting to dApp...'}
               {state === 'passkey-check' && 'Checking for passkeys...'}
-              {!sdkState.isInitialized && 'Initializing...'}
             </p>
-            {sdkState.urlParams && (
+            {config && (
               <p className="text-sm text-gray-500 mt-2">
-                SDK: {sdkState.urlParams.sdkName} v{sdkState.urlParams.sdkVersion}
+                SDK v{config.version}
               </p>
             )}
           </div>
@@ -129,7 +346,11 @@ export default function KeysJawIdApp() {
             <p className="text-gray-600 mb-4">{error || 'An error occurred'}</p>
             <div className="space-y-2">
               <button
-                onClick={() => clearError('passkey-check')}
+                onClick={() => {
+                  setError(null);
+                  setState('passkey-check');
+                  checkForPasskeys();
+                }}
                 className="w-full py-2 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
               >
                 Try Again
@@ -165,13 +386,17 @@ export default function KeysJawIdApp() {
                 setState('processing');
                 try {
                   console.log('🔑 Creating passkey with username:', username);
-                  const result = await sdkPasskey.createPasskey(username);
+                  const result = await createPasskeyMutation.mutateAsync(username);
                   console.log('✅ Passkey created successfully');
-                  setCurrentAccount(result.account);
+
+                  // Refetch to get updated account list
+                  await passkeyQuery.refetchAccounts();
+                  setCurrentAccount(passkeyQuery.accounts[0] || null);
                   setState('account-selection');
                 } catch (err) {
                   console.error('❌ Failed to create passkey:', err);
                   setError(err instanceof Error ? err.message : 'Failed to create passkey');
+                  setState('error');
                 }
               }}
               onCreateAccount={() => {
@@ -210,7 +435,7 @@ export default function KeysJawIdApp() {
                 setState('processing');
                 try {
                   console.log('🔓 Authenticating with passkey...');
-                  const result = await sdkPasskey.authenticate();
+                  const result = await loginMutation.mutateAsync();
                   console.log('✅ Authentication successful');
                   setCurrentAccount(result.account);
                   setState('account-selection');
@@ -268,7 +493,7 @@ export default function KeysJawIdApp() {
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Address:</span>
                   <span className="font-mono text-xs font-medium text-gray-900">
-                    {walletAddress?.slice(0, 6)}...{walletAddress?.slice(-4)}
+                    {authQuery.walletAddress?.slice(0, 6)}...{authQuery.walletAddress?.slice(-4)}
                   </span>
                 </div>
                 {metadata && (
@@ -288,12 +513,13 @@ export default function KeysJawIdApp() {
                   setState('processing');
                   try {
                     console.log('✅ User approved connection');
-                    await pendingRequest.onApprove([walletAddress || '0x0000000000000000000000000000000000000000']);
+                    await pendingRequest.onApprove([authQuery.walletAddress || '0x0000000000000000000000000000000000000000']);
                     setState('success');
                     setTimeout(() => window.close(), 1500);
                   } catch (err) {
                     console.error('❌ Failed to approve connection:', err);
                     setError(err instanceof Error ? err.message : 'Failed to approve connection');
+                    setState('error');
                   }
                 }}
                 className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors shadow-lg"
@@ -335,6 +561,7 @@ export default function KeysJawIdApp() {
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
+              setState('error');
             }
           }}
           onError={async (error) => {
@@ -378,6 +605,7 @@ export default function KeysJawIdApp() {
             } catch (err) {
               console.error('❌ Failed to send transaction:', err);
               setError(err instanceof Error ? err.message : 'Failed to send transaction');
+              setState('error');
             }
           }}
           onError={async (error) => {
@@ -440,6 +668,7 @@ export default function KeysJawIdApp() {
                     setTimeout(() => window.close(), 1500);
                   } catch (err) {
                     setError(err instanceof Error ? err.message : 'Operation failed');
+                    setState('error');
                   }
                 }}
                 className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
@@ -459,7 +688,7 @@ export default function KeysJawIdApp() {
           <div className="text-6xl mb-4">⏳</div>
           <h2 className="text-xl font-semibold mb-2">Connected</h2>
           <p className="text-gray-600 mb-1">
-            {sdkState.config?.metadata?.appName || 'dApp'}
+            {config?.metadata?.appName || 'dApp'}
           </p>
           <p className="text-sm text-gray-500 mb-4">Waiting for requests...</p>
 

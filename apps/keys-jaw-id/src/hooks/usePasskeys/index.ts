@@ -1,5 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
-import { fetchAccountsFromLocalStorage, PasskeyAccount } from "@jaw.id/passkeys";
+import { PasskeyAccount } from "@jaw.id/core";
+import { PasskeyService } from "../../lib/passkey-service";
 
 export interface LocalStorageAccount {
   username: string;
@@ -7,6 +8,12 @@ export interface LocalStorageAccount {
   credentialId?: string;
   isImported?: boolean;
 }
+
+// Function to fetch accounts using PasskeyService
+const fetchAccountsFromLocalStorage = (): PasskeyAccount[] => {
+  const service = new PasskeyService({ localOnly: true });
+  return service.getAccounts();
+};
 
 export const usePasskeys = () => {
   const query = useQuery<PasskeyAccount[]>({

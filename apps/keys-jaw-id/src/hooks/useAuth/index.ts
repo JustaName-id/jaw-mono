@@ -1,5 +1,11 @@
-import { checkAuth } from "@jaw.id/passkeys";
 import { useQuery } from "@tanstack/react-query";
+import { PasskeyService } from "../../lib/passkey-service";
+
+// Function to check auth using PasskeyService
+const checkAuth = () => {
+    const service = new PasskeyService({ localOnly: true });
+    return service.checkAuth();
+};
 
 export const useAuth = () => {
     const query = useQuery({

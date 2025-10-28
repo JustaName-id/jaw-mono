@@ -21,7 +21,7 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
 
     const [username, setUsername] = useState('')
     const { hasRequiredSubname, refetch: refetchSubnames, walletAddress } = useSubnameCheck();
-    const [debouncedUsername, setDebouncedUsername] = useDebounceValue(username, 500)
+    // const [debouncedUsername, setDebouncedUsername] = useDebounceValue(username, 500)
     // const { isSubnameAvailable, isSubnameAvailableLoading } = useIsSubnameAvailable({
     //     username,
     //     ensDomain: process.env.NEXT_PUBLIC_ENS_NAME ?? '',
@@ -83,7 +83,9 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
 
                 await refetchSubnames()
             }
-            // The useEffect above will handle completion if the subname was successfully claimed
+
+            // Call onComplete after successful account creation
+            onComplete();
         } catch (error) {
             console.error('Failed to create account:', error)
         }
@@ -123,7 +125,12 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
 
     return (
         <OnboardingDialog
-            accounts={accounts}
+            accounts={accounts.map(account => ({
+                username: account.username,
+                creationDate: new Date(account.creationDate),
+                credentialId: account.credentialId,
+                isImported: account.isImported,
+            }))}
             onAccountSelect={handleAccountSelect}
             loggingInAccount={loggingInAccount}
             onImportAccount={handleImportAccount}
@@ -131,7 +138,7 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
             username={username}
             onUsernameChange={(value) => {
                 setUsername(value);
-                setDebouncedUsername(value);
+                // setDebouncedUsername(value);
             }}
             onCreateAccount={handleCreateAccount}
             isCreating={isCreatingPasskey}

@@ -1,34 +1,28 @@
-// import { createSmartAccount } from "@/sdk/lib/justanaccount";
-import { loginWithPasskey, storePasskeyAccountForLogin } from "@jaw.id/passkeys";
 import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "../useAuth";
-import { ChainId } from "../../utils/types";
+import { PasskeyService } from "../../lib/passkey-service";
 
 export const usePasskeyLogin = () => {
   const { refetch } = useAuth();
-  
+
   return useMutation({
     mutationFn: async () => {
         try {
-            const passkeyCredential = await loginWithPasskey();
-            if (!passkeyCredential) {
+            const service = new PasskeyService({ localOnly: true });
+            // Call without credentialId to use the first available passkey
+            const result = await service.authenticateWithPasskey();
+
+            if (!result) {
                 throw new Error('No stored passkey found or authentication failed');
             }
 
-            // const smartAccount = await createSmartAccount(passkeyCredential, parseInt(process.env.NEXT_PUBLIC_CHAIN_ID!) as ChainId);
-            // const address = await smartAccount.getAddress();
-
-            // storePasskeyAccountForLogin(passkeyCredential, address);
-
             return {
-                // account: smartAccount,
-                account: null,
-                // address,
-                address: '0x1234567890123456789012345678901234567890',
-                passkeyCredential,
+                address: result.address,
+                credentialId: result.credentialId,
+                account: result.account,
                 isLoggedIn: true
             };
-            
+
         } catch (error) {
             console.error('Passkey login failed:', error);
             throw error;
