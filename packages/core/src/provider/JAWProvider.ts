@@ -28,23 +28,23 @@ import {
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
     private readonly metadata: AppMetadata;
+    // @ts-expect-error - Will be used in future implementation
     private readonly preference: JawProviderPreference;
     private readonly communicator: Communicator | null;
 
     private signer: Signer | null = null;
 
-    constructor({ metadata, preference: { keysUrl, ...preference } }: Readonly<ConstructorOptions>) {
+    constructor({ metadata, preference }: Readonly<ConstructorOptions>) {
         super();
         this.metadata = metadata;
         this.preference = preference;
 
         // Only create communicator for cross-platform mode
         if (!preference.appSpecific) {
-            this.communicator = new Communicator({
-                url: keysUrl,
-                metadata,
-                preference,
-            });
+           this.communicator = new Communicator({
+            metadata,
+            preference,
+        });
         } else {
             this.communicator = null;
         }
@@ -106,6 +106,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             if (!this.signer) {
                 switch (args.method) {
                     case 'eth_requestAccounts': {
+
                         // Determine signer type based on preference
                         const signerType: SignerType = this.preference.appSpecific
                             ? 'appSpecific'
@@ -133,6 +134,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         }
 
                         const result = await signer.request(args);
+
                         this.signer = signer;
                         return result as T;
                     }
@@ -148,6 +150,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         }
 
                         const result = await ephemeralSigner.request(args);
+
                         try {
                             await ephemeralSigner.cleanup(); // clean up ephemeral session
                         } catch (cleanupError) {

@@ -61,6 +61,7 @@ export function createSigner(params: {
             if (!communicator) {
                 throw new Error('Communicator is required for popup mode (crossPlatform)');
             }
+        
             return new JAWSigner({
                 metadata,
                 callback,

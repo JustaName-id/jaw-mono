@@ -5,40 +5,57 @@ export { JAW_KEYS_URL, JAW_PASSKEYS_URL, JAW_RPC_URL, FACTORY_ADDRESS, CONTRACT_
 export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
 
 /** SDK exports **/
-export * from './sdk/index.js';
+export { createJAWSDK, type CreateJAWSDKOptions } from './sdk/index.js';
+
+/**  RPC exports **/
+export {
+    type SignInWithEthereumCapabilityRequest,
+    type SignInWithEthereumCapabilityResponse,
+    type WalletConnectRequest,
+    type WalletConnectResponse,
+    type ViemRPCParams,
+    type ViemRPCReturnType,
+    SUPPORTED_METHODS,
+} from './rpc/index.js';
 
 /**  Account exports **/
-export * from './account/index.js';
+export {
+    toJustanAccount,
+    type ToJustanAccountParameters,
+    type ToJustanAccountReturnType,
+    type JustanAccountImplementation,
+} from './account/index.js';
 
 /**  Error exports **/
 export * from './errors/index.js';
 
-/**  Message exports **/
-export * from './messages/index.js';
-
-/** Communicator exports **/
-export * from './communicator/index.js';
-
 /** Provider exports **/
-export * from './provider/index.js';
-
-/** Events exports **/
-export * from './events/index.js';
-
-/** Signer exports **/
-export { AppSpecificSigner, type Signer } from './signer/index.js';
-
-/** Utils exports **/
-export * from './utils/index.js';
-
-/** KeyvManager exports **/
-export * from './key-manager/index.js';
-
-/** Storage Manager exports **/
-export * from './storage-manager/index.js'
+export {
+    type RequestArguments,
+    type ProviderRpcError,
+    type ProviderConnectInfo,
+    type ProviderInterface,
+    type AppMetadata,
+    type JawProviderPreference,
+    type ProviderEventCallback,
+    JAWProvider,
+    createJAWProvider,
+    type CreateProviderOptions
+} from './provider/index.js';
 
 /** Passkey Manager exports **/
-export * from './passkey-manager/index.js';
+export {
+    PasskeyManager,
+    type PasskeyCredential,
+    type PasskeyAccount,
+    type AuthCheckResult,
+    type AuthState,
+    type PasskeyRegistrationRequest,
+    type PasskeyLookupResponse,
+    type BackendResponse,
+    type PasskeysByCredIdsResponse,
+    type LookupPasskeysRequest,
+} from './passkey-manager/index.js';
 
 /** Default export **/
 export { createJAWSDK as default } from './sdk/createJAWSDK.js';

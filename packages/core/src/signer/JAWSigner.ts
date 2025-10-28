@@ -84,7 +84,7 @@ export class JAWSigner implements Signer {
 
         const decrypted = await this.decryptResponseMessage(response);
 
-        this.handleResponse(args, decrypted);
+        await this.handleResponse(args, decrypted);
     }
 
     async request(request: RequestArguments) {

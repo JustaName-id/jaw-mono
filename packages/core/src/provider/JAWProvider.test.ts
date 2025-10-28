@@ -98,6 +98,7 @@ describe('JAWProvider', () => {
       expect(provider).toBeInstanceOf(JAWProvider);
       expect((provider as any).metadata).toEqual(mockMetadata);
       expect((provider as any).preference).toEqual({
+        keysUrl: 'https://keys.test.com',
         appSpecific: false,
       });
     });
@@ -108,9 +109,9 @@ describe('JAWProvider', () => {
 
       // Assert
       expect(Communicator).toHaveBeenCalledWith({
-        url: 'https://keys.test.com',
         metadata: mockMetadata,
         preference: {
+          keysUrl: 'https://keys.test.com',
           appSpecific: false,
         },
       });
@@ -225,6 +226,7 @@ describe('JAWProvider', () => {
       // Act
       await provider.request(request);
 
+      // Assert
       expect(createSigner).toHaveBeenCalled();
       expect(mockSigner.handshake).toHaveBeenCalledWith(request);
       expect(storeSignerType).toHaveBeenCalledWith('crossPlatform');
@@ -1397,6 +1399,7 @@ describe('createJAWProvider', () => {
 
     // Assert
     expect((provider as any).preference).toEqual({
+      keysUrl: 'https://keys.test.com',
       appSpecific: true,
       serverUrl: 'https://api.test.com',
       apiKey: 'test-api-key',
