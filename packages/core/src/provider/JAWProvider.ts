@@ -33,12 +33,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
 
     private signer: Signer | null = null;
 
-    constructor({ metadata, preference: { keysUrl, ...preference } }: Readonly<ConstructorOptions>) {
+    constructor({ metadata, preference }: Readonly<ConstructorOptions>) {
         super();
         this.metadata = metadata;
         this.preference = preference;
         this.communicator = new Communicator({
-            url: keysUrl,
             metadata,
             preference,
         });
