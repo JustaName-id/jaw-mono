@@ -8,13 +8,11 @@ import { correlationIds } from '../store/index.js';
 import { fetchRPCRequest, checkErrorForInvalidRequestArgs } from '../utils/index.js';
 import {
   createSigner,
-  fetchSignerType,
   loadSignerType,
   storeSignerType,
 } from '../signer/index.js';
 import type { AppMetadata, ConstructorOptions, RequestArguments } from './interface.js';
 import type { Signer } from '../signer/index.js';
-import type { SignerType } from '../messages/index.js';
 
 // Mock all dependencies
 vi.mock('../communicator/index.js');
@@ -80,7 +78,6 @@ describe('JAWProvider', () => {
     // Setup default mocks
     (loadSignerType as Mock).mockReturnValue(null);
     (createSigner as Mock).mockReturnValue(mockSigner);
-    (fetchSignerType as Mock).mockResolvedValue('scw' as SignerType);
     (checkErrorForInvalidRequestArgs as Mock).mockImplementation(() => {
       // No-op for tests
     });
@@ -121,7 +118,7 @@ describe('JAWProvider', () => {
 
     it('should initialize signer if signerType is stored', () => {
       // Arrange
-      (loadSignerType as Mock).mockReturnValue('scw');
+      (loadSignerType as Mock).mockReturnValue('crossPlatform');
 
       // Act
       provider = new JAWProvider(mockConstructorOptions);
@@ -222,7 +219,6 @@ describe('JAWProvider', () => {
         method: 'eth_requestAccounts',
       };
       const mockAccounts = ['0x1234567890123456789012345678901234567890'];
-      (fetchSignerType as Mock).mockResolvedValue('scw');
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
       (mockSigner.request as Mock).mockResolvedValue(mockAccounts);
 
@@ -230,14 +226,9 @@ describe('JAWProvider', () => {
       await provider.request(request);
 
       // Assert
-      expect(fetchSignerType).toHaveBeenCalledWith({
-        communicator: (provider as any).communicator,
-        preference: (provider as any).preference,
-        handshakeRequest: request,
-      });
       expect(createSigner).toHaveBeenCalled();
       expect(mockSigner.handshake).toHaveBeenCalledWith(request);
-      expect(storeSignerType).toHaveBeenCalledWith('scw');
+      expect(storeSignerType).toHaveBeenCalledWith('crossPlatform');
       expect((provider as any).signer).toBe(mockSigner);
     });
 
@@ -249,7 +240,6 @@ describe('JAWProvider', () => {
       const request2: RequestArguments = {
         method: 'eth_accounts',
       };
-      (fetchSignerType as Mock).mockResolvedValue('scw');
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
       (mockSigner.request as Mock).mockResolvedValue(['0x1234567890123456789012345678901234567890']);
 
@@ -265,22 +255,11 @@ describe('JAWProvider', () => {
     it('should handle handshake failure and not store signer', async () => {
       // Arrange
       const request: RequestArguments = { method: 'eth_requestAccounts' };
-      (fetchSignerType as Mock).mockResolvedValue('scw');
       (mockSigner.handshake as Mock).mockRejectedValue(new Error('Handshake failed'));
 
       // Act & Assert
       await expect(provider.request(request)).rejects.toThrow('Handshake failed');
       expect(storeSignerType).not.toHaveBeenCalled();
-      expect((provider as any).signer).toBeNull();
-    });
-
-    it('should handle fetchSignerType failure', async () => {
-      // Arrange
-      const request: RequestArguments = { method: 'eth_requestAccounts' };
-      (fetchSignerType as Mock).mockRejectedValue(new Error('Network error'));
-
-      // Act & Assert
-      await expect(provider.request(request)).rejects.toThrow('Network error');
       expect((provider as any).signer).toBeNull();
     });
   });
@@ -290,7 +269,7 @@ describe('JAWProvider', () => {
       provider = new JAWProvider(mockConstructorOptions);
     });
 
-    it('should create scw signer and handshake', async () => {
+    it('should create crossPlatform signer and handshake', async () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_connect',
@@ -307,7 +286,7 @@ describe('JAWProvider', () => {
 
       // Assert
       expect(createSigner).toHaveBeenCalledWith({
-        signerType: 'scw',
+        signerType: 'crossPlatform',
         metadata: mockMetadata,
         communicator: (provider as any).communicator,
         callback: expect.any(Function),
@@ -736,7 +715,6 @@ describe('JAWProvider', () => {
     it('should call eth_requestAccounts', async () => {
       // Arrange
       const mockAccounts = ['0x1234567890123456789012345678901234567890'];
-      (fetchSignerType as Mock).mockResolvedValue('scw');
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
       (mockSigner.request as Mock).mockResolvedValue(mockAccounts);
 
@@ -745,12 +723,9 @@ describe('JAWProvider', () => {
       });
 
       // Act
-      const result = await provider.enable();
+      const result = await provider.request({method: 'eth_requestAccounts'});
 
       // Assert
-      expect(consoleWarnSpy).toHaveBeenCalledWith(
-        `.enable() has been deprecated. Please use .request({ method: "eth_requestAccounts" }) instead.`
-      );
       expect(result).toEqual(mockAccounts);
 
       consoleWarnSpy.mockRestore();
@@ -849,7 +824,6 @@ describe('JAWProvider', () => {
       };
       const mockAccounts = ['0x1234567890123456789012345678901234567890'];
 
-      (fetchSignerType as Mock).mockResolvedValue('scw');
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
       (mockSigner.request as Mock).mockResolvedValue(mockAccounts);
 
@@ -870,7 +844,6 @@ describe('JAWProvider', () => {
       const request: RequestArguments = { method: 'eth_requestAccounts' };
       const mockAccounts = ['0x1234567890123456789012345678901234567890'];
 
-      (fetchSignerType as Mock).mockResolvedValue('scw');
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
       (mockSigner.request as Mock).mockResolvedValue(mockAccounts);
 
@@ -930,7 +903,6 @@ describe('JAWProvider', () => {
         params: ['0x48656c6c6f', '0x1234567890123456789012345678901234567890'],
       };
 
-      (fetchSignerType as Mock).mockResolvedValue('scw');
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
       (mockSigner.request as Mock)
         .mockResolvedValueOnce(['0x1234567890123456789012345678901234567890'])
@@ -954,7 +926,6 @@ describe('JAWProvider', () => {
       const request1: RequestArguments = { method: 'eth_requestAccounts' };
       const request2: RequestArguments = { method: 'eth_requestAccounts' };
 
-      (fetchSignerType as Mock).mockResolvedValue('scw');
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
       (mockSigner.request as Mock).mockResolvedValue(['0x1234567890123456789012345678901234567890']);
       (mockSigner.cleanup as Mock).mockResolvedValue(undefined);

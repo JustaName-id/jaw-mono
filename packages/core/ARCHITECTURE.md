@@ -196,7 +196,7 @@ sequenceDiagram
     Comm->>Popup: window.open()
     Popup->>Comm: 'PopupLoaded' event
 
-    Provider->>Signer: createSigner('scw')
+    Provider->>Signer: createSigner('crossPlatform')
     Provider->>Signer: handshake()
 
     Signer->>KeyMgr: getOwnPublicKey()
@@ -443,7 +443,7 @@ jaw:passkey:accounts      → Array<PasskeyAccount>
 ### Signer Type Storage (localStorage: `jaw:signer:type`)
 
 ```
-jaw:signer:type           → 'scw' | other signer types
+jaw:signer:type           → 'crossPlatform' | other signer types
 ```
 
 ## Error Handling Strategy

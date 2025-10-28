@@ -15,7 +15,6 @@ export {
 
 export {
     createSigner,
-    fetchSignerType,
     loadSignerType,
     storeSignerType,
     findOwnerIndex,

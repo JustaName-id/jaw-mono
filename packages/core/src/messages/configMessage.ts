@@ -9,4 +9,4 @@ export type ConfigEvent =
     | 'PopupUnload'
     | 'selectSignerType'
 
-export type SignerType = 'scw'; // Replace with JawSigner || AppSpecificSigner
+export type SignerType = 'crossPlatform'; // Add appSpecific
