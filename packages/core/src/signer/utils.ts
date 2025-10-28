@@ -1,10 +1,11 @@
-import {ConfigMessage, MessageID, SignerType} from "../messages/index.js";
-import {AppMetadata, JawProviderPreference, ProviderEventCallback, RequestArguments} from "../provider/index.js";
+import {SignerType} from "../messages/index.js";
+import {AppMetadata, ProviderEventCallback} from "../provider/index.js";
 import {Communicator} from "../communicator/index.js";
 import {Signer} from "./interface.js";
 import {JAWSigner} from "./JAWSigner.js";
+import {AppSpecificSigner} from "./AppSpecificSigner.js";
 import {createLocalStorage} from "../storage-manager/utils.js";
-import {Client, Hex, isAddress, pad} from "viem";
+import {Address, Client, Hex, isAddress, pad} from "viem";
 import {getCode, readContract} from "viem/actions";
 import {abi} from "../account/index.js";
 
@@ -15,7 +16,7 @@ export type FindOwnerIndexParams = {
     /**
      * The address of the account to get the owner index for
      */
-    address: `0x${string}`;
+    address: Address;
     /**
      * The client to use to get the code and read the contract
      */
@@ -34,41 +35,38 @@ export function storeSignerType(signerType: SignerType): void {
     storage.setItem(SIGNER_TYPE_KEY, signerType);
 }
 
+/**
+ * Create a signer instance based on the signer type
+ * @param params - Signer creation parameters
+ * @returns A signer instance (AppSpecificSigner or JAWSigner)
+ */
 export function createSigner(params: {
     signerType: SignerType;
     metadata: AppMetadata;
-    communicator: Communicator;
+    communicator?: Communicator | null;
     callback: ProviderEventCallback;
 }): Signer {
     const { signerType, metadata, communicator, callback } = params;
+
     switch (signerType) {
-        case 'scw': {
+        case 'appSpecific':
+            // App-specific mode: embedded UI via EventBus (no popup)
+            return new AppSpecificSigner({
+                metadata,
+                callback,
+            });
+
+        case 'crossPlatform':
+            // Smart Contract Wallet: popup-based authentication
+            if (!communicator) {
+                throw new Error('Communicator is required for popup mode (crossPlatform)');
+            }
             return new JAWSigner({
                 metadata,
                 callback,
                 communicator,
             });
-        }
     }
-}
-
-export async function fetchSignerType(params: {
-    communicator: Communicator;
-    preference: JawProviderPreference;
-    handshakeRequest: RequestArguments;
-}): Promise<SignerType> {
-    const { communicator, handshakeRequest } = params;
-
-    const request: ConfigMessage & { id: MessageID } = {
-        id: crypto.randomUUID(),
-        event: 'selectSignerType',
-        data: {
-            ...params.preference,
-            handshakeRequest,
-        },
-    };
-    const { data } = await communicator.postRequestAndWaitForResponse(request);
-    return data as SignerType;
 }
 
 export async function findOwnerIndex({

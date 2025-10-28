@@ -3,6 +3,10 @@ export {
 } from "./JAWSigner.js"
 
 export {
+    AppSpecificSigner
+} from "./AppSpecificSigner.js"
+
+export {
     type Signer
 } from "./interface.js"
 
@@ -15,7 +19,6 @@ export {
 
 export {
     createSigner,
-    fetchSignerType,
     loadSignerType,
     storeSignerType,
     findOwnerIndex,

@@ -1,4 +1,5 @@
 import { EventEmitter } from 'eventemitter3';
+import type { EventBus } from '../events/EventBus.js';
 
 export interface RequestArguments {
     readonly method: string;
@@ -28,6 +29,11 @@ export interface ProviderInterface extends EventEmitter<keyof ProviderEventMap> 
     disconnect(): Promise<void>;
     emit<K extends keyof ProviderEventMap>(event: K, ...args: [ProviderEventMap[K]]): boolean;
     on<K extends keyof ProviderEventMap>(event: K, listener: (_: ProviderEventMap[K]) => void): this;
+    /**
+     * Get the EventBus instance for app-specific mode
+     * Returns null in cross-platform (popup) mode
+     */
+    getEventBus(): EventBus | null;
 }
 
 export interface AppMetadata {

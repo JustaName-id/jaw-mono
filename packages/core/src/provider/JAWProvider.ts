@@ -17,11 +17,11 @@ import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest }
 
 import { correlationIds } from '../store/index.js';
 
-import { Signer } from '../signer/index.js';
+import { Signer, AppSpecificSigner } from '../signer/index.js';
+import { EventBus } from '../events/EventBus.js';
 
 import {
     createSigner,
-    fetchSignerType,
     loadSignerType,
     storeSignerType,
 } from '../signer/index.js';
@@ -29,7 +29,7 @@ import {
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
     private readonly metadata: AppMetadata;
     private readonly preference: JawProviderPreference;
-    private readonly communicator: Communicator;
+    private readonly communicator: Communicator | null;
 
     private signer: Signer | null = null;
 
@@ -37,11 +37,17 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         super();
         this.metadata = metadata;
         this.preference = preference;
-        this.communicator = new Communicator({
-            url: keysUrl,
-            metadata,
-            preference,
-        });
+
+        // Only create communicator for cross-platform mode
+        if (!preference.appSpecific) {
+            this.communicator = new Communicator({
+                url: keysUrl,
+                metadata,
+                preference,
+            });
+        } else {
+            this.communicator = null;
+        }
 
         const signerType = loadSignerType();
         if (signerType) {
@@ -62,34 +68,88 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         }
     }
 
+    async disconnect() {
+        await this.signer?.cleanup();
+        this.signer = null;
+
+        correlationIds.clear();
+        this.emit('disconnect', standardErrors.provider.disconnected('User initiated disconnection'));
+    }
+
+    /**
+     * Get the EventBus instance for app-specific mode
+     * @returns EventBus if using AppSpecificSigner (app-specific mode), null otherwise
+     *
+     * @example
+     * ```typescript
+     * const provider = jaw.getProvider();
+     * const eventBus = provider.getEventBus();
+     *
+     * if (eventBus) {
+     *   // App-specific mode - subscribe to events
+     *   eventBus.on('authRequired', (data, resolve, reject) => {
+     *     showAuthModal(data).then(resolve).catch(reject);
+     *   });
+     * }
+     * ```
+     */
+    public getEventBus(): EventBus | null {
+        if (this.signer instanceof AppSpecificSigner) {
+            return this.signer.events;
+        }
+        return null;
+    }
+
     private async _request<T>(args: RequestArguments): Promise<T> {
         try {
             checkErrorForInvalidRequestArgs(args);
             if (!this.signer) {
                 switch (args.method) {
                     case 'eth_requestAccounts': {
-                        const signerType = await this.requestSignerSelection(args);
+                        // Determine signer type based on preference
+                        const signerType: SignerType = this.preference.appSpecific
+                            ? 'appSpecific'
+                            : "crossPlatform";
+
                         const signer = this.initSigner(signerType);
-                        await signer.handshake(args);
+
+                        // Only perform handshake for cross-platform mode (key exchange)
+                        if (signerType === 'crossPlatform') {
+                            await signer.handshake(args);
+                        }
 
                         this.signer = signer;
                         storeSignerType(signerType);
                         break;
                     }
                     case 'wallet_connect': {
-                        const signer = this.initSigner('scw');
-                        await signer.handshake({ method: 'handshake' }); // exchange session keys
-                        const result = await signer.request(args); // send diffie-hellman encrypted request
+                        // Determine signer type for wallet_connect
+                        const signerType: SignerType = this.preference.appSpecific ? 'appSpecific' : 'crossPlatform';
+                        const signer = this.initSigner(signerType);
+
+                        // Only perform handshake for cross-platform mode (key exchange)
+                        if (signerType === 'crossPlatform') {
+                            await signer.handshake({ method: 'handshake' });
+                        }
+
+                        const result = await signer.request(args);
                         this.signer = signer;
                         return result as T;
                     }
                     case 'wallet_sendCalls':
                     case 'wallet_sign': {
-                        const ephemeralSigner = this.initSigner('scw');
-                        await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
-                        const result = await ephemeralSigner.request(args); // send diffie-hellman encrypted request
+                        // Ephemeral signer: use once then cleanup
+                        const signerType: SignerType = this.preference.appSpecific ? 'appSpecific' : 'crossPlatform';
+                        const ephemeralSigner = this.initSigner(signerType);
+
+                        // Only perform handshake for popup mode (key exchange)
+                        if (signerType === 'crossPlatform') {
+                            await ephemeralSigner.handshake({ method: 'handshake' });
+                        }
+
+                        const result = await ephemeralSigner.request(args);
                         try {
-                            await ephemeralSigner.cleanup(); // clean up (rotate) the ephemeral session keys
+                            await ephemeralSigner.cleanup(); // clean up ephemeral session
                         } catch (cleanupError) {
                             // Log cleanup error but don't fail the request
                             console.warn('Ephemeral signer cleanup failed:', cleanupError);
@@ -124,32 +184,6 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             }
             return Promise.reject(serializeError(error));
         }
-    }
-
-    /** @deprecated Use `.request({ method: 'eth_requestAccounts' })` instead. */
-    public async enable() {
-        console.warn(
-            `.enable() has been deprecated. Please use .request({ method: "eth_requestAccounts" }) instead.`
-        );
-        return await this.request({
-            method: 'eth_requestAccounts',
-        });
-    }
-
-    async disconnect() {
-        await this.signer?.cleanup();
-        this.signer = null;
-        correlationIds.clear();
-        this.emit('disconnect', standardErrors.provider.disconnected('User initiated disconnection'));
-    }
-
-    private async requestSignerSelection(handshakeRequest: RequestArguments): Promise<SignerType> {
-        const signerType = await fetchSignerType({
-            communicator: this.communicator,
-            preference: this.preference,
-            handshakeRequest,
-        });
-        return signerType;
     }
 
     private initSigner(signerType: SignerType): Signer {

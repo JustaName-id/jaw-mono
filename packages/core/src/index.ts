@@ -25,6 +25,9 @@ export * from './provider/index.js';
 /** Events exports **/
 export * from './events/index.js';
 
+/** Signer exports **/
+export { AppSpecificSigner, type Signer } from './signer/index.js';
+
 /** Utils exports **/
 export * from './utils/index.js';
 

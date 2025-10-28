@@ -9,4 +9,9 @@ export type ConfigEvent =
     | 'PopupUnload'
     | 'selectSignerType'
 
-export type SignerType = 'scw'; // Replace with JawSigner || AppSpecificSigner
+/**
+ * Signer type determines which signer implementation to use
+ * - 'crossPlatform': Smart Contract Wallet signer with popup authentication (cross-platform)
+ * - 'appSpecific': App-specific signer with embedded UI via EventBus
+ */
+export type SignerType = 'crossPlatform' | 'appSpecific';
