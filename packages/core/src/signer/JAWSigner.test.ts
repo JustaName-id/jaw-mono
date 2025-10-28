@@ -69,7 +69,6 @@ describe('JAWSigner', () => {
 
     // Setup mock communicator
     mockCommunicator = new Communicator({
-      url: 'https://test.com',
       metadata: mockMetadata,
       preference: { keysUrl: 'https://test.com' },
     }) as Mocked<Communicator>;

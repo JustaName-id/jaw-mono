@@ -21,24 +21,23 @@ import { Signer } from '../signer/index.js';
 
 import {
     createSigner,
-    fetchSignerType,
     loadSignerType,
     storeSignerType,
 } from '../signer/index.js';
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
     private readonly metadata: AppMetadata;
+    // @ts-expect-error - Will be used in future implementation
     private readonly preference: JawProviderPreference;
     private readonly communicator: Communicator;
 
     private signer: Signer | null = null;
 
-    constructor({ metadata, preference: { keysUrl, ...preference } }: Readonly<ConstructorOptions>) {
+    constructor({ metadata, preference }: Readonly<ConstructorOptions>) {
         super();
         this.metadata = metadata;
         this.preference = preference;
         this.communicator = new Communicator({
-            url: keysUrl,
             metadata,
             preference,
         });
@@ -62,13 +61,20 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         }
     }
 
+    async disconnect() {
+        await this.signer?.cleanup();
+        this.signer = null;
+        correlationIds.clear();
+        this.emit('disconnect', standardErrors.provider.disconnected('User initiated disconnection'));
+    }
+
     private async _request<T>(args: RequestArguments): Promise<T> {
         try {
             checkErrorForInvalidRequestArgs(args);
             if (!this.signer) {
                 switch (args.method) {
                     case 'eth_requestAccounts': {
-                        const signerType = await this.requestSignerSelection(args);
+                        const signerType = "crossPlatform";
                         const signer = this.initSigner(signerType);
                         await signer.handshake(args);
 
@@ -77,7 +83,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         break;
                     }
                     case 'wallet_connect': {
-                        const signer = this.initSigner('scw');
+                        const signer = this.initSigner('crossPlatform');
                         await signer.handshake({ method: 'handshake' }); // exchange session keys
                         const result = await signer.request(args); // send diffie-hellman encrypted request
                         this.signer = signer;
@@ -85,7 +91,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     }
                     case 'wallet_sendCalls':
                     case 'wallet_sign': {
-                        const ephemeralSigner = this.initSigner('scw');
+                        const ephemeralSigner = this.initSigner('crossPlatform');
                         await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
                         const result = await ephemeralSigner.request(args); // send diffie-hellman encrypted request
                         try {
@@ -124,32 +130,6 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             }
             return Promise.reject(serializeError(error));
         }
-    }
-
-    /** @deprecated Use `.request({ method: 'eth_requestAccounts' })` instead. */
-    public async enable() {
-        console.warn(
-            `.enable() has been deprecated. Please use .request({ method: "eth_requestAccounts" }) instead.`
-        );
-        return await this.request({
-            method: 'eth_requestAccounts',
-        });
-    }
-
-    async disconnect() {
-        await this.signer?.cleanup();
-        this.signer = null;
-        correlationIds.clear();
-        this.emit('disconnect', standardErrors.provider.disconnected('User initiated disconnection'));
-    }
-
-    private async requestSignerSelection(handshakeRequest: RequestArguments): Promise<SignerType> {
-        const signerType = await fetchSignerType({
-            communicator: this.communicator,
-            preference: this.preference,
-            handshakeRequest,
-        });
-        return signerType;
     }
 
     private initSigner(signerType: SignerType): Signer {
