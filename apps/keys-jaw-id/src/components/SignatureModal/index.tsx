@@ -10,6 +10,8 @@ import { SmartAccount } from "viem/account-abstraction";
 export interface SignatureModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
+  message: string;
+  address?: string;
   onSuccess: (signature: string, message: string) => void;
   onError: (error: Error) => void;
 }
@@ -17,13 +19,14 @@ export interface SignatureModalProps {
 export const SignatureModal = ({
   open,
   onOpenChange,
+  message: messageToSign,
+  address,
   onSuccess,
   onError
 }: SignatureModalProps) => {
   // const { walletAddress } = useSubnameCheck();
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [message, setMessage] = useState<string>('test');
   const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
 
   const signMessage = useCallback(async () => {
@@ -36,13 +39,13 @@ export const SignatureModal = ({
       }
 
       const signature = await smartAccount.signMessage({
-        message: message
+        message: messageToSign
       });
 
       setSignatureStatus('Signature created successfully!');
 
       setTimeout(() => {
-        onSuccess(signature, message);
+        onSuccess(signature, messageToSign);
         onOpenChange(false);
         setSignatureStatus('');
         setIsProcessing(false);
@@ -54,7 +57,7 @@ export const SignatureModal = ({
       onError(error as Error);
       setIsProcessing(false);
     }
-  }, [message, smartAccount, onSuccess, onError, onOpenChange]);
+  }, [messageToSign, smartAccount, onSuccess, onError, onOpenChange]);
 
   const handleCancel = () => {
     if (!isProcessing) {
@@ -67,14 +70,10 @@ export const SignatureModal = ({
     const initializeModal = async () => {
       if (open) {
         try {
-          // const message = justaname.siwe.requestChallenge({
-          //   address: walletAddress ?? '',
-          //   chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID!) as ChainId,
-          //   domain: window.location.host,
-          //   origin: window.location.origin,
-          // });
-          setMessage(message);
+          console.log('🔐 Initializing signature modal with message:', messageToSign);
+          console.log('📍 Address:', address);
 
+          // TODO: Initialize smart account for signing
           // const passkeyCredential = fetchPasskeyCredential();
           // if (!passkeyCredential) {
           //   throw new Error('No passkey credential found. Please log in again.');
@@ -89,22 +88,20 @@ export const SignatureModal = ({
         }
       } else {
         setSmartAccount(null);
-        setMessage('');
         setSignatureStatus('');
       }
     };
 
     initializeModal();
-    // }, [open, walletAddress, onError]);
-  }, [open, onError]);
+  }, [open, messageToSign, address, onError]);
 
-  const canSign = !isProcessing && !!message && !!smartAccount;
+  const canSign = !isProcessing && !!messageToSign && !!smartAccount;
 
   return (
     <SignatureDialog
       open={open}
       onOpenChange={onOpenChange}
-      message={message}
+      message={messageToSign}
       origin={window.location.origin}
       timestamp={new Date()}
       onSign={signMessage}

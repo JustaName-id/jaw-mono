@@ -77,10 +77,12 @@ export default function KeysJawIdApp() {
     console.log('🚀 Running in SDK popup mode');
     setIsSDKMode(true);
 
-    // Clear auth state for fresh connection (user must select account each time)
+    // Initialize passkey service
     const passkeyService = new PasskeyService({ localOnly: true });
-    passkeyService.logout();
-    console.log('🔓 Auth state cleared - user will need to select account');
+    
+    // Only clear auth state for connection requests, not for sign message requests
+    // For sign message requests, we want to preserve the existing auth state
+    console.log('🔍 Checking if we should preserve auth state...');
 
     // Initialize crypto handler
     cryptoHandler.initialize().then(() => {
@@ -101,7 +103,18 @@ export default function KeysJawIdApp() {
       if (message.data?.version) {
         console.log('📋 Received config:', message.data);
         setConfig(message.data);
-        checkForPasskeys();
+        
+        // Check if user is already authenticated before checking for passkeys
+        const authCheck = passkeyService.checkAuth();
+        if (authCheck.isAuthenticated) {
+          console.log('✅ User already authenticated, skipping auth flow');
+          // Set the current account and go directly to processing
+          const accounts = passkeyService.getAccounts();
+          setCurrentAccount(accounts[0] || null);
+          setState('processing');
+        } else {
+          checkForPasskeys();
+        }
       }
 
       // Handle selectSignerType event
@@ -135,8 +148,8 @@ export default function KeysJawIdApp() {
     };
   }, []);
 
-  // Handle late-arriving handshake requests
-  // This fixes the race condition where user authenticates before handshake arrives
+  // Handle late-arriving requests
+  // This fixes race conditions where requests arrive while user is authenticating
   useEffect(() => {
     // If we're stuck in processing state and a connect request arrives late
     if (
@@ -148,6 +161,7 @@ export default function KeysJawIdApp() {
       console.log('✅ Late handshake received, transitioning to account-selection');
       setState('account-selection');
     }
+
   }, [pendingRequest, state, authQuery.isAuthenticated, currentAccount]);
 
   // Check for existing passkeys using hooks
@@ -284,6 +298,13 @@ export default function KeysJawIdApp() {
           throw new Error(error);
         },
       });
+
+      // For sign message requests, if user is authenticated, show signature modal directly
+      if (requestType === SDKRequestType.SIGN_MESSAGE && authQuery.isAuthenticated && currentAccount) {
+        console.log('✅ Sign message request received while authenticated, showing signature modal');
+        // The signature modal will be shown in the render logic below
+        return;
+      }
     } catch (err) {
       console.error('❌ Failed to handle encrypted request:', err);
       setError(err instanceof Error ? err.message : 'Failed to decrypt request');
@@ -295,6 +316,45 @@ export default function KeysJawIdApp() {
   // SDK MODE - When opened by Coinbase SDK
   // ==========================================
   if (isSDKMode) {
+
+
+    // Check if we have a pending sign message request and either user is authenticated OR we're in processing state
+    if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE && (authQuery.isAuthenticated || state === 'processing')) {
+      console.log('✅ All conditions met, showing SignatureModal');
+      const messageToSign = pendingRequest.params[0] as string;
+      const address = pendingRequest.params[1] as string;
+      
+      return (
+        <SignatureModal
+          open={true}
+          onOpenChange={() => { }}
+          message={messageToSign}
+          address={address}
+          onSuccess={async (signature, message) => {
+            setState('processing');
+            try {
+              await pendingRequest.onApprove(signature);
+              setState('success');
+              setTimeout(() => window.close(), 1500);
+            } catch (err) {
+              console.error('❌ Failed to send signature:', err);
+              setError(err instanceof Error ? err.message : 'Failed to send signature');
+              setState('error');
+            }
+          }}
+          onError={async (error) => {
+            try {
+              await pendingRequest.onReject(error.message);
+              window.close();
+            } catch (err) {
+              console.error('❌ Failed to reject:', err);
+              window.close();
+            }
+          }}
+        />
+      );
+    }
+
     // Show loading while initializing or checking passkeys
     if (state === 'initializing' || state === 'passkey-check') {
       return (
@@ -412,6 +472,11 @@ export default function KeysJawIdApp() {
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     console.log('✅ Moving to account-selection for connection approval');
                     setState('account-selection');
+                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE) {
+                    // If there's a pending sign message request, the SignatureModal will be shown
+                    // in the priority logic above since user is now authenticated
+                    console.log('✅ User authenticated, sign message request will be handled');
+                    setState('processing');
                   } else {
                     // No pending request yet, wait for it
                     console.log('⏳ No pending request yet, waiting...');
@@ -471,6 +536,11 @@ export default function KeysJawIdApp() {
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     console.log('✅ Moving to account-selection for connection approval');
                     setState('account-selection');
+                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE) {
+                    // If there's a pending sign message request, the SignatureModal will be shown
+                    // in the priority logic above since user is now authenticated
+                    console.log('✅ User authenticated, sign message request will be handled');
+                    setState('processing');
                   } else {
                     // No pending request yet, wait for it
                     console.log('⏳ No pending request yet, waiting...');
@@ -583,36 +653,6 @@ export default function KeysJawIdApp() {
       );
     }
 
-    // Show signing request
-    if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE) {
-      return (
-        <SignatureModal
-          open={true}
-          onOpenChange={() => { }}
-          onSuccess={async (signature, message) => {
-            setState('processing');
-            try {
-              await pendingRequest.onApprove(signature);
-              setState('success');
-              setTimeout(() => window.close(), 1500);
-            } catch (err) {
-              console.error('❌ Failed to send signature:', err);
-              setError(err instanceof Error ? err.message : 'Failed to send signature');
-              setState('error');
-            }
-          }}
-          onError={async (error) => {
-            try {
-              await pendingRequest.onReject(error.message);
-              window.close();
-            } catch (err) {
-              console.error('❌ Failed to reject:', err);
-              window.close();
-            }
-          }}
-        />
-      );
-    }
 
     // Show transaction request
     if (pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
