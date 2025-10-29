@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { useSubnameCheck, useAuth, usePasskeys } from '../hooks';
+import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
 import { TransactionModal } from '../components/TransactionModal';
@@ -9,7 +9,6 @@ import { SDKRequestType, type AppMetadata } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator } from '../lib/popup-communicator';
 import { CryptoHandler, type RPCRequestMessage } from '../lib/crypto-handler';
-import { PasskeyService } from '../lib/passkey-service';
 
 // Simple state types
 type PopupState =
@@ -46,8 +45,6 @@ interface PendingRequest {
 }
 
 export default function KeysJawIdApp() {
-  const { walletAddress } = useSubnameCheck();
-
   // Use hooks for passkey operations
   const authQuery = useAuth();
   const passkeyQuery = usePasskeys();
@@ -63,7 +60,6 @@ export default function KeysJawIdApp() {
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [showOnboarding, setShowOnboarding] = useState(true);
 
   // Single useEffect for all message handling
   useEffect(() => {
@@ -76,13 +72,6 @@ export default function KeysJawIdApp() {
 
     console.log('🚀 Running in SDK popup mode');
     setIsSDKMode(true);
-
-    // Initialize passkey service
-    const passkeyService = new PasskeyService({ localOnly: true });
-    
-    // Only clear auth state for connection requests, not for sign message requests
-    // For sign message requests, we want to preserve the existing auth state
-    console.log('🔍 Checking if we should preserve auth state...');
 
     // Initialize crypto handler
     cryptoHandler.initialize().then(() => {
@@ -102,19 +91,15 @@ export default function KeysJawIdApp() {
       // Handle config message
       if (message.data?.version) {
         console.log('📋 Received config:', message.data);
+        console.log('🔧 DEBUG: Starting passkey check flow');
         setConfig(message.data);
-        
-        // Check if user is already authenticated before checking for passkeys
-        const authCheck = passkeyService.checkAuth();
-        if (authCheck.isAuthenticated) {
-          console.log('✅ User already authenticated, skipping auth flow');
-          // Set the current account and go directly to processing
-          const accounts = passkeyService.getAccounts();
-          setCurrentAccount(accounts[0] || null);
-          setState('processing');
-        } else {
-          checkForPasskeys();
-        }
+
+        // Always show account selection UI - never auto-authenticate
+        checkForPasskeys();
+
+        // Send PopupReady to signal we're ready for business messages
+        console.log('🔧 DEBUG: Sending PopupReady signal');
+        communicator.sendPopupReady();
       }
 
       // Handle selectSignerType event
@@ -148,25 +133,21 @@ export default function KeysJawIdApp() {
     };
   }, []);
 
-  // Handle late-arriving requests
-  // This fixes race conditions where requests arrive while user is authenticating
+  // Handle transition to account-selection when handshake arrives for authenticated users
   useEffect(() => {
-    // If we're stuck in processing state and a connect request arrives late
     if (
-      state === 'processing' &&
       pendingRequest?.type === SDKRequestType.CONNECT &&
-      authQuery.isAuthenticated &&
-      currentAccount
+      currentAccount &&
+      (state === 'processing' || state === 'passkey-auth' || state === 'passkey-create')
     ) {
-      console.log('✅ Late handshake received, transitioning to account-selection');
+      console.log('🔧 DEBUG: Handshake received, transitioning to account-selection');
       setState('account-selection');
     }
-
-  }, [pendingRequest, state, authQuery.isAuthenticated, currentAccount]);
+  }, [pendingRequest, state, currentAccount]);
 
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
-    console.log('🔍 Checking for existing passkeys...');
+    console.log('🔧 DEBUG: Checking for existing passkeys...');
     setState('passkey-check');
 
     try {
@@ -175,15 +156,18 @@ export default function KeysJawIdApp() {
 
       const accounts = accountsResult.data || [];
 
-      console.log('📊 Fresh data - accounts:', accounts.length);
+      console.log('🔧 DEBUG: Found accounts:', {
+        count: accounts.length,
+        usernames: accounts.map(a => a.username),
+      });
 
       if (accounts.length > 0) {
         // Has accounts - show account selection/auth screen
-        console.log('🔑 Found existing passkeys, showing auth screen');
+        console.log('🔧 DEBUG: Showing passkey-auth state (account selection)');
         setState('passkey-auth');
       } else {
         // No accounts - need to create
-        console.log('➕ No passkeys found, showing create screen');
+        console.log('🔧 DEBUG: Showing passkey-create state (no accounts)');
         setState('passkey-create');
       }
     } catch (err) {
@@ -323,7 +307,7 @@ export default function KeysJawIdApp() {
       console.log('✅ All conditions met, showing SignatureModal');
       const messageToSign = pendingRequest.params[0] as string;
       const address = pendingRequest.params[1] as string;
-      
+
       return (
         <SignatureModal
           open={true}
@@ -379,9 +363,22 @@ export default function KeysJawIdApp() {
     if (state === 'processing') {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50">
-          <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <p className="text-gray-600">Processing...</p>
+          <div className="text-center max-w-md p-6">
+            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+              {currentAccount ? 'Connecting to dApp...' : 'Processing...'}
+            </h3>
+            <p className="text-gray-600 mb-4">
+              {currentAccount
+                ? `Authenticated as ${currentAccount.username}. Waiting for dApp connection...`
+                : 'Please wait while we process your request.'
+              }
+            </p>
+            {config?.metadata && (
+              <p className="text-sm text-gray-500">
+                {config.metadata.appName}
+              </p>
+            )}
           </div>
         </div>
       );
@@ -455,32 +452,31 @@ export default function KeysJawIdApp() {
 
             <SignInScreen
               onComplete={async () => {
-                setState('processing');
                 try {
-                  console.log('✅ Passkey creation completed in SignInScreen');
+                  console.log('🔧 DEBUG: Passkey creation completed in SignInScreen');
 
                   // SignInScreen already created the passkey, just refetch and proceed
-                  await passkeyQuery.refetchAccounts();
-                  await authQuery.refetch();
+                  const accountsResult = await passkeyQuery.refetchAccounts();
 
-                  const accounts = passkeyQuery.accounts;
+                  const accounts = accountsResult.data || [];
                   const newestAccount = accounts[accounts.length - 1] || null;
                   setCurrentAccount(newestAccount);
-                  console.log('✅ Set current account:', newestAccount?.username);
+                  console.log('🔧 DEBUG: Set current account:', newestAccount?.username);
 
-                  // If there's a pending connect request, show approval screen
+                  // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
-                    console.log('✅ Moving to account-selection for connection approval');
+                    console.log('🔧 DEBUG: Moving to account-selection for connection approval');
                     setState('account-selection');
                   } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE) {
                     // If there's a pending sign message request, the SignatureModal will be shown
                     // in the priority logic above since user is now authenticated
-                    console.log('✅ User authenticated, sign message request will be handled');
+                    console.log('🔧 DEBUG: User authenticated, sign message request will be handled');
                     setState('processing');
                   } else {
-                    // No pending request yet, wait for it
-                    console.log('⏳ No pending request yet, waiting...');
-                    setState('processing');
+                    // No pending request yet, stay on current screen and wait for it
+                    // useEffect will handle transition when handshake arrives
+                    console.log('🔧 DEBUG: No pending request yet, staying on create screen and waiting...');
+                    // Don't change state - stay on passkey-create to keep UI visible
                   }
                 } catch (err) {
                   console.error('❌ Failed after passkey creation:', err);
@@ -520,31 +516,30 @@ export default function KeysJawIdApp() {
 
             <SignInScreen
               onComplete={async () => {
-                setState('processing');
                 try {
-                  console.log('✅ Authentication completed in SignInScreen');
+                  console.log('🔧 DEBUG: Authentication completed in SignInScreen');
 
                   // SignInScreen already handled login, just proceed
-                  await authQuery.refetch();
-                  await passkeyQuery.refetchAccounts();
+                  const accountsResult = await passkeyQuery.refetchAccounts();
 
-                  const accounts = passkeyQuery.accounts;
+                  const accounts = accountsResult.data || [];
                   setCurrentAccount(accounts[0] || null);
-                  console.log('✅ Set current account:', accounts[0]?.username);
+                  console.log('🔧 DEBUG: Set current account:', accounts[0]?.username);
 
-                  // If there's a pending connect request, show approval screen
+                  // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
-                    console.log('✅ Moving to account-selection for connection approval');
+                    console.log('🔧 DEBUG: Moving to account-selection for connection approval');
                     setState('account-selection');
                   } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE) {
                     // If there's a pending sign message request, the SignatureModal will be shown
                     // in the priority logic above since user is now authenticated
-                    console.log('✅ User authenticated, sign message request will be handled');
+                    console.log('🔧 DEBUG: User authenticated, sign message request will be handled');
                     setState('processing');
                   } else {
-                    // No pending request yet, wait for it
-                    console.log('⏳ No pending request yet, waiting...');
-                    setState('processing');
+                    // No pending request yet, stay on current screen and wait for it
+                    // useEffect will handle transition when handshake arrives
+                    console.log('🔧 DEBUG: No pending request yet, staying on auth screen and waiting...');
+                    // Don't change state - stay on passkey-auth to keep UI visible
                   }
                 } catch (err) {
                   console.error('❌ Failed after authentication:', err);
@@ -698,131 +693,16 @@ export default function KeysJawIdApp() {
       );
     }
 
-    // Fallback for other request types
-    if (pendingRequest) {
-      const { type, metadata, method, params } = pendingRequest;
-
-      return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-          <div className="bg-white rounded-lg shadow-lg p-8 max-w-md w-full">
-            {metadata?.appLogoUrl && (
-              <img
-                src={metadata.appLogoUrl}
-                alt={metadata.appName}
-                className="w-16 h-16 mx-auto mb-4 rounded-full"
-              />
-            )}
-            <h2 className="text-2xl font-bold text-center mb-4">
-              {metadata?.appName || 'dApp'} Request
-            </h2>
-            <p className="text-gray-600 text-center mb-6">
-              Method: <code className="bg-gray-100 px-2 py-1 rounded text-sm">{method}</code>
-            </p>
-            <pre className="bg-gray-100 p-4 rounded text-xs overflow-x-auto mb-6">
-              {JSON.stringify(params, null, 2)}
-            </pre>
-            <div className="flex gap-3">
-              <button
-                onClick={async () => {
-                  setState('processing');
-                  try {
-                    await pendingRequest.onReject('User rejected request');
-                    window.close();
-                  } catch (err) {
-                    window.close();
-                  }
-                }}
-                className="flex-1 px-4 py-2 bg-gray-200 hover:bg-gray-300 rounded-lg"
-              >
-                Reject
-              </button>
-              <button
-                onClick={async () => {
-                  setState('processing');
-                  try {
-                    await pendingRequest.onApprove({ success: true });
-                    setState('success');
-                    setTimeout(() => window.close(), 1500);
-                  } catch (err) {
-                    setError(err instanceof Error ? err.message : 'Operation failed');
-                    setState('error');
-                  }
-                }}
-                className="flex-1 px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg"
-              >
-                Approve
-              </button>
-            </div>
-          </div>
-        </div>
-      );
-    }
-
-    // Waiting for request (should not normally be seen)
+    // No pending request yet - should not normally be seen
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
-          <div className="text-6xl mb-4">⏳</div>
-          <h2 className="text-xl font-semibold mb-2">Connected</h2>
-          <p className="text-gray-600 mb-1">
-            {config?.metadata?.appName || 'dApp'}
-          </p>
-          <p className="text-sm text-gray-500 mb-4">Waiting for requests...</p>
-
-          {/* DEBUGGING: Manual close button */}
-          <button
-            onClick={() => window.close()}
-            className="mt-4 px-6 py-2 bg-red-500 hover:bg-red-600 text-white rounded-lg text-sm"
-          >
-            Close Popup (Manual)
-          </button>
+          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <p className="text-gray-600">Waiting for request...</p>
         </div>
       </div>
     );
   }
 
-  // ==========================================
-  // NORMAL MODE - Standalone wallet app
-  // ==========================================
-  return (
-    <div className="min-h-screen bg-gray-50">
-      {showOnboarding ? (
-        <div className="flex items-center justify-center min-h-screen p-4">
-          <SignInScreen
-            onComplete={() => setShowOnboarding(false)}
-            onCreateAccount={() => {
-              console.log('Create account');
-            }}
-          />
-        </div>
-      ) : (
-        <div className="container mx-auto p-8">
-          <h1 className="text-4xl font-bold mb-4">Keys Wallet</h1>
-          <p className="text-gray-600 mb-8">
-            Wallet Address: <code className="bg-gray-100 px-2 py-1 rounded text-sm">{walletAddress}</code>
-          </p>
-
-          {/* Your normal wallet UI here */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold mb-2">Balance</h3>
-              <p className="text-3xl font-bold">0.00 ETH</p>
-            </div>
-
-            <div className="bg-white p-6 rounded-lg shadow">
-              <h3 className="text-lg font-semibold mb-2">Network</h3>
-              <p className="text-gray-600">Base</p>
-            </div>
-          </div>
-
-          <button
-            onClick={() => setShowOnboarding(true)}
-            className="mt-8 text-sm text-gray-600 hover:text-gray-800"
-          >
-            ← Back to Login
-          </button>
-        </div>
-      )}
-    </div>
-  );
+  return null;
 }

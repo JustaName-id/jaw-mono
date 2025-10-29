@@ -11,6 +11,8 @@ export const useAuth = () => {
     const query = useQuery({
         queryKey: ["auth"],
         queryFn: checkAuth,
+        staleTime: 0,
+        gcTime: 0,
     });
     return {
         isLoading: query.isLoading,

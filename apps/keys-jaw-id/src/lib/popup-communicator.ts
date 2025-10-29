@@ -49,6 +49,19 @@ export class PopupCommunicator {
   }
 
   /**
+   * Send PopupReady event to opener
+   * Signals that popup is fully initialized and ready to receive business messages
+   */
+  sendPopupReady(): void {
+    console.log('🔧 DEBUG: Sending PopupReady event');
+    const message: Message = {
+      id: crypto.randomUUID(),
+      event: 'PopupReady',
+    };
+    this.postMessage(message);
+  }
+
+  /**
    * Send a response to a specific request
    */
   sendResponse(requestId: MessageID, data: unknown): void {

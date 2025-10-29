@@ -59,6 +59,7 @@ export class Communicator {
 
         return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded')
             .then((message) => {
+                console.log('🔧 DEBUG: Received PopupLoaded');
                 this.postMessage({
                     requestId: message.id,
                     data: {
@@ -68,8 +69,14 @@ export class Communicator {
                         location: window.location.toString(),
                     },
                 });
+                console.log('🔧 DEBUG: Sent config, waiting for PopupReady...');
             })
             .then(() => {
+                // Wait for popup to signal it's ready
+                return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupReady');
+            })
+            .then(() => {
+                console.log('🔧 DEBUG: Received PopupReady, popup fully initialized');
                 if (!this.popup) throw standardErrors.rpc.internal();
                 return this.popup;
             });
