@@ -63,10 +63,7 @@ export {
 } from "./key-manager/index.js"
 
 /** Messages exports **/
-export {
-    type Message,
-    type MessageID
-} from "./messages/index.js"
+export * from "./messages/index.js"
 
 /** Utils exports **/
 export * from "./utils/index.js"
