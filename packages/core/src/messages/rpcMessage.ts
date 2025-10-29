@@ -19,6 +19,8 @@ export interface RPCRequestMessage extends RPCMessage {
     content:
         | {
         handshake: RequestArguments;
+        chains?: { [key: number]: string }; // Optional chains data to send to popup
+        ens?: string; // Optional ENS name for issuing subnames
     }
         | {
         encrypted: EncryptedData;

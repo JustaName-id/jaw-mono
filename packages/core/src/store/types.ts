@@ -11,6 +11,7 @@ export type Chain = {
       symbol?: string;
       decimal?: number;
     };
+    paymasterUrl?: string;
   };
   
 
@@ -26,6 +27,7 @@ export type Config = {
     preference?: JawProviderPreference;
     version: string;
     deviceId?: string;
+    apiKey?: string;
     paymasterUrls?: Record<number, string>;
   };
   

@@ -44,7 +44,9 @@ export class JAWSigner implements Signer {
         this.callback = params.callback;
         this.keyManager = new KeyManager();
 
-        const { account, chains } = store.getState();
+        const state = store.getState();
+        const { account, chains } = state;
+
         this.accounts = account.accounts ?? [];
         this.chain = account.chain ?? {
             id: params.metadata.appChainIds?.[0] ?? 1,
@@ -62,12 +64,29 @@ export class JAWSigner implements Signer {
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
         await this.communicator.waitForPopupLoaded?.();
 
+        // Get chains from store and convert to the format expected by popup
+        const storedChains = store.getState().chains;
+        const chainsForPopup = storedChains && storedChains.length > 0
+            ? storedChains.reduce((acc, chain) => {
+                if (chain.rpcUrl) {
+                    acc[chain.id] = chain.rpcUrl;
+                }
+                return acc;
+            }, {} as { [key: number]: string })
+            : undefined;
+
+        // Get ENS from metadata if present
+        const metadata = store.config.get().metadata;
+        const ens = metadata?.ens;
+
         const handshakeMessage = await this.createRequestMessage(
             {
                 handshake: {
                     method: args.method,
                     params: args.params ?? [],
                 },
+                ...(chainsForPopup ? { chains: chainsForPopup } : {}),
+                ...(ens ? { ens } : {}),
             },
             correlationId
         );
@@ -119,7 +138,7 @@ export class JAWSigner implements Signer {
                     // Wait for the popup to be loaded before making async calls
                     await this.communicator.waitForPopupLoaded?.();
 
-                    // Check if addSubAccount capability is present and if so, inject the the sub account capabilities
+                    // Prepare capabilities to inject (currently empty, reserved for future use)
                     const capabilitiesToInject: Record<string, unknown> = {};
 
                     const modifiedRequest = injectRequestCapabilities(request, capabilitiesToInject);
