@@ -68,16 +68,15 @@ export class JAWSigner implements Signer {
         const storedChains = store.getState().chains;
         const chainsForPopup = storedChains && storedChains.length > 0
             ? storedChains.reduce((acc, chain) => {
-                if (chain.rpcUrl) {
-                    acc[chain.id] = chain.rpcUrl;
-                }
+                acc[chain.id] = {
+                    id: chain.id,
+                    ...(chain.rpcUrl ? { rpcUrl: chain.rpcUrl } : {}),
+                    ...(chain.paymasterUrl ? { paymasterUrl: chain.paymasterUrl } : {}),
+                    ...(chain.nativeCurrency ? { nativeCurrency: chain.nativeCurrency } : {}),
+                };
                 return acc;
-            }, {} as { [key: number]: string })
+            }, {} as { [key: number]: SDKChain })
             : undefined;
-
-        // Get ENS from metadata if present
-        const metadata = store.config.get().metadata;
-        const ens = metadata?.ens;
 
         const handshakeMessage = await this.createRequestMessage(
             {
@@ -86,7 +85,6 @@ export class JAWSigner implements Signer {
                     params: args.params ?? [],
                 },
                 ...(chainsForPopup ? { chains: chainsForPopup } : {}),
-                ...(ens ? { ens } : {}),
             },
             correlationId
         );
@@ -386,13 +384,18 @@ export class JAWSigner implements Signer {
 
         const availableChains = response.data?.chains;
         if (availableChains) {
-            const nativeCurrencies = response.data?.nativeCurrencies;
-            const chains: SDKChain[] = Object.entries(availableChains).map(([id, rpcUrl]) => {
-                const nativeCurrency = nativeCurrencies?.[Number(id)];
+            const chains: SDKChain[] = Object.entries(availableChains).map(([id, chain]) => {
                 return {
                     id: Number(id),
-                    rpcUrl,
-                    ...(nativeCurrency ? { nativeCurrency } : {}),
+                    ...(chain.rpcUrl ? { rpcUrl: chain.rpcUrl } : {}),
+                    ...(chain.paymasterUrl ? { paymasterUrl: chain.paymasterUrl } : {}),
+                    ...(chain.nativeCurrency ? {
+                        nativeCurrency: {
+                            name: chain.nativeCurrency.name,
+                            symbol: chain.nativeCurrency.symbol,
+                            decimals: chain.nativeCurrency.decimal,
+                        }
+                    } : {}),
                 };
             });
 
