@@ -23,9 +23,16 @@ export const usePasskeys = () => {
     gcTime: 0,
   });
 
+  const getSmartAccount = async () => {
+    const service = new PasskeyService({ localOnly: true });
+    const smartAccount = await service.recreateSmartAccount();
+    return smartAccount;
+  };
+
   return {
     accounts: query.data || [],
     accountsLoading: query.isLoading,
     refetchAccounts: query.refetch,
+    getSmartAccount,
   };
 };

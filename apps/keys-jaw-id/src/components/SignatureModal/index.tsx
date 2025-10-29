@@ -2,12 +2,12 @@
 
 import { SignatureDialog } from "@jaw/ui";
 // import { useSubnameCheck } from "@/hooks";
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { SmartAccount } from "viem/account-abstraction";
-// import { createSmartAccount, fetchPasskeyCredential } from "@jaw.id/justaname";
-// import { ChainId } from "@/utils/types";
+import { usePasskeys } from "../../hooks";
 
 export interface SignatureModalProps {
+  origin: string;
   open: boolean;
   onOpenChange: (open: boolean) => void;
   message: string;
@@ -17,6 +17,7 @@ export interface SignatureModalProps {
 }
 
 export const SignatureModal = ({
+  origin,
   open,
   onOpenChange,
   message: messageToSign,
@@ -28,6 +29,9 @@ export const SignatureModal = ({
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
   const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
+  const [timestamp] = useState(() => new Date());
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const { getSmartAccount } = usePasskeys();
 
   const signMessage = useCallback(async () => {
     try {
@@ -43,13 +47,10 @@ export const SignatureModal = ({
       });
 
       setSignatureStatus('Signature created successfully!');
-
-      setTimeout(() => {
-        onSuccess(signature, messageToSign);
-        onOpenChange(false);
-        setSignatureStatus('');
-        setIsProcessing(false);
-      }, 1500);
+      
+      // Call onSuccess immediately - parent will handle closing
+      // The parent sets state to 'success' and closes the window after onApprove completes
+      onSuccess(signature, messageToSign);
 
     } catch (error) {
       console.error("Error signing message:", error);
@@ -61,39 +62,60 @@ export const SignatureModal = ({
 
   const handleCancel = () => {
     if (!isProcessing) {
+      setSmartAccount(null);
+      // Create a standard user rejected error (EIP-1193 code 4001)
+      const rejectionError = new Error('User rejected the request');
+      (rejectionError as any).code = 4001;
+      console.log('❌ User cancelled signature request');
+      onError(rejectionError);
       onOpenChange(false);
       setSignatureStatus('');
     }
   };
 
   useEffect(() => {
+    let isMounted = true;
+
     const initializeModal = async () => {
       if (open) {
         try {
+          setIsProcessing(false); // Reset processing state when opening
           console.log('🔐 Initializing signature modal with message:', messageToSign);
-          console.log('📍 Address:', address);
-
-          // TODO: Initialize smart account for signing
-          // const passkeyCredential = fetchPasskeyCredential();
-          // if (!passkeyCredential) {
-          //   throw new Error('No passkey credential found. Please log in again.');
-          // }
-
-          // const smartAccountInstance = await createSmartAccount(passkeyCredential, parseInt(process.env.NEXT_PUBLIC_CHAIN_ID!) as ChainId);
-          // setSmartAccount(smartAccountInstance);
+          console.log('📍 Address:', address);  
+          const smartAccount = await getSmartAccount();
+          
+          // Only update state if component is still mounted
+          if (isMounted) {
+            setSmartAccount(smartAccount);
+          }
         } catch (error) {
           console.error("Error initializing smart account:", error);
-          setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-          onError(error as Error);
+          // Only update state if component is still mounted
+          if (isMounted) {
+            setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
+            onError(error as Error);
+          }
         }
       } else {
+        // Reset everything when modal closes
         setSmartAccount(null);
         setSignatureStatus('');
+        setIsProcessing(false);
       }
     };
 
     initializeModal();
-  }, [open, messageToSign, address, onError]);
+
+    // Cleanup function
+    return () => {
+      isMounted = false;
+      // Clear any pending timeouts
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [open, messageToSign, address, onError, getSmartAccount]);
 
   const canSign = !isProcessing && !!messageToSign && !!smartAccount;
 
@@ -102,8 +124,8 @@ export const SignatureModal = ({
       open={open}
       onOpenChange={onOpenChange}
       message={messageToSign}
-      origin={window.location.origin}
-      timestamp={new Date()}
+      origin={origin}
+      timestamp={timestamp}
       onSign={signMessage}
       onCancel={handleCancel}
       isProcessing={isProcessing}

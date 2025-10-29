@@ -33,6 +33,7 @@ interface PopupConfig {
 }
 
 interface PendingRequest {
+  origin: string;
   type: SDKRequestType;
   requestId: string;
   correlationId: string;
@@ -197,7 +198,10 @@ export default function KeysJawIdApp() {
 
       // For eth_requestAccounts, we need to show approval UI
       if (method === 'eth_requestAccounts') {
+        const origin = communicator.getOrigin() || "";
+        console.log('📍 Request origin:', origin);
         setPendingRequest({
+          origin,
           type: SDKRequestType.CONNECT,
           requestId: request.id,
           correlationId: request.correlationId,
@@ -208,12 +212,22 @@ export default function KeysJawIdApp() {
             console.log('✅ User approved connection, sending response...');
             const accounts = result as string[];
             const response = await cryptoHandler.createHandshakeResponse(request.id, accounts);
-            communicator.sendMessage(response);
+            communicator.sendMessage(response as any);
           },
           onReject: async (error: string) => {
             console.log('❌ User rejected connection');
-            // TODO: Send error response
-            throw new Error(error);
+            // Send error response for handshake rejection
+            try {
+              const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
+                request.id,
+                request.correlationId,
+                4001, // User rejected request (EIP-1193 standard)
+                error || 'User rejected the request'
+              );
+              communicator.sendMessage(errorResponse as any);
+            } catch (err) {
+              console.error('❌ Failed to send rejection response:', err);
+            }
           },
         });
       }
@@ -259,7 +273,10 @@ export default function KeysJawIdApp() {
         requestType = SDKRequestType.CONNECT; // fallback
       }
 
+      const origin = communicator.getOrigin() ?? '';
+      console.log('📍 Request origin:', origin);
       setPendingRequest({
+        origin,
         type: requestType,
         requestId: request.id,
         correlationId: request.correlationId,
@@ -274,12 +291,25 @@ export default function KeysJawIdApp() {
             request.correlationId,
             result
           );
-          communicator.sendMessage(response);
+          communicator.sendMessage(response as any);
         },
         onReject: async (error: string) => {
-          console.log('❌ User rejected request');
-          // TODO: Send error response
-          throw new Error(error);
+          console.log('❌ User rejected request:', error);
+          // Send standard error response (EIP-1193 code 4001)
+          try {
+            const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
+              request.id,
+              request.correlationId,
+              4001, // User rejected request (EIP-1193 standard)
+              error || 'User rejected the request'
+            );
+            communicator.sendMessage(errorResponse as any);
+            // Close window after sending error
+            setTimeout(() => window.close(), 100);
+          } catch (err) {
+            console.error('❌ Failed to send rejection response:', err);
+            window.close();
+          }
         },
       });
 
@@ -303,13 +333,19 @@ export default function KeysJawIdApp() {
 
 
     // Check if we have a pending sign message request and either user is authenticated OR we're in processing state
-    if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE && (authQuery.isAuthenticated || state === 'processing')) {
+    // Don't show modal if state is 'success' or 'error' (request has been completed)
+    if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE && 
+        state !== 'success' && 
+        state !== 'error' &&
+        (authQuery.isAuthenticated || state === 'processing')) {
+      console.log('✅ Pending request:', pendingRequest);
       console.log('✅ All conditions met, showing SignatureModal');
       const messageToSign = pendingRequest.params[0] as string;
       const address = pendingRequest.params[1] as string;
 
       return (
         <SignatureModal
+          origin={pendingRequest.origin}
           open={true}
           onOpenChange={() => { }}
           message={messageToSign}

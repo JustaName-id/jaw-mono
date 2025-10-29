@@ -248,6 +248,59 @@ export class CryptoHandler {
   }
 
   /**
+   * Create encrypted error response for RPC methods
+   */
+  async createEncryptedErrorResponse(
+    requestId: MessageID,
+    correlationId: string,
+    errorCode: number,
+    errorMessage: string
+  ): Promise<RPCResponseMessage> {
+    console.log('📦 Creating encrypted error response:', { requestId, errorCode, errorMessage });
+
+    try {
+      const sharedSecret = await this.keyManager.getSharedSecret();
+      if (!sharedSecret) {
+        throw new Error('No shared secret available');
+      }
+
+      if (!this.ownPublicKeyHex) {
+        throw new Error('Own public key not available');
+      }
+
+      // Create error response payload
+      const responseData = {
+        result: {
+          error: {
+            code: errorCode,
+            message: errorMessage,
+          },
+        },
+      };
+
+      // Encrypt using @jaw.id/core
+      const encrypted = await encryptContent(responseData, sharedSecret);
+
+      const response: RPCResponseMessage = {
+        requestId,
+        id: crypto.randomUUID(),
+        sender: this.ownPublicKeyHex,
+        correlationId,
+        content: {
+          encrypted,
+        },
+        timestamp: new Date(),
+      };
+
+      console.log('✅ Encrypted error response created');
+      return response;
+    } catch (error) {
+      console.error('❌ Failed to create encrypted error response:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Clear all stored keys
    * Called when starting a new session
    */
