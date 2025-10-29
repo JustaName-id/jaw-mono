@@ -7,6 +7,8 @@ export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   apiKey: string;
   preference?: Partial<JawProviderPreference>;
   paymasterUrls?: Record<number, string>;
+  /** Used to issue subnames*/
+  ens?: string;
 };
 
 const DEFAULT_PREFERENCE: JawProviderPreference = {
@@ -43,11 +45,11 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
       appName: params.appName || 'DApp',
       appLogoUrl: params.appLogoUrl || null,
       appChainIds: params.appChainIds || [1],
-      ...(params.ens ? { ens: params.ens } : {}),
     },
     preference: {
       ...DEFAULT_PREFERENCE,
       ...params.preference,
+      ...(params.ens ? { ens: params.ens } : {}),
     },
     paymasterUrls: params.paymasterUrls,
   };

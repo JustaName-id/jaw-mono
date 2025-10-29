@@ -51,6 +51,7 @@ const mockEncryptedData = {
 };
 const mockCorrelationId = 'test-correlation-id';
 const mockMessageId = '12345678-1234-1234-1234-123456789012' as const;
+const mockApiKey = 'ZZAdkx3GrA0q7UENOlq27BkbpuSlutv1'
 
 describe('JAWSigner', () => {
   let signer: JAWSigner;
@@ -69,6 +70,7 @@ describe('JAWSigner', () => {
 
     // Setup mock communicator
     mockCommunicator = new Communicator({
+      apiKey: mockApiKey,
       metadata: mockMetadata,
       preference: { keysUrl: 'https://test.com' },
     }) as Mocked<Communicator>;
