@@ -57,5 +57,16 @@ export {
     type LookupPasskeysRequest,
 } from './passkey-manager/index.js';
 
+/** Key Manager exports **/
+export {
+    KeyManager
+} from "./key-manager/index.js"
+
+/** Messages exports **/
+export * from "./messages/index.js"
+
+/** Utils exports **/
+export * from "./utils/index.js"
+
 /** Default export **/
 export { createJAWSDK as default } from './sdk/createJAWSDK.js';

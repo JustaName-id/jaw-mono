@@ -25,11 +25,13 @@ import {JAW_PASSKEYS_URL} from "../constants.js";
 export class PasskeyManager {
   private storage: SyncStorage;
   private preference: JawProviderPreference;
+  private apiKey?: string;
   private static readonly CREDENTIAL_ID_REGEX = /^[A-Za-z0-9_-]+$/;
 
-  constructor(storage?: SyncStorage, preference?: JawProviderPreference) {
+  constructor(storage?: SyncStorage, preference?: JawProviderPreference, apiKey?: string) {
     this.storage = storage ?? createLocalStorage('jaw', 'passkey');
     this.preference = preference ?? {};
+    this.apiKey = apiKey;
   }
 
   /**
@@ -150,7 +152,7 @@ export class PasskeyManager {
         publicKey,
         displayName: name.trim(),
       },
-      this.preference.apiKey,
+      this.apiKey,
       dev,
       serverUrl
     );
@@ -188,7 +190,7 @@ export class PasskeyManager {
     const serverUrl = this.preference.serverUrl ?? JAW_PASSKEYS_URL;
     const passkeyData = await lookupPasskeyFromBackend(
       credentialId,
-      this.preference.apiKey,
+      this.apiKey,
       dev,
       serverUrl
     );
