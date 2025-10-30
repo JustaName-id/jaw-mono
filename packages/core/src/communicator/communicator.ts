@@ -5,6 +5,7 @@ import { standardErrors } from '../errors/errors.js';
 
 import {AppMetadata, JawProviderPreference} from '../provider/interface.js';
 import {ConfigMessage} from "../messages/configMessage.js";
+import { store, SDKChain } from '../store/index.js';
 
 export type CommunicatorOptions = {
     apiKey: string;
@@ -30,6 +31,7 @@ export class Communicator {
     private readonly preference: JawProviderPreference;
     private readonly url: URL;
     private readonly apiKey: string;
+    private readonly chainsForPopup?: { [key: number]: SDKChain };
     private popup: Window | null = null;
     private listeners = new Map<(_: MessageEvent) => void, { reject: (_: Error) => void }>();
 
@@ -38,6 +40,20 @@ export class Communicator {
         this.metadata = metadata;
         this.preference = preference;
         this.apiKey = apiKey;
+
+        // Get chains from store and convert to the format expected by popup
+        const storedChains = store.getState().chains;
+        this.chainsForPopup = storedChains && storedChains.length > 0
+            ? storedChains.reduce((acc, chain) => {
+                acc[chain.id] = {
+                    id: chain.id,
+                    ...(chain.rpcUrl ? { rpcUrl: chain.rpcUrl } : {}),
+                    ...(chain.paymasterUrl ? { paymasterUrl: chain.paymasterUrl } : {}),
+                    ...(chain.nativeCurrency ? { nativeCurrency: chain.nativeCurrency } : {}),
+                };
+                return acc;
+            }, {} as { [key: number]: SDKChain })
+            : undefined;
     }
 
     /**
@@ -69,7 +85,8 @@ export class Communicator {
                         metadata: this.metadata,
                         preference: this.preference,
                         location: window.location.toString(),
-                        apiKey: this.apiKey
+                        apiKey: this.apiKey,
+                        ...(this.chainsForPopup ? { chains: this.chainsForPopup } : {})
                     },
                 });
                 console.log('🔧 DEBUG: Sent config, waiting for PopupReady...');
