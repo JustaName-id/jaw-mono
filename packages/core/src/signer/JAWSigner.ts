@@ -24,6 +24,7 @@ import {
     ensureIntNumber,
     hexStringFromNumber
 } from '../utils/index.js';
+import {clearSignerType} from "./utils.js";
 
 type ConstructorOptions = {
     metadata: AppMetadata;
@@ -262,6 +263,8 @@ export class JAWSigner implements Signer {
         // clear the store
         store.account.clear();
         store.chains.clear();
+
+        clearSignerType();
 
         // reset the signer
         this.accounts = [];

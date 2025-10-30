@@ -34,6 +34,10 @@ export function storeSignerType(signerType: SignerType): void {
     storage.setItem(SIGNER_TYPE_KEY, signerType);
 }
 
+export function clearSignerType(): void {
+    storage.removeItem(SIGNER_TYPE_KEY);
+}
+
 export function createSigner(params: {
     signerType: SignerType;
     metadata: AppMetadata;

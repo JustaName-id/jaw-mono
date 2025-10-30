@@ -44,6 +44,14 @@ vi.mock('../utils/index.js', async (importOriginal) => {
   };
 });
 
+vi.mock('./utils.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils.js')>();
+  return {
+    ...actual,
+    clearSignerType: vi.fn(),
+  };
+});
+
 const mockCryptoKey = {} as CryptoKey;
 const mockEncryptedData = {
   iv: new Uint8Array([1, 2, 3]),
