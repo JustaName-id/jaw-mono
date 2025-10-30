@@ -1,10 +1,7 @@
-import { AppMetadata, ConstructorOptions, JawProviderPreference } from './interface.js';
+import { ConstructorOptions } from './interface.js';
 import { JAWProvider } from './JAWProvider.js';
 
-export type CreateProviderOptions = {
-  metadata: AppMetadata;
-  preference: JawProviderPreference;
-};
+export type CreateProviderOptions = ConstructorOptions;
 
 /**
  * Create a JAW Provider instance.
@@ -12,10 +9,5 @@ export type CreateProviderOptions = {
  * @returns A JAW Provider object.
  */
 export function createJAWProvider(options: CreateProviderOptions): JAWProvider {
-  const params: ConstructorOptions = {
-    metadata: options.metadata,
-    preference: options.preference,
-  };
-
-  return new JAWProvider(params);
+  return new JAWProvider(options);
 }

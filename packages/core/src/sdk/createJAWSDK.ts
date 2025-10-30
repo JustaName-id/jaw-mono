@@ -1,11 +1,14 @@
 import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
 import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
-import { store } from '../store/index.js';
+import { store, createInitialChains, createClients, ChainClients } from '../store/index.js';
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
+  apiKey: string;
   preference?: Partial<JawProviderPreference>;
   paymasterUrls?: Record<number, string>;
+  /** Used to issue subnames*/
+  ens?: string;
 };
 
 const DEFAULT_PREFERENCE: JawProviderPreference = {
@@ -24,6 +27,7 @@ const DEFAULT_PREFERENCE: JawProviderPreference = {
  * import { createJAWSDK } from '@jaw.id/core';
  *
  * const jaw = createJAWSDK({
+ *   apiKey: 'your-api-key',
  *   appName: 'My DApp',
  *   appLogoUrl: 'https://example.com/logo.png',
  *   appChainIds: [1, 137],
@@ -36,6 +40,7 @@ const DEFAULT_PREFERENCE: JawProviderPreference = {
 
 export function createJAWSDK(params: CreateJAWSDKOptions) {
   const options: ConstructorOptions = {
+    apiKey: params.apiKey,
     metadata: {
       appName: params.appName || 'DApp',
       appLogoUrl: params.appLogoUrl || null,
@@ -44,12 +49,25 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
     preference: {
       ...DEFAULT_PREFERENCE,
       ...params.preference,
+      ...(params.ens ? { ens: params.ens } : {}),
     },
     paymasterUrls: params.paymasterUrls,
   };
 
   // Store the config
   store.config.set(options);
+
+  // Always clear and reinitialize chains on SDK creation to ensure consistency
+  store.chains.clear();
+  ChainClients.setState({});
+
+
+  const appChainIds = options.metadata.appChainIds;
+  if (params.apiKey && appChainIds && appChainIds.length > 0) {
+    const initialChains = createInitialChains(appChainIds, params.apiKey, params.paymasterUrls);
+    store.chains.set(initialChains);
+    createClients(initialChains);
+  }
 
   let provider: ProviderInterface | null = null;
 

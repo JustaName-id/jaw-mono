@@ -24,6 +24,7 @@ import {
     ensureIntNumber,
     hexStringFromNumber
 } from '../utils/index.js';
+import {clearSignerType} from "./utils.js";
 
 type ConstructorOptions = {
     metadata: AppMetadata;
@@ -44,7 +45,9 @@ export class JAWSigner implements Signer {
         this.callback = params.callback;
         this.keyManager = new KeyManager();
 
-        const { account, chains } = store.getState();
+        const state = store.getState();
+        const { account, chains } = state;
+
         this.accounts = account.accounts ?? [];
         this.chain = account.chain ?? {
             id: params.metadata.appChainIds?.[0] ?? 1,
@@ -62,12 +65,27 @@ export class JAWSigner implements Signer {
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
         await this.communicator.waitForPopupLoaded?.();
 
+        // Get chains from store and convert to the format expected by popup
+        const storedChains = store.getState().chains;
+        const chainsForPopup = storedChains && storedChains.length > 0
+            ? storedChains.reduce((acc, chain) => {
+                acc[chain.id] = {
+                    id: chain.id,
+                    ...(chain.rpcUrl ? { rpcUrl: chain.rpcUrl } : {}),
+                    ...(chain.paymasterUrl ? { paymasterUrl: chain.paymasterUrl } : {}),
+                    ...(chain.nativeCurrency ? { nativeCurrency: chain.nativeCurrency } : {}),
+                };
+                return acc;
+            }, {} as { [key: number]: SDKChain })
+            : undefined;
+
         const handshakeMessage = await this.createRequestMessage(
             {
                 handshake: {
                     method: args.method,
                     params: args.params ?? [],
                 },
+                ...(chainsForPopup ? { chains: chainsForPopup } : {}),
             },
             correlationId
         );
@@ -84,7 +102,7 @@ export class JAWSigner implements Signer {
 
         const decrypted = await this.decryptResponseMessage(response);
 
-        this.handleResponse(args, decrypted);
+        await this.handleResponse(args, decrypted);
     }
 
     async request(request: RequestArguments) {
@@ -119,7 +137,7 @@ export class JAWSigner implements Signer {
                     // Wait for the popup to be loaded before making async calls
                     await this.communicator.waitForPopupLoaded?.();
 
-                    // Check if addSubAccount capability is present and if so, inject the the sub account capabilities
+                    // Prepare capabilities to inject (currently empty, reserved for future use)
                     const capabilitiesToInject: Record<string, unknown> = {};
 
                     const modifiedRequest = injectRequestCapabilities(request, capabilitiesToInject);
@@ -246,6 +264,8 @@ export class JAWSigner implements Signer {
         store.account.clear();
         store.chains.clear();
 
+        clearSignerType();
+
         // reset the signer
         this.accounts = [];
         this.chain = {
@@ -367,13 +387,18 @@ export class JAWSigner implements Signer {
 
         const availableChains = response.data?.chains;
         if (availableChains) {
-            const nativeCurrencies = response.data?.nativeCurrencies;
-            const chains: SDKChain[] = Object.entries(availableChains).map(([id, rpcUrl]) => {
-                const nativeCurrency = nativeCurrencies?.[Number(id)];
+            const chains: SDKChain[] = Object.entries(availableChains).map(([id, chain]) => {
                 return {
                     id: Number(id),
-                    rpcUrl,
-                    ...(nativeCurrency ? { nativeCurrency } : {}),
+                    ...(chain.rpcUrl ? { rpcUrl: chain.rpcUrl } : {}),
+                    ...(chain.paymasterUrl ? { paymasterUrl: chain.paymasterUrl } : {}),
+                    ...(chain.nativeCurrency ? {
+                        nativeCurrency: {
+                            name: chain.nativeCurrency.name,
+                            symbol: chain.nativeCurrency.symbol,
+                            decimals: chain.nativeCurrency.decimal,
+                        }
+                    } : {}),
                 };
             });
 

@@ -7,7 +7,7 @@ import {AppMetadata, JawProviderPreference} from '../provider/interface.js';
 import {ConfigMessage} from "../messages/configMessage.js";
 
 export type CommunicatorOptions = {
-    url?: string;
+    apiKey: string;
     metadata: AppMetadata;
     preference: JawProviderPreference;
 };
@@ -29,13 +29,15 @@ export class Communicator {
     private readonly metadata: AppMetadata;
     private readonly preference: JawProviderPreference;
     private readonly url: URL;
+    private readonly apiKey: string;
     private popup: Window | null = null;
     private listeners = new Map<(_: MessageEvent) => void, { reject: (_: Error) => void }>();
 
-    constructor({ url = JAW_KEYS_URL, metadata, preference }: CommunicatorOptions) {
-        this.url = new URL(url);
+    constructor({ apiKey, metadata, preference }: CommunicatorOptions) {
+        this.url = new URL(preference.keysUrl ?? JAW_KEYS_URL);
         this.metadata = metadata;
         this.preference = preference;
+        this.apiKey = apiKey;
     }
 
     /**
@@ -67,6 +69,7 @@ export class Communicator {
                         metadata: this.metadata,
                         preference: this.preference,
                         location: window.location.toString(),
+                        apiKey: this.apiKey
                     },
                 });
                 console.log('🔧 DEBUG: Sent config, waiting for PopupReady...');

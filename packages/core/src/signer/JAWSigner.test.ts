@@ -44,6 +44,14 @@ vi.mock('../utils/index.js', async (importOriginal) => {
   };
 });
 
+vi.mock('./utils.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./utils.js')>();
+  return {
+    ...actual,
+    clearSignerType: vi.fn(),
+  };
+});
+
 const mockCryptoKey = {} as CryptoKey;
 const mockEncryptedData = {
   iv: new Uint8Array([1, 2, 3]),
@@ -51,6 +59,7 @@ const mockEncryptedData = {
 };
 const mockCorrelationId = 'test-correlation-id';
 const mockMessageId = '12345678-1234-1234-1234-123456789012' as const;
+const mockApiKey = 'ZZAdkx3GrA0q7UENOlq27BkbpuSlutv1'
 
 describe('JAWSigner', () => {
   let signer: JAWSigner;
@@ -69,7 +78,7 @@ describe('JAWSigner', () => {
 
     // Setup mock communicator
     mockCommunicator = new Communicator({
-      url: 'https://test.com',
+      apiKey: mockApiKey,
       metadata: mockMetadata,
       preference: { keysUrl: 'https://test.com' },
     }) as Mocked<Communicator>;
@@ -179,8 +188,8 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
-            137: 'https://polygon-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+            137: { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
           },
           capabilities: {
             '0x1': { paymasterService: { supported: true } },
@@ -260,7 +269,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -304,7 +313,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -613,7 +622,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -668,7 +677,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -715,7 +724,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -761,7 +770,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -830,7 +839,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -950,7 +959,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -1024,7 +1033,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -1174,7 +1183,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -1228,7 +1237,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -1384,8 +1393,8 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
-            137: 'https://polygon-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+            137: { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
           },
           capabilities: {
             '0x1': { paymasterService: { supported: true } },
@@ -1444,12 +1453,8 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
-            137: 'https://polygon-mainnet.rpc.com',
-          },
-          nativeCurrencies: {
-            1: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
-            137: { name: 'Polygon', symbol: 'MATIC', decimals: 18 },
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com', nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimal: 18 } },
+            137: { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com', nativeCurrency: { name: 'Polygon', symbol: 'MATIC', decimal: 18 } },
           },
         },
       } as RPCResponse);
@@ -1509,8 +1514,8 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
-            137: 'https://polygon-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+            137: { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -1561,9 +1566,9 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
-            137: 'https://polygon-mainnet.rpc.com',
-            42: 'https://kovan.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+            137: { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
+            42: { id: 42, rpcUrl: 'https://kovan.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -1658,8 +1663,8 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
-            10: 'https://optimism-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+            10: { id: 10, rpcUrl: 'https://optimism-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -1705,7 +1710,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -1857,7 +1862,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -1929,7 +1934,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
           // No capabilities
         },
@@ -2103,7 +2108,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -2194,7 +2199,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);
@@ -2244,7 +2249,7 @@ describe('JAWSigner', () => {
         },
         data: {
           chains: {
-            1: 'https://eth-mainnet.rpc.com',
+            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
           },
         },
       } as RPCResponse);

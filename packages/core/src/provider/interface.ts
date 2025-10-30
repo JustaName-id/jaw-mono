@@ -50,7 +50,8 @@ export interface JawProviderPreference {
     keysUrl?: string;
     /** Backend server URL for passkey storage (default: https://api.justaname.id/wallet/v2/passkeys) */
     serverUrl?: string;
-    apiKey?: string;
+    /** Used to issue subnames **/
+    ens?: string;
 }
 
 export type ProviderEventCallback = ProviderInterface['emit'];
@@ -60,5 +61,6 @@ export class ProviderEventEmitter extends EventEmitter<keyof ProviderEventMap> {
 export interface ConstructorOptions {
     metadata: AppMetadata;
     preference: JawProviderPreference;
+    apiKey: string;
     paymasterUrls?: Record<number, string>;
 }

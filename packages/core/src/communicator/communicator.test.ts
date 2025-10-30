@@ -86,7 +86,6 @@ describe('Communicator', () => {
 
         // url defaults to JAW_KEYS_URL
         communicator = new Communicator({
-            url: JAW_KEYS_URL,
             metadata: appMetadata,
             preference,
         });
@@ -280,7 +279,6 @@ describe('Communicator', () => {
 
             // Create a new communicator instance to properly test the closed popup scenario
             communicator = new Communicator({
-                url: JAW_KEYS_URL,
                 metadata: appMetadata,
                 preference,
             });

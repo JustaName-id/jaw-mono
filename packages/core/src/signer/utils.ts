@@ -1,5 +1,5 @@
-import {ConfigMessage, MessageID, SignerType} from "../messages/index.js";
-import {AppMetadata, JawProviderPreference, ProviderEventCallback, RequestArguments} from "../provider/index.js";
+import {SignerType} from "../messages/index.js";
+import {AppMetadata, ProviderEventCallback} from "../provider/index.js";
 import {Communicator} from "../communicator/index.js";
 import {Signer} from "./interface.js";
 import {JAWSigner} from "./JAWSigner.js";
@@ -34,6 +34,10 @@ export function storeSignerType(signerType: SignerType): void {
     storage.setItem(SIGNER_TYPE_KEY, signerType);
 }
 
+export function clearSignerType(): void {
+    storage.removeItem(SIGNER_TYPE_KEY);
+}
+
 export function createSigner(params: {
     signerType: SignerType;
     metadata: AppMetadata;
@@ -42,7 +46,7 @@ export function createSigner(params: {
 }): Signer {
     const { signerType, metadata, communicator, callback } = params;
     switch (signerType) {
-        case 'scw': {
+        case 'crossPlatform': {
             return new JAWSigner({
                 metadata,
                 callback,
@@ -50,25 +54,6 @@ export function createSigner(params: {
             });
         }
     }
-}
-
-export async function fetchSignerType(params: {
-    communicator: Communicator;
-    preference: JawProviderPreference;
-    handshakeRequest: RequestArguments;
-}): Promise<SignerType> {
-    const { communicator, handshakeRequest } = params;
-
-    const request: ConfigMessage & { id: MessageID } = {
-        id: crypto.randomUUID(),
-        event: 'selectSignerType',
-        data: {
-            ...params.preference,
-            handshakeRequest,
-        },
-    };
-    const { data } = await communicator.postRequestAndWaitForResponse(request);
-    return data as SignerType;
 }
 
 export async function findOwnerIndex({
