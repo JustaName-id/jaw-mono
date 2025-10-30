@@ -2293,7 +2293,10 @@ describe('JAWSigner', () => {
       expect(encryptContent).toHaveBeenCalledWith(
         {
           action: request,
-          chainId: 1,
+          chain: {
+            id: 1,
+            rpcUrl: 'https://eth-mainnet.rpc.com',
+          },
         },
         mockCryptoKey
       );
@@ -2353,7 +2356,10 @@ describe('JAWSigner', () => {
       expect(encryptContent).toHaveBeenCalledWith(
         {
           action: request,
-          chainId: 137, // Should use the switched chain
+          chain: {
+            id: 137,
+            rpcUrl: 'https://polygon.rpc.com',
+          }, // Should use the switched chain
         },
         mockCryptoKey
       );

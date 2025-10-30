@@ -39,6 +39,7 @@ export class JAWSigner implements Signer {
 
     private accounts: Address[];
     private chain: SDKChain;
+    private chains: SDKChain[] | undefined;
 
     constructor(params: ConstructorOptions) {
         this.communicator = params.communicator;
@@ -52,6 +53,7 @@ export class JAWSigner implements Signer {
         this.chain = account.chain ?? {
             id: params.metadata.appChainIds?.[0] ?? 1,
         };
+        this.chains = chains;
 
         if (chains) {
             createClients(chains);
@@ -256,6 +258,7 @@ export class JAWSigner implements Signer {
         this.chain = {
             id: metadata?.appChainIds?.[0] ?? 1,
         };
+        this.chains = undefined;
     }
 
     /**
@@ -325,10 +328,12 @@ export class JAWSigner implements Signer {
             throw standardErrors.provider.unauthorized('No shared secret found when encrypting request');
         }
 
+        const chain = this.chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+
         const encrypted = await encryptContent(
             {
                 action: request,
-                chainId: this.chain.id,
+                chain: chain,
             },
             sharedSecret
         );
@@ -388,6 +393,7 @@ export class JAWSigner implements Signer {
             });
 
             store.chains.set(chains);
+            this.chains = chains;
 
             this.updateChain(this.chain.id, chains);
             createClients(chains);

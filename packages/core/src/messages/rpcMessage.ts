@@ -20,7 +20,6 @@ export interface RPCRequestMessage extends RPCMessage {
     content:
         | {
         handshake: RequestArguments;
-        chains?: { [key: number]: Chain };
     }
         | {
         encrypted: EncryptedData;
@@ -40,7 +39,7 @@ export interface RPCResponseMessage extends RPCMessage {
 
 export type RPCRequest = {
     action: RequestArguments; // JSON-RPC call
-    chainId: number;
+    chain: Chain;
 };
 
 export type RPCResponseNativeCurrency = {
