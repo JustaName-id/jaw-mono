@@ -20,6 +20,7 @@ export interface RPCRequestMessage extends RPCMessage {
     content:
         | {
         handshake: RequestArguments;
+        chain: Chain;
     }
         | {
         encrypted: EncryptedData;

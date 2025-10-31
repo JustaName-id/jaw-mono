@@ -7,7 +7,6 @@ import {AppMetadata, JawProviderPreference} from '../provider/interface.js';
 import {ConfigMessage} from "../messages/configMessage.js";
 
 export type CommunicatorOptions = {
-    apiKey: string;
     metadata: AppMetadata;
     preference: JawProviderPreference;
 };
@@ -29,15 +28,13 @@ export class Communicator {
     private readonly metadata: AppMetadata;
     private readonly preference: JawProviderPreference;
     private readonly url: URL;
-    private readonly apiKey: string;
     private popup: Window | null = null;
     private listeners = new Map<(_: MessageEvent) => void, { reject: (_: Error) => void }>();
 
-    constructor({ apiKey, metadata, preference }: CommunicatorOptions) {
+    constructor({ metadata, preference }: CommunicatorOptions) {
         this.url = new URL(preference.keysUrl ?? JAW_KEYS_URL);
         this.metadata = metadata;
         this.preference = preference;
-        this.apiKey = apiKey;
     }
 
     /**
@@ -67,8 +64,7 @@ export class Communicator {
                         version: SDK_VERSION,
                         metadata: this.metadata,
                         preference: this.preference,
-                        location: window.location.toString(),
-                        apiKey: this.apiKey
+                        location: window.location.toString()
                     },
                 });
             })
