@@ -2,6 +2,7 @@ import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
 import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
 import { store, createInitialChains, createClients, ChainClients } from '../store/index.js';
+import { validateConfig } from './validateConfig.js';
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   apiKey: string;
@@ -39,6 +40,8 @@ const DEFAULT_PREFERENCE: JawProviderPreference = {
  */
 
 export function createJAWSDK(params: CreateJAWSDKOptions) {
+  validateConfig(params);
+
   const options: ConstructorOptions = {
     apiKey: params.apiKey,
     metadata: {
