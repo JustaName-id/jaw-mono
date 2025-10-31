@@ -65,27 +65,12 @@ export class JAWSigner implements Signer {
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
         await this.communicator.waitForPopupLoaded?.();
 
-        // Get chains from store and convert to the format expected by popup
-        const storedChains = store.getState().chains;
-        const chainsForPopup = storedChains && storedChains.length > 0
-            ? storedChains.reduce((acc, chain) => {
-                acc[chain.id] = {
-                    id: chain.id,
-                    ...(chain.rpcUrl ? { rpcUrl: chain.rpcUrl } : {}),
-                    ...(chain.paymasterUrl ? { paymasterUrl: chain.paymasterUrl } : {}),
-                    ...(chain.nativeCurrency ? { nativeCurrency: chain.nativeCurrency } : {}),
-                };
-                return acc;
-            }, {} as { [key: number]: SDKChain })
-            : undefined;
-
         const handshakeMessage = await this.createRequestMessage(
             {
                 handshake: {
                     method: args.method,
                     params: args.params ?? [],
                 },
-                ...(chainsForPopup ? { chains: chainsForPopup } : {}),
             },
             correlationId
         );
@@ -201,11 +186,14 @@ export class JAWSigner implements Signer {
                 this.callback?.('connect', { chainId: numberToHex(this.chain.id) });
                 return this.sendRequestToPopup(modifiedRequest);
             }
-            default:
-                if (!this.chain.rpcUrl) {
+            default: {
+                const chains = store.getState().chains;
+                const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+                if (!chain.rpcUrl) {
                     throw standardErrors.rpc.internal('No RPC URL set for chain');
                 }
-                return fetchRPCRequest(request, this.chain.rpcUrl);
+                return fetchRPCRequest(request, chain.rpcUrl);
+            }
         }
     }
 
@@ -262,7 +250,6 @@ export class JAWSigner implements Signer {
 
         // clear the store
         store.account.clear();
-        store.chains.clear();
 
         clearSignerType();
 
@@ -340,10 +327,13 @@ export class JAWSigner implements Signer {
             throw standardErrors.provider.unauthorized('No shared secret found when encrypting request');
         }
 
+        const chains = store.getState().chains;
+        const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+
         const encrypted = await encryptContent(
             {
                 action: request,
-                chainId: this.chain.id,
+                chain: chain,
             },
             sharedSecret
         );
@@ -384,29 +374,6 @@ export class JAWSigner implements Signer {
         }
 
         const response: RPCResponse = await decryptContent(content.encrypted, sharedSecret);
-
-        const availableChains = response.data?.chains;
-        if (availableChains) {
-            const chains: SDKChain[] = Object.entries(availableChains).map(([id, chain]) => {
-                return {
-                    id: Number(id),
-                    ...(chain.rpcUrl ? { rpcUrl: chain.rpcUrl } : {}),
-                    ...(chain.paymasterUrl ? { paymasterUrl: chain.paymasterUrl } : {}),
-                    ...(chain.nativeCurrency ? {
-                        nativeCurrency: {
-                            name: chain.nativeCurrency.name,
-                            symbol: chain.nativeCurrency.symbol,
-                            decimals: chain.nativeCurrency.decimal,
-                        }
-                    } : {}),
-                };
-            });
-
-            store.chains.set(chains);
-
-            this.updateChain(this.chain.id, chains);
-            createClients(chains);
-        }
 
         const walletCapabilities = response.data?.capabilities;
         if (walletCapabilities) {
