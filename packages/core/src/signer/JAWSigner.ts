@@ -39,7 +39,6 @@ export class JAWSigner implements Signer {
 
     private accounts: Address[];
     private chain: SDKChain;
-    private chains: SDKChain[] | undefined;
 
     constructor(params: ConstructorOptions) {
         this.communicator = params.communicator;
@@ -53,7 +52,6 @@ export class JAWSigner implements Signer {
         this.chain = account.chain ?? {
             id: params.metadata.appChainIds?.[0] ?? 1,
         };
-        this.chains = chains;
 
         if (chains) {
             createClients(chains);
@@ -188,11 +186,14 @@ export class JAWSigner implements Signer {
                 this.callback?.('connect', { chainId: numberToHex(this.chain.id) });
                 return this.sendRequestToPopup(modifiedRequest);
             }
-            default:
-                if (!this.chain.rpcUrl) {
+            default: {
+                const chains = store.getState().chains;
+                const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+                if (!chain.rpcUrl) {
                     throw standardErrors.rpc.internal('No RPC URL set for chain');
                 }
-                return fetchRPCRequest(request, this.chain.rpcUrl);
+                return fetchRPCRequest(request, chain.rpcUrl);
+            }
         }
     }
 
@@ -249,7 +250,6 @@ export class JAWSigner implements Signer {
 
         // clear the store
         store.account.clear();
-        store.chains.clear();
 
         clearSignerType();
 
@@ -258,7 +258,6 @@ export class JAWSigner implements Signer {
         this.chain = {
             id: metadata?.appChainIds?.[0] ?? 1,
         };
-        this.chains = undefined;
     }
 
     /**
@@ -328,7 +327,8 @@ export class JAWSigner implements Signer {
             throw standardErrors.provider.unauthorized('No shared secret found when encrypting request');
         }
 
-        const chain = this.chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+        const chains = store.getState().chains;
+        const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
 
         const encrypted = await encryptContent(
             {
@@ -374,30 +374,6 @@ export class JAWSigner implements Signer {
         }
 
         const response: RPCResponse = await decryptContent(content.encrypted, sharedSecret);
-
-        const availableChains = response.data?.chains;
-        if (availableChains) {
-            const chains: SDKChain[] = Object.entries(availableChains).map(([id, chain]) => {
-                return {
-                    id: Number(id),
-                    ...(chain.rpcUrl ? { rpcUrl: chain.rpcUrl } : {}),
-                    ...(chain.paymasterUrl ? { paymasterUrl: chain.paymasterUrl } : {}),
-                    ...(chain.nativeCurrency ? {
-                        nativeCurrency: {
-                            name: chain.nativeCurrency.name,
-                            symbol: chain.nativeCurrency.symbol,
-                            decimals: chain.nativeCurrency.decimal,
-                        }
-                    } : {}),
-                };
-            });
-
-            store.chains.set(chains);
-            this.chains = chains;
-
-            this.updateChain(this.chain.id, chains);
-            createClients(chains);
-        }
 
         const walletCapabilities = response.data?.capabilities;
         if (walletCapabilities) {

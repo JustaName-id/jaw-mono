@@ -587,7 +587,6 @@ describe('JAWSigner', () => {
 
       // Assert
       expect(store.account.clear).toHaveBeenCalled();
-      expect(store.chains.clear).toHaveBeenCalled();
     });
   });
 
@@ -641,7 +640,6 @@ describe('JAWSigner', () => {
       await signer.cleanup();
 
       expect(store.account.clear).toHaveBeenCalled();
-      expect(store.chains.clear).toHaveBeenCalled();
     });
   });
 
@@ -1362,7 +1360,7 @@ describe('JAWSigner', () => {
   });
 
   describe('Chain & Capabilities Updates', () => {
-    it('should update chains and capabilities from response data', async () => {
+    it('should update capabilities from response data', async () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new JAWSigner({
         metadata: mockMetadata,
@@ -1410,11 +1408,8 @@ describe('JAWSigner', () => {
       // Act
       await unauthenticatedSigner.request(request);
 
-      // Assert
-      expect(store.chains.set).toHaveBeenCalledWith([
-        { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
-        { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
-      ]);
+      // Assert - chains are no longer stored from response data
+      expect(store.chains.set).not.toHaveBeenCalled();
       expect(store.account.set).toHaveBeenCalledWith({
         capabilities: {
           '0x1': { paymasterService: { supported: true } },
@@ -1422,7 +1417,7 @@ describe('JAWSigner', () => {
       });
     });
 
-    it('should handle nativeCurrencies in chain updates', async () => {
+    it('should not store chains from response data', async () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new JAWSigner({
         metadata: mockMetadata,
@@ -1467,19 +1462,8 @@ describe('JAWSigner', () => {
       // Act
       await unauthenticatedSigner.request(request);
 
-      // Assert
-      expect(store.chains.set).toHaveBeenCalledWith([
-        {
-          id: 1,
-          rpcUrl: 'https://eth-mainnet.rpc.com',
-          nativeCurrency: { name: 'Ethereum', symbol: 'ETH', decimals: 18 },
-        },
-        {
-          id: 137,
-          rpcUrl: 'https://polygon-mainnet.rpc.com',
-          nativeCurrency: { name: 'Polygon', symbol: 'MATIC', decimals: 18 },
-        },
-      ]);
+      // Assert - chains are no longer stored from response data
+      expect(store.chains.set).not.toHaveBeenCalled();
     });
   });
 
@@ -1618,7 +1602,7 @@ describe('JAWSigner', () => {
       expect(mockCallback).not.toHaveBeenCalled();
     });
 
-    it('should update chain with newAvailableChains parameter', async () => {
+    it('should not update chains when receiving chain data in responses', async () => {
       // Arrange
       // Mock current state with different chains
       vi.spyOn(store, 'getState').mockReturnValue({
@@ -1671,11 +1655,8 @@ describe('JAWSigner', () => {
 
       await signer.request(request);
 
-      // Assert - Chain should be updated from new available chains
-      expect(store.chains.set).toHaveBeenCalledWith([
-        { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
-        { id: 10, rpcUrl: 'https://optimism-mainnet.rpc.com' },
-      ]);
+      // Assert - chains are no longer stored from response data
+      expect(store.chains.set).not.toHaveBeenCalled();
     });
   });
 
@@ -2262,6 +2243,20 @@ describe('JAWSigner', () => {
 
     it('should encrypt request with action and chainId', async () => {
       // Arrange
+      // Mock store to have chains with rpcUrl
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          chain: { id: 1 },
+          capabilities: undefined,
+        },
+        chains: [
+          { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+        ],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
+      });
+
       const request: RequestArguments = {
         method: 'personal_sign',
         params: ['0x48656c6c6f', '0x1234567890123456789012345678901234567890'],
