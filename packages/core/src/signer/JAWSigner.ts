@@ -65,12 +65,16 @@ export class JAWSigner implements Signer {
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
         await this.communicator.waitForPopupLoaded?.();
 
+        const chains = store.getState().chains;
+        const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+
         const handshakeMessage = await this.createRequestMessage(
             {
                 handshake: {
                     method: args.method,
                     params: args.params ?? [],
                 },
+            chain
             },
             correlationId
         );
