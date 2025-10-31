@@ -15,7 +15,8 @@ export default function TestPage() {
       appChainIds: [1, 137, 8453], // Ethereum, Polygon, Base
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
-      }
+      },
+      apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
     })
   );
 
