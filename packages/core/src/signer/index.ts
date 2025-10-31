@@ -18,6 +18,4 @@ export {
     loadSignerType,
     storeSignerType,
     clearSignerType,
-    findOwnerIndex,
-    type FindOwnerIndexParams
 } from "./utils.js"
