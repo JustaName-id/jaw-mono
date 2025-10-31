@@ -19,12 +19,7 @@ export {
 } from './rpc/index.js';
 
 /**  Account exports **/
-export {
-    toJustanAccount,
-    type ToJustanAccountParameters,
-    type ToJustanAccountReturnType,
-    type JustanAccountImplementation,
-} from './account/index.js';
+export * from './account/index.js';
 
 /**  Error exports **/
 export * from './errors/index.js';

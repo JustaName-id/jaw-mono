@@ -11,59 +11,53 @@ import {
     type TypedData,
     stringToHex,
     padHex,
-    numberToHex,
-    pad,
-    BaseError,
-    type LocalAccount,
-    decodeFunctionData,
-} from "viem";
-import { readContract } from "viem/actions";
+    numberToHex, pad, BaseError,
+    type LocalAccount, decodeFunctionData,
+} from 'viem'
+import { readContract } from 'viem/actions'
 import {
     type SmartAccount,
     type WebAuthnAccount,
     toSmartAccount,
     entryPoint08Abi,
     entryPoint08Address,
-    type SmartAccountImplementation,
-    getUserOperationTypedData,
-} from "viem/account-abstraction";
-import * as Signature from "ox/Signature";
-import type * as WebAuthnP256 from "ox/WebAuthnP256";
+    type SmartAccountImplementation, getUserOperationTypedData,
+} from 'viem/account-abstraction'
+import * as Signature from 'ox/Signature'
+import type * as WebAuthnP256 from 'ox/WebAuthnP256'
 import {
     hashMessage as erc7739HashMessage,
     hashTypedData as erc7739HashTypedData,
     wrapTypedDataSignature,
-} from "viem/experimental/erc7739";
+} from 'viem/experimental/erc7739'
 import {CONTRACT_NAME, CONTRACT_VERSION, FACTORY_ADDRESS} from "../constants.js";
 
 export type JustanAccountImplementation = SmartAccountImplementation<
     typeof entryPoint08Abi,
-    "0.8",
+    '0.8',
     {
-        abi: typeof abi;
-        factory: { abi: typeof factoryAbi; address: Address };
+        abi: typeof abi
+        factory: { abi: typeof factoryAbi; address: Address }
     }
->;
+>
 
 export type ToJustanAccountParameters = {
-    client: JustanAccountImplementation["client"];
-    owners: readonly (Address | LocalAccount | WebAuthnAccount)[];
-    ownerIndex?: number | undefined;
-    nonce?: bigint | undefined;
-    entryPoint?:
-        | {
-        abi: typeof entryPoint08Abi;
-        address: Address;
-        version: "0.8";
-    }
-        | undefined;
-    factoryAddress?: Address | undefined;
-};
+    client: JustanAccountImplementation['client']
+    owners: readonly (Address | LocalAccount | WebAuthnAccount)[]
+    ownerIndex?: number | undefined
+    nonce?: bigint | undefined
+    entryPoint?: {
+        abi: typeof entryPoint08Abi
+        address: Address
+        version: '0.8'
+    } | undefined
+    factoryAddress?: Address | undefined
+}
 
-export type ToJustanAccountReturnType = SmartAccount;
+export type ToJustanAccountReturnType = SmartAccount
 
 export async function toJustanAccount(
-    parameters: ToJustanAccountParameters
+    parameters: ToJustanAccountParameters,
 ): Promise<ToJustanAccountReturnType> {
     const {
         client,
@@ -73,25 +67,25 @@ export async function toJustanAccount(
         entryPoint = {
             abi: entryPoint08Abi,
             address: entryPoint08Address,
-            version: "0.8",
+            version: '0.8',
         },
         factoryAddress = FACTORY_ADDRESS,
-    } = parameters;
+    } = parameters
 
     const owners_bytes = owners.map((owner) => {
-        if (typeof owner === "string") return pad(owner);
-        if (owner.type === "webAuthn") return owner.publicKey;
-        if (owner.type === "local") return pad(owner.address);
-        throw new BaseError("invalid owner type");
-    });
+        if (typeof owner === 'string') return pad(owner)
+        if (owner.type === 'webAuthn') return owner.publicKey
+        if (owner.type === 'local') return pad(owner.address)
+        throw new BaseError('invalid owner type')
+    })
     const owner = (() => {
-        const owner = owners[ownerIndex] ?? owners[0];
-        if (typeof owner === "string")
-            return { address: owner, type: "address" } as const;
-        return owner;
-    })();
+        const owner = owners[ownerIndex] ?? owners[0]
+        if (typeof owner === 'string')
+            return { address: owner, type: 'address' } as const
+        return owner
+    })()
 
-    if (!owner) throw new Error("No owner provided");
+    if (!owner) throw new Error('No owner provided')
 
     return toSmartAccount({
         client,
@@ -100,65 +94,63 @@ export async function toJustanAccount(
             const result = decodeFunctionData({
                 abi,
                 data,
-            });
-            if (result.functionName === "execute")
+            })
+            if (result.functionName === 'execute')
                 return [
                     { to: result.args[0], value: result.args[1], data: result.args[2] },
-                ];
-            if (result.functionName === "executeBatch")
+                ]
+            if (result.functionName === 'executeBatch')
                 return result.args[0].map((arg) => ({
                     to: arg.target,
                     value: arg.value,
                     data: arg.data,
-                }));
-            throw new BaseError(
-                `unable to decode calls for "${result.functionName}"`
-            );
+                }))
+            throw new BaseError(`unable to decode calls for "${result.functionName}"`)
         },
         async encodeCalls(calls) {
             if (calls.length === 1) {
                 return encodeFunctionData({
                     abi,
-                    functionName: "execute",
-                    args: [calls[0].to, calls[0].value ?? 0n, calls[0].data ?? "0x"],
-                });
+                    functionName: 'execute',
+                    args: [calls[0].to, calls[0].value ?? 0n, calls[0].data ?? '0x'],
+                })
             }
             return encodeFunctionData({
                 abi,
-                functionName: "executeBatch",
+                functionName: 'executeBatch',
                 args: [
                     calls.map((call) => ({
                         target: call.to,
                         value: call.value ?? 0n,
-                        data: call.data ?? "0x",
+                        data: call.data ?? '0x',
                     })),
                 ],
-            });
+            })
         },
         async getAddress() {
             return await readContract(client, {
                 address: factoryAddress,
                 abi: factoryAbi,
-                functionName: "getAddress",
+                functionName: 'getAddress',
                 args: [owners_bytes, nonce],
-            });
+            })
         },
         async getFactoryArgs() {
             return {
                 factory: factoryAddress,
                 factoryData: encodeFunctionData({
                     abi: factoryAbi,
-                    functionName: "createAccount",
+                    functionName: 'createAccount',
                     args: [owners_bytes, nonce],
                 }),
-            };
+            }
         },
         async getStubSignature() {
-            return "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000170000000000000000000000000000000000000000000000000000000000000001949fc7c88032b9fcb5f6efc7a7b8c63668eae9871b765e23123bb473ff57aa831a7c0d9276168ebcc29f2875a0239cffdf2a9cd1c2007c5c77c071db9264df1d000000000000000000000000000000000000000000000000000000000000002549960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008a7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2273496a396e6164474850596759334b7156384f7a4a666c726275504b474f716d59576f4d57516869467773222c226f726967696e223a2268747470733a2f2f7369676e2e636f696e626173652e636f6d222c2263726f73734f726967696e223a66616c73657d00000000000000000000000000000000000000000000";
+            return '0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000170000000000000000000000000000000000000000000000000000000000000001949fc7c88032b9fcb5f6efc7a7b8c63668eae9871b765e23123bb473ff57aa831a7c0d9276168ebcc29f2875a0239cffdf2a9cd1c2007c5c77c071db9264df1d000000000000000000000000000000000000000000000000000000000000002549960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008a7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2273496a396e6164474850596759334b7156384f7a4a666c726275504b474f716d59576f4d57516869467773222c226f726967696e223a2268747470733a2f2f7369676e2e636f696e626173652e636f6d222c2263726f73734f726967696e223a66616c73657d00000000000000000000000000000000000000000000'
         },
         async signMessage(parameters) {
-            const { message } = parameters;
-            const address = await this.getAddress();
+            const { message } = parameters
+            const address = await this.getAddress()
 
             const hash = erc7739HashMessage({
                 message: message,
@@ -168,25 +160,21 @@ export async function toJustanAccount(
                     verifyingContract: address,
                     chainId: client.chain!.id,
                 },
-            });
+            })
 
-            if (owner.type === "address") throw new Error("owner cannot sign");
+            if (owner.type === 'address') throw new Error('owner cannot sign')
 
-            const signature = await sign({ owner, hash });
+            const signature = await sign({ owner, hash })
 
             return wrapSignature({
                 ownerIndex,
                 signature,
-            });
+            })
         },
         async signTypedData(parameters) {
-            const {
-                domain = {},
-                types,
-                primaryType,
-                message,
-            } = parameters as TypedDataDefinition<TypedData, string>;
-            const address = await this.getAddress();
+            const { domain = {}, types, primaryType, message } =
+                parameters as TypedDataDefinition<TypedData, string>
+            const address = await this.getAddress()
 
             const nestedHash = erc7739HashTypedData({
                 domain,
@@ -198,18 +186,18 @@ export async function toJustanAccount(
                     name: CONTRACT_NAME,
                     version: CONTRACT_VERSION,
                     verifyingContract: address,
-                    salt: "0x0000000000000000000000000000000000000000000000000000000000000000" as Hash,
+                    salt: '0x0000000000000000000000000000000000000000000000000000000000000000' as Hash,
                 },
-            });
+            })
 
-            if (owner.type === "address") throw new Error("owner cannot sign");
+            if (owner.type === 'address') throw new Error('owner cannot sign')
 
-            const signature = await sign({ owner, hash: nestedHash });
+            const signature = await sign({ owner, hash: nestedHash })
 
             const wrappedWithOwner = wrapSignature({
                 ownerIndex,
                 signature,
-            });
+            })
 
             return wrapTypedDataSignature({
                 domain,
@@ -217,12 +205,12 @@ export async function toJustanAccount(
                 primaryType,
                 message,
                 signature: wrappedWithOwner,
-            });
+            })
         },
         async signUserOperation(parameters) {
-            const { chainId = client.chain!.id, ...userOperation } = parameters;
+            const { chainId = client.chain!.id, ...userOperation } = parameters
 
-            const address = await this.getAddress();
+            const address = await this.getAddress()
             const typedData = getUserOperationTypedData({
                 chainId,
                 entryPointAddress: entryPoint.address,
@@ -230,30 +218,30 @@ export async function toJustanAccount(
                     ...userOperation,
                     sender: address,
                 },
-            });
+            })
 
-            if (owner.type === "address") throw new Error("owner cannot sign");
+            if (owner.type === 'address') throw new Error('owner cannot sign')
 
-            const signature = await signTypedData({ typedData, owner });
+            const signature = await signTypedData({typedData, owner})
 
             return wrapSignature({
                 ownerIndex,
                 signature,
-            });
+            })
         },
 
         userOperation: {
             async estimateGas(userOperation) {
-                if (owner.type !== "webAuthn") return;
+                if (owner.type !== 'webAuthn') return
                 // Accounts with WebAuthn owner require a minimum verification gas limit of 800,000.
                 return {
                     verificationGasLimit: BigInt(
-                        Math.max(Number(userOperation.verificationGasLimit ?? 0n), 800_000)
+                        Math.max(Number(userOperation.verificationGasLimit ?? 0n), 800_000),
                     ),
-                };
+                }
             },
         },
-    });
+    })
 }
 
 // INTERNAL FUNCTIONS
@@ -263,72 +251,74 @@ export async function sign({
                                hash,
                                owner,
                            }: {
-    hash: Hash;
-    owner: LocalAccount | WebAuthnAccount;
+    hash: Hash
+    owner: LocalAccount | WebAuthnAccount
 }) {
-    if (owner.type === "webAuthn") {
+    if (owner.type === 'webAuthn') {
         const { signature, webauthn } = await owner.sign({
             hash,
-        });
-        return toWebAuthnSignature({ signature, webauthn });
+        })
+        return toWebAuthnSignature({ signature, webauthn })
     }
 
-    if (owner.sign) return owner.sign({ hash });
+    if (owner.sign) return owner.sign({ hash })
 
-    throw new BaseError("`owner` does not support raw sign.");
+    throw new BaseError('`owner` does not support raw sign.')
 }
 
 export async function signTypedData({
                                         typedData,
                                         owner,
                                     }: {
-    typedData: TypedDataDefinition;
-    owner: LocalAccount | WebAuthnAccount;
+    typedData: TypedDataDefinition,
+    owner: LocalAccount | WebAuthnAccount
 }) {
-    if (owner.type === "webAuthn") {
-        const { signature, webauthn } = await owner.signTypedData(typedData);
+    if (owner.type === 'webAuthn') {
+        const {signature, webauthn} = await owner.signTypedData(
+            typedData
+        )
 
-        return toWebAuthnSignature({ signature, webauthn });
+        return toWebAuthnSignature({signature, webauthn})
     }
 
-    if (owner.signTypedData) return owner.signTypedData(typedData);
+    if (owner.signTypedData) return owner.signTypedData(typedData)
 
-    throw new BaseError("`owner` does not support signTypedData.");
+    throw new BaseError('`owner` does not support signTypedData.')
 }
 
 export function toWebAuthnSignature({
                                         webauthn,
                                         signature,
                                     }: {
-    webauthn: WebAuthnP256.SignMetadata;
-    signature: Hex;
+    webauthn: WebAuthnP256.SignMetadata
+    signature: Hex
 }) {
-    const { r, s } = Signature.fromHex(signature);
+    const { r, s } = Signature.fromHex(signature)
 
-    const rBytes32 = padHex(numberToHex(r), { size: 32 });
-    const sBytes32 = padHex(numberToHex(s), { size: 32 });
+    const rBytes32 = padHex(numberToHex(r), { size: 32 })
+    const sBytes32 = padHex(numberToHex(s), { size: 32 })
 
     return encodeAbiParameters(
         [
             {
                 components: [
                     {
-                        name: "authenticatorData",
-                        type: "bytes",
+                        name: 'authenticatorData',
+                        type: 'bytes',
                     },
-                    { name: "clientDataJSON", type: "bytes" },
-                    { name: "challengeIndex", type: "uint256" },
-                    { name: "typeIndex", type: "uint256" },
+                    { name: 'clientDataJSON', type: 'bytes' },
+                    { name: 'challengeIndex', type: 'uint256' },
+                    { name: 'typeIndex', type: 'uint256' },
                     {
-                        name: "r",
-                        type: "bytes32",
+                        name: 'r',
+                        type: 'bytes32',
                     },
                     {
-                        name: "s",
-                        type: "bytes32",
+                        name: 's',
+                        type: 'bytes32',
                     },
                 ],
-                type: "tuple",
+                type: 'tuple',
             },
         ],
         [
@@ -340,38 +330,38 @@ export function toWebAuthnSignature({
                 r: rBytes32,
                 s: sBytes32,
             },
-        ]
-    );
+        ],
+    )
 }
 
 /** @internal */
 export function wrapSignature(parameters: {
-    ownerIndex?: number | undefined;
-    signature: Hex;
+    ownerIndex?: number | undefined
+    signature: Hex
 }) {
-    const { ownerIndex = 0 } = parameters;
+    const { ownerIndex = 0 } = parameters
     const signatureData = (() => {
-        if (size(parameters.signature) !== 65) return parameters.signature;
-        const signature = parseSignature(parameters.signature);
+        if (size(parameters.signature) !== 65) return parameters.signature
+        const signature = parseSignature(parameters.signature)
         return encodePacked(
-            ["bytes32", "bytes32", "uint8"],
-            [signature.r, signature.s, signature.yParity === 0 ? 27 : 28]
-        );
-    })();
+            ['bytes32', 'bytes32', 'uint8'],
+            [signature.r, signature.s, signature.yParity === 0 ? 27 : 28],
+        )
+    })()
     return encodeAbiParameters(
         [
             {
                 components: [
                     {
-                        name: "ownerIndex",
-                        type: "uint8",
+                        name: 'ownerIndex',
+                        type: 'uint8',
                     },
                     {
-                        name: "signatureData",
-                        type: "bytes",
+                        name: 'signatureData',
+                        type: 'bytes',
                     },
                 ],
-                type: "tuple",
+                type: 'tuple',
             },
         ],
         [
@@ -379,714 +369,714 @@ export function wrapSignature(parameters: {
                 ownerIndex,
                 signatureData,
             },
-        ]
-    );
+        ],
+    )
 }
 /////////////////////////////////////////////////////////////////////////////////////////////
 // Constants
 
 export const abi = [
     {
-        type: "constructor",
+        type: 'constructor',
         inputs: [
             {
-                name: "entryPointAddress",
-                type: "address",
-                internalType: "address",
+                name: 'entryPointAddress',
+                type: 'address',
+                internalType: 'address',
             },
         ],
-        stateMutability: "nonpayable",
+        stateMutability: 'nonpayable',
     },
     {
-        type: "fallback",
-        stateMutability: "payable",
+        type: 'fallback',
+        stateMutability: 'payable',
     },
     {
-        type: "receive",
-        stateMutability: "payable",
+        type: 'receive',
+        stateMutability: 'payable',
     },
     {
-        type: "function",
-        name: "addOwnerAddress",
+        type: 'function',
+        name: 'addOwnerAddress',
         inputs: [
             {
-                name: "owner",
-                type: "address",
-                internalType: "address",
-            },
-        ],
-        outputs: [],
-        stateMutability: "nonpayable",
-    },
-    {
-        type: "function",
-        name: "addOwnerPublicKey",
-        inputs: [
-            {
-                name: "x",
-                type: "bytes32",
-                internalType: "bytes32",
-            },
-            {
-                name: "y",
-                type: "bytes32",
-                internalType: "bytes32",
+                name: 'owner',
+                type: 'address',
+                internalType: 'address',
             },
         ],
         outputs: [],
-        stateMutability: "nonpayable",
+        stateMutability: 'nonpayable',
     },
     {
-        type: "function",
-        name: "eip712Domain",
+        type: 'function',
+        name: 'addOwnerPublicKey',
+        inputs: [
+            {
+                name: 'x',
+                type: 'bytes32',
+                internalType: 'bytes32',
+            },
+            {
+                name: 'y',
+                type: 'bytes32',
+                internalType: 'bytes32',
+            },
+        ],
+        outputs: [],
+        stateMutability: 'nonpayable',
+    },
+    {
+        type: 'function',
+        name: 'eip712Domain',
         inputs: [],
         outputs: [
             {
-                name: "fields",
-                type: "bytes1",
-                internalType: "bytes1",
+                name: 'fields',
+                type: 'bytes1',
+                internalType: 'bytes1',
             },
             {
-                name: "name",
-                type: "string",
-                internalType: "string",
+                name: 'name',
+                type: 'string',
+                internalType: 'string',
             },
             {
-                name: "version",
-                type: "string",
-                internalType: "string",
+                name: 'version',
+                type: 'string',
+                internalType: 'string',
             },
             {
-                name: "chainId",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'chainId',
+                type: 'uint256',
+                internalType: 'uint256',
             },
             {
-                name: "verifyingContract",
-                type: "address",
-                internalType: "address",
+                name: 'verifyingContract',
+                type: 'address',
+                internalType: 'address',
             },
             {
-                name: "salt",
-                type: "bytes32",
-                internalType: "bytes32",
+                name: 'salt',
+                type: 'bytes32',
+                internalType: 'bytes32',
             },
             {
-                name: "extensions",
-                type: "uint256[]",
-                internalType: "uint256[]",
+                name: 'extensions',
+                type: 'uint256[]',
+                internalType: 'uint256[]',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "entryPoint",
+        type: 'function',
+        name: 'entryPoint',
         inputs: [],
         outputs: [
             {
-                name: "",
-                type: "address",
-                internalType: "contract IEntryPoint",
+                name: '',
+                type: 'address',
+                internalType: 'contract IEntryPoint',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "execute",
+        type: 'function',
+        name: 'execute',
         inputs: [
             {
-                name: "target",
-                type: "address",
-                internalType: "address",
+                name: 'target',
+                type: 'address',
+                internalType: 'address',
             },
             {
-                name: "value",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'value',
+                type: 'uint256',
+                internalType: 'uint256',
             },
             {
-                name: "data",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'data',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
         outputs: [],
-        stateMutability: "nonpayable",
+        stateMutability: 'nonpayable',
     },
     {
-        type: "function",
-        name: "executeBatch",
+        type: 'function',
+        name: 'executeBatch',
         inputs: [
             {
-                name: "calls",
-                type: "tuple[]",
-                internalType: "struct BaseAccount.Call[]",
+                name: 'calls',
+                type: 'tuple[]',
+                internalType: 'struct BaseAccount.Call[]',
                 components: [
                     {
-                        name: "target",
-                        type: "address",
-                        internalType: "address",
+                        name: 'target',
+                        type: 'address',
+                        internalType: 'address',
                     },
                     {
-                        name: "value",
-                        type: "uint256",
-                        internalType: "uint256",
+                        name: 'value',
+                        type: 'uint256',
+                        internalType: 'uint256',
                     },
                     {
-                        name: "data",
-                        type: "bytes",
-                        internalType: "bytes",
+                        name: 'data',
+                        type: 'bytes',
+                        internalType: 'bytes',
                     },
                 ],
             },
         ],
         outputs: [],
-        stateMutability: "nonpayable",
+        stateMutability: 'nonpayable',
     },
     {
-        type: "function",
-        name: "getNonce",
+        type: 'function',
+        name: 'getNonce',
         inputs: [],
         outputs: [
             {
-                name: "",
-                type: "uint256",
-                internalType: "uint256",
+                name: '',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "initialize",
+        type: 'function',
+        name: 'initialize',
         inputs: [
             {
-                name: "owners",
-                type: "bytes[]",
-                internalType: "bytes[]",
+                name: 'owners',
+                type: 'bytes[]',
+                internalType: 'bytes[]',
             },
         ],
         outputs: [],
-        stateMutability: "payable",
+        stateMutability: 'payable',
     },
     {
-        type: "function",
-        name: "isOwnerAddress",
+        type: 'function',
+        name: 'isOwnerAddress',
         inputs: [
             {
-                name: "account",
-                type: "address",
-                internalType: "address",
+                name: 'account',
+                type: 'address',
+                internalType: 'address',
             },
         ],
         outputs: [
             {
-                name: "",
-                type: "bool",
-                internalType: "bool",
+                name: '',
+                type: 'bool',
+                internalType: 'bool',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "isOwnerBytes",
+        type: 'function',
+        name: 'isOwnerBytes',
         inputs: [
             {
-                name: "account",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'account',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
         outputs: [
             {
-                name: "",
-                type: "bool",
-                internalType: "bool",
+                name: '',
+                type: 'bool',
+                internalType: 'bool',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "isOwnerPublicKey",
+        type: 'function',
+        name: 'isOwnerPublicKey',
         inputs: [
             {
-                name: "x",
-                type: "bytes32",
-                internalType: "bytes32",
+                name: 'x',
+                type: 'bytes32',
+                internalType: 'bytes32',
             },
             {
-                name: "y",
-                type: "bytes32",
-                internalType: "bytes32",
+                name: 'y',
+                type: 'bytes32',
+                internalType: 'bytes32',
             },
         ],
         outputs: [
             {
-                name: "",
-                type: "bool",
-                internalType: "bool",
+                name: '',
+                type: 'bool',
+                internalType: 'bool',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "isValidSignature",
+        type: 'function',
+        name: 'isValidSignature',
         inputs: [
             {
-                name: "hash",
-                type: "bytes32",
-                internalType: "bytes32",
+                name: 'hash',
+                type: 'bytes32',
+                internalType: 'bytes32',
             },
             {
-                name: "signature",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'signature',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
         outputs: [
             {
-                name: "result",
-                type: "bytes4",
-                internalType: "bytes4",
+                name: 'result',
+                type: 'bytes4',
+                internalType: 'bytes4',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "nextOwnerIndex",
+        type: 'function',
+        name: 'nextOwnerIndex',
         inputs: [],
         outputs: [
             {
-                name: "",
-                type: "uint256",
-                internalType: "uint256",
+                name: '',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "ownerAtIndex",
+        type: 'function',
+        name: 'ownerAtIndex',
         inputs: [
             {
-                name: "index",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'index',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
         outputs: [
             {
-                name: "",
-                type: "bytes",
-                internalType: "bytes",
+                name: '',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "ownerCount",
+        type: 'function',
+        name: 'ownerCount',
         inputs: [],
         outputs: [
             {
-                name: "",
-                type: "uint256",
-                internalType: "uint256",
+                name: '',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "removeLastOwner",
+        type: 'function',
+        name: 'removeLastOwner',
         inputs: [
             {
-                name: "index",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'index',
+                type: 'uint256',
+                internalType: 'uint256',
             },
             {
-                name: "owner",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'owner',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
         outputs: [],
-        stateMutability: "nonpayable",
+        stateMutability: 'nonpayable',
     },
     {
-        type: "function",
-        name: "removeOwnerAtIndex",
+        type: 'function',
+        name: 'removeOwnerAtIndex',
         inputs: [
             {
-                name: "index",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'index',
+                type: 'uint256',
+                internalType: 'uint256',
             },
             {
-                name: "owner",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'owner',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
         outputs: [],
-        stateMutability: "nonpayable",
+        stateMutability: 'nonpayable',
     },
     {
-        type: "function",
-        name: "removedOwnersCount",
+        type: 'function',
+        name: 'removedOwnersCount',
         inputs: [],
         outputs: [
             {
-                name: "",
-                type: "uint256",
-                internalType: "uint256",
+                name: '',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "supportsInterface",
+        type: 'function',
+        name: 'supportsInterface',
         inputs: [
             {
-                name: "id",
-                type: "bytes4",
-                internalType: "bytes4",
+                name: 'id',
+                type: 'bytes4',
+                internalType: 'bytes4',
             },
         ],
         outputs: [
             {
-                name: "",
-                type: "bool",
-                internalType: "bool",
+                name: '',
+                type: 'bool',
+                internalType: 'bool',
             },
         ],
-        stateMutability: "pure",
+        stateMutability: 'pure',
     },
     {
-        type: "function",
-        name: "validateUserOp",
+        type: 'function',
+        name: 'validateUserOp',
         inputs: [
             {
-                name: "userOp",
-                type: "tuple",
-                internalType: "struct PackedUserOperation",
+                name: 'userOp',
+                type: 'tuple',
+                internalType: 'struct PackedUserOperation',
                 components: [
                     {
-                        name: "sender",
-                        type: "address",
-                        internalType: "address",
+                        name: 'sender',
+                        type: 'address',
+                        internalType: 'address',
                     },
                     {
-                        name: "nonce",
-                        type: "uint256",
-                        internalType: "uint256",
+                        name: 'nonce',
+                        type: 'uint256',
+                        internalType: 'uint256',
                     },
                     {
-                        name: "initCode",
-                        type: "bytes",
-                        internalType: "bytes",
+                        name: 'initCode',
+                        type: 'bytes',
+                        internalType: 'bytes',
                     },
                     {
-                        name: "callData",
-                        type: "bytes",
-                        internalType: "bytes",
+                        name: 'callData',
+                        type: 'bytes',
+                        internalType: 'bytes',
                     },
                     {
-                        name: "accountGasLimits",
-                        type: "bytes32",
-                        internalType: "bytes32",
+                        name: 'accountGasLimits',
+                        type: 'bytes32',
+                        internalType: 'bytes32',
                     },
                     {
-                        name: "preVerificationGas",
-                        type: "uint256",
-                        internalType: "uint256",
+                        name: 'preVerificationGas',
+                        type: 'uint256',
+                        internalType: 'uint256',
                     },
                     {
-                        name: "gasFees",
-                        type: "bytes32",
-                        internalType: "bytes32",
+                        name: 'gasFees',
+                        type: 'bytes32',
+                        internalType: 'bytes32',
                     },
                     {
-                        name: "paymasterAndData",
-                        type: "bytes",
-                        internalType: "bytes",
+                        name: 'paymasterAndData',
+                        type: 'bytes',
+                        internalType: 'bytes',
                     },
                     {
-                        name: "signature",
-                        type: "bytes",
-                        internalType: "bytes",
+                        name: 'signature',
+                        type: 'bytes',
+                        internalType: 'bytes',
                     },
                 ],
             },
             {
-                name: "userOpHash",
-                type: "bytes32",
-                internalType: "bytes32",
+                name: 'userOpHash',
+                type: 'bytes32',
+                internalType: 'bytes32',
             },
             {
-                name: "missingAccountFunds",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'missingAccountFunds',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
         outputs: [
             {
-                name: "validationData",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'validationData',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
-        stateMutability: "nonpayable",
+        stateMutability: 'nonpayable',
     },
     {
-        type: "event",
-        name: "AddOwner",
+        type: 'event',
+        name: 'AddOwner',
         inputs: [
             {
-                name: "index",
-                type: "uint256",
+                name: 'index',
+                type: 'uint256',
                 indexed: true,
-                internalType: "uint256",
+                internalType: 'uint256',
             },
             {
-                name: "owner",
-                type: "bytes",
+                name: 'owner',
+                type: 'bytes',
                 indexed: false,
-                internalType: "bytes",
+                internalType: 'bytes',
             },
         ],
         anonymous: false,
     },
     {
-        type: "event",
-        name: "RemoveOwner",
+        type: 'event',
+        name: 'RemoveOwner',
         inputs: [
             {
-                name: "index",
-                type: "uint256",
+                name: 'index',
+                type: 'uint256',
                 indexed: true,
-                internalType: "uint256",
+                internalType: 'uint256',
             },
             {
-                name: "owner",
-                type: "bytes",
+                name: 'owner',
+                type: 'bytes',
                 indexed: false,
-                internalType: "bytes",
+                internalType: 'bytes',
             },
         ],
         anonymous: false,
     },
     {
-        type: "error",
-        name: "ExecuteError",
+        type: 'error',
+        name: 'ExecuteError',
         inputs: [
             {
-                name: "index",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'index',
+                type: 'uint256',
+                internalType: 'uint256',
             },
             {
-                name: "error",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'error',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
     },
     {
-        type: "error",
-        name: "FnSelectorNotRecognized",
+        type: 'error',
+        name: 'FnSelectorNotRecognized',
         inputs: [],
     },
     {
-        type: "error",
-        name: "JustanAccount_AlreadyInitialized",
+        type: 'error',
+        name: 'JustanAccount_AlreadyInitialized',
         inputs: [],
     },
     {
-        type: "error",
-        name: "MultiOwnable_AlreadyOwner",
+        type: 'error',
+        name: 'MultiOwnable_AlreadyOwner',
         inputs: [
             {
-                name: "owner",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'owner',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
     },
     {
-        type: "error",
-        name: "MultiOwnable_InvalidEthereumAddressOwner",
+        type: 'error',
+        name: 'MultiOwnable_InvalidEthereumAddressOwner',
         inputs: [
             {
-                name: "owner",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'owner',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
     },
     {
-        type: "error",
-        name: "MultiOwnable_InvalidOwnerBytesLength",
+        type: 'error',
+        name: 'MultiOwnable_InvalidOwnerBytesLength',
         inputs: [
             {
-                name: "owner",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'owner',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
     },
     {
-        type: "error",
-        name: "MultiOwnable_LastOwner",
+        type: 'error',
+        name: 'MultiOwnable_LastOwner',
         inputs: [],
     },
     {
-        type: "error",
-        name: "MultiOwnable_NoOwnerAtIndex",
+        type: 'error',
+        name: 'MultiOwnable_NoOwnerAtIndex',
         inputs: [
             {
-                name: "index",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'index',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
     },
     {
-        type: "error",
-        name: "MultiOwnable_NotLastOwner",
+        type: 'error',
+        name: 'MultiOwnable_NotLastOwner',
         inputs: [
             {
-                name: "ownersRemaining",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'ownersRemaining',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
     },
     {
-        type: "error",
-        name: "MultiOwnable_Unauthorized",
+        type: 'error',
+        name: 'MultiOwnable_Unauthorized',
         inputs: [],
     },
     {
-        type: "error",
-        name: "MultiOwnable_WrongOwnerAtIndex",
+        type: 'error',
+        name: 'MultiOwnable_WrongOwnerAtIndex',
         inputs: [
             {
-                name: "index",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'index',
+                type: 'uint256',
+                internalType: 'uint256',
             },
             {
-                name: "expectedOwner",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'expectedOwner',
+                type: 'bytes',
+                internalType: 'bytes',
             },
             {
-                name: "actualOwner",
-                type: "bytes",
-                internalType: "bytes",
+                name: 'actualOwner',
+                type: 'bytes',
+                internalType: 'bytes',
             },
         ],
     },
-] as const;
+] as const
 
 export const factoryAbi = [
     {
-        type: "constructor",
+        type: 'constructor',
         inputs: [
             {
-                name: "implementation",
-                type: "address",
-                internalType: "address",
+                name: 'implementation',
+                type: 'address',
+                internalType: 'address',
             },
         ],
-        stateMutability: "nonpayable",
+        stateMutability: 'nonpayable',
     },
     {
-        type: "function",
-        name: "createAccount",
+        type: 'function',
+        name: 'createAccount',
         inputs: [
             {
-                name: "owners",
-                type: "bytes[]",
-                internalType: "bytes[]",
+                name: 'owners',
+                type: 'bytes[]',
+                internalType: 'bytes[]',
             },
             {
-                name: "nonce",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'nonce',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
         outputs: [
             {
-                name: "account",
-                type: "address",
-                internalType: "contract JustanAccount",
+                name: 'account',
+                type: 'address',
+                internalType: 'contract JustanAccount',
             },
         ],
-        stateMutability: "payable",
+        stateMutability: 'payable',
     },
     {
-        type: "function",
-        name: "getAddress",
+        type: 'function',
+        name: 'getAddress',
         inputs: [
             {
-                name: "owners",
-                type: "bytes[]",
-                internalType: "bytes[]",
+                name: 'owners',
+                type: 'bytes[]',
+                internalType: 'bytes[]',
             },
             {
-                name: "nonce",
-                type: "uint256",
-                internalType: "uint256",
+                name: 'nonce',
+                type: 'uint256',
+                internalType: 'uint256',
             },
         ],
         outputs: [
             {
-                name: "",
-                type: "address",
-                internalType: "address",
+                name: '',
+                type: 'address',
+                internalType: 'address',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "getImplementation",
+        type: 'function',
+        name: 'getImplementation',
         inputs: [],
         outputs: [
             {
-                name: "",
-                type: "address",
-                internalType: "address",
+                name: '',
+                type: 'address',
+                internalType: 'address',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "function",
-        name: "initCodeHash",
+        type: 'function',
+        name: 'initCodeHash',
         inputs: [],
         outputs: [
             {
-                name: "",
-                type: "bytes32",
-                internalType: "bytes32",
+                name: '',
+                type: 'bytes32',
+                internalType: 'bytes32',
             },
         ],
-        stateMutability: "view",
+        stateMutability: 'view',
     },
     {
-        type: "error",
-        name: "OwnerRequired",
+        type: 'error',
+        name: 'OwnerRequired',
         inputs: [],
     },
-] as const;
+] as const
