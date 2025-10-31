@@ -3,6 +3,7 @@ import type { Address } from 'viem';
 import { createWebAuthnCredential, toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, createPublicClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
+import { createClient, type chain } from './client';
 
 export interface PasskeyCreationResult {
   credentialId: string;
@@ -285,7 +286,7 @@ export class PasskeyService {
    * Recreate smart account instance from stored passkey data
    * This allows signing messages with the actual smart account
    */
-  async recreateSmartAccount(): Promise<Awaited<ReturnType<typeof toJustanAccount>>> {
+  async recreateSmartAccount(chain: chain): Promise<Awaited<ReturnType<typeof toJustanAccount>>> {
     const currentAccount = this.passkeyManager.getCurrentAccount();
     if (!currentAccount) {
       throw new Error('No authenticated account found');
@@ -300,16 +301,14 @@ export class PasskeyService {
     });
 
     // Create a public client to interact with the smart account factory
-    const client = createPublicClient({
-      chain: baseSepolia,
-      transport: http(),
-    });
+    const client = createClient(chain);
 
     // Use toJustanAccount to derive the smart contract wallet address
     const smartAccount = await toJustanAccount({
       client,
       owners: [webAuthnAccount],
     });
+    console.log('🔍 Smart account:', smartAccount.address);
 
     return smartAccount;
   }

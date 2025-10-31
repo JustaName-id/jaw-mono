@@ -46,6 +46,8 @@ Thumbs.db
 # Next.js
 .next
 out
+.env.*
+.env
 
 # Auto-generated files
 **/sdk-info.ts

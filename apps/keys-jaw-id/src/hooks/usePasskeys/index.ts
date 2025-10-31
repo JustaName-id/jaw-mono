@@ -2,6 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { PasskeyAccount } from "@jaw.id/core";
 import { PasskeyService } from "../../lib/passkey-service";
+import type { chain } from "../../lib/client";
 
 export interface LocalStorageAccount {
   username: string;
@@ -24,9 +25,9 @@ export const usePasskeys = () => {
     gcTime: 0,
   });
 
-  const getSmartAccount = useCallback(async () => {
+  const getSmartAccount = useCallback(async (chain: chain) => {
     const service = new PasskeyService({ localOnly: true });
-    const smartAccount = await service.recreateSmartAccount();
+    const smartAccount = await service.recreateSmartAccount(chain);
     return smartAccount;
   }, []);
 

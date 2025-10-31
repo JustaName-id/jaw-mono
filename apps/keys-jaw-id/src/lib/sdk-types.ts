@@ -74,7 +74,11 @@ export interface DecryptedRequest {
     method: string;
     params: unknown[];
   };
-  chainId: number;
+  chain: {
+    id: number;
+    rpcUrl: string;
+    paymasterUrl?: string;
+  };
 }
 
 // Response payload structure (what gets encrypted)

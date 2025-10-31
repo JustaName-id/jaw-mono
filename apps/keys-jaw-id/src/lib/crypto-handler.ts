@@ -1,8 +1,3 @@
-/**
- * CryptoHandler
- * Handles encryption/decryption using @jaw.id/core KeyManager
- * Automatically persists keys to localStorage
- */
 
 import {
   KeyManager,
@@ -11,26 +6,24 @@ import {
   exportKeyToHexString,
   importKeyFromHexString,
 } from '@jaw.id/core';
-import type { RPCRequest, RPCResponse, DecryptedRequest, EncryptedContent } from './sdk-types';
-import type { MessageID } from './popup-communicator';
+// import type { RPCRequest, RPCResponse, DecryptedRequest, EncryptedContent } from './sdk-types';
+import type { RPCResponseMessage , RPCRequestMessage ,RPCRequest, MessageID} from '@jaw.id/core';
 
-export interface RPCRequestMessage extends RPCRequest {
-  id: MessageID;
-}
-
-export interface RPCResponseMessage {
-  requestId: MessageID;
-  id: MessageID;
-  sender: string;
-  correlationId: string;
-  content: {
-    encrypted: EncryptedContent;
+// Local Chain type matching the core's Chain interface
+type Chain = {
+  id: number;
+  rpcUrl?: string;
+  nativeCurrency?: {
+    name?: string;
+    symbol?: string;
+    decimal?: number;
   };
-  timestamp: Date;
-}
+  paymasterUrl?: string;
+};
+
 
 export class CryptoHandler {
-  private keyManager: KeyManager;
+  private keyManager: KeyManager; 
   private peerPublicKeyHex: string | null = null;
   private ownPublicKeyHex: string | null = null;
 
@@ -120,6 +113,12 @@ export class CryptoHandler {
       }
 
       // Create response data matching SDK expectations
+      const chainsData: { [key: number]: Chain } = {
+        1: { id: 1, rpcUrl: 'https://eth.drpc.org' },
+        8453: { id: 8453, rpcUrl: 'https://base.drpc.org' },
+        84532: { id: 84532, rpcUrl: 'https://base-sepolia.drpc.org' },
+      };
+      
       const responseData = {
         result: {
           value: {
@@ -127,21 +126,17 @@ export class CryptoHandler {
           },
         },
         data: {
-          chains: {
-            '1': 'https://eth.drpc.org',
-            '8453': 'https://base.drpc.org',
-            '84532': 'https://base-sepolia.drpc.org',
-          },
+          chains: chainsData,
           capabilities: {
-            '1': {
+            '0x1': {
               paymasterService: { supported: false },
               atomicBatch: { supported: false },
             },
-            '8453': {
+            '0x2105': {
               paymasterService: { supported: true },
               atomicBatch: { supported: true },
             },
-            '84532': {
+            '0x14a34': {
               paymasterService: { supported: true },
               atomicBatch: { supported: true },
             },
@@ -154,7 +149,7 @@ export class CryptoHandler {
 
       const response: RPCResponseMessage = {
         requestId,
-        id: crypto.randomUUID(),
+        id: crypto.randomUUID() as MessageID,
         sender: this.ownPublicKeyHex,
         correlationId: crypto.randomUUID(),
         content: {
@@ -174,7 +169,7 @@ export class CryptoHandler {
   /**
    * Decrypt an encrypted RPC request
    */
-  async decryptRequest(request: RPCRequestMessage): Promise<DecryptedRequest> {
+  async decryptRequest(request: RPCRequestMessage): Promise<RPCRequest> {
     console.log('🔓 Decrypting request...');
 
     try {
@@ -183,7 +178,7 @@ export class CryptoHandler {
         throw new Error('No shared secret available');
       }
 
-      if (!request.content.encrypted) {
+      if (!('encrypted' in request.content)) {
         throw new Error('Request does not contain encrypted content');
       }
 
@@ -191,7 +186,7 @@ export class CryptoHandler {
       const decrypted = await decryptContent(request.content.encrypted, sharedSecret);
 
       console.log('✅ Request decrypted:', decrypted);
-      return decrypted as DecryptedRequest;
+      return decrypted as RPCRequest;
     } catch (error) {
       console.error('❌ Failed to decrypt request:', error);
       throw error;
@@ -230,7 +225,7 @@ export class CryptoHandler {
 
       const response: RPCResponseMessage = {
         requestId,
-        id: crypto.randomUUID(),
+        id: crypto.randomUUID() as MessageID,
         sender: this.ownPublicKeyHex,
         correlationId,
         content: {
@@ -283,7 +278,7 @@ export class CryptoHandler {
 
       const response: RPCResponseMessage = {
         requestId,
-        id: crypto.randomUUID(),
+        id: crypto.randomUUID() as MessageID,
         sender: this.ownPublicKeyHex,
         correlationId,
         content: {

@@ -5,6 +5,7 @@ import { SignatureDialog } from "@jaw/ui";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { SmartAccount } from "viem/account-abstraction";
 import { usePasskeys } from "../../hooks";
+import type { chain } from "../../lib/client";
 
 export interface SignatureModalProps {
   origin: string;
@@ -12,6 +13,7 @@ export interface SignatureModalProps {
   onOpenChange: (open: boolean) => void;
   message: string;
   address?: string;
+  chain: chain;
   onSuccess: (signature: string, message: string) => void;
   onError: (error: Error) => void;
 }
@@ -22,6 +24,7 @@ export const SignatureModal = ({
   onOpenChange,
   message: messageToSign,
   address,
+  chain,
   onSuccess,
   onError
 }: SignatureModalProps) => {
@@ -45,6 +48,7 @@ export const SignatureModal = ({
       const signature = await smartAccount.signMessage({
         message: messageToSign
       });
+      console.log('🔍 Signature:', signature);
 
       setSignatureStatus('Signature created successfully!');
       
@@ -82,7 +86,7 @@ export const SignatureModal = ({
           setIsProcessing(false); // Reset processing state when opening
           console.log('🔐 Initializing signature modal with message:', messageToSign);
           console.log('📍 Address:', address);  
-          const smartAccount = await getSmartAccount();
+          const smartAccount = await getSmartAccount(chain);
           
           // Only update state if component is still mounted
           if (isMounted) {

@@ -8,7 +8,9 @@ import { TransactionModal } from '../components/TransactionModal';
 import { SDKRequestType, type AppMetadata } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator } from '../lib/popup-communicator';
-import { CryptoHandler, type RPCRequestMessage } from '../lib/crypto-handler';
+import { CryptoHandler } from '../lib/crypto-handler';
+import type { RPCRequestMessage } from '@jaw.id/core';
+import type { chain } from '../lib/client';
 
 // Simple state types
 type PopupState =
@@ -40,7 +42,11 @@ interface PendingRequest {
   metadata: AppMetadata | null;
   method: string;
   params: unknown[];
-  chainId?: number;
+  chain?: {
+    id: number;
+    rpcUrl: string;
+    paymasterUrl?: string;
+  } | undefined;
   onApprove: (result: unknown) => Promise<void>;
   onReject: (error: string) => Promise<void>;
 }
@@ -110,12 +116,14 @@ export default function KeysJawIdApp() {
         const rpcMessage = message as RPCRequestMessage;
 
         // Handle handshake (unencrypted initial request)
-        if (rpcMessage.content.handshake) {
+        if ('handshake' in rpcMessage.content) {
+          console.log('🤝 Received handshake request');
           handleHandshakeRequest(rpcMessage);
         }
 
         // Handle encrypted request
-        if (rpcMessage.content.encrypted) {
+        if ('encrypted' in rpcMessage.content) {
+          console.log('🔐 Received encrypted request');
           handleEncryptedRequest(rpcMessage);
         }
       }
@@ -171,12 +179,16 @@ export default function KeysJawIdApp() {
       await cryptoHandler.clear();
       await cryptoHandler.processHandshakeRequest(request);
 
-      const handshake = request.content.handshake;
-      if (!handshake) return;
+     
+      if (!('handshake' in request.content) || !request.content.handshake){
+        console.error('❌ Invalid handshake request');
+      return;
+      }
+
 
       // Determine request type
-      const method = handshake.method;
-      const params = handshake.params;
+      const method = request.content.handshake.method;
+      const params = request.content.handshake.params;
 
       console.log('📋 Handshake method:', method, 'params:', params);
 
@@ -186,11 +198,12 @@ export default function KeysJawIdApp() {
         setPendingRequest({
           origin,
           type: SDKRequestType.CONNECT,
-          requestId: request.id,
-          correlationId: request.correlationId,
+          requestId: request.id || '',
+          correlationId: request.correlationId || '',
           metadata: config?.metadata || null,
           method,
-          params,
+          params: Array.isArray(params) ? params : [],
+          chain:  undefined,
           onApprove: async (result: unknown) => {
             const accounts = result as string[];
             const response = await cryptoHandler.createHandshakeResponse(request.id, accounts);
@@ -201,7 +214,7 @@ export default function KeysJawIdApp() {
             try {
               const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
                 request.id,
-                request.correlationId,
+                request.correlationId || '',
                 4001, // User rejected request (EIP-1193 standard)
                 error || 'User rejected the request'
               );
@@ -231,9 +244,9 @@ export default function KeysJawIdApp() {
 
       const method = decrypted.action.method;
       const params = decrypted.action.params;
-      const chainId = decrypted.chainId;
+      const chain = decrypted.chain;
 
-      console.log('📋 Decrypted method:', method, 'params:', params, 'chainId:', chainId);
+      console.log('📋 Decrypted method:', method, 'params:', params, 'chain:', chain);
 
       // Determine request type and show appropriate UI
       let requestType: SDKRequestType;
@@ -259,16 +272,16 @@ export default function KeysJawIdApp() {
       setPendingRequest({
         origin,
         type: requestType,
-        requestId: request.id,
-        correlationId: request.correlationId,
+        requestId: request.id || '',
+        correlationId: request.correlationId || '',
         metadata: config?.metadata || null,
         method,
-        params,
-        chainId,
+        params: Array.isArray(params) ? params : [],
+        chain: chain?.rpcUrl ? { id: chain.id, rpcUrl: chain.rpcUrl, paymasterUrl: chain.paymasterUrl } : undefined,
         onApprove: async (result: unknown) => {
           const response = await cryptoHandler.createEncryptedResponse(
-            request.id,
-            request.correlationId,
+            request.id || '',
+            request.correlationId || '',
             result
           );
           communicator.sendMessage(response as any);
@@ -277,8 +290,8 @@ export default function KeysJawIdApp() {
           // Send standard error response (EIP-1193 code 4001)
           try {
             const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
-              request.id,
-              request.correlationId,
+              request.id || '',
+              request.correlationId || '',
               4001, // User rejected request (EIP-1193 standard)
               error || 'User rejected the request'
             );
@@ -325,7 +338,7 @@ export default function KeysJawIdApp() {
           to: call.to,
           data: call.data || '0x',
           value: call.value || '0',
-          chainId: pendingRequest.chainId || parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1'),
+          chainId: pendingRequest.chain?.id || parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1'),
         }));
       } else {
         // eth_sendTransaction format - single transaction
@@ -333,7 +346,7 @@ export default function KeysJawIdApp() {
           to: txParams.to,
           data: txParams.data || '0x',
           value: txParams.value || '0',
-          chainId: pendingRequest.chainId || parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1'),
+          chainId: pendingRequest.chain?.id || parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1'),
         }];
       }
 
@@ -389,12 +402,14 @@ export default function KeysJawIdApp() {
           onOpenChange={() => { }}
           message={messageToSign}
           address={address}
+          chain={pendingRequest.chain as chain}
           onSuccess={async (signature, message) => {
             setState('processing');
             try {
               await pendingRequest.onApprove(signature);
+              console.log('✅ Signature sent successfully');
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              setTimeout(() => window.close(), 35000);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
