@@ -6,20 +6,7 @@ import {
   exportKeyToHexString,
   importKeyFromHexString,
 } from '@jaw.id/core';
-// import type { RPCRequest, RPCResponse, DecryptedRequest, EncryptedContent } from './sdk-types';
 import type { RPCResponseMessage , RPCRequestMessage ,RPCRequest, MessageID} from '@jaw.id/core';
-
-// Local Chain type matching the core's Chain interface
-type Chain = {
-  id: number;
-  rpcUrl?: string;
-  nativeCurrency?: {
-    name?: string;
-    symbol?: string;
-    decimal?: number;
-  };
-  paymasterUrl?: string;
-};
 
 
 export class CryptoHandler {
@@ -111,14 +98,6 @@ export class CryptoHandler {
       if (!this.ownPublicKeyHex || !this.peerPublicKeyHex) {
         throw new Error('Missing public keys');
       }
-
-      // Create response data matching SDK expectations
-      const chainsData: { [key: number]: Chain } = {
-        1: { id: 1, rpcUrl: 'https://eth.drpc.org' },
-        8453: { id: 8453, rpcUrl: 'https://base.drpc.org' },
-        84532: { id: 84532, rpcUrl: 'https://base-sepolia.drpc.org' },
-      };
-      
       const responseData = {
         result: {
           value: {
@@ -126,7 +105,7 @@ export class CryptoHandler {
           },
         },
         data: {
-          chains: chainsData,
+          // TODO: Make it dynamic based on the chain
           capabilities: {
             '0x1': {
               paymasterService: { supported: false },

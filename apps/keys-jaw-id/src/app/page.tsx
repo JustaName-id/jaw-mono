@@ -10,7 +10,7 @@ import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
 import type { RPCRequestMessage } from '@jaw.id/core';
-import type { chain } from '../lib/client';
+import type { Chain as chain } from '@jaw.id/core';
 
 // Simple state types
 type PopupState =
@@ -409,7 +409,7 @@ export default function KeysJawIdApp() {
               await pendingRequest.onApprove(signature);
               console.log('✅ Signature sent successfully');
               setState('success');
-              setTimeout(() => window.close(), 35000);
+              setTimeout(() => window.close(), 1500);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');

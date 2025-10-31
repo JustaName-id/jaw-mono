@@ -1,9 +1,10 @@
-import { PasskeyManager, type PasskeyAccount, toJustanAccount } from '@jaw.id/core';
+import { PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation } from '@jaw.id/core';
 import type { Address } from 'viem';
 import { createWebAuthnCredential, toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, createPublicClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
-import { createClient, type chain } from './client';
+import {type Chain } from '@jaw.id/core';
+import { getBundlerClient } from '@jaw.id/core';
 
 export interface PasskeyCreationResult {
   credentialId: string;
@@ -286,7 +287,7 @@ export class PasskeyService {
    * Recreate smart account instance from stored passkey data
    * This allows signing messages with the actual smart account
    */
-  async recreateSmartAccount(chain: chain): Promise<Awaited<ReturnType<typeof toJustanAccount>>> {
+  async recreateSmartAccount(chain: Chain): Promise<Awaited<ReturnType<typeof toJustanAccount>>> {
     const currentAccount = this.passkeyManager.getCurrentAccount();
     if (!currentAccount) {
       throw new Error('No authenticated account found');
@@ -300,8 +301,8 @@ export class PasskeyService {
       },
     });
 
-    // Create a public client to interact with the smart account factory
-    const client = createClient(chain);
+
+    const client = getBundlerClient(chain) as JustanAccountImplementation["client"];
 
     // Use toJustanAccount to derive the smart contract wallet address
     const smartAccount = await toJustanAccount({
@@ -311,33 +312,6 @@ export class PasskeyService {
     console.log('🔍 Smart account:', smartAccount.address);
 
     return smartAccount;
-  }
-
-  /**
-   * Base64URL encode
-   */
-  private base64UrlEncode(buffer: Uint8Array): string {
-    const base64 = btoa(String.fromCharCode(...Array.from(buffer)));
-    return base64
-      .replace(/\+/g, '-')
-      .replace(/\//g, '_')
-      .replace(/=/g, '');
-  }
-
-  /**
-   * Base64URL decode
-   */
-  private base64UrlDecode(base64url: string): ArrayBuffer {
-    const base64 = base64url
-      .replace(/-/g, '+')
-      .replace(/_/g, '/');
-    const padding = '='.repeat((4 - (base64.length % 4)) % 4);
-    const binaryString = atob(base64 + padding);
-    const bytes = new Uint8Array(binaryString.length);
-    for (let i = 0; i < binaryString.length; i++) {
-      bytes[i] = binaryString.charCodeAt(i);
-    }
-    return bytes.buffer;
   }
 
 }
