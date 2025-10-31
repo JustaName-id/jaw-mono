@@ -55,7 +55,12 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
   };
 
   // Store the config
-  store.config.set(options);
+  const storedOptions = {
+    metadata: options.metadata,
+    preference: options.preference,
+    paymasterUrls: options.paymasterUrls,
+  }
+  store.config.set(storedOptions);
 
   // Always clear and reinitialize chains on SDK creation to ensure consistency
   store.chains.clear();
