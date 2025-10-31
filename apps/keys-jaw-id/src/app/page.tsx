@@ -91,21 +91,17 @@ export default function KeysJawIdApp() {
 
       // Handle config message
       if (message.data?.version) {
-        console.log('📋 Received config:', message.data);
-        console.log('🔧 DEBUG: Starting passkey check flow');
         setConfig(message.data);
 
         // Always show account selection UI - never auto-authenticate
         checkForPasskeys();
 
         // Send PopupReady to signal we're ready for business messages
-        console.log('🔧 DEBUG: Sending PopupReady signal');
         communicator.sendPopupReady();
       }
 
       // Handle selectSignerType event
       if (message.event === 'selectSignerType') {
-        console.log('🔑 Received selectSignerType request');
         communicator.sendResponse(message.id, 'scw');
       }
 
@@ -115,13 +111,11 @@ export default function KeysJawIdApp() {
 
         // Handle handshake (unencrypted initial request)
         if (rpcMessage.content.handshake) {
-          console.log('🤝 Received handshake request');
           handleHandshakeRequest(rpcMessage);
         }
 
         // Handle encrypted request
         if (rpcMessage.content.encrypted) {
-          console.log('🔐 Received encrypted request');
           handleEncryptedRequest(rpcMessage);
         }
       }
@@ -141,14 +135,12 @@ export default function KeysJawIdApp() {
       currentAccount &&
       (state === 'processing' || state === 'passkey-auth' || state === 'passkey-create')
     ) {
-      console.log('🔧 DEBUG: Handshake received, transitioning to account-selection');
       setState('account-selection');
     }
   }, [pendingRequest, state, currentAccount]);
 
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
-    console.log('🔧 DEBUG: Checking for existing passkeys...');
     setState('passkey-check');
 
     try {
@@ -157,18 +149,11 @@ export default function KeysJawIdApp() {
 
       const accounts = accountsResult.data || [];
 
-      console.log('🔧 DEBUG: Found accounts:', {
-        count: accounts.length,
-        usernames: accounts.map(a => a.username),
-      });
-
       if (accounts.length > 0) {
         // Has accounts - show account selection/auth screen
-        console.log('🔧 DEBUG: Showing passkey-auth state (account selection)');
         setState('passkey-auth');
       } else {
         // No accounts - need to create
-        console.log('🔧 DEBUG: Showing passkey-create state (no accounts)');
         setState('passkey-create');
       }
     } catch (err) {
@@ -181,7 +166,6 @@ export default function KeysJawIdApp() {
   // Handle handshake request (unencrypted)
   const handleHandshakeRequest = async (request: RPCRequestMessage) => {
     try {
-      console.log('🤝 Processing handshake...');
 
       // Clear old keys and process new handshake
       await cryptoHandler.clear();
@@ -199,7 +183,6 @@ export default function KeysJawIdApp() {
       // For eth_requestAccounts, we need to show approval UI
       if (method === 'eth_requestAccounts') {
         const origin = communicator.getOrigin() || "";
-        console.log('📍 Request origin:', origin);
         setPendingRequest({
           origin,
           type: SDKRequestType.CONNECT,
@@ -209,13 +192,11 @@ export default function KeysJawIdApp() {
           method,
           params,
           onApprove: async (result: unknown) => {
-            console.log('✅ User approved connection, sending response...');
             const accounts = result as string[];
             const response = await cryptoHandler.createHandshakeResponse(request.id, accounts);
             communicator.sendMessage(response as any);
           },
           onReject: async (error: string) => {
-            console.log('❌ User rejected connection');
             // Send error response for handshake rejection
             try {
               const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
@@ -241,7 +222,6 @@ export default function KeysJawIdApp() {
   // Handle encrypted request
   const handleEncryptedRequest = async (request: RPCRequestMessage) => {
     try {
-      console.log('🔐 Processing encrypted request...');
 
       // Restore shared secret from message
       await cryptoHandler.restoreSharedSecretFromMessage(request);
@@ -260,7 +240,7 @@ export default function KeysJawIdApp() {
 
       if (method === 'personal_sign') {
         requestType = SDKRequestType.SIGN_MESSAGE;
-      } else if (method === 'wallet_sendCalls') {
+      } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
         requestType = SDKRequestType.SEND_TRANSACTION;
       } else if (method === 'eth_chainId') {
         requestType = SDKRequestType.CHAIN_ID;
@@ -273,8 +253,9 @@ export default function KeysJawIdApp() {
         requestType = SDKRequestType.CONNECT; // fallback
       }
 
+      console.log('requestType', requestType);
+
       const origin = communicator.getOrigin() ?? '';
-      console.log('📍 Request origin:', origin);
       setPendingRequest({
         origin,
         type: requestType,
@@ -285,7 +266,6 @@ export default function KeysJawIdApp() {
         params,
         chainId,
         onApprove: async (result: unknown) => {
-          console.log('✅ User approved, sending encrypted response...');
           const response = await cryptoHandler.createEncryptedResponse(
             request.id,
             request.correlationId,
@@ -294,7 +274,6 @@ export default function KeysJawIdApp() {
           communicator.sendMessage(response as any);
         },
         onReject: async (error: string) => {
-          console.log('❌ User rejected request:', error);
           // Send standard error response (EIP-1193 code 4001)
           try {
             const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
@@ -313,10 +292,9 @@ export default function KeysJawIdApp() {
         },
       });
 
-      // For sign message requests, if user is authenticated, show signature modal directly
-      if (requestType === SDKRequestType.SIGN_MESSAGE && authQuery.isAuthenticated && currentAccount) {
-        console.log('✅ Sign message request received while authenticated, showing signature modal');
-        // The signature modal will be shown in the render logic below
+      // For sign message and transaction requests, if user is authenticated, show modal directly
+      if ((requestType === SDKRequestType.SIGN_MESSAGE || requestType === SDKRequestType.SEND_TRANSACTION) && authQuery.isAuthenticated && currentAccount) {
+        // The modal will be shown in the render logic below
         return;
       }
     } catch (err) {
@@ -331,15 +309,76 @@ export default function KeysJawIdApp() {
   // ==========================================
   if (isSDKMode) {
 
+    // Check if we have a pending transaction request and either user is authenticated OR we're in processing state
+    // Don't show modal if state is 'success' or 'error' (request has been completed)
+    if (pendingRequest?.type === SDKRequestType.SEND_TRANSACTION &&
+      state !== 'success' &&
+      state !== 'error' &&
+      (authQuery.isAuthenticated || state === 'processing')) {
+      const txParams = pendingRequest.params[0] as any;
+
+      // Handle both wallet_sendCalls format (with calls array) and eth_sendTransaction format (single tx)
+      let transactions;
+      if (txParams.calls) {
+        // wallet_sendCalls format
+        transactions = txParams.calls.map((call: any) => ({
+          to: call.to,
+          data: call.data || '0x',
+          value: call.value || '0',
+          chainId: pendingRequest.chainId || parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1'),
+        }));
+      } else {
+        // eth_sendTransaction format - single transaction
+        transactions = [{
+          to: txParams.to,
+          data: txParams.data || '0x',
+          value: txParams.value || '0',
+          chainId: pendingRequest.chainId || parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1'),
+        }];
+      }
+
+      return (
+        <TransactionModal
+          open={true}
+          onOpenChange={() => { }}
+          transactions={transactions}
+          sponsored={false}
+          onSuccess={async () => {
+            setState('processing');
+            try {
+              // For eth_sendTransaction, return tx hash; for wallet_sendCalls, return sendCallsId
+              const result = pendingRequest.method === 'eth_sendTransaction'
+                ? `0x${'0'.repeat(64)}` // TODO: Replace with actual tx hash
+                : { sendCallsId: `0x${'0'.repeat(64)}` };
+
+              await pendingRequest.onApprove(result);
+              setState('success');
+              setTimeout(() => window.close(), 1500);
+            } catch (err) {
+              console.error('❌ Failed to send transaction:', err);
+              setError(err instanceof Error ? err.message : 'Failed to send transaction');
+              setState('error');
+            }
+          }}
+          onError={async (error) => {
+            try {
+              await pendingRequest.onReject(error.message);
+              window.close();
+            } catch (err) {
+              console.error('❌ Failed to reject:', err);
+              window.close();
+            }
+          }}
+        />
+      );
+    }
 
     // Check if we have a pending sign message request and either user is authenticated OR we're in processing state
     // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE && 
-        state !== 'success' && 
-        state !== 'error' &&
-        (authQuery.isAuthenticated || state === 'processing')) {
-      console.log('✅ Pending request:', pendingRequest);
-      console.log('✅ All conditions met, showing SignatureModal');
+    if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE &&
+      state !== 'success' &&
+      state !== 'error' &&
+      (authQuery.isAuthenticated || state === 'processing')) {
       const messageToSign = pendingRequest.params[0] as string;
       const address = pendingRequest.params[1] as string;
 
@@ -489,7 +528,6 @@ export default function KeysJawIdApp() {
             <SignInScreen
               onComplete={async () => {
                 try {
-                  console.log('🔧 DEBUG: Passkey creation completed in SignInScreen');
 
                   // SignInScreen already created the passkey, just refetch and proceed
                   const accountsResult = await passkeyQuery.refetchAccounts();
@@ -497,21 +535,17 @@ export default function KeysJawIdApp() {
                   const accounts = accountsResult.data || [];
                   const newestAccount = accounts[accounts.length - 1] || null;
                   setCurrentAccount(newestAccount);
-                  console.log('🔧 DEBUG: Set current account:', newestAccount?.username);
 
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
-                    console.log('🔧 DEBUG: Moving to account-selection for connection approval');
                     setState('account-selection');
-                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE) {
-                    // If there's a pending sign message request, the SignatureModal will be shown
+                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
+                    // If there's a pending sign message or transaction request, the modal will be shown
                     // in the priority logic above since user is now authenticated
-                    console.log('🔧 DEBUG: User authenticated, sign message request will be handled');
                     setState('processing');
                   } else {
                     // No pending request yet, stay on current screen and wait for it
                     // useEffect will handle transition when handshake arrives
-                    console.log('🔧 DEBUG: No pending request yet, staying on create screen and waiting...');
                     // Don't change state - stay on passkey-create to keep UI visible
                   }
                 } catch (err) {
@@ -521,7 +555,6 @@ export default function KeysJawIdApp() {
                 }
               }}
               onCreateAccount={() => {
-                console.log('Create account flow triggered');
               }}
             />
 
@@ -553,28 +586,23 @@ export default function KeysJawIdApp() {
             <SignInScreen
               onComplete={async () => {
                 try {
-                  console.log('🔧 DEBUG: Authentication completed in SignInScreen');
 
                   // SignInScreen already handled login, just proceed
                   const accountsResult = await passkeyQuery.refetchAccounts();
 
                   const accounts = accountsResult.data || [];
                   setCurrentAccount(accounts[0] || null);
-                  console.log('🔧 DEBUG: Set current account:', accounts[0]?.username);
 
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
-                    console.log('🔧 DEBUG: Moving to account-selection for connection approval');
                     setState('account-selection');
-                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE) {
-                    // If there's a pending sign message request, the SignatureModal will be shown
+                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
+                    // If there's a pending sign message or transaction request, the modal will be shown
                     // in the priority logic above since user is now authenticated
-                    console.log('🔧 DEBUG: User authenticated, sign message request will be handled');
                     setState('processing');
                   } else {
                     // No pending request yet, stay on current screen and wait for it
                     // useEffect will handle transition when handshake arrives
-                    console.log('🔧 DEBUG: No pending request yet, staying on auth screen and waiting...');
                     // Don't change state - stay on passkey-auth to keep UI visible
                   }
                 } catch (err) {
@@ -681,51 +709,6 @@ export default function KeysJawIdApp() {
             </div>
           </div>
         </div>
-      );
-    }
-
-
-    // Show transaction request
-    if (pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
-      const txParams = pendingRequest.params[0] as any;
-      const calls = txParams.calls || [];
-
-      return (
-        <TransactionModal
-          open={true}
-          onOpenChange={() => { }}
-          transactions={calls.map((call: any) => ({
-            to: call.to,
-            data: call.data,
-            value: call.value || '0',
-            chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1'),
-          }))}
-          sponsored={false}
-          onSuccess={async () => {
-            setState('processing');
-            try {
-              // TODO: Replace with actual tx hash
-              await pendingRequest.onApprove({
-                sendCallsId: `0x${'0'.repeat(64)}`,
-              });
-              setState('success');
-              setTimeout(() => window.close(), 1500);
-            } catch (err) {
-              console.error('❌ Failed to send transaction:', err);
-              setError(err instanceof Error ? err.message : 'Failed to send transaction');
-              setState('error');
-            }
-          }}
-          onError={async (error) => {
-            try {
-              await pendingRequest.onReject(error.message);
-              window.close();
-            } catch (err) {
-              console.error('❌ Failed to reject:', err);
-              window.close();
-            }
-          }}
-        />
       );
     }
 

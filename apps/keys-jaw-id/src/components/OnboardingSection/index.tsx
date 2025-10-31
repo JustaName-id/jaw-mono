@@ -23,8 +23,6 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
     // TODO: Re-enable subname check when implementing ENS subname registration
     // const { hasRequiredSubname, refetch: refetchSubnames, walletAddress } = useSubnameCheck();
 
-    // Debug: Log accounts whenever they change
-    console.log('📋 SignInScreen - Current accounts:', accounts);
     // const [debouncedUsername, setDebouncedUsername] = useDebounceValue(username, 500)
     // const { isSubnameAvailable, isSubnameAvailableLoading } = useIsSubnameAvailable({
     //     username,
@@ -41,7 +39,6 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
 
     const handleAccountSelect = async (account: LocalStorageAccount) => {
         try {
-            console.log('🔑 handleAccountSelect called with:', account);
             if (!account.credentialId) {
                 throw new Error('Credential ID is required');
             }
@@ -50,7 +47,6 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
                 credentialId: account.credentialId,
                 isImported: account.isImported,
             })
-            console.log('✅ Login successful');
             onComplete()
         } catch (error) {
             console.error("❌ Login failed:", error)
@@ -60,7 +56,6 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
 
     const handleCreateAccount = async () => {
         try {
-            console.log('➕ handleCreateAccount called with username:', username);
 
             // Validate username
             if (!username || username.trim().length === 0) {
@@ -70,7 +65,6 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
 
             // Always create passkey with username (don't check walletAddress)
             const result = await register(username.trim())
-            console.log('✅ Passkey created with address:', result.address);
 
             // TODO: Subname registration - implement later
             // if (!!result.address) {
@@ -95,9 +89,7 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
             // }
 
             // Refetch accounts to update the UI with the newly created passkey
-            console.log('🔄 Refetching accounts...');
             await refetchAccounts();
-            console.log('✅ Accounts refetched');
 
             // Call onComplete after successful account creation
             onComplete();
@@ -108,9 +100,7 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
 
     const handleImportAccount = async () => {
         try {
-            console.log('📥 handleImportAccount called - attempting to import passkey');
             const result = await passkeyLogin();
-            console.log('✅ Import successful:', result);
             onComplete();
         } catch (error) {
             console.error('❌ Import failed:', error);
