@@ -53,7 +53,6 @@ export class PopupCommunicator {
    * Signals that popup is fully initialized and ready to receive business messages
    */
   sendPopupReady(): void {
-    console.log('🔧 DEBUG: Sending PopupReady event');
     const message: Message = {
       id: crypto.randomUUID(),
       event: 'PopupReady',
