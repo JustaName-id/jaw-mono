@@ -587,7 +587,6 @@ describe('JAWSigner', () => {
 
       // Assert
       expect(store.account.clear).toHaveBeenCalled();
-      expect(store.chains.clear).toHaveBeenCalled();
     });
   });
 
@@ -641,7 +640,6 @@ describe('JAWSigner', () => {
       await signer.cleanup();
 
       expect(store.account.clear).toHaveBeenCalled();
-      expect(store.chains.clear).toHaveBeenCalled();
     });
   });
 

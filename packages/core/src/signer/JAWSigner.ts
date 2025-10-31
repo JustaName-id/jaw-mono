@@ -250,7 +250,6 @@ export class JAWSigner implements Signer {
 
         // clear the store
         store.account.clear();
-        store.chains.clear();
 
         clearSignerType();
 
