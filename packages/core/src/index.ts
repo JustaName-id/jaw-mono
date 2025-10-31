@@ -63,5 +63,8 @@ export * from "./messages/index.js"
 /** Utils exports **/
 export * from "./utils/index.js"
 
+/** Store exports **/
+export {type Chain} from "./store/index.js"
+
 /** Default export **/
 export { createJAWSDK as default } from './sdk/createJAWSDK.js';
