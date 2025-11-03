@@ -2,7 +2,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
 import { PasskeyAccount } from "@jaw.id/core";
 import { PasskeyService } from "../../lib/passkey-service";
-import type { chain } from "../../lib/client";
+import type { chain } from "../../lib/sdk-types";
 
 export interface LocalStorageAccount {
   username: string;

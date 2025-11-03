@@ -11,6 +11,9 @@ export const SignatureDialog = ({
   message,
   origin,
   timestamp,
+  accountAddress,
+  chainName,
+  chainIcon,
   onSign,
   onCancel,
   isProcessing,
@@ -56,6 +59,31 @@ export const SignatureDialog = ({
     >
       <div className="flex flex-col gap-6 justify-between max-md:h-full">
         <div className="flex flex-col gap-3">
+          {/* Account and Chain Info */}
+          {(accountAddress || chainName) && (
+            <div className="flex flex-row items-center justify-between gap-4 p-3.5">
+              {accountAddress && (
+                <p className="text-sm font-normal">
+                  {accountAddress.length > 10 
+                    ? `${accountAddress.slice(0, 6)}...${accountAddress.slice(-4)}` 
+                    : accountAddress}
+                </p>
+              )}
+              {chainName && (
+                <div className="flex flex-row items-center gap-2">
+                  {chainIcon && (
+                    <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-white">
+                      {chainIcon}
+                    </div>
+                  )}
+                  <p className="text-base font-medium">
+                    {chainName}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+
           <div className="flex flex-col gap-2">
             <p className="text-sm font-bold text-foreground">Request from</p>
             <div className="flex flex-row items-center gap-2 p-3 border border-border rounded-[6px]">

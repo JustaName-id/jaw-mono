@@ -68,17 +68,20 @@ export interface RPCRequest {
   timestamp: string;
 }
 
+// Chain type definition
+export type chain = {
+  id: number;
+  rpcUrl: string;
+  paymasterUrl?: string;
+};
+
 // Decrypted content from encrypted requests
 export interface DecryptedRequest {
   action: {
     method: string;
     params: unknown[];
   };
-  chain: {
-    id: number;
-    rpcUrl: string;
-    paymasterUrl?: string;
-  };
+  chain: chain;
 }
 
 // Response payload structure (what gets encrypted)

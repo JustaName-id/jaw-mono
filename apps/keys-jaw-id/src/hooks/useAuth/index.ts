@@ -1,10 +1,17 @@
 import { useQuery } from "@tanstack/react-query";
 import { PasskeyService } from "../../lib/passkey-service";
 
+
 // Function to check auth using PasskeyService
 const checkAuth = () => {
     const service = new PasskeyService({ localOnly: true });
-    return service.checkAuth();
+    const authResult = service.checkAuth();
+    const currentAccount = service.getCurrentAccount();
+    
+    return {
+        ...authResult,
+        accountName: currentAccount?.username,
+    };
 };
 
 export const useAuth = () => {
@@ -20,6 +27,7 @@ export const useAuth = () => {
         isSuccess: query.isSuccess,
         isAuthenticated: query.data?.isAuthenticated,
         walletAddress: query.data?.address,
+        accountName: query.data?.accountName,
         refetch: query.refetch,
     };
 };

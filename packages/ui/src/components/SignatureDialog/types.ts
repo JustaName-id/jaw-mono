@@ -1,3 +1,4 @@
+import { JSX } from "react";
 export interface SignatureDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -6,6 +7,10 @@ export interface SignatureDialogProps {
   message: string;
   origin: string;
   timestamp: Date;
+
+  accountAddress?: string;
+  chainName?: string;
+  chainIcon?: JSX.Element;
 
   // Actions
   onSign: () => Promise<void>;
