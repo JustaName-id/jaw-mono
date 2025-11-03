@@ -5,6 +5,7 @@ import { DefaultDialog } from "../DefaultDialog";
 import { SignatureDialogProps } from "./types";
 import { useIsMobile } from "../../hooks";
 
+
 export const SignatureDialog = ({
   open,
   onOpenChange,
@@ -21,29 +22,46 @@ export const SignatureDialog = ({
   canSign,
 }: SignatureDialogProps) => {
   const isMobile = useIsMobile();
+
+  // Format origin to display only domain (remove protocol)
+  const formatOrigin = (url: string) => {
+    try {
+      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+      return urlObj.hostname.replace('www.', '');
+    } catch {
+      return origin;
+    }
+  };
+
   return (
     <DefaultDialog
       open={open}
+      handleClose={onCancel}
       onOpenChange={!isProcessing ? onOpenChange : undefined}
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
-          <p className="text-xs font-bold text-muted-foreground leading-[100%]">
-            {timestamp.toLocaleDateString('en-US', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long'
-            })} at {timestamp.toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              timeZoneName: 'short'
-            })}
-          </p>
-          <p className="text-[30px] font-normal leading-[100%] text-foreground">
+          <div className="flex flex-row items-center justify-between">
+            <p className="text-xs font-bold text-muted-foreground leading-[100%]">
+              {timestamp.toLocaleDateString('en-US', {
+                weekday: 'long',
+                day: 'numeric',
+                month: 'long'
+              })} at {timestamp.toLocaleTimeString('en-US', {
+                hour: '2-digit',
+                minute: '2-digit',
+                second: '2-digit',
+                timeZoneName: 'short'
+              })}
+            </p>
+            {/* <InfoIcon /> */}
+          </div>
+          {/* Title */}
+          <p className="text-[30px] font-medium leading-[100%] text-foreground">
             Signature request
           </p>
-          <p className="text-sm text-muted-foreground leading-[100%]">
-            Review request details before you confirm
+          {/* TODO: Reverse resolve address to ens name */}
+          <p className="text-sm text-muted-foreground">
+            {accountAddress}
           </p>
         </div>
       }
@@ -57,78 +75,78 @@ export const SignatureDialog = ({
         maxWidth: '500px',
       }}
     >
-      <div className="flex flex-col gap-6 justify-between max-md:h-full">
-        <div className="flex flex-col gap-3">
-          {/* Account and Chain Info */}
-          {(accountAddress || chainName) && (
-            <div className="flex flex-row items-center justify-between gap-4 p-3.5">
-              {accountAddress && (
-                <p className="text-sm font-normal">
-                  {accountAddress.length > 10 
-                    ? `${accountAddress.slice(0, 6)}...${accountAddress.slice(-4)}` 
-                    : accountAddress}
-                </p>
-              )}
-              {chainName && (
+      <div className="flex flex-col h-full">
+        {/* Main Content Area - Large scrollable message box */}
+        <div className="flex-1 p-4 bg-white border border-border rounded-[6px] min-h-[300px] max-h-[500px] overflow-y-auto">
+          <p className="text-sm font-normal text-foreground whitespace-pre-wrap break-words leading-relaxed">
+            {message || 'No message provided'}
+          </p>
+        </div>
+
+        {/* Footer Information Section - Network and URL */}
+        <div className="bg-white border border-border rounded-[6px] p-2 mt-3">
+          <div className="flex flex-row gap-4">
+            {/* Network Column */}
+            {chainName && (
+              <div className="flex flex-col gap-1 flex-1">
+                <p className="text-xs font-bold text-foreground">Network</p>
                 <div className="flex flex-row items-center gap-2">
                   {chainIcon && (
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center flex-shrink-0 bg-white">
+                    <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
                       {chainIcon}
                     </div>
                   )}
-                  <p className="text-base font-medium">
+                  <p className="text-sm font-normal text-foreground">
                     {chainName}
                   </p>
                 </div>
-              )}
-            </div>
-          )}
-
-          <div className="flex flex-col gap-2">
-            <p className="text-sm font-bold text-foreground">Request from</p>
-            <div className="flex flex-row items-center gap-2 p-3 border border-border rounded-[6px]">
-              <div className="w-4 h-4 bg-blue-500 rounded-full flex-shrink-0"></div>
-              <p className="text-sm font-normal text-foreground">{origin}</p>
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2">
-            <div className="flex flex-row items-center justify-between">
-              <p className="text-sm font-bold text-foreground">Message</p>
-            </div>
-            <div className="p-4 bg-gray-50 rounded-[6px] min-h-[200px] max-h-[400px] overflow-y-auto">
-              <p className="text-sm font-normal text-foreground whitespace-pre-wrap break-words">
-                {message || 'No message provided'}
+              </div>
+            )}
+            
+            {/* Vertical Separator */}
+            {chainName && (
+              <div className="w-[1px] bg-border min-h-[40px]"></div>
+            )}
+            
+            {/* URL Column */}
+            <div className="flex flex-col gap-1 flex-1">
+              <p className="text-xs font-bold text-foreground">URL</p>
+              <p className="text-sm font-normal text-foreground">
+                {formatOrigin(origin)}
               </p>
             </div>
           </div>
-
-          {signatureStatus && (
-            <div className={`text-sm p-3 rounded-lg ${signatureStatus.includes('Error') ? 'bg-red-50 text-red-600' :
-              signatureStatus.includes('successfully') ? 'bg-green-50 text-green-600' :
-                'bg-blue-50 text-blue-600'
-              }`}>
-              {signatureStatus}
-            </div>
-          )}
         </div>
 
-        <div className="flex gap-3 p-3.5 max-md:mt-auto">
-          <Button
-            variant="outline"
-            onClick={onCancel}
-            disabled={isProcessing}
-            className="flex-1"
-          >
-            Cancel
-          </Button>
-          <Button
-            onClick={onSign}
-            disabled={!canSign}
-            className="flex-1"
-          >
-            {isProcessing ? 'Signing...' : 'Sign'}
-          </Button>
+        {/* Status Message */}
+        {signatureStatus && (
+          <div className={`text-sm p-3 rounded-lg mt-3 ${signatureStatus.includes('Error') ? 'bg-red-50 text-red-600' :
+            signatureStatus.includes('successfully') ? 'bg-green-50 text-green-600' :
+              'bg-blue-50 text-blue-600'
+            }`}>
+            {signatureStatus}
+          </div>
+        )}
+
+        {/* Action Buttons Section */}
+        <div className="flex mt-3">
+          <div className="flex gap-2 w-full justify-between">
+            <Button
+              variant="outline"
+              onClick={onCancel}
+              disabled={isProcessing}
+              className="h-9"
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={onSign}
+              disabled={!canSign}
+              className="h-9"
+            >
+              {isProcessing ? 'Signing...' : 'Sign'}
+            </Button>
+          </div>
         </div>
       </div>
     </DefaultDialog>

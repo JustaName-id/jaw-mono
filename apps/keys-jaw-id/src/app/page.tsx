@@ -251,7 +251,8 @@ export default function KeysJawIdApp() {
       // Determine request type and show appropriate UI
       let requestType: SDKRequestType;
 
-      if (method === 'personal_sign') {
+      //TODO: Check Wallet
+      if (method === 'personal_sign' || (method === 'wallet_sign' )) {
         requestType = SDKRequestType.SIGN_MESSAGE;
       } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
         requestType = SDKRequestType.SEND_TRANSACTION;
