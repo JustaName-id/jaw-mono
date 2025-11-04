@@ -33,11 +33,15 @@ interface PopupConfig {
   version: string;
   metadata: AppMetadata;
   preference: {
-    options: string;
+    options?: string;
     keysUrl: string;
     attribution?: Record<string, unknown>;
+    appSpecific?: boolean;
+    serverUrl?: string;
+    ens?: string;
   };
   location: string;
+  apiKey: string;
 }
 
 interface PendingRequest {
@@ -75,6 +79,9 @@ export default function KeysJawIdApp() {
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [ensConfig, setEnsConfig] = useState<string | undefined>(undefined);
+  const [chainId, setChainId] = useState<number | undefined>(undefined);
+  const [apiKey, setApiKey] = useState<string | undefined>(undefined);
 
   // Single useEffect for all message handling
   useEffect(() => {
@@ -105,7 +112,11 @@ export default function KeysJawIdApp() {
 
       // Handle config message
       if (message.data?.version) {
+
         setConfig(message.data);
+        setEnsConfig(message.data.preference?.ens);
+        setChainId(message.data.metadata?.appChainIds?.[0]);
+        setApiKey(message.data.apiKey);
 
         // Always show account selection UI - never auto-authenticate
         checkForPasskeys();
@@ -187,12 +198,17 @@ export default function KeysJawIdApp() {
       await cryptoHandler.clear();
       await cryptoHandler.processHandshakeRequest(request);
 
-     
-      if (!('handshake' in request.content) || !request.content.handshake){
+
+      if (!('handshake' in request.content) || !request.content.handshake) {
         console.error('❌ Invalid handshake request');
-      return;
+        return;
       }
 
+      console.log('🔍 =========================');
+      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
+      console.log('🔍 =========================');
+      console.log(JSON.stringify(request, null, 2));
+      console.log('🔍 =========================');
 
       // Determine request type
       const method = request.content.handshake.method;
@@ -211,7 +227,7 @@ export default function KeysJawIdApp() {
           metadata: config?.metadata || null,
           method,
           params: Array.isArray(params) ? params : [],
-          chain:  undefined,
+          chain: undefined,
           onApprove: async (result: unknown) => {
             const accounts = result as string[];
             const response = await cryptoHandler.createHandshakeResponse(request.id, accounts);
@@ -260,7 +276,7 @@ export default function KeysJawIdApp() {
       let requestType: SDKRequestType;
 
       //TODO: Check Wallet
-      if (method === 'personal_sign' || (method === 'wallet_sign' )) {
+      if (method === 'personal_sign' || (method === 'wallet_sign')) {
         requestType = SDKRequestType.SIGN_MESSAGE;
       } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
         requestType = SDKRequestType.SEND_TRANSACTION;
@@ -474,11 +490,11 @@ export default function KeysJawIdApp() {
           <div className="text-center max-w-md p-6">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              {currentAccount ? 'Connecting to dApp...' : 'Processing...'}
+              {authQuery.isAuthenticated ? 'Connecting to dApp...' : 'Processing...'}
             </h3>
             <p className="text-gray-600 mb-4">
-              {currentAccount
-                ? `Authenticated as ${currentAccount.username}. Waiting for dApp connection...`
+              {authQuery.isAuthenticated && authQuery.accountName
+                ? `Authenticated as ${authQuery.accountName}. Waiting for dApp connection...`
                 : 'Please wait while we process your request.'
               }
             </p>
@@ -559,11 +575,16 @@ export default function KeysJawIdApp() {
             </div>
 
             <SignInScreen
+              ensConfig={ensConfig}
+              chainId={chainId}
+              apiKey={apiKey}
               onComplete={async () => {
                 try {
 
                   // SignInScreen already created the passkey, just refetch and proceed
                   const accountsResult = await passkeyQuery.refetchAccounts();
+
+                  await authQuery.refetch();
 
                   const accounts = accountsResult.data || [];
                   const newestAccount = accounts[accounts.length - 1] || null;
@@ -617,11 +638,16 @@ export default function KeysJawIdApp() {
             </div>
 
             <SignInScreen
+              ensConfig={ensConfig}
+              chainId={chainId}
+              apiKey={apiKey}
               onComplete={async () => {
                 try {
 
                   // SignInScreen already handled login, just proceed
                   const accountsResult = await passkeyQuery.refetchAccounts();
+
+                  await authQuery.refetch();
 
                   const accounts = accountsResult.data || [];
                   setCurrentAccount(accounts[0] || null);
@@ -683,11 +709,11 @@ export default function KeysJawIdApp() {
               </p>
             </div>
 
-            {currentAccount && (
+            {currentAccount && authQuery.isAuthenticated && (
               <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2">
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Account:</span>
-                  <span className="font-medium text-gray-900">{currentAccount.username}</span>
+                  <span className="font-medium text-gray-900">{authQuery.accountName || currentAccount.username}</span>
                 </div>
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Address:</span>
