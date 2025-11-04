@@ -5,8 +5,10 @@ export {
     type WalletConnectResponse
 } from "./wallet_connect.js"
 
-export { 
-    type ViemRPCParams, 
+export {
+    type ViemRPCParams,
     type ViemRPCReturnType,
     SUPPORTED_METHODS,
 } from './methodTypes.js';
+
+export { getCapabilities } from './capabilities.js';

@@ -1,5 +1,18 @@
-import {Address, Client, createPublicClient, getAddress, Hash, Hex, http, isAddress, pad, Transport, Chain as ViemChain} from "viem";
-import {getCode, readContract} from "viem/actions";
+import {
+    Address,
+    Client,
+    createPublicClient,
+    getAddress,
+    Hash,
+    Hex,
+    http,
+    isAddress,
+    pad,
+    Transport,
+    Chain as ViemChain,
+    formatUnits
+} from "viem";
+import {getCode, getGasPrice, readContract} from "viem/actions";
 import {abi, JustanAccountImplementation, toJustanAccount} from "../account/index.js";
 import {
     BundlerClient,
@@ -191,5 +204,15 @@ export function formatPublicKey(publicKey: Hex): Hex {
         return pad(publicKey);
     }
     return publicKey;
+}
+
+export async function calculateGas(
+    chain: Chain,
+    gas: bigint,
+): Promise<string> {
+    const bundlerClient = getBundlerClient(chain)
+    const gasPrice = await getGasPrice(bundlerClient)
+    const result = formatUnits(gas * gasPrice, 18)
+    return result
 }
 

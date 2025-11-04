@@ -7,6 +7,7 @@ import {
     getCachedWalletConnectResponse,
     injectRequestCapabilities,
 } from './SignerUtils.js';
+import { getCapabilities } from '../rpc/capabilities.js';
 
 import { Communicator } from '../communicator/index.js';
 import { standardErrors } from '../errors/index.js';
@@ -294,12 +295,9 @@ export class JAWSigner implements Signer {
             );
         }
 
-        const capabilities = store.getState().account.capabilities;
-
-        // Return empty object if capabilities is undefined
-        if (!capabilities) {
-            return {};
-        }
+        const state = store.getState();
+        const chains = state.chains ?? [];
+        const capabilities = state.account.capabilities ?? getCapabilities(chains);
 
         // If no filter is provided, return all capabilities
         if (!filterChainIds || filterChainIds.length === 0) {

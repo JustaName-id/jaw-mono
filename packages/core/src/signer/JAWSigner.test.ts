@@ -1270,7 +1270,7 @@ describe('JAWSigner', () => {
       await expect(signer.request(request)).rejects.toThrow('no active account found when getting capabilities');
     });
 
-    it('should return empty object when capabilities undefined', async () => {
+    it('should return SDK capabilities when wallet capabilities undefined', async () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_getCapabilities',
@@ -1292,7 +1292,48 @@ describe('JAWSigner', () => {
       const result = await signer.request(request);
 
       // Assert
-      expect(result).toEqual({});
+      // Should return SDK-generated capabilities based on configured chains
+      expect(result).toEqual({
+        '0x1': { atomicBatch: { supported: true } },
+      });
+    });
+
+    it('should include paymasterService when chain has paymasterUrl', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890'],
+      };
+
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          chain: { id: 1 },
+          capabilities: undefined,
+        },
+        chains: [
+          { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com', paymasterUrl: 'https://paymaster.example.com' },
+          { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
+        ],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
+      });
+
+      // Act
+      const result = await signer.request(request);
+
+      // Assert
+      // Should include paymasterService for chain 1 (has paymasterUrl)
+      // Should NOT include paymasterService for chain 137 (no paymasterUrl)
+      expect(result).toEqual({
+        '0x1': {
+          atomicBatch: { supported: true },
+          paymasterService: { supported: true }
+        },
+        '0x89': {
+          atomicBatch: { supported: true }
+        },
+      });
     });
 
     it('should filter capabilities by chainIds parameter', async () => {

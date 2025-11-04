@@ -19,5 +19,6 @@ export {
     estimateUserOpGas,
     createSmartAccount,
     findOwnerIndex,
-    formatPublicKey
+    formatPublicKey,
+    calculateGas
 } from "./smartAccount.js"
