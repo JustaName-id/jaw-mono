@@ -476,7 +476,7 @@ describe('JAWSigner', () => {
           chain: { id: 1 },
           capabilities: {
             '0x1': { paymasterService: { supported: true } },
-            '0x89': { atomicBatch: { supported: true } },
+            '0x89': { atomicBatch: { status: 'supported' } },
           },
         },
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
@@ -490,7 +490,7 @@ describe('JAWSigner', () => {
       // Assert
       expect(result).toEqual({
         '0x1': { paymasterService: { supported: true } },
-        '0x89': { atomicBatch: { supported: true } },
+        '0x89': { atomicBatch: { status: 'supported' } },
       });
     });
 
@@ -1294,7 +1294,7 @@ describe('JAWSigner', () => {
       // Assert
       // Should return SDK-generated capabilities based on configured chains
       expect(result).toEqual({
-        '0x1': { atomicBatch: { supported: true } },
+        '0x1': { atomicBatch: { status: 'supported' } },
       });
     });
 
@@ -1327,11 +1327,11 @@ describe('JAWSigner', () => {
       // Should NOT include paymasterService for chain 137 (no paymasterUrl)
       expect(result).toEqual({
         '0x1': {
-          atomicBatch: { supported: true },
+          atomicBatch: { status: 'supported' },
           paymasterService: { supported: true }
         },
         '0x89': {
-          atomicBatch: { supported: true }
+          atomicBatch: { status: 'supported' }
         },
       });
     });
@@ -1349,7 +1349,7 @@ describe('JAWSigner', () => {
           chain: { id: 1 },
           capabilities: {
             '0x1': { paymasterService: { supported: true } },
-            '0x89': { atomicBatch: { supported: true } },
+            '0x89': { atomicBatch: { status: 'supported' } },
             '0xa': { otherFeature: { supported: true } },
           },
         },
@@ -1380,7 +1380,7 @@ describe('JAWSigner', () => {
           chain: { id: 1 },
           capabilities: {
             '0x1': { paymasterService: { supported: true } },
-            '0x89': { atomicBatch: { supported: true } },
+            '0x89': { atomicBatch: { status: 'supported' } },
             '0xa': { otherFeature: { supported: true } },
           },
         },
@@ -1395,7 +1395,7 @@ describe('JAWSigner', () => {
       // Assert
       expect(result).toEqual({
         '0x1': { paymasterService: { supported: true } },
-        '0x89': { atomicBatch: { supported: true } },
+        '0x89': { atomicBatch: { status: 'supported' } },
       });
     });
   });

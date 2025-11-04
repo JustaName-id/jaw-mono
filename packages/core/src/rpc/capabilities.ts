@@ -4,9 +4,9 @@ import { SDKChain } from '../store/index.js';
 /**
  * Utility function to expose capabilities for configured chains.
  *
- * Capabilities indicate what advanced features the wallet supports:
+ * Capabilities indicate what advanced features the wallet supports (EIP-5792):
  * - atomicBatch: Execute multiple calls atomically (all succeed or all fail) - always supported
- * - paymasterService: Support for gasless transactions via ERC-4337 paymasters - only if paymasterUrl is configured
+ * - paymasterService: Support for gasless transactions via ERC-4337 paymasters (ERC-7677) - only if paymasterUrl is configured
  *
  * @param chains - Array of configured chains from the store/config
  * @returns Record of chain IDs (in hex) to their supported capabilities
@@ -20,8 +20,8 @@ import { SDKChain } from '../store/index.js';
  * const capabilities = getCapabilities(chains);
  * // Returns:
  * // {
- * //   '0x1': { atomicBatch: { supported: true }, paymasterService: { supported: true } },
- * //   '0xaa36a7': { atomicBatch: { supported: true } },
+ * //   '0x1': { atomicBatch: { status: 'supported' }, paymasterService: { supported: true } },
+ * //   '0xaa36a7': { atomicBatch: { status: 'supported' } },
  * // }
  * ```
  */
@@ -33,7 +33,7 @@ export function getCapabilities(chains: SDKChain[]): Record<`0x${string}`, Recor
 
         const chainCapabilities: Record<string, unknown> = {
             atomicBatch: {
-                supported: true,
+                status: 'supported',
             },
         };
 
