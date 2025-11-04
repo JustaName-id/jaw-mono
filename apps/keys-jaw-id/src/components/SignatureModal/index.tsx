@@ -1,41 +1,13 @@
 'use client'
 
 import { SignatureDialog, getChainIcon } from "@jaw/ui";
-import { useAuth, usePasskeys } from "../../hooks";
+import {  usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SmartAccount } from "viem/account-abstraction";
-import { base, baseSepolia, optimism, optimismSepolia, arbitrum, arbitrumSepolia, mainnet, sepolia } from "viem/chains";
 import type { chain } from "../../lib/sdk-types";
+import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 
-// Helper to get chain name from chain id
-const getChainNameFromId = (chainId: number): string => {
-  const chainMap: Record<number, string> = {
-    [mainnet.id]: mainnet.name,
-    [sepolia.id]: sepolia.name,
-    [base.id]: base.name,
-    [baseSepolia.id]: baseSepolia.name,
-    [optimism.id]: optimism.name,
-    [optimismSepolia.id]: optimismSepolia.name,
-    [arbitrum.id]: arbitrum.name,
-    [arbitrumSepolia.id]: arbitrumSepolia.name,
-  };
-  return chainMap[chainId] || `Chain ${chainId}`;
-};
 
-// Helper to get chain icon key from chain id
-const getChainIconKeyFromId = (chainId: number): string => {
-  const chainMap: Record<number, string> = {
-    [mainnet.id]: "ethereum",
-    [sepolia.id]: "sepolia",
-    [base.id]: "base",
-    [baseSepolia.id]: "base-sepolia",
-    [optimism.id]: "optimism",
-    [optimismSepolia.id]: "optimism",
-    [arbitrum.id]: "arbitrum",
-    [arbitrumSepolia.id]: "arbitrum",
-  };
-  return chainMap[chainId] || "ethereum";
-};
 
 export interface SignatureModalProps {
   origin: string;
@@ -58,7 +30,6 @@ export const SignatureModal = ({
   onSuccess,
   onError
 }: SignatureModalProps) => {
-  const { walletAddress } = useAuth();
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
   const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
@@ -71,8 +42,6 @@ export const SignatureModal = ({
   const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
   const chainIcon = useMemo(() => chainIconKey ? getChainIcon(chainIconKey, 16) : undefined, [chainIconKey]);
 
-  // Use walletAddress from useAuth or fallback to address prop
-  const displayAddress = walletAddress || address;
 
   const signMessage = useCallback(async () => {
     try {
@@ -168,7 +137,7 @@ export const SignatureModal = ({
       message={messageToSign}
       origin={origin}
       timestamp={timestamp}
-      accountAddress={displayAddress}
+      accountAddress={address}
       chainName={chainName}
       chainIcon={chainIcon}
       onSign={signMessage}
