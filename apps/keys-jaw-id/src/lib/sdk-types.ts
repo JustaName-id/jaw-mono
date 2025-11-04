@@ -71,7 +71,7 @@ export interface RPCRequest {
 // Chain type definition
 export type chain = {
   id: number;
-  rpcUrl: string;
+  rpcUrl?: string;
   paymasterUrl?: string;
 };
 

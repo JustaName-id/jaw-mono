@@ -309,7 +309,6 @@ export class PasskeyService {
       client,
       owners: [webAuthnAccount],
     });
-    console.log('🔍 Smart account:', smartAccount.address);
 
     return smartAccount;
   }

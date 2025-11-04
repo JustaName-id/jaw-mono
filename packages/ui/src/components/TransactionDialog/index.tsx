@@ -24,6 +24,7 @@ export const TransactionDialog = ({
   isProcessing,
   transactionStatus,
   networkName,
+  chainIconKey,
   getChainIcon,
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
@@ -35,13 +36,33 @@ export const TransactionDialog = ({
 
   // Helper function to format value for display
   const formatTransactionValue = (value?: string) => {
-    if (!value || value === '0') return null;
-    // If value looks like wei (long number, no decimals), format it from wei to ETH
-    if (/^\d+$/.test(value) && value.length > 10) {
-      return formatEther(BigInt(value));
+    if (!value || value === '0' || value === '0x0') return null;
+    
+    try {
+      // Handle hex strings (0x...)
+      if (value.startsWith('0x')) {
+        const bigIntValue = BigInt(value);
+        return formatEther(bigIntValue);
+      }
+      
+      // If value looks like wei (long number, no decimals), format it from wei to ETH
+      if (/^\d+$/.test(value) && value.length > 10) {
+        return formatEther(BigInt(value));
+      }
+      
+      // If it's already a decimal string (like "0.001"), return as is
+      if (/^\d+\.?\d*$/.test(value) && value.length <= 20) {
+        return value;
+      }
+      
+      // Try to parse as BigInt and format
+      const bigIntValue = BigInt(value);
+      return formatEther(bigIntValue);
+    } catch (error) {
+      // If parsing fails, return null to hide the value
+      console.warn('Failed to format transaction value:', value, error);
+      return null;
     }
-    // Otherwise, assume it's already in ETH format
-    return value;
   };
 
   const canConfirm = !isProcessing && !gasFeeLoading && !(gasEstimationError && !sponsored);
@@ -126,7 +147,7 @@ export const TransactionDialog = ({
                 <div className="flex flex-col text-foreground flex-1 gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">Network</p>
                   <div className="flex flex-row items-center gap-1">
-                    {getChainIcon(networkName?.toLowerCase() || 'ethereum', 16)}
+                    {getChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 16)}
                     <p className="text-base font-normal text-ellipsis leading-[150%] truncate">{networkName || 'Ethereum'}</p>
                   </div>
                 </div>
@@ -146,6 +167,7 @@ export const TransactionDialog = ({
                         <div className="flex items-center gap-2">
                           {sponsored && gasFee && gasFee !== 'sponsored' && (
                             <div className="flex flex-col line-through text-muted-foreground">
+                             {/* TODO: Add gas fee in USD */}
                               <p className="text-base font-normal">
                                 ${(ethPrice * Number(gasFee)).toFixed(4)}
                               </p>
@@ -156,7 +178,13 @@ export const TransactionDialog = ({
                           </span>
                         </div>
                         <p className="text-xs font-normal text-muted-foreground">
-                          {sponsored && gasFee && gasFee !== 'sponsored' ? `${Number(gasFee).toFixed(4)} ETH` : 'Gas fees covered'}
+                          {sponsored && gasFee && gasFee !== 'sponsored' ? (() => {
+                            const gasValue = Number(gasFee);
+                            if (gasValue > 0 && gasValue < 0.0001) {
+                              return '> 0.0001 ETH';
+                            }
+                            return gasValue.toFixed(4) + ' ETH';
+                          })() : 'Gas fees covered'}
                         </p>
                       </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
@@ -167,7 +195,13 @@ export const TransactionDialog = ({
                           </p>
                         </div>
                         <p className="text-xs font-normal text-muted-foreground">
-                          {Number(gasFee).toFixed(4)} ETH
+                          {(() => {
+                            const gasValue = Number(gasFee);
+                            if (gasValue > 0 && gasValue < 0.0001) {
+                              return '> 0.0001 ETH';
+                            }
+                            return gasValue.toFixed(4) + ' ETH';
+                          })()}
                         </p>
                       </div>
                     ) : (
@@ -347,7 +381,7 @@ export const TransactionDialog = ({
                 <div className="flex flex-col text-foreground flex-1 gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">Network</p>
                   <div className="flex flex-row items-center gap-1">
-                    {getChainIcon(networkName?.toLowerCase() || 'ethereum', 16)}
+                    {getChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 16)}
                     <p className="text-base font-normal text-ellipsis leading-[150%] truncate">{networkName || 'Ethereum'}</p>
                   </div>
                 </div>
@@ -377,7 +411,13 @@ export const TransactionDialog = ({
                           </span>
                         </div>
                         <p className="text-xs font-normal text-muted-foreground">
-                          {sponsored && gasFee && gasFee !== 'sponsored' ? `${Number(gasFee).toFixed(4)} ETH` : 'Gas fees covered'}
+                          {sponsored && gasFee && gasFee !== 'sponsored' ? (() => {
+                            const gasValue = Number(gasFee);
+                            if (gasValue > 0 && gasValue < 0.0001) {
+                              return '> 0.0001 ETH';
+                            }
+                            return gasValue.toFixed(4) + ' ETH';
+                          })() : 'Gas fees covered'}
                         </p>
                       </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
@@ -388,7 +428,13 @@ export const TransactionDialog = ({
                           </p>
                         </div>
                         <p className="text-xs font-normal text-muted-foreground">
-                          {Number(gasFee).toFixed(4)} ETH
+                          {(() => {
+                            const gasValue = Number(gasFee);
+                            if (gasValue > 0 && gasValue < 0.0001) {
+                              return '> 0.0001 ETH';
+                            }
+                            return gasValue.toFixed(4) + ' ETH';
+                          })()}
                         </p>
                       </div>
                     ) : (
