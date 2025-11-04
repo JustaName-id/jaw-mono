@@ -2,14 +2,11 @@
 
 import { TransactionDialog, TransactionData, getChainIcon } from "@jaw/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Address, parseEther, formatEther, Hash } from "viem";
+import { Address, parseEther, Hash } from "viem";
 import { SmartAccount } from "viem/account-abstraction";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
-import { sendTransaction, estimateUserOpGas, type Chain } from "@jaw.id/core";
-import { createPublicClient, http } from "viem";
-import { mainnet, sepolia, base, baseSepolia, optimism, optimismSepolia, arbitrum, arbitrumSepolia } from "viem/chains";
-
+import { sendTransaction, estimateUserOpGas, type Chain , calculateGas } from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -38,13 +35,7 @@ export interface TransactionRequestData {
 export interface TransactionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // New: Accept complete transaction request data
   transactionRequest?: TransactionRequestData;
-  // Backward compatibility props
-  to?: string;
-  data?: string;
-  value?: string;
-  chainId?: number;
   transactions?: TransactionData[];
   sponsored?: boolean;
   chain?: Chain;  // Chain info with RPC and paymaster URLs
@@ -56,10 +47,6 @@ export const TransactionModal = ({
   open,
   onOpenChange,
   transactionRequest,
-  to,
-  data,
-  value = '0',
-  chainId,
   transactions,
   sponsored = false,
   chain,
@@ -84,9 +71,9 @@ export const TransactionModal = ({
     return sponsored;
   }, [transactionRequest, sponsored]);
 
-  // Normalize transaction data - prioritize transactionRequest, then fallback to legacy props
+  // Normalize transaction data - prioritize transactionRequest, then fallback to legacy transactions prop
   const normalizedTransactions = useMemo((): TransactionData[] => {
-    // New way: use transactionRequest if available
+    // Use transactionRequest if available
     if (transactionRequest) {
       return transactionRequest.transactions.map(tx => ({
         to: tx.to || '',
@@ -101,18 +88,8 @@ export const TransactionModal = ({
       return transactions;
     }
 
-    // Backwards compatibility - convert single transaction props to array
-    if (to && chainId !== undefined) {
-      return [{
-        to,
-        data,
-        value: value || '0',
-        chainId
-      }];
-    }
-
     return [];
-  }, [transactionRequest, transactions, to, data, value, chainId]);
+  }, [transactionRequest, transactions]);
 
   const networkName = useMemo(() => {
     // Use chain prop if available, otherwise fall back to transaction chainId
@@ -226,43 +203,8 @@ export const TransactionModal = ({
 
         // Estimate gas using core package
         const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls, chain);
-        console.log('🔍 Gas estimate (units):', gasEstimate);
-
-        // Get gas price from chain to calculate total cost
-        const SUPPORTED_CHAINS = [
-          mainnet,
-          sepolia,
-          base,
-          baseSepolia,
-          optimism,
-          optimismSepolia,
-          arbitrum,
-          arbitrumSepolia,
-        ];
-        const viemChain = SUPPORTED_CHAINS.find(c => c.id === chain.id);
-        
-        if (!chain.rpcUrl) {
-          throw new Error('RPC URL is required for gas estimation');
-        }
-
-        const publicClient = createPublicClient({
-          chain: viemChain,
-          transport: http(chain.rpcUrl),
-        });
-
-        // Get current gas price
-        const gasPrice = await publicClient.getGasPrice();
-        console.log('🔍 Gas price (wei):', gasPrice);
-
-        // Calculate total gas cost: gas units * gas price
-        const totalGasCost = gasEstimate * gasPrice;
-        console.log('🔍 Total gas cost (wei):', totalGasCost);
-
-        // Convert BigInt to ETH using formatEther (handles 18 decimals properly)
-        // formatEther returns a string with proper decimal formatting (e.g., "0.000123")
-        const gasInEth = formatEther(totalGasCost);
-        console.log('🔍 Gas cost (ETH):', gasInEth);
-        setGasFee(gasInEth);
+        const gasPrice = await calculateGas(chain, gasEstimate);
+        setGasFee(gasPrice);
         setGasEstimationError('');
 
         // Override with sponsored if paymaster is available
