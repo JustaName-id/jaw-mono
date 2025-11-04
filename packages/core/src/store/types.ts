@@ -5,7 +5,7 @@ import { Address , AppMetadata , JawProviderPreference} from "../provider/interf
 
 export type Chain = {
     id: number;
-    rpcUrl: string;
+    rpcUrl?: string;
     nativeCurrency?: {
       name?: string;
       symbol?: string;

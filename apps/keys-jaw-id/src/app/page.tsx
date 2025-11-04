@@ -4,13 +4,19 @@ import { useEffect, useState } from 'react';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
-import { TransactionModal } from '../components/TransactionModal';
+import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { SDKRequestType, type AppMetadata } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
+import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
+
+
+
+
+// Note: TransactionRequestData is now imported from TransactionModal for consistency
 
 // Simple state types
 type PopupState =
@@ -50,6 +56,8 @@ interface PendingRequest {
   onApprove: (result: unknown) => Promise<void>;
   onReject: (error: string) => Promise<void>;
 }
+
+
 
 export default function KeysJawIdApp() {
   // Use hooks for passkey operations
@@ -329,43 +337,47 @@ export default function KeysJawIdApp() {
       state !== 'success' &&
       state !== 'error' &&
       (authQuery.isAuthenticated || state === 'processing')) {
-      const txParams = pendingRequest.params[0] as any;
 
-      // Handle both wallet_sendCalls format (with calls array) and eth_sendTransaction format (single tx)
-      let transactions;
-      if (txParams.calls) {
-        // wallet_sendCalls format
-        transactions = txParams.calls.map((call: any) => ({
-          to: call.to,
-          data: call.data || '0x',
-          value: call.value || '0',
-          chainId: pendingRequest.chain?.id || parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1'),
-        }));
-      } else {
-        // eth_sendTransaction format - single transaction
-        transactions = [{
-          to: txParams.to,
-          data: txParams.data || '0x',
-          value: txParams.value || '0',
-          chainId: pendingRequest.chain?.id || parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1'),
-        }];
+      // Extract transaction data with type safety
+      let txData: TransactionRequestData;
+      try {
+        txData = extractTransactionData(
+          pendingRequest.method,
+          pendingRequest.params,
+          pendingRequest.chain
+        );
+      } catch (err) {
+        console.error('❌ Failed to extract transaction data:', err);
+        setError(err instanceof Error ? err.message : 'Invalid transaction parameters');
+        setState('error');
+        return null;
       }
 
       return (
         <TransactionModal
           open={true}
           onOpenChange={() => { }}
-          transactions={transactions}
-          sponsored={false}
-          onSuccess={async () => {
+          transactionRequest={txData}
+          chain={pendingRequest.chain as chain}
+          onSuccess={async (result: TransactionResult) => {
             setState('processing');
             try {
-              // For eth_sendTransaction, return tx hash; for wallet_sendCalls, return sendCallsId
-              const result = pendingRequest.method === 'eth_sendTransaction'
-                ? `0x${'0'.repeat(64)}` // TODO: Replace with actual tx hash
-                : { sendCallsId: `0x${'0'.repeat(64)}` };
+              // Type-safe result handling based on method
+              let response: WalletSendCallsReturn | EthSendTransactionReturn;
 
-              await pendingRequest.onApprove(result);
+              if (txData.method === 'wallet_sendCalls') {
+                // EIP-5792: Return sendCallsId for wallet_sendCalls
+                response = {
+                  id: result.sendCallsId || result.hash || `0x${'0'.repeat(64)}`,
+                  // capabilities can be included if supported by the wallet
+                } satisfies WalletSendCallsReturn;
+              } else {
+                // eth_sendTransaction: Return transaction hash
+                response = (result.hash || `0x${'0'.repeat(64)}`) as EthSendTransactionReturn;
+              }
+
+              console.log('✅ Transaction response:', response);
+              await pendingRequest.onApprove(response);
               setState('success');
               setTimeout(() => window.close(), 1500);
             } catch (err) {
@@ -376,10 +388,15 @@ export default function KeysJawIdApp() {
           }}
           onError={async (error) => {
             try {
-              await pendingRequest.onReject(error.message);
+              const errorMessage = error instanceof Error ? error.message : String(error);
+              await pendingRequest.onReject(errorMessage);
+              setTimeout(() => window.close(), 1500);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
+              const rejectMessage = err instanceof Error ? err.message : 'Failed to reject request';
+              setError(rejectMessage);
+              setTimeout(() => window.close(), 1500);
               window.close();
             }
           }}

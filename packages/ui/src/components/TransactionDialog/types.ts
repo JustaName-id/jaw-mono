@@ -38,5 +38,6 @@ export interface TransactionDialogProps {
 
   // Display utilities
   networkName: string;
+  chainIconKey?: string; // Optional icon key for better icon resolution
   getChainIcon: (chain: string, size?: number) => JSX.Element;
 }

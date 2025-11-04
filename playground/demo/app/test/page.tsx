@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { createJAWSDK } from '@jaw.id/core';
+import { parseEther, encodeFunctionData, parseAbi } from 'viem';
 
 export default function TestPage() {
   const [isConnected, setIsConnected] = useState(false);
@@ -12,7 +13,7 @@ export default function TestPage() {
     createJAWSDK({
       appName: 'JAW Demo App',
       appLogoUrl: null,
-      appChainIds: [1, 137, 8453], // Ethereum, Polygon, Base
+      appChainIds: [11155111, 84532], // Sepolia (11155111), Base Sepolia (84532)
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
       },
@@ -210,21 +211,132 @@ export default function TestPage() {
 
     try {
       const provider = sdk.getProvider();
-      addLog('Requesting transaction signature...');
+      addLog('Sending ETH transaction (eth_sendTransaction)...');
+
+      // Example: Send 0.001 ETH to a recipient
+      // Use viem's parseEther to convert ETH to wei
+      const value = parseEther('0.001');
+
       const txHash = await provider.request({
         method: 'eth_sendTransaction',
         params: [{
           from: accounts[0],
-          to: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-          value: '0x0', // 0 ETH
-          gas: '0x5208', // 21000 gas
-          gasPrice: '0x3b9aca00' // 1 gwei
+          to: '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0', // Example recipient
+          value: `0x${value.toString(16)}`, // Convert bigint to hex
+          data: '0x', // No data for simple ETH transfer
         }]
       });
-      addLog(`Transaction hash: ${txHash}`);
+
+      addLog(`✅ Transaction hash: ${txHash}`);
+      addLog(`View on explorer: https://etherscan.io/tx/${txHash}`);
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
-      addLog(`Error sending transaction: ${errorMessage}`);
+      addLog(`❌ Error sending transaction: ${errorMessage}`);
+    }
+  };
+
+  const handleSendBatchTransaction = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog('Sending batch transaction (wallet_sendCalls - EIP-5792)...');
+
+      // Example: Batch multiple calls atomically
+      // 1. Send ETH to recipient
+      // 2. Call a contract function
+
+      // Prepare values using viem
+      const ethValue = parseEther('0.001');
+      const ethValue2 = parseEther('0.002');
+
+      // Encode ERC20 transfer function call: transfer(address recipient, uint256 amount)
+      const erc20Abi = parseAbi([
+        'function transfer(address to, uint256 amount) returns (bool)'
+      ]);
+
+      const transferData = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: 'transfer',
+        args: [
+          '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0', // Recipient
+          BigInt(1000000) // 1 USDC (6 decimals)
+        ]
+      });
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [{
+          version: '1.0',
+          from: accounts[0],
+          calls: [
+            // Call 1: Send 0.001 ETH
+            {
+              to: '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0',
+              value: `0x${ethValue.toString(16)}`,
+              data: '0x',
+            },
+            // Call 2: ERC20 transfer (properly encoded with viem)
+            {
+              to: '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0', // USDC contract
+              value: `0x${ethValue2.toString(16)}`,
+              data: `0x`,
+            },
+          ],
+        }]
+      });
+
+      addLog(`✅ Batch transaction ID: ${typeof result === 'object' && result !== null && 'id' in result ? result.id : JSON.stringify(result)}`);
+      addLog('Note: All calls executed atomically in a single user operation');
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      addLog(`❌ Error sending batch transaction: ${errorMessage}`);
+    }
+  };
+
+  const handleSendContractInteraction = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog('Sending contract interaction (eth_sendTransaction)...');
+
+      // Example: ERC20 approve function using viem
+      const erc20Abi = parseAbi([
+        'function approve(address spender, uint256 amount) returns (bool)'
+      ]);
+
+      const spenderAddress = '0x1111111254EEB25477B68fb85Ed929f73A960582'; // 1inch Router
+      const maxUint256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+
+      // Encode function call using viem
+      const approveData = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: 'approve',
+        args: [spenderAddress, maxUint256]
+      });
+
+      const txHash = await provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          from: accounts[0],
+          to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC contract
+          value: '0x0',
+          data: approveData,
+        }]
+      });
+
+      addLog(`✅ Contract interaction hash: ${txHash}`);
+      addLog(`Function: approve(spender, amount)`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      addLog(`❌ Error in contract interaction: ${errorMessage}`);
     }
   };
 
@@ -241,7 +353,7 @@ export default function TestPage() {
         method: 'eth_signTransaction',
         params: [{
           from: accounts[0],
-          to: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
+          to: '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0',
           value: '0x0',
           gas: '0x5208',
           gasPrice: '0x3b9aca00'
@@ -550,13 +662,44 @@ export default function TestPage() {
             >
               Sign Transaction
             </button>
+          </div>
+        </div>
+
+        {/* Transaction Actions */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Transaction Actions
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <button
               onClick={handleSendTransaction}
               disabled={!isConnected}
               className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              Send Transaction
+              Send ETH (eth_sendTransaction)
             </button>
+            <button
+              onClick={handleSendContractInteraction}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Contract Call (ERC20 Approve)
+            </button>
+            <button
+              onClick={handleSendBatchTransaction}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Batch Transaction (wallet_sendCalls)
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Note:</span> wallet_sendCalls (EIP-5792) executes multiple calls atomically in a single user operation.
+            </p>
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Test Networks:</span> This demo uses Sepolia and Base Sepolia testnets. Get test ETH from faucets before testing transactions.
+            </p>
           </div>
         </div>
 
@@ -588,27 +731,20 @@ export default function TestPage() {
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
             Switch Chain
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <button
-              onClick={() => handleSwitchChain('0x1')}
+              onClick={() => handleSwitchChain('0xaa36a7')}
               disabled={!isConnected}
               className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              Ethereum (0x1)
+              Sepolia (0xaa36a7)
             </button>
             <button
-              onClick={() => handleSwitchChain('0x89')}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Polygon (0x89)
-            </button>
-            <button
-              onClick={() => handleSwitchChain('0x2105')}
+              onClick={() => handleSwitchChain('0x14a34')}
               disabled={!isConnected}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              Base (0x2105)
+              Base Sepolia (0x14a34)
             </button>
           </div>
         </div>

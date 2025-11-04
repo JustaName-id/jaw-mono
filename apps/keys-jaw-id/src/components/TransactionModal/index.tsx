@@ -1,70 +1,115 @@
 'use client'
 
 import { TransactionDialog, TransactionData, getChainIcon } from "@jaw/ui";
-// import { useSubnameCheck } from "@/hooks";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Address, parseEther } from "viem";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Address, parseEther, Hash } from "viem";
 import { SmartAccount } from "viem/account-abstraction";
-import { SUPPORTED_CHAINS_NAMES } from "../../utils/constants";
-// import { createSmartAccount, estimateUserOpGas, sendTransaction, calculateGas, fetchPasskeyCredential } from "@/lib/justanaccount";
+import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
+import { usePasskeys, useAuth } from "../../hooks";
+import { sendTransaction, estimateUserOpGas, type Chain , calculateGas } from "@jaw.id/core";
+
+// Transaction execution result
+export interface TransactionResult {
+  hash?: Hash;
+  sendCallsId?: string;
+  userOpHash?: Hash;
+}
+
+// Transaction request data with method-specific metadata
+export interface TransactionRequestData {
+  method: 'wallet_sendCalls' | 'eth_sendTransaction';
+  transactions: Array<{
+    to?: string;
+    data?: string;
+    value: string;
+    chainId: number;
+  }>;
+  chainId: number;
+  paymasterUrl?: string;
+  // wallet_sendCalls specific fields
+  atomicRequired?: boolean;
+  version?: string;
+  callsId?: string;
+}
 
 export interface TransactionModalProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  // Support both single transaction (backwards compatibility) and transaction arrays
-  to?: string;
-  data?: string;
-  value?: string;
-  chainId?: number;
+  transactionRequest?: TransactionRequestData;
   transactions?: TransactionData[];
   sponsored?: boolean;
-  onSuccess?: () => void;
+  chain?: Chain;  // Chain info with RPC and paymaster URLs
+  onSuccess?: (result: TransactionResult) => void;
   onError?: (error: Error) => void;
 }
 
 export const TransactionModal = ({
   open,
   onOpenChange,
-  to,
-  data,
-  value = '0',
-  chainId,
+  transactionRequest,
   transactions,
   sponsored = false,
+  chain,
   onSuccess,
   onError
 }: TransactionModalProps) => {
-  // const { walletAddress } = useSubnameCheck();
-  // const { ethPrice } = useEthPrice();
+  const { getSmartAccount } = usePasskeys();
+  const { walletAddress } = useAuth();
   const [gasFee, setGasFee] = useState<string>('');
   const [gasFeeLoading, setGasFeeLoading] = useState<boolean>(false);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [cachedSmartAccount, setCachedSmartAccount] = useState<SmartAccount>();
+  const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
+  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
-  // Normalize transaction data - support both single transaction and array formats
+  // Determine if sponsored based on transactionRequest or prop
+  const isSponsored = useMemo(() => {
+    if (transactionRequest) {
+      return !!transactionRequest.paymasterUrl;
+    }
+    return sponsored;
+  }, [transactionRequest, sponsored]);
+
+  // Normalize transaction data - prioritize transactionRequest, then fallback to legacy transactions prop
   const normalizedTransactions = useMemo((): TransactionData[] => {
+    // Use transactionRequest if available
+    if (transactionRequest) {
+      return transactionRequest.transactions.map(tx => ({
+        to: tx.to || '',
+        data: tx.data || '0x',
+        value: tx.value,
+        chainId: tx.chainId
+      }));
+    }
+
+    // Legacy way: use transactions prop
     if (transactions && transactions.length > 0) {
       return transactions;
     }
-    // Backwards compatibility - convert single transaction props to array
-    if (to && chainId !== undefined) {
-      return [{
-        to,
-        data,
-        value: value || '0',
-        chainId
-      }];
-    }
+
     return [];
-  }, [transactions, to, data, value, chainId]);
+  }, [transactionRequest, transactions]);
 
   const networkName = useMemo(() => {
-    // For multiple transactions, use the first transaction's chain
-    const chainId = normalizedTransactions[0]?.chainId;
-    return SUPPORTED_CHAINS_NAMES[chainId as keyof typeof SUPPORTED_CHAINS_NAMES];
-  }, [normalizedTransactions]);
+    // Use chain prop if available, otherwise fall back to transaction chainId
+    const chainId = chain?.id ?? normalizedTransactions[0]?.chainId;
+    
+    if (!chainId) return 'Ethereum';
+    
+    // Use the getChainNameFromId utility which has comprehensive chain mapping
+    return getChainNameFromId(chainId);
+  }, [normalizedTransactions, chain]);
+
+  const chainIconKey = useMemo(() => {
+    // Use chain prop if available, otherwise fall back to transaction chainId
+    const chainId = chain?.id ?? normalizedTransactions[0]?.chainId;
+    
+    if (!chainId) return 'ethereum';
+    
+    // Use getChainIconKeyFromId to get the correct icon key format
+    return getChainIconKeyFromId(chainId);
+  }, [normalizedTransactions, chain]);
 
   const resetModalState = useCallback(() => {
     setGasFee('');
@@ -80,140 +125,224 @@ export const TransactionModal = ({
     }
   }, [open, resetModalState]);
 
-  // Clear cached smart account when key parameters change
+  // Initialize smart account when modal opens
   useEffect(() => {
-    setCachedSmartAccount(undefined);
-  }, [normalizedTransactions]);
+    let isMounted = true;
 
-  const getSmartAccount = useCallback(async () => {
-    // const passkeyCredential = fetchPasskeyCredential();
-    // if (!passkeyCredential) {
-    //   throw new Error('No passkey credential found. Please log in again.');
-    // }
-    // // Use the first transaction's chainId if multiple chains are involved
-    // const txChainId = normalizedTransactions[0]?.chainId || chainId || 1;
-    // return await createSmartAccount(passkeyCredential, txChainId);
-  }, [normalizedTransactions, chainId]);
+    const initializeModal = async () => {
+      if (open && chain) {
+        try {
+          setIsProcessing(false);
+          console.log('🔐 Initializing transaction modal');
+          const account = await getSmartAccount(chain);
 
-  const estimateGas = useCallback(async () => {
-    if (!open || normalizedTransactions.length === 0) return;
+          if (isMounted) {
+            setSmartAccount(account);
+          }
+        } catch (error) {
+          console.error("Error initializing smart account:", error);
+          if (isMounted) {
+            setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
+            onError?.(error as Error);
+          }
+        }
+      } else if (!open) {
+        // Reset when modal closes
+        setSmartAccount(null);
+        setTransactionStatus('');
+        setIsProcessing(false);
+        setGasFee('');
+        setGasEstimationError('');
+      }
+    };
 
-    try {
-      setGasFeeLoading(true);
-      const smartAccount = await getSmartAccount();
-      // setCachedSmartAccount(smartAccount);
+    initializeModal();
 
-      // Convert normalized transactions to the format expected by estimateUserOpGas
-      const transactionCalls = normalizedTransactions.map(tx => ({
-        to: tx.to as Address,
-        value: tx.value && tx.value !== '0' ? (
-          /^\d+$/.test(tx.value) && tx.value.length > 10
-            ? BigInt(tx.value)
-            : parseEther(tx.value)
-        ) : 0n,
-        data: tx.data as `0x${string}` || '0x'
-      }));
+    return () => {
+      isMounted = false;
+      if (timeoutRef.current) {
+        clearTimeout(timeoutRef.current);
+        timeoutRef.current = null;
+      }
+    };
+  }, [open, chain, getSmartAccount, onError]);
 
-      // Estimate gas for all transactions
-      // const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls);
+  // Gas estimation using core package
+  useEffect(() => {
+    if (!open || !smartAccount || !chain || normalizedTransactions.length === 0) return;
 
-      // Use the first transaction's chainId for gas calculation
-      const firstChainId = normalizedTransactions[0]?.chainId || chainId || 1;
-      // const gas = await calculateGas(firstChainId, gasEstimate);
-      // setGasFee(gas);
-    } catch (error) {
-      console.error("Error estimating gas:", error);
+    const estimateGas = async () => {
+      try {
+        setGasFeeLoading(true);
 
-      if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
-        if (sponsored) {
+        // Convert normalized transactions to the format expected by estimateUserOpGas
+        const transactionCalls = normalizedTransactions.map(tx => {
+          let value = 0n;
+
+          if (tx.value && tx.value !== '0') {
+            // Check if it's a hex string
+            if (tx.value.startsWith('0x')) {
+              value = BigInt(tx.value);
+            }
+            // Check if it's a decimal string representing wei
+            else if (/^\d+$/.test(tx.value)) {
+              value = BigInt(tx.value);
+            }
+            // Otherwise assume it's ETH string like "0.001"
+            else {
+              value = parseEther(tx.value);
+            }
+          }
+
+          return {
+            to: tx.to as Address,
+            value,
+            data: tx.data as `0x${string}` || '0x'
+          };
+        });
+
+        // Estimate gas using core package
+        const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls, chain);
+        const gasPrice = await calculateGas(chain, gasEstimate);
+        setGasFee(gasPrice);
+        setGasEstimationError('');
+
+        // Override with sponsored if paymaster is available
+        if (isSponsored) {
           setGasFee('sponsored');
-          setGasEstimationError('');
+        }
+      } catch (error) {
+        console.error("Error estimating gas:", error);
+
+        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
+          if (isSponsored) {
+            setGasFee('sponsored');
+            setGasEstimationError('');
+          } else {
+            setGasFee('');
+            setGasEstimationError('Insufficient funds');
+          }
         } else {
           setGasFee('');
-          setGasEstimationError('Insufficient funds');
+          setGasEstimationError('Failed to estimate gas');
         }
-      } else {
-        setGasFee('');
-        setGasEstimationError('Failed to estimate gas');
+      } finally {
+        setGasFeeLoading(false);
       }
-    } finally {
-      setGasFeeLoading(false);
-    }
-  }, [open, normalizedTransactions, getSmartAccount, sponsored, chainId]);
+    };
 
-  useEffect(() => {
-    if (open) {
-      estimateGas();
-    }
-  }, [open, estimateGas]);
+    estimateGas();
+  }, [open, smartAccount, chain, normalizedTransactions, isSponsored]);
 
-  const handleConfirm = async () => {
+  const handleConfirm = useCallback(async () => {
     try {
       setIsProcessing(true);
       setTransactionStatus('Preparing transaction...');
 
-      const smartAccount = cachedSmartAccount || await getSmartAccount();
+      if (!smartAccount) {
+        throw new Error('Smart account not initialized. Please try again.');
+      }
+
+      if (!chain) {
+        throw new Error('Chain information is required.');
+      }
 
       setTransactionStatus('Sending transaction...');
 
       // Convert normalized transactions to the format expected by sendTransaction
-      const transactionCalls = normalizedTransactions.map(tx => ({
-        to: tx.to as Address,
-        value: tx.value && tx.value !== '0' ? (
-          /^\d+$/.test(tx.value) && tx.value.length > 10
-            ? BigInt(tx.value)
-            : parseEther(tx.value)
-        ) : 0n,
-        data: tx.data as `0x${string}` || '0x'
-      }));
+      const transactionCalls = normalizedTransactions.map(tx => {
+        let value = 0n;
 
-      // Send all transactions as a batch
-      // await sendTransaction(
-      //   smartAccount,
-      //   transactionCalls,
-      //   sponsored
-      // );
+        if (tx.value && tx.value !== '0') {
+          // Check if it's a hex string
+          if (tx.value.startsWith('0x')) {
+            value = BigInt(tx.value);
+          }
+          // Check if it's a decimal string representing wei
+          else if (/^\d+$/.test(tx.value)) {
+            value = BigInt(tx.value);
+          }
+          // Otherwise assume it's ETH string like "0.001"
+          else {
+            value = parseEther(tx.value);
+          }
+        }
 
-      setTransactionStatus('Transaction sent successfully!');
+        return {
+          to: tx.to as Address,
+          value,
+          data: tx.data as `0x${string}` || '0x'
+        };
+      });
 
-      // Success callback
-      setTimeout(() => {
-        onSuccess?.();
-        resetModalState();
-        onOpenChange(false);
-      }, 1500);
+      // Send transaction using core package
+      // This handles bundler communication and returns the final transaction hash
+      const txHash = await sendTransaction(smartAccount, transactionCalls, chain);
+
+      console.log('✅ Transaction confirmed:', txHash);
+      setTransactionStatus('Transaction confirmed!');
+
+      // Return the transaction result with proper format based on method
+      const result: TransactionResult = {
+        hash: txHash,
+        sendCallsId: transactionRequest?.method === 'wallet_sendCalls' ? txHash : undefined,
+      };
+
+      // Log metadata for debugging
+      if (transactionRequest) {
+        console.log('📋 Transaction metadata:', {
+          method: transactionRequest.method,
+          atomicRequired: transactionRequest.atomicRequired,
+          version: transactionRequest.version,
+          callsId: transactionRequest.callsId,
+          paymasterUrl: transactionRequest.paymasterUrl,
+        });
+      }
+
+      // Call onSuccess immediately - parent will handle closing
+      onSuccess?.(result);
 
     } catch (error) {
       console.error("Error in transaction:", error);
-      setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Transaction failed'}`);
-      onError?.(error as Error);
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      setTransactionStatus(`Error: ${errorMessage}`);
+      // Ensure we pass a proper Error object to onError
+      const errorObj = error instanceof Error ? error : new Error(errorMessage);
+      onError?.(errorObj);
       setIsProcessing(false);
     }
-  };
+  }, [smartAccount, chain, normalizedTransactions, onSuccess, onError]);
 
-  const handleCancel = () => {
+  const handleCancel = useCallback(() => {
     if (!isProcessing) {
+      setSmartAccount(null);
+      // Create a standard user rejected error (EIP-1193 code 4001)
+      const rejectionError = new Error('User rejected the request');
+      (rejectionError as any).code = 4001;
+      console.log('❌ User cancelled transaction request');
+      onError?.(rejectionError);
       onOpenChange(false);
+      setTransactionStatus('');
     }
-  };
+  }, [isProcessing, onError, onOpenChange]);
 
   return (
     <TransactionDialog
       open={open}
       onOpenChange={onOpenChange}
       transactions={normalizedTransactions}
-      walletAddress={''}
-      // walletAddress={walletAddress ?? ''}
+      walletAddress={walletAddress ?? ''}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
-      sponsored={sponsored}
+      sponsored={isSponsored}
       ethPrice={0}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
+      chainIconKey={chainIconKey}
       getChainIcon={getChainIcon}
     />
   );
