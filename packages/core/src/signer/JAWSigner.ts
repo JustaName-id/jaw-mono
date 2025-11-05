@@ -179,9 +179,6 @@ export class JAWSigner implements Signer {
             case 'wallet_showCallsStatus':
             case 'wallet_grantPermissions':
                 return this.sendRequestToPopup(request);
-            case 'wallet_addEthereumChain':
-            case 'wallet_watchAsset':
-                throw standardErrors.provider.unsupportedMethod();
             case 'wallet_connect': {
                 // Return cached wallet connect response if available
                 const cachedResponse = await getCachedWalletConnectResponse();
@@ -200,6 +197,11 @@ export class JAWSigner implements Signer {
                 return this.sendRequestToPopup(modifiedRequest);
             }
             default: {
+                // Throw error for any unhandled wallet_* methods
+                if (request.method.startsWith('wallet_')) {
+                    throw standardErrors.provider.unsupportedMethod();
+                }
+
                 const chains = store.getState().chains;
                 const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
                 if (!chain.rpcUrl) {
