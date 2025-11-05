@@ -59,7 +59,6 @@ const mockEncryptedData = {
 };
 const mockCorrelationId = 'test-correlation-id';
 const mockMessageId = '12345678-1234-1234-1234-123456789012' as const;
-const mockApiKey = 'ZZAdkx3GrA0q7UENOlq27BkbpuSlutv1'
 
 describe('JAWSigner', () => {
   let signer: JAWSigner;
@@ -78,7 +77,6 @@ describe('JAWSigner', () => {
 
     // Setup mock communicator
     mockCommunicator = new Communicator({
-      apiKey: mockApiKey,
       metadata: mockMetadata,
       preference: { keysUrl: 'https://test.com' },
     }) as Mocked<Communicator>;
@@ -1777,41 +1775,22 @@ describe('JAWSigner', () => {
       expect(store.account.set).not.toHaveBeenCalled(); // Should not update accounts
     });
 
-    it('should return result value for wallet_addEthereumChain', async () => {
+    it('should throw unsupported method error for wallet_addEthereumChain', async () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_addEthereumChain',
         params: [{ chainId: '0xa', rpcUrls: ['https://optimism.rpc.com'] }],
       };
 
-      const mockResponse: RPCResponseMessage = {
-        id: mockMessageId,
-        requestId: mockMessageId,
-        correlationId: mockCorrelationId,
-        sender: 'peer-public-key-hex',
-        content: {
-          encrypted: mockEncryptedData,
-        },
-        timestamp: new Date(),
-      };
-
-      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
-
-      (decryptContent as Mock).mockResolvedValue({
-        result: {
-          value: null,
-        },
-      } as RPCResponse);
-
-      // Act
-      const result = await signer.request(request);
-
-      // Assert
-      expect(result).toBeNull();
+      // Act & Assert
+      await expect(signer.request(request)).rejects.toMatchObject({
+        code: 4200,
+        message: 'The requested method is not supported by this Ethereum provider.',
+      });
       expect(store.account.set).not.toHaveBeenCalled(); // Should not update accounts
     });
 
-    it('should return result value for wallet_watchAsset', async () => {
+    it('should throw unsupported method error for wallet_watchAsset', async () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_watchAsset',
@@ -1825,30 +1804,11 @@ describe('JAWSigner', () => {
         }],
       };
 
-      const mockResponse: RPCResponseMessage = {
-        id: mockMessageId,
-        requestId: mockMessageId,
-        correlationId: mockCorrelationId,
-        sender: 'peer-public-key-hex',
-        content: {
-          encrypted: mockEncryptedData,
-        },
-        timestamp: new Date(),
-      };
-
-      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
-
-      (decryptContent as Mock).mockResolvedValue({
-        result: {
-          value: true,
-        },
-      } as RPCResponse);
-
-      // Act
-      const result = await signer.request(request);
-
-      // Assert
-      expect(result).toBe(true);
+      // Act & Assert
+      await expect(signer.request(request)).rejects.toMatchObject({
+        code: 4200,
+        message: 'The requested method is not supported by this Ethereum provider.',
+      });
       expect(store.account.set).not.toHaveBeenCalled();
     });
   });

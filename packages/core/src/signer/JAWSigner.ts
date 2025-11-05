@@ -168,12 +168,13 @@ export class JAWSigner implements Signer {
             case 'eth_signTypedData_v3':
             case 'eth_signTypedData_v4':
             case 'eth_signTypedData':
-            case 'wallet_addEthereumChain':
-            case 'wallet_watchAsset':
             case 'wallet_sendCalls':
             case 'wallet_showCallsStatus':
             case 'wallet_grantPermissions':
                 return this.sendRequestToPopup(request);
+            case 'wallet_addEthereumChain':
+            case 'wallet_watchAsset':
+                throw standardErrors.provider.unsupportedMethod();
             case 'wallet_connect': {
                 // Return cached wallet connect response if available
                 const cachedResponse = await getCachedWalletConnectResponse();
