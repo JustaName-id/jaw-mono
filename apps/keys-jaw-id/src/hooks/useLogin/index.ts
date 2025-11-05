@@ -1,8 +1,10 @@
 import { useMutation } from "@tanstack/react-query";
-import { useAuth } from "../useAuth";
+import { Chain, PasskeyAccount } from "packages/core/src";
 import { PasskeyService } from "../../lib/passkey-service";
+import { useAuth } from "../useAuth";
 
 interface LoginParams {
+  chainId: Chain;
   credentialId: string;
   isImported?: boolean;
 }
@@ -11,7 +13,7 @@ export const useLogin = () => {
   const { refetch } = useAuth();
 
   return useMutation({
-    mutationFn: async ({ credentialId, isImported }: LoginParams) => {
+    mutationFn: async ({ chainId, credentialId, isImported }: LoginParams) => {
         try {
             const service = new PasskeyService({ localOnly: true });
             const result = await service.authenticateWithPasskey(credentialId);
@@ -20,11 +22,29 @@ export const useLogin = () => {
                 throw new Error('Passkey authentication failed');
             }
 
+            const smartAccount = await service.recreateSmartAccount(chainId);
+            const address = await smartAccount.getAddress();
+
+            service.setAuthState(address, credentialId);
+
+            if(isImported) {
+              const newAccount: PasskeyAccount = {
+                  credentialId: credentialId,
+                  publicKey: result.account.publicKey,
+                  isImported: isImported,
+                  username: result.account.username,
+                  creationDate: new Date().toISOString(),
+              };
+              
+              service.addAccountToList(newAccount);
+          }
+
             return {
-                address: result.address,
-                credentialId: result.credentialId,
-                account: result.account,
-                isLoggedIn: true
+              account: smartAccount,
+              address,
+              passkeyCredential: result.account.credentialId,
+              username: result.account.username,
+              creationDate: result.account.creationDate
             };
         } catch (error) {
             console.error('Login failed:', error);

@@ -5,8 +5,9 @@ import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } fro
 import { useState } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
 import { ChainId } from '../../utils/types';
-import { SUPPORTED_CHAINS } from '../../utils/constants';
-import { useIsSubnameAvailable, useJustaName } from '@justaname.id/react'
+import { SUPPORTED_CHAINS } from 'packages/core/src';
+// import { useIsSubnameAvailable, useJustaName } from '@justaname.id/react'
+import { Chain } from 'packages/core/src';
 
 
 interface SignInScreenProps {
@@ -31,13 +32,13 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
     console.log('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED')
     console.log('✅ OnboardingSection: ApiKey =', apiKey ? 'PROVIDED' : 'NOT PROVIDED')
 
-    const { justaname } = useJustaName();
-    const { isSubnameAvailable, isSubnameAvailableLoading } = useIsSubnameAvailable({
-        username,
-        ensDomain: ensConfig ?? '',
-        chainId: chainId as ChainId,
-        enabled: !!ensConfig && debouncedUsername.length > 2
-    })
+    // const { justaname } = useJustaName();
+    // const { isSubnameAvailable, isSubnameAvailableLoading } = useIsSubnameAvailable({
+    //     username,
+    //     ensDomain: ensConfig ?? '',
+    //     chainId: chainId as ChainId,
+    //     enabled: !!ensConfig && debouncedUsername.length > 2
+    // })
 
 
     const { mutateAsync: register, isPending: isCreatingPasskey } = useCreatePasskey();
@@ -49,6 +50,7 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
             }
             setLoggingInAccount(account.username);
             await login({
+                chainId: SUPPORTED_CHAINS.find(chain => chain.id === chainId) as Chain,
                 credentialId: account.credentialId,
                 isImported: account.isImported,
             })
@@ -74,23 +76,23 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
             if (ensConfig && chainId && apiKey && !!result.address) {
                 try {
                     console.log('📝 Registering subname:', username, 'on', ensConfig, 'chain', chainId)
-                    await justaname.subnames.addSubname(
-                        {
-                            username: username,
-                            ensDomain: ensConfig,
-                            chainId: chainId as ChainId,
-                            addresses: SUPPORTED_CHAINS.map(chain => ({
-                                address: result.address,
-                                coinType: (+chain.id + 2147483648).toString(),
-                            })),
-                            overrideSignatureCheck: true,
-                        },
-                        {
-                            xApiKey: apiKey,
-                            xAddress: result.address,
-                            xMessage: "",
-                        }
-                    )
+                    // await justaname.subnames.addSubname(
+                    //     {
+                    //         username: username,
+                    //         ensDomain: ensConfig,
+                    //         chainId: chainId as ChainId,
+                    //         addresses: SUPPORTED_CHAINS.map(chain => ({
+                    //             address: result.address,
+                    //             coinType: (+chain.id + 2147483648).toString(),
+                    //         })),
+                    //         overrideSignatureCheck: true,
+                    //     },
+                    //     {
+                    //         xApiKey: apiKey,
+                    //         xAddress: result.address,
+                    //         xMessage: "",
+                    //     }
+                    // )
                     console.log('✅ Subname registration would happen here (JustaName SDK not yet configured)')
                 } catch (error) {
                     console.error('❌ Failed to register subname:', error)
@@ -134,12 +136,12 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
         if (!ensConfig) {
             return 'Available';
         }
-        if (isSubnameAvailableLoading) {
-            return 'Checking availability...';
-        }
-        if (isSubnameAvailable?.isAvailable) {
-            return 'Available';
-        }
+        // if (isSubnameAvailableLoading) {
+        //     return 'Checking availability...';
+        // }
+        // if (isSubnameAvailable?.isAvailable) {
+        //     return 'Available';
+        // }
         return 'Unavailable';
     };
 
@@ -149,8 +151,9 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
 
         if (!ensConfig) return true;
 
-        if (isSubnameAvailableLoading) return false;
-        return isSubnameAvailable?.isAvailable === true;
+        // if (isSubnameAvailableLoading) return false;
+        // return isSubnameAvailable?.isAvailable === true;
+        return true;
     })();
 
 
@@ -174,7 +177,8 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
             isCreating={isCreatingPasskey}
             usernameValidation={{
                 isValid: isUsernameValid,
-                isLoading: isSubnameAvailableLoading,
+                // isLoading: isSubnameAvailableLoading,
+                isLoading: false,
                 message: getValidationMessage(),
             }}
             ensDomain={ensConfig ?? ''}
