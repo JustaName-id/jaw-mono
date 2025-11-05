@@ -1,8 +1,7 @@
 import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
 import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
-import { store, createInitialChains, createClients, ChainClients } from '../store/index.js';
-import { validateConfig } from './validateConfig.js';
+import { store, createInitialChains, ChainClients } from '../store/index.js';
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   apiKey: string;
@@ -31,7 +30,7 @@ const DEFAULT_PREFERENCE: JawProviderPreference = {
  *   apiKey: 'your-api-key',
  *   appName: 'My DApp',
  *   appLogoUrl: 'https://example.com/logo.png',
- *   appChainIds: [1, 137],
+ *   defaultChainId: 8453, // Optional: defaults to mainnet (1)
  * });
  *
  * const provider = jaw.getProvider();
@@ -40,14 +39,12 @@ const DEFAULT_PREFERENCE: JawProviderPreference = {
  */
 
 export function createJAWSDK(params: CreateJAWSDKOptions) {
-  validateConfig(params);
-
   const options: ConstructorOptions = {
     apiKey: params.apiKey,
     metadata: {
       appName: params.appName || 'DApp',
       appLogoUrl: params.appLogoUrl || null,
-      appChainIds: params.appChainIds || [1],
+      defaultChainId: params.defaultChainId,
     },
     preference: {
       ...DEFAULT_PREFERENCE,
@@ -69,12 +66,10 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
   store.chains.clear();
   ChainClients.setState({});
 
-
-  const appChainIds = options.metadata.appChainIds;
-  if (params.apiKey && appChainIds && appChainIds.length > 0) {
-    const initialChains = createInitialChains(appChainIds, params.apiKey, params.paymasterUrls);
+  if (params.apiKey) {
+    const initialChains = createInitialChains(params.apiKey, params.paymasterUrls);
     store.chains.set(initialChains);
-    createClients(initialChains);
+    // Clients will be created lazily when first accessed
   }
 
   let provider: ProviderInterface | null = null;

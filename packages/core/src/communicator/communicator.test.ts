@@ -48,7 +48,7 @@ function queueMessageEvent({
 const appMetadata: AppMetadata = {
     appName: 'Test App',
     appLogoUrl: null,
-    appChainIds: [1],
+    defaultChainId: 1,
 };
 
 const preference: JawProviderPreference = { keysUrl: JAW_KEYS_URL };

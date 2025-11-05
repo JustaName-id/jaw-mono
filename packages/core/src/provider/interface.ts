@@ -35,8 +35,8 @@ export interface AppMetadata {
     appName: string;
     /** Application logo image URL; favicon is used if unspecified */
     appLogoUrl: string | null;
-    /** Array of chainIds your dapp supports */
-    appChainIds: number[];
+    /** Default chain ID to use on first connection (defaults to mainnet if not specified) */
+    defaultChainId?: number;
 }
 
 export interface JawProviderPreference {

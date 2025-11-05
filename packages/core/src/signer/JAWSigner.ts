@@ -14,7 +14,7 @@ import { standardErrors } from '../errors/index.js';
 import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../messages/index.js';
 import { KeyManager } from '../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/index.js';
-import { SDKChain, createClients, correlationIds, store } from '../store/index.js';
+import { SDKChain, correlationIds, store } from '../store/index.js';
 import { WalletConnectResponse } from '../rpc/index.js';
 import {
     decryptContent,
@@ -47,16 +47,12 @@ export class JAWSigner implements Signer {
         this.keyManager = new KeyManager();
 
         const state = store.getState();
-        const { account, chains } = state;
+        const { account } = state;
 
         this.accounts = account.accounts ?? [];
         this.chain = account.chain ?? {
-            id: params.metadata.appChainIds?.[0] ?? 1,
+            id: params.metadata.defaultChainId ?? 1,
         };
-
-        if (chains) {
-            createClients(chains);
-        }
     }
 
     async handshake(args: RequestArguments) {
@@ -120,7 +116,18 @@ export class JAWSigner implements Signer {
                 }
                 case 'wallet_switchEthereumChain': {
                     assertParamsChainId(request.params);
-                    this.chain.id = Number(request.params[0].chainId);
+                    const chainId = ensureIntNumber(request.params[0].chainId);
+
+                    // Check if chain is supported
+                    const chains = store.getState().chains ?? [];
+                    const chain = chains.find(c => c.id === chainId);
+                    if (!chain) {
+                        throw standardErrors.provider.unsupportedMethod(
+                            `wallet_switchEthereumChain is not supported for chainID ${chainId}`
+                        );
+                    }
+
+                    this.chain.id = chainId;
                     return;
                 }
                 case 'wallet_connect': {
@@ -262,7 +269,7 @@ export class JAWSigner implements Signer {
         // reset the signer
         this.accounts = [];
         this.chain = {
-            id: metadata?.appChainIds?.[0] ?? 1,
+            id: metadata?.defaultChainId ?? 1,
         };
     }
 
@@ -277,11 +284,10 @@ export class JAWSigner implements Signer {
         const localResult = this.updateChain(chainId);
         if (localResult) return null;
 
-        const popupResult = await this.sendRequestToPopup(request);
-        if (popupResult === null) {
-            this.updateChain(chainId);
-        }
-        return popupResult;
+        // Chain not found in store - it's not supported
+        throw standardErrors.provider.unsupportedMethod(
+            `wallet_switchEthereumChain is not supported for target chainID ${chainId}`
+        );
     }
 
     private async handleGetCapabilitiesRequest(request: RequestArguments) {
@@ -297,8 +303,7 @@ export class JAWSigner implements Signer {
         }
 
         const state = store.getState();
-        const chains = state.chains ?? [];
-        const capabilities = state.account.capabilities ?? getCapabilities(chains);
+        const capabilities = state.account.capabilities ?? getCapabilities();
 
         // If no filter is provided, return all capabilities
         if (!filterChainIds || filterChainIds.length === 0) {

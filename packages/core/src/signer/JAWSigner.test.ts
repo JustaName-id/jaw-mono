@@ -72,7 +72,7 @@ describe('JAWSigner', () => {
     mockMetadata = {
       appName: 'Test App',
       appLogoUrl: 'https://test.com/logo.png',
-      appChainIds: [1, 137],
+      defaultChainId: 1,
     };
 
     // Setup mock communicator
@@ -1048,12 +1048,27 @@ describe('JAWSigner', () => {
   });
 
   describe('Unauthenticated Scenarios', () => {
-    it('should allow wallet_switchEthereumChain when unauthenticated', async () => {
+    it('should allow wallet_switchEthereumChain when unauthenticated if chain is supported', async () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new JAWSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
+      });
+
+      // Mock store with supported chains
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: undefined,
+          chain: undefined,
+          capabilities: undefined,
+        },
+        chains: [
+          { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+          { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
+        ],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
       });
 
       const request: RequestArguments = {
@@ -1549,7 +1564,7 @@ describe('JAWSigner', () => {
       vi.clearAllMocks();
     });
 
-    it('should send request to popup when chain not found in available chains', async () => {
+    it('should throw error when chain not found in available chains', async () => {
       // Arrange
       const switchRequest: RequestArguments = {
         method: 'wallet_switchEthereumChain',
@@ -1570,38 +1585,16 @@ describe('JAWSigner', () => {
         keys: {},
       });
 
-      const mockSwitchResponse: RPCResponseMessage = {
-        id: mockMessageId,
-        requestId: mockMessageId,
-        correlationId: mockCorrelationId,
-        sender: 'peer-public-key-hex',
-        content: {
-          encrypted: mockEncryptedData,
-        },
-        timestamp: new Date(),
-      };
-
-      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockSwitchResponse);
-
-      (decryptContent as Mock).mockResolvedValue({
-        result: {
-          value: null,
-        },
-        data: {
-          chains: {
-            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
-            137: { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
-            42: { id: 42, rpcUrl: 'https://kovan.rpc.com' },
-          },
-        },
-      } as RPCResponse);
-
-      // Act
-      const result = await signer.request(switchRequest);
-
-      // Assert
-      expect(result).toBeNull();
-      expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+      // Act & Assert
+      try {
+        await signer.request(switchRequest);
+        expect.fail('Should have thrown an error');
+      } catch (error: any) {
+        expect(error.code).toBe(4200);
+        expect(error.message).toContain('wallet_switchEthereumChain');
+        expect(error.message).toContain('42');
+      }
+      expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
     });
 
     it('should not trigger chainChanged callback if chain is already current', async () => {
@@ -2013,7 +2006,7 @@ describe('JAWSigner', () => {
       const metadata: AppMetadata = {
         appName: 'Test App',
         appLogoUrl: 'https://test.com/logo.png',
-        appChainIds: [42, 10],
+        defaultChainId: 42,
       };
 
       // Act
@@ -2025,10 +2018,10 @@ describe('JAWSigner', () => {
 
       // Assert
       expect((newSigner as any).accounts).toEqual([]);
-      expect((newSigner as any).chain).toEqual({ id: 42 }); // First chain from appChainIds
+      expect((newSigner as any).chain).toEqual({ id: 42 }); // From defaultChainId
     });
 
-    it('should initialize with chain 1 when no appChainIds provided', () => {
+    it('should initialize with chain 1 when no defaultChainId provided', () => {
       // Arrange
       vi.spyOn(store, 'getState').mockReturnValue({
         account: {
@@ -2044,7 +2037,7 @@ describe('JAWSigner', () => {
       const metadata: AppMetadata = {
         appName: 'Test App',
         appLogoUrl: 'https://test.com/logo.png',
-        appChainIds: [1], // Default to chain 1
+        // No defaultChainId provided - should default to chain 1
       };
 
       // Act
