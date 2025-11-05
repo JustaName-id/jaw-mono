@@ -15,6 +15,7 @@ export {
     type WalletConnectResponse,
     type ViemRPCParams,
     type ViemRPCReturnType,
+    getCapabilities,
     SUPPORTED_METHODS,
 } from './rpc/index.js';
 

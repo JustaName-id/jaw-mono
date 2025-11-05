@@ -1,39 +1,44 @@
 'use client'
 
 import { LocalStorageAccount, OnboardingDialog } from '@jaw/ui';
-import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey } from '../../hooks';
+import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
-// import { ChainId } from '@/utils/types';
-// import { SUPPORTED_CHAINS } from '@/utils/constants';
+import { ChainId } from '../../utils/types';
+import { SUPPORTED_CHAINS } from '../../utils/constants';
+import { useIsSubnameAvailable, useJustaName } from '@justaname.id/react'
 
 
 interface SignInScreenProps {
     onComplete: () => void
     onCreateAccount: () => void
+    ensConfig?: string
+    chainId?: number
+    apiKey?: string
 }
 
-export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps) {
+export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, apiKey }: SignInScreenProps) {
     const { accounts, refetchAccounts } = usePasskeys();
     const { mutateAsync: login } = useLogin();
     const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
+    const { refetch: refetchAuth } = useAuth();
     const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
 
     const [username, setUsername] = useState('')
-    // TODO: Re-enable subname check when implementing ENS subname registration
-    // const { hasRequiredSubname, refetch: refetchSubnames, walletAddress } = useSubnameCheck();
+    const [debouncedUsername] = useDebounceValue(username, 500)
 
-    // const [debouncedUsername, setDebouncedUsername] = useDebounceValue(username, 500)
-    // const { isSubnameAvailable, isSubnameAvailableLoading } = useIsSubnameAvailable({
-    //     username,
-    //     ensDomain: process.env.NEXT_PUBLIC_ENS_NAME ?? '',
-    //     chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID!) as ChainId,
-    //     enabled: debouncedUsername.length > 2
-    // })
-    const isSubnameAvailable = {
-        isAvailable: true,
-    };
-    const isSubnameAvailableLoading = false;
+    console.log('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED')
+    console.log('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED')
+    console.log('✅ OnboardingSection: ApiKey =', apiKey ? 'PROVIDED' : 'NOT PROVIDED')
+
+    const { justaname } = useJustaName();
+    const { isSubnameAvailable, isSubnameAvailableLoading } = useIsSubnameAvailable({
+        username,
+        ensDomain: ensConfig ?? '',
+        chainId: chainId as ChainId,
+        enabled: !!ensConfig && debouncedUsername.length > 2
+    })
+
 
     const { mutateAsync: register, isPending: isCreatingPasskey } = useCreatePasskey();
 
@@ -63,35 +68,41 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
                 return;
             }
 
-            // Always create passkey with username (don't check walletAddress)
-            const result = await register(username.trim())
+            const fullUsername = ensConfig ? `${username.trim()}.${ensConfig}` : username.trim();
+            const result = await register(fullUsername);
 
-            // TODO: Subname registration - implement later
-            // if (!!result.address) {
-            //     await justaname.subnames.addSubname(
-            //         {
-            //             username: username,
-            //             ensDomain: process.env.NEXT_PUBLIC_ENS_NAME ?? '',
-            //             chainId: parseInt(process.env.NEXT_PUBLIC_CHAIN_ID!) as ChainId,
-            //             addresses: SUPPORTED_CHAINS.map(chain => ({
-            //                 address: result.address,
-            //                 coinType: (+chain.id + 2147483648).toString(),
-            //             })),
-            //             overrideSignatureCheck: true,
-            //         },
-            //         {
-            //             xApiKey: process.env.NEXT_PUBLIC_API_KEY!,
-            //             xAddress: result.address,
-            //             xMessage: "",
-            //         }
-            //     )
-            //     await refetchSubnames()
-            // }
+            if (ensConfig && chainId && apiKey && !!result.address) {
+                try {
+                    console.log('📝 Registering subname:', username, 'on', ensConfig, 'chain', chainId)
+                    await justaname.subnames.addSubname(
+                        {
+                            username: username,
+                            ensDomain: ensConfig,
+                            chainId: chainId as ChainId,
+                            addresses: SUPPORTED_CHAINS.map(chain => ({
+                                address: result.address,
+                                coinType: (+chain.id + 2147483648).toString(),
+                            })),
+                            overrideSignatureCheck: true,
+                        },
+                        {
+                            xApiKey: apiKey,
+                            xAddress: result.address,
+                            xMessage: "",
+                        }
+                    )
+                    console.log('✅ Subname registration would happen here (JustaName SDK not yet configured)')
+                } catch (error) {
+                    console.error('❌ Failed to register subname:', error)
+                }
+            } else {
+                console.log('⏭️ Skipping subname registration - ENS config not provided or incomplete')
+            }
 
-            // Refetch accounts to update the UI with the newly created passkey
             await refetchAccounts();
 
-            // Call onComplete after successful account creation
+            await refetchAuth();
+
             onComplete();
         } catch (error) {
             console.error('❌ Failed to create account:', error)
@@ -100,20 +111,28 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
 
     const handleImportAccount = async () => {
         try {
-            const result = await passkeyLogin();
+            await passkeyLogin();
             onComplete();
         } catch (error) {
             console.error('❌ Import failed:', error);
         }
     };
 
-    // Build validation message
     const getValidationMessage = (): string => {
         if (username.includes('.')) {
             return 'Invalid format';
         }
+
         if (username.length > 0 && username.length <= 2) {
             return 'Minimum 3 characters';
+        }
+
+        if (username.length === 0) {
+            return '';
+        }
+
+        if (!ensConfig) {
+            return 'Available';
         }
         if (isSubnameAvailableLoading) {
             return 'Checking availability...';
@@ -124,11 +143,16 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
         return 'Unavailable';
     };
 
-    const isUsernameValid =
-        !username.includes('.') &&
-        username.length > 2 &&
-        !isSubnameAvailableLoading &&
-        isSubnameAvailable?.isAvailable;
+    const isUsernameValid: boolean = (() => {
+        if (username.includes('.')) return false;
+        if (username.length <= 2) return false;
+
+        if (!ensConfig) return true;
+
+        if (isSubnameAvailableLoading) return false;
+        return isSubnameAvailable?.isAvailable === true;
+    })();
+
 
     return (
         <OnboardingDialog
@@ -145,7 +169,6 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
             username={username}
             onUsernameChange={(value) => {
                 setUsername(value);
-                // setDebouncedUsername(value);
             }}
             onCreateAccount={handleCreateAccount}
             isCreating={isCreatingPasskey}
@@ -154,7 +177,7 @@ export function SignInScreen({ onComplete, onCreateAccount }: SignInScreenProps)
                 isLoading: isSubnameAvailableLoading,
                 message: getValidationMessage(),
             }}
-            ensDomain={process.env.NEXT_PUBLIC_ENS_NAME ?? ''}
+            ensDomain={ensConfig ?? ''}
         />
     );
 }

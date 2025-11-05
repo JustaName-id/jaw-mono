@@ -1,7 +1,7 @@
 // import { Records, useAddressSubnames } from '@justaname.id/react'
 import { useMemo } from 'react'
-import { useAuth } from '../useAuth'
 import { ChainId } from '../../utils/types'
+import { useAuth } from '../useAuth'
 
 interface UseSubnameCheckResult {
     hasRequiredSubname: boolean
@@ -13,26 +13,33 @@ interface UseSubnameCheckResult {
     refetch: () => void
 }
 
-export const useSubnameCheck = (): UseSubnameCheckResult => {
+interface UseSubnameCheckOptions {
+    ensName?: string
+    chainId?: ChainId
+    enabled?: boolean
+}
+
+export const useSubnameCheck = (options?: UseSubnameCheckOptions): UseSubnameCheckResult => {
     const { isAuthenticated, walletAddress, isLoading: isAuthLoading } = useAuth()
-    
-    const ensName = process.env.NEXT_PUBLIC_ENS_NAME ?? 'justanexample.eth'
-    const chainId = parseInt(process.env.NEXT_PUBLIC_CHAIN_ID!) as ChainId
 
+    const ensName = options?.ensName ?? process.env.NEXT_PUBLIC_ENS_NAME ?? 'justanexample.eth'
+    const chainId = options?.chainId ?? (parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1') as ChainId)
+    const enabled = options?.enabled ?? true
 
-    const shouldFetchSubnames = isAuthenticated && !!walletAddress
+    const shouldFetchSubnames = isAuthenticated && !!walletAddress && enabled
 
-    // const { 
-    //     addressSubnames, 
-    //     isAddressSubnamesPending, 
+    // const {
+    //     addressSubnames,
+    //     isAddressSubnamesPending,
     //     isAddressSubnamesFetching,
-    //     refetchAddressSubnames 
+    //     refetchAddressSubnames
     // } = useAddressSubnames({
     //     address: walletAddress || undefined,
     //     chainId: chainId,
     //     isClaimed: true,
     //     enabled: shouldFetchSubnames
     // })
+
 
 
     const processedSubnames = useMemo(() => {

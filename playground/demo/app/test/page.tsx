@@ -16,6 +16,7 @@ export default function TestPage() {
       appChainIds: [11155111, 84532], // Sepolia (11155111), Base Sepolia (84532)
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
+        ens: process.env.NEXT_PUBLIC_ENS_NAME || '',
       },
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
     })
@@ -67,10 +68,10 @@ export default function TestPage() {
       const errorMessage = error instanceof Error
         ? error.message
         : typeof error === 'object' && error !== null && 'message' in error
-        ? (error as { message: string }).message
-        : typeof error === 'object' && error !== null
-        ? JSON.stringify(error, null, 2)
-        : String(error);
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
       addLog(`Error connecting: ${errorMessage}`);
     }
   };
@@ -104,15 +105,15 @@ export default function TestPage() {
       addLog(`Balance for ${accounts[0]}: ${balance}`);
     } catch (error) {
       console.error('Balance error details:', error);
-      const errorMessage = error instanceof Error 
-        ? error.message 
+      const errorMessage = error instanceof Error
+        ? error.message
         : typeof error === 'object' && error !== null && 'message' in error
-        // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-        // @ts-ignore
-        ? (error as { message: string }).message
-        : typeof error === 'object' && error !== null
-        ? JSON.stringify(error, null, 2)
-        : String(error);
+          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+          // @ts-ignore
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
       addLog(`Error getting balance: ${errorMessage}`);
     }
   };
@@ -134,13 +135,13 @@ export default function TestPage() {
       addLog(`Signature: ${signature}`);
     } catch (error) {
       console.error('Sign message error details:', error);
-      const errorMessage = error instanceof Error 
-        ? error.message 
+      const errorMessage = error instanceof Error
+        ? error.message
         : typeof error === 'object' && error !== null && 'message' in error
-        ? (error as { message: string }).message
-        : typeof error === 'object' && error !== null
-        ? JSON.stringify(error, null, 2)
-        : String(error);
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
       addLog(`Error signing message: ${errorMessage}`);
     }
   };
@@ -389,10 +390,10 @@ export default function TestPage() {
       const errorMessage = error instanceof Error
         ? error.message
         : typeof error === 'object' && error !== null && 'message' in error
-        ? (error as { message: string }).message
-        : typeof error === 'object' && error !== null
-        ? JSON.stringify(error, null, 2)
-        : String(error);
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
       addLog(`Error getting capabilities: ${errorMessage}`);
     }
   };

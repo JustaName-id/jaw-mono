@@ -92,7 +92,7 @@ export function OnboardingDialog({
               value={username}
               onChange={(e) => onUsernameChange(e.target.value)}
               className="flex-1"
-            // right={<span className="text-sm font-bold text-foreground">{`.${ensDomain}`}</span>}
+              right={ensDomain ? <span className="text-sm font-bold text-foreground">{`.${ensDomain}`}</span> : undefined}
             />
             {isCreating ? (
               <Spinner className="w-10 h-10 animate-spin" />
@@ -105,11 +105,19 @@ export function OnboardingDialog({
               </Button>
             )}
           </div>
-          {/* {username.length > 0 && (
-            <span className="text-sm font-medium text-foreground">
-              {usernameValidation.message}
-            </span>
-          )} */}
+          {username.length > 0 && usernameValidation.message && (
+            <div className="flex items-center justify-between px-1">
+              <span className={`text-xs font-medium ${
+                usernameValidation.isLoading
+                  ? 'text-muted-foreground'
+                  : usernameValidation.isValid
+                    ? 'text-green-600'
+                    : 'text-red-600'
+              }`}>
+                {usernameValidation.message}
+              </span>
+            </div>
+          )}
         </div>
       </CardContent>
     </Card>

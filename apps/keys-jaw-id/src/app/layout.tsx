@@ -1,4 +1,5 @@
 import './global.css';
+import { JustaNameProviderWrapper } from './providers/justaname';
 import { ReactQueryProvider } from './providers/react-query';
 
 export const metadata = {
@@ -14,7 +15,9 @@ export default function RootLayout({
   return (
     <html lang="en">
       <ReactQueryProvider>
-        <body>{children}</body>
+        <JustaNameProviderWrapper>
+          <body>{children}</body>
+        </JustaNameProviderWrapper>
       </ReactQueryProvider>
     </html>
   )
