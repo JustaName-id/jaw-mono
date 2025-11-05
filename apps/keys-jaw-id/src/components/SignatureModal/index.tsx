@@ -140,6 +140,7 @@ export const SignatureModal = ({
       accountAddress={address}
       chainName={chainName}
       chainIcon={chainIcon}
+      chainId={chain.id}
       onSign={signMessage}
       onCancel={handleCancel}
       isProcessing={isProcessing}
