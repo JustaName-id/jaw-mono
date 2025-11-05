@@ -53,7 +53,6 @@ export const SUPPORTED_METHODS = [
   'net_version',
   'personal_ecRecover',
   'personal_sign',
-  'wallet_addEthereumChain',
   'wallet_connect',
   'wallet_getCallsStatus',
   'wallet_getCapabilities',
@@ -62,5 +61,4 @@ export const SUPPORTED_METHODS = [
   'wallet_sign',
   'wallet_showCallsStatus',
   'wallet_switchEthereumChain',
-  'wallet_watchAsset',
 ] as const;
