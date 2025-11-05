@@ -4,10 +4,11 @@ import { Button } from "../ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { DefaultDialog } from "../DefaultDialog";
 import { CopiedIcon, CopyIcon, WalletIcon } from "../../icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { formatEther } from "viem";
 import { TransactionDialogProps } from "./types";
 import { useIsMobile } from "../../hooks";
+import { getJustaNameInstance } from "../../utils/justaNameInstance";
 
 export const TransactionDialog = ({
   open,
@@ -29,10 +30,51 @@ export const TransactionDialog = ({
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
+  const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
 
   const totalTransactions = transactions.length;
   const isSingleTransaction = totalTransactions === 1;
   const currentTransaction = transactions[0];
+
+  // Initialize JustaName and resolve addresses
+  useEffect(() => {
+    const justaName = getJustaNameInstance();
+    
+    // Resolve wallet address
+    if (walletAddress && currentTransaction?.chainId) {
+      justaName.subnames.reverseResolve({
+        address: walletAddress as `0x${string}`,
+        chainId: currentTransaction.chainId,
+      }).then((result) => {
+        console.log('result', result);
+        if (result) {
+          setResolvedAddresses(prev => ({ ...prev, [walletAddress]: result }));
+        }
+      }).catch(() => {
+        // Silently fail if resolution fails
+      });
+    }
+
+    // Resolve transaction 'to' addresses
+    transactions.forEach((transaction) => {
+      if (transaction.to && transaction.chainId) {
+        justaName.subnames.reverseResolve({
+          address: transaction.to as `0x${string}`,
+          chainId: transaction.chainId,
+        }).then((result) => {
+          if (result) {
+            setResolvedAddresses(prev => ({ ...prev, [transaction.to]: result }));
+          }
+        }).catch(() => {
+          // Silently fail if resolution fails
+        });
+      }
+    });
+  }, [walletAddress, transactions, currentTransaction?.chainId]);
+
+  // Get resolved addresses or fallback to original
+  const resolvedWalletAddress = resolvedAddresses[walletAddress] || walletAddress;
+  const resolvedToAddress = currentTransaction?.to ? (resolvedAddresses[currentTransaction.to] || currentTransaction.to) : '';
 
   // Helper function to format value for display
   const formatTransactionValue = (value?: string) => {
@@ -117,7 +159,7 @@ export const TransactionDialog = ({
                   <p className="text-xs font-bold leading-[133%]">From</p>
                   <div className="flex flex-row items-center gap-1 min-w-0">
                     <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
-                    <p className="text-base font-normal text-ellipsis leading-[150%] truncate overflow-hidden">{walletAddress}</p>
+                    <p className="text-base font-normal text-ellipsis leading-[150%] truncate overflow-hidden">{resolvedWalletAddress}</p>
                   </div>
                 </div>
                 <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[70px]" />
@@ -126,7 +168,7 @@ export const TransactionDialog = ({
                   <div className="flex flex-row items-center gap-1 min-w-0">
                     <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
                     <p className="text-base font-normal text-ellipsis leading-[150%] truncate overflow-hidden">
-                      {currentTransaction?.to}
+                      {resolvedToAddress}
                     </p>
                   </div>
                 </div>
@@ -277,7 +319,7 @@ export const TransactionDialog = ({
                 <p className="text-xs font-bold leading-[133%] text-foreground mb-1">From</p>
                 <div className="flex flex-row items-center gap-1">
                   <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
-                  <p className="text-base font-normal text-ellipsis leading-[150%] truncate overflow-hidden">{walletAddress}</p>
+                  <p className="text-base font-normal text-ellipsis leading-[150%] truncate overflow-hidden">{resolvedWalletAddress}</p>
                 </div>
               </div>
 
@@ -297,7 +339,7 @@ export const TransactionDialog = ({
                             <div className="flex flex-row items-center gap-1">
                               <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
                               <p className="text-sm font-normal text-ellipsis leading-[150%] truncate overflow-hidden">
-                                {transaction.to}
+                                {resolvedAddresses[transaction.to] || transaction.to}
                               </p>
                             </div>
                           </div>

@@ -10,6 +10,7 @@ export interface SignatureDialogProps {
 
   accountAddress?: string;
   chainName?: string;
+  chainId?: number;
   chainIcon?: JSX.Element;
 
   // Actions

@@ -8,6 +8,7 @@
   },
   "private": true,
   "dependencies": {
+    "@justaname.id/sdk": "^0.2.204",
     "@justweb3/ui": "^0.0.142",
     "@tanstack/react-query": "^5.90.3",
     "axios": "1.12.2",
