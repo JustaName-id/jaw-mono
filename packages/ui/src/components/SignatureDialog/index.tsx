@@ -4,6 +4,8 @@ import { Button } from "../ui/button";
 import { DefaultDialog } from "../DefaultDialog";
 import { SignatureDialogProps } from "./types";
 import { useIsMobile } from "../../hooks";
+import { getJustaNameInstance } from "../../utils/justaNameInstance";
+import { useState, useEffect } from "react";
 
 
 export const SignatureDialog = ({
@@ -14,6 +16,7 @@ export const SignatureDialog = ({
   timestamp,
   accountAddress,
   chainName,
+  chainId,
   chainIcon,
   onSign,
   onCancel,
@@ -22,6 +25,27 @@ export const SignatureDialog = ({
   canSign,
 }: SignatureDialogProps) => {
   const isMobile = useIsMobile();
+  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+
+  // Resolve account address to human-readable name
+  useEffect(() => {
+    if (accountAddress && chainId) {
+      const justaName = getJustaNameInstance();
+      justaName.subnames.reverseResolve({
+        address: accountAddress as `0x${string}`,
+        chainId: chainId,
+      }).then((result) => {
+        if (result) {
+          setResolvedAddress(result);
+        }
+      }).catch(() => {
+        // Silently fail if resolution fails
+      });
+    }
+  }, [accountAddress, chainId]);
+
+  // Get resolved address or fallback to original
+  const displayAddress = resolvedAddress || accountAddress || '';
 
   // Format origin to display only domain (remove protocol)
   const formatOrigin = (url: string) => {
@@ -59,9 +83,8 @@ export const SignatureDialog = ({
           <p className="text-[30px] font-medium leading-[100%] text-foreground">
             Signature request
           </p>
-          {/* TODO: Reverse resolve address to ens name */}
           <p className="text-sm text-muted-foreground">
-            {accountAddress}
+            {displayAddress}
           </p>
         </div>
       }
