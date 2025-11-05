@@ -5,8 +5,9 @@ import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } fro
 import { useState } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
 import { ChainId } from '../../utils/types';
-import { SUPPORTED_CHAINS } from '../../utils/constants';
+import { SUPPORTED_CHAINS } from 'packages/core/src';
 import { useIsSubnameAvailable, useJustaName } from '@justaname.id/react'
+import { Chain } from 'packages/core/src';
 
 
 interface SignInScreenProps {
@@ -49,6 +50,7 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
             }
             setLoggingInAccount(account.username);
             await login({
+                chainId: SUPPORTED_CHAINS.find(chain => chain.id === chainId) as Chain,
                 credentialId: account.credentialId,
                 isImported: account.isImported,
             })
