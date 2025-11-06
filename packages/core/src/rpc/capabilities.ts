@@ -17,9 +17,9 @@ import { store } from '../store/index.js';
  * const capabilities = getCapabilities();
  * // Returns:
  * // {
- * //   '0x1': { atomicBatch: { status: 'supported' }, paymasterService: { supported: true } },
- * //   '0xaa36a7': { atomicBatch: { status: 'supported' } },
- * //   '0x2105': { atomicBatch: { status: 'supported' } },
+ * //   '0x1': { atomicBatch: { supported: true }, paymasterService: { supported: true } },
+ * //   '0xaa36a7': { atomicBatch: { supported: true } },
+ * //   '0x2105': { atomicBatch: { supported: true } },
  * //   // ... all supported chains
  * // }
  * ```
@@ -33,7 +33,7 @@ export function getCapabilities(): Record<`0x${string}`, Record<string, unknown>
 
         const chainCapabilities: Record<string, unknown> = {
             atomicBatch: {
-                status: 'supported',
+                supported: true,
             },
         };
 
