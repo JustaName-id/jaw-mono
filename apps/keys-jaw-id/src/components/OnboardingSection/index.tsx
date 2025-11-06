@@ -4,7 +4,6 @@ import { LocalStorageAccount, OnboardingDialog } from '@jaw/ui';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState } from 'react';
 import { useDebounceValue } from 'usehooks-ts';
-import { ChainId } from '../../utils/types';
 import { SUPPORTED_CHAINS } from 'packages/core/src';
 // import { useIsSubnameAvailable, useJustaName } from '@justaname.id/react'
 import { Chain } from 'packages/core/src';
@@ -177,7 +176,8 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
             isCreating={isCreatingPasskey}
             usernameValidation={{
                 isValid: isUsernameValid,
-                isLoading: isSubnameAvailableLoading,
+                // Not sure , how its used , just made this change to check.
+                isLoading: false,
                 message: getValidationMessage(),
             }}
             ensDomain={ensConfig ?? ''}

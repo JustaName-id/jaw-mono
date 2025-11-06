@@ -63,20 +63,7 @@ export class PasskeyService {
     return this.passkeyManager.checkAuth();
   }
 
-  disconnect(): void {
-    this.passkeyManager.logout();
-  }
 
-  setAuthState(address: Address, credentialId: string): void {
-    this.passkeyManager.storeAuthState(address, credentialId);
-  }
-
-  /**
-   * Get all stored passkey accounts
-   */
-  getAccounts(): PasskeyAccount[] {
-    return this.passkeyManager.fetchAccounts();
-  }
 
   /**
    * Get currently active account
@@ -120,14 +107,6 @@ export class PasskeyService {
       console.error('Failed to create passkey:', error);
       throw error;
     }
-  }
-
-  /**
-   * Add a passkey account to the stored list
-   * @param account - The passkey account to add to the stored list
-   */
-  addAccountToList(account: PasskeyAccount): void {
-    this.passkeyManager.addAccountToList(account);
   }
   
   /**
@@ -185,10 +164,7 @@ export class PasskeyService {
         transport: http(),
       });
 
-      const smartAccount = await toJustanAccount({
-        client,
-        owners: [webAuthnAccount],
-      });
+      const smartAccount = await createSmartAccount(webAuthnAccount, client);
       const address = getAddress(smartAccount.address);
       this.storeAddress(credentialId, address);
 
@@ -222,10 +198,7 @@ export class PasskeyService {
         publicKey: credential.publicKey,
       },
     });
-    const smartAccount = await toJustanAccount({
-      client,
-      owners: [webAuthnAccount],
-    });
+    const smartAccount = await createSmartAccount(webAuthnAccount, client);
     const address = getAddress(smartAccount.address);
     this.storeAddress(credential.id, address);
 
@@ -244,20 +217,6 @@ export class PasskeyService {
       address: address,
       account: newAccount,
     };
-  }
-
-  /**
-   * Logout current user
-   */
-  logout(): void {
-    this.passkeyManager.logout();
-  }
-
-  /**
-   * Clear all stored data
-   */
-  clearAll(): void {
-    this.passkeyManager.clearAll();
   }
 
   /**
