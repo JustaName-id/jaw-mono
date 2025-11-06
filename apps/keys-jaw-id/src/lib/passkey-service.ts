@@ -63,6 +63,14 @@ export class PasskeyService {
     return this.passkeyManager.checkAuth();
   }
 
+  disconnect(): void {
+    this.passkeyManager.logout();
+  }
+
+  setAuthState(address: Address, credentialId: string): void {
+    this.passkeyManager.storeAuthState(address, credentialId);
+  }
+
   /**
    * Get all stored passkey accounts
    */
@@ -114,6 +122,14 @@ export class PasskeyService {
     }
   }
 
+  /**
+   * Add a passkey account to the stored list
+   * @param account - The passkey account to add to the stored list
+   */
+  addAccountToList(account: PasskeyAccount): void {
+    this.passkeyManager.addAccountToList(account);
+  }
+  
   /**
    * Authenticate with existing passkey
    * @param specificCredentialId - specific credential ID to authenticate with
