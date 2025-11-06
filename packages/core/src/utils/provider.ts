@@ -10,8 +10,8 @@ import {
  * @param apiKey The API key to append to the URL
  * @returns The constructed URL with the API key query parameter
  */
-export function buildJawRpcUrl(baseUrl: string, apiKey: string): string {
-    return `${baseUrl}?api-key=${apiKey}`;
+export function buildHandleJawRpcUrl(baseUrl: string, apiKey: string): string {
+    return `${baseUrl}/handle?api-key=${apiKey}`;
 }
 
 export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string) {

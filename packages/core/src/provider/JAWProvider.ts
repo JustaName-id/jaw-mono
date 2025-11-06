@@ -13,7 +13,7 @@ import {
     RequestArguments,
 } from './interface.js';
 
-import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest, buildJawRpcUrl } from '../utils/index.js';
+import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest, buildHandleJawRpcUrl } from '../utils/index.js';
 
 import { correlationIds } from '../store/index.js';
 
@@ -106,7 +106,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     }
                     case 'wallet_getAssets':
                     case 'wallet_getCallsStatus': {
-                        const rpcUrl = buildJawRpcUrl(JAW_RPC_URL, this.apiKey);
+                        const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, this.apiKey);
                         const result = await fetchRPCRequest(args, rpcUrl);
                         return result as T;
                     }

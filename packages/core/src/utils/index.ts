@@ -16,7 +16,7 @@ export {
 export {
     fetchRPCRequest,
     checkErrorForInvalidRequestArgs,
-    buildJawRpcUrl
+    buildHandleJawRpcUrl
 } from "./provider.js"
 
 export {
