@@ -13,7 +13,7 @@ import {
     RequestArguments,
 } from './interface.js';
 
-import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest } from '../utils/index.js';
+import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest, buildJawRpcUrl } from '../utils/index.js';
 
 import { correlationIds } from '../store/index.js';
 
@@ -30,13 +30,15 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     // @ts-expect-error - Will be used in future implementation
     private readonly preference: JawProviderPreference;
     private readonly communicator: Communicator;
+    private readonly apiKey: string;
 
     private signer: Signer | null = null;
 
-    constructor({ metadata, preference }: Readonly<ConstructorOptions>) {
+    constructor({ metadata, preference, apiKey }: Readonly<ConstructorOptions>) {
         super();
         this.metadata = metadata;
         this.preference = preference;
+        this.apiKey = apiKey;
         this.communicator = new Communicator({
             metadata,
             preference,
@@ -102,8 +104,10 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         }
                         return result as T;
                     }
+                    case 'wallet_getAssets':
                     case 'wallet_getCallsStatus': {
-                        const result = await fetchRPCRequest(args, JAW_RPC_URL);
+                        const rpcUrl = buildJawRpcUrl(JAW_RPC_URL, this.apiKey);
+                        const result = await fetchRPCRequest(args, rpcUrl);
                         return result as T;
                     }
                     case 'net_version': {
