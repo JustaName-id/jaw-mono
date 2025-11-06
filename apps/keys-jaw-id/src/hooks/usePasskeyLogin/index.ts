@@ -10,19 +10,16 @@ export const usePasskeyLogin = () => {
         try {
             const service = new PasskeyService({ localOnly: true });
             // Call without credentialId to use the first available passkey
-            const result = await service.authenticateWithPasskey();
+            const result = await service.importPasskeyAccount();
 
             if (!result) {
                 throw new Error('No stored passkey found or authentication failed');
             }
 
             return {
-                address: result.address,
-                credentialId: result.credentialId,
-                account: result.account,
-                isLoggedIn: true
+              address: result.address,
+              credentialId: result.credentialId,
             };
-
         } catch (error) {
             console.error('Passkey login failed:', error);
             throw error;

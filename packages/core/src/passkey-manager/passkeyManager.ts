@@ -6,7 +6,7 @@ import {
   AuthState,
 } from './types.js';
 import type { JawProviderPreference } from '../provider/index.js';
-import { registerPasskeyInBackend, lookupPasskeyFromBackend, WebAuthnAuthenticationResult , authenticateWithWebAuthnUtils, createPasskeyUtils} from './utils.js';
+import { registerPasskeyInBackend, lookupPasskeyFromBackend, WebAuthnAuthenticationResult , authenticateWithWebAuthnUtils, createPasskeyUtils, ImportWebAuthnAuthenticationResult, importPasskeyUtils} from './utils.js';
 import {JAW_PASSKEYS_URL} from "../constants.js";
 import type { WebAuthnAccount } from "viem/account-abstraction";
 
@@ -158,15 +158,24 @@ export class PasskeyManager {
    */
 
    async authenticateWithWebAuthn(
-    credentialId: string,
     rpId: string,
+    credentialId: string,
     options?: {
       userVerification?: UserVerificationRequirement;
       timeout?: number;
       transports?: AuthenticatorTransport[];
     }
   ): Promise<WebAuthnAuthenticationResult> {
-    return authenticateWithWebAuthnUtils(credentialId, rpId, options);
+   return authenticateWithWebAuthnUtils( rpId, credentialId, options);
+  }
+
+  /**
+   * Import a passkey account from the backend
+   * @returns ImportWebAuthnAuthenticationResult
+   * @throws {PasskeyLookupError} If backend lookup fails or passkey not found
+   */
+  async importPasskeyAccount(): Promise<ImportWebAuthnAuthenticationResult> {
+    return importPasskeyUtils();
   }
 
   /**
