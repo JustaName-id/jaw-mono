@@ -13,7 +13,10 @@ export type {
 export {
   registerPasskeyInBackend,
   lookupPasskeyFromBackend,
+  authenticateWithWebAuthn,
   PasskeyRegistrationError,
   PasskeyLookupError,
+  WebAuthnAuthenticationError,
+  type WebAuthnAuthenticationResult,
 } from './utils.js';
 

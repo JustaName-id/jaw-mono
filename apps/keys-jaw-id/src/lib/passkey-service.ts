@@ -1,4 +1,4 @@
-import { PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation } from '@jaw.id/core';
+import { PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation, authenticateWithWebAuthn } from '@jaw.id/core';
 import type { Address } from 'viem';
 import { createWebAuthnCredential, toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, createPublicClient, http } from 'viem';
@@ -17,6 +17,7 @@ export interface PasskeyAuthenticationResult {
   credentialId: string;
   address: Address;
   account: PasskeyAccount;
+  challenge?: Uint8Array;
 }
 
 /**
@@ -194,10 +195,10 @@ export class PasskeyService {
 
   /**
    * Authenticate with existing passkey
-   * @param specificCredentialId - Optional specific credential ID to authenticate with
+   * @param specificCredentialId - specific credential ID to authenticate with
    * @returns Authentication result with address and account
    */
-  async authenticateWithPasskey(specificCredentialId?: string): Promise<PasskeyAuthenticationResult> {
+  async authenticateWithPasskey(specificCredentialId: string): Promise<PasskeyAuthenticationResult> {
     if (!this.isWebAuthnSupported()) {
       throw new Error('WebAuthn is not supported in this browser');
     }
@@ -214,54 +215,43 @@ export class PasskeyService {
       console.log('🔍 Found accounts:', existingAccounts.length);
       console.log('🌐 Using rpId:', this.rpId);
 
-      // For local development, skip WebAuthn ceremony and use first account
-      // This avoids rpId and credential format issues
-      let account: PasskeyAccount;
-
-      if (specificCredentialId) {
-        const found = existingAccounts.find(acc => acc.credentialId === specificCredentialId);
-        if (!found) {
-          throw new Error(`Passkey with ID ${specificCredentialId} not found`);
-        }
-        account = found;
-      } else {
-        // Use first account
-        account = existingAccounts[0];
+      // Filter passkey data from found accounts
+      const passkeyData = existingAccounts.find(acc => acc.credentialId === specificCredentialId);
+      if (!passkeyData) {
+        throw new Error(`Passkey with ID ${specificCredentialId} not found`);
       }
 
-      console.log('✅ Using account:', account.username, account.credentialId);
+      console.log('✅ Using account:', passkeyData.username, specificCredentialId);
 
-      // Try to get cached address from localStorage (stored during passkey creation)
-      let address: Address;
-      const cachedAddress = this.getAddress(account.credentialId);
-
-      if (cachedAddress) {
-        // Use the address that was stored during passkey creation
-        address = cachedAddress;
-        console.log('✅ Using cached address from storage:', address);
-      } else {
-        // Fallback for accounts created before address caching was implemented
-        const authState = this.passkeyManager.checkAuth();
-
-        if (authState.isAuthenticated && authState.address) {
-          address = authState.address as Address;
-          console.log('✅ Using address from auth state:', address);
-        } else {
-          // Last resort: generate a deterministic address from the public key
-          // This is for development only
-          const publicKeyHash = account.publicKey.slice(0, 42) as Address;
-          address = publicKeyHash;
-          console.log('⚠️ Using deterministic address (dev mode):', address);
+      // Perform WebAuthn authentication using core SDK
+      const { challenge } = await authenticateWithWebAuthn(
+        specificCredentialId,
+        this.rpId,
+        {
+          userVerification: "preferred",
+          timeout: 60000,
+          transports: ["internal", "hybrid"],
         }
+      );
+
+      // Get cached address from localStorage (stored during passkey creation)
+      const cachedAddress = this.getAddress(specificCredentialId);
+
+      if (!cachedAddress) {
+        throw new Error(`Address not found for credential ID: ${specificCredentialId}. Please recreate the passkey.`);
       }
+
+      const address: Address = cachedAddress;
+      console.log('✅ Using cached address from storage:', address);
 
       // Update auth state
-      this.passkeyManager.storeAuthState(address, account.credentialId);
+      this.passkeyManager.storeAuthState(address, specificCredentialId);
 
       return {
-        credentialId: account.credentialId,
+        credentialId: specificCredentialId,
         address,
-        account,
+        account: passkeyData,
+        challenge,
       };
     } catch (error) {
       console.error('Failed to authenticate with passkey:', error);

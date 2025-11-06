@@ -9,7 +9,7 @@ export interface UseCreatePasskeyResult {
 export function useCreatePasskey() {
   const mutation = useMutation({
     mutationFn: async (username: string): Promise<UseCreatePasskeyResult> => {
-      const service = new PasskeyService({ localOnly: true });
+      const service = new PasskeyService();
       const result = await service.createPasskey(username);
 
       return {

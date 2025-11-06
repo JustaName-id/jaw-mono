@@ -2,6 +2,89 @@ import { restCall } from "../api/index.js";
 import type { PasskeyRegistrationRequest, PasskeyLookupResponse } from "./types.js";
 
 /**
+ * WebAuthn authentication result
+ */
+export interface WebAuthnAuthenticationResult {
+  credential: PublicKeyCredential;
+  challenge: Uint8Array;
+}
+
+/**
+ * Custom error for WebAuthn authentication failures
+ */
+export class WebAuthnAuthenticationError extends Error {
+  constructor(message: string, public override readonly cause?: unknown) {
+    super(message);
+    this.name = 'WebAuthnAuthenticationError';
+  }
+}
+
+/**
+ * Authenticate with a WebAuthn passkey
+ * @param credentialId - The base64url encoded credential ID
+ * @param rpId - The relying party identifier (e.g., domain name)
+ * @param options - Optional authentication options
+ * @returns WebAuthn authentication result with credential and challenge
+ * @throws {WebAuthnAuthenticationError} If authentication fails
+ */
+export async function authenticateWithWebAuthn(
+  credentialId: string,
+  rpId: string,
+  options?: {
+    userVerification?: UserVerificationRequirement;
+    timeout?: number;
+    transports?: AuthenticatorTransport[];
+  }
+): Promise<WebAuthnAuthenticationResult> {
+  // Check if WebAuthn is supported
+  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+    throw new WebAuthnAuthenticationError('WebAuthn is not supported in this environment');
+  }
+
+  try {
+    // Convert credentialId from base64url to binary format
+    const base64 = credentialId.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedBase64 = base64 + "==".substring(0, (4 - (base64.length % 4)) % 4);
+    const credentialIdArray = Uint8Array.from(atob(paddedBase64), (c) => c.charCodeAt(0));
+
+    // Generate challenge
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+
+    // Perform WebAuthn authentication
+    const credential = (await navigator.credentials.get({
+      publicKey: {
+        challenge: challenge,
+        rpId: rpId,
+        allowCredentials: [{
+          id: credentialIdArray,
+          type: "public-key",
+          transports: options?.transports ?? ["internal", "hybrid"],
+        }],
+        userVerification: options?.userVerification ?? "preferred",
+        timeout: options?.timeout ?? 60000,
+      },
+    })) as PublicKeyCredential | null;
+
+    if (!credential) {
+      throw new WebAuthnAuthenticationError("Failed to authenticate with specified passkey");
+    }
+
+    return {
+      credential,
+      challenge,
+    };
+  } catch (error) {
+    if (error instanceof WebAuthnAuthenticationError) {
+      throw error;
+    }
+    throw new WebAuthnAuthenticationError(
+      `WebAuthn authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
+    );
+  }
+}
+
+/**
  * Custom error for passkey registration failures
  */
 export class PasskeyRegistrationError extends Error {
