@@ -150,7 +150,7 @@ export async function importPasskeyUtils(): Promise<ImportWebAuthnAuthentication
     String.fromCharCode(...new Uint8Array(credential.rawId))
   ).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
 
-  const passkeyData = await lookupPasskeyFromBackend(credentialIdBase64, 'H6BIeCMIpFjX56JiMTsrqkvK245girZQ');
+  const passkeyData = await lookupPasskeyFromBackend(credentialIdBase64);
 
   return {
     name: passkeyData.displayName || "Passkey",
