@@ -25,19 +25,7 @@ export const useLogin = () => {
             const smartAccount = await service.recreateSmartAccount(chainId);
             const address = await smartAccount.getAddress();
 
-            service.setAuthState(address, credentialId);
-
-            if(isImported) {
-              const newAccount: PasskeyAccount = {
-                  credentialId: credentialId,
-                  publicKey: result.account.publicKey,
-                  isImported: isImported,
-                  username: result.account.username,
-                  creationDate: new Date().toISOString(),
-              };
-              
-              service.addAccountToList(newAccount);
-          }
+            service.storeAuthState(address, credentialId);
 
             return {
               account: smartAccount,

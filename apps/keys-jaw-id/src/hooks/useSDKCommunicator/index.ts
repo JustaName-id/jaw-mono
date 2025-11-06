@@ -359,12 +359,12 @@ export function useSDKCommunicator() {
       console.log('🔓 DECRYPTED REQUEST:');
       console.log('   Action Method:', decrypted.action.method);
       console.log('   Action Params:', decrypted.action.params);
-      console.log('   Chain ID:', decrypted.chainId);
+      console.log('   Chain ID:', decrypted.chain.id);
 
       setSDKState(prev => ({ ...prev, currentRequest: request }));
 
       const { method, params } = decrypted.action;
-      const { chainId } = decrypted;
+      const { id: chainId } = decrypted.chain;
 
       console.log(`🔧 Routing encrypted method: ${method} on chain ${chainId}`);
 

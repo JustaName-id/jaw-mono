@@ -13,8 +13,8 @@ export interface LocalStorageAccount {
 
 // Function to fetch accounts using PasskeyService
 const fetchAccountsFromLocalStorage = (): PasskeyAccount[] => {
-  const service = new PasskeyService({ localOnly: true });
-  return service.getAccounts();
+  const service = new PasskeyService();
+  return service.fetchAccounts();
 };
 
 export const usePasskeys = () => {
@@ -26,7 +26,7 @@ export const usePasskeys = () => {
   });
 
   const getSmartAccount = useCallback(async (chain: chain) => {
-    const service = new PasskeyService({ localOnly: true });
+    const service = new PasskeyService();
     const smartAccount = await service.recreateSmartAccount(chain);
     return smartAccount;
   }, []);

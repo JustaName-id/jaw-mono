@@ -137,7 +137,6 @@ export default function KeysJawIdApp() {
 
         // Handle handshake (unencrypted initial request)
         if ('handshake' in rpcMessage.content) {
-          console.log('🤝 Received handshake request');
           handleHandshakeRequest(rpcMessage);
         }
 
@@ -214,6 +213,11 @@ export default function KeysJawIdApp() {
       // Determine request type
       const method = request.content.handshake.method;
       const params = request.content.handshake.params;
+      const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
+
+      if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
+        setApiKey(apiKeyFromProvider);
+      }
 
       console.log('📋 Handshake method:', method, 'params:', params);
 

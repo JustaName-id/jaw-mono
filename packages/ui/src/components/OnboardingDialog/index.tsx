@@ -32,6 +32,9 @@ export function OnboardingDialog({
   const [username, setUsername] = useState('')
   const [debouncedUsername, setDebouncedUsername] = useState(username);
 
+  // Error state
+  const [error, setError] = useState<string | null>(null);
+
   // Debounce username input
   useEffect(() => {
     const handler = setTimeout(() => {
@@ -110,6 +113,9 @@ export function OnboardingDialog({
   }, [debouncedUsername, username, ensDomain, chainId]);
 
   const handleCreateAccountClick = async () => {
+    // Clear any previous errors
+    setError(null);
+
     try {
       const address = await onCreateAccount(username);
 
@@ -137,17 +143,19 @@ export function OnboardingDialog({
             }
           );
 
-          console.log('✅ Subname registered successfully:', username + '.' + ensDomain);
-        } catch (error) {
-          console.error('❌ Failed to register subname:', error);
-          throw new Error(`Failed to register subname: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        } catch (subnameError) {
+          const errorMessage = `Failed to register subname: ${subnameError instanceof Error ? subnameError.message : 'Unknown error'}`;
+          console.error('❌ SUBNAME ERROR:', errorMessage, subnameError);
+          setError(errorMessage);
+          return; // Don't complete if subname registration fails
         }
       }
 
       await onAccountCreationComplete();
     } catch (error) {
-      console.error('❌ Account creation failed:', error);
-      throw error;
+      const errorMessage = `Account creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error('❌ ACCOUNT CREATION ERROR:', errorMessage, error);
+      setError(errorMessage);
     }
   };
 
@@ -227,14 +235,20 @@ export function OnboardingDialog({
               <Spinner className="w-10 h-10 animate-spin" />
             ) : (
               <Button
-                onClick={handleCreateAccountClick}
+                onClick={async () => {
+                  try {
+                    await handleCreateAccountClick();
+                  } catch (err) {
+                    console.error('❌ Button onClick caught error:', err);
+                  }
+                }}
                 disabled={!isValid || isLoading}
               >
                 Create Account
               </Button>
             )}
           </div>
-          {username.length > 0 && message && (
+          {username.length > 0 && message && !error && (
             <div className="flex items-center justify-between px-1">
               <span className={`text-xs font-medium ${isLoading
                 ? 'text-muted-foreground'
@@ -244,6 +258,20 @@ export function OnboardingDialog({
                 }`}>
                 {message}
               </span>
+            </div>
+          )}
+          {error && (
+            <div className="flex flex-col gap-2 px-1 py-2 bg-red-50 border border-red-200 rounded-md">
+              <span className="text-xs font-medium text-red-600">
+                {error}
+              </span>
+              <Button
+                onClick={() => setError(null)}
+                variant="ghost"
+                className="h-6 text-xs text-red-600 hover:text-red-700 hover:bg-red-100"
+              >
+                Dismiss
+              </Button>
             </div>
           )}
         </div>

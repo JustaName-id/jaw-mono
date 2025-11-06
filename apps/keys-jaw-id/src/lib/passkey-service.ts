@@ -1,8 +1,8 @@
-import { PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation } from '@jaw.id/core';
-import type { Address } from 'viem';
-import { createWebAuthnCredential, toWebAuthnAccount } from 'viem/account-abstraction';
+import { PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation, createSmartAccount} from '@jaw.id/core';
+import type { Address, PublicClient } from 'viem';
+import {  toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, createPublicClient, http } from 'viem';
-import { baseSepolia } from 'viem/chains';
+import { mainnet } from 'viem/chains';
 import {type Chain } from '@jaw.id/core';
 import { getBundlerClient } from '@jaw.id/core';
 
@@ -17,6 +17,7 @@ export interface PasskeyAuthenticationResult {
   credentialId: string;
   address: Address;
   account: PasskeyAccount;
+  challenge?: Uint8Array;
 }
 
 /**
@@ -27,8 +28,6 @@ export class PasskeyService {
   private passkeyManager: PasskeyManager;
   private rpId: string;
   private rpName: string;
-  private localOnly: boolean;
-  private static ADDRESS_STORAGE_KEY = 'jaw_passkey_addresses';
 
   constructor(preference?: { serverUrl?: string; apiKey?: string; localOnly?: boolean }) {
     this.passkeyManager = new PasskeyManager(undefined, preference);
@@ -36,38 +35,22 @@ export class PasskeyService {
     // For production, use your actual domain
     this.rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
     this.rpName = 'JAW Wallet';
-    // Enable local-only mode for development (skips backend registration)
-    this.localOnly = preference?.localOnly ?? true;
+  }
+
+  private getMainnetPublicClient(): PublicClient {
+    return createPublicClient({
+      chain: mainnet,
+      transport: http("https://eth.drpc.org"),
+    });
   }
 
   /**
    * Store address for a credential ID
    */
-  storeAddress(credentialId: string, address: Address): void {
-    if (typeof window === 'undefined') return;
-
-    const addresses = this.getAddressMap();
-    addresses[credentialId] = address;
-    localStorage.setItem(PasskeyService.ADDRESS_STORAGE_KEY, JSON.stringify(addresses));
+  private storeAddress(credentialId: string, address: Address): void {
+      this.passkeyManager.storeAuthState(address, credentialId);
   }
 
-  /**
-   * Get address for a credential ID
-   */
-  private getAddress(credentialId: string): Address | null {
-    const addresses = this.getAddressMap();
-    return addresses[credentialId] || null;
-  }
-
-  /**
-   * Get all address mappings
-   */
-  private getAddressMap(): Record<string, Address> {
-    if (typeof window === 'undefined') return {};
-
-    const stored = localStorage.getItem(PasskeyService.ADDRESS_STORAGE_KEY);
-    return stored ? JSON.parse(stored) : {};
-  }
 
   /**
    * Check if WebAuthn is supported
@@ -87,20 +70,16 @@ export class PasskeyService {
     return this.passkeyManager.checkAuth();
   }
 
-  disconnect(): void {
-    this.passkeyManager.logout();
-  }
-
-  setAuthState(address: Address, credentialId: string): void {
-    this.passkeyManager.storeAuthState(address, credentialId);
-  }
-
-  /**
+ /**
    * Get all stored passkey accounts
    */
-  getAccounts(): PasskeyAccount[] {
-    return this.passkeyManager.fetchAccounts();
-  }
+ fetchAccounts(): PasskeyAccount[] {
+  return this.passkeyManager.fetchAccounts();
+}
+
+storeAuthState(address: Address, credentialId: string): void {
+  this.passkeyManager.storeAuthState(address, credentialId);
+}
 
   /**
    * Get currently active account
@@ -120,107 +99,45 @@ export class PasskeyService {
     }
 
     try {
-      // Use viem's createWebAuthnCredential to create the passkey
-      const credential = await createWebAuthnCredential({
-        name: username,
-        rp: {
-          id: this.rpId,
-          name: this.rpName,
-        },
-      });
+    
+      const { credentialId, publicKey, webAuthnAccount , passkeyAccount} = await this.passkeyManager.createPasskey(username, this.rpId, this.rpName);
 
-      // Create WebAuthn account from credential
-      const webAuthnAccount = toWebAuthnAccount({
-        credential,
-      });
+      const client = this.getMainnetPublicClient();
 
-      const credentialId = credential.id;
-      const publicKey = credential.publicKey;
+      console.log('🔍 Creating smart account for chain:', mainnet);
+      const smartAccount = await createSmartAccount(webAuthnAccount, client);
 
-      // Create a public client to interact with the smart account factory
-      const client = createPublicClient({
-        chain: baseSepolia,
-        transport: http(),
-      });
-
-      // Use toJustanAccount to derive the smart contract wallet address
-      const smartAccount = await toJustanAccount({
-        client,
-        owners: [webAuthnAccount],
-      });
-
+      console.log('🔍 Smart account created:', smartAccount);
       const address = getAddress(smartAccount.address);
+      console.log('🔍 Smart account created for address:', address);
 
-      // Store address mapping for later retrieval
       this.storeAddress(credentialId, address);
-
-      // Store in PasskeyManager
-      if (this.localOnly) {
-        // Local-only mode: skip backend registration
-        console.log('Local-only mode: Skipping backend registration');
-
-        // Store auth state
-        this.passkeyManager.storeAuthState(address, credentialId);
-
-        // Create and store account locally
-        const newAccount: PasskeyAccount = {
-          username: username.trim(),
-          credentialId,
-          publicKey,
-          creationDate: new Date().toISOString(),
-          isImported: false,
-        };
-
-        this.passkeyManager.addAccountToList(newAccount);
-      } else {
-        // Production mode: register with backend
-        await this.passkeyManager.storePasskeyAccount(
-          username,
-          credentialId,
-          publicKey,
-          address,
-          false // not dev mode
-        );
-      }
-
-      const account = this.passkeyManager.getAccountByCredentialId(credentialId);
-      if (!account) {
-        throw new Error('Failed to retrieve stored account');
-      }
 
       return {
         credentialId,
         publicKey,
         address,
-        account,
+        account: passkeyAccount,
       };
     } catch (error) {
       console.error('Failed to create passkey:', error);
       throw error;
     }
   }
-
-  /**
-   * Add a passkey account to the stored list
-   * @param account - The passkey account to add to the stored list
-   */
-  addAccountToList(account: PasskeyAccount): void {
-    this.passkeyManager.addAccountToList(account);
-  }
   
   /**
    * Authenticate with existing passkey
-   * @param specificCredentialId - Optional specific credential ID to authenticate with
+   * @param specificCredentialId - specific credential ID to authenticate with
    * @returns Authentication result with address and account
    */
-  async authenticateWithPasskey(specificCredentialId?: string): Promise<PasskeyAuthenticationResult> {
+  async authenticateWithPasskey(credentialId: string): Promise<PasskeyAuthenticationResult> {
     if (!this.isWebAuthnSupported()) {
       throw new Error('WebAuthn is not supported in this browser');
     }
 
     try {
       // Get existing passkeys
-      const existingAccounts = this.passkeyManager.fetchAccounts();
+      const existingAccounts = this.fetchAccounts();
 
       // If no accounts exist, throw error
       if (existingAccounts.length === 0) {
@@ -230,54 +147,46 @@ export class PasskeyService {
       console.log('🔍 Found accounts:', existingAccounts.length);
       console.log('🌐 Using rpId:', this.rpId);
 
-      // For local development, skip WebAuthn ceremony and use first account
-      // This avoids rpId and credential format issues
-      let account: PasskeyAccount;
-
-      if (specificCredentialId) {
-        const found = existingAccounts.find(acc => acc.credentialId === specificCredentialId);
-        if (!found) {
-          throw new Error(`Passkey with ID ${specificCredentialId} not found`);
-        }
-        account = found;
-      } else {
-        // Use first account
-        account = existingAccounts[0];
+      // Filter passkey data from found accounts
+      const passkeyData = existingAccounts.find(acc => acc.credentialId === credentialId);
+      if (!passkeyData) {
+        throw new Error(`Passkey with ID ${credentialId} not found`);
       }
 
-      console.log('✅ Using account:', account.username, account.credentialId);
+      console.log('✅ Using account:', passkeyData.username, credentialId);
 
-      // Try to get cached address from localStorage (stored during passkey creation)
-      let address: Address;
-      const cachedAddress = this.getAddress(account.credentialId);
-
-      if (cachedAddress) {
-        // Use the address that was stored during passkey creation
-        address = cachedAddress;
-        console.log('✅ Using cached address from storage:', address);
-      } else {
-        // Fallback for accounts created before address caching was implemented
-        const authState = this.passkeyManager.checkAuth();
-
-        if (authState.isAuthenticated && authState.address) {
-          address = authState.address as Address;
-          console.log('✅ Using address from auth state:', address);
-        } else {
-          // Last resort: generate a deterministic address from the public key
-          // This is for development only
-          const publicKeyHash = account.publicKey.slice(0, 42) as Address;
-          address = publicKeyHash;
-          console.log('⚠️ Using deterministic address (dev mode):', address);
+      // Perform WebAuthn authentication using core SDK
+      const { challenge } = await this.passkeyManager.authenticateWithWebAuthn(
+       
+        this.rpId,
+        credentialId,
+        {
+          userVerification: "preferred",
+          timeout: 60000,
+          transports: ["internal", "hybrid"],
         }
-      }
+      );
 
-      // Update auth state
-      this.passkeyManager.storeAuthState(address, account.credentialId);
+
+      const webAuthnAccount = toWebAuthnAccount({
+        credential: {
+          id: passkeyData.credentialId,
+          publicKey: passkeyData.publicKey,
+        },
+      });
+
+      const client = this.getMainnetPublicClient();
+      console.log('🔍 Creating smart account for chain:', client);
+      const smartAccount = await createSmartAccount(webAuthnAccount, client);
+      console.log('🔍 Smart account created:', smartAccount);
+      const address = getAddress(smartAccount.address);
+      this.storeAddress(credentialId, address);
 
       return {
-        credentialId: account.credentialId,
-        address,
-        account,
+        credentialId: credentialId,
+        address:address,
+        account: passkeyData,
+        challenge,
       };
     } catch (error) {
       console.error('Failed to authenticate with passkey:', error);
@@ -286,17 +195,39 @@ export class PasskeyService {
   }
 
   /**
-   * Logout current user
+   * Import a passkey account from the backend
+   * @returns ImportWebAuthnAuthenticationResult
+   * @throws {PasskeyLookupError} If backend lookup fails or passkey not found
    */
-  logout(): void {
-    this.passkeyManager.logout();
-  }
+  async importPasskeyAccount(): Promise<PasskeyAuthenticationResult> {
+    const result = await this.passkeyManager.importPasskeyAccount();
+    const { name,credential } = result;
+    const client = this.getMainnetPublicClient();
+    const webAuthnAccount = toWebAuthnAccount({
+      credential: {
+        id: credential.id,
+        publicKey: credential.publicKey,
+      },
+    });
+    const smartAccount = await createSmartAccount(webAuthnAccount, client);
+    const address = getAddress(smartAccount.address);
+    this.storeAddress(credential.id, address);
 
-  /**
-   * Clear all stored data
-   */
-  clearAll(): void {
-    this.passkeyManager.clearAll();
+    const newAccount: PasskeyAccount = {
+      credentialId: credential.id,
+      publicKey: credential.publicKey,
+      username: name,
+      creationDate: new Date().toISOString(),
+      isImported: true,
+    };
+
+    this.passkeyManager.addAccountToList(newAccount);
+
+    return {
+      credentialId: credential.id,
+      address: address,
+      account: newAccount,
+    };
   }
 
   /**

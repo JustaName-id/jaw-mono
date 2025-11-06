@@ -5,7 +5,7 @@ import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } fro
 import { useState } from 'react';
 import { SUPPORTED_CHAINS } from 'packages/core/src';
 import { Chain } from 'packages/core/src';
-import { ChainId } from '@justaname.id/sdk';
+import { ChainId } from '../../utils/types';
 
 
 interface SignInScreenProps {
@@ -49,25 +49,36 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
     }
 
     const handleCreateAccount = async (username: string): Promise<string> => {
-        if (!username || username.trim().length === 0) {
-            console.error('❌ Username is required');
-            throw new Error('Username is required');
+        try {
+
+            if (!username || username.trim().length === 0) {
+                console.error('❌ Username is required');
+                throw new Error('Username is required');
+            }
+
+            const fullUsername = ensConfig ? `${username.trim()}.${ensConfig}` : username.trim();
+
+            const result = await register(fullUsername);
+
+            if (!result.address) {
+                throw new Error('Failed to get address from passkey registration');
+            }
+
+            return result.address;
+        } catch (error) {
+            console.error('❌ Error details:', error instanceof Error ? error.message : String(error));
+            throw error;
         }
-
-        const fullUsername = ensConfig ? `${username.trim()}.${ensConfig}` : username.trim();
-        const result = await register(fullUsername);
-
-        if (!result.address) {
-            throw new Error('Failed to get address from passkey registration');
-        }
-
-        return result.address;
     }
 
     const handleAccountCreationComplete = async () => {
-        await refetchAccounts();
-        await refetchAuth();
-        onComplete();
+        try {
+            await refetchAccounts();
+            await refetchAuth();
+            onComplete();
+        } catch (error) {
+            throw error;
+        }
     }
 
     const handleImportAccount = async () => {

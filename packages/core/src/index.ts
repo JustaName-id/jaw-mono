@@ -51,6 +51,8 @@ export {
     type BackendResponse,
     type PasskeysByCredIdsResponse,
     type LookupPasskeysRequest,
+    type WebAuthnAuthenticationResult,
+    WebAuthnAuthenticationError,
 } from './passkey-manager/index.js';
 
 /** Key Manager exports **/
