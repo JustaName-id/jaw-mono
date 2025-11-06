@@ -3,17 +3,16 @@
 import { LocalStorageAccount, OnboardingDialog } from '@jaw/ui';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState } from 'react';
-import { useDebounceValue } from 'usehooks-ts';
 import { SUPPORTED_CHAINS } from 'packages/core/src';
-// import { useIsSubnameAvailable, useJustaName } from '@justaname.id/react'
 import { Chain } from 'packages/core/src';
+import { ChainId } from '../../utils/types';
 
 
 interface SignInScreenProps {
     onComplete: () => void
     onCreateAccount: () => void
     ensConfig?: string
-    chainId?: number
+    chainId?: ChainId
     apiKey?: string
 }
 
@@ -24,21 +23,10 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
     const { refetch: refetchAuth } = useAuth();
     const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
 
-    const [username, setUsername] = useState('')
-    const [debouncedUsername] = useDebounceValue(username, 500)
 
     console.log('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED')
     console.log('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED')
     console.log('✅ OnboardingSection: ApiKey =', apiKey ? 'PROVIDED' : 'NOT PROVIDED')
-
-    // const { justaname } = useJustaName();
-    // const { isSubnameAvailable, isSubnameAvailableLoading } = useIsSubnameAvailable({
-    //     username,
-    //     ensDomain: ensConfig ?? '',
-    //     chainId: chainId as ChainId,
-    //     enabled: !!ensConfig && debouncedUsername.length > 2
-    // })
-
 
     const { mutateAsync: register, isPending: isCreatingPasskey } = useCreatePasskey();
 
@@ -60,53 +48,36 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
         }
     }
 
-    const handleCreateAccount = async () => {
+    const handleCreateAccount = async (username: string): Promise<string> => {
         try {
 
-            // Validate username
             if (!username || username.trim().length === 0) {
                 console.error('❌ Username is required');
-                return;
+                throw new Error('Username is required');
             }
 
             const fullUsername = ensConfig ? `${username.trim()}.${ensConfig}` : username.trim();
+
             const result = await register(fullUsername);
 
-            if (ensConfig && chainId && apiKey && !!result.address) {
-                try {
-                    console.log('📝 Registering subname:', username, 'on', ensConfig, 'chain', chainId)
-                    // await justaname.subnames.addSubname(
-                    //     {
-                    //         username: username,
-                    //         ensDomain: ensConfig,
-                    //         chainId: chainId as ChainId,
-                    //         addresses: SUPPORTED_CHAINS.map(chain => ({
-                    //             address: result.address,
-                    //             coinType: (+chain.id + 2147483648).toString(),
-                    //         })),
-                    //         overrideSignatureCheck: true,
-                    //     },
-                    //     {
-                    //         xApiKey: apiKey,
-                    //         xAddress: result.address,
-                    //         xMessage: "",
-                    //     }
-                    // )
-                    console.log('✅ Subname registration would happen here (JustaName SDK not yet configured)')
-                } catch (error) {
-                    console.error('❌ Failed to register subname:', error)
-                }
-            } else {
-                console.log('⏭️ Skipping subname registration - ENS config not provided or incomplete')
+            if (!result.address) {
+                throw new Error('Failed to get address from passkey registration');
             }
 
+            return result.address;
+        } catch (error) {
+            console.error('❌ Error details:', error instanceof Error ? error.message : String(error));
+            throw error;
+        }
+    }
+
+    const handleAccountCreationComplete = async () => {
+        try {
             await refetchAccounts();
-
             await refetchAuth();
-
             onComplete();
         } catch (error) {
-            console.error('❌ Failed to create account:', error)
+            throw error;
         }
     }
 
@@ -118,43 +89,6 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
             console.error('❌ Import failed:', error);
         }
     };
-
-    const getValidationMessage = (): string => {
-        if (username.includes('.')) {
-            return 'Invalid format';
-        }
-
-        if (username.length > 0 && username.length <= 2) {
-            return 'Minimum 3 characters';
-        }
-
-        if (username.length === 0) {
-            return '';
-        }
-
-        if (!ensConfig) {
-            return 'Available';
-        }
-        // if (isSubnameAvailableLoading) {
-        //     return 'Checking availability...';
-        // }
-        // if (isSubnameAvailable?.isAvailable) {
-        //     return 'Available';
-        // }
-        return 'Unavailable';
-    };
-
-    const isUsernameValid: boolean = (() => {
-        if (username.includes('.')) return false;
-        if (username.length <= 2) return false;
-
-        if (!ensConfig) return true;
-
-        // if (isSubnameAvailableLoading) return false;
-        // return isSubnameAvailable?.isAvailable === true;
-        return true;
-    })();
-
 
     return (
         <OnboardingDialog
@@ -168,19 +102,13 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
             loggingInAccount={loggingInAccount}
             onImportAccount={handleImportAccount}
             isImporting={isImportingPasskey}
-            username={username}
-            onUsernameChange={(value) => {
-                setUsername(value);
-            }}
             onCreateAccount={handleCreateAccount}
+            onAccountCreationComplete={handleAccountCreationComplete}
             isCreating={isCreatingPasskey}
-            usernameValidation={{
-                isValid: isUsernameValid,
-                // Not sure , how its used , just made this change to check.
-                isLoading: false,
-                message: getValidationMessage(),
-            }}
-            ensDomain={ensConfig ?? ''}
+            ensDomain={ensConfig}
+            chainId={chainId}
+            apiKey={apiKey}
+            supportedChains={SUPPORTED_CHAINS.map(chain => ({ id: chain.id }))}
         />
     );
 }

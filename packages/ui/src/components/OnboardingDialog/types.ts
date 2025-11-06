@@ -1,14 +1,10 @@
+import { ChainId } from "@justaname.id/sdk";
+
 export interface LocalStorageAccount {
   username: string;
   creationDate: Date;
   credentialId?: string;
   isImported?: boolean;
-}
-
-export interface UsernameValidation {
-  isValid: boolean;
-  isLoading: boolean;
-  message: string;
 }
 
 export interface OnboardingDialogProps {
@@ -22,14 +18,13 @@ export interface OnboardingDialogProps {
   isImporting: boolean;
 
   // Create new account section
-  username: string;
-  onUsernameChange: (username: string) => void;
-  onCreateAccount: () => void;
+  onCreateAccount: (username: string) => Promise<string>;
+  onAccountCreationComplete: () => Promise<void>;
   isCreating: boolean;
 
-  // Validation
-  usernameValidation: UsernameValidation;
-
   // Configuration
-  ensDomain: string;
+  ensDomain?: string;
+  chainId?: ChainId;
+  apiKey?: string;
+  supportedChains?: Array<{ id: number }>;
 }

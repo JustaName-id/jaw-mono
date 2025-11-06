@@ -1,5 +1,5 @@
 import { PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation, createSmartAccount} from '@jaw.id/core';
-import type { Address } from 'viem';
+import type { Address, PublicClient } from 'viem';
 import {  toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, createPublicClient, http } from 'viem';
 import { mainnet } from 'viem/chains';
@@ -37,6 +37,13 @@ export class PasskeyService {
     this.rpName = 'JAW Wallet';
   }
 
+  private getMainnetPublicClient(): PublicClient {
+    return createPublicClient({
+      chain: mainnet,
+      transport: http("https://eth.drpc.org"),
+    });
+  }
+
   /**
    * Store address for a credential ID
    */
@@ -63,7 +70,16 @@ export class PasskeyService {
     return this.passkeyManager.checkAuth();
   }
 
+ /**
+   * Get all stored passkey accounts
+   */
+ fetchAccounts(): PasskeyAccount[] {
+  return this.passkeyManager.fetchAccounts();
+}
 
+storeAuthState(address: Address, credentialId: string): void {
+  this.passkeyManager.storeAuthState(address, credentialId);
+}
 
   /**
    * Get currently active account
@@ -86,14 +102,14 @@ export class PasskeyService {
     
       const { credentialId, publicKey, webAuthnAccount , passkeyAccount} = await this.passkeyManager.createPasskey(username, this.rpId, this.rpName);
 
-      const client = createPublicClient({
-        chain: mainnet,
-        transport: http(),
-      });
+      const client = this.getMainnetPublicClient();
 
+      console.log('🔍 Creating smart account for chain:', mainnet);
       const smartAccount = await createSmartAccount(webAuthnAccount, client);
 
+      console.log('🔍 Smart account created:', smartAccount);
       const address = getAddress(smartAccount.address);
+      console.log('🔍 Smart account created for address:', address);
 
       this.storeAddress(credentialId, address);
 
@@ -121,7 +137,7 @@ export class PasskeyService {
 
     try {
       // Get existing passkeys
-      const existingAccounts = this.passkeyManager.fetchAccounts();
+      const existingAccounts = this.fetchAccounts();
 
       // If no accounts exist, throw error
       if (existingAccounts.length === 0) {
@@ -159,12 +175,10 @@ export class PasskeyService {
         },
       });
 
-      const client = createPublicClient({
-        chain: mainnet,
-        transport: http(),
-      });
-
+      const client = this.getMainnetPublicClient();
+      console.log('🔍 Creating smart account for chain:', client);
       const smartAccount = await createSmartAccount(webAuthnAccount, client);
+      console.log('🔍 Smart account created:', smartAccount);
       const address = getAddress(smartAccount.address);
       this.storeAddress(credentialId, address);
 
@@ -188,10 +202,7 @@ export class PasskeyService {
   async importPasskeyAccount(): Promise<PasskeyAuthenticationResult> {
     const result = await this.passkeyManager.importPasskeyAccount();
     const { name,credential } = result;
-    const client = createPublicClient({
-      chain: mainnet,
-      transport: http(),
-    });
+    const client = this.getMainnetPublicClient();
     const webAuthnAccount = toWebAuthnAccount({
       credential: {
         id: credential.id,

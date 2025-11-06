@@ -12,6 +12,7 @@ import { CryptoHandler } from '../lib/crypto-handler';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
+import { ChainId } from '@justaname.id/sdk';
 
 
 
@@ -80,7 +81,7 @@ export default function KeysJawIdApp() {
   const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ensConfig, setEnsConfig] = useState<string | undefined>(undefined);
-  const [chainId, setChainId] = useState<number | undefined>(undefined);
+  const [chainId, setChainId] = useState<ChainId | undefined>(undefined);
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
 
   // Single useEffect for all message handling
@@ -115,7 +116,7 @@ export default function KeysJawIdApp() {
 
         setConfig(message.data);
         setEnsConfig(message.data.preference?.ens);
-        setChainId(message.data.metadata?.appChainIds?.[0]);
+        setChainId(message.data.metadata?.appChainIds?.[0] as ChainId);
         setApiKey(message.data.apiKey);
 
         // Always show account selection UI - never auto-authenticate
@@ -136,7 +137,6 @@ export default function KeysJawIdApp() {
 
         // Handle handshake (unencrypted initial request)
         if ('handshake' in rpcMessage.content) {
-          console.log('🤝 Received handshake request');
           handleHandshakeRequest(rpcMessage);
         }
 
@@ -213,6 +213,11 @@ export default function KeysJawIdApp() {
       // Determine request type
       const method = request.content.handshake.method;
       const params = request.content.handshake.params;
+      const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
+
+      if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
+        setApiKey(apiKeyFromProvider);
+      }
 
       console.log('📋 Handshake method:', method, 'params:', params);
 

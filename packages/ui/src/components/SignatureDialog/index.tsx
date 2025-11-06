@@ -125,12 +125,12 @@ export const SignatureDialog = ({
                 </div>
               </div>
             )}
-            
+
             {/* Vertical Separator */}
             {chainName && (
               <div className="w-[1px] bg-border min-h-[40px]"></div>
             )}
-            
+
             {/* URL Column */}
             <div className="flex flex-col gap-1 flex-1">
               <p className="text-xs font-bold text-foreground">URL</p>

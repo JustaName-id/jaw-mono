@@ -7,7 +7,14 @@ let justaNameInstance: ReturnType<typeof JustaName.init> | null = null;
  */
 export function getJustaNameInstance() {
   if (!justaNameInstance) {
-    justaNameInstance = JustaName.init({});
+    justaNameInstance = JustaName.init({
+      networks: [
+        {
+          chainId: 1,
+          providerUrl: 'https://eth.drpc.org'
+        }
+      ]
+    });
   }
   return justaNameInstance;
 }
