@@ -13,7 +13,6 @@ export type {
 export {
   registerPasskeyInBackend,
   lookupPasskeyFromBackend,
-  authenticateWithWebAuthn,
   PasskeyRegistrationError,
   PasskeyLookupError,
   WebAuthnAuthenticationError,

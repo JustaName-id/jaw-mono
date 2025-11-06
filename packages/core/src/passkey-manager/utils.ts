@@ -1,5 +1,7 @@
+import { createWebAuthnCredential, toWebAuthnAccount } from "viem/account-abstraction";
 import { restCall } from "../api/index.js";
 import type { PasskeyRegistrationRequest, PasskeyLookupResponse } from "./types.js";
+import type { WebAuthnAccount } from "viem/account-abstraction";
 
 /**
  * WebAuthn authentication result
@@ -27,7 +29,7 @@ export class WebAuthnAuthenticationError extends Error {
  * @returns WebAuthn authentication result with credential and challenge
  * @throws {WebAuthnAuthenticationError} If authentication fails
  */
-export async function authenticateWithWebAuthn(
+export async function authenticateWithWebAuthnUtils(
   credentialId: string,
   rpId: string,
   options?: {
@@ -84,6 +86,43 @@ export async function authenticateWithWebAuthn(
   }
 }
 
+
+export async function createPasskeyUtils(
+  username: string,
+  rpId: string,
+  rpName: string
+): Promise<{ credentialId: string; publicKey: `0x${string}`; webAuthnAccount: WebAuthnAccount }> {
+  
+  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+    throw new PasskeyRegistrationError('WebAuthn is not supported in this environment');
+  }
+
+  const credential = await createWebAuthnCredential({
+    name: username,
+    rp: {
+      id: rpId,
+      name: rpName,
+    },
+  });
+
+  const webAuthnAccount = toWebAuthnAccount({
+    credential,
+  });
+
+  await registerPasskeyInBackend({
+    credentialId: credential.id,
+    publicKey: credential.publicKey,
+    displayName: username,
+  },
+);
+
+
+  return {
+    credentialId: credential.id,
+    publicKey: credential.publicKey,
+    webAuthnAccount: webAuthnAccount,
+  };
+}
 /**
  * Custom error for passkey registration failures
  */

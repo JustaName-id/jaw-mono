@@ -173,8 +173,8 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
             onCreateAccount={handleCreateAccount}
             isCreating={isCreatingPasskey}
             usernameValidation={{
-                isValid: isUsernameValid,
-                isLoading: isSubnameAvailableLoading,
+                isValid: true,
+                isLoading: false,
                 message: getValidationMessage(),
             }}
             ensDomain={ensConfig ?? ''}
