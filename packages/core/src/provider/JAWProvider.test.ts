@@ -4,13 +4,14 @@ import { JAWProvider } from './JAWProvider.js';
 import { createJAWProvider } from './createJAWProvider.js';
 import { Communicator } from '../communicator/index.js';
 import { standardErrorCodes } from '../errors/index.js';
-import { correlationIds } from '../store/index.js';
-import { fetchRPCRequest, checkErrorForInvalidRequestArgs } from '../utils/index.js';
+import { correlationIds, store } from '../store/index.js';
+import { fetchRPCRequest, checkErrorForInvalidRequestArgs, buildHandleJawRpcUrl } from '../utils/index.js';
 import {
   createSigner,
   loadSignerType,
   storeSignerType,
 } from '../signer/index.js';
+import { storeCallStatus, getCallStatus, waitForReceiptInBackground } from '../rpc/index.js';
 import type { AppMetadata, ConstructorOptions, RequestArguments } from './interface.js';
 import type { Signer } from '../signer/index.js';
 
@@ -23,20 +24,13 @@ vi.mock('../errors/index.js', async (importOriginal) => {
     serializeError: vi.fn((error) => error),
   };
 });
-vi.mock('../store/index.js', () => ({
-  correlationIds: {
-    set: vi.fn(),
-    get: vi.fn(),
-    delete: vi.fn(),
-    clear: vi.fn(),
-  },
-}));
 vi.mock('../utils/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../utils/index.js')>();
   return {
     ...actual,
     fetchRPCRequest: vi.fn(),
     checkErrorForInvalidRequestArgs: vi.fn(),
+    buildHandleJawRpcUrl: vi.fn(),
   };
 });
 vi.mock('../signer/index.js', () => ({
@@ -45,6 +39,33 @@ vi.mock('../signer/index.js', () => ({
   loadSignerType: vi.fn(),
   storeSignerType: vi.fn(),
 }));
+vi.mock('../rpc/index.js', () => ({
+  storeCallStatus: vi.fn(),
+  getCallStatus: vi.fn(),
+  waitForReceiptInBackground: vi.fn(),
+}));
+vi.mock('../store/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../store/index.js')>();
+  return {
+    ...actual,
+    correlationIds: {
+      set: vi.fn(),
+      get: vi.fn(),
+      delete: vi.fn(),
+      clear: vi.fn(),
+    },
+    store: {
+      account: {
+        get: vi.fn(() => ({ chain: { id: 1 } })),
+      },
+      callStatuses: {
+        get: vi.fn(),
+        set: vi.fn(),
+        update: vi.fn(),
+      },
+    },
+  };
+});
 
 describe('JAWProvider', () => {
   let provider: JAWProvider;
@@ -57,7 +78,6 @@ describe('JAWProvider', () => {
     mockMetadata = {
       appName: 'Test App',
       appLogoUrl: 'https://test.com/logo.png',
-      appChainIds: [1, 137],
     };
 
     mockConstructorOptions = {
@@ -66,6 +86,7 @@ describe('JAWProvider', () => {
         keysUrl: 'https://keys.test.com',
         appSpecific: false,
       },
+      apiKey: 'test-api-key',
     };
 
     // Setup mock signer
@@ -315,6 +336,7 @@ describe('JAWProvider', () => {
   describe('_request - No Signer: wallet_sendCalls', () => {
     beforeEach(() => {
       provider = new JAWProvider(mockConstructorOptions);
+      (waitForReceiptInBackground as Mock).mockResolvedValue(undefined);
     });
 
     it('should create ephemeral signer and cleanup after request', async () => {
@@ -323,9 +345,10 @@ describe('JAWProvider', () => {
         method: 'wallet_sendCalls',
         params: [{ calls: [] }],
       };
-      const mockBatchId = '0xbatchId';
+      const mockUserOpHash = '0xuserOpHash';
+      const mockChainId = 1;
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
-      (mockSigner.request as Mock).mockResolvedValue(mockBatchId);
+      (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash, chainId: mockChainId });
       (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
 
       // Act
@@ -336,8 +359,48 @@ describe('JAWProvider', () => {
       expect(mockSigner.handshake).toHaveBeenCalledWith({ method: 'handshake' });
       expect(mockSigner.request).toHaveBeenCalledWith(request);
       expect(mockSigner.cleanup).toHaveBeenCalled();
-      expect(result).toEqual(mockBatchId);
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+      expect(result).toEqual({ id: mockUserOpHash });
       expect((provider as any).signer).toBeNull(); // Should not store ephemeral signer
+    });
+
+    it('should store call status and start background task when userOpHash is returned', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_sendCalls',
+        params: [{ calls: [] }],
+      };
+      const mockUserOpHash = '0xuserOpHash123';
+      const mockChainId = 137;
+      (mockSigner.handshake as Mock).mockResolvedValue(undefined);
+      (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash, chainId: mockChainId });
+      (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
+
+      // Act
+      await provider.request(request);
+
+      // Assert
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+    });
+
+    it('should not store call status if no userOpHash is returned', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_sendCalls',
+        params: [{ calls: [] }],
+      };
+      (mockSigner.handshake as Mock).mockResolvedValue(undefined);
+      (mockSigner.request as Mock).mockResolvedValue({ id: undefined });
+      (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
+
+      // Act
+      await provider.request(request);
+
+      // Assert
+      expect(storeCallStatus).not.toHaveBeenCalled();
+      expect(waitForReceiptInBackground).not.toHaveBeenCalled();
     });
 
     it('should return result even if cleanup fails', async () => {
@@ -346,9 +409,10 @@ describe('JAWProvider', () => {
         method: 'wallet_sendCalls',
         params: [{ calls: [] }],
       };
-      const mockBatchId = '0xbatchId';
+      const mockUserOpHash = '0xbatchId';
+      const mockChainId = 1;
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
-      (mockSigner.request as Mock).mockResolvedValue(mockBatchId);
+      (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash, chainId: mockChainId });
       (mockSigner.cleanup as Mock).mockRejectedValue(new Error('Cleanup failed'));
 
       // Act
@@ -358,8 +422,38 @@ describe('JAWProvider', () => {
       expect(mockSigner.handshake).toHaveBeenCalled();
       expect(mockSigner.request).toHaveBeenCalled();
       expect(mockSigner.cleanup).toHaveBeenCalled();
-      expect(result).toEqual(mockBatchId);
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+      expect(result).toEqual({ id: mockUserOpHash });
       expect((provider as any).signer).toBeNull();
+    });
+
+    it('should handle background task errors gracefully', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_sendCalls',
+        params: [{ calls: [] }],
+      };
+      const mockUserOpHash = '0xbatchId';
+      const mockChainId = 1;
+      (mockSigner.handshake as Mock).mockResolvedValue(undefined);
+      (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash, chainId: mockChainId });
+      (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
+      (waitForReceiptInBackground as Mock).mockRejectedValue(new Error('Background task failed'));
+
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(result).toEqual({ id: mockUserOpHash });
+      expect(consoleErrorSpy).toHaveBeenCalledWith(
+        'Background receipt wait failed:',
+        expect.any(Error)
+      );
+
+      consoleErrorSpy.mockRestore();
     });
 
     it('should never store ephemeral signer', async () => {
@@ -368,9 +462,10 @@ describe('JAWProvider', () => {
         method: 'wallet_sendCalls',
         params: [{ calls: [] }],
       };
-      const mockBatchId = '0xbatchId';
+      const mockUserOpHash = '0xbatchId';
+      const mockChainId = 1;
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
-      (mockSigner.request as Mock).mockResolvedValue(mockBatchId);
+      (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash, chainId: mockChainId });
       (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
 
       const storeSignerTypeSpy = vi.mocked(storeSignerType);
@@ -434,26 +529,150 @@ describe('JAWProvider', () => {
     });
   });
 
-  describe('_request - No Signer: wallet_getCallsStatus', () => {
+  describe('_request - No Signer: wallet_getAssets', () => {
     beforeEach(() => {
       provider = new JAWProvider(mockConstructorOptions);
     });
 
-    it('should forward to JAW_RPC_URL', async () => {
+    it('should call fetchRPCRequest with correct RPC URL', async () => {
       // Arrange
       const request: RequestArguments = {
-        method: 'wallet_getCallsStatus',
-        params: ['0xbatchId'],
+        method: 'wallet_getAssets',
+        params: [],
       };
-      const mockStatus = { status: 'CONFIRMED' };
-      (fetchRPCRequest as Mock).mockResolvedValue(mockStatus);
+      const mockRpcUrl = 'https://rpc.test.com';
+      const mockAssets = [{ address: '0x123', symbol: 'ETH' }];
+      (buildHandleJawRpcUrl as Mock).mockReturnValue(mockRpcUrl);
+      (fetchRPCRequest as Mock).mockResolvedValue(mockAssets);
 
       // Act
       const result = await provider.request(request);
 
       // Assert
-      expect(fetchRPCRequest).toHaveBeenCalledWith(request, expect.any(String));
-      expect(result).toEqual(mockStatus);
+      expect(buildHandleJawRpcUrl).toHaveBeenCalledWith(expect.any(String), 'test-api-key');
+      expect(fetchRPCRequest).toHaveBeenCalledWith(request, mockRpcUrl);
+      expect(result).toEqual(mockAssets);
+    });
+
+    it('should handle fetchRPCRequest errors', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getAssets',
+        params: [],
+      };
+      const mockRpcUrl = 'https://rpc.test.com';
+      const mockError = new Error('RPC request failed');
+      (buildHandleJawRpcUrl as Mock).mockReturnValue(mockRpcUrl);
+      (fetchRPCRequest as Mock).mockRejectedValue(mockError);
+
+      // Act & Assert
+      await expect(provider.request(request)).rejects.toThrow('RPC request failed');
+      expect(fetchRPCRequest).toHaveBeenCalledWith(request, mockRpcUrl);
+    });
+  });
+
+  describe('_request - No Signer: wallet_getCallsStatus', () => {
+    beforeEach(() => {
+      provider = new JAWProvider(mockConstructorOptions);
+    });
+
+    it('should get call status from storage', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockCallStatus = {
+        status: 'pending',
+        chainId: 1,
+      };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(getCallStatus).toHaveBeenCalledWith('0xbatchId');
+      expect(result).toEqual({
+        id: '0xbatchId',
+        status: 100, // pending
+        receipts: [],
+      });
+    });
+
+    it('should return status code 200 for completed status', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockCallStatus = {
+        status: 'completed',
+        chainId: 1,
+        receipts: [{ hash: '0xreceipt1' }],
+      };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(result).toEqual({
+        id: '0xbatchId',
+        status: 200, // completed
+        receipts: [{ hash: '0xreceipt1' }],
+      });
+    });
+
+    it('should return status code 400 for failed status', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockCallStatus = {
+        status: 'failed',
+        chainId: 1,
+        error: 'Transaction failed',
+      };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(result).toEqual({
+        id: '0xbatchId',
+        status: 400, // failed
+        receipts: [],
+      });
+    });
+
+    it('should throw error if batchId is missing', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: [],
+      };
+
+      // Act & Assert
+      await expect(provider.request(request)).rejects.toMatchObject({
+        message: 'batchId is required',
+      });
+    });
+
+    it('should throw error if no call status found', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xnonexistent'],
+      };
+      (getCallStatus as Mock).mockReturnValue(undefined);
+
+      // Act & Assert
+      await expect(provider.request(request)).rejects.toMatchObject({
+        message: 'No call status found for batchId: 0xnonexistent',
+      });
     });
   });
 
@@ -605,6 +824,148 @@ describe('JAWProvider', () => {
       // Assert
       expect(mockSigner.request).toHaveBeenCalledWith(request);
       expect(result).toEqual(mockTxHash);
+    });
+
+    it('should store call status and start background task for wallet_sendCalls', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_sendCalls',
+        params: [{ calls: [] }],
+      };
+      const mockUserOpHash = '0xuserOpHash';
+      (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash });
+      (waitForReceiptInBackground as Mock).mockResolvedValue(undefined);
+      (store.account.get as Mock).mockReturnValue({ chain: { id: 1 } });
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(mockSigner.request).toHaveBeenCalledWith(request);
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1);
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1);
+      expect(result).toEqual({ id: mockUserOpHash });
+    });
+
+    it('should use metadata defaultChainId if account chain is not set', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_sendCalls',
+        params: [{ calls: [] }],
+      };
+      const mockUserOpHash = '0xuserOpHash';
+      (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash });
+      (waitForReceiptInBackground as Mock).mockResolvedValue(undefined);
+      (store.account.get as Mock).mockReturnValue({});
+      const metadataWithChainId = { ...mockMetadata, defaultChainId: 137 };
+
+      provider = new JAWProvider({ ...mockConstructorOptions, metadata: metadataWithChainId });
+      (provider as any).signer = mockSigner;
+
+      // Act
+      await provider.request(request);
+
+      // Assert
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 137);
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 137);
+    });
+
+    it('should use chainId 1 as fallback if no chain info available', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_sendCalls',
+        params: [{ calls: [] }],
+      };
+      const mockUserOpHash = '0xuserOpHash';
+      (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash });
+      (waitForReceiptInBackground as Mock).mockResolvedValue(undefined);
+      (store.account.get as Mock).mockReturnValue({});
+      const metadataWithoutChainId = { ...mockMetadata };
+
+      provider = new JAWProvider({ ...mockConstructorOptions, metadata: metadataWithoutChainId });
+      (provider as any).signer = mockSigner;
+
+      // Act
+      await provider.request(request);
+
+      // Assert
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1);
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1);
+    });
+
+    it('should get call status from storage for wallet_getCallsStatus', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockCallStatus = {
+        status: 'pending',
+        chainId: 1,
+      };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(getCallStatus).toHaveBeenCalledWith('0xbatchId');
+      expect(result).toEqual({
+        id: '0xbatchId',
+        status: 100, // pending
+        receipts: [],
+      });
+    });
+
+    it('should return status code 200 for completed status with signer', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockCallStatus = {
+        status: 'completed',
+        chainId: 1,
+        receipts: [{ hash: '0xreceipt1' }],
+      };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(result).toEqual({
+        id: '0xbatchId',
+        status: 200, // completed
+        receipts: [{ hash: '0xreceipt1' }],
+      });
+    });
+
+    it('should throw error if batchId is missing with signer', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: [],
+      };
+
+      // Act & Assert
+      await expect(provider.request(request)).rejects.toMatchObject({
+        message: 'batchId is required',
+      });
+    });
+
+    it('should throw error if no call status found with signer', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xnonexistent'],
+      };
+      (getCallStatus as Mock).mockReturnValue(undefined);
+
+      // Act & Assert
+      await expect(provider.request(request)).rejects.toMatchObject({
+        message: 'No call status found for batchId: 0xnonexistent',
+      });
     });
   });
 
@@ -1367,7 +1728,6 @@ describe('createJAWProvider', () => {
     mockMetadata = {
       appName: 'Test App',
       appLogoUrl: 'https://test.com/logo.png',
-      appChainIds: [1, 137],
     };
 
     vi.clearAllMocks();
@@ -1380,6 +1740,7 @@ describe('createJAWProvider', () => {
       preference: {
         keysUrl: 'https://keys.test.com',
       },
+      apiKey: 'test-api-key',
     };
 
     // Act
@@ -1396,6 +1757,7 @@ describe('createJAWProvider', () => {
       preference: {
         keysUrl: 'https://keys.test.com',
       },
+      apiKey: 'test-api-key',
     };
 
     // Act
@@ -1411,12 +1773,12 @@ describe('createJAWProvider', () => {
       keysUrl: 'https://keys.test.com',
       appSpecific: true,
       serverUrl: 'https://api.test.com',
-      apiKey: 'test-api-key',
     };
 
     const options = {
       metadata: mockMetadata,
       preference,
+      apiKey: 'test-api-key',
     };
 
     // Act
@@ -1427,7 +1789,6 @@ describe('createJAWProvider', () => {
       keysUrl: 'https://keys.test.com',
       appSpecific: true,
       serverUrl: 'https://api.test.com',
-      apiKey: 'test-api-key',
     });
   });
 
@@ -1436,11 +1797,13 @@ describe('createJAWProvider', () => {
     const options1 = {
       metadata: { ...mockMetadata, appName: 'App 1' },
       preference: { keysUrl: 'https://keys1.test.com' },
+      apiKey: 'test-api-key',
     };
 
     const options2 = {
       metadata: { ...mockMetadata, appName: 'App 2' },
       preference: { keysUrl: 'https://keys2.test.com' },
+      apiKey: 'test-api-key',
     };
 
     // Act
