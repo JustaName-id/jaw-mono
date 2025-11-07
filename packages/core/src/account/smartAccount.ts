@@ -1,11 +1,9 @@
 import {
     Address,
     Client,
-    createPublicClient,
     getAddress,
     Hash,
     Hex,
-    http,
     isAddress,
     pad,
     Transport,
@@ -16,12 +14,10 @@ import {getCode, getGasPrice, readContract} from "viem/actions";
 import {abi, JustanAccountImplementation, toJustanAccount} from "../account/index.js";
 import {
     BundlerClient,
-    createBundlerClient,
-    createPaymasterClient,
     SmartAccount,
     WebAuthnAccount
 } from "viem/account-abstraction";
-import {Chain} from "../store/index.js";
+import {Chain, getBundlerClient as getBundlerClientFromStore} from "../store/index.js";
 import {arbitrum, arbitrumSepolia, base, baseSepolia, mainnet, optimism, optimismSepolia, sepolia} from "viem/chains";
 
 export type FindOwnerIndexParams = {
@@ -50,27 +46,23 @@ export const SUPPORTED_CHAINS = [
     arbitrumSepolia,
 ]
 
+/**
+ * Gets or creates a bundler client for a chain using lazy loading.
+ * Clients are cached in the store and created only when first accessed.
+ *
+ * @param chain - The chain to get the bundler client for
+ * @returns The bundler client for the specified chain
+ * @throws Error if the chain is not supported or client creation fails
+ */
 export const getBundlerClient = (chain: Chain): BundlerClient<Transport, ViemChain> => {
-    const viemChain = SUPPORTED_CHAINS.find(c => c.id === chain.id);
+    const bundlerClient = getBundlerClientFromStore(chain.id);
 
+    if (!bundlerClient) {
+        throw new Error(`Unable to create bundler client for chain ${chain.id}`);
+    }
 
-    const publicClient = createPublicClient({
-        chain: viemChain,
-        transport: http(chain.rpcUrl),
-    });
-
-    const paymasterClient = chain.paymasterUrl
-        ? createPaymasterClient({
-            transport: http(chain.paymasterUrl)
-        })
-        : undefined;
-
-    return createBundlerClient({
-        client: publicClient,
-        ...(paymasterClient && { paymaster: paymasterClient }),
-        transport: http(chain.rpcUrl)
-    });
-
+    // Type assertion: we know the bundler client has a chain because it's created with one
+    return bundlerClient as BundlerClient<Transport, ViemChain>;
 }
 
 export async function sendTransaction(

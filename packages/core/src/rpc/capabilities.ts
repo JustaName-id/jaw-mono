@@ -1,39 +1,39 @@
 import { numberToHex } from 'viem';
-import { SDKChain } from '../store/index.js';
+import { store } from '../store/index.js';
 
 /**
- * Utility function to expose capabilities for configured chains.
+ * Utility function to expose capabilities for all supported chains.
  *
  * Capabilities indicate what advanced features the wallet supports (EIP-5792):
  * - atomicBatch: Execute multiple calls atomically (all succeed or all fail) - always supported
  * - paymasterService: Support for gasless transactions via ERC-4337 paymasters (ERC-7677) - only if paymasterUrl is configured
  *
- * @param chains - Array of configured chains from the store/config
+ * Reads all chains from the store (which are initialized with all supported chains on SDK creation).
+ *
  * @returns Record of chain IDs (in hex) to their supported capabilities
  *
  * @example
  * ```typescript
- * const chains = [
- *   { id: 1, rpcUrl: '...', paymasterUrl: 'https://paymaster.example.com' },
- *   { id: 11155111, rpcUrl: '...' }
- * ];
- * const capabilities = getCapabilities(chains);
+ * const capabilities = getCapabilities();
  * // Returns:
  * // {
- * //   '0x1': { atomicBatch: { status: 'supported' }, paymasterService: { supported: true } },
- * //   '0xaa36a7': { atomicBatch: { status: 'supported' } },
+ * //   '0x1': { atomicBatch: { supported: true }, paymasterService: { supported: true } },
+ * //   '0xaa36a7': { atomicBatch: { supported: true } },
+ * //   '0x2105': { atomicBatch: { supported: true } },
+ * //   // ... all supported chains
  * // }
  * ```
  */
-export function getCapabilities(chains: SDKChain[]): Record<`0x${string}`, Record<string, unknown>> {
+export function getCapabilities(): Record<`0x${string}`, Record<string, unknown>> {
     const capabilities: Record<`0x${string}`, Record<string, unknown>> = {};
+    const chains = store.getState().chains ?? [];
 
     for (const chain of chains) {
         const chainIdHex = numberToHex(chain.id) as `0x${string}`;
 
         const chainCapabilities: Record<string, unknown> = {
             atomicBatch: {
-                status: 'supported',
+                supported: true,
             },
         };
 

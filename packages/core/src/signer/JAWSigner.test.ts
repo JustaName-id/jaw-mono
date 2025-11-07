@@ -59,7 +59,6 @@ const mockEncryptedData = {
 };
 const mockCorrelationId = 'test-correlation-id';
 const mockMessageId = '12345678-1234-1234-1234-123456789012' as const;
-const mockApiKey = 'ZZAdkx3GrA0q7UENOlq27BkbpuSlutv1'
 
 describe('JAWSigner', () => {
   let signer: JAWSigner;
@@ -73,12 +72,11 @@ describe('JAWSigner', () => {
     mockMetadata = {
       appName: 'Test App',
       appLogoUrl: 'https://test.com/logo.png',
-      appChainIds: [1, 137],
+      defaultChainId: 1,
     };
 
     // Setup mock communicator
     mockCommunicator = new Communicator({
-      apiKey: mockApiKey,
       metadata: mockMetadata,
       preference: { keysUrl: 'https://test.com' },
     }) as Mocked<Communicator>;
@@ -476,7 +474,7 @@ describe('JAWSigner', () => {
           chain: { id: 1 },
           capabilities: {
             '0x1': { paymasterService: { supported: true } },
-            '0x89': { atomicBatch: { status: 'supported' } },
+            '0x89': { atomicBatch: { supported: true } },
           },
         },
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
@@ -490,7 +488,7 @@ describe('JAWSigner', () => {
       // Assert
       expect(result).toEqual({
         '0x1': { paymasterService: { supported: true } },
-        '0x89': { atomicBatch: { status: 'supported' } },
+        '0x89': { atomicBatch: { supported: true } },
       });
     });
 
@@ -1050,12 +1048,27 @@ describe('JAWSigner', () => {
   });
 
   describe('Unauthenticated Scenarios', () => {
-    it('should allow wallet_switchEthereumChain when unauthenticated', async () => {
+    it('should allow wallet_switchEthereumChain when unauthenticated if chain is supported', async () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new JAWSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
+      });
+
+      // Mock store with supported chains
+      vi.spyOn(store, 'getState').mockReturnValue({
+        account: {
+          accounts: undefined,
+          chain: undefined,
+          capabilities: undefined,
+        },
+        chains: [
+          { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+          { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
+        ],
+        config: { metadata: mockMetadata, version: '1.0.0' },
+        keys: {},
       });
 
       const request: RequestArguments = {
@@ -1294,7 +1307,7 @@ describe('JAWSigner', () => {
       // Assert
       // Should return SDK-generated capabilities based on configured chains
       expect(result).toEqual({
-        '0x1': { atomicBatch: { status: 'supported' } },
+        '0x1': { atomicBatch: { supported: true } },
       });
     });
 
@@ -1327,11 +1340,11 @@ describe('JAWSigner', () => {
       // Should NOT include paymasterService for chain 137 (no paymasterUrl)
       expect(result).toEqual({
         '0x1': {
-          atomicBatch: { status: 'supported' },
+          atomicBatch: { supported: true },
           paymasterService: { supported: true }
         },
         '0x89': {
-          atomicBatch: { status: 'supported' }
+          atomicBatch: { supported: true }
         },
       });
     });
@@ -1349,7 +1362,7 @@ describe('JAWSigner', () => {
           chain: { id: 1 },
           capabilities: {
             '0x1': { paymasterService: { supported: true } },
-            '0x89': { atomicBatch: { status: 'supported' } },
+            '0x89': { atomicBatch: { supported: true } },
             '0xa': { otherFeature: { supported: true } },
           },
         },
@@ -1380,7 +1393,7 @@ describe('JAWSigner', () => {
           chain: { id: 1 },
           capabilities: {
             '0x1': { paymasterService: { supported: true } },
-            '0x89': { atomicBatch: { status: 'supported' } },
+            '0x89': { atomicBatch: { supported: true } },
             '0xa': { otherFeature: { supported: true } },
           },
         },
@@ -1395,7 +1408,7 @@ describe('JAWSigner', () => {
       // Assert
       expect(result).toEqual({
         '0x1': { paymasterService: { supported: true } },
-        '0x89': { atomicBatch: { status: 'supported' } },
+        '0x89': { atomicBatch: { supported: true } },
       });
     });
   });
@@ -1551,7 +1564,7 @@ describe('JAWSigner', () => {
       vi.clearAllMocks();
     });
 
-    it('should send request to popup when chain not found in available chains', async () => {
+    it('should throw error when chain not found in available chains', async () => {
       // Arrange
       const switchRequest: RequestArguments = {
         method: 'wallet_switchEthereumChain',
@@ -1572,38 +1585,16 @@ describe('JAWSigner', () => {
         keys: {},
       });
 
-      const mockSwitchResponse: RPCResponseMessage = {
-        id: mockMessageId,
-        requestId: mockMessageId,
-        correlationId: mockCorrelationId,
-        sender: 'peer-public-key-hex',
-        content: {
-          encrypted: mockEncryptedData,
-        },
-        timestamp: new Date(),
-      };
-
-      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockSwitchResponse);
-
-      (decryptContent as Mock).mockResolvedValue({
-        result: {
-          value: null,
-        },
-        data: {
-          chains: {
-            1: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
-            137: { id: 137, rpcUrl: 'https://polygon-mainnet.rpc.com' },
-            42: { id: 42, rpcUrl: 'https://kovan.rpc.com' },
-          },
-        },
-      } as RPCResponse);
-
-      // Act
-      const result = await signer.request(switchRequest);
-
-      // Assert
-      expect(result).toBeNull();
-      expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+      // Act & Assert
+      try {
+        await signer.request(switchRequest);
+        expect.fail('Should have thrown an error');
+      } catch (error: any) {
+        expect(error.code).toBe(4200);
+        expect(error.message).toContain('wallet_switchEthereumChain');
+        expect(error.message).toContain('42');
+      }
+      expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
     });
 
     it('should not trigger chainChanged callback if chain is already current', async () => {
@@ -1777,41 +1768,22 @@ describe('JAWSigner', () => {
       expect(store.account.set).not.toHaveBeenCalled(); // Should not update accounts
     });
 
-    it('should return result value for wallet_addEthereumChain', async () => {
+    it('should throw unsupported method error for wallet_addEthereumChain', async () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_addEthereumChain',
         params: [{ chainId: '0xa', rpcUrls: ['https://optimism.rpc.com'] }],
       };
 
-      const mockResponse: RPCResponseMessage = {
-        id: mockMessageId,
-        requestId: mockMessageId,
-        correlationId: mockCorrelationId,
-        sender: 'peer-public-key-hex',
-        content: {
-          encrypted: mockEncryptedData,
-        },
-        timestamp: new Date(),
-      };
-
-      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
-
-      (decryptContent as Mock).mockResolvedValue({
-        result: {
-          value: null,
-        },
-      } as RPCResponse);
-
-      // Act
-      const result = await signer.request(request);
-
-      // Assert
-      expect(result).toBeNull();
+      // Act & Assert
+      await expect(signer.request(request)).rejects.toMatchObject({
+        code: 4200,
+        message: 'The requested method is not supported by this Ethereum provider.',
+      });
       expect(store.account.set).not.toHaveBeenCalled(); // Should not update accounts
     });
 
-    it('should return result value for wallet_watchAsset', async () => {
+    it('should throw unsupported method error for wallet_watchAsset', async () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_watchAsset',
@@ -1825,30 +1797,11 @@ describe('JAWSigner', () => {
         }],
       };
 
-      const mockResponse: RPCResponseMessage = {
-        id: mockMessageId,
-        requestId: mockMessageId,
-        correlationId: mockCorrelationId,
-        sender: 'peer-public-key-hex',
-        content: {
-          encrypted: mockEncryptedData,
-        },
-        timestamp: new Date(),
-      };
-
-      mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
-
-      (decryptContent as Mock).mockResolvedValue({
-        result: {
-          value: true,
-        },
-      } as RPCResponse);
-
-      // Act
-      const result = await signer.request(request);
-
-      // Assert
-      expect(result).toBe(true);
+      // Act & Assert
+      await expect(signer.request(request)).rejects.toMatchObject({
+        code: 4200,
+        message: 'The requested method is not supported by this Ethereum provider.',
+      });
       expect(store.account.set).not.toHaveBeenCalled();
     });
   });
@@ -2053,7 +2006,7 @@ describe('JAWSigner', () => {
       const metadata: AppMetadata = {
         appName: 'Test App',
         appLogoUrl: 'https://test.com/logo.png',
-        appChainIds: [42, 10],
+        defaultChainId: 42,
       };
 
       // Act
@@ -2065,10 +2018,10 @@ describe('JAWSigner', () => {
 
       // Assert
       expect((newSigner as any).accounts).toEqual([]);
-      expect((newSigner as any).chain).toEqual({ id: 42 }); // First chain from appChainIds
+      expect((newSigner as any).chain).toEqual({ id: 42 }); // From defaultChainId
     });
 
-    it('should initialize with chain 1 when no appChainIds provided', () => {
+    it('should initialize with chain 1 when no defaultChainId provided', () => {
       // Arrange
       vi.spyOn(store, 'getState').mockReturnValue({
         account: {
@@ -2084,7 +2037,7 @@ describe('JAWSigner', () => {
       const metadata: AppMetadata = {
         appName: 'Test App',
         appLogoUrl: 'https://test.com/logo.png',
-        appChainIds: [1], // Default to chain 1
+        // No defaultChainId provided - should default to chain 1
       };
 
       // Act
