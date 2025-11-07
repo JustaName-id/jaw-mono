@@ -114,7 +114,9 @@ export const TransactionDialog = ({
       // open={open}
       // onOpenChange={!isProcessing ? onOpenChange : undefined}
       open={true}
-      onOpenChange={isProcessing ? undefined : () => { }}
+      onOpenChange={isProcessing ? undefined : () => {
+        // Empty handler to prevent dialog close
+      }}
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
           <p className="text-xs font-bold text-muted-foreground leading-[100%]">

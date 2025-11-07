@@ -108,6 +108,7 @@ export default function KeysJawIdApp() {
     });
 
     // Listen for messages
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cleanup = communicator.onMessage<PopupConfig>((message: any) => {
       console.log('📥 Received message:', message);
 
@@ -153,6 +154,7 @@ export default function KeysJawIdApp() {
       communicator.sendPopupUnload();
       cleanup();
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle transition to account-selection when handshake arrives for authenticated users
@@ -236,6 +238,7 @@ export default function KeysJawIdApp() {
           onApprove: async (result: unknown) => {
             const accounts = result as string[];
             const response = await cryptoHandler.createHandshakeResponse(request.id, accounts);
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(response as any);
           },
           onReject: async (error: string) => {
@@ -247,6 +250,7 @@ export default function KeysJawIdApp() {
                 4001, // User rejected request (EIP-1193 standard)
                 error || 'User rejected the request'
               );
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
               communicator.sendMessage(errorResponse as any);
             } catch (err) {
               console.error('❌ Failed to send rejection response:', err);
@@ -317,6 +321,7 @@ export default function KeysJawIdApp() {
             request.correlationId || '',
             result
           );
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
           communicator.sendMessage(response as any);
         },
         onReject: async (error: string) => {
@@ -328,6 +333,7 @@ export default function KeysJawIdApp() {
               4001, // User rejected request (EIP-1193 standard)
               error || 'User rejected the request'
             );
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(errorResponse as any);
             // Close window after sending error
             setTimeout(() => window.close(), 100);
@@ -438,6 +444,7 @@ export default function KeysJawIdApp() {
 
       if (pendingRequest.method === 'wallet_sign') {
         // wallet_sign: params[0] is SignParams object
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const signParams = pendingRequest.params[0] as { request: { type: string; data: any }; address?: string };
         messageToSign = typeof signParams?.request?.data === 'string' ? signParams.request.data : String(signParams?.request?.data || '');
         address = signParams?.address;

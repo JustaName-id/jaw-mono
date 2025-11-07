@@ -1,6 +1,6 @@
 'use client'
 
-import { BadgeDollarIcon, CopyIcon, EyeIcon } from "@jaw/ui";
+import { BadgeDollarIcon, CopyIcon, EyeIcon } from "../../icons";
 import { useEffect, useState } from "react";
 import { useIsMobile } from "../../hooks";
 import { getJustaNameInstance } from "../../utils/justaNameInstance";

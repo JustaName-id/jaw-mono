@@ -21,6 +21,7 @@ export * from './components/OrSeparator';
 export * from './components/OnboardingDialog';
 export * from './components/TransactionDialog';
 export * from './components/SignatureDialog';
+export * from './components/SiweDialog';
 export * from './lib/utils';
 export * from './icons';
 export * from './hooks';
