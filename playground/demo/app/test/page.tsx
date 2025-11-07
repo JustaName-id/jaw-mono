@@ -13,7 +13,7 @@ export default function TestPage() {
     createJAWSDK({
       appName: 'JAW Demo App',
       appLogoUrl: null,
-      appChainIds: [11155111, 84532], // Sepolia (11155111), Base Sepolia (84532)
+      defaultChainId: 1,
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
         ens: process.env.NEXT_PUBLIC_ENS_NAME || '',
