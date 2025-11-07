@@ -280,8 +280,11 @@ export default function KeysJawIdApp() {
       // Determine request type and show appropriate UI
       let requestType: SDKRequestType;
 
-      //TODO: Check Wallet
-      if (method === 'personal_sign' || (method === 'wallet_sign')) {
+      // Check for sign message requests
+      // personal_sign: always a sign message request
+      // wallet_sign: only if request.type === "0x45" (Personal Sign per EIP-191)
+      if (method === 'personal_sign' || 
+          (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x45")) {
         requestType = SDKRequestType.SIGN_MESSAGE;
       } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
         requestType = SDKRequestType.SEND_TRANSACTION;
@@ -431,8 +434,20 @@ export default function KeysJawIdApp() {
       state !== 'success' &&
       state !== 'error' &&
       (authQuery.isAuthenticated || state === 'processing')) {
-      const messageToSign = pendingRequest.params[0] as string;
-      const address = pendingRequest.params[1] as string;
+      // Extract message and address based on method type
+      let messageToSign: string;
+      let address: string | undefined;
+      
+      if (pendingRequest.method === 'wallet_sign') {
+        // wallet_sign: params[0] is SignParams object
+        const signParams = pendingRequest.params[0] as { request: { type: string; data: any }; address?: string };
+        messageToSign = typeof signParams?.request?.data === 'string' ? signParams.request.data : String(signParams?.request?.data || '');
+        address = signParams?.address;
+      } else {
+        // personal_sign: params[0] is message, params[1] is address
+        messageToSign = pendingRequest.params[0] as string;
+        address = pendingRequest.params[1] as string;
+      }
 
       return (
         <SignatureModal

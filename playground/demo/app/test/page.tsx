@@ -13,7 +13,7 @@ export default function TestPage() {
     createJAWSDK({
       appName: 'JAW Demo App',
       appLogoUrl: null,
-      appChainIds: [1],
+      appChainIds: [11155111, 84532], // Sepolia (11155111), Base Sepolia (84532)
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
         ens: process.env.NEXT_PUBLIC_ENS_NAME || '',
@@ -143,6 +143,44 @@ export default function TestPage() {
             ? JSON.stringify(error, null, 2)
             : String(error);
       addLog(`Error signing message: ${errorMessage}`);
+    }
+  };
+
+  const handleWalletSign = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const message = 'Hello from JAW SDK Test (wallet_sign)!';
+      const provider = sdk.getProvider();
+      addLog(`Requesting wallet_sign signature for message: "${message}"...`);
+      addLog(`Using request.type: 0x45 (Personal Sign per EIP-191)`);
+      
+      const signature = await provider.request({
+        method: 'wallet_sign',
+        params: [{
+          version: '1.0',
+          address: accounts[0],
+          request: {
+            type: '0x45', // Personal Sign (EIP-191)
+            data: message
+          }
+        }]
+      });
+      
+      addLog(`Signature: ${signature}`);
+    } catch (error) {
+      console.error('Wallet sign error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`Error signing with wallet_sign: ${errorMessage}`);
     }
   };
 
@@ -641,13 +679,20 @@ export default function TestPage() {
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
             Signing Actions
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <button
               onClick={handleSignMessage}
               disabled={!isConnected}
               className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              Sign Message
+              Sign Message (personal_sign)
+            </button>
+            <button
+              onClick={handleWalletSign}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Wallet Sign (0x45)
             </button>
             <button
               onClick={handleSignTypedData}
