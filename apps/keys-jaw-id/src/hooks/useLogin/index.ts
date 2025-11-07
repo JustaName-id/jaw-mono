@@ -1,5 +1,5 @@
 import { useMutation } from "@tanstack/react-query";
-import { Chain, PasskeyAccount } from "packages/core/src";
+import { Chain } from "@jaw.id/core";
 import { PasskeyService } from "../../lib/passkey-service";
 import { useAuth } from "../useAuth";
 

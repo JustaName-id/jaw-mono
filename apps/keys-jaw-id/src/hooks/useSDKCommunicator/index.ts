@@ -35,6 +35,7 @@ import {
   restoreSharedSecret,
   getOwnPublicKeyFromStorage,
   clearStoredKeys,
+  EncryptedData,
 } from '../../lib/sdk-crypto';
 
 export function useSDKCommunicator() {
@@ -352,7 +353,7 @@ export function useSDKCommunicator() {
 
       // Decrypt the request
       const decrypted: DecryptedRequest = await decrypt(
-        request.content.encrypted!,
+        request.content.encrypted! as EncryptedData,
         sharedSecret
       );
 

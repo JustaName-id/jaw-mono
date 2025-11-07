@@ -3,10 +3,9 @@
 import { TransactionDialog, TransactionData, getChainIcon } from "@jaw/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, parseEther, Hash } from "viem";
-import { SmartAccount } from "viem/account-abstraction";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
-import { sendTransaction, estimateUserOpGas, type Chain, calculateGas } from "@jaw.id/core";
+import {sendTransaction, estimateUserOpGas, type Chain, calculateGas, ToJustanAccountReturnType} from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -56,7 +55,7 @@ export const TransactionModal = ({
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
+  const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Determine if sponsored based on transactionRequest or prop

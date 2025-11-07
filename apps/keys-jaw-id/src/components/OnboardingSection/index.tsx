@@ -3,8 +3,7 @@
 import { LocalStorageAccount, OnboardingDialog } from '@jaw/ui';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState } from 'react';
-import { SUPPORTED_CHAINS } from 'packages/core/src';
-import { Chain } from 'packages/core/src';
+import { SUPPORTED_CHAINS, Chain } from '@jaw.id/core';
 import { ChainId } from '../../utils/types';
 
 

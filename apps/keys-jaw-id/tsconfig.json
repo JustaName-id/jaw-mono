@@ -18,6 +18,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "incremental": true,
+    "types": [],
     "plugins": [
       {
         "name": "next"
@@ -32,7 +33,6 @@
       ]
     },
     "outDir": "dist",
-    "rootDir": "src",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": [

@@ -5,7 +5,6 @@
 
 import {
   saveKeys,
-  loadKeys,
   clearKeys as clearStorageKeys,
   hasPeerKeys as hasStoredPeerKeys,
   getOwnKeyPair as getStoredOwnKeyPair,
@@ -18,7 +17,7 @@ export interface KeyManager {
 }
 
 export interface EncryptedData {
-  iv: Uint8Array;
+  iv: Uint8Array<ArrayBuffer>;
   cipherText: ArrayBuffer;
 }
 

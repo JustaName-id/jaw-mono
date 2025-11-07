@@ -62,8 +62,8 @@
     "nx": "21.6.4",
     "postcss": "8.4.38",
     "tailwindcss": "3.4.3",
-    "tsx": "^4.8.1",
     "tslib": "2.8.1",
+    "tsx": "^4.8.1",
     "typescript": "~5.9.2",
     "typescript-eslint": "^8.40.0",
     "verdaccio": "^6.0.5",
@@ -75,6 +75,9 @@
     "packages/*",
     "apps/*"
   ],
+  "resolutions": {
+    "viem": "2.38.2"
+  },
   "nx": {
     "includedScripts": [],
     "targets": {

@@ -3,9 +3,9 @@
 import { SignatureDialog, getChainIcon } from "@jaw/ui";
 import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { SmartAccount } from "viem/account-abstraction";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
+import {ToJustanAccountReturnType} from "@jaw.id/core";
 
 
 
@@ -28,7 +28,7 @@ export const SignatureModal = ({
 }: SignatureModalProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
+  const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
   const [timestamp] = useState(() => new Date());
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { getSmartAccount } = usePasskeys();

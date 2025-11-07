@@ -5,7 +5,7 @@ export function useIsMobile(breakpoint = 768) {
 
   useEffect(() => {
     // Check if window is defined (client-side)
-    if (typeof window === 'undefined') return
+    if (typeof window === 'undefined') return undefined
 
     // Media query for mobile detection
     const mediaQuery = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
@@ -28,6 +28,8 @@ export function useIsMobile(breakpoint = 768) {
       mediaQuery.addListener(handleMediaQueryChange)
       return () => mediaQuery.removeListener(handleMediaQueryChange)
     }
+
+    return undefined
   }, [breakpoint])
 
   return isMobile

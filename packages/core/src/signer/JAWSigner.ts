@@ -1,4 +1,5 @@
 import { Address, hexToNumber, isAddressEqual, numberToHex } from 'viem';
+import { UUID } from 'crypto';
 
 import { Signer } from './interface.js';
 import {
@@ -352,7 +353,7 @@ export class JAWSigner implements Signer {
         const publicKey = await exportKeyToHexString('public', await this.keyManager.getOwnPublicKey());
 
         return {
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as UUID,
             correlationId,
             sender: publicKey,
             content,
