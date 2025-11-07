@@ -9,6 +9,7 @@ import {
     injectRequestCapabilities,
 } from './SignerUtils.js';
 import { getCapabilities } from '../rpc/capabilities.js';
+import { getCallStatus } from '../rpc/wallet_sendCalls.js';
 
 import { Communicator } from '../communicator/index.js';
 import { standardErrors } from '../errors/index.js';
@@ -164,6 +165,8 @@ export class JAWSigner implements Signer {
                 return numberToHex(this.chain.id);
             case 'wallet_getCapabilities':
                 return this.handleGetCapabilitiesRequest(request);
+            case 'wallet_getCallsStatus':
+                return this.handleGetCallsStatusRequest(request);
             case 'wallet_switchEthereumChain':
                 return this.handleSwitchChainRequest(request);
             case 'personal_sign':
@@ -332,6 +335,39 @@ export class JAWSigner implements Signer {
         );
 
         return filteredCapabilities;
+    }
+
+    private async handleGetCallsStatusRequest(request: RequestArguments) {
+        // Extract batchId from params
+        const batchId = Array.isArray(request.params) && request.params[0] 
+            ? String(request.params[0]) 
+            : undefined;
+        
+        if (!batchId) {
+            throw standardErrors.rpc.invalidParams('batchId is required');
+        }
+        
+        // Get status from storage
+        const callStatus = getCallStatus(batchId);
+        
+        if (!callStatus) {
+            throw standardErrors.rpc.invalidParams(`No call status found for batchId: ${batchId}`);
+        }
+        
+        // Return status in expected format
+        // Status codes: 100 = pending, 200 = completed, 400 = failed
+        let statusCode = 100; // pending
+        if (callStatus.status === 'completed') {
+            statusCode = 200;
+        } else if (callStatus.status === 'failed') {
+            statusCode = 400;
+        }
+        
+        return {
+            id: batchId,
+            status: statusCode,
+            receipts: callStatus.receipts || [],
+        };
     }
 
     private async sendEncryptedRequest(request: RequestArguments): Promise<RPCResponseMessage> {

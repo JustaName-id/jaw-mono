@@ -1,7 +1,7 @@
 import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
 import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
-import { store, createInitialChains, ChainClients } from '../store/index.js';
+import { store, createInitialChains, ChainClients, createClients } from '../store/index.js';
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   apiKey: string;
@@ -69,6 +69,7 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
   if (params.apiKey) {
     const initialChains = createInitialChains(params.apiKey, params.paymasterUrls);
     store.chains.set(initialChains);
+    createClients(initialChains);
     // Clients will be created lazily when first accessed
   }
 

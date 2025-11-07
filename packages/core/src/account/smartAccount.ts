@@ -8,16 +8,20 @@ import {
     pad,
     Transport,
     Chain as ViemChain,
-    formatUnits
+    formatUnits,
+    http,
+    createPublicClient
 } from "viem";
 import {getCode, getGasPrice, readContract} from "viem/actions";
 import {abi, JustanAccountImplementation, toJustanAccount} from "../account/index.js";
 import {
     BundlerClient,
     SmartAccount,
+    createBundlerClient,
+    createPaymasterClient,
     WebAuthnAccount
 } from "viem/account-abstraction";
-import {Chain, getBundlerClient as getBundlerClientFromStore} from "../store/index.js";
+import {Chain} from "../store/index.js";
 import {arbitrum, arbitrumSepolia, base, baseSepolia, mainnet, optimism, optimismSepolia, sepolia} from "viem/chains";
 
 export type FindOwnerIndexParams = {
@@ -67,14 +71,26 @@ export const SUPPORTED_CHAINS = [
  */
 export const getBundlerClient = (chain: Chain): BundlerClient<Transport, ViemChain> => {
     console.log('🔍 Getting bundler client for chain:', chain);
-    const bundlerClient = getBundlerClientFromStore(chain.id);
+    // const bundlerClient = getBundlerClientFromStore(chain.id);
+    const viemChain = SUPPORTED_CHAINS.find(c => c.id === chain.id);
 
-    if (!bundlerClient) {
-        throw new Error(`Unable to create bundler client for chain ${chain.id}`);
-    }
 
-    // Type assertion: we know the bundler client has a chain because it's created with one
-    return bundlerClient as BundlerClient<Transport, ViemChain>;
+    const publicClient = createPublicClient({
+        chain: viemChain,
+        transport: http(chain.rpcUrl),
+    });
+
+    const paymasterClient = chain.paymasterUrl
+        ? createPaymasterClient({
+            transport: http(chain.paymasterUrl)
+        })
+        : undefined;
+
+        return createBundlerClient({
+            client: publicClient,
+            ...(paymasterClient && { paymaster: paymasterClient }),
+            transport: http(chain.rpcUrl)
+        });
 }
 
 export async function sendTransaction(

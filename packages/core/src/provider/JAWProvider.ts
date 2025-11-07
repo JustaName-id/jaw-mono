@@ -15,7 +15,7 @@ import {
 
 import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest, buildHandleJawRpcUrl } from '../utils/index.js';
 
-import { correlationIds, store } from '../store/index.js';
+import { correlationIds } from '../store/index.js';
 import { storeCallStatus, waitForReceiptInBackground, getCallStatus } from '../rpc/index.js';
 
 import { Signer } from '../signer/index.js';
@@ -191,22 +191,15 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             
             // Handle wallet_sendCalls result to store status and start background task
             if (args.method === 'wallet_sendCalls') {
-                const resultObj = result as { id?: string };
+                const resultObj = result as { id?: string, chainId?: number };
                 const userOpHash = resultObj?.id;
+                const chainId = resultObj?.chainId;
                 
-                if (userOpHash) {
+                if (userOpHash && chainId) {
                     // Get chainId - priority order:
                     // 1. From store account chain (set during connection/handshake)
                     // 2. From metadata defaultChainId
-                    // 3. Default to 1 (mainnet)
-                    let chainId = 1; // default fallback
-                    const accountChain = store.account.get().chain;
-                    if (accountChain?.id) {
-                        chainId = accountChain.id;
-                    } else if (this.metadata.defaultChainId) {
-                        chainId = this.metadata.defaultChainId;
-                    }
-                    
+
                     // Store call status and start background task
                     storeCallStatus(userOpHash, chainId);
                     // Start background task (don't await - runs in background)
@@ -214,39 +207,6 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         console.error('Background receipt wait failed:', error);
                     });
                 }
-            }
-            
-            // Handle wallet_getCallsStatus when signer exists
-            if (args.method === 'wallet_getCallsStatus') {
-                const batchId = Array.isArray(args.params) && args.params[0] 
-                    ? String(args.params[0]) 
-                    : undefined;
-                
-                if (!batchId) {
-                    throw standardErrors.rpc.invalidParams('batchId is required');
-                }
-                
-                // Get status from storage
-                const callStatus = getCallStatus(batchId);
-                
-                if (!callStatus) {
-                    throw standardErrors.rpc.invalidParams(`No call status found for batchId: ${batchId}`);
-                }
-                
-                // Return status in expected format
-                // Status codes: 100 = pending, 200 = completed, 400 = failed
-                let statusCode = 100; // pending
-                if (callStatus.status === 'completed') {
-                    statusCode = 200;
-                } else if (callStatus.status === 'failed') {
-                    statusCode = 400;
-                }
-                
-                return {
-                    id: batchId,
-                    status: statusCode,
-                    receipts: callStatus.receipts || [],
-                } as T;
             }
             
             return result as T;

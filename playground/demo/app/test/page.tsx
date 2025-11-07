@@ -14,7 +14,7 @@ export default function TestPage() {
     createJAWSDK({
       appName: 'JAW Demo App',
       appLogoUrl: null,
-      defaultChainId: 1,
+      defaultChainId: 84532,
 
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
@@ -325,9 +325,9 @@ export default function TestPage() {
             },
             // Call 2: ERC20 transfer (properly encoded with viem)
             {
-              to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC contract address
-              value: '0x0',
-              data: transferData,
+              to: '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0',
+              value: `0x${ethValue.toString(16)}`,
+              data: '0x',
             },
           ],
           // Optional parameters supported by current implementation
@@ -335,6 +335,9 @@ export default function TestPage() {
           atomicRequired: true, // All calls must succeed or all fail
         }]
       });
+
+      addLog(`[Demo] Batch transaction result: ${JSON.stringify(result)}`);
+      console.log('[Demo] Batch transaction result:', result);
 
       // Extract batch ID from result
       const batchId = typeof result === 'object' && result !== null && 'id' in result 

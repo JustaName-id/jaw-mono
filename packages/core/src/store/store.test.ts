@@ -215,25 +215,25 @@ describe('store', () => {
         metadata: {
           appName: 'Test App',
           appLogoUrl: 'https://example.com/logo.png',
-          appChainIds: [1, 11155111],
+          defaultChainId: 1,
         },
       });
 
       const state = config.get();
       expect(state.metadata?.appName).toBe('Test App');
-      expect(state.metadata?.appChainIds).toEqual([1, 11155111]);
+      expect(state.metadata?.defaultChainId).toBe(1);
     });
 
     it('should set config preference', () => {
       config.set({
         preference: {
-          mode: 'cross-platform',
+          appSpecific: false,
           keysUrl: 'https://keys.example.com',
         },
       });
 
       const state = config.get();
-      expect(state.preference?.mode).toBe('cross-platform');
+      expect(state.preference?.appSpecific).toBe(false);
       expect(state.preference?.keysUrl).toBe('https://keys.example.com');
     });
 
@@ -242,7 +242,7 @@ describe('store', () => {
         metadata: {
           appName: 'Test App',
           appLogoUrl: null,
-          appChainIds: [1],
+          defaultChainId: 1,
         },
       });
 
@@ -276,7 +276,7 @@ describe('store', () => {
         metadata: {
           appName: 'Test App',
           appLogoUrl: null,
-          appChainIds: [1],
+          defaultChainId: 1,
         },
       });
 
