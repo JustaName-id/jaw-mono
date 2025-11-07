@@ -83,6 +83,9 @@ export const SiweDialog = ({
             </p>
             {/* <InfoIcon /> */}
           </div>
+          <p className="text-sm text-muted-foreground">
+            {displayAddress}
+          </p>
         </div>
       }
       contentStyle={isMobile ? {
