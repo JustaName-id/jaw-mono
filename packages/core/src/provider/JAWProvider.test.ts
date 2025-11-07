@@ -441,7 +441,9 @@ describe('JAWProvider', () => {
       (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
       (waitForReceiptInBackground as Mock).mockRejectedValue(new Error('Background task failed'));
 
-      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const consoleErrorSpy = vi.spyOn(console, 'error').mockImplementation(() => {
+        // no-op
+      });
 
       // Act
       const result = await provider.request(request);
