@@ -6,12 +6,15 @@ import { Address, parseEther, Hash } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
 import {sendTransaction, estimateUserOpGas, type Chain, calculateGas, ToJustanAccountReturnType} from "@jaw.id/core";
+import { sendBundledTransaction } from "packages/core/src/account/smartAccount";
 
 // Transaction execution result
 export interface TransactionResult {
   hash?: Hash;
   sendCallsId?: string;
   userOpHash?: Hash;
+  id?:Hash;
+  chainId?: number;
 }
 
 // Transaction request data with method-specific metadata
@@ -271,18 +274,29 @@ export const TransactionModal = ({
       });
 
       // Send transaction using core package
+      let result: TransactionResult ;
       // This handles bundler communication and returns the final transaction hash
-      const txHash = await sendTransaction(smartAccount, transactionCalls, chain);
-
-      console.log('✅ Transaction confirmed:', txHash);
-      setTransactionStatus('Transaction confirmed!');
-
-      // Return the transaction result with proper format based on method
-      const result: TransactionResult = {
-        hash: txHash,
-        sendCallsId: transactionRequest?.method === 'wallet_sendCalls' ? txHash : undefined,
+      if(transactionRequest?.method === 'wallet_sendCalls') {
+        const bundledResult = await sendBundledTransaction(smartAccount, transactionCalls, chain);
+           // Return the transaction result with proper format based on method
+       result = {
+        id: bundledResult.id,
+        chainId: bundledResult.chainId,
       };
 
+   
+      }else{
+       const  txHash = await sendTransaction(smartAccount, transactionCalls, chain);
+       result = {
+        hash: txHash,
+      };
+      }
+
+
+      console.log('✅ Transaction confirmed:', result);
+      setTransactionStatus('Transaction confirmed!');
+
+   
       // Log metadata for debugging
       if (transactionRequest) {
         console.log('📋 Transaction metadata:', {

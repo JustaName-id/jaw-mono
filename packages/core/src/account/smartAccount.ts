@@ -66,6 +66,7 @@ export const SUPPORTED_CHAINS = [
  * @throws Error if the chain is not supported or client creation fails
  */
 export const getBundlerClient = (chain: Chain): BundlerClient<Transport, ViemChain> => {
+    console.log('🔍 Getting bundler client for chain:', chain);
     const bundlerClient = getBundlerClientFromStore(chain.id);
 
     if (!bundlerClient) {

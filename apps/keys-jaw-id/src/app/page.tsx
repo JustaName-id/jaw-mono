@@ -117,7 +117,7 @@ export default function KeysJawIdApp() {
 
         setConfig(message.data);
         setEnsConfig(message.data.preference?.ens);
-        setChainId(message.data.metadata?.appChainIds?.[0] as ChainId);
+        setChainId(message.data.metadata?.defaultChainId as ChainId);
         setApiKey(message.data.apiKey);
 
         // Always show account selection UI - never auto-authenticate
