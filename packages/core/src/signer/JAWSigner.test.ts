@@ -13,6 +13,7 @@ import {
 } from '../utils/index.js';
 import { fetchRPCRequest } from '../utils/index.js';
 import { correlationIds } from '../store/correlation-ids/store.js';
+import { getCallStatus } from '../rpc/wallet_sendCalls.js';
 
 // Mock dependencies
 vi.mock('../communicator/index.js', () => ({
@@ -51,6 +52,10 @@ vi.mock('./utils.js', async (importOriginal) => {
     clearSignerType: vi.fn(),
   };
 });
+
+vi.mock('../rpc/wallet_sendCalls.js', () => ({
+  getCallStatus: vi.fn(),
+}));
 
 const mockCryptoKey = {} as CryptoKey;
 const mockEncryptedData = {
@@ -130,6 +135,7 @@ describe('JAWSigner', () => {
         version: '1.0.0',
       },
       keys: {},
+      callStatuses: {},
     });
 
     vi.spyOn(store.config, 'get').mockReturnValue({
@@ -448,6 +454,7 @@ describe('JAWSigner', () => {
           version: '1.0.0',
         },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -480,6 +487,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -489,6 +497,105 @@ describe('JAWSigner', () => {
       expect(result).toEqual({
         '0x1': { paymasterService: { supported: true } },
         '0x89': { atomicBatch: { supported: true } },
+      });
+    });
+
+    it('should handle wallet_getCallsStatus request', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockCallStatus = {
+        status: 'pending',
+        chainId: 1,
+      };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+
+      // Act
+      const result = await signer.request(callsStatusRequest);
+
+      // Assert
+      expect(getCallStatus).toHaveBeenCalledWith('0xbatchId');
+      expect(result).toEqual({
+        id: '0xbatchId',
+        status: 100, // pending
+        receipts: [],
+      });
+    });
+
+    it('should return status code 200 for completed status', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockCallStatus = {
+        status: 'completed',
+        chainId: 1,
+        receipts: [{ hash: '0xreceipt1' }],
+      };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+
+      // Act
+      const result = await signer.request(callsStatusRequest);
+
+      // Assert
+      expect(result).toEqual({
+        id: '0xbatchId',
+        status: 200, // completed
+        receipts: [{ hash: '0xreceipt1' }],
+      });
+    });
+
+    it('should return status code 400 for failed status', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockCallStatus = {
+        status: 'failed',
+        chainId: 1,
+        error: 'Transaction failed',
+      };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+
+      // Act
+      const result = await signer.request(callsStatusRequest);
+
+      // Assert
+      expect(result).toEqual({
+        id: '0xbatchId',
+        status: 400, // failed
+        receipts: [],
+      });
+    });
+
+    it('should throw error if batchId is missing', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: [],
+      };
+
+      // Act & Assert
+      await expect(signer.request(callsStatusRequest)).rejects.toMatchObject({
+        message: 'batchId is required',
+      });
+    });
+
+    it('should throw error if no call status found', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xnonexistent'],
+      };
+      (getCallStatus as Mock).mockReturnValue(undefined);
+
+      // Act & Assert
+      await expect(signer.request(callsStatusRequest)).rejects.toMatchObject({
+        message: 'No call status found for batchId: 0xnonexistent',
       });
     });
 
@@ -509,6 +616,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       (fetchRPCRequest as Mock).mockResolvedValue('0x1000');
@@ -864,6 +972,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1 }], // No rpcUrl in chains either
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Manually set authenticated state for the signer
@@ -1069,6 +1178,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       const request: RequestArguments = {
@@ -1277,6 +1387,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act & Assert
@@ -1299,6 +1410,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -1330,6 +1442,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -1369,6 +1482,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -1400,6 +1514,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -1583,6 +1698,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act & Assert
@@ -1621,6 +1737,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Clear previous callback calls from beforeEach
@@ -1649,6 +1766,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Clear previous callback calls
@@ -1973,6 +2091,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 137, rpcUrl: 'https://polygon.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -2001,6 +2120,7 @@ describe('JAWSigner', () => {
         chains: [],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       const metadata: AppMetadata = {
@@ -2032,6 +2152,7 @@ describe('JAWSigner', () => {
         chains: [],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       const metadata: AppMetadata = {
@@ -2249,6 +2370,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       const request: RequestArguments = {
@@ -2305,6 +2427,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       await signer.request({
