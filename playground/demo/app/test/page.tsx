@@ -13,7 +13,8 @@ export default function TestPage() {
     createJAWSDK({
       appName: 'JAW Demo App',
       appLogoUrl: null,
-      defaultChainId: 1,
+      defaultChainId: 84532,
+
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
         ens: process.env.NEXT_PUBLIC_ENS_NAME || '',

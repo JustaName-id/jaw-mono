@@ -11,4 +11,7 @@ export {
     SUPPORTED_METHODS,
 } from './methodTypes.js';
 
+export {storeCallStatus, getCallStatus, waitForReceiptInBackground} from './wallet_sendCalls.js';
+
+
 export { getCapabilities } from './capabilities.js';

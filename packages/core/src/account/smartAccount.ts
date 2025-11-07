@@ -35,6 +35,17 @@ export type FindOwnerIndexParams = {
     publicKey: Hex;
 };
 
+export type BundledTransactionResult = {
+    /**
+     * The user operation hash
+     */
+    id: Hash;
+    /**
+     * The chain id
+     */
+    chainId: number;
+}
+
 export const SUPPORTED_CHAINS = [
     mainnet,
     sepolia,
@@ -101,7 +112,7 @@ export async function sendBundledTransaction(
         data?: Hex;
     }>,
     chain: Chain
-): Promise<Hash> {
+): Promise<BundledTransactionResult> {
     const bundlerClient = getBundlerClient(chain)
 
     const userOpHash = await bundlerClient.sendUserOperation({
@@ -113,7 +124,10 @@ export async function sendBundledTransaction(
         }))
     })
 
-    return userOpHash
+    return {
+        id: userOpHash,
+        chainId: chain.id
+    }
 }
 
 export async function estimateUserOpGas(

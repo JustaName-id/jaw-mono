@@ -1,7 +1,7 @@
 import { SDK_VERSION } from '../sdk-info.js';
 import { createJSONStorage, persist } from 'zustand/middleware';
 import { StateCreator, createStore } from 'zustand/vanilla';
-import { ChainSlice, KeysSlice, AccountSlice, ConfigSlice, StoreState, Account, Chain, Config } from './types.js';
+import { ChainSlice, KeysSlice, AccountSlice, ConfigSlice, CallStatusSlice, StoreState, Account, Chain, Config, CallStatus } from './types.js';
 
 
 
@@ -30,6 +30,12 @@ const createChainSlice: StateCreator<StoreState, [], [], ChainSlice> = () => {
     };
   };
 
+  const createCallStatusSlice: StateCreator<StoreState, [], [], CallStatusSlice> = () => {
+    return {
+      callStatuses: {},
+    };
+  };
+
 
   export const sdkstore = createStore(
     persist<StoreState>(
@@ -38,6 +44,7 @@ const createChainSlice: StateCreator<StoreState, [], [], ChainSlice> = () => {
         ...createKeysSlice(...args),
         ...createAccountSlice(...args),
         ...createConfigSlice(...args),
+        ...createCallStatusSlice(...args),
       }),
       {
         name: 'jawsdk.store',
@@ -50,6 +57,7 @@ const createChainSlice: StateCreator<StoreState, [], [], ChainSlice> = () => {
             keys: state.keys,
             account: state.account,
             config: state.config,
+            callStatuses: state.callStatuses,
           } as StoreState;
         },
       }
@@ -102,11 +110,34 @@ const createChainSlice: StateCreator<StoreState, [], [], ChainSlice> = () => {
     },
   };
 
+  export const callStatuses = {
+    get: (batchId: string) => sdkstore.getState().callStatuses[batchId],
+    set: (batchId: string, status: CallStatus) => {
+      sdkstore.setState((state) => ({
+        callStatuses: { ...state.callStatuses, [batchId]: status },
+      }));
+    },
+    update: (batchId: string, updates: Partial<CallStatus>) => {
+      const current = sdkstore.getState().callStatuses[batchId];
+      if (current) {
+        sdkstore.setState((state) => ({
+          callStatuses: { ...state.callStatuses, [batchId]: { ...current, ...updates } },
+        }));
+      }
+    },
+    clear: () => {
+      sdkstore.setState({
+        callStatuses: {},
+      });
+    },
+  };
+
   const actions = {
     account,
     chains,
     keys,
     config,
+    callStatuses,
   };
   
   export const store = {
