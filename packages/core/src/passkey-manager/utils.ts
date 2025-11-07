@@ -1,5 +1,172 @@
+import { createWebAuthnCredential, toWebAuthnAccount } from "viem/account-abstraction";
 import { restCall } from "../api/index.js";
 import type { PasskeyRegistrationRequest, PasskeyLookupResponse } from "./types.js";
+import type { WebAuthnAccount } from "viem/account-abstraction";
+
+/**
+ * WebAuthn authentication result
+ */
+export interface WebAuthnAuthenticationResult {
+  credential: PublicKeyCredential;
+  challenge: Uint8Array;
+}
+
+export interface ImportWebAuthnAuthenticationResult {
+  name: string;
+  credential: {
+    id: string;
+    publicKey: `0x${string}`;
+  };
+}
+
+/**
+ * Custom error for WebAuthn authentication failures
+ */
+export class WebAuthnAuthenticationError extends Error {
+  constructor(message: string, public override readonly cause?: unknown) {
+    super(message);
+    this.name = 'WebAuthnAuthenticationError';
+  }
+}
+
+/**
+ * Authenticate with a WebAuthn passkey
+ * @param credentialId - The base64url encoded credential ID
+ * @param rpId - The relying party identifier (e.g., domain name)
+ * @param options - Optional authentication options
+ * @returns WebAuthn authentication result with credential and challenge
+ * @throws {WebAuthnAuthenticationError} If authentication fails
+ */
+export async function authenticateWithWebAuthnUtils(
+  rpId: string,
+  credentialId: string,
+  options?: {
+    userVerification?: UserVerificationRequirement;
+    timeout?: number;
+    transports?: AuthenticatorTransport[];
+  }
+): Promise<WebAuthnAuthenticationResult> {
+  // Check if WebAuthn is supported
+  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+    throw new WebAuthnAuthenticationError('WebAuthn is not supported in this environment');
+  }
+  try {
+    // Convert credentialId from base64url to binary format
+    const base64 = credentialId.replace(/-/g, "+").replace(/_/g, "/");
+    const paddedBase64 = base64 + "==".substring(0, (4 - (base64.length % 4)) % 4);
+    const credentialIdArray = Uint8Array.from(atob(paddedBase64), (c) => c.charCodeAt(0));
+
+    // Generate challenge
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+    // Perform WebAuthn authentication
+    const credential = (await navigator.credentials.get({
+      publicKey: {
+        challenge: challenge,
+        rpId: rpId,
+        allowCredentials: [{
+          id: credentialIdArray,
+          type: "public-key",
+          transports: options?.transports ?? ["internal", "hybrid"],
+        }],
+        userVerification: options?.userVerification ?? "preferred",
+        timeout: options?.timeout ?? 60000,
+      },
+    })) as PublicKeyCredential | null;
+
+    if (!credential) {
+      throw new WebAuthnAuthenticationError("Failed to authenticate with specified passkey");
+    }
+
+    return {
+      credential,
+      challenge,
+    };
+  } catch (error) {
+    if (error instanceof WebAuthnAuthenticationError) {
+      throw error;
+    }
+    throw new WebAuthnAuthenticationError(
+      `WebAuthn authentication failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
+    );
+  }
+}
+
+
+export async function createPasskeyUtils(
+  username: string,
+  rpId: string,
+  rpName: string
+): Promise<{ credentialId: string; publicKey: `0x${string}`; webAuthnAccount: WebAuthnAccount }> {
+  
+  if (typeof window === 'undefined' || !window.PublicKeyCredential) {
+    throw new PasskeyRegistrationError('WebAuthn is not supported in this environment');
+  }
+
+  const credential = await createWebAuthnCredential({
+    name: username,
+    rp: {
+      id: rpId,
+      name: rpName,
+    },
+  });
+
+  const webAuthnAccount = toWebAuthnAccount({
+    credential,
+  });
+
+  await registerPasskeyInBackend({
+    credentialId: credential.id,
+    publicKey: credential.publicKey,
+    displayName: username,
+  },
+);
+
+
+  return {
+    credentialId: credential.id,
+    publicKey: credential.publicKey,
+    webAuthnAccount: webAuthnAccount,
+  };
+}
+
+
+export async function importPasskeyUtils(): Promise<ImportWebAuthnAuthenticationResult> {
+  try {
+    const challenge = crypto.getRandomValues(new Uint8Array(32));
+
+  const credential = (await navigator.credentials.get({
+    publicKey: {
+      challenge: challenge,
+      userVerification: "preferred",
+      timeout: 60000,
+    },
+  })) as PublicKeyCredential;
+  if (!credential) {
+    throw new Error("No credential selected");
+  }
+
+  const credentialIdBase64 = btoa(
+    String.fromCharCode(...new Uint8Array(credential.rawId))
+  ).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+
+  const passkeyData = await lookupPasskeyFromBackend(credentialIdBase64);
+
+  return {
+    name: passkeyData.displayName || "Passkey",
+    credential: {
+      id: credentialIdBase64,
+      publicKey: passkeyData.publicKey,
+    }
+  };
+  } catch (error) {
+    throw new PasskeyLookupError(
+      `Failed to import passkey: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      error
+    );
+  }
+  
+}
 
 /**
  * Custom error for passkey registration failures

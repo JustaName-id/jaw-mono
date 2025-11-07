@@ -40,7 +40,7 @@ export interface LookupPasskeysRequest {
 
 export interface PasskeyLookupResponse {
   credentialId: string
-  publicKey: string
+  publicKey: `0x${string}`
   displayName: string
 }
 

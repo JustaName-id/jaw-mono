@@ -69,6 +69,10 @@ export class Communicator {
                 });
             })
             .then(() => {
+                // Wait for popup to signal it's ready
+                return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupReady');
+            })
+            .then(() => {
                 if (!this.popup) throw standardErrors.rpc.internal();
                 return this.popup;
             });

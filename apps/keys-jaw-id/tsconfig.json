@@ -18,6 +18,7 @@
     "forceConsistentCasingInFileNames": true,
     "skipLibCheck": true,
     "incremental": true,
+    "types": [],
     "plugins": [
       {
         "name": "next"
@@ -26,10 +27,12 @@
     "paths": {
       "@/*": [
         "./src/*"
+      ],
+      "@jaw/ui": [
+        "../../packages/ui/src/*"
       ]
     },
     "outDir": "dist",
-    "rootDir": "src",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"
   },
   "include": [
@@ -53,5 +56,13 @@
     "eslint.config.js",
     "eslint.config.cjs",
     "eslint.config.mjs"
+  ],
+  "references": [
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/ui"
+    }
   ]
 }

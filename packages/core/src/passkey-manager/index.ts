@@ -15,5 +15,7 @@ export {
   lookupPasskeyFromBackend,
   PasskeyRegistrationError,
   PasskeyLookupError,
+  WebAuthnAuthenticationError,
+  type WebAuthnAuthenticationResult,
 } from './utils.js';
 
