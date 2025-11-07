@@ -6,7 +6,7 @@ import { Address, parseEther, Hash } from "viem";
 import { SmartAccount } from "viem/account-abstraction";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
-import { sendTransaction, estimateUserOpGas, type Chain , calculateGas } from "@jaw.id/core";
+import { sendTransaction, estimateUserOpGas, type Chain, calculateGas } from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -33,8 +33,6 @@ export interface TransactionRequestData {
 }
 
 export interface TransactionModalProps {
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   transactionRequest?: TransactionRequestData;
   transactions?: TransactionData[];
   sponsored?: boolean;
@@ -44,8 +42,6 @@ export interface TransactionModalProps {
 }
 
 export const TransactionModal = ({
-  open,
-  onOpenChange,
   transactionRequest,
   transactions,
   sponsored = false,
@@ -94,9 +90,9 @@ export const TransactionModal = ({
   const networkName = useMemo(() => {
     // Use chain prop if available, otherwise fall back to transaction chainId
     const chainId = chain?.id ?? normalizedTransactions[0]?.chainId;
-    
+
     if (!chainId) return 'Ethereum';
-    
+
     // Use the getChainNameFromId utility which has comprehensive chain mapping
     return getChainNameFromId(chainId);
   }, [normalizedTransactions, chain]);
@@ -104,9 +100,9 @@ export const TransactionModal = ({
   const chainIconKey = useMemo(() => {
     // Use chain prop if available, otherwise fall back to transaction chainId
     const chainId = chain?.id ?? normalizedTransactions[0]?.chainId;
-    
+
     if (!chainId) return 'ethereum';
-    
+
     // Use getChainIconKeyFromId to get the correct icon key format
     return getChainIconKeyFromId(chainId);
   }, [normalizedTransactions, chain]);
@@ -120,17 +116,17 @@ export const TransactionModal = ({
   }, []);
 
   useEffect(() => {
-    if (!open) {
+    if (!chain) {
       resetModalState();
     }
-  }, [open, resetModalState]);
+  }, [chain, resetModalState]);
 
   // Initialize smart account when modal opens
   useEffect(() => {
     let isMounted = true;
 
     const initializeModal = async () => {
-      if (open && chain) {
+      if (chain) {
         try {
           setIsProcessing(false);
           console.log('🔐 Initializing transaction modal');
@@ -321,15 +317,16 @@ export const TransactionModal = ({
       (rejectionError as any).code = 4001;
       console.log('❌ User cancelled transaction request');
       onError?.(rejectionError);
-      onOpenChange(false);
       setTransactionStatus('');
     }
-  }, [isProcessing, onError, onOpenChange]);
+  }, [isProcessing, onError]);
 
   return (
     <TransactionDialog
-      open={open}
-      onOpenChange={onOpenChange}
+      // open={open}
+      // onOpenChange={handleCancel}
+      open={true}
+      onOpenChange={() => { console.log('onOpenChange') }}
       transactions={normalizedTransactions}
       walletAddress={walletAddress ?? ''}
       gasFee={gasFee}

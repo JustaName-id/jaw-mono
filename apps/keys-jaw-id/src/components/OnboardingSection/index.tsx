@@ -10,13 +10,12 @@ import { ChainId } from '../../utils/types';
 
 interface SignInScreenProps {
     onComplete: () => void
-    onCreateAccount: () => void
     ensConfig?: string
     chainId?: ChainId
     apiKey?: string
 }
 
-export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, apiKey }: SignInScreenProps) {
+export function SignInScreen({ onComplete, ensConfig, chainId, apiKey }: SignInScreenProps) {
     const { accounts, refetchAccounts } = usePasskeys();
     const { mutateAsync: login } = useLogin();
     const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
@@ -72,13 +71,9 @@ export function SignInScreen({ onComplete, onCreateAccount, ensConfig, chainId, 
     }
 
     const handleAccountCreationComplete = async () => {
-        try {
-            await refetchAccounts();
-            await refetchAuth();
-            onComplete();
-        } catch (error) {
-            throw error;
-        }
+        await refetchAccounts();
+        await refetchAuth();
+        onComplete();
     }
 
     const handleImportAccount = async () => {

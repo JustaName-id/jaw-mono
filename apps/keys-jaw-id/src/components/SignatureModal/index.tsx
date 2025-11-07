@@ -1,7 +1,7 @@
 'use client'
 
 import { SignatureDialog, getChainIcon } from "@jaw/ui";
-import {  usePasskeys } from "../../hooks";
+import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SmartAccount } from "viem/account-abstraction";
 import type { chain } from "../../lib/sdk-types";
@@ -11,8 +11,6 @@ import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handl
 
 export interface SignatureModalProps {
   origin: string;
-  open: boolean;
-  onOpenChange: (open: boolean) => void;
   message: string;
   address?: string;
   chain: chain;
@@ -22,8 +20,6 @@ export interface SignatureModalProps {
 
 export const SignatureModal = ({
   origin,
-  open,
-  onOpenChange,
   message: messageToSign,
   address,
   chain,
@@ -58,7 +54,7 @@ export const SignatureModal = ({
       console.log('🔍 Signature:', signature);
 
       setSignatureStatus('Signature created successfully!');
-      
+
       // Call onSuccess immediately - parent will handle closing
       // The parent sets state to 'success' and closes the window after onApprove completes
       onSuccess(signature, messageToSign);
@@ -69,7 +65,7 @@ export const SignatureModal = ({
       onError(error as Error);
       setIsProcessing(false);
     }
-  }, [messageToSign, smartAccount, onSuccess, onError, onOpenChange]);
+  }, [messageToSign, smartAccount, onSuccess, onError]);
 
   const handleCancel = () => {
     if (!isProcessing) {
@@ -79,7 +75,6 @@ export const SignatureModal = ({
       (rejectionError as any).code = 4001;
       console.log('❌ User cancelled signature request');
       onError(rejectionError);
-      onOpenChange(false);
       setSignatureStatus('');
     }
   };
@@ -88,13 +83,13 @@ export const SignatureModal = ({
     let isMounted = true;
 
     const initializeModal = async () => {
-      if (open) {
+      if (chain) {
         try {
           setIsProcessing(false); // Reset processing state when opening
           console.log('🔐 Initializing signature modal with message:', messageToSign);
-          console.log('📍 Address:', address);  
+          console.log('📍 Address:', address);
           const smartAccount = await getSmartAccount(chain);
-          
+
           // Only update state if component is still mounted
           if (isMounted) {
             setSmartAccount(smartAccount);
@@ -132,8 +127,10 @@ export const SignatureModal = ({
 
   return (
     <SignatureDialog
-      open={open}
-      onOpenChange={onOpenChange}
+      // open={open}
+      // onOpenChange={onOpenChange}
+      open={true}
+      onOpenChange={() => { console.log('onOpenChange') }}
       message={messageToSign}
       origin={origin}
       timestamp={timestamp}

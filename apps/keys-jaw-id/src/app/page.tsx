@@ -283,8 +283,8 @@ export default function KeysJawIdApp() {
       // Check for sign message requests
       // personal_sign: always a sign message request
       // wallet_sign: only if request.type === "0x45" (Personal Sign per EIP-191)
-      if (method === 'personal_sign' || 
-          (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x45")) {
+      if (method === 'personal_sign' ||
+        (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x45")) {
         requestType = SDKRequestType.SIGN_MESSAGE;
       } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
         requestType = SDKRequestType.SEND_TRANSACTION;
@@ -379,8 +379,6 @@ export default function KeysJawIdApp() {
 
       return (
         <TransactionModal
-          open={true}
-          onOpenChange={() => { }}
           transactionRequest={txData}
           chain={pendingRequest.chain as chain}
           onSuccess={async (result: TransactionResult) => {
@@ -437,7 +435,7 @@ export default function KeysJawIdApp() {
       // Extract message and address based on method type
       let messageToSign: string;
       let address: string | undefined;
-      
+
       if (pendingRequest.method === 'wallet_sign') {
         // wallet_sign: params[0] is SignParams object
         const signParams = pendingRequest.params[0] as { request: { type: string; data: any }; address?: string };
@@ -452,8 +450,8 @@ export default function KeysJawIdApp() {
       return (
         <SignatureModal
           origin={pendingRequest.origin}
-          open={true}
-          onOpenChange={() => { }}
+          // open={true}
+          // onOpenChange={() => { }}
           message={messageToSign}
           address={address}
           chain={pendingRequest.chain as chain}
@@ -628,8 +626,6 @@ export default function KeysJawIdApp() {
                   setState('error');
                 }
               }}
-              onCreateAccount={() => {
-              }}
             />
 
             <button
@@ -689,9 +685,6 @@ export default function KeysJawIdApp() {
                   setError(err instanceof Error ? err.message : 'Authentication failed');
                   setState('passkey-auth');
                 }
-              }}
-              onCreateAccount={() => {
-                setState('passkey-create');
               }}
             />
 

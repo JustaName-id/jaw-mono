@@ -11,8 +11,8 @@ import { useIsMobile } from "../../hooks";
 import { getJustaNameInstance } from "../../utils/justaNameInstance";
 
 export const TransactionDialog = ({
-  open,
-  onOpenChange,
+  // open,
+  // onOpenChange,
   transactions,
   walletAddress,
   gasFee,
@@ -39,7 +39,7 @@ export const TransactionDialog = ({
   // Initialize JustaName and resolve addresses
   useEffect(() => {
     const justaName = getJustaNameInstance();
-    
+
     // Resolve wallet address
     if (walletAddress && currentTransaction?.chainId) {
       justaName.subnames.reverseResolve({
@@ -79,24 +79,24 @@ export const TransactionDialog = ({
   // Helper function to format value for display
   const formatTransactionValue = (value?: string) => {
     if (!value || value === '0' || value === '0x0') return null;
-    
+
     try {
       // Handle hex strings (0x...)
       if (value.startsWith('0x')) {
         const bigIntValue = BigInt(value);
         return formatEther(bigIntValue);
       }
-      
+
       // If value looks like wei (long number, no decimals), format it from wei to ETH
       if (/^\d+$/.test(value) && value.length > 10) {
         return formatEther(BigInt(value));
       }
-      
+
       // If it's already a decimal string (like "0.001"), return as is
       if (/^\d+\.?\d*$/.test(value) && value.length <= 20) {
         return value;
       }
-      
+
       // Try to parse as BigInt and format
       const bigIntValue = BigInt(value);
       return formatEther(bigIntValue);
@@ -111,8 +111,10 @@ export const TransactionDialog = ({
 
   return (
     <DefaultDialog
-      open={open}
-      onOpenChange={!isProcessing ? onOpenChange : undefined}
+      // open={open}
+      // onOpenChange={!isProcessing ? onOpenChange : undefined}
+      open={true}
+      onOpenChange={isProcessing ? undefined : () => { }}
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
           <p className="text-xs font-bold text-muted-foreground leading-[100%]">
@@ -209,7 +211,7 @@ export const TransactionDialog = ({
                         <div className="flex items-center gap-2">
                           {sponsored && gasFee && gasFee !== 'sponsored' && (
                             <div className="flex flex-col line-through text-muted-foreground">
-                             {/* TODO: Add gas fee in USD */}
+                              {/* TODO: Add gas fee in USD */}
                               <p className="text-base font-normal">
                                 ${(ethPrice * Number(gasFee)).toFixed(4)}
                               </p>

@@ -8,6 +8,3 @@ export * from './useCreatePasskey';
 // export * from './useEthPrice';
 // export * from './useJustaName';
 export * from './useSDKCommunicator';
-export * from './useSDKState';
-export * from './useSDKPasskey';
-

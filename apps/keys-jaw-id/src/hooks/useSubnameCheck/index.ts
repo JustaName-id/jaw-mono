@@ -10,7 +10,6 @@ interface UseSubnameCheckResult {
     isLoading: boolean
     isError: boolean
     walletAddress: string | null
-    refetch: () => void
 }
 
 interface UseSubnameCheckOptions {
@@ -23,7 +22,7 @@ export const useSubnameCheck = (options?: UseSubnameCheckOptions): UseSubnameChe
     const { isAuthenticated, walletAddress, isLoading: isAuthLoading } = useAuth()
 
     const ensName = options?.ensName ?? process.env.NEXT_PUBLIC_ENS_NAME ?? 'justanexample.eth'
-    const chainId = options?.chainId ?? (parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1') as ChainId)
+    // const chainId = options?.chainId ?? (parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1') as ChainId)
     const enabled = options?.enabled ?? true
 
     const shouldFetchSubnames = isAuthenticated && !!walletAddress && enabled
@@ -70,6 +69,5 @@ export const useSubnameCheck = (options?: UseSubnameCheckOptions): UseSubnameChe
         isLoading,
         isError,
         walletAddress: walletAddress || null,
-        refetch: () => {}
     }
 }
