@@ -93,6 +93,29 @@ export async function sendTransaction(
     return receipt.receipt.transactionHash
 }
 
+export async function sendBundledTransaction(
+    smartAccount: SmartAccount,
+    calls: Array<{
+        to: Address;
+        value?: bigint;
+        data?: Hex;
+    }>,
+    chain: Chain
+): Promise<Hash> {
+    const bundlerClient = getBundlerClient(chain)
+
+    const userOpHash = await bundlerClient.sendUserOperation({
+        account: smartAccount,
+        calls: calls.map(call => ({
+            to: getAddress(call.to),
+            value: call.value ?? 0n,
+            data: call.data ?? '0x'
+        }))
+    })
+
+    return userOpHash
+}
+
 export async function estimateUserOpGas(
     smartAccount: SmartAccount,
     calls: Array<{
