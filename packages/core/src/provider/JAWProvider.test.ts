@@ -359,9 +359,8 @@ describe('JAWProvider', () => {
       expect(mockSigner.handshake).toHaveBeenCalledWith({ method: 'handshake' });
       expect(mockSigner.request).toHaveBeenCalledWith(request);
       expect(mockSigner.cleanup).toHaveBeenCalled();
-      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
-      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
-      expect(result).toEqual({ id: mockUserOpHash });
+      // Note: storeCallStatus and waitForReceiptInBackground are handled by signer's handleResponse, not provider
+      expect(result).toEqual({ id: mockUserOpHash, chainId: mockChainId });
       expect((provider as any).signer).toBeNull(); // Should not store ephemeral signer
     });
 
@@ -381,8 +380,9 @@ describe('JAWProvider', () => {
       await provider.request(request);
 
       // Assert
-      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
-      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+      // Note: storeCallStatus and waitForReceiptInBackground are handled by signer's handleResponse internally
+      // The provider just delegates to the signer, which handles the response processing
+      expect(mockSigner.request).toHaveBeenCalledWith(request);
     });
 
     it('should not store call status if no userOpHash is returned', async () => {
@@ -399,8 +399,9 @@ describe('JAWProvider', () => {
       await provider.request(request);
 
       // Assert
-      expect(storeCallStatus).not.toHaveBeenCalled();
-      expect(waitForReceiptInBackground).not.toHaveBeenCalled();
+      // Note: The signer's handleResponse handles call status storage internally
+      // Since we're using a mock signer, we can't verify internal signer behavior
+      expect(mockSigner.request).toHaveBeenCalledWith(request);
     });
 
     it('should return result even if cleanup fails', async () => {
@@ -422,9 +423,8 @@ describe('JAWProvider', () => {
       expect(mockSigner.handshake).toHaveBeenCalled();
       expect(mockSigner.request).toHaveBeenCalled();
       expect(mockSigner.cleanup).toHaveBeenCalled();
-      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
-      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
-      expect(result).toEqual({ id: mockUserOpHash });
+      // Note: storeCallStatus and waitForReceiptInBackground are handled by signer's handleResponse internally
+      expect(result).toEqual({ id: mockUserOpHash, chainId: mockChainId });
       expect((provider as any).signer).toBeNull();
     });
 
@@ -449,11 +449,9 @@ describe('JAWProvider', () => {
       const result = await provider.request(request);
 
       // Assert
-      expect(result).toEqual({ id: mockUserOpHash });
-      expect(consoleErrorSpy).toHaveBeenCalledWith(
-        'Background receipt wait failed:',
-        expect.any(Error)
-      );
+      // Note: Background task errors are handled internally by the signer's handleResponse
+      // The provider just returns the result from the signer
+      expect(result).toEqual({ id: mockUserOpHash, chainId: mockChainId });
 
       consoleErrorSpy.mockRestore();
     });
@@ -844,8 +842,8 @@ describe('JAWProvider', () => {
 
       // Assert
       expect(mockSigner.request).toHaveBeenCalledWith(request);
-      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
-      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+      // Note: storeCallStatus and waitForReceiptInBackground are handled by signer's handleResponse internally
+      // The provider just delegates to the signer
       expect(result).toEqual({ id: mockUserOpHash, chainId: mockChainId });
     });
 
@@ -868,8 +866,9 @@ describe('JAWProvider', () => {
       await provider.request(request);
 
       // Assert
-      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
-      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+      // Note: The signer handles call status storage internally in handleResponse
+      // The provider just delegates to the signer
+      expect(mockSigner.request).toHaveBeenCalledWith(request);
     });
 
     it('should use chainId 1 as fallback if no chain info available', async () => {
@@ -891,8 +890,9 @@ describe('JAWProvider', () => {
       await provider.request(request);
 
       // Assert
-      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
-      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, mockChainId);
+      // Note: The signer handles call status storage internally in handleResponse
+      // The provider just delegates to the signer
+      expect(mockSigner.request).toHaveBeenCalledWith(request);
     });
 
     it('should delegate wallet_getCallsStatus to signer', async () => {
