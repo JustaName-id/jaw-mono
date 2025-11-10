@@ -9,7 +9,7 @@ import {
     injectRequestCapabilities,
 } from './SignerUtils.js';
 import { getCapabilities } from '../rpc/capabilities.js';
-import { getCallStatus, waitForReceiptInBackground, storeCallStatus } from '../rpc/wallet_sendCalls.js';
+import { getCallStatusEIP5792, waitForReceiptInBackground, storeCallStatus } from '../rpc/wallet_sendCalls.js';
 
 import { Communicator } from '../communicator/index.js';
 import { standardErrors } from '../errors/index.js';
@@ -363,28 +363,14 @@ export class JAWSigner implements Signer {
             throw standardErrors.rpc.invalidParams('batchId is required');
         }
         
-        // Get status from storage
-        const callStatus = getCallStatus(batchId);
+        // Get status in EIP-5792 format
+        const result = getCallStatusEIP5792(batchId);
         
-        if (!callStatus) {
+        if (!result) {
             throw standardErrors.rpc.invalidParams(`No call status found for batchId: ${batchId}`);
         }
         
-        // Return status in expected format
-        // Status codes: 100 = pending, 200 = completed, 400 = failed
-        let statusCode = 100; // pending
-        if (callStatus.status === 'completed') {
-            statusCode = 200;
-        } else if (callStatus.status === 'failed') {
-            statusCode = 400;
-        }
-        
-        return {
-            id: batchId,
-            status: statusCode,
-            // proper types for result from rpc
-            receipts: callStatus.receipts || [],
-        };
+        return result;
     }
 
     private async sendEncryptedRequest(request: RequestArguments): Promise<RPCResponseMessage> {

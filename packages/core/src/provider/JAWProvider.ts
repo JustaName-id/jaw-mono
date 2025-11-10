@@ -16,7 +16,7 @@ import {
 import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest, buildHandleJawRpcUrl } from '../utils/index.js';
 
 import { correlationIds } from '../store/index.js';
-import { getCallStatus } from '../rpc/index.js';
+import { getCallStatusEIP5792 } from '../rpc/index.js';
 
 import { Signer } from '../signer/index.js';
 
@@ -135,27 +135,14 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                             throw standardErrors.rpc.invalidParams('batchId is required');
                         }
                         
-                        // Get status from storage
-                        const callStatus = getCallStatus(batchId);
+                        // Get status in EIP-5792 format
+                        const result = getCallStatusEIP5792(batchId); // Default to chain 1 if not available
                         
-                        if (!callStatus) {
+                        if (!result) {
                             throw standardErrors.rpc.invalidParams(`No call status found for batchId: ${batchId}`);
                         }
                         
-                        // Return status in expected format
-                        // Status codes: 100 = pending, 200 = completed, 400 = failed
-                        let statusCode = 100; // pending
-                        if (callStatus.status === 'completed') {
-                            statusCode = 200;
-                        } else if (callStatus.status === 'failed') {
-                            statusCode = 400;
-                        }
-                        
-                        return {
-                            id: batchId,
-                            status: statusCode,
-                            receipts: callStatus.receipts || [],
-                        } as T;
+                        return result as T;
                     }
                     case 'net_version': {
                         const result = 1 as T; // default value
@@ -194,4 +181,5 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             callback: this.emit.bind(this),
         });
     }
+
 }

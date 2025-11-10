@@ -472,6 +472,7 @@ export default function TestPage() {
         method: 'wallet_getCallsStatus',
         params: [lastBatchId]
       });
+      console.log('[Demo] Calls status:', status);
 
       // Status format: { id: string, status: number, receipts: unknown[] }
       // Status codes: 100 = pending, 200 = completed, 400 = failed
