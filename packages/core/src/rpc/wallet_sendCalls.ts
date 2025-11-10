@@ -71,6 +71,7 @@ export async function waitForReceiptInBackground(userOpHash: string, chainId: nu
         });
 
         // TODO: Check receipt status to determine if transaction succeeded or failed
+        
 
         // Update storage when done - mark as completed
         updateCallStatusToCompleted(userOpHash, [receipt]);

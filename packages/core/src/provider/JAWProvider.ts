@@ -16,7 +16,7 @@ import {
 import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest, buildHandleJawRpcUrl } from '../utils/index.js';
 
 import { correlationIds } from '../store/index.js';
-import { storeCallStatus, waitForReceiptInBackground, getCallStatus } from '../rpc/index.js';
+import { getCallStatus } from '../rpc/index.js';
 
 import { Signer } from '../signer/index.js';
 
@@ -96,20 +96,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         const ephemeralSigner = this.initSigner('crossPlatform');
                         await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
                         const result = await ephemeralSigner.request(args); // send diffie-hellman encrypted request
-                  
-
-                        const resultObj = result as {id: string, chainId: number};
-                        const userOpHash = resultObj.id;
-                        const chainId = resultObj.chainId;
-                        
-                        // Store call status and start background task if we have a userOpHash
-                        if (userOpHash) {
-                            storeCallStatus(userOpHash, chainId);
-                            // Start background task (don't await - runs in background)
-                            waitForReceiptInBackground(userOpHash, chainId).catch((error) => {
-                                console.error('Background receipt wait failed:', error);
-                            });
-                        }
+                        // Note: Call status storage and background task are handled by the signer's handleResponse
 
                         try {
                             await ephemeralSigner.cleanup(); // clean up (rotate) the ephemeral session keys
@@ -118,7 +105,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                             console.warn('Ephemeral signer cleanup failed:', cleanupError);
                         }
                         
-                        return {id: userOpHash} as T;
+                        return result as T;
                     }
 
                     case 'wallet_sign': {
@@ -188,26 +175,6 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             
             // Handle requests when signer exists
             const result = await this.signer.request(args);
-            
-            // Handle wallet_sendCalls result to store status and start background task
-            if (args.method === 'wallet_sendCalls') {
-                const resultObj = result as { id?: string, chainId?: number };
-                const userOpHash = resultObj?.id;
-                const chainId = resultObj?.chainId;
-                
-                if (userOpHash && chainId) {
-                    // Get chainId - priority order:
-                    // 1. From store account chain (set during connection/handshake)
-                    // 2. From metadata defaultChainId
-
-                    // Store call status and start background task
-                    storeCallStatus(userOpHash, chainId);
-                    // Start background task (don't await - runs in background)
-                    waitForReceiptInBackground(userOpHash, chainId).catch((error) => {
-                        console.error('Background receipt wait failed:', error);
-                    });
-                }
-            }
             
             return result as T;
         } catch (error) {
