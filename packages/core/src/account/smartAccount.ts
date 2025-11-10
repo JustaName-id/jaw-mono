@@ -8,16 +8,20 @@ import {
     pad,
     Transport,
     Chain as ViemChain,
-    formatUnits
+    formatUnits,
+    http,
+    createPublicClient
 } from "viem";
 import {getCode, getGasPrice, readContract} from "viem/actions";
 import {abi, JustanAccountImplementation, toJustanAccount} from "../account/index.js";
 import {
     BundlerClient,
     SmartAccount,
+    createBundlerClient,
+    createPaymasterClient,
     WebAuthnAccount
 } from "viem/account-abstraction";
-import {Chain, getBundlerClient as getBundlerClientFromStore} from "../store/index.js";
+import {Chain} from "../store/index.js";
 import {arbitrum, arbitrumSepolia, base, baseSepolia, mainnet, optimism, optimismSepolia, sepolia} from "viem/chains";
 
 export type FindOwnerIndexParams = {
@@ -34,6 +38,17 @@ export type FindOwnerIndexParams = {
      */
     publicKey: Hex;
 };
+
+export type BundledTransactionResult = {
+    /**
+     * The user operation hash
+     */
+    id: Hash;
+    /**
+     * The chain id
+     */
+    chainId: number;
+}
 
 export const SUPPORTED_CHAINS = [
     mainnet,
@@ -55,14 +70,27 @@ export const SUPPORTED_CHAINS = [
  * @throws Error if the chain is not supported or client creation fails
  */
 export const getBundlerClient = (chain: Chain): BundlerClient<Transport, ViemChain> => {
-    const bundlerClient = getBundlerClientFromStore(chain.id);
+    console.log('🔍 Getting bundler client for chain:', chain);
+    // const bundlerClient = getBundlerClientFromStore(chain.id);
+    const viemChain = SUPPORTED_CHAINS.find(c => c.id === chain.id);
 
-    if (!bundlerClient) {
-        throw new Error(`Unable to create bundler client for chain ${chain.id}`);
-    }
 
-    // Type assertion: we know the bundler client has a chain because it's created with one
-    return bundlerClient as BundlerClient<Transport, ViemChain>;
+    const publicClient = createPublicClient({
+        chain: viemChain,
+        transport: http(chain.rpcUrl),
+    });
+
+    const paymasterClient = chain.paymasterUrl
+        ? createPaymasterClient({
+            transport: http(chain.paymasterUrl)
+        })
+        : undefined;
+
+        return createBundlerClient({
+            client: publicClient,
+            ...(paymasterClient && { paymaster: paymasterClient }),
+            transport: http(chain.rpcUrl)
+        });
 }
 
 export async function sendTransaction(
@@ -91,6 +119,32 @@ export async function sendTransaction(
     })
 
     return receipt.receipt.transactionHash
+}
+
+export async function sendBundledTransaction(
+    smartAccount: SmartAccount,
+    calls: Array<{
+        to: Address;
+        value?: bigint;
+        data?: Hex;
+    }>,
+    chain: Chain
+): Promise<BundledTransactionResult> {
+    const bundlerClient = getBundlerClient(chain)
+
+    const userOpHash = await bundlerClient.sendUserOperation({
+        account: smartAccount,
+        calls: calls.map(call => ({
+            to: getAddress(call.to),
+            value: call.value ?? 0n,
+            data: call.data ?? '0x'
+        }))
+    })
+
+    return {
+        id: userOpHash,
+        chainId: chain.id
+    }
 }
 
 export async function estimateUserOpGas(

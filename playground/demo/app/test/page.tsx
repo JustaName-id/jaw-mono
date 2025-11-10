@@ -9,11 +9,13 @@ export default function TestPage() {
   const [accounts, setAccounts] = useState<string[]>([]);
   const [chainId, setChainId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
+  const [lastBatchId, setLastBatchId] = useState<string | null>(null);
   const [sdk] = useState(() =>
     createJAWSDK({
       appName: 'JAW Demo App',
       appLogoUrl: null,
-      defaultChainId: 1,
+      defaultChainId: 84532,
+
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
         ens: process.env.NEXT_PUBLIC_ENS_NAME || '',
@@ -83,6 +85,7 @@ export default function TestPage() {
       setIsConnected(false);
       setAccounts([]);
       setChainId(null);
+      setLastBatchId(null);
       addLog('Disconnected successfully');
     } catch (error) {
       addLog(`Error disconnecting: ${error instanceof Error ? error.message : String(error)}`);
@@ -286,11 +289,10 @@ export default function TestPage() {
 
       // Example: Batch multiple calls atomically
       // 1. Send ETH to recipient
-      // 2. Call a contract function
+      // 2. Call a contract function (ERC20 transfer)
 
       // Prepare values using viem
       const ethValue = parseEther('0.001');
-      const ethValue2 = parseEther('0.002');
 
       // Encode ERC20 transfer function call: transfer(address recipient, uint256 amount)
       const erc20Abi = parseAbi([
@@ -306,6 +308,9 @@ export default function TestPage() {
         ]
       });
 
+      // Get current chain ID for optional parameter
+      const currentChainId = chainId ? parseInt(chainId, 16) : undefined;
+
       const result = await provider.request({
         method: 'wallet_sendCalls',
         params: [{
@@ -320,16 +325,33 @@ export default function TestPage() {
             },
             // Call 2: ERC20 transfer (properly encoded with viem)
             {
-              to: '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0', // USDC contract
-              value: `0x${ethValue2.toString(16)}`,
-              data: `0x`,
+              to: '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0',
+              value: `0x${ethValue.toString(16)}`,
+              data: '0x',
             },
           ],
+          // Optional parameters supported by current implementation
+          chainId: currentChainId ? `0x${currentChainId.toString(16)}` : undefined,
+          atomicRequired: true, // All calls must succeed or all fail
         }]
       });
 
-      addLog(`✅ Batch transaction ID: ${typeof result === 'object' && result !== null && 'id' in result ? result.id : JSON.stringify(result)}`);
-      addLog('Note: All calls executed atomically in a single user operation');
+      addLog(`[Demo] Batch transaction result: ${JSON.stringify(result)}`);
+      console.log('[Demo] Batch transaction result:', result);
+
+      // Extract batch ID from result
+      const batchId = typeof result === 'object' && result !== null && 'id' in result 
+        ? (result as { id: string }).id 
+        : null;
+
+      if (batchId) {
+        setLastBatchId(batchId);
+        addLog(`✅ Batch transaction submitted! Batch ID: ${batchId}`);
+        addLog('Note: All calls executed atomically in a single user operation');
+        addLog('Use "Get Calls Status" button to check transaction status');
+      } else {
+        addLog(`✅ Batch transaction result: ${JSON.stringify(result)}`);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       addLog(`❌ Error sending batch transaction: ${errorMessage}`);
@@ -433,6 +455,54 @@ export default function TestPage() {
             ? JSON.stringify(error, null, 2)
             : String(error);
       addLog(`Error getting capabilities: ${errorMessage}`);
+    }
+  };
+
+  const handleGetCallsStatus = async () => {
+    if (!lastBatchId) {
+      addLog('No batch ID available. Send a batch transaction first.');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog(`Checking status for batch ID: ${lastBatchId}...`);
+
+      const status = await provider.request({
+        method: 'wallet_getCallsStatus',
+        params: [lastBatchId]
+      });
+      console.log('[Demo] Calls status:', status);
+
+      // Status format: { id: string, status: number, receipts: unknown[] }
+      // Status codes: 100 = pending, 200 = completed, 400 = failed
+      const statusObj = status as { id: string; status: number; receipts: unknown[] };
+      const statusText = statusObj.status === 100 
+        ? 'pending' 
+        : statusObj.status === 200 
+          ? 'completed' 
+          : statusObj.status === 400 
+            ? 'failed' 
+            : `unknown (${statusObj.status})`;
+
+      addLog(`Batch ID: ${statusObj.id}`);
+      addLog(`Status: ${statusText} (code: ${statusObj.status})`);
+      
+      if (statusObj.receipts && statusObj.receipts.length > 0) {
+        addLog(`Receipts: ${JSON.stringify(statusObj.receipts, null, 2)}`);
+      } else {
+        addLog('No receipts available yet');
+      }
+    } catch (error) {
+      console.error('[Demo] Get calls status error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`Error getting calls status: ${errorMessage}`);
     }
   };
 
@@ -671,6 +741,13 @@ export default function TestPage() {
             >
               Get Capabilities
             </button>
+            <button
+              onClick={handleGetCallsStatus}
+              disabled={!isConnected || !lastBatchId}
+              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Get Calls Status
+            </button>
           </div>
         </div>
 
@@ -741,8 +818,13 @@ export default function TestPage() {
           </div>
           <div className="mt-3 space-y-2">
             <p className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Note:</span> wallet_sendCalls (EIP-5792) executes multiple calls atomically in a single user operation.
+              <span className="font-medium">Note:</span> wallet_sendCalls (EIP-5792) executes multiple calls atomically in a single user operation. Returns a batch ID that can be used with wallet_getCallsStatus to check transaction status.
             </p>
+            {lastBatchId && (
+              <p className="text-sm text-blue-600 dark:text-blue-400">
+                <span className="font-medium">Last Batch ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{lastBatchId}</code>
+              </p>
+            )}
             <p className="text-sm text-gray-600 dark:text-gray-400">
               <span className="font-medium">Test Networks:</span> This demo uses Sepolia and Base Sepolia testnets. Get test ETH from faucets before testing transactions.
             </p>

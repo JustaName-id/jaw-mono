@@ -13,6 +13,7 @@ import {
 } from '../utils/index.js';
 import { fetchRPCRequest } from '../utils/index.js';
 import { correlationIds } from '../store/correlation-ids/store.js';
+import { getCallStatusEIP5792 } from '../rpc/wallet_sendCalls.js';
 
 // Mock dependencies
 vi.mock('../communicator/index.js', () => ({
@@ -51,6 +52,13 @@ vi.mock('./utils.js', async (importOriginal) => {
     clearSignerType: vi.fn(),
   };
 });
+
+vi.mock('../rpc/wallet_sendCalls.js', () => ({
+  getCallStatus: vi.fn(),
+  getCallStatusEIP5792: vi.fn(),
+  waitForReceiptInBackground: vi.fn(),
+  storeCallStatus: vi.fn(),
+}));
 
 const mockCryptoKey = {} as CryptoKey;
 const mockEncryptedData = {
@@ -130,6 +138,7 @@ describe('JAWSigner', () => {
         version: '1.0.0',
       },
       keys: {},
+      callStatuses: {},
     });
 
     vi.spyOn(store.config, 'get').mockReturnValue({
@@ -448,6 +457,7 @@ describe('JAWSigner', () => {
           version: '1.0.0',
         },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -480,6 +490,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -489,6 +500,110 @@ describe('JAWSigner', () => {
       expect(result).toEqual({
         '0x1': { paymasterService: { supported: true } },
         '0x89': { atomicBatch: { supported: true } },
+      });
+    });
+
+    it('should handle wallet_getCallsStatus request', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockEIP5792Response = {
+        version: '2.0.0',
+        id: '0xbatchId' as `0x${string}`,
+        chainId: '0x01' as `0x${string}`,
+        status: 100, // pending
+        atomic: true,
+        receipts: undefined,
+      };
+      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
+
+      // Act
+      const result = await signer.request(callsStatusRequest);
+
+      // Assert
+      expect(getCallStatusEIP5792).toHaveBeenCalledWith('0xbatchId');
+      expect(result).toEqual(mockEIP5792Response);
+    });
+
+    it('should return status code 200 for completed status', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockEIP5792Response = {
+        version: '2.0.0',
+        id: '0xbatchId' as `0x${string}`,
+        chainId: '0x01' as `0x${string}`,
+        status: 200, // completed
+        atomic: true,
+        receipts: [{
+          logs: [],
+          status: '0x1' as `0x${string}`,
+          blockHash: '0xhash' as `0x${string}`,
+          blockNumber: '0x123' as `0x${string}`,
+          gasUsed: '0x456' as `0x${string}`,
+          transactionHash: '0xreceipt1' as `0x${string}`,
+        }],
+      };
+      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
+
+      // Act
+      const result = await signer.request(callsStatusRequest);
+
+      // Assert
+      expect(result).toEqual(mockEIP5792Response);
+    });
+
+    it('should return status code 400 for failed status', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xbatchId'],
+      };
+      const mockEIP5792Response = {
+        version: '2.0.0',
+        id: '0xbatchId' as `0x${string}`,
+        chainId: '0x01' as `0x${string}`,
+        status: 400, // failed
+        atomic: true,
+        receipts: undefined,
+      };
+      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
+
+      // Act
+      const result = await signer.request(callsStatusRequest);
+
+      // Assert
+      expect(result).toEqual(mockEIP5792Response);
+    });
+
+    it('should throw error if batchId is missing', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: [],
+      };
+
+      // Act & Assert
+      await expect(signer.request(callsStatusRequest)).rejects.toMatchObject({
+        message: 'batchId is required',
+      });
+    });
+
+    it('should throw error if no call status found', async () => {
+      // Arrange
+      const callsStatusRequest: RequestArguments = {
+        method: 'wallet_getCallsStatus',
+        params: ['0xnonexistent'],
+      };
+      (getCallStatusEIP5792 as Mock).mockReturnValue(undefined);
+
+      // Act & Assert
+      await expect(signer.request(callsStatusRequest)).rejects.toMatchObject({
+        message: 'No call status found for batchId: 0xnonexistent',
       });
     });
 
@@ -509,6 +624,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       (fetchRPCRequest as Mock).mockResolvedValue('0x1000');
@@ -864,6 +980,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1 }], // No rpcUrl in chains either
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Manually set authenticated state for the signer
@@ -1069,6 +1186,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       const request: RequestArguments = {
@@ -1277,6 +1395,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act & Assert
@@ -1299,6 +1418,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -1330,6 +1450,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -1369,6 +1490,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -1400,6 +1522,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -1583,6 +1706,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act & Assert
@@ -1621,6 +1745,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Clear previous callback calls from beforeEach
@@ -1649,6 +1774,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Clear previous callback calls
@@ -1973,6 +2099,7 @@ describe('JAWSigner', () => {
         chains: [{ id: 137, rpcUrl: 'https://polygon.rpc.com' }],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       // Act
@@ -2001,6 +2128,7 @@ describe('JAWSigner', () => {
         chains: [],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       const metadata: AppMetadata = {
@@ -2032,6 +2160,7 @@ describe('JAWSigner', () => {
         chains: [],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       const metadata: AppMetadata = {
@@ -2249,6 +2378,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       const request: RequestArguments = {
@@ -2305,6 +2435,7 @@ describe('JAWSigner', () => {
         ],
         config: { metadata: mockMetadata, version: '1.0.0' },
         keys: {},
+        callStatuses: {},
       });
 
       await signer.request({

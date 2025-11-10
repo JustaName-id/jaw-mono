@@ -17,6 +17,7 @@ import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest, 
 
 import { correlationIds } from '../store/index.js';
 
+import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { Signer } from '../signer/index.js';
 
 import {
@@ -91,7 +92,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         this.signer = signer;
                         return result as T;
                     }
-                    case 'wallet_sendCalls':
+                    case 'wallet_sendCalls': 
                     case 'wallet_sign': {
                         const ephemeralSigner = this.initSigner('crossPlatform');
                         await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
@@ -104,10 +105,15 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         }
                         return result as T;
                     }
-                    case 'wallet_getAssets':
-                    case 'wallet_getCallsStatus': {
+                    case 'wallet_getAssets': {
                         const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, this.apiKey);
                         const result = await fetchRPCRequest(args, rpcUrl);
+                        return result as T;
+                    }
+                    case 'wallet_getCallsStatus': {
+
+                        const result = await handleGetCallsStatusRequest(args);
+                        
                         return result as T;
                     }
                     case 'net_version': {
@@ -125,7 +131,10 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     }
                 }
             }
+            
+            // Handle requests when signer exists
             const result = await this.signer.request(args);
+            
             return result as T;
         } catch (error) {
             const { code } = error as { code?: number };
@@ -144,4 +153,5 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             callback: this.emit.bind(this),
         });
     }
+
 }

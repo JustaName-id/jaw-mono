@@ -117,7 +117,7 @@ export default function KeysJawIdApp() {
 
         setConfig(message.data);
         setEnsConfig(message.data.preference?.ens);
-        setChainId(message.data.metadata?.appChainIds?.[0] as ChainId);
+        setChainId(message.data.metadata?.defaultChainId as ChainId);
         setApiKey(message.data.apiKey);
 
         // Always show account selection UI - never auto-authenticate
@@ -396,9 +396,10 @@ export default function KeysJawIdApp() {
               if (txData.method === 'wallet_sendCalls') {
                 // EIP-5792: Return sendCallsId for wallet_sendCalls
                 response = {
-                  id: result.sendCallsId || result.hash || `0x${'0'.repeat(64)}`,
+                  id: result.id  || `0x${'0'.repeat(64)}`,
+                  chainId: result.chainId as number,
                   // capabilities can be included if supported by the wallet
-                } satisfies WalletSendCallsReturn;
+                } satisfies WalletSendCallsReturn ;
               } else {
                 // eth_sendTransaction: Return transaction hash
                 response = (result.hash || `0x${'0'.repeat(64)}`) as EthSendTransactionReturn;

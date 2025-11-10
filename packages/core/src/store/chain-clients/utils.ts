@@ -122,13 +122,15 @@ export function getClient(chainId: number): PublicClient | undefined {
  */
 export function getBundlerClient(chainId: number): BundlerClient | undefined {
   // Check if client already exists
-  const existingClient = ChainClients.getState()[chainId]?.bundlerClient;
+  const existingClient = ChainClients.getState()?.[chainId]?.bundlerClient;
+  console.log('Existing client:', existingClient);
   if (existingClient) {
     return existingClient;
   }
 
   // Lazy create: find chain in store and create client
   const chains = store.getState().chains ?? [];
+  console.log('Chains:', chains);
   const chain = chains.find(c => c.id === chainId);
   if (!chain) {
     return undefined;
