@@ -1427,11 +1427,15 @@ describe('JAWSigner', () => {
       // Assert
       // Should return SDK-generated capabilities based on configured chains
       expect(result).toEqual({
-        '0x1': { atomicBatch: { supported: true } },
+        '0x1': {
+          atomicBatch: { supported: true },
+          atomic: { status: 'supported' },
+          paymasterService: { supported: true }
+        },
       });
     });
 
-    it('should include paymasterService when chain has paymasterUrl', async () => {
+    it('should include paymasterService and atomic for all chains', async () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_getCapabilities',
@@ -1457,15 +1461,17 @@ describe('JAWSigner', () => {
       const result = await signer.request(request);
 
       // Assert
-      // Should include paymasterService for chain 1 (has paymasterUrl)
-      // Should NOT include paymasterService for chain 137 (no paymasterUrl)
+      // Should include paymasterService and atomic for all chains
       expect(result).toEqual({
         '0x1': {
           atomicBatch: { supported: true },
+          atomic: { status: 'supported' },
           paymasterService: { supported: true }
         },
         '0x89': {
-          atomicBatch: { supported: true }
+          atomicBatch: { supported: true },
+          atomic: { status: 'supported' },
+          paymasterService: { supported: true }
         },
       });
     });

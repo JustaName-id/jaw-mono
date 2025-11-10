@@ -52,12 +52,12 @@ export type BundledTransactionResult = {
 
 export const SUPPORTED_CHAINS = [
     mainnet,
-    sepolia,
     base,
-    baseSepolia,
     optimism,
-    optimismSepolia,
     arbitrum,
+    sepolia,
+    baseSepolia,
+    optimismSepolia,
     arbitrumSepolia,
 ]
 

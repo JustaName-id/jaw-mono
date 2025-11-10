@@ -89,7 +89,7 @@ export function OnboardingDialog({
           const justaName = getJustaNameInstance();
           const result = await justaName.subnames.isSubnameAvailable({
             subname: debouncedUsername + '.' + ensDomain,
-            chainId: chainId,
+            chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
           });
 
           if (result?.isAvailable) {
@@ -132,7 +132,7 @@ export function OnboardingDialog({
             {
               username: username,
               ensDomain: ensDomain,
-              chainId: chainId,
+              chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
               addresses: addresses,
               overrideSignatureCheck: true,
             },
