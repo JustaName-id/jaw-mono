@@ -138,8 +138,19 @@ export class JAWSigner implements Signer {
                     // Wait for the popup to be loaded before making async calls
                     await this.communicator.waitForPopupLoaded?.();
 
-                    // Prepare capabilities to inject (currently empty, reserved for future use)
+                    // Extract subnameTextRecords from request params if present
+                    const requestParams = request.params as unknown[];
+                    const requestCapabilities = requestParams?.[0] && typeof requestParams[0] === 'object' && requestParams[0] !== null
+                        ? (requestParams[0] as { capabilities?: { subnameTextRecords?: Array<{ key: string; value: string }> } }).capabilities
+                        : undefined;
+                    
+                    const subnameTextRecords = requestCapabilities?.subnameTextRecords;
+
+                    // Prepare capabilities to inject
                     const capabilitiesToInject: Record<string, unknown> = {};
+                    if (subnameTextRecords) {
+                        capabilitiesToInject.subnameTextRecords = subnameTextRecords;
+                    }
 
                     const modifiedRequest = injectRequestCapabilities(request, capabilitiesToInject);
                     return this.sendRequestToPopup(modifiedRequest);
@@ -207,9 +218,24 @@ export class JAWSigner implements Signer {
 
                 // Wait for the popup to be loaded before making async calls
                 await this.communicator.waitForPopupLoaded?.();
+                
+                // Extract subnameTextRecords from request params if present
+                const requestParams = request.params as unknown[];
+                const requestCapabilities = requestParams?.[0] && typeof requestParams[0] === 'object' && requestParams[0] !== null
+                    ? (requestParams[0] as { capabilities?: { subnameTextRecords?: Array<{ key: string; value: string }> } }).capabilities
+                    : undefined;
+                
+                const subnameTextRecords = requestCapabilities?.subnameTextRecords;
+
+                // Prepare capabilities to inject
+                const capabilitiesToInject: Record<string, unknown> = {};
+                if (subnameTextRecords) {
+                    capabilitiesToInject.subnameTextRecords = subnameTextRecords;
+                }
+
                 const modifiedRequest = injectRequestCapabilities(
                     request,
-                    {}
+                    capabilitiesToInject
                 );
 
                 this.callback?.('connect', { chainId: numberToHex(this.chain.id) });
@@ -260,6 +286,9 @@ export class JAWSigner implements Signer {
             }
             case 'wallet_connect': {
                 const response = result.value as WalletConnectResponse;
+                if (!response || !response.accounts || !Array.isArray(response.accounts)) {
+                    throw standardErrors.rpc.invalidParams('Invalid wallet_connect response: missing accounts');
+                }
                 const accounts = response.accounts.map((account) => account.address);
                 this.accounts = accounts;
                 store.account.set({

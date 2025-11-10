@@ -79,6 +79,69 @@ export default function TestPage() {
     }
   };
 
+  const handleConnectWithTextRecords = async () => {
+    try {
+      addLog('Connecting with subnameTextRecords capability...');
+      const provider = sdk.getProvider();
+
+      // Example text records to test
+      const testTextRecords = [
+        { key: 'email', value: 'test@example.com' },
+        { key: 'url', value: 'https://example.com' },
+        { key: 'description', value: 'Test account created via SDK' }
+      ];
+
+      addLog(`Requesting connection with text records: ${JSON.stringify(testTextRecords)}`);
+
+      const accountsResult = await provider.request({
+        method: 'wallet_connect',
+        params: [{
+          version: '1.0',
+          capabilities: {
+            subnameTextRecords: testTextRecords
+          }
+        }]
+      });
+
+      console.log('[Demo] wallet_connect result:', accountsResult);
+
+      // Handle WalletConnectResponse format
+      let accounts: string[];
+      if (Array.isArray(accountsResult)) {
+        accounts = accountsResult as string[];
+      } else if (accountsResult && typeof accountsResult === 'object' && 'accounts' in accountsResult) {
+        const walletConnectResponse = accountsResult as { accounts: { address: string }[] };
+        accounts = walletConnectResponse.accounts.map(acc => acc.address);
+      } else {
+        throw new Error('Unexpected accounts format: ' + JSON.stringify(accountsResult));
+      }
+
+      setAccounts(accounts);
+      setIsConnected(true);
+      console.log('[Demo] Connection successful with text records, accounts stored:', accounts);
+      addLog(`✅ Connected with text records! Accounts: ${accounts.join(', ')}`);
+      addLog(`📝 Text records will be applied when creating a NEW account: ${JSON.stringify(testTextRecords)}`);
+
+      // Get chain ID
+      const chainIdResult = await provider.request({
+        method: 'eth_chainId',
+        params: []
+      });
+      setChainId(chainIdResult as string);
+      addLog(`Chain ID: ${chainIdResult}`);
+    } catch (error) {
+      console.error('[Demo] Connection error:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`❌ Error connecting with text records: ${errorMessage}`);
+    }
+  };
+
   const handleDisconnect = async () => {
     try {
       addLog('Disconnecting...');
@@ -718,13 +781,20 @@ export default function TestPage() {
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
             Connection Actions
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <button
               onClick={handleConnect}
               disabled={isConnected}
               className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              Connect
+              Connect (eth_requestAccounts)
+            </button>
+            <button
+              onClick={handleConnectWithTextRecords}
+              disabled={isConnected}
+              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Connect with Text Records
             </button>
             <button
               onClick={handleDisconnect}
@@ -733,6 +803,11 @@ export default function TestPage() {
             >
               Disconnect
             </button>
+          </div>
+          <div className="mt-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Note:</span> "Connect with Text Records" uses <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_connect</code> with <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">subnameTextRecords</code> capability. These text records will be applied when creating a <span className="font-medium">NEW account</span> during onboarding (not when connecting to existing accounts).
+            </p>
           </div>
         </div>
 

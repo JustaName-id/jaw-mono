@@ -27,4 +27,5 @@ export interface OnboardingDialogProps {
   chainId?: ChainId;
   apiKey?: string;
   supportedChains?: Array<{ id: number }>;
+  subnameTextRecords?: Array<{ key: string; value: string }>;
 }

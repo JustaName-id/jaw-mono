@@ -27,9 +27,10 @@ export type WalletConnectRequest = {
         {
             // JSON-RPC method version.
             version: string;
-            // Optional capabilities to request (e.g. Sign In With Ethereum).
+            // Optional capabilities to request (e.g. Sign In With Ethereum, subname text records).
             capabilities?: {
                 signInWithEthereum?: SignInWithEthereumCapabilityRequest;
+                subnameTextRecords?: Array<{ key: string; value: string }>;
             };
         },
     ];
@@ -42,6 +43,7 @@ export type WalletConnectResponse = {
         // Capabilities granted that is associated with this account.
         capabilities?: {
             signInWithEthereum?: SignInWithEthereumCapabilityResponse | SerializedEthereumRpcError;
+            subnameTextRecords?: Array<{ key: string; value: string }>;
         };
     }[];
 };
