@@ -17,9 +17,10 @@ import {
     type LocalAccount,
     decodeFunctionData,
     isAddressEqual,
-    type Client
+    type Client,
+    type Account,
 } from "viem";
-import { readContract, getCode, getChainId, signAuthorization as signAuthorizationAction } from "viem/actions";
+import { readContract, getChainId, signAuthorization as signAuthorizationAction } from "viem/actions";
 import {
     type SmartAccount,
     type WebAuthnAccount,
@@ -37,7 +38,7 @@ import {
     hashTypedData as erc7739HashTypedData,
     wrapTypedDataSignature,
 } from "viem/experimental/erc7739";
-import {CONTRACT_NAME, CONTRACT_VERSION, FACTORY_ADDRESS, EIP7702_CODE_PREFIX} from "../constants.js";
+import {CONTRACT_NAME, CONTRACT_VERSION, FACTORY_ADDRESS} from "../constants.js";
 
 export type JustanAccountImplementation = SmartAccountImplementation<
     typeof entryPoint08Abi,
@@ -68,7 +69,9 @@ export type ToJustanAccountParameters = {
     eip7702Auth?: SignAuthorizationReturnType | undefined;
 };
 
-export type ToJustanAccountReturnType = SmartAccount;
+export type ToJustanAccountReturnType = SmartAccount & {
+    signAuthorization: (executor?: 'self' | Account | Address | undefined) => Promise<SignAuthorizationReturnType>;
+};
 
 export async function toJustanAccount(
     parameters: ToJustanAccountParameters
@@ -94,6 +97,15 @@ export async function toJustanAccount(
     let delegationContract: Address | undefined;
     if (isEip7702) {
         delegationContract = await getDelegationContract(client, factoryAddress);
+        
+        if (
+            eip7702Auth &&
+            !isAddressEqual(eip7702Auth.address, delegationContract)
+        ) {
+            throw new BaseError(
+                "EIP-7702 authorization delegate address does not match delegation contract address"
+            );
+        }
     }
 
     const owners_bytes = owners.map((owner) => {
@@ -300,9 +312,11 @@ export async function toJustanAccount(
             });
         },
 
-        async signAuthorization() {
+        async signAuthorization(executor: 'self' | Account | Address | undefined = 'self') {
             if (!isEip7702) {
-                return undefined;
+                throw new BaseError(
+                    "signAuthorization can only be called for EIP-7702 accounts"
+                );
             }
 
             if (!delegationContract) {
@@ -311,41 +325,15 @@ export async function toJustanAccount(
                 );
             }
 
-            const code = await getCode(client, { address: accountAddress });
-
-            if (
-                !code ||
-                code.length === 0 ||
-                !code
-                    .toLowerCase()
-                    .startsWith(
-                        `${EIP7702_CODE_PREFIX}${delegationContract.slice(2).toLowerCase()}`
-                    )
-            ) {
-                if (
-                    eip7702Auth &&
-                    !isAddressEqual(
-                        eip7702Auth.address,
-                        delegationContract
-                    )
-                ) {
-                    throw new BaseError(
-                        "EIP-7702 authorization delegate address does not match delegation contract address"
-                    );
-                }
-
-                const auth =
-                    eip7702Auth ??
-                    (await signAuthorizationAction(client, {
-                        account: eip7702Account!,
-                        address: delegationContract as `0x${string}`,
-                        chainId: await getChainId(client),
-                    }));
-
-                return auth;
-            }
-
-            return undefined;
+            return (
+                eip7702Auth ??
+                (await signAuthorizationAction(client, {
+                    account: eip7702Account!,
+                    address: delegationContract as `0x${string}`,
+                    chainId: await getChainId(client),
+                    executor: executor,
+                }))
+            );
         },
 
         userOperation: {

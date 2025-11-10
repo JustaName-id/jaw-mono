@@ -54,3 +54,6 @@ vitest.config.*.timestamp*
 
 
 playground/
+
+test/
+.env
