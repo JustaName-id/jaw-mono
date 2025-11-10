@@ -391,15 +391,15 @@ export default function KeysJawIdApp() {
             setState('processing');
             try {
               // Type-safe result handling based on method
-              let response: WalletSendCallsReturn | EthSendTransactionReturn | any;
+              let response: WalletSendCallsReturn | EthSendTransactionReturn;
 
               if (txData.method === 'wallet_sendCalls') {
                 // EIP-5792: Return sendCallsId for wallet_sendCalls
                 response = {
                   id: result.id  || `0x${'0'.repeat(64)}`,
-                  chainId: result.chainId || 0,
+                  chainId: result.chainId as number,
                   // capabilities can be included if supported by the wallet
-                } satisfies WalletSendCallsReturn | any;
+                } satisfies WalletSendCallsReturn ;
               } else {
                 // eth_sendTransaction: Return transaction hash
                 response = (result.hash || `0x${'0'.repeat(64)}`) as EthSendTransactionReturn;

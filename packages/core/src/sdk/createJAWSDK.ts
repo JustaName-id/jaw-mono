@@ -70,7 +70,6 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
     const initialChains = createInitialChains(params.apiKey, params.paymasterUrls);
     store.chains.set(initialChains);
     createClients(initialChains);
-    // Clients will be created lazily when first accessed
   }
 
   let provider: ProviderInterface | null = null;

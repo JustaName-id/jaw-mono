@@ -9,7 +9,8 @@ import {
     injectRequestCapabilities,
 } from './SignerUtils.js';
 import { getCapabilities } from '../rpc/capabilities.js';
-import { getCallStatusEIP5792, waitForReceiptInBackground, storeCallStatus } from '../rpc/wallet_sendCalls.js';
+import { waitForReceiptInBackground, storeCallStatus } from '../rpc/wallet_sendCalls.js';
+import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 
 import { Communicator } from '../communicator/index.js';
 import { standardErrors } from '../errors/index.js';
@@ -166,7 +167,7 @@ export class JAWSigner implements Signer {
             case 'wallet_getCapabilities':
                 return this.handleGetCapabilitiesRequest(request);
             case 'wallet_getCallsStatus':
-                return this.handleGetCallsStatusRequest(request);
+                return await handleGetCallsStatusRequest(request);
             case 'wallet_switchEthereumChain':
                 return this.handleSwitchChainRequest(request);
             case 'wallet_sendCalls':
@@ -353,25 +354,7 @@ export class JAWSigner implements Signer {
         return filteredCapabilities;
     }
 
-    private async handleGetCallsStatusRequest(request: RequestArguments) {
-        // Extract batchId from params
-        const batchId = Array.isArray(request.params) && request.params[0] 
-            ? String(request.params[0]) 
-            : undefined;
-        
-        if (!batchId) {
-            throw standardErrors.rpc.invalidParams('batchId is required');
-        }
-        
-        // Get status in EIP-5792 format
-        const result = getCallStatusEIP5792(batchId);
-        
-        if (!result) {
-            throw standardErrors.rpc.invalidParams(`No call status found for batchId: ${batchId}`);
-        }
-        
-        return result;
-    }
+ 
 
     private async sendEncryptedRequest(request: RequestArguments): Promise<RPCResponseMessage> {
         const sharedSecret = await this.keyManager.getSharedSecret();

@@ -11,7 +11,10 @@ export type WalletSendCallsParams = ViemRPCParams<'wallet_sendCalls'>;
 export type EthSendTransactionParams = ViemRPCParams<'eth_sendTransaction'>;
 
 // Type-safe return types from Viem
-export type WalletSendCallsReturn = ViemRPCReturnType<'wallet_sendCalls'>;
+export type WalletSendCallsReturn = ViemRPCReturnType<'wallet_sendCalls'> & {
+  id: `0x${string}`;
+  chainId: number;
+};
 export type EthSendTransactionReturn = ViemRPCReturnType<'eth_sendTransaction'>;
 
 // Normalized transaction format (internal to extraction utility)

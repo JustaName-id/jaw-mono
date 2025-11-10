@@ -11,7 +11,8 @@ import {
   loadSignerType,
   storeSignerType,
 } from '../signer/index.js';
-import { getCallStatusEIP5792, waitForReceiptInBackground } from '../rpc/index.js';
+import { waitForReceiptInBackground } from '../rpc/index.js';
+import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import type { AppMetadata, ConstructorOptions, RequestArguments } from './interface.js';
 import type { Signer } from '../signer/index.js';
 
@@ -44,6 +45,9 @@ vi.mock('../rpc/index.js', () => ({
   getCallStatus: vi.fn(),
   getCallStatusEIP5792: vi.fn(),
   waitForReceiptInBackground: vi.fn(),
+}));
+vi.mock('../rpc/wallet_getCallStatus.js', () => ({
+  handleGetCallsStatusRequest: vi.fn(),
 }));
 vi.mock('../store/index.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../store/index.js')>();
@@ -575,6 +579,17 @@ describe('JAWProvider', () => {
   describe('_request - No Signer: wallet_getCallsStatus', () => {
     beforeEach(() => {
       provider = new JAWProvider(mockConstructorOptions);
+      // Reset mock to default behavior - throw error if batchId is missing
+      (handleGetCallsStatusRequest as Mock).mockImplementation((request: RequestArguments) => {
+        const batchId = Array.isArray(request.params) && request.params[0] 
+          ? String(request.params[0]) 
+          : undefined;
+        if (!batchId) {
+          throw new Error('batchId is required');
+        }
+        // Return undefined by default - tests will override this
+        return Promise.resolve(undefined);
+      });
     });
 
     it('should get call status from storage', async () => {
@@ -591,13 +606,13 @@ describe('JAWProvider', () => {
         atomic: true,
         receipts: undefined,
       };
-      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
+      (handleGetCallsStatusRequest as Mock).mockResolvedValue(mockEIP5792Response);
 
       // Act
       const result = await provider.request(request);
 
       // Assert
-      expect(getCallStatusEIP5792).toHaveBeenCalledWith('0xbatchId');
+      expect(handleGetCallsStatusRequest).toHaveBeenCalledWith(request);
       expect(result).toEqual(mockEIP5792Response);
     });
 
@@ -622,7 +637,7 @@ describe('JAWProvider', () => {
           transactionHash: '0xreceipt1' as `0x${string}`,
         }],
       };
-      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
+      (handleGetCallsStatusRequest as Mock).mockResolvedValue(mockEIP5792Response);
 
       // Act
       const result = await provider.request(request);
@@ -645,7 +660,7 @@ describe('JAWProvider', () => {
         atomic: true,
         receipts: undefined,
       };
-      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
+      (handleGetCallsStatusRequest as Mock).mockResolvedValue(mockEIP5792Response);
 
       // Act
       const result = await provider.request(request);
@@ -660,6 +675,16 @@ describe('JAWProvider', () => {
         method: 'wallet_getCallsStatus',
         params: [],
       };
+      // Reset mock to throw error when batchId is missing
+      (handleGetCallsStatusRequest as Mock).mockImplementation((req: RequestArguments) => {
+        const batchId = Array.isArray(req.params) && req.params[0] 
+          ? String(req.params[0]) 
+          : undefined;
+        if (!batchId) {
+          return Promise.reject(new Error('batchId is required'));
+        }
+        return Promise.resolve(undefined);
+      });
 
       // Act & Assert
       await expect(provider.request(request)).rejects.toMatchObject({
@@ -673,7 +698,9 @@ describe('JAWProvider', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xnonexistent'],
       };
-      (getCallStatusEIP5792 as Mock).mockReturnValue(undefined);
+      (handleGetCallsStatusRequest as Mock).mockRejectedValue(
+        new Error('No call status found for batchId: 0xnonexistent')
+      );
 
       // Act & Assert
       await expect(provider.request(request)).rejects.toMatchObject({

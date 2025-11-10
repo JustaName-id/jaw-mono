@@ -16,8 +16,8 @@ import {
 import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest, buildHandleJawRpcUrl } from '../utils/index.js';
 
 import { correlationIds } from '../store/index.js';
-import { getCallStatusEIP5792 } from '../rpc/index.js';
 
+import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { Signer } from '../signer/index.js';
 
 import {
@@ -92,22 +92,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         this.signer = signer;
                         return result as T;
                     }
-                    case 'wallet_sendCalls': {
-                        const ephemeralSigner = this.initSigner('crossPlatform');
-                        await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
-                        const result = await ephemeralSigner.request(args); // send diffie-hellman encrypted request
-                        // Note: Call status storage and background task are handled by the signer's handleResponse
-
-                        try {
-                            await ephemeralSigner.cleanup(); // clean up (rotate) the ephemeral session keys
-                        } catch (cleanupError) {
-                            // Log cleanup error but don't fail the request
-                            console.warn('Ephemeral signer cleanup failed:', cleanupError);
-                        }
-                        
-                        return result as T;
-                    }
-
+                    case 'wallet_sendCalls': 
                     case 'wallet_sign': {
                         const ephemeralSigner = this.initSigner('crossPlatform');
                         await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
@@ -126,21 +111,8 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         return result as T;
                     }
                     case 'wallet_getCallsStatus': {
-                        // Extract batchId from params
-                        const batchId = Array.isArray(args.params) && args.params[0] 
-                            ? String(args.params[0]) 
-                            : undefined;
-                        
-                        if (!batchId) {
-                            throw standardErrors.rpc.invalidParams('batchId is required');
-                        }
-                        
-                        // Get status in EIP-5792 format
-                        const result = getCallStatusEIP5792(batchId); // Default to chain 1 if not available
-                        
-                        if (!result) {
-                            throw standardErrors.rpc.invalidParams(`No call status found for batchId: ${batchId}`);
-                        }
+
+                        const result = await handleGetCallsStatusRequest(args);
                         
                         return result as T;
                     }
