@@ -184,6 +184,58 @@ export default function TestPage() {
     }
   };
 
+  const handleSiweSign = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      // Generate a proper SIWE (Sign-In with Ethereum) message per EIP-4361
+      // https://eips.ethereum.org/EIPS/eip-4361
+      const domain = 'localhost:3000';
+      const address = accounts[0];
+      const statement = 'Sign in to JAW SDK Demo with your Ethereum account';
+      const uri = 'http://localhost:3000';
+      const version = '1';
+      const chainIdNum = parseInt(chainId || '0x1', 16);
+      const nonce = Math.random().toString(36).substring(2, 15); // Random nonce
+      const issuedAt = new Date().toISOString();
+
+      const siweMessage = `${domain} wants you to sign in with your Ethereum account:
+${address}
+
+${statement}
+
+URI: ${uri}
+Version: ${version}
+Chain ID: ${chainIdNum}
+Nonce: ${nonce}
+Issued At: ${issuedAt}`;
+
+      const provider = sdk.getProvider();
+      addLog('🔐 Requesting SIWE (Sign-In with Ethereum) signature...');
+      addLog('This should open the special SIWE dialog with logo and "Sign in Request" header');
+
+      const signature = await provider.request({
+        method: 'personal_sign',
+        params: [siweMessage, address]
+      });
+
+      addLog(`✅ SIWE Signature: ${signature}`);
+    } catch (error) {
+      console.error('SIWE sign error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`❌ Error signing SIWE message: ${errorMessage}`);
+    }
+  };
+
   const handleSignTypedData = async () => {
     if (accounts.length === 0) {
       addLog('No accounts connected');
@@ -695,11 +747,18 @@ export default function TestPage() {
               Wallet Sign (0x45)
             </button>
             <button
+              onClick={handleSiweSign}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Sign-In with Ethereum (SIWE)
+            </button>
+            <button
               onClick={handleSignTypedData}
               disabled={!isConnected}
               className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              Sign Typed Data
+              Sign Typed Data (EIP-712)
             </button>
             <button
               onClick={handleSignTransaction}

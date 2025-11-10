@@ -4,6 +4,9 @@ import { useEffect, useState } from 'react';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
+import { SiweModal } from '../components/SiweModal';
+import { Eip712Modal } from '../components/Eip712Modal';
+import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { SDKRequestType, type AppMetadata } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
@@ -12,6 +15,7 @@ import { CryptoHandler } from '../lib/crypto-handler';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
+import { isSiweMessage } from '../lib/siwe-handler';
 import { ChainId } from '@justaname.id/sdk';
 
 
@@ -55,7 +59,7 @@ interface PendingRequest {
   params: unknown[];
   chain?: {
     id: number;
-    rpcUrl: string;
+    rpcUrl?: string;
     paymasterUrl?: string;
   } | undefined;
   onApprove: (result: unknown) => Promise<void>;
@@ -215,13 +219,14 @@ export default function KeysJawIdApp() {
       // Determine request type
       const method = request.content.handshake.method;
       const params = request.content.handshake.params;
+      const chain = request.content.chain;
       const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
 
       if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
         setApiKey(apiKeyFromProvider);
       }
 
-      console.log('📋 Handshake method:', method, 'params:', params);
+      console.log('📋 Handshake method:', method, 'params:', params, 'chain:', chain);
 
       // For eth_requestAccounts, we need to show approval UI
       if (method === 'eth_requestAccounts') {
@@ -234,7 +239,7 @@ export default function KeysJawIdApp() {
           metadata: config?.metadata || null,
           method,
           params: Array.isArray(params) ? params : [],
-          chain: undefined,
+          chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl, paymasterUrl: chain.paymasterUrl } : undefined,
           onApprove: async (result: unknown) => {
             const accounts = result as string[];
             const response = await cryptoHandler.createHandshakeResponse(request.id, accounts);
@@ -290,6 +295,9 @@ export default function KeysJawIdApp() {
       if (method === 'personal_sign' ||
         (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x45")) {
         requestType = SDKRequestType.SIGN_MESSAGE;
+      } else if (method === 'eth_signTypedData_v4') {
+        // EIP-712 typed data signing
+        requestType = SDKRequestType.SIGN_TYPED_DATA;
       } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
         requestType = SDKRequestType.SEND_TRANSACTION;
       } else if (method === 'eth_chainId') {
@@ -314,7 +322,7 @@ export default function KeysJawIdApp() {
         metadata: config?.metadata || null,
         method,
         params: Array.isArray(params) ? params : [],
-        chain: chain?.rpcUrl ? { id: chain.id, rpcUrl: chain.rpcUrl, paymasterUrl: chain.paymasterUrl } : undefined,
+        chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl, paymasterUrl: chain.paymasterUrl } : undefined,
         onApprove: async (result: unknown) => {
           const response = await cryptoHandler.createEncryptedResponse(
             request.id || '',
@@ -344,8 +352,8 @@ export default function KeysJawIdApp() {
         },
       });
 
-      // For sign message and transaction requests, if user is authenticated, show modal directly
-      if ((requestType === SDKRequestType.SIGN_MESSAGE || requestType === SDKRequestType.SEND_TRANSACTION) && authQuery.isAuthenticated && currentAccount) {
+      // For sign message, typed data, and transaction requests, if user is authenticated, show modal directly
+      if ((requestType === SDKRequestType.SIGN_MESSAGE || requestType === SDKRequestType.SIGN_TYPED_DATA || requestType === SDKRequestType.SEND_TRANSACTION) && authQuery.isAuthenticated && currentAccount) {
         // The modal will be shown in the render logic below
         return;
       }
@@ -454,6 +462,43 @@ export default function KeysJawIdApp() {
         address = pendingRequest.params[1] as string;
       }
 
+      // Check if this is a SIWE (Sign-In with Ethereum) message
+      const isSiwe = isSiweMessage(messageToSign);
+
+      // Render SiweModal for SIWE messages, SignatureModal for regular messages
+      if (isSiwe) {
+        return (
+          <SiweModal
+            origin={pendingRequest.origin}
+            message={messageToSign}
+            address={address}
+            chain={pendingRequest.chain as chain}
+            onSuccess={async (signature, message) => {
+              setState('processing');
+              try {
+                await pendingRequest.onApprove(signature);
+                console.log('✅ SIWE signature sent successfully');
+                setState('success');
+                setTimeout(() => window.close(), 1500);
+              } catch (err) {
+                console.error('❌ Failed to send SIWE signature:', err);
+                setError(err instanceof Error ? err.message : 'Failed to send signature');
+                setState('error');
+              }
+            }}
+            onError={async (error) => {
+              try {
+                await pendingRequest.onReject(error.message);
+                window.close();
+              } catch (err) {
+                console.error('❌ Failed to reject:', err);
+                window.close();
+              }
+            }}
+          />
+        );
+      }
+
       return (
         <SignatureModal
           origin={pendingRequest.origin}
@@ -467,6 +512,49 @@ export default function KeysJawIdApp() {
             try {
               await pendingRequest.onApprove(signature);
               console.log('✅ Signature sent successfully');
+              setState('success');
+              setTimeout(() => window.close(), 1500);
+            } catch (err) {
+              console.error('❌ Failed to send signature:', err);
+              setError(err instanceof Error ? err.message : 'Failed to send signature');
+              setState('error');
+            }
+          }}
+          onError={async (error) => {
+            try {
+              await pendingRequest.onReject(error.message);
+              window.close();
+            } catch (err) {
+              console.error('❌ Failed to reject:', err);
+              window.close();
+            }
+          }}
+        />
+      );
+    }
+
+    // Check if we have a pending EIP-712 typed data signing request and either user is authenticated OR we're in processing state
+    // Don't show modal if state is 'success' or 'error' (request has been completed)
+    if (pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA &&
+      state !== 'success' &&
+      state !== 'error' &&
+      (authQuery.isAuthenticated || state === 'processing')) {
+      // Extract typed data JSON and address based on method type
+      // eth_signTypedData_v4: params[0] is address, params[1] is typed data JSON string
+      const address = pendingRequest.params[0] as string;
+      const typedDataJson = pendingRequest.params[1] as string;
+
+      return (
+        <Eip712Modal
+          origin={pendingRequest.origin}
+          typedDataJson={typedDataJson}
+          address={address}
+          chain={pendingRequest.chain as chain}
+          onSuccess={async (signature) => {
+            setState('processing');
+            try {
+              await pendingRequest.onApprove(signature);
+              console.log('✅ Typed data signature sent successfully');
               setState('success');
               setTimeout(() => window.close(), 1500);
             } catch (err) {
@@ -618,8 +706,8 @@ export default function KeysJawIdApp() {
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     setState('account-selection');
-                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
-                    // If there's a pending sign message or transaction request, the modal will be shown
+                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
+                    // If there's a pending sign message, typed data, or transaction request, the modal will be shown
                     // in the priority logic above since user is now authenticated
                     setState('processing');
                   } else {
@@ -678,8 +766,8 @@ export default function KeysJawIdApp() {
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     setState('account-selection');
-                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
-                    // If there's a pending sign message or transaction request, the modal will be shown
+                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
+                    // If there's a pending sign message, typed data, or transaction request, the modal will be shown
                     // in the priority logic above since user is now authenticated
                     setState('processing');
                   } else {
@@ -708,86 +796,38 @@ export default function KeysJawIdApp() {
 
     // Show connection approval (account-selection state)
     if (state === 'account-selection' && pendingRequest?.type === SDKRequestType.CONNECT) {
-      const { metadata } = pendingRequest;
-
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-          <div className="w-full max-w-md bg-white rounded-lg shadow-lg p-6">
-            <div className="text-center mb-6">
-              {metadata?.appLogoUrl && (
-                <img
-                  src={metadata.appLogoUrl}
-                  alt={metadata.appName}
-                  className="w-16 h-16 mx-auto mb-3 rounded-full"
-                />
-              )}
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Connect to {metadata?.appName || 'dApp'}
-              </h2>
-              <p className="text-gray-600">
-                This app wants to connect to your wallet
-              </p>
-            </div>
-
-            {currentAccount && authQuery.isAuthenticated && (
-              <div className="bg-gray-50 rounded-lg p-4 mb-6 space-y-2">
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Account:</span>
-                  <span className="font-medium text-gray-900">{authQuery.accountName || currentAccount.username}</span>
-                </div>
-                <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Address:</span>
-                  <span className="font-mono text-xs font-medium text-gray-900">
-                    {authQuery.walletAddress?.slice(0, 6)}...{authQuery.walletAddress?.slice(-4)}
-                  </span>
-                </div>
-                {metadata && (
-                  <div className="flex justify-between text-sm">
-                    <span className="text-gray-600">Chains:</span>
-                    <span className="font-medium text-gray-900">
-                      {metadata.appChainIds.length} chains
-                    </span>
-                  </div>
-                )}
-              </div>
-            )}
-
-            <div className="space-y-3">
-              <button
-                onClick={async () => {
-                  setState('processing');
-                  try {
-                    console.log('✅ User approved connection');
-                    await pendingRequest.onApprove([authQuery.walletAddress || '0x0000000000000000000000000000000000000000']);
-                    setState('success');
-                    setTimeout(() => window.close(), 1500);
-                  } catch (err) {
-                    console.error('❌ Failed to approve connection:', err);
-                    setError(err instanceof Error ? err.message : 'Failed to approve connection');
-                    setState('error');
-                  }
-                }}
-                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors shadow-lg"
-              >
-                Connect Wallet
-              </button>
-              <button
-                onClick={async () => {
-                  try {
-                    await pendingRequest.onReject('User rejected connection');
-                    window.close();
-                  } catch (err) {
-                    console.error('❌ Failed to reject:', err);
-                    window.close();
-                  }
-                }}
-                className="w-full py-3 px-4 bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold rounded-lg transition-colors"
-              >
-                Cancel
-              </button>
-            </div>
-          </div>
-        </div>
+        <ConnectModal
+          origin={pendingRequest.origin}
+          appName={pendingRequest.metadata?.appName || 'dApp'}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
+          supportedChains={pendingRequest.metadata?.appChainIds}
+          accountName={authQuery.accountName || currentAccount?.username}
+          walletAddress={authQuery.walletAddress || '0x0000000000000000000000000000000000000000'}
+          chain={pendingRequest.chain}
+          onSuccess={async () => {
+            setState('processing');
+            try {
+              console.log('✅ User approved connection');
+              await pendingRequest.onApprove([authQuery.walletAddress || '0x0000000000000000000000000000000000000000']);
+              setState('success');
+              setTimeout(() => window.close(), 1500);
+            } catch (err) {
+              console.error('❌ Failed to approve connection:', err);
+              setError(err instanceof Error ? err.message : 'Failed to approve connection');
+              setState('error');
+            }
+          }}
+          onError={async (error) => {
+            try {
+              await pendingRequest.onReject(error.message);
+              window.close();
+            } catch (err) {
+              console.error('❌ Failed to reject:', err);
+              window.close();
+            }
+          }}
+        />
       );
     }
 

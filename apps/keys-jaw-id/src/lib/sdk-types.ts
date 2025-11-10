@@ -180,6 +180,7 @@ export interface SDKState {
 export enum SDKRequestType {
   CONNECT = 'connect',
   SIGN_MESSAGE = 'sign_message',
+  SIGN_TYPED_DATA = 'sign_typed_data',
   SEND_TRANSACTION = 'send_transaction',
   CHAIN_ID = 'chain_id',
   GET_SUB_ACCOUNTS = 'get_sub_accounts',

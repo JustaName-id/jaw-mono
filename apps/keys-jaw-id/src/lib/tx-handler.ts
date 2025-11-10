@@ -43,7 +43,7 @@ export interface NormalizedTransaction {
 export function extractTransactionData(
     method: string,
     params: unknown[],
-    chain?: { id: number; rpcUrl: string; paymasterUrl?: string }
+    chain?: { id: number; rpcUrl?: string; paymasterUrl?: string }
   ): TransactionRequestData {
     const chainId = chain?.id || parseInt(process.env.NEXT_PUBLIC_CHAIN_ID || '1');
   

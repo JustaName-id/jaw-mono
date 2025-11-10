@@ -1,8 +1,8 @@
 'use client'
 
-import { BadgeDollarIcon, CopyIcon, EyeIcon } from "../../icons";
 import { useEffect, useState } from "react";
 import { useIsMobile } from "../../hooks";
+import { CopyIcon } from "../../icons";
 import { getJustaNameInstance } from "../../utils/justaNameInstance";
 import { DefaultDialog } from "../DefaultDialog";
 import { Button } from "../ui/button";
@@ -12,7 +12,6 @@ export const SiweDialog = ({
   open,
   onOpenChange,
   message,
-  origin,
   timestamp,
   accountAddress,
   chainName,
@@ -113,12 +112,12 @@ export const SiweDialog = ({
           </div>
         </div>
         {/* Main Content Area - Large scrollable message box */}
-        <div className="flex-1 p-3.5 bg-white flex flex-col gap-2.5 border border-border rounded-[6px] overflow-y-auto">
+        <div className="flex-1 p-3.5 bg-white flex flex-col gap-2.5 border border-border rounded-[6px]">
           <div className="flex flex-row items-center justify-between">
             <p className="text-foreground font-bold text-xs leading-[150%]">Message</p>
-            <CopyIcon className="w-4 h-4" onClick={onCopyMessageHandler} />
+            <CopyIcon className="w-4 h-4 cursor-pointer" onClick={onCopyMessageHandler} />
           </div>
-          <div className="flex bg-secondary rounded-[6px] p-2.5 min-h-[70px]">
+          <div className="flex bg-secondary rounded-[6px] p-2.5 max-h-[170px] overflow-y-auto">
             <p className="text-sm font-normal text-foreground whitespace-pre-wrap break-words leading-relaxed">
               {message || 'No message provided'}
             </p>
@@ -130,23 +129,23 @@ export const SiweDialog = ({
         <div className="flex flex-row gap-4 border border-border rounded-[6px] p-2">
           {/* Network Column */}
           {chainName && (
-            <div className="flex flex-col gap-1 flex-1">
-              <p className="text-xs font-bold text-foreground">Network</p>
-              <div className="flex flex-row items-center gap-2">
-                {chainIcon && (
-                  <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
-                    {chainIcon}
-                  </div>
-                )}
-                <p className="text-sm font-normal text-foreground">
-                  {chainName}
-                </p>
+            <>
+              <div className="flex flex-col gap-1 flex-1">
+                <p className="text-xs font-bold text-foreground">Network</p>
+                <div className="flex flex-row items-center gap-2">
+                  {chainIcon && (
+                    <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+                      {chainIcon}
+                    </div>
+                  )}
+                  <p className="text-sm font-normal text-foreground">
+                    {chainName}
+                  </p>
+                </div>
               </div>
-            </div>
-          )}
-          {/* Vertical Separator */}
-          {chainName && (
-            <div className="w-[1px] bg-border min-h-[40px]"></div>
+              {/* Vertical Separator */}
+              <div className="w-[1px] bg-border min-h-[40px]"></div>
+            </>
           )}
           {/* URL Column */}
           <div className="flex flex-col gap-1 flex-1">
@@ -155,18 +154,6 @@ export const SiweDialog = ({
               {formatOrigin(origin)}
             </p>
           </div>
-        </div>
-        <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
-          <EyeIcon className="w-4 h-4" />
-          <p className="text-foreground text-xs font-normal leading-[150%]">Allow the app to see your addresses</p>
-        </div>
-        <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
-          <BadgeDollarIcon className="w-4 h-4" />
-          <p className="text-foreground text-xs font-normal leading-[150%]">Allow the app to propose transactions</p>
-        </div>
-        <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
-          <BadgeDollarIcon className="w-4 h-4" />
-          <p className="text-foreground text-xs font-normal leading-[150%]">The app cannot move funds without your permission</p>
         </div>
         {/* Status Message */}
         {siweStatus && (
