@@ -52,6 +52,8 @@ export interface JawProviderPreference {
     serverUrl?: string;
     /** Used to issue subnames **/
     ens?: string;
+    /** Whether to show testnet chains (default: false) */
+    showTestnets?: boolean;
 }
 
 export type ProviderEventCallback = ProviderInterface['emit'];

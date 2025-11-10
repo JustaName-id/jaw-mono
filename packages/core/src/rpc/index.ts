@@ -13,5 +13,6 @@ export {
 
 export {storeCallStatus, getCallStatus, waitForReceiptInBackground, getCallStatusEIP5792} from './wallet_sendCalls.js';
 
+export { handleGetAssetsRequest } from './wallet_getAssets.js';
 
 export { getCapabilities } from './capabilities.js';
