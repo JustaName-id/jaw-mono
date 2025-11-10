@@ -11,7 +11,7 @@ import {
   loadSignerType,
   storeSignerType,
 } from '../signer/index.js';
-import { storeCallStatus, getCallStatus, waitForReceiptInBackground } from '../rpc/index.js';
+import { getCallStatusEIP5792, waitForReceiptInBackground } from '../rpc/index.js';
 import type { AppMetadata, ConstructorOptions, RequestArguments } from './interface.js';
 import type { Signer } from '../signer/index.js';
 
@@ -42,6 +42,7 @@ vi.mock('../signer/index.js', () => ({
 vi.mock('../rpc/index.js', () => ({
   storeCallStatus: vi.fn(),
   getCallStatus: vi.fn(),
+  getCallStatusEIP5792: vi.fn(),
   waitForReceiptInBackground: vi.fn(),
 }));
 vi.mock('../store/index.js', async (importOriginal) => {
@@ -582,22 +583,22 @@ describe('JAWProvider', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xbatchId'],
       };
-      const mockCallStatus = {
-        status: 'pending',
-        chainId: 1,
+      const mockEIP5792Response = {
+        version: '2.0.0',
+        id: '0xbatchId' as `0x${string}`,
+        chainId: '0x01' as `0x${string}`,
+        status: 100, // pending
+        atomic: true,
+        receipts: undefined,
       };
-      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
       const result = await provider.request(request);
 
       // Assert
-      expect(getCallStatus).toHaveBeenCalledWith('0xbatchId');
-      expect(result).toEqual({
-        id: '0xbatchId',
-        status: 100, // pending
-        receipts: [],
-      });
+      expect(getCallStatusEIP5792).toHaveBeenCalledWith('0xbatchId');
+      expect(result).toEqual(mockEIP5792Response);
     });
 
     it('should return status code 200 for completed status', async () => {
@@ -606,22 +607,28 @@ describe('JAWProvider', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xbatchId'],
       };
-      const mockCallStatus = {
-        status: 'completed',
-        chainId: 1,
-        receipts: [{ hash: '0xreceipt1' }],
+      const mockEIP5792Response = {
+        version: '2.0.0',
+        id: '0xbatchId' as `0x${string}`,
+        chainId: '0x01' as `0x${string}`,
+        status: 200, // completed
+        atomic: true,
+        receipts: [{
+          logs: [],
+          status: '0x1' as `0x${string}`,
+          blockHash: '0xhash' as `0x${string}`,
+          blockNumber: '0x123' as `0x${string}`,
+          gasUsed: '0x456' as `0x${string}`,
+          transactionHash: '0xreceipt1' as `0x${string}`,
+        }],
       };
-      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
       const result = await provider.request(request);
 
       // Assert
-      expect(result).toEqual({
-        id: '0xbatchId',
-        status: 200, // completed
-        receipts: [{ hash: '0xreceipt1' }],
-      });
+      expect(result).toEqual(mockEIP5792Response);
     });
 
     it('should return status code 400 for failed status', async () => {
@@ -630,22 +637,21 @@ describe('JAWProvider', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xbatchId'],
       };
-      const mockCallStatus = {
-        status: 'failed',
-        chainId: 1,
-        error: 'Transaction failed',
+      const mockEIP5792Response = {
+        version: '2.0.0',
+        id: '0xbatchId' as `0x${string}`,
+        chainId: '0x01' as `0x${string}`,
+        status: 400, // failed
+        atomic: true,
+        receipts: undefined,
       };
-      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
       const result = await provider.request(request);
 
       // Assert
-      expect(result).toEqual({
-        id: '0xbatchId',
-        status: 400, // failed
-        receipts: [],
-      });
+      expect(result).toEqual(mockEIP5792Response);
     });
 
     it('should throw error if batchId is missing', async () => {
@@ -667,7 +673,7 @@ describe('JAWProvider', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xnonexistent'],
       };
-      (getCallStatus as Mock).mockReturnValue(undefined);
+      (getCallStatusEIP5792 as Mock).mockReturnValue(undefined);
 
       // Act & Assert
       await expect(provider.request(request)).rejects.toMatchObject({

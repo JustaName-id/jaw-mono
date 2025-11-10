@@ -13,7 +13,7 @@ import {
 } from '../utils/index.js';
 import { fetchRPCRequest } from '../utils/index.js';
 import { correlationIds } from '../store/correlation-ids/store.js';
-import { getCallStatus } from '../rpc/wallet_sendCalls.js';
+import { getCallStatusEIP5792 } from '../rpc/wallet_sendCalls.js';
 
 // Mock dependencies
 vi.mock('../communicator/index.js', () => ({
@@ -55,6 +55,9 @@ vi.mock('./utils.js', async (importOriginal) => {
 
 vi.mock('../rpc/wallet_sendCalls.js', () => ({
   getCallStatus: vi.fn(),
+  getCallStatusEIP5792: vi.fn(),
+  waitForReceiptInBackground: vi.fn(),
+  storeCallStatus: vi.fn(),
 }));
 
 const mockCryptoKey = {} as CryptoKey;
@@ -506,22 +509,22 @@ describe('JAWSigner', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xbatchId'],
       };
-      const mockCallStatus = {
-        status: 'pending',
-        chainId: 1,
+      const mockEIP5792Response = {
+        version: '2.0.0',
+        id: '0xbatchId' as `0x${string}`,
+        chainId: '0x01' as `0x${string}`,
+        status: 100, // pending
+        atomic: true,
+        receipts: undefined,
       };
-      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
       const result = await signer.request(callsStatusRequest);
 
       // Assert
-      expect(getCallStatus).toHaveBeenCalledWith('0xbatchId');
-      expect(result).toEqual({
-        id: '0xbatchId',
-        status: 100, // pending
-        receipts: [],
-      });
+      expect(getCallStatusEIP5792).toHaveBeenCalledWith('0xbatchId');
+      expect(result).toEqual(mockEIP5792Response);
     });
 
     it('should return status code 200 for completed status', async () => {
@@ -530,22 +533,28 @@ describe('JAWSigner', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xbatchId'],
       };
-      const mockCallStatus = {
-        status: 'completed',
-        chainId: 1,
-        receipts: [{ hash: '0xreceipt1' }],
+      const mockEIP5792Response = {
+        version: '2.0.0',
+        id: '0xbatchId' as `0x${string}`,
+        chainId: '0x01' as `0x${string}`,
+        status: 200, // completed
+        atomic: true,
+        receipts: [{
+          logs: [],
+          status: '0x1' as `0x${string}`,
+          blockHash: '0xhash' as `0x${string}`,
+          blockNumber: '0x123' as `0x${string}`,
+          gasUsed: '0x456' as `0x${string}`,
+          transactionHash: '0xreceipt1' as `0x${string}`,
+        }],
       };
-      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
       const result = await signer.request(callsStatusRequest);
 
       // Assert
-      expect(result).toEqual({
-        id: '0xbatchId',
-        status: 200, // completed
-        receipts: [{ hash: '0xreceipt1' }],
-      });
+      expect(result).toEqual(mockEIP5792Response);
     });
 
     it('should return status code 400 for failed status', async () => {
@@ -554,22 +563,21 @@ describe('JAWSigner', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xbatchId'],
       };
-      const mockCallStatus = {
-        status: 'failed',
-        chainId: 1,
-        error: 'Transaction failed',
+      const mockEIP5792Response = {
+        version: '2.0.0',
+        id: '0xbatchId' as `0x${string}`,
+        chainId: '0x01' as `0x${string}`,
+        status: 400, // failed
+        atomic: true,
+        receipts: undefined,
       };
-      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
+      (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
       const result = await signer.request(callsStatusRequest);
 
       // Assert
-      expect(result).toEqual({
-        id: '0xbatchId',
-        status: 400, // failed
-        receipts: [],
-      });
+      expect(result).toEqual(mockEIP5792Response);
     });
 
     it('should throw error if batchId is missing', async () => {
@@ -591,7 +599,7 @@ describe('JAWSigner', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xnonexistent'],
       };
-      (getCallStatus as Mock).mockReturnValue(undefined);
+      (getCallStatusEIP5792 as Mock).mockReturnValue(undefined);
 
       // Act & Assert
       await expect(signer.request(callsStatusRequest)).rejects.toMatchObject({
