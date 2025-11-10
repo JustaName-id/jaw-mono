@@ -15,6 +15,7 @@ const DEFAULT_PREFERENCE: JawProviderPreference = {
   appSpecific: false,
   keysUrl: JAW_KEYS_URL,
   serverUrl:  JAW_PASSKEYS_URL,
+  showTestnets: false,
 };
 /**
  * Create a JAW SDK instance (factory function pattern).
@@ -59,6 +60,7 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
     metadata: options.metadata,
     preference: options.preference,
     paymasterUrls: options.paymasterUrls,
+    apiKey: params.apiKey,
   }
   store.config.set(storedOptions);
 
@@ -67,7 +69,11 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
   ChainClients.setState({});
 
   if (params.apiKey) {
-    const initialChains = createInitialChains(params.apiKey, params.paymasterUrls);
+    const initialChains = createInitialChains(
+      params.apiKey,
+      params.paymasterUrls,
+      options.preference.showTestnets
+    );
     store.chains.set(initialChains);
     createClients(initialChains);
   }

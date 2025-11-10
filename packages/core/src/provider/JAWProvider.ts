@@ -1,6 +1,5 @@
 import { Communicator } from '../communicator/index.js';
 import { standardErrorCodes, serializeError, standardErrors } from '../errors/index.js';
-import { JAW_RPC_URL } from '../constants.js';
 
 import { SignerType } from '../messages/index.js';
 
@@ -13,11 +12,12 @@ import {
     RequestArguments,
 } from './interface.js';
 
-import { hexStringFromNumber, checkErrorForInvalidRequestArgs, fetchRPCRequest, buildHandleJawRpcUrl } from '../utils/index.js';
+import { hexStringFromNumber, checkErrorForInvalidRequestArgs } from '../utils/index.js';
 
 import { correlationIds } from '../store/index.js';
 
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
+import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 import { Signer } from '../signer/index.js';
 
 import {
@@ -28,7 +28,6 @@ import {
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
     private readonly metadata: AppMetadata;
-    // @ts-expect-error - Will be used in future implementation
     private readonly preference: JawProviderPreference;
     private readonly communicator: Communicator;
     private readonly apiKey: string;
@@ -106,8 +105,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         return result as T;
                     }
                     case 'wallet_getAssets': {
-                        const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, this.apiKey);
-                        const result = await fetchRPCRequest(args, rpcUrl);
+                        const result = await handleGetAssetsRequest(
+                            args,
+                            this.apiKey,
+                            this.preference.showTestnets ?? false
+                        );
                         return result as T;
                     }
                     case 'wallet_getCallsStatus': {

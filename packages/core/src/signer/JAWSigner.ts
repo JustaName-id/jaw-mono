@@ -11,6 +11,7 @@ import {
 import { getCapabilities } from '../rpc/capabilities.js';
 import { waitForReceiptInBackground, storeCallStatus } from '../rpc/wallet_sendCalls.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
+import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 
 import { Communicator } from '../communicator/index.js';
 import { standardErrors } from '../errors/index.js';
@@ -168,6 +169,17 @@ export class JAWSigner implements Signer {
                 return this.handleGetCapabilitiesRequest(request);
             case 'wallet_getCallsStatus':
                 return await handleGetCallsStatusRequest(request);
+            case 'wallet_getAssets': {
+                const config = store.config.get();
+                const apiKey = config.apiKey;
+                const showTestnets = config.preference?.showTestnets ?? false;
+
+                if (!apiKey) {
+                    throw standardErrors.rpc.internal('No API key configured');
+                }
+
+                return await handleGetAssetsRequest(request, apiKey, showTestnets);
+            }
             case 'wallet_switchEthereumChain':
                 return this.handleSwitchChainRequest(request);
             case 'wallet_sendCalls':

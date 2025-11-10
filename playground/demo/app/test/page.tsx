@@ -19,6 +19,7 @@ export default function TestPage() {
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
         ens: process.env.NEXT_PUBLIC_ENS_NAME || '',
+        showTestnets: true
       },
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
     })
@@ -554,6 +555,48 @@ export default function TestPage() {
     }
   };
 
+  const handleGetAssets = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog(`Requesting assets for account: ${accounts[0]}...`);
+
+      const assets = await provider.request({
+        method: 'wallet_getAssets',
+        params: [{
+          account: accounts[0]
+        }]
+      });
+
+      console.log('[Demo] Assets received:', assets);
+      addLog(`Assets: ${JSON.stringify(assets, null, 2)}`);
+
+      // Count assets per chain
+      if (assets && typeof assets === 'object') {
+        const assetsObj = assets as Record<string, unknown[]>;
+        Object.entries(assetsObj).forEach(([chainId, chainAssets]) => {
+          if (Array.isArray(chainAssets)) {
+            addLog(`Chain ${chainId}: ${chainAssets.length} asset(s) found`);
+          }
+        });
+      }
+    } catch (error) {
+      console.error('[Demo] Get assets error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`Error getting assets: ${errorMessage}`);
+    }
+  };
+
   const handleGetCoinbase = async () => {
     try {
       const provider = sdk.getProvider();
@@ -836,7 +879,14 @@ export default function TestPage() {
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
             Wallet Actions
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <button
+              onClick={handleGetAssets}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Get Assets (wallet_getAssets)
+            </button>
             <button
               onClick={handleWatchAsset}
               disabled={!isConnected}
@@ -851,6 +901,11 @@ export default function TestPage() {
             >
               Add Ethereum Chain
             </button>
+          </div>
+          <div className="mt-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Note:</span> wallet_getAssets (EIP-7811) retrieves assets across all supported chains. The chainFilter is automatically set based on the showTestnets preference (default: mainnet chains only).
+            </p>
           </div>
         </div>
 

@@ -50,16 +50,34 @@ export type BundledTransactionResult = {
     chainId: number;
 }
 
-export const SUPPORTED_CHAINS = [
+export const MAINNET_CHAINS = [
     mainnet,
     base,
     optimism,
     arbitrum,
+]
+
+export const TESTNET_CHAINS = [
     sepolia,
     baseSepolia,
     optimismSepolia,
     arbitrumSepolia,
 ]
+
+export const SUPPORTED_CHAINS = [
+    ...MAINNET_CHAINS,
+    ...TESTNET_CHAINS,
+]
+
+/**
+ * Get supported chains based on testnet preference.
+ *
+ * @param showTestnets - Whether to include testnet chains (default: false)
+ * @returns Array of supported chains
+ */
+export function getSupportedChains(showTestnets = false) {
+    return showTestnets ? SUPPORTED_CHAINS : MAINNET_CHAINS;
+}
 
 /**
  * Gets or creates a bundler client for a chain using lazy loading.
