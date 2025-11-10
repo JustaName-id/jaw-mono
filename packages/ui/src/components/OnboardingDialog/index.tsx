@@ -10,6 +10,7 @@ import { OrSeparator } from '../OrSeparator';
 import { OnboardingDialogProps } from './types';
 import { useState, useEffect } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import {toCoinType} from "viem";
 
 export function OnboardingDialog({
   accounts,
@@ -125,7 +126,7 @@ export function OnboardingDialog({
 
           const addresses = supportedChains.map(chain => ({
             address: address,
-            coinType: (+chain.id + 2147483648).toString(),
+            coinType: toCoinType(chain.id).toString(),
           }));
 
           await justaName.subnames.addSubname(
