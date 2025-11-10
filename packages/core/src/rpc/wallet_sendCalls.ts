@@ -149,12 +149,24 @@ export function transformReceiptsToEIP5792(receipts: unknown[]): Array<{
     }
     
     // Return status in expected format
-    // Status codes: 100 = pending, 200 = completed, 400 = failed
+    // EIP-5792 Status codes:
+    // 100 = pending (not completed onchain)
+    // 200 = completed (included onchain without reverts)
+    // 400 = offchain failure (not included onchain, wallet won't retry)
+    // 500 = complete revert (reverted completely, has receipt with status 0x0)
+    // 600 = partial revert (not applicable for ERC-4337 atomic operations)
     let statusCode = 100; // pending
     if (callStatus.status === 'completed') {
-        statusCode = 200;
+        statusCode = 200; // Completed successfully
     } else if (callStatus.status === 'failed') {
-        statusCode = 400;
+        // Distinguish between offchain failure (400) and onchain revert (500)
+        if (callStatus.receipts && callStatus.receipts.length > 0) {
+            // Has receipts but failed → onchain revert (status 500)
+            statusCode = 500;
+        } else {
+            // No receipts → offchain failure (status 400)
+            statusCode = 400;
+        }
     }
 
     // Transform receipts to EIP-5792 format
@@ -192,18 +204,37 @@ export async function waitForReceiptInBackground(userOpHash: string, chainId: nu
             updateCallStatusToFailed(userOpHash, error);
             return;
         }
-
-        // Wait for receipt (this may take a while)
         // Status remains 'pending' while waiting
         const receipt = await (bundlerClient as BundlerClient).waitForUserOperationReceipt({
             hash: userOpHash as `0x${string}`,
         });
 
-        // TODO: Check receipt status to determine if transaction succeeded or failed
+        // Check receipt status to determine if transaction succeeded or failed
+        // The receipt from waitForUserOperationReceipt has a receipt field with status
+        const actualReceipt = (receipt as any).receipt || receipt;
+        const receiptStatus = actualReceipt.status;
         
+        // Determine if transaction succeeded:
+        // - status === '0x1' or 1 means success
+        // - status === '0x0' or 0 means failure (reverted)
+        // - If status is undefined but receipt exists, assume success (included on-chain)
+        const isSuccess = receiptStatus === '0x1' || 
+                         receiptStatus === 1 || 
+                         (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
 
-        // Update storage when done - mark as completed
-        updateCallStatusToCompleted(userOpHash, [receipt]);
+        if (isSuccess) {
+            // Transaction succeeded - mark as completed
+            updateCallStatusToCompleted(userOpHash, [receipt]);
+        } else {
+            // Transaction failed/reverted - mark as failed but still store receipt
+            // This allows wallet_getCallsStatus to return the receipt with status 0x0
+            updateCallStatusToFailed(userOpHash, new Error('Transaction reverted'));
+            // Still store the receipt so it can be returned in EIP-5792 format
+            // This will result in status code 500 (onchain revert) instead of 400 (offchain failure)
+            store.callStatuses.update(userOpHash, {
+                receipts: [receipt],
+            });
+        }
     } catch (error) {
         console.error(`Error waiting for receipt for ${userOpHash}:`, error);
         // Update status to failed on error
