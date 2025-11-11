@@ -19,7 +19,7 @@ import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../messages/
 import { KeyManager } from '../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/index.js';
 import { SDKChain, correlationIds, store } from '../store/index.js';
-import { WalletConnectResponse } from '../rpc/index.js';
+import { WalletConnectRequest, WalletConnectResponse } from '../rpc/index.js';
 import {
     decryptContent,
     encryptContent,
@@ -227,24 +227,98 @@ export class JAWSigner implements Signer {
     }
 
     /**
+     * Type guard to validate if request matches WalletConnectRequest structure
+     */
+    private isValidWalletConnectRequest(request: RequestArguments): request is WalletConnectRequest {
+        if (request.method !== 'wallet_connect') {
+            return false;
+        }
+
+        const params = request.params;
+        if (!Array.isArray(params) || params.length === 0) {
+            return false;
+        }
+
+        const firstParam = params[0];
+        if (typeof firstParam !== 'object' || firstParam === null) {
+            return false;
+        }
+
+        // Validate version property exists and is a string
+        if (!('version' in firstParam) || typeof firstParam.version !== 'string') {
+            return false;
+        }
+
+        // Validate capabilities structure if present
+        if ('capabilities' in firstParam && firstParam.capabilities !== undefined) {
+            const capabilities = firstParam.capabilities;
+            if (typeof capabilities !== 'object' || capabilities === null) {
+                return false;
+            }
+
+            // Validate signInWithEthereum structure if present
+            if ('signInWithEthereum' in capabilities && capabilities.signInWithEthereum !== undefined) {
+                const siwe = capabilities.signInWithEthereum;
+                if (typeof siwe !== 'object' || siwe === null) {
+                    return false;
+                }
+                if (!('nonce' in siwe) || typeof siwe.nonce !== 'string') {
+                    return false;
+                }
+                if (!('chainId' in siwe) || typeof siwe.chainId !== 'string') {
+                    return false;
+                }
+            }
+
+            // Validate subnameTextRecords structure if present
+            if ('subnameTextRecords' in capabilities && capabilities.subnameTextRecords !== undefined) {
+                const records = capabilities.subnameTextRecords;
+                if (!Array.isArray(records)) {
+                    return false;
+                }
+                for (const record of records) {
+                    if (typeof record !== 'object' || record === null) {
+                        return false;
+                    }
+                    if (!('key' in record) || typeof record.key !== 'string') {
+                        return false;
+                    }
+                    if (!('value' in record) || typeof record.value !== 'string') {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
      * Extracts capabilities from request params and injects them into the request.
      * This function handles any capabilities generically, not just specific ones.
+     * Validates that the request matches WalletConnectRequest structure before processing.
      * 
      * @param request - The request arguments containing potential capabilities
      * @returns The modified request with capabilities injected
+     * @throws {EthereumRpcError} If the request doesn't match WalletConnectRequest structure
      */
     private extractAndInjectCapabilities(request: RequestArguments): RequestArguments {
-        const requestParams = request.params as unknown[];
+        // Validate and type cast to WalletConnectRequest
+        if (!this.isValidWalletConnectRequest(request)) {
+            throw standardErrors.rpc.invalidParams(
+                'Invalid wallet_connect request structure. Request must match WalletConnectRequest type.'
+            );
+        }
+
+        // Now we can safely access params[0] as WalletConnectRequest['params'][0]
+        const walletConnectRequest = request as WalletConnectRequest;
+        const firstParam = walletConnectRequest.params[0];
         
         // Extract capabilities from request params if present
-        const requestCapabilities = requestParams?.[0] && 
-            typeof requestParams[0] === 'object' && 
-            requestParams[0] !== null
-            ? (requestParams[0] as { capabilities?: Record<string, unknown> }).capabilities
-            : undefined;
+        const requestCapabilities = firstParam.capabilities;
         
         // If capabilities exist, inject them into the request
-        if (requestCapabilities && typeof requestCapabilities === 'object') {
+        if (requestCapabilities) {
             const capabilitiesToInject: Record<string, unknown> = { ...requestCapabilities };
             return injectRequestCapabilities(request, capabilitiesToInject);
         }
