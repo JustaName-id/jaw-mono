@@ -1,4 +1,5 @@
 import { Address, hexToNumber, isAddressEqual, numberToHex } from 'viem';
+import { UUID } from 'crypto';
 
 import { Signer } from './interface.js';
 import {
@@ -7,13 +8,17 @@ import {
     getCachedWalletConnectResponse,
     injectRequestCapabilities,
 } from './SignerUtils.js';
+import { getCapabilities } from '../rpc/capabilities.js';
+import { waitForReceiptInBackground, storeCallStatus } from '../rpc/wallet_sendCalls.js';
+import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
+import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 
 import { Communicator } from '../communicator/index.js';
 import { standardErrors } from '../errors/index.js';
 import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../messages/index.js';
 import { KeyManager } from '../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/index.js';
-import { SDKChain, createClients, correlationIds, store } from '../store/index.js';
+import { SDKChain, correlationIds, store } from '../store/index.js';
 import { WalletConnectResponse } from '../rpc/index.js';
 import {
     decryptContent,
@@ -24,6 +29,7 @@ import {
     ensureIntNumber,
     hexStringFromNumber
 } from '../utils/index.js';
+import {clearSignerType} from "./utils.js";
 
 type ConstructorOptions = {
     metadata: AppMetadata;
@@ -44,15 +50,13 @@ export class JAWSigner implements Signer {
         this.callback = params.callback;
         this.keyManager = new KeyManager();
 
-        const { account, chains } = store.getState();
+        const state = store.getState();
+        const { account } = state;
+
         this.accounts = account.accounts ?? [];
         this.chain = account.chain ?? {
-            id: params.metadata.appChainIds?.[0] ?? 1,
+            id: params.metadata.defaultChainId ?? 1,
         };
-
-        if (chains) {
-            createClients(chains);
-        }
     }
 
     async handshake(args: RequestArguments) {
@@ -62,12 +66,16 @@ export class JAWSigner implements Signer {
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
         await this.communicator.waitForPopupLoaded?.();
 
+        const chains = store.getState().chains;
+        const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+
         const handshakeMessage = await this.createRequestMessage(
             {
                 handshake: {
                     method: args.method,
                     params: args.params ?? [],
                 },
+            chain
             },
             correlationId
         );
@@ -84,7 +92,7 @@ export class JAWSigner implements Signer {
 
         const decrypted = await this.decryptResponseMessage(response);
 
-        this.handleResponse(args, decrypted);
+        await this.handleResponse(args, decrypted);
     }
 
     async request(request: RequestArguments) {
@@ -112,14 +120,25 @@ export class JAWSigner implements Signer {
                 }
                 case 'wallet_switchEthereumChain': {
                     assertParamsChainId(request.params);
-                    this.chain.id = Number(request.params[0].chainId);
+                    const chainId = ensureIntNumber(request.params[0].chainId);
+
+                    // Check if chain is supported
+                    const chains = store.getState().chains ?? [];
+                    const chain = chains.find(c => c.id === chainId);
+                    if (!chain) {
+                        throw standardErrors.provider.unsupportedMethod(
+                            `wallet_switchEthereumChain is not supported for chainID ${chainId}`
+                        );
+                    }
+
+                    this.chain.id = chainId;
                     return;
                 }
                 case 'wallet_connect': {
                     // Wait for the popup to be loaded before making async calls
                     await this.communicator.waitForPopupLoaded?.();
 
-                    // Check if addSubAccount capability is present and if so, inject the the sub account capabilities
+                    // Prepare capabilities to inject (currently empty, reserved for future use)
                     const capabilitiesToInject: Record<string, unknown> = {};
 
                     const modifiedRequest = injectRequestCapabilities(request, capabilitiesToInject);
@@ -148,24 +167,37 @@ export class JAWSigner implements Signer {
                 return numberToHex(this.chain.id);
             case 'wallet_getCapabilities':
                 return this.handleGetCapabilitiesRequest(request);
+            case 'wallet_getCallsStatus':
+                return await handleGetCallsStatusRequest(request);
+            case 'wallet_getAssets': {
+                const config = store.config.get();
+                const apiKey = config.apiKey;
+                const showTestnets = config.preference?.showTestnets ?? false;
+
+                if (!apiKey) {
+                    throw standardErrors.rpc.internal('No API key configured');
+                }
+
+                return await handleGetAssetsRequest(request, apiKey, showTestnets);
+            }
             case 'wallet_switchEthereumChain':
                 return this.handleSwitchChainRequest(request);
-            case 'eth_ecRecover':
+            case 'wallet_sendCalls':
             case 'personal_sign':
             case 'wallet_sign':
-            case 'personal_ecRecover':
-            case 'eth_signTransaction':
             case 'eth_sendTransaction':
-            case 'eth_signTypedData_v1':
-            case 'eth_signTypedData_v3':
             case 'eth_signTypedData_v4':
-            case 'eth_signTypedData':
-            case 'wallet_addEthereumChain':
-            case 'wallet_watchAsset':
-            case 'wallet_sendCalls':
             case 'wallet_showCallsStatus':
             case 'wallet_grantPermissions':
                 return this.sendRequestToPopup(request);
+            case 'eth_sign':
+            case 'eth_ecRecover':
+            case 'personal_ecRecover':
+            case 'eth_signTransaction':
+            case 'eth_signTypedData':
+            case 'eth_signTypedData_v1':
+            case 'eth_signTypedData_v3':
+                throw standardErrors.provider.unsupportedMethod();
             case 'wallet_connect': {
                 // Return cached wallet connect response if available
                 const cachedResponse = await getCachedWalletConnectResponse();
@@ -183,11 +215,19 @@ export class JAWSigner implements Signer {
                 this.callback?.('connect', { chainId: numberToHex(this.chain.id) });
                 return this.sendRequestToPopup(modifiedRequest);
             }
-            default:
-                if (!this.chain.rpcUrl) {
+            default: {
+                // Throw error for any unhandled wallet_* methods
+                if (request.method.startsWith('wallet_')) {
+                    throw standardErrors.provider.unsupportedMethod();
+                }
+
+                const chains = store.getState().chains;
+                const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+                if (!chain.rpcUrl) {
                     throw standardErrors.rpc.internal('No RPC URL set for chain');
                 }
-                return fetchRPCRequest(request, this.chain.rpcUrl);
+                return fetchRPCRequest(request, chain.rpcUrl);
+            }
         }
     }
 
@@ -232,6 +272,22 @@ export class JAWSigner implements Signer {
                 this.callback?.('accountsChanged', accounts_);
                 break;
             }
+            case 'wallet_sendCalls': {
+                // Handle wallet_sendCalls result: store call status and start background task
+                const resultObj = result.value as { id?: string; chainId?: number };
+                const userOpHash = resultObj?.id;
+                const chainId = resultObj?.chainId;
+
+                if (userOpHash && chainId) {
+                    // Store call status and start background task
+                    storeCallStatus(userOpHash, chainId);
+                    // Start background task (don't await - runs in background)
+                    waitForReceiptInBackground(userOpHash, chainId).catch((error) => {
+                        console.error('Background receipt wait failed:', error);
+                    });
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -244,12 +300,13 @@ export class JAWSigner implements Signer {
 
         // clear the store
         store.account.clear();
-        store.chains.clear();
+
+        clearSignerType();
 
         // reset the signer
         this.accounts = [];
         this.chain = {
-            id: metadata?.appChainIds?.[0] ?? 1,
+            id: metadata?.defaultChainId ?? 1,
         };
     }
 
@@ -264,11 +321,10 @@ export class JAWSigner implements Signer {
         const localResult = this.updateChain(chainId);
         if (localResult) return null;
 
-        const popupResult = await this.sendRequestToPopup(request);
-        if (popupResult === null) {
-            this.updateChain(chainId);
-        }
-        return popupResult;
+        // Chain not found in store - it's not supported
+        throw standardErrors.provider.unsupportedMethod(
+            `wallet_switchEthereumChain is not supported for target chainID ${chainId}`
+        );
     }
 
     private async handleGetCapabilitiesRequest(request: RequestArguments) {
@@ -283,12 +339,8 @@ export class JAWSigner implements Signer {
             );
         }
 
-        const capabilities = store.getState().account.capabilities;
-
-        // Return empty object if capabilities is undefined
-        if (!capabilities) {
-            return {};
-        }
+        const state = store.getState();
+        const capabilities = state.account.capabilities ?? getCapabilities();
 
         // If no filter is provided, return all capabilities
         if (!filterChainIds || filterChainIds.length === 0) {
@@ -314,16 +366,21 @@ export class JAWSigner implements Signer {
         return filteredCapabilities;
     }
 
+ 
+
     private async sendEncryptedRequest(request: RequestArguments): Promise<RPCResponseMessage> {
         const sharedSecret = await this.keyManager.getSharedSecret();
         if (!sharedSecret) {
             throw standardErrors.provider.unauthorized('No shared secret found when encrypting request');
         }
 
+        const chains = store.getState().chains;
+        const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+
         const encrypted = await encryptContent(
             {
                 action: request,
-                chainId: this.chain.id,
+                chain: chain,
             },
             sharedSecret
         );
@@ -340,7 +397,7 @@ export class JAWSigner implements Signer {
         const publicKey = await exportKeyToHexString('public', await this.keyManager.getOwnPublicKey());
 
         return {
-            id: crypto.randomUUID(),
+            id: crypto.randomUUID() as UUID,
             correlationId,
             sender: publicKey,
             content,
@@ -364,24 +421,6 @@ export class JAWSigner implements Signer {
         }
 
         const response: RPCResponse = await decryptContent(content.encrypted, sharedSecret);
-
-        const availableChains = response.data?.chains;
-        if (availableChains) {
-            const nativeCurrencies = response.data?.nativeCurrencies;
-            const chains: SDKChain[] = Object.entries(availableChains).map(([id, rpcUrl]) => {
-                const nativeCurrency = nativeCurrencies?.[Number(id)];
-                return {
-                    id: Number(id),
-                    rpcUrl,
-                    ...(nativeCurrency ? { nativeCurrency } : {}),
-                };
-            });
-
-            store.chains.set(chains);
-
-            this.updateChain(this.chain.id, chains);
-            createClients(chains);
-        }
 
         const walletCapabilities = response.data?.capabilities;
         if (walletCapabilities) {

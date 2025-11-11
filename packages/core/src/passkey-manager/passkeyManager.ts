@@ -6,8 +6,9 @@ import {
   AuthState,
 } from './types.js';
 import type { JawProviderPreference } from '../provider/index.js';
-import { registerPasskeyInBackend, lookupPasskeyFromBackend } from './utils.js';
+import { registerPasskeyInBackend, lookupPasskeyFromBackend, WebAuthnAuthenticationResult , authenticateWithWebAuthnUtils, createPasskeyUtils, ImportWebAuthnAuthenticationResult, importPasskeyUtils} from './utils.js';
 import {JAW_PASSKEYS_URL} from "../constants.js";
+import type { WebAuthnAccount } from "viem/account-abstraction";
 
 /**
  * PasskeyManager handles passkey authentication and account management
@@ -25,11 +26,13 @@ import {JAW_PASSKEYS_URL} from "../constants.js";
 export class PasskeyManager {
   private storage: SyncStorage;
   private preference: JawProviderPreference;
+  private apiKey?: string;
   private static readonly CREDENTIAL_ID_REGEX = /^[A-Za-z0-9_-]+$/;
 
-  constructor(storage?: SyncStorage, preference?: JawProviderPreference) {
+  constructor(storage?: SyncStorage, preference?: JawProviderPreference, apiKey?: string) {
     this.storage = storage ?? createLocalStorage('jaw', 'passkey');
     this.preference = preference ?? {};
+    this.apiKey = apiKey;
   }
 
   /**
@@ -117,9 +120,62 @@ export class PasskeyManager {
     );
 
     if (!accountExists) {
+      console.log('Adding account to list:', account);
       existingAccounts.push(account);
       this.storage.setItem('accounts', existingAccounts);
     }
+  }
+
+  /**
+   * Create a new WebAuthn passkey
+   * @param username - The username for the passkey
+   * @param rpId - The relying party identifier (e.g., domain name)
+   * @param rpName - The relying party name
+   * @returns WebAuthn passkey creation result with credential and challenge
+   * @throws {PasskeyRegistrationError} If passkey creation fails
+   */
+  async createPasskey(username: string, rpId: string, rpName: string): Promise<{ credentialId: string; publicKey: `0x${string}`; webAuthnAccount: WebAuthnAccount; passkeyAccount: PasskeyAccount }> {
+    const { credentialId, publicKey, webAuthnAccount } = await createPasskeyUtils(username, rpId, rpName);
+    const passkeyAccount: PasskeyAccount = {
+      username,
+      credentialId,
+      publicKey,
+      creationDate: new Date().toISOString(),
+      isImported: false,
+    };
+    this.addAccountToList(passkeyAccount);
+    console.log('Accounts list:', this.fetchAccounts());
+    return { credentialId, publicKey, webAuthnAccount, passkeyAccount };
+  }
+
+  /**
+   * Authenticate with a WebAuthn passkey
+   * @param credentialId - The passkey credential ID
+   * @param rpId - The relying party identifier (e.g., domain name)
+   * @param options - Optional authentication options
+   * @returns WebAuthn authentication result with credential and challenge
+   * @throws {WebAuthnAuthenticationError} If authentication fails
+   */
+
+   async authenticateWithWebAuthn(
+    rpId: string,
+    credentialId: string,
+    options?: {
+      userVerification?: UserVerificationRequirement;
+      timeout?: number;
+      transports?: AuthenticatorTransport[];
+    }
+  ): Promise<WebAuthnAuthenticationResult> {
+   return authenticateWithWebAuthnUtils( rpId, credentialId, options);
+  }
+
+  /**
+   * Import a passkey account from the backend
+   * @returns ImportWebAuthnAuthenticationResult
+   * @throws {PasskeyLookupError} If backend lookup fails or passkey not found
+   */
+  async importPasskeyAccount(): Promise<ImportWebAuthnAuthenticationResult> {
+    return importPasskeyUtils();
   }
 
   /**
@@ -150,7 +206,7 @@ export class PasskeyManager {
         publicKey,
         displayName: name.trim(),
       },
-      this.preference.apiKey,
+      this.apiKey,
       dev,
       serverUrl
     );
@@ -188,7 +244,7 @@ export class PasskeyManager {
     const serverUrl = this.preference.serverUrl ?? JAW_PASSKEYS_URL;
     const passkeyData = await lookupPasskeyFromBackend(
       credentialId,
-      this.preference.apiKey,
+      this.apiKey,
       dev,
       serverUrl
     );

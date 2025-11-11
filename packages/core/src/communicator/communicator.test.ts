@@ -25,7 +25,11 @@ function dispatchMessageEvent({ data, origin }: { data: unknown; origin: string 
 }
 
 const popupLoadedMessage = {
-    data: { event: 'PopupLoaded' },
+    data: { event: 'PopupLoaded', id: 'popup-loaded-id' },
+};
+
+const popupReadyMessage = {
+    data: { event: 'PopupReady' },
 };
 
 /**
@@ -48,7 +52,7 @@ function queueMessageEvent({
 const appMetadata: AppMetadata = {
     appName: 'Test App',
     appLogoUrl: null,
-    appChainIds: [1],
+    defaultChainId: 1,
 };
 
 const preference: JawProviderPreference = { keysUrl: JAW_KEYS_URL };
@@ -86,7 +90,6 @@ describe('Communicator', () => {
 
         // url defaults to JAW_KEYS_URL
         communicator = new Communicator({
-            url: JAW_KEYS_URL,
             metadata: appMetadata,
             preference,
         });
@@ -138,6 +141,7 @@ describe('Communicator', () => {
             const mockRequest: Message & { id: MessageID } = { id: 'mock-request-id-1-2', data: {} };
 
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
             queueMessageEvent({
                 data: {
                     requestId: mockRequest.id,
@@ -148,6 +152,7 @@ describe('Communicator', () => {
 
             expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
                 {
+                    requestId: 'popup-loaded-id',
                     data: {
                         version: SDK_VERSION,
                         metadata: appMetadata,
@@ -173,11 +178,13 @@ describe('Communicator', () => {
             const mockResponse: Message = { requestId: 'mock-request-id-1-2', data: {} };
 
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
 
             await communicator.postMessage(mockResponse);
 
             expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
                 {
+                    requestId: 'popup-loaded-id',
                     data: {
                         version: SDK_VERSION,
                         metadata: appMetadata,
@@ -197,6 +204,7 @@ describe('Communicator', () => {
     describe('waitForPopupLoaded', () => {
         it('should open a popup window and finish handshake', async () => {
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
 
             const popup = await communicator.waitForPopupLoaded();
 
@@ -207,6 +215,7 @@ describe('Communicator', () => {
 
             expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
                 {
+                    requestId: 'popup-loaded-id',
                     data: {
                         version: SDK_VERSION,
                         metadata: appMetadata,
@@ -240,6 +249,7 @@ describe('Communicator', () => {
             });
 
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
             await communicator.waitForPopupLoaded();
 
             // Call again - should reuse existing popup
@@ -273,6 +283,7 @@ describe('Communicator', () => {
             });
 
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
             await communicator.waitForPopupLoaded();
 
             // Close the popup
@@ -280,12 +291,12 @@ describe('Communicator', () => {
 
             // Create a new communicator instance to properly test the closed popup scenario
             communicator = new Communicator({
-                url: JAW_KEYS_URL,
                 metadata: appMetadata,
                 preference,
             });
 
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
             await communicator.waitForPopupLoaded();
 
             expect(callCount).toBe(2);
@@ -295,6 +306,7 @@ describe('Communicator', () => {
     describe('disconnect', () => {
         it('should close the popup window and clear all listeners', async () => {
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
             await communicator.waitForPopupLoaded();
 
             // Set up a pending message listener
@@ -346,6 +358,7 @@ describe('Communicator', () => {
 
         it('should reject all pending listeners on disconnect', async () => {
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
             await communicator.waitForPopupLoaded();
 
             // Set up multiple pending message listeners
@@ -371,6 +384,7 @@ describe('Communicator', () => {
     describe('PopupUnload event', () => {
         it('should handle PopupUnload event and disconnect', async () => {
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
             queueMessageEvent({
                 data: { event: 'PopupUnload', id: 'unload-id' },
             });
@@ -388,6 +402,7 @@ describe('Communicator', () => {
             const initialRemoveCount = removeEventListenerCallCount;
 
             queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
             queueMessageEvent({
                 data: { event: 'PopupUnload', id: 'unload-id' },
             });

@@ -35,8 +35,8 @@ export interface AppMetadata {
     appName: string;
     /** Application logo image URL; favicon is used if unspecified */
     appLogoUrl: string | null;
-    /** Array of chainIds your dapp supports */
-    appChainIds: number[];
+    /** Default chain ID to use on first connection (defaults to mainnet if not specified) */
+    defaultChainId?: number;
 }
 
 export interface JawProviderPreference {
@@ -50,7 +50,10 @@ export interface JawProviderPreference {
     keysUrl?: string;
     /** Backend server URL for passkey storage (default: https://api.justaname.id/wallet/v2/passkeys) */
     serverUrl?: string;
-    apiKey?: string;
+    /** Used to issue subnames **/
+    ens?: string;
+    /** Whether to show testnet chains (default: false) */
+    showTestnets?: boolean;
 }
 
 export type ProviderEventCallback = ProviderInterface['emit'];
@@ -60,5 +63,6 @@ export class ProviderEventEmitter extends EventEmitter<keyof ProviderEventMap> {
 export interface ConstructorOptions {
     metadata: AppMetadata;
     preference: JawProviderPreference;
+    apiKey: string;
     paymasterUrls?: Record<number, string>;
 }

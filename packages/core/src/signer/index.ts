@@ -15,7 +15,7 @@ export {
 
 export {
     createSigner,
-    fetchSignerType,
     loadSignerType,
-    storeSignerType
+    storeSignerType,
+    clearSignerType,
 } from "./utils.js"

@@ -4,6 +4,16 @@ import {
     RequestArguments,
 } from '../provider/index.js';
 
+/**
+ * Constructs the JAW RPC URL with the provided API key as a query parameter
+ * @param baseUrl The base RPC URL
+ * @param apiKey The API key to append to the URL
+ * @returns The constructed URL with the API key query parameter
+ */
+export function buildHandleJawRpcUrl(baseUrl: string, apiKey: string): string {
+    return `${baseUrl}/handle?api-key=${apiKey}`;
+}
+
 export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string) {
     const requestBody = {
         ...request,

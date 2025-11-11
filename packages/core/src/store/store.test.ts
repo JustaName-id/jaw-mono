@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 
-import { sdkstore, account, chains, keys, config, store } from './store.js';
+import { sdkstore, account, chains, keys, config, callStatuses, store } from './store.js';
 import { SDK_VERSION } from '../sdk-info.js';
 
 describe('store', () => {
@@ -12,6 +12,7 @@ describe('store', () => {
         keys: {},
         account: {},
         config: { version: SDK_VERSION },
+        callStatuses: {},
       },
       true
     );
@@ -214,25 +215,25 @@ describe('store', () => {
         metadata: {
           appName: 'Test App',
           appLogoUrl: 'https://example.com/logo.png',
-          appChainIds: [1, 11155111],
+          defaultChainId: 1,
         },
       });
 
       const state = config.get();
       expect(state.metadata?.appName).toBe('Test App');
-      expect(state.metadata?.appChainIds).toEqual([1, 11155111]);
+      expect(state.metadata?.defaultChainId).toBe(1);
     });
 
     it('should set config preference', () => {
       config.set({
         preference: {
-          mode: 'cross-platform',
+          appSpecific: false,
           keysUrl: 'https://keys.example.com',
         },
       });
 
       const state = config.get();
-      expect(state.preference?.mode).toBe('cross-platform');
+      expect(state.preference?.appSpecific).toBe(false);
       expect(state.preference?.keysUrl).toBe('https://keys.example.com');
     });
 
@@ -241,7 +242,7 @@ describe('store', () => {
         metadata: {
           appName: 'Test App',
           appLogoUrl: null,
-          appChainIds: [1],
+          defaultChainId: 1,
         },
       });
 
@@ -275,12 +276,163 @@ describe('store', () => {
         metadata: {
           appName: 'Test App',
           appLogoUrl: null,
-          appChainIds: [1],
+          defaultChainId: 1,
         },
       });
 
       const state = config.get();
       expect(state.version).toBe(initialVersion);
+    });
+  });
+
+  describe('callStatuses actions', () => {
+    it('should initialize with empty callStatuses object', () => {
+      const status = callStatuses.get('0xbatchId');
+      expect(status).toBeUndefined();
+    });
+
+    it('should set a call status as pending', () => {
+      callStatuses.set('0xbatchId1', {
+        status: 'pending',
+        chainId: 1,
+      });
+
+      const status = callStatuses.get('0xbatchId1');
+      expect(status).toBeDefined();
+      expect(status?.status).toBe('pending');
+      expect(status?.chainId).toBe(1);
+    });
+
+    it('should set multiple call statuses', () => {
+      callStatuses.set('0xbatchId1', {
+        status: 'pending',
+        chainId: 1,
+      });
+      callStatuses.set('0xbatchId2', {
+        status: 'completed',
+        chainId: 1,
+        receipts: [{ receipt: { transactionHash: '0xtxhash' } }],
+      });
+      callStatuses.set('0xbatchId3', {
+        status: 'failed',
+        chainId: 1,
+        error: 'Transaction failed',
+      });
+
+      expect(callStatuses.get('0xbatchId1')?.status).toBe('pending');
+      expect(callStatuses.get('0xbatchId2')?.status).toBe('completed');
+      expect(callStatuses.get('0xbatchId3')?.status).toBe('failed');
+      expect(callStatuses.get('0xbatchId3')?.error).toBe('Transaction failed');
+    });
+
+    it('should update call status', () => {
+      callStatuses.set('0xbatchId1', {
+        status: 'pending',
+        chainId: 1,
+      });
+
+      callStatuses.update('0xbatchId1', {
+        status: 'completed',
+        receipts: [{ receipt: { transactionHash: '0xtxhash' } }],
+      });
+
+      const status = callStatuses.get('0xbatchId1');
+      expect(status?.status).toBe('completed');
+      expect(status?.chainId).toBe(1); // Should preserve existing fields
+      expect(status?.receipts).toBeDefined();
+    });
+
+    it('should update only specified fields', () => {
+      callStatuses.set('0xbatchId1', {
+        status: 'pending',
+        chainId: 1,
+      });
+
+      callStatuses.update('0xbatchId1', {
+        status: 'failed',
+        error: 'Transaction failed',
+      });
+
+      const status = callStatuses.get('0xbatchId1');
+      expect(status?.status).toBe('failed');
+      expect(status?.chainId).toBe(1); // Should preserve chainId
+      expect(status?.error).toBe('Transaction failed');
+    });
+
+    it('should not update if batchId does not exist', () => {
+      const initialState = sdkstore.getState().callStatuses;
+      
+      callStatuses.update('0xnonexistent', {
+        status: 'completed',
+      });
+
+      // State should remain unchanged
+      expect(sdkstore.getState().callStatuses).toEqual(initialState);
+    });
+
+    it('should return undefined for non-existent batchId', () => {
+      const status = callStatuses.get('0xnonexistent');
+      expect(status).toBeUndefined();
+    });
+
+    it('should clear all call statuses', () => {
+      callStatuses.set('0xbatchId1', {
+        status: 'pending',
+        chainId: 1,
+      });
+      callStatuses.set('0xbatchId2', {
+        status: 'completed',
+        chainId: 1,
+      });
+
+      callStatuses.clear();
+
+      expect(callStatuses.get('0xbatchId1')).toBeUndefined();
+      expect(callStatuses.get('0xbatchId2')).toBeUndefined();
+    });
+
+    it('should preserve other call statuses when setting one', () => {
+      callStatuses.set('0xbatchId1', {
+        status: 'pending',
+        chainId: 1,
+      });
+      callStatuses.set('0xbatchId2', {
+        status: 'completed',
+        chainId: 1,
+      });
+
+      callStatuses.set('0xbatchId3', {
+        status: 'failed',
+        chainId: 1,
+        error: 'Error',
+      });
+
+      expect(callStatuses.get('0xbatchId1')?.status).toBe('pending');
+      expect(callStatuses.get('0xbatchId2')?.status).toBe('completed');
+      expect(callStatuses.get('0xbatchId3')?.status).toBe('failed');
+    });
+
+    it('should handle all three status states', () => {
+      callStatuses.set('0xpending', {
+        status: 'pending',
+        chainId: 1,
+      });
+      callStatuses.set('0xcompleted', {
+        status: 'completed',
+        chainId: 1,
+        receipts: [{ receipt: { transactionHash: '0xtxhash' } }],
+      });
+      callStatuses.set('0xfailed', {
+        status: 'failed',
+        chainId: 1,
+        error: 'Transaction failed',
+      });
+
+      expect(callStatuses.get('0xpending')?.status).toBe('pending');
+      expect(callStatuses.get('0xcompleted')?.status).toBe('completed');
+      expect(callStatuses.get('0xcompleted')?.receipts).toBeDefined();
+      expect(callStatuses.get('0xfailed')?.status).toBe('failed');
+      expect(callStatuses.get('0xfailed')?.error).toBe('Transaction failed');
     });
   });
 
@@ -290,6 +442,7 @@ describe('store', () => {
       expect(store.chains).toBeDefined();
       expect(store.keys).toBeDefined();
       expect(store.config).toBeDefined();
+      expect(store.callStatuses).toBeDefined();
       expect(store.getState).toBeDefined();
       expect(store.setState).toBeDefined();
       expect(store.subscribe).toBeDefined();
@@ -338,6 +491,10 @@ describe('store', () => {
       chains.set([{ id: 1 }]);
       keys.set('key1', 'value1');
       account.set({ accounts: ['0x1234567890123456789012345678901234567890'] });
+      callStatuses.set('0xbatchId', {
+        status: 'pending',
+        chainId: 1,
+      });
 
       // Update only chains
       chains.set([{ id: 2 }]);
@@ -345,12 +502,17 @@ describe('store', () => {
       // Other slices should remain unchanged
       expect(keys.get('key1')).toBe('value1');
       expect(account.get().accounts?.length).toBe(1);
+      expect(callStatuses.get('0xbatchId')?.status).toBe('pending');
     });
 
     it('should clear only targeted slice', () => {
       chains.set([{ id: 1 }]);
       keys.set('key1', 'value1');
       account.set({ accounts: ['0x1234567890123456789012345678901234567890'] });
+      callStatuses.set('0xbatchId', {
+        status: 'pending',
+        chainId: 1,
+      });
 
       // Clear only keys
       keys.clear();
@@ -361,6 +523,7 @@ describe('store', () => {
       // Other slices should remain
       expect(chains.get().length).toBe(1);
       expect(account.get().accounts?.length).toBe(1);
+      expect(callStatuses.get('0xbatchId')?.status).toBe('pending');
     });
   });
 });

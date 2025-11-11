@@ -1,6 +1,7 @@
 import { RequestArguments } from '../provider/interface.js';
 import { SerializedEthereumRpcError } from '../errors/utils.js';
 import { Message, MessageID } from './message.js';
+import { Chain } from '../store/types.js';
 
 interface RPCMessage extends Message {
     id: MessageID;
@@ -19,6 +20,7 @@ export interface RPCRequestMessage extends RPCMessage {
     content:
         | {
         handshake: RequestArguments;
+        chain: Chain;
     }
         | {
         encrypted: EncryptedData;
@@ -38,7 +40,7 @@ export interface RPCResponseMessage extends RPCMessage {
 
 export type RPCRequest = {
     action: RequestArguments; // JSON-RPC call
-    chainId: number;
+    chain: Chain;
 };
 
 export type RPCResponseNativeCurrency = {
@@ -56,10 +58,8 @@ export type RPCResponse = {
         error: SerializedEthereumRpcError;
     };
     data?: {
-        // optional data
-        chains?: { [key: number]: string };
+        chains?: { [key: number]: Chain };
         capabilities?: Record<`0x${string}`, Record<string, unknown>>;
-        nativeCurrencies?: { [key: number]: RPCResponseNativeCurrency };
     };
 };
 

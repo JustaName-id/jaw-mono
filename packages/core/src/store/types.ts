@@ -11,6 +11,7 @@ export type Chain = {
       symbol?: string;
       decimal?: number;
     };
+    paymasterUrl?: string;
   };
   
 
@@ -26,6 +27,7 @@ export type Config = {
     preference?: JawProviderPreference;
     version: string;
     deviceId?: string;
+    apiKey?: string;
     paymasterUrls?: Record<number, string>;
   };
   
@@ -46,6 +48,17 @@ export type Config = {
   export type AccountSlice = {
     account: Account;
   };
+
+  export type CallStatus = {
+    status: 'pending' | 'failed' | 'completed';
+    receipts?: unknown[];
+    chainId?: number;
+    error?: string;
+  };
+
+  export type CallStatusSlice = {
+    callStatuses: Record<string, CallStatus>;
+  };
   
   export type MergeTypes<T extends unknown[]> = T extends [infer First, ...infer Rest]
   ? First & (Rest extends unknown[] ? MergeTypes<Rest> : Record<string, unknown>)
@@ -58,5 +71,6 @@ export type Config = {
     KeysSlice,
     AccountSlice,
     ConfigSlice,
+    CallStatusSlice,
   ]
 >;
