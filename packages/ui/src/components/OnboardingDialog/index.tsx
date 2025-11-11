@@ -10,6 +10,7 @@ import { OrSeparator } from '../OrSeparator';
 import { OnboardingDialogProps } from './types';
 import { useState, useEffect } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import {toCoinType} from "viem";
 
 export function OnboardingDialog({
   accounts,
@@ -89,7 +90,7 @@ export function OnboardingDialog({
           const justaName = getJustaNameInstance();
           const result = await justaName.subnames.isSubnameAvailable({
             subname: debouncedUsername + '.' + ensDomain,
-            chainId: chainId,
+            chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
           });
 
           if (result?.isAvailable) {
@@ -125,14 +126,14 @@ export function OnboardingDialog({
 
           const addresses = supportedChains.map(chain => ({
             address: address,
-            coinType: (+chain.id + 2147483648).toString(),
+            coinType: toCoinType(chain.id).toString(),
           }));
 
           await justaName.subnames.addSubname(
             {
               username: username,
               ensDomain: ensDomain,
-              chainId: chainId,
+              chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
               addresses: addresses,
               overrideSignatureCheck: true,
             },

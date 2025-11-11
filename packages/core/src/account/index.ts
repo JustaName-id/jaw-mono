@@ -13,6 +13,9 @@ export {
 
 export {
     SUPPORTED_CHAINS,
+    MAINNET_CHAINS,
+    TESTNET_CHAINS,
+    getSupportedChains,
     type FindOwnerIndexParams,
     getBundlerClient,
     sendTransaction,

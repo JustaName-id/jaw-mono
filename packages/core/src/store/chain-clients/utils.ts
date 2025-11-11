@@ -4,7 +4,7 @@ import { BundlerClient, createBundlerClient, createPaymasterClient } from 'viem/
 import { ChainClients } from './store.js';
 import { RPCResponseNativeCurrency } from '../../messages/rpcMessage.js';
 import { JAW_RPC_URL } from '../../constants.js';
-import { SUPPORTED_CHAINS } from '../../account/smartAccount.js';
+import { getSupportedChains } from '../../account/smartAccount.js';
 import { store } from '../store.js';
 
 export type SDKChain = {
@@ -122,13 +122,15 @@ export function getClient(chainId: number): PublicClient | undefined {
  */
 export function getBundlerClient(chainId: number): BundlerClient | undefined {
   // Check if client already exists
-  const existingClient = ChainClients.getState()[chainId]?.bundlerClient;
+  const existingClient = ChainClients.getState()?.[chainId]?.bundlerClient;
+  console.log('Existing client:', existingClient);
   if (existingClient) {
     return existingClient;
   }
 
   // Lazy create: find chain in store and create client
   const chains = store.getState().chains ?? [];
+  console.log('Chains:', chains);
   const chain = chains.find(c => c.id === chainId);
   if (!chain) {
     return undefined;
@@ -152,17 +154,17 @@ export function getBundlerClient(chainId: number): BundlerClient | undefined {
  *
  * @param apiKey - API key for authentication
  * @param paymasterUrls - Optional mapping of chain IDs to paymaster URLs
- * @returns Array of SDKChain objects with constructed RPC URLs for all supported chains
+ * @param showTestnets - Whether to include testnet chains (default: false)
+ * @returns Array of SDKChain objects with constructed RPC URLs for supported chains
  *
- * @example
- * const chains = createInitialChains('my-api-key', { 1: 'https://paymaster.example.com' });
- * // Returns chains for mainnet, sepolia, base, baseSepolia, optimism, optimismSepolia, arbitrum, arbitrumSepolia
  */
 export function createInitialChains(
   apiKey: string,
-  paymasterUrls?: Record<number, string>
+  paymasterUrls?: Record<number, string>,
+  showTestnets = false
 ): SDKChain[] {
-  return SUPPORTED_CHAINS.map((chain) => ({
+  const chains = getSupportedChains(showTestnets);
+  return chains.map((chain) => ({
     id: chain.id,
     rpcUrl: `${JAW_RPC_URL}?chainId=${chain.id}&api-key=${apiKey}`,
     ...(paymasterUrls?.[chain.id] ? { paymasterUrl: paymasterUrls[chain.id] } : {}),

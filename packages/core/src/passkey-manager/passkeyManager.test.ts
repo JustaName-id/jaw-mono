@@ -526,7 +526,6 @@ describe('PasskeyManager', () => {
       const customPreference = {
         keysUrl: 'https://custom-keys.example.com',
         serverUrl: 'https://custom.example.com',
-        apiKey: 'test-key',
       };
 
       const customManager = new PasskeyManager(createMemoryStorage(), customPreference);
@@ -534,7 +533,6 @@ describe('PasskeyManager', () => {
 
       expect(preference.keysUrl).toBe('https://custom-keys.example.com');
       expect(preference.serverUrl).toBe('https://custom.example.com');
-      expect(preference.apiKey).toBe('test-key');
     });
 
     it('should return copy of preference', () => {
@@ -559,11 +557,11 @@ describe('PasskeyManager', () => {
 
     it('should merge with existing preference', () => {
       manager.updatePreference({ serverUrl: 'https://example.com' });
-      manager.updatePreference({ apiKey: 'test-key' });
+      manager.updatePreference({ keysUrl: 'https://custom-keys.example.com' });
 
       const preference = manager.getPreference();
       expect(preference.serverUrl).toBe('https://example.com');
-      expect(preference.apiKey).toBe('test-key');
+      expect(preference.keysUrl).toBe('https://custom-keys.example.com');
     });
 
     it('should overwrite existing values', () => {

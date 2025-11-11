@@ -9,6 +9,9 @@ import {
     injectRequestCapabilities,
 } from './SignerUtils.js';
 import { getCapabilities } from '../rpc/capabilities.js';
+import { waitForReceiptInBackground, storeCallStatus } from '../rpc/wallet_sendCalls.js';
+import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
+import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 
 import { Communicator } from '../communicator/index.js';
 import { standardErrors } from '../errors/index.js';
@@ -164,13 +167,26 @@ export class JAWSigner implements Signer {
                 return numberToHex(this.chain.id);
             case 'wallet_getCapabilities':
                 return this.handleGetCapabilitiesRequest(request);
+            case 'wallet_getCallsStatus':
+                return await handleGetCallsStatusRequest(request);
+            case 'wallet_getAssets': {
+                const config = store.config.get();
+                const apiKey = config.apiKey;
+                const showTestnets = config.preference?.showTestnets ?? false;
+
+                if (!apiKey) {
+                    throw standardErrors.rpc.internal('No API key configured');
+                }
+
+                return await handleGetAssetsRequest(request, apiKey, showTestnets);
+            }
             case 'wallet_switchEthereumChain':
                 return this.handleSwitchChainRequest(request);
+            case 'wallet_sendCalls':
             case 'personal_sign':
             case 'wallet_sign':
             case 'eth_sendTransaction':
             case 'eth_signTypedData_v4':
-            case 'wallet_sendCalls':
             case 'wallet_showCallsStatus':
             case 'wallet_grantPermissions':
                 return this.sendRequestToPopup(request);
@@ -256,6 +272,22 @@ export class JAWSigner implements Signer {
                 this.callback?.('accountsChanged', accounts_);
                 break;
             }
+            case 'wallet_sendCalls': {
+                // Handle wallet_sendCalls result: store call status and start background task
+                const resultObj = result.value as { id?: string; chainId?: number };
+                const userOpHash = resultObj?.id;
+                const chainId = resultObj?.chainId;
+
+                if (userOpHash && chainId) {
+                    // Store call status and start background task
+                    storeCallStatus(userOpHash, chainId);
+                    // Start background task (don't await - runs in background)
+                    waitForReceiptInBackground(userOpHash, chainId).catch((error) => {
+                        console.error('Background receipt wait failed:', error);
+                    });
+                }
+                break;
+            }
             default:
                 break;
         }
@@ -333,6 +365,8 @@ export class JAWSigner implements Signer {
 
         return filteredCapabilities;
     }
+
+ 
 
     private async sendEncryptedRequest(request: RequestArguments): Promise<RPCResponseMessage> {
         const sharedSecret = await this.keyManager.getSharedSecret();

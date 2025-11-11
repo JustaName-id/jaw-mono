@@ -249,7 +249,9 @@ storeAuthState(address: Address, credentialId: string): void {
     });
 
 
+    console.log('🔍 Creating bundler client for chain:', chain);
     const client = getBundlerClient(chain) as JustanAccountImplementation["client"];
+
 
     // Use toJustanAccount to derive the smart contract wallet address
     const smartAccount = await toJustanAccount({

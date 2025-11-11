@@ -1,7 +1,7 @@
 import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
 import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
-import { store, createInitialChains, ChainClients } from '../store/index.js';
+import { store, createInitialChains, ChainClients, createClients } from '../store/index.js';
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   apiKey: string;
@@ -15,6 +15,7 @@ const DEFAULT_PREFERENCE: JawProviderPreference = {
   appSpecific: false,
   keysUrl: JAW_KEYS_URL,
   serverUrl:  JAW_PASSKEYS_URL,
+  showTestnets: false,
 };
 /**
  * Create a JAW SDK instance (factory function pattern).
@@ -59,6 +60,7 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
     metadata: options.metadata,
     preference: options.preference,
     paymasterUrls: options.paymasterUrls,
+    apiKey: params.apiKey,
   }
   store.config.set(storedOptions);
 
@@ -67,9 +69,13 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
   ChainClients.setState({});
 
   if (params.apiKey) {
-    const initialChains = createInitialChains(params.apiKey, params.paymasterUrls);
+    const initialChains = createInitialChains(
+      params.apiKey,
+      params.paymasterUrls,
+      options.preference.showTestnets
+    );
     store.chains.set(initialChains);
-    // Clients will be created lazily when first accessed
+    createClients(initialChains);
   }
 
   let provider: ProviderInterface | null = null;

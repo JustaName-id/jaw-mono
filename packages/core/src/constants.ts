@@ -5,3 +5,5 @@ export const JAW_RPC_URL = 'https://api.justaname.id/proxy/v1/rpc';
 export const FACTORY_ADDRESS = "0x1578f4A87243bA8413ee8F5acf2af29635ED09EC";
 export const CONTRACT_NAME = "JustanAccount";
 export const CONTRACT_VERSION = "1";
+
+export const EIP7702_CODE_PREFIX = "0xef0100";
