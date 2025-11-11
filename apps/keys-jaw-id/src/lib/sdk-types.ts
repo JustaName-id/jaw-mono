@@ -22,7 +22,8 @@ export interface PopupUnloadEvent {
 export interface AppMetadata {
   appName: string;
   appLogoUrl: string;
-  appChainIds: number[];
+  defaultChainId?: number;
+  appChainIds?: number[];
 }
 
 export interface SDKPreference {

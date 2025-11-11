@@ -192,7 +192,7 @@ export const Eip712Dialog = ({
         width: '100%',
         height: '100%',
         maxWidth: 'none',
-        maxHeight: '95vh',
+        maxHeight: 'none',
         overflowY: 'auto',
       } : {
         width: 'fit-content',

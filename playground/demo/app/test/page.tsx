@@ -14,7 +14,7 @@ export default function TestPage() {
     createJAWSDK({
       appName: 'JAW Demo App',
       appLogoUrl: null,
-      defaultChainId: 84532,
+      defaultChainId: 1,
 
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
@@ -161,7 +161,7 @@ export default function TestPage() {
       const provider = sdk.getProvider();
       addLog(`Requesting wallet_sign signature for message: "${message}"...`);
       addLog(`Using request.type: 0x45 (Personal Sign per EIP-191)`);
-      
+
       const signature = await provider.request({
         method: 'wallet_sign',
         params: [{
@@ -173,7 +173,7 @@ export default function TestPage() {
           }
         }]
       });
-      
+
       addLog(`Signature: ${signature}`);
     } catch (error) {
       console.error('Wallet sign error details:', error);
@@ -393,8 +393,8 @@ Issued At: ${issuedAt}`;
       console.log('[Demo] Batch transaction result:', result);
 
       // Extract batch ID from result
-      const batchId = typeof result === 'object' && result !== null && 'id' in result 
-        ? (result as { id: string }).id 
+      const batchId = typeof result === 'object' && result !== null && 'id' in result
+        ? (result as { id: string }).id
         : null;
 
       if (batchId) {
@@ -530,17 +530,17 @@ Issued At: ${issuedAt}`;
       // Status format: { id: string, status: number, receipts: unknown[] }
       // Status codes: 100 = pending, 200 = completed, 400 = failed
       const statusObj = status as { id: string; status: number; receipts: unknown[] };
-      const statusText = statusObj.status === 100 
-        ? 'pending' 
-        : statusObj.status === 200 
-          ? 'completed' 
-          : statusObj.status === 400 
-            ? 'failed' 
+      const statusText = statusObj.status === 100
+        ? 'pending'
+        : statusObj.status === 200
+          ? 'completed'
+          : statusObj.status === 400
+            ? 'failed'
             : `unknown (${statusObj.status})`;
 
       addLog(`Batch ID: ${statusObj.id}`);
       addLog(`Status: ${statusText} (code: ${statusObj.status})`);
-      
+
       if (statusObj.receipts && statusObj.receipts.length > 0) {
         addLog(`Receipts: ${JSON.stringify(statusObj.receipts, null, 2)}`);
       } else {
