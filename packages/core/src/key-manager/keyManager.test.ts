@@ -72,8 +72,8 @@ describe('KeyManager', () => {
   });
 
   it('should persist keys to storage', async () => {
-    const publicKey = await keyManager.getOwnPublicKey();
-    
+    await keyManager.getOwnPublicKey();
+
     // Verify keys were stored
     const ownPrivateKey = storage.getItem('ownPrivateKey');
     const ownPublicKey = storage.getItem('ownPublicKey');

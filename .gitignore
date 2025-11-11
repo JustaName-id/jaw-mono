@@ -54,3 +54,5 @@ out
 vite.config.*.timestamp*
 vitest.config.*.timestamp*
 
+test/
+

@@ -11,20 +11,28 @@ import {
     type TypedData,
     stringToHex,
     padHex,
-    numberToHex, pad, BaseError,
-    type LocalAccount, decodeFunctionData,
-} from 'viem'
-import { readContract } from 'viem/actions'
+    numberToHex,
+    pad,
+    BaseError,
+    type LocalAccount,
+    decodeFunctionData,
+    isAddressEqual,
+    type Client,
+    type Account,
+} from "viem";
+import { readContract, getChainId, signAuthorization as signAuthorizationAction } from "viem/actions";
 import {
     type SmartAccount,
     type WebAuthnAccount,
     toSmartAccount,
     entryPoint08Abi,
     entryPoint08Address,
-    type SmartAccountImplementation, getUserOperationTypedData,
-} from 'viem/account-abstraction'
-import * as Signature from 'ox/Signature'
-import type * as WebAuthnP256 from 'ox/WebAuthnP256'
+    type SmartAccountImplementation,
+    getUserOperationTypedData
+} from "viem/account-abstraction";
+import type { SignAuthorizationReturnType } from "viem/accounts";
+import * as Signature from "ox/Signature";
+import type * as WebAuthnP256 from "ox/WebAuthnP256";
 import {
     hashMessage as erc7739HashMessage,
     hashTypedData as erc7739HashTypedData,
@@ -41,20 +49,29 @@ export type JustanAccountImplementation = SmartAccountImplementation<
     }
 >
 
+// NOTE: take into consideration signing using another owner
 export type ToJustanAccountParameters = {
-    client: JustanAccountImplementation['client']
-    owners: readonly (Address | LocalAccount | WebAuthnAccount)[]
-    ownerIndex?: number | undefined
-    nonce?: bigint | undefined
-    entryPoint?: {
-        abi: typeof entryPoint08Abi
-        address: Address
-        version: '0.8'
-    } | undefined
-    factoryAddress?: Address | undefined
-}
+    client: JustanAccountImplementation["client"];
+    owners: readonly (Address | LocalAccount | WebAuthnAccount)[];
+    ownerIndex?: number | undefined;
+    nonce?: bigint | undefined;
+    entryPoint?:
+        | {
+        abi: typeof entryPoint08Abi;
+        address: Address;
+        version: "0.8";
+    }
+        | undefined;
+    factoryAddress?: Address | undefined;
 
-export type ToJustanAccountReturnType = SmartAccount
+    // EIP-7702 parameters (optional)
+    eip7702Account?: LocalAccount | undefined;
+    eip7702Auth?: SignAuthorizationReturnType | undefined;
+};
+
+export type ToJustanAccountReturnType = SmartAccount & {
+    signAuthorization: (executor?: 'self' | Account | Address | undefined) => Promise<SignAuthorizationReturnType>;
+};
 
 export async function toJustanAccount(
     parameters: ToJustanAccountParameters,
@@ -70,22 +87,61 @@ export async function toJustanAccount(
             version: '0.8',
         },
         factoryAddress = FACTORY_ADDRESS,
-    } = parameters
+        // EIP-7702 parameters
+        eip7702Account,
+        eip7702Auth,
+    } = parameters;
+
+    const isEip7702 = !!eip7702Account || !!eip7702Auth;
+
+    let delegationContract: Address | undefined;
+    if (isEip7702) {
+        delegationContract = await getDelegationContract(client, factoryAddress);
+        
+        if (
+            eip7702Auth &&
+            !isAddressEqual(eip7702Auth.address, delegationContract)
+        ) {
+            throw new BaseError(
+                "EIP-7702 authorization delegate address does not match delegation contract address"
+            );
+        }
+    }
 
     const owners_bytes = owners.map((owner) => {
-        if (typeof owner === 'string') return pad(owner)
-        if (owner.type === 'webAuthn') return owner.publicKey
-        if (owner.type === 'local') return pad(owner.address)
-        throw new BaseError('invalid owner type')
-    })
+        if (typeof owner === "string") return pad(owner);
+        if (owner.type === "webAuthn") return owner.publicKey;
+        if (owner.type === "local") return pad(owner.address);
+        throw new BaseError("invalid owner type");
+    });
+
     const owner = (() => {
-        const owner = owners[ownerIndex] ?? owners[0]
-        if (typeof owner === 'string')
-            return { address: owner, type: 'address' } as const
-        return owner
-    })()
+        if (isEip7702) {
+            if (!eip7702Account) {
+                throw new BaseError("eip7702Account is required when using EIP-7702");
+            }
+            return eip7702Account;
+        }
+
+        const owner = owners[ownerIndex] ?? owners[0];
+        if (typeof owner === "string")
+            return { address: owner, type: "address" } as const;
+        return owner;
+    })();
 
     if (!owner) throw new Error('No owner provided')
+
+    let accountAddress: Address;
+    if (isEip7702) {
+        accountAddress = eip7702Account!.address;
+    } else {
+        accountAddress = await readContract(client, {
+            address: factoryAddress,
+            abi: factoryAbi,
+            functionName: "getAddress",
+            args: [owners_bytes, nonce],
+        });
+    }
 
     return toSmartAccount({
         client,
@@ -128,14 +184,16 @@ export async function toJustanAccount(
             })
         },
         async getAddress() {
-            return await readContract(client, {
-                address: factoryAddress,
-                abi: factoryAbi,
-                functionName: 'getAddress',
-                args: [owners_bytes, nonce],
-            })
+            return accountAddress;
         },
         async getFactoryArgs() {
+            if (isEip7702) {
+                return {
+                    factory: undefined,
+                    factoryData: undefined,
+                };
+            }
+
             return {
                 factory: factoryAddress,
                 factoryData: encodeFunctionData({
@@ -146,11 +204,16 @@ export async function toJustanAccount(
             }
         },
         async getStubSignature() {
-            return '0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000170000000000000000000000000000000000000000000000000000000000000001949fc7c88032b9fcb5f6efc7a7b8c63668eae9871b765e23123bb473ff57aa831a7c0d9276168ebcc29f2875a0239cffdf2a9cd1c2007c5c77c071db9264df1d000000000000000000000000000000000000000000000000000000000000002549960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008a7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2273496a396e6164474850596759334b7156384f7a4a666c726275504b474f716d59576f4d57516869467773222c226f726967696e223a2268747470733a2f2f7369676e2e636f696e626173652e636f6d222c2263726f73734f726967696e223a66616c73657d00000000000000000000000000000000000000000000'
+            if (isEip7702) {
+                return "0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c";
+            }
+
+            return "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000170000000000000000000000000000000000000000000000000000000000000001949fc7c88032b9fcb5f6efc7a7b8c63668eae9871b765e23123bb473ff57aa831a7c0d9276168ebcc29f2875a0239cffdf2a9cd1c2007c5c77c071db9264df1d000000000000000000000000000000000000000000000000000000000000002549960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97630500000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000008a7b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2273496a396e6164474850596759334b7156384f7a4a666c726275504b474f716d59576f4d57516869467773222c226f726967696e223a2268747470733a2f2f7369676e2e636f696e626173652e636f6d222c2263726f73734f726967696e223a66616c73657d00000000000000000000000000000000000000000000";
         },
         async signMessage(parameters) {
-            const { message } = parameters
-            const address = await this.getAddress()
+            const { message } = parameters;
+
+            const address = await this.getAddress();
 
             const hash = erc7739HashMessage({
                 message: message,
@@ -166,15 +229,24 @@ export async function toJustanAccount(
 
             const signature = await sign({ owner, hash })
 
+            if (isEip7702) {
+                return signature;
+            }
+
             return wrapSignature({
                 ownerIndex,
                 signature,
             })
         },
         async signTypedData(parameters) {
-            const { domain = {}, types, primaryType, message } =
-                parameters as TypedDataDefinition<TypedData, string>
-            const address = await this.getAddress()
+            const {
+                domain = {},
+                types,
+                primaryType,
+                message,
+            } = parameters as TypedDataDefinition<TypedData, string>;
+
+            const address = await this.getAddress();
 
             const nestedHash = erc7739HashTypedData({
                 domain,
@@ -193,6 +265,10 @@ export async function toJustanAccount(
             if (owner.type === 'address') throw new Error('owner cannot sign')
 
             const signature = await sign({ owner, hash: nestedHash })
+
+            if (isEip7702) {
+                return signature;
+            }
 
             const wrappedWithOwner = wrapSignature({
                 ownerIndex,
@@ -224,10 +300,38 @@ export async function toJustanAccount(
 
             const signature = await signTypedData({typedData, owner})
 
+            if (isEip7702) {
+                return signature;
+            }
+
             return wrapSignature({
                 ownerIndex,
                 signature,
             })
+        },
+
+        async signAuthorization(executor: 'self' | Account | Address | undefined = 'self') {
+            if (!isEip7702) {
+                throw new BaseError(
+                    "signAuthorization can only be called for EIP-7702 accounts"
+                );
+            }
+
+            if (!delegationContract) {
+                throw new BaseError(
+                    "Delegation contract is required for EIP-7702 authorization"
+                );
+            }
+
+            return (
+                eip7702Auth ??
+                (await signAuthorizationAction(client, {
+                    account: eip7702Account!,
+                    address: delegationContract as `0x${string}`,
+                    chainId: await getChainId(client),
+                    executor: executor,
+                }))
+            );
         },
 
         userOperation: {
@@ -245,6 +349,18 @@ export async function toJustanAccount(
 }
 
 // INTERNAL FUNCTIONS
+
+/** @internal */
+async function getDelegationContract(
+    client: Client,
+    factoryAddress: Address
+): Promise<Address> {
+    return await readContract(client, {
+        address: factoryAddress,
+        abi: factoryAbi,
+        functionName: "getImplementation",
+    });
+}
 
 /** @internal */
 export async function sign({
