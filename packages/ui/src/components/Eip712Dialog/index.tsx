@@ -163,6 +163,7 @@ export const Eip712Dialog = ({
 
   // Get contract address from domain
   const contractAddress = typedData?.domain?.verifyingContract as string | undefined;
+  const domainName = typedData?.domain?.name as string | undefined;
 
   return (
     <DefaultDialog
@@ -231,7 +232,7 @@ export const Eip712Dialog = ({
             <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
               <p className="text-xs font-bold leading-[133%]">Domain</p>
               <p className="text-base font-normal leading-[150%] truncate">
-                {formatOrigin(origin)}
+                {domainName || formatOrigin(origin)}
               </p>
             </div>
           </div>
@@ -286,7 +287,7 @@ export const Eip712Dialog = ({
             disabled={!canSign}
             className="flex-1"
           >
-            {isProcessing ? 'Processing...' : 'Transact'}
+            {isProcessing ? 'Processing...' : 'Sign'}
           </Button>
         </div>
       </div>
