@@ -138,21 +138,7 @@ export class JAWSigner implements Signer {
                     // Wait for the popup to be loaded before making async calls
                     await this.communicator.waitForPopupLoaded?.();
 
-                    // Extract subnameTextRecords from request params if present
-                    const requestParams = request.params as unknown[];
-                    const requestCapabilities = requestParams?.[0] && typeof requestParams[0] === 'object' && requestParams[0] !== null
-                        ? (requestParams[0] as { capabilities?: { subnameTextRecords?: Array<{ key: string; value: string }> } }).capabilities
-                        : undefined;
-                    
-                    const subnameTextRecords = requestCapabilities?.subnameTextRecords;
-
-                    // Prepare capabilities to inject
-                    const capabilitiesToInject: Record<string, unknown> = {};
-                    if (subnameTextRecords) {
-                        capabilitiesToInject.subnameTextRecords = subnameTextRecords;
-                    }
-
-                    const modifiedRequest = injectRequestCapabilities(request, capabilitiesToInject);
+                    const modifiedRequest = this.extractAndInjectCapabilities(request);
                     return this.sendRequestToPopup(modifiedRequest);
                 }
                 case 'wallet_sendCalls':
@@ -219,24 +205,7 @@ export class JAWSigner implements Signer {
                 // Wait for the popup to be loaded before making async calls
                 await this.communicator.waitForPopupLoaded?.();
                 
-                // Extract subnameTextRecords from request params if present
-                const requestParams = request.params as unknown[];
-                const requestCapabilities = requestParams?.[0] && typeof requestParams[0] === 'object' && requestParams[0] !== null
-                    ? (requestParams[0] as { capabilities?: { subnameTextRecords?: Array<{ key: string; value: string }> } }).capabilities
-                    : undefined;
-                
-                const subnameTextRecords = requestCapabilities?.subnameTextRecords;
-
-                // Prepare capabilities to inject
-                const capabilitiesToInject: Record<string, unknown> = {};
-                if (subnameTextRecords) {
-                    capabilitiesToInject.subnameTextRecords = subnameTextRecords;
-                }
-
-                const modifiedRequest = injectRequestCapabilities(
-                    request,
-                    capabilitiesToInject
-                );
+                const modifiedRequest = this.extractAndInjectCapabilities(request);
 
                 this.callback?.('connect', { chainId: numberToHex(this.chain.id) });
                 return this.sendRequestToPopup(modifiedRequest);
@@ -255,6 +224,32 @@ export class JAWSigner implements Signer {
                 return fetchRPCRequest(request, chain.rpcUrl);
             }
         }
+    }
+
+    /**
+     * Extracts capabilities from request params and injects them into the request.
+     * This function handles any capabilities generically, not just specific ones.
+     * 
+     * @param request - The request arguments containing potential capabilities
+     * @returns The modified request with capabilities injected
+     */
+    private extractAndInjectCapabilities(request: RequestArguments): RequestArguments {
+        const requestParams = request.params as unknown[];
+        
+        // Extract capabilities from request params if present
+        const requestCapabilities = requestParams?.[0] && 
+            typeof requestParams[0] === 'object' && 
+            requestParams[0] !== null
+            ? (requestParams[0] as { capabilities?: Record<string, unknown> }).capabilities
+            : undefined;
+        
+        // If capabilities exist, inject them into the request
+        if (requestCapabilities && typeof requestCapabilities === 'object') {
+            const capabilitiesToInject: Record<string, unknown> = { ...requestCapabilities };
+            return injectRequestCapabilities(request, capabilitiesToInject);
+        }
+        
+        return request;
     }
 
     private async sendRequestToPopup(request: RequestArguments) {
