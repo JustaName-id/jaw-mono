@@ -7,7 +7,7 @@ import { SignatureModal } from '../components/SignatureModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { SDKRequestType } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
-import { PopupCommunicator } from '../lib/popup-communicator';
+import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
@@ -196,7 +196,7 @@ export default function KeysJawIdApp() {
         // Send empty accounts response for key exchange handshake
         const response = await cryptoHandler.createHandshakeResponse(request.id, []);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        communicator.sendMessage(response as any);
+        communicator.sendMessage(response as unknown as Message);
         return;
       }
 

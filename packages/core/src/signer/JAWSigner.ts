@@ -19,7 +19,7 @@ import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../messages/
 import { KeyManager } from '../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/index.js';
 import { SDKChain, correlationIds, store } from '../store/index.js';
-import { WalletConnectRequest, WalletConnectResponse } from '../rpc/index.js';
+import { SignInWithEthereumCapabilityRequest, SubnameTextRecordCapabilityRequest, WalletConnectRequest, WalletConnectResponse } from '../rpc/index.js';
 import {
     decryptContent,
     encryptContent,
@@ -319,7 +319,7 @@ export class JAWSigner implements Signer {
         
         // If capabilities exist, inject them into the request
         if (requestCapabilities) {
-            const capabilitiesToInject: Record<string, unknown> = { ...requestCapabilities };
+            const capabilitiesToInject: Record<string, SignInWithEthereumCapabilityRequest | SubnameTextRecordCapabilityRequest> = { ...requestCapabilities };
             return injectRequestCapabilities(request, capabilitiesToInject);
         }
         

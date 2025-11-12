@@ -3,7 +3,7 @@
 import { LocalStorageAccount, OnboardingDialog } from '@jaw/ui';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState } from 'react';
-import { SUPPORTED_CHAINS, Chain } from '@jaw.id/core';
+import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest } from '@jaw.id/core';
 import { ChainId } from '../../utils/types';
 
 
@@ -12,7 +12,7 @@ interface SignInScreenProps {
     ensConfig?: string
     chainId?: ChainId
     apiKey?: string
-    subnameTextRecords?: Array<{ key: string; value: string }>
+    subnameTextRecords?: SubnameTextRecordCapabilityRequest
 }
 
 export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, subnameTextRecords }: SignInScreenProps) {

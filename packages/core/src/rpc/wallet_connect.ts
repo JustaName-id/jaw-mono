@@ -16,10 +16,13 @@ export type SignInWithEthereumCapabilityRequest = {
     resources?: string[];
 };
 
+
 export type SignInWithEthereumCapabilityResponse = {
     message: string;
     signature: `0x${string}`;
 };
+
+export type SubnameTextRecordCapabilityRequest = Array<{ key: string; value: string }>
 
 export type WalletConnectRequest = {
     method: 'wallet_connect';
@@ -30,7 +33,7 @@ export type WalletConnectRequest = {
             // Optional capabilities to request (e.g. Sign In With Ethereum, subname text records).
             capabilities?: {
                 signInWithEthereum?: SignInWithEthereumCapabilityRequest;
-                subnameTextRecords?: Array<{ key: string; value: string }>;
+                subnameTextRecords?: SubnameTextRecordCapabilityRequest;
             };
         },
     ];
@@ -43,7 +46,6 @@ export type WalletConnectResponse = {
         // Capabilities granted that is associated with this account.
         capabilities?: {
             signInWithEthereum?: SignInWithEthereumCapabilityResponse | SerializedEthereumRpcError;
-            subnameTextRecords?: Array<{ key: string; value: string }>;
         };
     }[];
 };
