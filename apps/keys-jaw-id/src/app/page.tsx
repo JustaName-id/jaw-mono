@@ -266,8 +266,8 @@ export default function KeysJawIdApp() {
       if (method === 'personal_sign' ||
         (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x45")) {
         requestType = SDKRequestType.SIGN_MESSAGE;
-      } else if (method === 'eth_signTypedData_v4') {
-        // EIP-712 typed data signing
+      } else if (method === 'eth_signTypedData_v4' ||
+        (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x01")) {
         requestType = SDKRequestType.SIGN_TYPED_DATA;
       } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
         requestType = SDKRequestType.SEND_TRANSACTION;
@@ -521,9 +521,26 @@ export default function KeysJawIdApp() {
       state !== 'error' &&
       (authQuery.isAuthenticated || state === 'processing')) {
       // Extract typed data JSON and address based on method type
-      // eth_signTypedData_v4: params[0] is address, params[1] is typed data JSON string
-      const address = pendingRequest.params[0] as string;
-      const typedDataJson = pendingRequest.params[1] as string;
+      let address: string | undefined;
+      let typedDataJson: string;
+
+      if (pendingRequest.method === 'wallet_sign') {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const signParams = pendingRequest.params[0] as { request: { type: string; data: any }; address?: string };
+
+        const data = signParams?.request?.data;
+        typedDataJson = typeof data === 'string' ? data : JSON.stringify(data);
+
+        address = signParams?.address;
+
+        console.log('🔍 wallet_sign EIP-712 Request:', { type: signParams?.request?.type, address, typedDataJson });
+      } else {
+        // eth_signTypedData_v4: params[0] is address, params[1] is typed data JSON string
+        address = pendingRequest.params[0] as string;
+        typedDataJson = pendingRequest.params[1] as string;
+
+        console.log('🔍 eth_signTypedData_v4 Request:', { address, typedDataJson });
+      }
 
       return (
         <Eip712Modal

@@ -16,90 +16,297 @@ interface TypedData {
   message: Record<string, unknown>;
 }
 
+const isObject = (value: unknown): value is Record<string, unknown> => {
+  return typeof value === 'object' && value !== null && !Array.isArray(value);
+};
+
+const isArray = (value: unknown): value is unknown[] => {
+  return Array.isArray(value);
+};
+
+const getValueColor = (value: unknown): string => {
+  if (typeof value === 'string') return 'text-foreground';
+  if (typeof value === 'number') return 'text-blue-600 dark:text-blue-400';
+  if (typeof value === 'boolean') return 'text-purple-600 dark:text-purple-400';
+  if (value === null || value === undefined) return 'text-gray-500 dark:text-gray-400';
+  return 'text-foreground';
+};
+
+const formatPrimitiveValue = (value: unknown): { text: string; color: string } => {
+  if (value === null) return { text: 'null', color: getValueColor(null) };
+  if (value === undefined) return { text: 'undefined', color: getValueColor(undefined) };
+  if (typeof value === 'boolean') return { text: String(value), color: getValueColor(value) };
+  if (typeof value === 'number') return { text: String(value), color: getValueColor(value) };
+  if (typeof value === 'string') return { text: `"${value}"`, color: getValueColor(value) };
+  return { text: JSON.stringify(value), color: 'text-foreground' };
+};
+
+// Component for rendering a single property line
+const PropertyLine = ({
+  propertyKey,
+  value,
+  isLast,
+  depth
+}: {
+  propertyKey: string;
+  value: unknown;
+  isLast: boolean;
+  depth: number;
+}) => {
+  const formatted = formatPrimitiveValue(value);
+  const paddingLeft = depth * 16; // 16px per depth level
+
+  return (
+    <div
+      className="flex items-start gap-1 py-0.5 font-mono text-sm"
+      style={{ paddingLeft: `${paddingLeft}px` }}
+    >
+      <span className="text-muted-foreground">"{propertyKey}":</span>
+      <span className={formatted.color}>{formatted.text}</span>
+      {!isLast && <span className="text-muted-foreground">,</span>}
+    </div>
+  );
+};
+
 // Recursive component to render nested objects
-const NestedDataView = ({ data, depth = 0 }: { data: unknown; depth?: number }) => {
-  const isObject = (value: unknown): value is Record<string, unknown> => {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-  };
-
-  const isArray = (value: unknown): value is unknown[] => {
-    return Array.isArray(value);
-  };
-
-  const formatValue = (value: unknown): string => {
-    if (value === null) return 'null';
-    if (value === undefined) return 'undefined';
-    if (typeof value === 'boolean') return String(value);
-    if (typeof value === 'number') return String(value);
-    if (typeof value === 'string') return value;
-    return JSON.stringify(value);
-  };
+const NestedDataView = ({
+  data,
+  depth = 0,
+  parentKey,
+  isLast = true
+}: {
+  data: unknown;
+  depth?: number;
+  parentKey?: string;
+  isLast?: boolean;
+}) => {
+  const paddingLeft = depth * 16;
 
   if (isObject(data)) {
     const entries = Object.entries(data);
+    const accordionId = `${parentKey || 'root'}-${depth}`;
+
+    if (depth === 0) {
+      return (
+        <div className="w-full font-mono text-sm">
+          <div className="flex flex-col">
+            {entries.map(([key, value], index) => {
+              const isLastEntry = index === entries.length - 1;
+
+              if (isObject(value) || isArray(value)) {
+                return (
+                  <NestedDataView
+                    key={key}
+                    data={value}
+                    depth={depth + 1}
+                    parentKey={key}
+                    isLast={isLastEntry}
+                  />
+                );
+              }
+
+              return (
+                <PropertyLine
+                  key={key}
+                  propertyKey={key}
+                  value={value}
+                  isLast={isLastEntry}
+                  depth={depth}
+                />
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
 
     return (
-      <Accordion type="multiple" className="w-full" defaultValue={depth === 0 ? ['object-root'] : []}>
-        <AccordionItem value="object-root" className="border border-border rounded-[6px] overflow-hidden">
-          <AccordionTrigger className="px-3.5 py-2.5 hover:no-underline bg-white">
-            <span className="text-sm font-medium text-foreground">Object</span>
-          </AccordionTrigger>
-          <AccordionContent className="px-3.5 pb-3.5 bg-white">
-            <div className="flex flex-col gap-2">
-              {entries.map(([key, value], index) => (
-                <div key={index} className="flex flex-col gap-1">
-                  {isObject(value) || isArray(value) ? (
-                    <div>
-                      <div className="flex items-center gap-2 mb-1">
-                        <span className="text-xs font-bold text-foreground">Key</span>
-                        <span className="text-xs font-normal text-foreground">{key}</span>
-                      </div>
-                      <NestedDataView data={value} depth={depth + 1} />
-                    </div>
-                  ) : (
-                    <div className="grid grid-cols-2 gap-2 p-2 border border-border rounded-[6px]">
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold text-foreground">Key</span>
-                        <span className="text-sm font-normal text-foreground">{key}</span>
-                      </div>
-                      <div className="flex flex-col">
-                        <span className="text-xs font-bold text-foreground">Value</span>
-                        <span className="text-sm font-normal text-foreground break-all">{formatValue(value)}</span>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
+      <div className="w-full font-mono text-sm">
+        <Accordion type="multiple" className="w-full" defaultValue={[]}>
+          <AccordionItem value={accordionId} className="border-none">
+            <div style={{ paddingLeft: `${paddingLeft}px` }}>
+              <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden">
+                <span className="flex items-center gap-0.5">
+                  {parentKey && <span className="text-muted-foreground">"{parentKey}":</span>}
+                  <span className="text-muted-foreground">{' {...}'}</span>
+                  {!isLast && <span className="text-muted-foreground">,</span>}
+                </span>
+              </AccordionTrigger>
             </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+            <AccordionContent className="pb-0">
+              <div className="flex flex-col">
+                <div
+                  className="py-0.5 text-muted-foreground"
+                  style={{ paddingLeft: `${paddingLeft}px` }}
+                >
+                  {parentKey && <span>"{parentKey}":</span>}
+                  <span>{' {'}</span>
+                </div>
+                {entries.map(([key, value], index) => {
+                  const isLastEntry = index === entries.length - 1;
+
+                  if (isObject(value) || isArray(value)) {
+                    return (
+                      <NestedDataView
+                        key={key}
+                        data={value}
+                        depth={depth + 1}
+                        parentKey={key}
+                        isLast={isLastEntry}
+                      />
+                    );
+                  }
+
+                  return (
+                    <PropertyLine
+                      key={key}
+                      propertyKey={key}
+                      value={value}
+                      isLast={isLastEntry}
+                      depth={depth + 1}
+                    />
+                  );
+                })}
+                <div
+                  className="py-0.5 text-muted-foreground"
+                  style={{ paddingLeft: `${paddingLeft}px` }}
+                >
+                  {'}'}
+                  {!isLast && ','}
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
     );
   }
 
   if (isArray(data)) {
-    return (
-      <Accordion type="multiple" className="w-full" defaultValue={depth === 0 ? ['array-root'] : []}>
-        <AccordionItem value="array-root" className="border border-border rounded-[6px] overflow-hidden">
-          <AccordionTrigger className="px-3.5 py-2.5 hover:no-underline bg-white">
-            <span className="text-sm font-medium text-foreground">Array [{data.length}]</span>
-          </AccordionTrigger>
-          <AccordionContent className="px-3.5 pb-3.5 bg-white">
-            <div className="flex flex-col gap-2">
-              {data.map((item, index) => (
-                <div key={index}>
-                  <div className="text-xs font-bold text-muted-foreground mb-1">[{index}]</div>
-                  <NestedDataView data={item} depth={depth + 1} />
+    const accordionId = `${parentKey || 'array'}-${depth}`;
+
+    if (depth === 0) {
+      return (
+        <div className="w-full font-mono text-sm">
+          <div className="flex flex-col">
+            {data.map((item, index) => {
+              const isLastEntry = index === data.length - 1;
+              const indexKey = `[${index}]`;
+
+              if (isObject(item) || isArray(item)) {
+                return (
+                  <div key={index}>
+                    <div
+                      className="py-0.5 text-muted-foreground font-mono text-sm"
+                      style={{ paddingLeft: `${depth * 16}px` }}
+                    >
+                      {indexKey}:
+                    </div>
+                    <NestedDataView
+                      data={item}
+                      depth={depth + 1}
+                      isLast={isLastEntry}
+                    />
+                  </div>
+                );
+              }
+
+              const formatted = formatPrimitiveValue(item);
+              return (
+                <div
+                  key={index}
+                  className="flex items-start gap-1 py-0.5 font-mono text-sm"
+                  style={{ paddingLeft: `${depth * 16}px` }}
+                >
+                  <span className="text-muted-foreground">{indexKey}:</span>
+                  <span className={formatted.color}>{formatted.text}</span>
+                  {!isLastEntry && <span className="text-muted-foreground">,</span>}
                 </div>
-              ))}
+              );
+            })}
+          </div>
+        </div>
+      );
+    }
+
+    return (
+      <div className="w-full font-mono text-sm">
+        <Accordion type="multiple" className="w-full" defaultValue={[]}>
+          <AccordionItem value={accordionId} className="border-none">
+            <div style={{ paddingLeft: `${paddingLeft}px` }}>
+              <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden">
+                <span className="flex items-center gap-0.5">
+                  {parentKey && <span className="text-muted-foreground">"{parentKey}":</span>}
+                  <span className="text-muted-foreground">{' [...]'}</span>
+                  {!isLast && <span className="text-muted-foreground">,</span>}
+                </span>
+              </AccordionTrigger>
             </div>
-          </AccordionContent>
-        </AccordionItem>
-      </Accordion>
+            <AccordionContent className="pb-0">
+              <div className="flex flex-col">
+                <div
+                  className="py-0.5 text-muted-foreground"
+                  style={{ paddingLeft: `${paddingLeft}px` }}
+                >
+                  {parentKey && <span>"{parentKey}":</span>}
+                  <span>{' ['}</span>
+                </div>
+                {data.map((item, index) => {
+                  const isLastEntry = index === data.length - 1;
+                  const indexKey = `[${index}]`;
+
+                  if (isObject(item) || isArray(item)) {
+                    return (
+                      <div key={index}>
+                        <div
+                          className="py-0.5 text-muted-foreground font-mono text-sm"
+                          style={{ paddingLeft: `${(depth + 1) * 16}px` }}
+                        >
+                          {indexKey}:
+                        </div>
+                        <NestedDataView
+                          data={item}
+                          depth={depth + 2}
+                          isLast={isLastEntry}
+                        />
+                      </div>
+                    );
+                  }
+
+                  const formatted = formatPrimitiveValue(item);
+                  return (
+                    <div
+                      key={index}
+                      className="flex items-start gap-1 py-0.5 font-mono text-sm"
+                      style={{ paddingLeft: `${(depth + 1) * 16}px` }}
+                    >
+                      <span className="text-muted-foreground">{indexKey}:</span>
+                      <span className={formatted.color}>{formatted.text}</span>
+                      {!isLastEntry && <span className="text-muted-foreground">,</span>}
+                    </div>
+                  );
+                })}
+                <div
+                  className="py-0.5 text-muted-foreground"
+                  style={{ paddingLeft: `${paddingLeft}px` }}
+                >
+                  {']'}
+                  {!isLast && ','}
+                </div>
+              </div>
+            </AccordionContent>
+          </AccordionItem>
+        </Accordion>
+      </div>
     );
   }
 
-  return <span className="text-sm font-normal text-foreground">{formatValue(data)}</span>;
+  const formatted = formatPrimitiveValue(data);
+  return (
+    <div className="py-0.5 font-mono text-sm" style={{ paddingLeft: `${paddingLeft}px` }}>
+      <span className={formatted.color}>{formatted.text}</span>
+    </div>
+  );
 };
 
 export const Eip712Dialog = ({
@@ -204,7 +411,7 @@ export const Eip712Dialog = ({
         {/* Main Content - Typed Data Tree View */}
         <div className="flex flex-col gap-3">
           {typedData ? (
-            <div className="max-h-[400px] overflow-y-auto">
+            <div className="max-h-[315px] overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border">
               {/* Combine domain and message into single tree */}
               <NestedDataView
                 data={{

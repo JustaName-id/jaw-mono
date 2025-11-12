@@ -361,6 +361,81 @@ Issued At: ${issuedAt}`;
     }
   };
 
+  const handleWalletSignTypedData = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const typedData = {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'version', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' }
+          ],
+          Person: [
+            { name: 'name', type: 'string' },
+            { name: 'wallet', type: 'address' }
+          ],
+          Mail: [
+            { name: 'from', type: 'Person' },
+            { name: 'to', type: 'Person' },
+            { name: 'contents', type: 'string' }
+          ]
+        },
+        primaryType: 'Mail',
+        domain: {
+          name: 'Ether Mail',
+          version: '1',
+          chainId: 1,
+          verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC'
+        },
+        message: {
+          from: {
+            name: 'Cow (via wallet_sign)',
+            wallet: accounts[0]
+          },
+          to: {
+            name: 'Bob',
+            wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB'
+          },
+          contents: 'Hello from wallet_sign with type 0x01!'
+        }
+      };
+
+      const provider = sdk.getProvider();
+      addLog('🔐 Requesting wallet_sign signature for EIP-712 typed data...');
+      addLog('Using request.type: 0x01 (Structured Data per EIP-191/EIP-712)');
+
+      const signature = await provider.request({
+        method: 'wallet_sign',
+        params: [{
+          version: '1.0',
+          address: accounts[0],
+          request: {
+            type: '0x01', // Structured Data (EIP-712)
+            data: JSON.stringify(typedData)
+          }
+        }]
+      });
+
+      addLog(`✅ Typed data signature (wallet_sign): ${signature}`);
+    } catch (error) {
+      console.error('Wallet sign typed data error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`❌ Error signing with wallet_sign (type 0x01): ${errorMessage}`);
+    }
+  };
+
   const handleSendTransaction = async () => {
     if (accounts.length === 0) {
       addLog('No accounts connected');
@@ -926,7 +1001,7 @@ Issued At: ${issuedAt}`;
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
             Signing Actions
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <button
               onClick={handleSignMessage}
               disabled={!isConnected}
@@ -953,7 +1028,14 @@ Issued At: ${issuedAt}`;
               disabled={!isConnected}
               className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              Sign Typed Data (EIP-712)
+              Sign Typed Data (eth_signTypedData_v4)
+            </button>
+            <button
+              onClick={handleWalletSignTypedData}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-pink-600 text-white rounded hover:bg-pink-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Wallet Sign Typed Data (0x01)
             </button>
             <button
               onClick={handleSignTransaction}
@@ -962,6 +1044,11 @@ Issued At: ${issuedAt}`;
             >
               Sign Transaction
             </button>
+          </div>
+          <div className="mt-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Note:</span> Both <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">eth_signTypedData_v4</code> and <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_sign (type 0x01)</code> perform EIP-712 typed data signing. The difference is in the parameter format: eth_signTypedData_v4 uses standard params, while wallet_sign uses a structured format with type specification per EIP-191.
+            </p>
           </div>
         </div>
 
