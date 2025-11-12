@@ -1,4 +1,5 @@
 import { ChainId } from "@justaname.id/sdk";
+import type { SubnameTextRecordCapabilityRequest } from "@jaw.id/core";
 
 export interface LocalStorageAccount {
   username: string;
@@ -27,4 +28,5 @@ export interface OnboardingDialogProps {
   chainId?: ChainId;
   apiKey?: string;
   supportedChains?: Array<{ id: number }>;
+  subnameTextRecords?: SubnameTextRecordCapabilityRequest;
 }

@@ -8,17 +8,17 @@ import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
 import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
-import { SDKRequestType, type AppMetadata } from '../lib/sdk-types';
+import { SDKRequestType } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
-import { PopupCommunicator } from '../lib/popup-communicator';
+import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
 import { isSiweMessage } from '../lib/siwe-handler';
 import { ChainId } from '@justaname.id/sdk';
-
-
+import type { PopupConfig, PendingRequest } from '../utils/types';
+import { extractSubnameTextRecords } from '../lib/extractSubnameTexts';
 
 
 // Note: TransactionRequestData is now imported from TransactionModal for consistency
@@ -33,39 +33,6 @@ type PopupState =
   | 'processing'
   | 'success'
   | 'error';
-
-interface PopupConfig {
-  version: string;
-  metadata: AppMetadata;
-  preference: {
-    options?: string;
-    keysUrl: string;
-    attribution?: Record<string, unknown>;
-    appSpecific?: boolean;
-    serverUrl?: string;
-    ens?: string;
-  };
-  location: string;
-  apiKey: string;
-}
-
-interface PendingRequest {
-  origin: string;
-  type: SDKRequestType;
-  requestId: string;
-  correlationId: string;
-  metadata: AppMetadata | null;
-  method: string;
-  params: unknown[];
-  chain?: {
-    id: number;
-    rpcUrl?: string;
-    paymasterUrl?: string;
-  } | undefined;
-  onApprove: (result: unknown) => Promise<void>;
-  onReject: (error: string) => Promise<void>;
-}
-
 
 
 export default function KeysJawIdApp() {
@@ -148,7 +115,6 @@ export default function KeysJawIdApp() {
 
         // Handle encrypted request
         if ('encrypted' in rpcMessage.content) {
-          console.log('🔐 Received encrypted request');
           handleEncryptedRequest(rpcMessage);
         }
       }
@@ -227,10 +193,17 @@ export default function KeysJawIdApp() {
         setApiKey(apiKeyFromProvider);
       }
 
-      console.log('📋 Handshake method:', method, 'params:', params, 'chain:', chain);
+      // For pure key exchange handshake (method: 'handshake'), send immediate response
+      if (method === 'handshake') {
+        // Send empty accounts response for key exchange handshake
+        const response = await cryptoHandler.createHandshakeResponse(request.id, []);
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        communicator.sendMessage(response as unknown as Message);
+        return;
+      }
 
-      // For eth_requestAccounts, we need to show approval UI
-      if (method === 'eth_requestAccounts') {
+      // For eth_requestAccounts and wallet_connect, we need to show approval UI
+      if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
         const origin = communicator.getOrigin() || "";
         setPendingRequest({
           origin,
@@ -240,7 +213,7 @@ export default function KeysJawIdApp() {
           metadata: config?.metadata || null,
           method,
           params: Array.isArray(params) ? params : [],
-          chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl, paymasterUrl: chain.paymasterUrl } : undefined,
+          chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', paymasterUrl: chain.paymasterUrl } : undefined,
           onApprove: async (result: unknown) => {
             const accounts = result as string[];
             const response = await cryptoHandler.createHandshakeResponse(request.id, accounts);
@@ -274,7 +247,6 @@ export default function KeysJawIdApp() {
   // Handle encrypted request
   const handleEncryptedRequest = async (request: RPCRequestMessage) => {
     try {
-
       // Restore shared secret from message
       await cryptoHandler.restoreSharedSecretFromMessage(request);
 
@@ -284,8 +256,6 @@ export default function KeysJawIdApp() {
       const method = decrypted.action.method;
       const params = decrypted.action.params;
       const chain = decrypted.chain;
-
-      console.log('📋 Decrypted method:', method, 'params:', params, 'chain:', chain);
 
       // Determine request type and show appropriate UI
       let requestType: SDKRequestType;
@@ -307,12 +277,12 @@ export default function KeysJawIdApp() {
         requestType = SDKRequestType.GET_SUB_ACCOUNTS;
       } else if (method === 'wallet_importSubAccount') {
         requestType = SDKRequestType.IMPORT_SUB_ACCOUNT;
+      } else if (method === 'wallet_connect') {
+        requestType = SDKRequestType.CONNECT;
       } else {
         console.warn('⚠️ Unknown method:', method);
         requestType = SDKRequestType.CONNECT; // fallback
       }
-
-      console.log('requestType', requestType);
 
       const origin = communicator.getOrigin() ?? '';
       setPendingRequest({
@@ -323,12 +293,21 @@ export default function KeysJawIdApp() {
         metadata: config?.metadata || null,
         method,
         params: Array.isArray(params) ? params : [],
-        chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl, paymasterUrl: chain.paymasterUrl } : undefined,
+        chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', paymasterUrl: chain.paymasterUrl } : undefined,
         onApprove: async (result: unknown) => {
+          // For wallet_connect, format as WalletConnectResponse
+          let responseData: unknown = result;
+          if (method === 'wallet_connect') {
+            const accounts = Array.isArray(result) ? result : [result];
+            responseData = {
+              accounts: accounts.map((address: string) => ({ address }))
+            };
+          }
+
           const response = await cryptoHandler.createEncryptedResponse(
             request.id || '',
             request.correlationId || '',
-            result
+            responseData
           );
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           communicator.sendMessage(response as any);
@@ -694,6 +673,7 @@ export default function KeysJawIdApp() {
               chainId={effectiveChainId}
               apiKey={apiKey}
               chainConfig={pendingRequest?.chain}
+              subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               onComplete={async () => {
                 try {
 
@@ -756,10 +736,9 @@ export default function KeysJawIdApp() {
               chainId={effectiveChainId}
               apiKey={apiKey}
               chainConfig={pendingRequest?.chain}
+              subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               onComplete={async () => {
                 try {
-
-                  // SignInScreen already handled login, just proceed
                   const accountsResult = await passkeyQuery.refetchAccounts();
 
                   await authQuery.refetch();
