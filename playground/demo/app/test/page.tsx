@@ -14,7 +14,7 @@ export default function TestPage() {
     createJAWSDK({
       appName: 'JAW Demo App',
       appLogoUrl: null,
-      defaultChainId: 84532,
+      defaultChainId: 1,
 
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
@@ -224,7 +224,7 @@ export default function TestPage() {
       const provider = sdk.getProvider();
       addLog(`Requesting wallet_sign signature for message: "${message}"...`);
       addLog(`Using request.type: 0x45 (Personal Sign per EIP-191)`);
-      
+
       const signature = await provider.request({
         method: 'wallet_sign',
         params: [{
@@ -236,7 +236,7 @@ export default function TestPage() {
           }
         }]
       });
-      
+
       addLog(`Signature: ${signature}`);
     } catch (error) {
       console.error('Wallet sign error details:', error);
@@ -248,6 +248,58 @@ export default function TestPage() {
             ? JSON.stringify(error, null, 2)
             : String(error);
       addLog(`Error signing with wallet_sign: ${errorMessage}`);
+    }
+  };
+
+  const handleSiweSign = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      // Generate a proper SIWE (Sign-In with Ethereum) message per EIP-4361
+      // https://eips.ethereum.org/EIPS/eip-4361
+      const domain = 'localhost:3000';
+      const address = accounts[0];
+      const statement = 'Sign in to JAW SDK Demo with your Ethereum account';
+      const uri = 'http://localhost:3000';
+      const version = '1';
+      const chainIdNum = parseInt(chainId || '0x1', 16);
+      const nonce = Math.random().toString(36).substring(2, 15); // Random nonce
+      const issuedAt = new Date().toISOString();
+
+      const siweMessage = `${domain} wants you to sign in with your Ethereum account:
+${address}
+
+${statement}
+
+URI: ${uri}
+Version: ${version}
+Chain ID: ${chainIdNum}
+Nonce: ${nonce}
+Issued At: ${issuedAt}`;
+
+      const provider = sdk.getProvider();
+      addLog('🔐 Requesting SIWE (Sign-In with Ethereum) signature...');
+      addLog('This should open the special SIWE dialog with logo and "Sign in Request" header');
+
+      const signature = await provider.request({
+        method: 'personal_sign',
+        params: [siweMessage, address]
+      });
+
+      addLog(`✅ SIWE Signature: ${signature}`);
+    } catch (error) {
+      console.error('SIWE sign error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`❌ Error signing SIWE message: ${errorMessage}`);
     }
   };
 
@@ -306,6 +358,81 @@ export default function TestPage() {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       addLog(`Error signing typed data: ${errorMessage}`);
+    }
+  };
+
+  const handleWalletSignTypedData = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const typedData = {
+        types: {
+          EIP712Domain: [
+            { name: 'name', type: 'string' },
+            { name: 'version', type: 'string' },
+            { name: 'chainId', type: 'uint256' },
+            { name: 'verifyingContract', type: 'address' }
+          ],
+          Person: [
+            { name: 'name', type: 'string' },
+            { name: 'wallet', type: 'address' }
+          ],
+          Mail: [
+            { name: 'from', type: 'Person' },
+            { name: 'to', type: 'Person' },
+            { name: 'contents', type: 'string' }
+          ]
+        },
+        primaryType: 'Mail',
+        domain: {
+          name: 'Ether Mail',
+          version: '1',
+          chainId: 1,
+          verifyingContract: '0xCcCCccccCCCCcCCCCCCcCcCccCcCCCcCcccccccC'
+        },
+        message: {
+          from: {
+            name: 'Cow (via wallet_sign)',
+            wallet: accounts[0]
+          },
+          to: {
+            name: 'Bob',
+            wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB'
+          },
+          contents: 'Hello from wallet_sign with type 0x01!'
+        }
+      };
+
+      const provider = sdk.getProvider();
+      addLog('🔐 Requesting wallet_sign signature for EIP-712 typed data...');
+      addLog('Using request.type: 0x01 (Structured Data per EIP-191/EIP-712)');
+
+      const signature = await provider.request({
+        method: 'wallet_sign',
+        params: [{
+          version: '1.0',
+          address: accounts[0],
+          request: {
+            type: '0x01', // Structured Data (EIP-712)
+            data: JSON.stringify(typedData)
+          }
+        }]
+      });
+
+      addLog(`✅ Typed data signature (wallet_sign): ${signature}`);
+    } catch (error) {
+      console.error('Wallet sign typed data error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`❌ Error signing with wallet_sign (type 0x01): ${errorMessage}`);
     }
   };
 
@@ -404,8 +531,8 @@ export default function TestPage() {
       console.log('[Demo] Batch transaction result:', result);
 
       // Extract batch ID from result
-      const batchId = typeof result === 'object' && result !== null && 'id' in result 
-        ? (result as { id: string }).id 
+      const batchId = typeof result === 'object' && result !== null && 'id' in result
+        ? (result as { id: string }).id
         : null;
 
       if (batchId) {
@@ -541,17 +668,17 @@ export default function TestPage() {
       // Status format: { id: string, status: number, receipts: unknown[] }
       // Status codes: 100 = pending, 200 = completed, 400 = failed
       const statusObj = status as { id: string; status: number; receipts: unknown[] };
-      const statusText = statusObj.status === 100 
-        ? 'pending' 
-        : statusObj.status === 200 
-          ? 'completed' 
-          : statusObj.status === 400 
-            ? 'failed' 
+      const statusText = statusObj.status === 100
+        ? 'pending'
+        : statusObj.status === 200
+          ? 'completed'
+          : statusObj.status === 400
+            ? 'failed'
             : `unknown (${statusObj.status})`;
 
       addLog(`Batch ID: ${statusObj.id}`);
       addLog(`Status: ${statusText} (code: ${statusObj.status})`);
-      
+
       if (statusObj.receipts && statusObj.receipts.length > 0) {
         addLog(`Receipts: ${JSON.stringify(statusObj.receipts, null, 2)}`);
       } else {
@@ -874,7 +1001,7 @@ export default function TestPage() {
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
             Signing Actions
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <button
               onClick={handleSignMessage}
               disabled={!isConnected}
@@ -890,11 +1017,25 @@ export default function TestPage() {
               Wallet Sign (0x45)
             </button>
             <button
+              onClick={handleSiweSign}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Sign-In with Ethereum (SIWE)
+            </button>
+            <button
               onClick={handleSignTypedData}
               disabled={!isConnected}
               className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              Sign Typed Data
+              Sign Typed Data (eth_signTypedData_v4)
+            </button>
+            <button
+              onClick={handleWalletSignTypedData}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-pink-600 text-white rounded hover:bg-pink-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Wallet Sign Typed Data (0x01)
             </button>
             <button
               onClick={handleSignTransaction}
@@ -903,6 +1044,11 @@ export default function TestPage() {
             >
               Sign Transaction
             </button>
+          </div>
+          <div className="mt-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Note:</span> Both <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">eth_signTypedData_v4</code> and <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_sign (type 0x01)</code> perform EIP-712 typed data signing. The difference is in the parameter format: eth_signTypedData_v4 uses standard params, while wallet_sign uses a structured format with type specification per EIP-191.
+            </p>
           </div>
         </div>
 
