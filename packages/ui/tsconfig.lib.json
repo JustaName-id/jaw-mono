@@ -32,5 +32,12 @@
     "src/**/*.jsx",
     "src/**/*.ts",
     "src/**/*.tsx"
-, "../../apps/keys-jaw-id/src/utils/constants.ts"  ]
+,
+"../../apps/keys-jaw-id/src/utils/constants.ts"
+],
+"references": [
+{
+  "path": "../core/tsconfig.lib.json"
+}
+]
 }
