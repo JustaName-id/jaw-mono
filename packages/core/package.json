@@ -26,6 +26,9 @@
       "build": {
         "dependsOn": ["generate-sdk-info"]
       },
+      "typecheck": {
+        "dependsOn": ["generate-sdk-info"]
+      },
       "test": {
         "cache": true,
         "inputs": [

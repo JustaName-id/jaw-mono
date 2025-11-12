@@ -11,6 +11,7 @@ export { createJAWSDK, type CreateJAWSDKOptions } from './sdk/index.js';
 export {
     type SignInWithEthereumCapabilityRequest,
     type SignInWithEthereumCapabilityResponse,
+    type SubnameTextRecordCapabilityRequest,
     type WalletConnectRequest,
     type WalletConnectResponse,
     type ViemRPCParams,

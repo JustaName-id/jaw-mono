@@ -3,7 +3,7 @@
 import { LocalStorageAccount, OnboardingDialog } from '@jaw/ui';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState } from 'react';
-import { SUPPORTED_CHAINS, Chain } from '@jaw.id/core';
+import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest } from '@jaw.id/core';
 import { ChainId } from '../../utils/types';
 
 
@@ -12,9 +12,10 @@ interface SignInScreenProps {
     ensConfig?: string
     chainId?: ChainId
     apiKey?: string
+    subnameTextRecords?: SubnameTextRecordCapabilityRequest
 }
 
-export function SignInScreen({ onComplete, ensConfig, chainId, apiKey }: SignInScreenProps) {
+export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, subnameTextRecords }: SignInScreenProps) {
     const { accounts, refetchAccounts } = usePasskeys();
     const { mutateAsync: login } = useLogin();
     const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
@@ -25,6 +26,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey }: SignInS
     console.log('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED')
     console.log('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED')
     console.log('✅ OnboardingSection: ApiKey =', apiKey ? 'PROVIDED' : 'NOT PROVIDED')
+    console.log('✅ OnboardingSection: SubnameTextRecords =', subnameTextRecords)
 
     const { mutateAsync: register, isPending: isCreatingPasskey } = useCreatePasskey();
 
@@ -103,6 +105,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey }: SignInS
             chainId={chainId}
             apiKey={apiKey}
             supportedChains={SUPPORTED_CHAINS.map(chain => ({ id: chain.id }))}
+            subnameTextRecords={subnameTextRecords}
         />
     );
 }

@@ -16,10 +16,13 @@ export type SignInWithEthereumCapabilityRequest = {
     resources?: string[];
 };
 
+
 export type SignInWithEthereumCapabilityResponse = {
     message: string;
     signature: `0x${string}`;
 };
+
+export type SubnameTextRecordCapabilityRequest = Array<{ key: string; value: string }>
 
 export type WalletConnectRequest = {
     method: 'wallet_connect';
@@ -27,9 +30,10 @@ export type WalletConnectRequest = {
         {
             // JSON-RPC method version.
             version: string;
-            // Optional capabilities to request (e.g. Sign In With Ethereum).
+            // Optional capabilities to request (e.g. Sign In With Ethereum, subname text records).
             capabilities?: {
                 signInWithEthereum?: SignInWithEthereumCapabilityRequest;
+                subnameTextRecords?: SubnameTextRecordCapabilityRequest;
             };
         },
     ];

@@ -25,6 +25,7 @@ export function OnboardingDialog({
   chainId,
   apiKey,
   supportedChains,
+  subnameTextRecords,
 }: OnboardingDialogProps) {
   // Validation state
   const [isValid, setIsValid] = useState(false);
@@ -129,6 +130,11 @@ export function OnboardingDialog({
             coinType: toCoinType(chain.id).toString(),
           }));
 
+
+          console.log('subnameTextRecords', subnameTextRecords);
+
+          // Use subnameTextRecords from capabilities if provided (only used during new account creation)
+          // If not provided or empty, use empty array (no text records will be set)
           await justaName.subnames.addSubname(
             {
               username: username,
@@ -136,6 +142,7 @@ export function OnboardingDialog({
               chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
               addresses: addresses,
               overrideSignatureCheck: true,
+              text: subnameTextRecords && subnameTextRecords.length > 0 ? subnameTextRecords : [],
             },
             {
               xApiKey: apiKey,
