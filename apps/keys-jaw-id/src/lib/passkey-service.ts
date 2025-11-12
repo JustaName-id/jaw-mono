@@ -1,10 +1,17 @@
-import { PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation, createSmartAccount} from '@jaw.id/core';
+import {
+  PasskeyManager,
+  type PasskeyAccount,
+  toJustanAccount,
+  type JustanAccountImplementation,
+  createSmartAccount,
+  findOwnerIndex
+} from '@jaw.id/core';
 import type { Address, PublicClient } from 'viem';
 import {  toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, createPublicClient, http } from 'viem';
 import { mainnet } from 'viem/chains';
-import {type Chain } from '@jaw.id/core';
-import { getBundlerClient } from '@jaw.id/core';
+import {type Chain, SPEND_PERMISSIONS_MANAGER_ADDRESS, getBundlerClient } from '@jaw.id/core';
+
 
 export interface PasskeyCreationResult {
   credentialId: string;
@@ -252,11 +259,25 @@ storeAuthState(address: Address, credentialId: string): void {
     console.log('🔍 Creating bundler client for chain:', chain);
     const client = getBundlerClient(chain) as JustanAccountImplementation["client"];
 
+    const tempSmartAccount = await toJustanAccount({
+      client,
+      owners: [webAuthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS],
+    });
+
+    const smartAccountAddress = await tempSmartAccount.getAddress();
+
+    const ownerIndex = await findOwnerIndex({
+      address: smartAccountAddress,
+      client: client,
+      publicKey: webAuthnAccount.publicKey,
+    });
+
 
     // Use toJustanAccount to derive the smart contract wallet address
     const smartAccount = await toJustanAccount({
       client,
-      owners: [webAuthnAccount],
+      owners: [webAuthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS],
+      ownerIndex
     });
 
     return smartAccount;
