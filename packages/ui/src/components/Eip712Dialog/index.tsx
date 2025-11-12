@@ -125,23 +125,17 @@ const NestedDataView = ({
         <Accordion type="multiple" className="w-full" defaultValue={[]}>
           <AccordionItem value={accordionId} className="border-none">
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
-              <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden">
+              <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden group">
                 <span className="flex items-center gap-0.5">
                   {parentKey && <span className="text-muted-foreground">"{parentKey}":</span>}
-                  <span className="text-muted-foreground">{' {...}'}</span>
-                  {!isLast && <span className="text-muted-foreground">,</span>}
+                  <span className="text-muted-foreground group-data-[state=closed]:inline hidden">{' {...}'}</span>
+                  <span className="text-muted-foreground group-data-[state=open]:inline hidden">{' {'}</span>
+                  {!isLast && <span className="text-muted-foreground group-data-[state=closed]:inline hidden">,</span>}
                 </span>
               </AccordionTrigger>
             </div>
-            <AccordionContent className="pb-0">
+            <AccordionContent className="pb-0 pt-0">
               <div className="flex flex-col">
-                <div
-                  className="py-0.5 text-muted-foreground"
-                  style={{ paddingLeft: `${paddingLeft}px` }}
-                >
-                  {parentKey && <span>"{parentKey}":</span>}
-                  <span>{' {'}</span>
-                </div>
                 {entries.map(([key, value], index) => {
                   const isLastEntry = index === entries.length - 1;
 
@@ -171,8 +165,8 @@ const NestedDataView = ({
                   className="py-0.5 text-muted-foreground"
                   style={{ paddingLeft: `${paddingLeft}px` }}
                 >
-                  {'}'}
-                  {!isLast && ','}
+                  <span>{'}'}</span>
+                  {!isLast && <span>,</span>}
                 </div>
               </div>
             </AccordionContent>
@@ -234,23 +228,17 @@ const NestedDataView = ({
         <Accordion type="multiple" className="w-full" defaultValue={[]}>
           <AccordionItem value={accordionId} className="border-none">
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
-              <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden">
+              <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden group">
                 <span className="flex items-center gap-0.5">
                   {parentKey && <span className="text-muted-foreground">"{parentKey}":</span>}
-                  <span className="text-muted-foreground">{' [...]'}</span>
-                  {!isLast && <span className="text-muted-foreground">,</span>}
+                  <span className="text-muted-foreground group-data-[state=closed]:inline hidden">{' [...]'}</span>
+                  <span className="text-muted-foreground group-data-[state=open]:inline hidden">{' ['}</span>
+                  {!isLast && <span className="text-muted-foreground group-data-[state=closed]:inline hidden">,</span>}
                 </span>
               </AccordionTrigger>
             </div>
-            <AccordionContent className="pb-0">
+            <AccordionContent className="pb-0 pt-0">
               <div className="flex flex-col">
-                <div
-                  className="py-0.5 text-muted-foreground"
-                  style={{ paddingLeft: `${paddingLeft}px` }}
-                >
-                  {parentKey && <span>"{parentKey}":</span>}
-                  <span>{' ['}</span>
-                </div>
                 {data.map((item, index) => {
                   const isLastEntry = index === data.length - 1;
                   const indexKey = `[${index}]`;
@@ -290,8 +278,8 @@ const NestedDataView = ({
                   className="py-0.5 text-muted-foreground"
                   style={{ paddingLeft: `${paddingLeft}px` }}
                 >
-                  {']'}
-                  {!isLast && ','}
+                  <span>{']'}</span>
+                  {!isLast && <span>,</span>}
                 </div>
               </div>
             </AccordionContent>
@@ -409,15 +397,14 @@ export const Eip712Dialog = ({
     >
       <div className="flex flex-col gap-6 justify-between max-md:h-full">
         {/* Main Content - Typed Data Tree View */}
-        <div className="flex flex-col gap-3">
+        <div className="flex flex-col gap-3 max-md:flex-1">
           {typedData ? (
-            <div className="max-h-[315px] overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border">
+            <div className="max-h-[310px] flex flex-1 overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border">
               {/* Combine domain and message into single tree */}
               <NestedDataView
-                data={{
-                  ...typedData.domain,
-                  ...typedData.message
-                }}
+                data={
+                  typedData
+                }
                 depth={0}
               />
             </div>
@@ -428,7 +415,7 @@ export const Eip712Dialog = ({
           )}
 
           {/* URL and Domain Information */}
-          <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
+          <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px] max-md:mt-auto">
             <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
               <p className="text-xs font-bold leading-[133%]">URL</p>
               <p className="text-base font-normal leading-[150%] truncate">
@@ -480,7 +467,7 @@ export const Eip712Dialog = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3 p-3.5 max-md:mt-auto">
+        <div className="flex gap-3 p-3.5">
           <Button
             variant="outline"
             onClick={onCancel}
