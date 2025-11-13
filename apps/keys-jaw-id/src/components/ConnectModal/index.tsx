@@ -1,6 +1,6 @@
 'use client'
 
-import { ConnectDialog, getChainIcon } from "@jaw/ui";
+import { ConnectDialog, useChainIcon } from "@jaw/ui";
 import { useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
@@ -34,7 +34,7 @@ export const ConnectModal = ({
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useMemo(() => chainIconKey ? getChainIcon(chainIconKey, 16) : undefined, [chainIconKey]);
+  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
 
   const handleConnect = async () => {
     try {

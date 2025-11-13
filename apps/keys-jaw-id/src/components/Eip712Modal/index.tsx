@@ -1,6 +1,6 @@
 'use client'
 
-import { Eip712Dialog, getChainIcon } from "@jaw/ui";
+import { Eip712Dialog, useChainIcon } from "@jaw/ui";
 import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
@@ -42,7 +42,7 @@ export const Eip712Modal = ({
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useMemo(() => chainIconKey ? getChainIcon(chainIconKey, 16) : undefined, [chainIconKey]);
+  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 16);
 
   // Parse typed data
   const typedData = useMemo(() => {

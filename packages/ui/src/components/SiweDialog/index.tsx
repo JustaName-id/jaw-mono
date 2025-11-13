@@ -13,6 +13,8 @@ export const SiweDialog = ({
   onOpenChange,
   message,
   timestamp,
+  appName,
+  appLogoUrl,
   accountAddress,
   chainName,
   chainId,
@@ -99,16 +101,18 @@ export const SiweDialog = ({
     >
       <div className="flex flex-col h-full gap-3">
         <div className="flex flex-1 flex-col p-3.5 items-center justify-center">
-          <img
-            src="/images/siwe-logo.svg"
-            alt="SIWE Logo"
-            className="w-[72px] h-[72px] rounded-full"
-          />
+          {appLogoUrl && (
+            <img
+              src={appLogoUrl}
+              alt={`${appName} logo`}
+              className="w-[72px] h-[72px] rounded-full mb-3"
+            />
+          )}
           <div className="flex flex-col items-center gap-1 text-foreground">
             <p className="text-2xl font-normal leading-[133%] ">
               Sign in Request
             </p>
-            <p className="text-base leading-[150%] font-bold">JustaName App</p>
+            <p className="text-base leading-[150%] font-bold">{appName}</p>
           </div>
         </div>
         {/* Main Content Area - Large scrollable message box */}

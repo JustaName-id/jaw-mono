@@ -7,7 +7,7 @@ import { CopiedIcon, CopyIcon, WalletIcon } from "../../icons";
 import { useState, useEffect } from "react";
 import { formatEther } from "viem";
 import { TransactionDialogProps } from "./types";
-import { useIsMobile } from "../../hooks";
+import { useIsMobile, useChainIcon } from "../../hooks";
 import { getJustaNameInstance } from "../../utils/justaNameInstance";
 
 export const TransactionDialog = ({
@@ -26,7 +26,6 @@ export const TransactionDialog = ({
   transactionStatus,
   networkName,
   chainIconKey,
-  getChainIcon,
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
@@ -35,6 +34,9 @@ export const TransactionDialog = ({
   const totalTransactions = transactions.length;
   const isSingleTransaction = totalTransactions === 1;
   const currentTransaction = transactions[0];
+
+  // Get chain icon using the hook
+  const chainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 16);
 
   // Initialize JustaName and resolve addresses
   useEffect(() => {
@@ -193,7 +195,7 @@ export const TransactionDialog = ({
                 <div className="flex flex-col text-foreground flex-1 gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">Network</p>
                   <div className="flex flex-row items-center gap-1">
-                    {getChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 16)}
+                    {chainIcon}
                     <p className="text-base font-normal text-ellipsis leading-[150%] truncate">{networkName || 'Ethereum'}</p>
                   </div>
                 </div>
@@ -427,7 +429,7 @@ export const TransactionDialog = ({
                 <div className="flex flex-col text-foreground flex-1 gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">Network</p>
                   <div className="flex flex-row items-center gap-1">
-                    {getChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 16)}
+                    {chainIcon}
                     <p className="text-base font-normal text-ellipsis leading-[150%] truncate">{networkName || 'Ethereum'}</p>
                   </div>
                 </div>

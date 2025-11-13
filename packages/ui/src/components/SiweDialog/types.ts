@@ -8,6 +8,10 @@ export interface SiweDialogProps {
   origin: string;
   timestamp: Date;
 
+  // App information
+  appName: string;
+  appLogoUrl?: string;
+
   accountAddress?: string;
   chainName?: string;
   chainId?: number;

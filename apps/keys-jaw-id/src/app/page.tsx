@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
@@ -56,6 +56,8 @@ export default function KeysJawIdApp() {
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
+  const configRef = useRef<PopupConfig | null>(null);
+
   // Single useEffect for all message handling
   useEffect(() => {
     // Check if running in popup mode
@@ -88,6 +90,8 @@ export default function KeysJawIdApp() {
       if (message.data?.version) {
 
         setConfig(message.data);
+        configRef.current = message.data;
+
         setEnsConfig(message.data.preference?.ens);
         setChainId(message.data.metadata?.defaultChainId as ChainId);
         setApiKey(message.data.apiKey);
@@ -210,7 +214,7 @@ export default function KeysJawIdApp() {
           type: SDKRequestType.CONNECT,
           requestId: request.id || '',
           correlationId: request.correlationId || '',
-          metadata: config?.metadata || null,
+          metadata: configRef.current?.metadata || null,
           method,
           params: Array.isArray(params) ? params : [],
           chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', paymasterUrl: chain.paymasterUrl } : undefined,
@@ -290,7 +294,7 @@ export default function KeysJawIdApp() {
         type: requestType,
         requestId: request.id || '',
         correlationId: request.correlationId || '',
-        metadata: config?.metadata || null,
+        metadata: configRef.current?.metadata || null,
         method,
         params: Array.isArray(params) ? params : [],
         chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', paymasterUrl: chain.paymasterUrl } : undefined,
@@ -454,6 +458,8 @@ export default function KeysJawIdApp() {
             message={messageToSign}
             address={address}
             chain={pendingRequest.chain as chain}
+            appName={pendingRequest.metadata?.appName || 'dApp'}
+            appLogoUrl={pendingRequest.metadata?.appLogoUrl}
             onSuccess={async (signature, message) => {
               setState('processing');
               try {
