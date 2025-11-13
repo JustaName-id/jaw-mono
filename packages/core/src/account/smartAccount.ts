@@ -188,7 +188,6 @@ export async function estimateUserOpGas(
 
     return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit
 }
-
 export async function createSmartAccount(webauthnAccount: WebAuthnAccount, bundlerClient: JustanAccountImplementation["client"]): Promise<SmartAccount> {
     // First create a temporary smart account to get the predicted address
     const tempSmartAccount = await toJustanAccount({

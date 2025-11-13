@@ -12,10 +12,11 @@ interface SignInScreenProps {
     ensConfig?: string
     chainId?: ChainId
     apiKey?: string
+    chainConfig?: { id: number; rpcUrl?: string; paymasterUrl?: string }
     subnameTextRecords?: SubnameTextRecordCapabilityRequest
 }
 
-export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, subnameTextRecords }: SignInScreenProps) {
+export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConfig, subnameTextRecords }: SignInScreenProps) {
     const { accounts, refetchAccounts } = usePasskeys();
     const { mutateAsync: login } = useLogin();
     const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
@@ -36,8 +37,25 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, subnameTe
                 throw new Error('Credential ID is required');
             }
             setLoggingInAccount(account.username);
+
+            let targetChain: Chain;
+
+            if (chainConfig && chainConfig.rpcUrl) {
+                targetChain = {
+                    id: chainConfig.id,
+                    rpcUrl: chainConfig.rpcUrl,
+                    ...(chainConfig.paymasterUrl && { paymasterUrl: chainConfig.paymasterUrl })
+                };
+            } else {
+                const fallbackChain = SUPPORTED_CHAINS.find(chain => chain.id === (chainId ?? 1));
+                if (!fallbackChain) {
+                    throw new Error(`Chain ${chainId ?? 1} is not supported`);
+                }
+                targetChain = { id: fallbackChain.id };
+            }
+
             await login({
-                chainId: SUPPORTED_CHAINS.find(chain => chain.id === chainId) as Chain,
+                chainId: targetChain,
                 credentialId: account.credentialId,
                 isImported: account.isImported,
             })
