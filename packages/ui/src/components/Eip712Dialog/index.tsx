@@ -391,8 +391,8 @@ export const Eip712Dialog = ({
         maxHeight: 'none',
         overflowY: 'auto',
       } : {
-        width: 'fit-content',
-        maxWidth: '500px',
+        width: '500px',
+        minWidth: '500px',
       }}
     >
       <div className="flex flex-col gap-6 justify-between max-md:h-full">

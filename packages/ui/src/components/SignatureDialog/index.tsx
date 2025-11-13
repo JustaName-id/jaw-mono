@@ -94,8 +94,8 @@ export const SignatureDialog = ({
         maxWidth: 'none',
         maxHeight: 'none',
       } : {
-        width: 'fit-content',
-        maxWidth: '500px',
+        width: '500px',
+        minWidth: '500px',
       }}
     >
       <div className="flex flex-col h-full">
