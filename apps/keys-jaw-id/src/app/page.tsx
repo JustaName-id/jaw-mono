@@ -807,7 +807,6 @@ export default function KeysJawIdApp() {
           origin={pendingRequest.origin}
           appName={pendingRequest.metadata?.appName || 'dApp'}
           appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-          supportedChains={pendingRequest.metadata?.appChainIds}
           accountName={authQuery.accountName || currentAccount?.username}
           walletAddress={authQuery.walletAddress || '0x0000000000000000000000000000000000000000'}
           chain={pendingRequest.chain}

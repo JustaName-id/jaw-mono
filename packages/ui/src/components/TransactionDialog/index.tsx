@@ -36,7 +36,7 @@ export const TransactionDialog = ({
   const currentTransaction = transactions[0];
 
   // Get chain icon using the hook
-  const chainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 16);
+  const chainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 24);
 
   // Initialize JustaName and resolve addresses
   useEffect(() => {

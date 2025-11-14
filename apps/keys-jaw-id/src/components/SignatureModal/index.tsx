@@ -36,7 +36,7 @@ export const SignatureModal = ({
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 16);
+  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
 
 
   const signMessage = useCallback(async () => {

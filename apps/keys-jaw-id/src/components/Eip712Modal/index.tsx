@@ -42,7 +42,7 @@ export const Eip712Modal = ({
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 16);
+  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
 
   // Parse typed data
   const typedData = useMemo(() => {

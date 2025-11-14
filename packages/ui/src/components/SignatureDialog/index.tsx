@@ -115,7 +115,7 @@ export const SignatureDialog = ({
                 <p className="text-xs font-bold text-foreground">Network</p>
                 <div className="flex flex-row items-center gap-2">
                   {chainIcon && (
-                    <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+                    <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
                       {chainIcon}
                     </div>
                   )}

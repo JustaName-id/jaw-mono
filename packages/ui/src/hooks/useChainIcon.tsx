@@ -50,7 +50,7 @@ export const useChainIcon = (chain: string, size?: number): JSX.Element => {
         <img
           src={iconUrl}
           alt={`${safeChain} icon`}
-          style={{ width: iconSize, height: iconSize, borderRadius: '50%' }}
+          style={{ width: iconSize, height: iconSize, minWidth: iconSize, borderRadius: '50%' }}
         />
       );
     }
@@ -65,6 +65,7 @@ export const useChainIcon = (chain: string, size?: number): JSX.Element => {
           display: 'flex',
           height: `${iconSize}px`,
           width: `${iconSize}px`,
+            minWidth: `${iconSize}px`,
           alignItems: 'center',
           justifyContent: 'center',
           textAlign: 'center',

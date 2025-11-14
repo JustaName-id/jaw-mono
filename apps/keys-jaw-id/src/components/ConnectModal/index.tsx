@@ -9,7 +9,6 @@ export interface ConnectModalProps {
   origin: string;
   appName: string;
   appLogoUrl?: string;
-  supportedChains?: number[];
   accountName?: string;
   walletAddress: string;
   chain?: chain;
@@ -21,7 +20,6 @@ export const ConnectModal = ({
   origin,
   appName,
   appLogoUrl,
-  supportedChains,
   accountName,
   walletAddress,
   chain,
@@ -70,9 +68,7 @@ export const ConnectModal = ({
       timestamp={timestamp}
       accountName={accountName}
       walletAddress={walletAddress}
-      supportedChains={supportedChains}
       chainName={chainName}
-      chainId={chain?.id}
       chainIcon={chainIcon}
       onConnect={handleConnect}
       onCancel={handleCancel}
