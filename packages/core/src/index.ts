@@ -16,7 +16,16 @@ export {
     type WalletConnectResponse,
     type ViemRPCParams,
     type ViemRPCReturnType,
-    getCapabilities,
+    type SpendPermission,
+    type SpendPeriod,
+    type SpendPermissionDetail,
+    type PermissionsDetail,
+    type WalletGrantPermissionsRequest,
+    type WalletGrantPermissionsResponse,
+    type WalletRevokePermissionsRequest,
+    type RevokePermissionApiResponse,
+    grantPermissions,
+    revokePermission,
     SUPPORTED_METHODS,
 } from './rpc/index.js';
 

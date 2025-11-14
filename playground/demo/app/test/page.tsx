@@ -10,6 +10,7 @@ export default function TestPage() {
   const [chainId, setChainId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [lastBatchId, setLastBatchId] = useState<string | null>(null);
+  const [lastPermissionId, setLastPermissionId] = useState<string | null>(null);
   const [sdk] = useState(() =>
     createJAWSDK({
       appName: 'JAW Demo App',
@@ -18,7 +19,7 @@ export default function TestPage() {
 
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
-        ens: process.env.NEXT_PUBLIC_ENS_NAME || '',
+
         showTestnets: true
       },
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
@@ -861,6 +862,148 @@ Issued At: ${issuedAt}`;
     }
   };
 
+  const handleGrantPermissions = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog('🔑 Requesting permissions grant (wallet_grantPermissions)...');
+
+      // Example spender address (could be a dApp contract)
+      const spenderAddress = '0x1111111254EEB25477B68fb85Ed929f73A960582'; // 1inch Router as example
+
+      // Example: Grant permission to spend 0.0001 ETH per day for 30 days
+      const limit = parseEther('0.0001'); // 0.0001 ETH in wei (easy to test)
+      const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
+
+      const currentChainId = chainId || '0x1';
+
+      addLog(`Granting permissions to spender: ${spenderAddress}`);
+      addLog(`Spend limit: 0.0001 ETH per day`);
+      addLog(`Expiry: ${new Date(expiryTimestamp * 1000).toISOString()}`);
+
+      const result = await provider.request({
+        method: 'wallet_grantPermissions',
+        params: [{
+          address: accounts[0],
+          chainId: currentChainId,
+          expiry: expiryTimestamp,
+          spender: spenderAddress,
+          permissions: {
+            spend: {
+              limit: `0x${limit.toString(16)}`,
+              period: 'day' as const,
+              token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' // Native token (ETH)
+            }
+          }
+        }]
+      });
+
+      console.log('[Demo] Grant permissions result:', result);
+
+      // Expected response format:
+      // { address, chainId, expiry, id, spender, spend: { limit, period, token } }
+      if (result && typeof result === 'object' && 'id' in result) {
+        const response = result as { id: string; address: string; spender: string; spend: { limit: string; period: string; token: string } };
+        setLastPermissionId(response.id);
+        addLog(`✅ Permission granted successfully!`);
+        addLog(`Permission ID: ${response.id}`);
+        addLog(`Full response: ${JSON.stringify(result, null, 2)}`);
+      } else {
+        addLog(`✅ Permission result: ${JSON.stringify(result, null, 2)}`);
+      }
+    } catch (error) {
+      console.error('[Demo] Grant permissions error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`❌ Error granting permissions: ${errorMessage}`);
+    }
+  };
+
+  const handleGetPermissions = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog(`📋 Requesting permissions list for account: ${accounts[0]}...`);
+
+      const permissions = await provider.request({
+        method: 'wallet_getPermissions',
+        params: [{
+          address: accounts[0]
+        }]
+      });
+
+      console.log('[Demo] Permissions received:', permissions);
+      addLog(`Permissions: ${JSON.stringify(permissions, null, 2)}`);
+
+      // Count permissions if it's an array
+      if (Array.isArray(permissions)) {
+        addLog(`✅ Found ${permissions.length} permission(s)`);
+      } else {
+        addLog(`✅ Permissions retrieved successfully`);
+      }
+    } catch (error) {
+      console.error('[Demo] Get permissions error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`❌ Error getting permissions: ${errorMessage}`);
+    }
+  };
+
+  const handleRevokePermissions = async () => {
+    if (!lastPermissionId) {
+      addLog('No permission ID available. Grant permissions first.');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog(`🚫 Revoking permission with ID: ${lastPermissionId}...`);
+
+      const result = await provider.request({
+        method: 'wallet_revokePermissions',
+        params: [{
+          address: accounts[0],
+          id: lastPermissionId as `0x${string}`
+        }]
+      });
+
+      console.log('[Demo] Revoke permissions result:', result);
+      addLog(`✅ Permission revoked successfully!`);
+      addLog(`Result: ${JSON.stringify(result, null, 2)}`);
+
+      // Clear the stored permission ID
+      setLastPermissionId(null);
+    } catch (error) {
+      console.error('[Demo] Revoke permissions error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`❌ Error revoking permissions: ${errorMessage}`);
+    }
+  };
+
   const clearLogs = () => {
     setLogs([]);
   };
@@ -1126,6 +1269,49 @@ Issued At: ${issuedAt}`;
           <div className="mt-3">
             <p className="text-sm text-gray-600 dark:text-gray-400">
               <span className="font-medium">Note:</span> wallet_getAssets (EIP-7811) retrieves assets across all supported chains. The chainFilter is automatically set based on the showTestnets preference (default: mainnet chains only).
+            </p>
+          </div>
+        </div>
+
+        {/* Permissions Actions */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Permissions Actions
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <button
+              onClick={handleGrantPermissions}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Grant Permissions
+            </button>
+            <button
+              onClick={handleGetPermissions}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Get Permissions
+            </button>
+            <button
+              onClick={handleRevokePermissions}
+              disabled={!isConnected || !lastPermissionId}
+              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Revoke Permissions
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Note:</span> Permissions allow a dApp or contract (spender) to spend tokens on behalf of your account within specified limits and time periods. This test grants permission to spend 0.0001 ETH per day for 30 days.
+            </p>
+            {lastPermissionId && (
+              <p className="text-sm text-green-600 dark:text-green-400">
+                <span className="font-medium">Last Permission ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{lastPermissionId}</code>
+              </p>
+            )}
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Test Flow:</span> 1) Grant Permissions → 2) Get Permissions to verify → 3) Revoke Permissions when done
             </p>
           </div>
         </div>

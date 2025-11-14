@@ -1,10 +1,9 @@
 import { encodeFunctionData, type Address, type Hex } from 'viem';
 import { readContract } from 'viem/actions';
-import { SPEND_PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL } from '../constants.js';
-import { sendTransaction } from '../account/smartAccount.js';
-import type { SmartAccount } from 'viem/account-abstraction';
-import type { Chain } from '../store/index.js';
-import { getClient } from '../store/chain-clients/utils.js';
+import {SPEND_PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL, JAW_PROXY_URL} from '../constants.js';
+import { sendTransaction, getBundlerClient } from '../account/smartAccount.js';
+import {SmartAccount} from 'viem/account-abstraction';
+import {Chain} from '../store/index.js';
 import { standardErrors } from '../errors/errors.js';
 import { restCall } from '../api/index.js';
 import { buildHandleJawRpcUrl, fetchRPCRequest } from '../utils/index.js';
@@ -239,7 +238,7 @@ export async function grantPermissions(
         chain
     );
 
-    const permissionHash = await getSpendPermissionHash(spendPermission, chain.id);
+    const permissionHash = await getSpendPermissionHash(spendPermission, chain);
 
     await storePermissionInRelay(permissionHash, spendPermission, chainId, apiKey);
 
@@ -264,6 +263,8 @@ async function getPermissionFromRelay(
     permissionHash: Hex,
     apiKey: string
 ): Promise<StorePermissionApiResponse> {
+    const permissionsBaseUrl = JAW_PROXY_URL;
+
     return await restCall(
         'GET_PERMISSION',
         'GET',
@@ -271,7 +272,7 @@ async function getPermissionFromRelay(
         { 'x-api-key': apiKey },
         { hash: permissionHash },
         undefined,
-        undefined
+        permissionsBaseUrl
     );
 }
 
@@ -437,11 +438,16 @@ async function storePermissionInRelay(
         chainId,
     };
 
+    const permissionsBaseUrl = JAW_PROXY_URL;
+
     return await restCall(
         'STORE_PERMISSION',
         'POST',
         requestData,
-        { 'x-api-key': apiKey }
+        { 'x-api-key': apiKey },
+        undefined,
+        undefined,
+        permissionsBaseUrl
     );
 }
 
@@ -452,6 +458,8 @@ async function deletePermissionFromRelay(
     permissionHash: Hex,
     apiKey: string
 ): Promise<RevokePermissionApiResponse> {
+    const permissionsBaseUrl = JAW_PROXY_URL;
+
     return await restCall(
         'DELETE_PERMISSION',
         'DELETE',
@@ -459,7 +467,7 @@ async function deletePermissionFromRelay(
         { 'x-api-key': apiKey },
         { hash: permissionHash },
         undefined,
-        undefined
+        permissionsBaseUrl
     );
 }
 
@@ -469,17 +477,11 @@ async function deletePermissionFromRelay(
  */
 async function getSpendPermissionHash(
     spendPermission: SpendPermission,
-    chainId: number
+    chain: Chain
 ): Promise<Hex> {
-    const publicClient = getClient(chainId);
+     const bundlerClient = getBundlerClient(chain)
 
-    if (!publicClient) {
-        throw standardErrors.rpc.internal({
-            message: `Public client not found for chain ${chainId}`,
-        });
-    }
-
-    const hash = await readContract(publicClient, {
+    const hash = await readContract(bundlerClient, {
         address: SPEND_PERMISSIONS_MANAGER_ADDRESS as Address,
         abi: SPEND_PERMISSIONS_MANAGER_ABI,
         functionName: 'getHash',

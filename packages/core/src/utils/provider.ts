@@ -1,4 +1,3 @@
-import { SDK_NAME, SDK_VERSION } from '../sdk-info.js';
 import { standardErrors } from '../errors/index.js';
 import {
     RequestArguments,
@@ -26,8 +25,6 @@ export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string)
         mode: 'cors',
         headers: {
             'Content-Type': 'application/json',
-            'X-Cbw-Sdk-Version': SDK_VERSION,
-            'X-Cbw-Sdk-Platform': SDK_NAME,
         },
     });
     const { result, error } = await res.json();
