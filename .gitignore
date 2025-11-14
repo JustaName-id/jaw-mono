@@ -47,6 +47,7 @@ Thumbs.db
 .next
 out
 .env.*
+!.env.example
 .env
 
 # Auto-generated files

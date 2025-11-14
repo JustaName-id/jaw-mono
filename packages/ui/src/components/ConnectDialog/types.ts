@@ -13,11 +13,9 @@ export interface ConnectDialogProps {
   // User account information
   accountName?: string;
   walletAddress: string;
-  supportedChains?: number[];
 
   // Chain information
   chainName?: string;
-  chainId?: number;
   chainIcon?: JSX.Element;
 
   // Actions

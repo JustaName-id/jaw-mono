@@ -40,7 +40,7 @@ export class PasskeyService {
   private getMainnetPublicClient(): PublicClient {
     return createPublicClient({
       chain: mainnet,
-      transport: http("https://eth.drpc.org"),
+      transport: http(process.env.NEXT_PUBLIC_MAINNET_CLIENT_URL),
     });
   }
 

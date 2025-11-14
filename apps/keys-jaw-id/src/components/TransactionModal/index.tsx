@@ -1,6 +1,6 @@
 'use client'
 
-import { TransactionDialog, TransactionData, getChainIcon } from "@jaw/ui";
+import { TransactionDialog, TransactionData } from "@jaw/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, parseEther, Hash } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
@@ -144,8 +144,8 @@ export const TransactionModal = ({
             onError?.(error as Error);
           }
         }
-      } else if (!open) {
-        // Reset when modal closes
+      } else {
+        // Reset when chain is not provided
         setSmartAccount(null);
         setTransactionStatus('');
         setIsProcessing(false);
@@ -163,11 +163,11 @@ export const TransactionModal = ({
         timeoutRef.current = null;
       }
     };
-  }, [open, chain, getSmartAccount, onError]);
+  }, [chain, getSmartAccount, onError]);
 
   // Gas estimation using core package
   useEffect(() => {
-    if (!open || !smartAccount || !chain || normalizedTransactions.length === 0) return;
+    if (!smartAccount || !chain || normalizedTransactions.length === 0) return;
 
     const estimateGas = async () => {
       try {
@@ -230,7 +230,7 @@ export const TransactionModal = ({
     };
 
     estimateGas();
-  }, [open, smartAccount, chain, normalizedTransactions, isSponsored]);
+  }, [smartAccount, chain, normalizedTransactions, isSponsored]);
 
   const handleConfirm = useCallback(async () => {
     try {
@@ -353,7 +353,6 @@ export const TransactionModal = ({
       transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
       chainIconKey={chainIconKey}
-      getChainIcon={getChainIcon}
     />
   );
 }

@@ -391,8 +391,8 @@ export const Eip712Dialog = ({
         maxHeight: 'none',
         overflowY: 'auto',
       } : {
-        width: 'fit-content',
-        maxWidth: '500px',
+        width: '500px',
+        minWidth: '500px',
       }}
     >
       <div className="flex flex-col gap-6 justify-between max-md:h-full">
@@ -446,7 +446,7 @@ export const Eip712Dialog = ({
                   <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
                     <p className="text-xs font-bold leading-[133%]">Network</p>
                     <div className="flex flex-row items-center gap-1 min-w-0">
-                      {chainIcon && <div className="w-4 h-4 flex-shrink-0">{chainIcon}</div>}
+                      {chainIcon && <div className="w-6 h-6 flex-shrink-0">{chainIcon}</div>}
                       <p className="text-base font-normal leading-[150%] truncate">{chainName}</p>
                     </div>
                   </div>
