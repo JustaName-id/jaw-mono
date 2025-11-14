@@ -1,6 +1,6 @@
 'use client'
 
-import { ConnectDialog, getChainIcon } from "@jaw/ui";
+import { ConnectDialog, useChainIcon } from "@jaw/ui";
 import { useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
@@ -9,7 +9,6 @@ export interface ConnectModalProps {
   origin: string;
   appName: string;
   appLogoUrl?: string;
-  supportedChains?: number[];
   accountName?: string;
   walletAddress: string;
   chain?: chain;
@@ -21,7 +20,6 @@ export const ConnectModal = ({
   origin,
   appName,
   appLogoUrl,
-  supportedChains,
   accountName,
   walletAddress,
   chain,
@@ -34,7 +32,7 @@ export const ConnectModal = ({
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useMemo(() => chainIconKey ? getChainIcon(chainIconKey, 16) : undefined, [chainIconKey]);
+  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
 
   const handleConnect = async () => {
     try {
@@ -70,9 +68,7 @@ export const ConnectModal = ({
       timestamp={timestamp}
       accountName={accountName}
       walletAddress={walletAddress}
-      supportedChains={supportedChains}
       chainName={chainName}
-      chainId={chain?.id}
       chainIcon={chainIcon}
       onConnect={handleConnect}
       onCancel={handleCancel}

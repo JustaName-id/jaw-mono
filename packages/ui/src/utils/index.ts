@@ -1,2 +1,2 @@
-export * from './getChainIcon';
 export * from './justaNameInstance';
+export * from './coingecko';

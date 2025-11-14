@@ -13,6 +13,8 @@ export const SiweDialog = ({
   onOpenChange,
   message,
   timestamp,
+  appName,
+  appLogoUrl,
   accountAddress,
   chainName,
   chainId,
@@ -93,22 +95,24 @@ export const SiweDialog = ({
         maxWidth: 'none',
         maxHeight: 'none',
       } : {
-        width: 'fit-content',
-        maxWidth: '500px',
+        width: '500px',
+        minWidth: '500px',
       }}
     >
       <div className="flex flex-col h-full gap-3">
         <div className="flex flex-1 flex-col p-3.5 items-center justify-center">
-          <img
-            src="/images/siwe-logo.svg"
-            alt="SIWE Logo"
-            className="w-[72px] h-[72px] rounded-full"
-          />
+          {appLogoUrl && (
+            <img
+              src={appLogoUrl}
+              alt={`${appName} logo`}
+              className="w-[72px] h-[72px] rounded-full mb-3"
+            />
+          )}
           <div className="flex flex-col items-center gap-1 text-foreground">
             <p className="text-2xl font-normal leading-[133%] ">
               Sign in Request
             </p>
-            <p className="text-base leading-[150%] font-bold">JustaName App</p>
+            <p className="text-base leading-[150%] font-bold">{appName}</p>
           </div>
         </div>
         {/* Main Content Area - Large scrollable message box */}
@@ -134,7 +138,7 @@ export const SiweDialog = ({
                 <p className="text-xs font-bold text-foreground">Network</p>
                 <div className="flex flex-row items-center gap-2">
                   {chainIcon && (
-                    <div className="w-4 h-4 flex items-center justify-center flex-shrink-0">
+                    <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
                       {chainIcon}
                     </div>
                   )}

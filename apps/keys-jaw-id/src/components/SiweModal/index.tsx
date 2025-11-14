@@ -1,6 +1,6 @@
 'use client'
 
-import { SiweDialog, getChainIcon } from "@jaw/ui";
+import { SiweDialog, useChainIcon } from "@jaw/ui";
 import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
@@ -12,6 +12,8 @@ export interface SiweModalProps {
   message: string;
   address?: string;
   chain: chain;
+  appName?: string;
+  appLogoUrl?: string;
   onSuccess: (signature: string, message: string) => void;
   onError: (error: Error) => void;
 }
@@ -21,6 +23,8 @@ export const SiweModal = ({
   message: messageToSign,
   address,
   chain,
+  appName,
+  appLogoUrl,
   onSuccess,
   onError
 }: SiweModalProps) => {
@@ -34,7 +38,7 @@ export const SiweModal = ({
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useMemo(() => chainIconKey ? getChainIcon(chainIconKey, 16) : undefined, [chainIconKey]);
+  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
 
   const signMessage = useCallback(async () => {
     try {
@@ -128,6 +132,8 @@ export const SiweModal = ({
       message={messageToSign}
       origin={origin}
       timestamp={timestamp}
+      appName={appName || 'dApp'}
+      appLogoUrl={appLogoUrl}
       accountAddress={address}
       chainName={chainName}
       chainIcon={chainIcon}
