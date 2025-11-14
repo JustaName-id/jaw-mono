@@ -15,7 +15,6 @@ export default function TestPage() {
       appName: 'JAW Demo App',
       appLogoUrl: "https://avatars.githubusercontent.com/u/159771991?s=200&v=4",
       defaultChainId: 1,
-
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
         ens: process.env.NEXT_PUBLIC_ENS_NAME || '',
