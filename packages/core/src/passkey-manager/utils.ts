@@ -208,6 +208,7 @@ export async function registerPasskeyInBackend(
       'POST',
       request,
       apiKey ? { 'x-api-key': apiKey } : {},
+      undefined,
       dev,
       serverUrl
     );
@@ -239,6 +240,7 @@ export async function lookupPasskeyFromBackend(
       'GET',
       { credentialIds: [credentialId] },
       apiKey ? { 'x-api-key': apiKey } : {},
+      undefined,
       dev,
       serverUrl
     );

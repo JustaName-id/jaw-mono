@@ -17,10 +17,12 @@ export interface PasskeyRoutes {
     request: PasskeyRegistrationRequest;
     response: void;
     headers: Record<string, string>;
+    pathParams?: never;
   };
   LOOKUP_PASSKEYS: {
     request: LookupPasskeysRequest;
     response: PasskeysByCredIdsResponse;
     headers: Record<string, string>;
+    pathParams?: never;
   };
 }
