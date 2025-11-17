@@ -1,6 +1,6 @@
 import {
-    PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation, createSmartAccount,
-    SUPPORTED_CHAINS
+  PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation, createSmartAccount,
+  SUPPORTED_CHAINS, findOwnerIndex
 } from '@jaw.id/core';
 import type { Address, PublicClient } from 'viem';
 import {  toWebAuthnAccount } from 'viem/account-abstraction';
