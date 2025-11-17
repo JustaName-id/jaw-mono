@@ -1,4 +1,4 @@
-import { encodeFunctionData, type Address, type Hex } from 'viem';
+import { encodeFunctionData, type Address, type Hex, type WalletClient } from 'viem';
 import { readContract } from 'viem/actions';
 import {SPEND_PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL, JAW_PROXY_URL} from '../constants.js';
 import { sendTransaction, getBundlerClient } from '../account/smartAccount.js';
@@ -257,45 +257,6 @@ export async function grantPermissions(
 }
 
 /**
- * Get permission from the relay using typed REST API call with path params
- */
-async function getPermissionFromRelay(
-    permissionHash: Hex,
-    apiKey: string
-): Promise<StorePermissionApiResponse> {
-    const permissionsBaseUrl = JAW_PROXY_URL;
-
-    return await restCall(
-        'GET_PERMISSION',
-        'GET',
-        {},
-        { 'x-api-key': apiKey },
-        { hash: permissionHash },
-        undefined,
-        permissionsBaseUrl
-    );
-}
-
-/**
- * Convert relay permission data to SpendPermission struct
- */
-function relayPermissionToSpendPermission(
-    relayPermission: StorePermissionApiResponse
-): SpendPermission {
-    return {
-        account: relayPermission.account as Address,
-        spender: relayPermission.spender as Address,
-        token: relayPermission.token as Address,
-        allowance: BigInt(relayPermission.allowance),
-        period: parseInt(relayPermission.period, 10),
-        start: parseInt(relayPermission.start, 10),
-        end: parseInt(relayPermission.end, 10),
-        salt: BigInt(relayPermission.salt),
-        extraData: relayPermission.extraData as Hex,
-    };
-}
-
-/**
  * Revoke a permission by its ID (permission hash)
  *
  * This function:
@@ -334,6 +295,90 @@ export async function revokePermission(
     );
 
     return await deletePermissionFromRelay(permissionId, apiKey);
+}
+
+/**
+ * Execute a spend using a granted SpendPermission
+ *
+ * This function allows a spender to spend tokens on behalf of an account
+ * that has granted them permission via wallet_grantPermissions.
+ *
+ * @param walletClient - The viem wallet client to use for the transaction (should be the spender's wallet)
+ * @param spendPermission - The SpendPermission struct received from wallet_grantPermissions
+ * @param value - The amount to spend (must be <= allowance and within period limits)
+ * @returns Transaction hash
+ *
+ * @example
+ * ```typescript
+ * import { spend, type SpendPermission } from '@jaw.id/core';
+ * import { createWalletClient, http } from 'viem';
+ * import { baseSepolia } from 'viem/chains';
+ *
+ * const walletClient = createWalletClient({
+ *   account,
+ *   chain: baseSepolia,
+ *   transport: http(),
+ * });
+ *
+ * const hash = await spend(
+ *   walletClient,
+ *   spendPermission,
+ *   BigInt(100000000000000)
+ * );
+ * console.log('Transaction:', hash);
+ * ```
+ */
+export async function spend(
+    walletClient: WalletClient,
+    spendPermission: SpendPermission,
+    value: bigint
+): Promise<Hex> {
+    // @ts-expect-error - viem's WalletClient types are too strict about chain parameter
+    return walletClient.writeContract({
+        address: SPEND_PERMISSIONS_MANAGER_ADDRESS as Address,
+        abi: SPEND_PERMISSIONS_MANAGER_ABI,
+        functionName: 'spend',
+        args: [spendPermission, value],
+    });
+}
+
+/**
+ * Get permission from the relay using typed REST API call with path params
+ */
+async function getPermissionFromRelay(
+    permissionHash: Hex,
+    apiKey: string
+): Promise<StorePermissionApiResponse> {
+    const permissionsBaseUrl = JAW_PROXY_URL;
+
+    return await restCall(
+        'GET_PERMISSION',
+        'GET',
+        {},
+        { 'x-api-key': apiKey },
+        { hash: permissionHash },
+        undefined,
+        permissionsBaseUrl
+    );
+}
+
+/**
+ * Convert relay permission data to SpendPermission struct
+ */
+function relayPermissionToSpendPermission(
+    relayPermission: StorePermissionApiResponse
+): SpendPermission {
+    return {
+        account: relayPermission.account as Address,
+        spender: relayPermission.spender as Address,
+        token: relayPermission.token as Address,
+        allowance: BigInt(relayPermission.allowance),
+        period: parseInt(relayPermission.period, 10),
+        start: parseInt(relayPermission.start, 10),
+        end: parseInt(relayPermission.end, 10),
+        salt: BigInt(relayPermission.salt),
+        extraData: relayPermission.extraData as Hex,
+    };
 }
 
 /**
@@ -585,5 +630,29 @@ const SPEND_PERMISSIONS_MANAGER_ABI = [
             },
         ],
         outputs: [{ name: 'hash', type: 'bytes32' }],
+    },
+    {
+        name: 'spend',
+        type: 'function',
+        stateMutability: 'nonpayable',
+        inputs: [
+            {
+                name: 'spendPermission',
+                type: 'tuple',
+                components: [
+                    { name: 'account', type: 'address' },
+                    { name: 'spender', type: 'address' },
+                    { name: 'token', type: 'address' },
+                    { name: 'allowance', type: 'uint160' },
+                    { name: 'period', type: 'uint48' },
+                    { name: 'start', type: 'uint48' },
+                    { name: 'end', type: 'uint48' },
+                    { name: 'salt', type: 'uint256' },
+                    { name: 'extraData', type: 'bytes' },
+                ],
+            },
+            { name: 'value', type: 'uint160' },
+        ],
+        outputs: [],
     },
 ] as const;

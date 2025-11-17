@@ -26,6 +26,7 @@ export {
     type RevokePermissionApiResponse,
     grantPermissions,
     revokePermission,
+    spend,
     SUPPORTED_METHODS,
 } from './rpc/index.js';
 
