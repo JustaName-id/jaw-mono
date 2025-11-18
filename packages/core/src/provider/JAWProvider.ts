@@ -68,7 +68,12 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     }
 
     async disconnect() {
-        await this.signer?.cleanup();
+        try {
+            await this.signer?.cleanup();
+        } catch (cleanupError) {
+            // Log cleanup error but continue with disconnection
+            console.warn('Signer cleanup failed during disconnect:', cleanupError);
+        }
         this.signer = null;
         correlationIds.clear();
         this.emit('disconnect', standardErrors.provider.disconnected('User initiated disconnection'));
@@ -94,6 +99,10 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         const result = await signer.request(args); // send diffie-hellman encrypted request
                         this.signer = signer;
                         return result as T;
+                    }
+                    case 'wallet_disconnect': {
+                        await this.disconnect();
+                        return null as T;
                     }
                     case 'wallet_sendCalls': 
                     case 'wallet_sign': {
@@ -148,10 +157,16 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     }
                 }
             }
-            
+
+            // Handle wallet_disconnect when signer exists
+            if (args.method === 'wallet_disconnect') {
+                await this.disconnect();
+                return null as T;
+            }
+
             // Handle requests when signer exists
             const result = await this.signer.request(args);
-            
+
             return result as T;
         } catch (error) {
             const { code } = error as { code?: number };

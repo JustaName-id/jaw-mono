@@ -355,6 +355,80 @@ describe('JAWProvider', () => {
     });
   });
 
+  describe('_request - wallet_disconnect', () => {
+    it('should disconnect when no signer exists', async () => {
+      // Arrange
+      provider = new JAWProvider(mockConstructorOptions);
+      const request: RequestArguments = {
+        method: 'wallet_disconnect',
+      };
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(result).toBeNull();
+      expect(correlationIds.clear).toHaveBeenCalled();
+      expect((provider as any).signer).toBeNull();
+    });
+
+    it('should cleanup signer and disconnect when signer exists', async () => {
+      // Arrange
+      provider = new JAWProvider(mockConstructorOptions);
+      (provider as any).signer = mockSigner;
+      (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
+      const request: RequestArguments = {
+        method: 'wallet_disconnect',
+      };
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert
+      expect(mockSigner.cleanup).toHaveBeenCalled();
+      expect(result).toBeNull();
+      expect(correlationIds.clear).toHaveBeenCalled();
+      expect((provider as any).signer).toBeNull();
+    });
+
+    it('should emit disconnect event', async () => {
+      // Arrange
+      provider = new JAWProvider(mockConstructorOptions);
+      (provider as any).signer = mockSigner;
+      (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
+      const emitSpy = vi.spyOn(provider, 'emit');
+      const request: RequestArguments = {
+        method: 'wallet_disconnect',
+      };
+
+      // Act
+      await provider.request(request);
+
+      // Assert
+      expect(emitSpy).toHaveBeenCalledWith(
+        'disconnect',
+        expect.objectContaining({
+          message: 'User initiated disconnection',
+        })
+      );
+    });
+
+    it('should handle cleanup errors gracefully', async () => {
+      // Arrange
+      provider = new JAWProvider(mockConstructorOptions);
+      (provider as any).signer = mockSigner;
+      (mockSigner.cleanup as Mock).mockRejectedValue(new Error('Cleanup failed'));
+      const request: RequestArguments = {
+        method: 'wallet_disconnect',
+      };
+
+      // Act & Assert - Should not throw, disconnect should complete
+      await expect(provider.request(request)).resolves.toBeNull();
+      expect((provider as any).signer).toBeNull();
+      expect(correlationIds.clear).toHaveBeenCalled();
+    });
+  });
+
   describe('_request - No Signer: wallet_sendCalls', () => {
     beforeEach(() => {
       provider = new JAWProvider(mockConstructorOptions);

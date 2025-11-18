@@ -47,6 +47,7 @@ export const SUPPORTED_METHODS = [
   'net_version',
   'personal_sign',
   'wallet_connect',
+  'wallet_disconnect',
   'wallet_getCallsStatus',
   'wallet_getCapabilities',
   'wallet_grantPermissions',
