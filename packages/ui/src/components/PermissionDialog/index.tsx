@@ -144,7 +144,7 @@ export const PermissionDialog = ({
           {/* Duration + Expiry Date */}
           <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
             <div className="flex flex-col text-foreground gap-0.5 flex-1">
-              <p className="text-xs font-bold leading-[133%]">Duration</p>
+              <p className="text-xs font-bold leading-[133%]">Spend Limit</p>
               <p className="text-base bold leading-[150%]">{duration}</p>
             </div>
             <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[50px]" />

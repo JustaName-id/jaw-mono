@@ -18,7 +18,6 @@ export default function TestPage() {
       defaultChainId: 1,
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
-
         showTestnets: true
       },
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
@@ -872,7 +871,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant (wallet_grantPermissions)...');
 
       // Example spender address (could be a dApp contract)
-      const spenderAddress = '0x1111111254EEB25477B68fb85Ed929f73A960582'; // 1inch Router as example
+      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
 
       // Example: Grant permission to spend 0.0001 ETH per day for 30 days
       const limit = parseEther('0.0001'); // 0.0001 ETH in wei (easy to test)
@@ -938,7 +937,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant for ERC-20 on Base Sepolia...');
 
       // Example spender address
-      const spenderAddress = '0x1111111254EEB25477B68fb85Ed929f73A960582'; // 1inch Router
+      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890'; // 1inch Router
 
       // USDC on Base Sepolia (6 decimals)
       const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
