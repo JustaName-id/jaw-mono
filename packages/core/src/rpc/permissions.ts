@@ -345,7 +345,7 @@ export async function spend(
 /**
  * Get permission from the relay using typed REST API call with path params
  */
-async function getPermissionFromRelay(
+export async function getPermissionFromRelay(
     permissionHash: Hex,
     apiKey: string
 ): Promise<StorePermissionApiResponse> {

@@ -32,5 +32,6 @@ export {
     grantPermissions,
     revokePermission,
     handleGetPermissionsRequest,
+    getPermissionFromRelay,
     spend
 } from './permissions.js';

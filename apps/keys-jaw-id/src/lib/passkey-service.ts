@@ -44,7 +44,7 @@ export class PasskeyService {
       const viemChain = SUPPORTED_CHAINS.find(c => c.id === +(process.env.NEXT_PUBLIC_CHAIN_ID || 1));
       return createPublicClient({
       chain: viemChain as ViemChain,
-      transport: http(process.env.NEXT_PUBLIC_MAINNET_CLIENT_URL),
+      transport: http(process.env.NEXT_PUBLIC_PROVIDER_URL),
     });
   }
 

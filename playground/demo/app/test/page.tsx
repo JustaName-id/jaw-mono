@@ -18,7 +18,6 @@ export default function TestPage() {
       defaultChainId: 1,
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
-
         showTestnets: true
       },
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
@@ -872,7 +871,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant (wallet_grantPermissions)...');
 
       // Example spender address (could be a dApp contract)
-      const spenderAddress = '0x1111111254EEB25477B68fb85Ed929f73A960582'; // 1inch Router as example
+      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
 
       // Example: Grant permission to spend 0.0001 ETH per day for 30 days
       const limit = parseEther('0.0001'); // 0.0001 ETH in wei (easy to test)
@@ -927,6 +926,76 @@ Issued At: ${issuedAt}`;
     }
   };
 
+  const handleGrantPermissionsBaseSepolia = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog('🔑 Requesting permissions grant for ERC-20 on Base Sepolia...');
+
+      // Example spender address
+      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890'; // 1inch Router
+
+      // USDC on Base Sepolia (6 decimals)
+      const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+      // 1 USDC with 6 decimals = 1 * 10^6 = 1000000
+      const limit = BigInt(1_000_000); // 1 USDC for testing
+      const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
+
+      // Base Sepolia chain ID
+      const baseSepoliaChainId = '0x14a34'; // 84532 in hex
+
+      addLog(`Chain: Base Sepolia (${baseSepoliaChainId})`);
+      addLog(`Token: USDC at ${usdcAddress}`);
+      addLog(`Spender: ${spenderAddress}`);
+      addLog(`Limit: 1 USDC per day`);
+      addLog(`Expiry: ${new Date(expiryTimestamp * 1000).toISOString()}`);
+
+      const result = await provider.request({
+        method: 'wallet_grantPermissions',
+        params: [{
+          address: accounts[0],
+          chainId: baseSepoliaChainId,
+          expiry: expiryTimestamp,
+          spender: spenderAddress,
+          permissions: {
+            spend: {
+              limit: `0x${limit.toString(16)}`,
+              period: 'day' as const,
+              token: usdcAddress // ERC-20 USDC token
+            }
+          }
+        }]
+      });
+
+      console.log('[Demo] Grant ERC-20 permissions result:', result);
+
+      if (result && typeof result === 'object' && 'id' in result) {
+        const response = result as { id: string; address: string; spender: string; spend: { limit: string; period: string; token: string } };
+        setLastPermissionId(response.id);
+        addLog(`✅ ERC-20 Permission granted successfully!`);
+        addLog(`Permission ID: ${response.id}`);
+        addLog(`Full response: ${JSON.stringify(result, null, 2)}`);
+      } else {
+        addLog(`✅ Permission result: ${JSON.stringify(result, null, 2)}`);
+      }
+    } catch (error) {
+      console.error('[Demo] Grant ERC-20 permissions error:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`❌ Error granting ERC-20 permissions: ${errorMessage}`);
+    }
+  };
+
   const handleGetPermissions = async () => {
     if (accounts.length === 0) {
       addLog('No accounts connected');
@@ -950,6 +1019,16 @@ Issued At: ${issuedAt}`;
       // Count permissions if it's an array
       if (Array.isArray(permissions)) {
         addLog(`✅ Found ${permissions.length} permission(s)`);
+
+        // If no lastPermissionId is set and permissions exist, set the first one
+        if (!lastPermissionId && permissions.length > 0) {
+          const firstPermission = permissions[0] as { id?: string };
+          if (firstPermission && firstPermission.id) {
+            setLastPermissionId(firstPermission.id);
+            addLog(`📌 Auto-set first permission as lastPermissionId: ${firstPermission.id}`);
+            addLog(`You can now use "Revoke Permissions" button to test revoke functionality`);
+          }
+        }
       } else {
         addLog(`✅ Permissions retrieved successfully`);
       }
@@ -1277,13 +1356,20 @@ Issued At: ${issuedAt}`;
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
             Permissions Actions
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
             <button
               onClick={handleGrantPermissions}
               disabled={!isConnected}
               className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
             >
-              Grant Permissions
+              Grant Permissions (ETH)
+            </button>
+            <button
+              onClick={handleGrantPermissionsBaseSepolia}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Grant Permissions (USDC)
             </button>
             <button
               onClick={handleGetPermissions}
