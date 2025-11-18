@@ -24,6 +24,7 @@ export * from './components/SignatureDialog';
 export * from './components/SiweDialog';
 export * from './components/ConnectDialog';
 export * from './components/Eip712Dialog';
+export * from './components/PermissionDialog';
 export * from './lib/utils';
 export * from './icons';
 export * from './hooks';

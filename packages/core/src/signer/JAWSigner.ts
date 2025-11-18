@@ -1,14 +1,12 @@
-import { Address, hexToNumber, isAddressEqual, numberToHex } from 'viem';
+import { Address, numberToHex } from 'viem';
 import { UUID } from 'crypto';
 
 import { Signer } from './interface.js';
 import {
-    assertGetCapabilitiesParams,
     assertParamsChainId,
     getCachedWalletConnectResponse,
     injectRequestCapabilities,
 } from './SignerUtils.js';
-import { getCapabilities } from '../rpc/capabilities.js';
 import { waitForReceiptInBackground, storeCallStatus } from '../rpc/wallet_sendCalls.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
@@ -19,7 +17,7 @@ import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../messages/
 import { KeyManager } from '../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/index.js';
 import { SDKChain, correlationIds, store } from '../store/index.js';
-import { SignInWithEthereumCapabilityRequest, SubnameTextRecordCapabilityRequest, WalletConnectRequest, WalletConnectResponse } from '../rpc/index.js';
+import { SignInWithEthereumCapabilityRequest, SubnameTextRecordCapabilityRequest, WalletConnectRequest, WalletConnectResponse, handleGetPermissionsRequest } from '../rpc/index.js';
 import {
     decryptContent,
     encryptContent,
@@ -162,8 +160,6 @@ export class JAWSigner implements Signer {
                 return this.chain.id;
             case 'eth_chainId':
                 return numberToHex(this.chain.id);
-            case 'wallet_getCapabilities':
-                return this.handleGetCapabilitiesRequest(request);
             case 'wallet_getCallsStatus':
                 return await handleGetCallsStatusRequest(request);
             case 'wallet_getAssets': {
@@ -177,6 +173,16 @@ export class JAWSigner implements Signer {
 
                 return await handleGetAssetsRequest(request, apiKey, showTestnets);
             }
+            case 'wallet_getPermissions': {
+                const config = store.config.get();
+                const apiKey = config.apiKey;
+
+                if (!apiKey) {
+                    throw standardErrors.rpc.internal('No API key configured');
+                }
+
+                return await handleGetPermissionsRequest(request, apiKey, this.accounts[0]);
+            }
             case 'wallet_switchEthereumChain':
                 return this.handleSwitchChainRequest(request);
             case 'wallet_sendCalls':
@@ -186,6 +192,7 @@ export class JAWSigner implements Signer {
             case 'eth_signTypedData_v4':
             case 'wallet_showCallsStatus':
             case 'wallet_grantPermissions':
+            case 'wallet_revokePermissions':
                 return this.sendRequestToPopup(request);
             case 'eth_sign':
             case 'eth_ecRecover':
@@ -424,47 +431,6 @@ export class JAWSigner implements Signer {
             `wallet_switchEthereumChain is not supported for target chainID ${chainId}`
         );
     }
-
-    private async handleGetCapabilitiesRequest(request: RequestArguments) {
-        assertGetCapabilitiesParams(request.params);
-
-        const requestedAccount = request.params[0];
-        const filterChainIds = request.params[1]; // Optional second parameter
-
-        if (!this.accounts.some((account) => isAddressEqual(account, requestedAccount))) {
-            throw standardErrors.provider.unauthorized(
-                'no active account found when getting capabilities'
-            );
-        }
-
-        const state = store.getState();
-        const capabilities = state.account.capabilities ?? getCapabilities();
-
-        // If no filter is provided, return all capabilities
-        if (!filterChainIds || filterChainIds.length === 0) {
-            return capabilities;
-        }
-
-        // Convert filter chain IDs to numbers once for efficient lookup
-        const filterChainNumbers = new Set(filterChainIds.map((chainId) => hexToNumber(chainId)));
-
-        // Filter capabilities
-        const filteredCapabilities = Object.fromEntries(
-            Object.entries(capabilities).filter(([capabilityKey]) => {
-                try {
-                    const capabilityChainNumber = hexToNumber(capabilityKey as `0x${string}`);
-                    return filterChainNumbers.has(capabilityChainNumber);
-                } catch {
-                    // If capabilityKey is not a valid hex string, exclude it
-                    return false;
-                }
-            })
-        );
-
-        return filteredCapabilities;
-    }
-
- 
 
     private async sendEncryptedRequest(request: RequestArguments): Promise<RPCResponseMessage> {
         const sharedSecret = await this.keyManager.getSharedSecret();

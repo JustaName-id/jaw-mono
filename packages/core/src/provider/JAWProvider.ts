@@ -12,12 +12,16 @@ import {
     RequestArguments,
 } from './interface.js';
 
-import { hexStringFromNumber, checkErrorForInvalidRequestArgs } from '../utils/index.js';
+import {
+    hexStringFromNumber,
+    checkErrorForInvalidRequestArgs,
+} from '../utils/index.js';
 
 import { correlationIds } from '../store/index.js';
 
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
+import { handleGetPermissionsRequest, handleGetCapabilitiesRequest } from '../rpc/index.js';
 import { Signer } from '../signer/index.js';
 
 import {
@@ -115,7 +119,18 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     case 'wallet_getCallsStatus': {
 
                         const result = await handleGetCallsStatusRequest(args);
-                        
+
+                        return result as T;
+                    }
+                    case 'wallet_getPermissions': {
+                        // wallet_getPermissions requires an explicit address when not authenticated
+                        const result = await handleGetPermissionsRequest(args, this.apiKey);
+
+                        return result as T;
+                    }
+                    case 'wallet_getCapabilities': {
+                        const result = handleGetCapabilitiesRequest(args);
+
                         return result as T;
                     }
                     case 'net_version': {

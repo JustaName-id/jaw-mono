@@ -23,6 +23,7 @@ import {
 } from "viem/account-abstraction";
 import {Chain} from "../store/index.js";
 import {arbitrum, arbitrumSepolia, base, baseSepolia, mainnet, optimism, optimismSepolia, sepolia} from "viem/chains";
+import {SPEND_PERMISSIONS_MANAGER_ADDRESS} from "../constants.js";
 
 export type FindOwnerIndexParams = {
     /**
@@ -191,7 +192,7 @@ export async function createSmartAccount(webauthnAccount: WebAuthnAccount, bundl
     // First create a temporary smart account to get the predicted address
     const tempSmartAccount = await toJustanAccount({
         client: bundlerClient,
-        owners: [webauthnAccount]
+        owners: [webauthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS]
     })
 
     // Get the predicted smart account address
@@ -207,7 +208,7 @@ export async function createSmartAccount(webauthnAccount: WebAuthnAccount, bundl
     // Create the smart account with the correct owner index
     return await toJustanAccount({
         client: bundlerClient,
-        owners: [webauthnAccount],
+        owners: [webauthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS],
         ownerIndex
     })
 }

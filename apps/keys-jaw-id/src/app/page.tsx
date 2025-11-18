@@ -8,6 +8,7 @@ import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
 import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
+import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
@@ -282,6 +283,10 @@ export default function KeysJawIdApp() {
         requestType = SDKRequestType.GET_SUB_ACCOUNTS;
       } else if (method === 'wallet_importSubAccount') {
         requestType = SDKRequestType.IMPORT_SUB_ACCOUNT;
+      } else if (method === 'wallet_grantPermissions') {
+        requestType = SDKRequestType.GRANT_PERMISSIONS;
+      } else if (method === 'wallet_revokePermissions') {
+        requestType = SDKRequestType.REVOKE_PERMISSIONS;
       } else if (method === 'wallet_connect') {
         requestType = SDKRequestType.CONNECT;
       } else {
@@ -337,8 +342,8 @@ export default function KeysJawIdApp() {
         },
       });
 
-      // For sign message, typed data, and transaction requests, if user is authenticated, show modal directly
-      if ((requestType === SDKRequestType.SIGN_MESSAGE || requestType === SDKRequestType.SIGN_TYPED_DATA || requestType === SDKRequestType.SEND_TRANSACTION) && authQuery.isAuthenticated && currentAccount) {
+      // For sign message, typed data, transaction, and permission requests, if user is authenticated, show modal directly
+      if ((requestType === SDKRequestType.SIGN_MESSAGE || requestType === SDKRequestType.SIGN_TYPED_DATA || requestType === SDKRequestType.SEND_TRANSACTION || requestType === SDKRequestType.GRANT_PERMISSIONS || requestType === SDKRequestType.REVOKE_PERMISSIONS) && authQuery.isAuthenticated && currentAccount) {
         // The modal will be shown in the render logic below
         return;
       }
@@ -581,8 +586,94 @@ export default function KeysJawIdApp() {
       );
     }
 
+    // Check if we have a pending grant permissions request and either user is authenticated OR we're in processing state
+    if (pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS &&
+      state !== 'success' &&
+      state !== 'error' &&
+      (authQuery.isAuthenticated || state === 'processing')) {
+
+      const permissionRequestData: PermissionRequestData = {
+        method: 'wallet_grantPermissions',
+        params: pendingRequest.params as any,
+      };
+
+      return (
+        <PermissionModal
+          permissionRequest={permissionRequestData}
+          chain={pendingRequest.chain as chain}
+          apiKey={apiKey || ''}
+          origin={pendingRequest.origin}
+          onSuccess={async (result) => {
+            setState('processing');
+            try {
+              await pendingRequest.onApprove(result);
+              console.log('✅ Permission granted successfully');
+              setState('success');
+              setTimeout(() => window.close(), 1500);
+            } catch (err) {
+              console.error('❌ Failed to grant permission:', err);
+              setError(err instanceof Error ? err.message : 'Failed to grant permission');
+              setState('error');
+            }
+          }}
+          onError={async (error) => {
+            try {
+              await pendingRequest.onReject(error.message);
+              window.close();
+            } catch (err) {
+              console.error('❌ Failed to reject:', err);
+              window.close();
+            }
+          }}
+        />
+      );
+    }
+
+    // Check if we have a pending revoke permissions request and either user is authenticated OR we're in processing state
+    if (pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS &&
+      state !== 'success' &&
+      state !== 'error' &&
+      (authQuery.isAuthenticated || state === 'processing')) {
+
+      const permissionRequestData: PermissionRequestData = {
+        method: 'wallet_revokePermissions',
+        params: pendingRequest.params as any,
+      };
+
+      return (
+        <PermissionModal
+          permissionRequest={permissionRequestData}
+          chain={pendingRequest.chain as chain}
+          apiKey={apiKey || ''}
+          origin={pendingRequest.origin}
+          onSuccess={async (result) => {
+            setState('processing');
+            try {
+              await pendingRequest.onApprove(result);
+              console.log('✅ Permission revoked successfully');
+              setState('success');
+              setTimeout(() => window.close(), 1500);
+            } catch (err) {
+              console.error('❌ Failed to revoke permission:', err);
+              setError(err instanceof Error ? err.message : 'Failed to revoke permission');
+              setState('error');
+            }
+          }}
+          onError={async (error) => {
+            try {
+              await pendingRequest.onReject(error.message);
+              window.close();
+            } catch (err) {
+              console.error('❌ Failed to reject:', err);
+              window.close();
+            }
+          }}
+        />
+      );
+    }
+
     // Show unsupported method modal
-    if (pendingRequest?.type === SDKRequestType.UNSUPPORTED_METHOD) {
+    if (!!pendingRequest && pendingRequest?.type === SDKRequestType.UNSUPPORTED_METHOD) {
       return (
         <UnsupportedMethodModal
           origin={pendingRequest.origin}

@@ -1,5 +1,5 @@
 /**  Constants **/
-export { JAW_KEYS_URL, JAW_PASSKEYS_URL, JAW_RPC_URL, FACTORY_ADDRESS, CONTRACT_NAME, CONTRACT_VERSION } from './constants.js';
+export { JAW_KEYS_URL, JAW_PASSKEYS_URL, JAW_RPC_URL, FACTORY_ADDRESS, CONTRACT_NAME, CONTRACT_VERSION, SPEND_PERMISSIONS_MANAGER_ADDRESS } from './constants.js';
 
 /**  SDK Info **/
 export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
@@ -16,7 +16,18 @@ export {
     type WalletConnectResponse,
     type ViemRPCParams,
     type ViemRPCReturnType,
-    getCapabilities,
+    type SpendPermission,
+    type SpendPeriod,
+    type SpendPermissionDetail,
+    type PermissionsDetail,
+    type WalletGrantPermissionsRequest,
+    type WalletGrantPermissionsResponse,
+    type WalletRevokePermissionsRequest,
+    type RevokePermissionApiResponse,
+    grantPermissions,
+    revokePermission,
+    getPermissionFromRelay,
+    spend,
     SUPPORTED_METHODS,
 } from './rpc/index.js';
 

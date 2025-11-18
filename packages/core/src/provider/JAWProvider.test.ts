@@ -40,12 +40,19 @@ vi.mock('../signer/index.js', () => ({
   loadSignerType: vi.fn(),
   storeSignerType: vi.fn(),
 }));
-vi.mock('../rpc/index.js', () => ({
-  storeCallStatus: vi.fn(),
-  getCallStatus: vi.fn(),
-  getCallStatusEIP5792: vi.fn(),
-  waitForReceiptInBackground: vi.fn(),
-}));
+vi.mock('../rpc/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../rpc/index.js')>();
+  return {
+    ...actual,
+    storeCallStatus: vi.fn(),
+    getCallStatus: vi.fn(),
+    getCallStatusEIP5792: vi.fn(),
+    waitForReceiptInBackground: vi.fn(),
+    handleGetPermissionsRequest: vi.fn(),
+    // Use the real implementation for handleGetCapabilitiesRequest
+    handleGetCapabilitiesRequest: actual.handleGetCapabilitiesRequest,
+  };
+});
 vi.mock('../rpc/wallet_getCallStatus.js', () => ({
   handleGetCallsStatusRequest: vi.fn(),
 }));
@@ -68,6 +75,16 @@ vi.mock('../store/index.js', async (importOriginal) => {
         set: vi.fn(),
         update: vi.fn(),
       },
+      getState: vi.fn(() => ({
+        chains: [
+          { id: 1, rpcUrl: 'https://eth.llamarpc.com' },
+          { id: 137, rpcUrl: 'https://polygon.llamarpc.com' },
+          { id: 10, rpcUrl: 'https://optimism.llamarpc.com' },
+        ],
+        account: {
+          capabilities: undefined,
+        },
+      })),
     },
   };
 });
@@ -1698,6 +1715,81 @@ describe('JAWProvider', () => {
       expect(chainChangedHandler).toHaveBeenNthCalledWith(1, '0x89');
       expect(chainChangedHandler).toHaveBeenNthCalledWith(2, '0xa');
       expect(chainChangedHandler).toHaveBeenNthCalledWith(3, '0x1');
+    });
+  });
+
+  describe('wallet_getCapabilities (without authentication)', () => {
+    beforeEach(() => {
+      provider = new JAWProvider(mockConstructorOptions);
+    });
+
+    it('should handle wallet_getCapabilities without authentication', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890'],
+      };
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert - Should return capabilities for all chains
+      expect(result).toHaveProperty('0x1');
+      expect((result as any)['0x1']).toHaveProperty('atomicBatch');
+      expect((result as any)['0x1']).toHaveProperty('paymasterService');
+      expect((result as any)['0x1']).toHaveProperty('atomic');
+      expect((result as any)['0x1']).toHaveProperty('permissions');
+    });
+
+    it('should filter capabilities by chainIds parameter', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890', ['0x1']], // Only request chain 1
+      };
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert - Should only return chain 1
+      expect(result).toHaveProperty('0x1');
+      expect(result).not.toHaveProperty('0x89');
+    });
+
+    it('should filter capabilities by multiple chainIds', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890', ['0x1', '0x89']],
+      };
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert - Should return both chains
+      expect(result).toHaveProperty('0x1');
+      expect(result).toHaveProperty('0x89');
+      expect(result).not.toHaveProperty('0xa');
+    });
+
+    it('should include all standard capabilities for each chain', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890'],
+      };
+
+      // Act
+      const result = await provider.request(request);
+
+      // Assert - Check that each chain has all standard capabilities
+      const chain1Caps = (result as any)['0x1'];
+      expect(chain1Caps).toEqual({
+        atomicBatch: { supported: true },
+        atomic: { status: 'supported' },
+        paymasterService: { supported: true },
+        permissions: { supported: true },
+      });
     });
   });
 });

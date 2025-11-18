@@ -16,4 +16,22 @@ export {storeCallStatus, getCallStatus, waitForReceiptInBackground, getCallStatu
 
 export { handleGetAssetsRequest } from './wallet_getAssets.js';
 
-export { getCapabilities } from './capabilities.js';
+export { getCapabilities, handleGetCapabilitiesRequest } from './capabilities.js';
+
+export {
+    type SpendPermission,
+    type SpendPeriod,
+    type SpendPermissionDetail,
+    type PermissionsDetail,
+    type WalletGrantPermissionsRequest,
+    type WalletGrantPermissionsResponse,
+    type WalletRevokePermissionsRequest,
+    type StorePermissionApiRequest,
+    type StorePermissionApiResponse,
+    type RevokePermissionApiResponse,
+    grantPermissions,
+    revokePermission,
+    handleGetPermissionsRequest,
+    getPermissionFromRelay,
+    spend
+} from './permissions.js';

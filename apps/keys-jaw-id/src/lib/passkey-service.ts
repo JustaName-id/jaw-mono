@@ -1,13 +1,13 @@
 import {
-    PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation, createSmartAccount,
-    SUPPORTED_CHAINS
+  PasskeyManager, type PasskeyAccount, toJustanAccount, type JustanAccountImplementation, createSmartAccount,
+  SUPPORTED_CHAINS, findOwnerIndex
 } from '@jaw.id/core';
 import type { Address, PublicClient } from 'viem';
 import {  toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, createPublicClient, http, Chain as ViemChain } from 'viem';
 import { mainnet } from 'viem/chains';
-import {type Chain } from '@jaw.id/core';
-import { getBundlerClient } from '@jaw.id/core';
+import {type Chain, SPEND_PERMISSIONS_MANAGER_ADDRESS, getBundlerClient } from '@jaw.id/core';
+
 
 export interface PasskeyCreationResult {
   credentialId: string;
@@ -44,7 +44,7 @@ export class PasskeyService {
       const viemChain = SUPPORTED_CHAINS.find(c => c.id === +(process.env.NEXT_PUBLIC_CHAIN_ID || 1));
       return createPublicClient({
       chain: viemChain as ViemChain,
-      transport: http(process.env.NEXT_PUBLIC_MAINNET_CLIENT_URL),
+      transport: http(process.env.NEXT_PUBLIC_PROVIDER_URL),
     });
   }
 
@@ -256,11 +256,25 @@ storeAuthState(address: Address, credentialId: string): void {
     console.log('🔍 Creating bundler client for chain:', chain);
     const client = getBundlerClient(chain) as JustanAccountImplementation["client"];
 
+    const tempSmartAccount = await toJustanAccount({
+      client,
+      owners: [webAuthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS],
+    });
+
+    const smartAccountAddress = await tempSmartAccount.getAddress();
+
+    const ownerIndex = await findOwnerIndex({
+      address: smartAccountAddress,
+      client: client,
+      publicKey: webAuthnAccount.publicKey,
+    });
+
 
     // Use toJustanAccount to derive the smart contract wallet address
     const smartAccount = await toJustanAccount({
       client,
-      owners: [webAuthnAccount],
+      owners: [webAuthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS],
+      ownerIndex
     });
 
     return smartAccount;

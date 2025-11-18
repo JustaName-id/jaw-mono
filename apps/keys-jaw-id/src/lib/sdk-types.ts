@@ -161,13 +161,40 @@ export interface WalletImportSubAccountMethod extends RPCMethod {
   }];
 }
 
+export interface WalletGrantPermissionsMethod extends RPCMethod {
+  method: 'wallet_grantPermissions';
+  params: [{
+    address: string;
+    chainId: string;
+    expiry: number;
+    spender: string;
+    permissions: {
+      spend: {
+        limit: string;
+        period: string;
+        token: string;
+      };
+    };
+  }];
+}
+
+export interface WalletRevokePermissionsMethod extends RPCMethod {
+  method: 'wallet_revokePermissions';
+  params: [{
+    address?: string;
+    id: string;
+  }];
+}
+
 export type SupportedRPCMethod =
   | EthRequestAccountsMethod
   | PersonalSignMethod
   | WalletSendCallsMethod
   | EthChainIdMethod
   | WalletGetSubAccountsMethod
-  | WalletImportSubAccountMethod;
+  | WalletImportSubAccountMethod
+  | WalletGrantPermissionsMethod
+  | WalletRevokePermissionsMethod;
 
 export interface SDKState {
   isInitialized: boolean;
@@ -186,6 +213,8 @@ export enum SDKRequestType {
   CHAIN_ID = 'chain_id',
   GET_SUB_ACCOUNTS = 'get_sub_accounts',
   IMPORT_SUB_ACCOUNT = 'import_sub_account',
+  GRANT_PERMISSIONS = 'grant_permissions',
+  REVOKE_PERMISSIONS = 'revoke_permissions',
   UNSUPPORTED_METHOD = 'unsupported_method',
 }
 
