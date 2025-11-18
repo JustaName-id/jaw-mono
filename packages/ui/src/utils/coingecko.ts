@@ -14,22 +14,6 @@ const CHAIN_TO_COINGECKO_ID: Record<string, string> = {
   matic: 'matic-network',
 };
 
-// Token symbol to CoinGecko API ID mapping
-const TOKEN_TO_COINGECKO_ID: Record<string, string> = {
-  eth: 'ethereum',
-  weth: 'weth',
-  usdc: 'usd-coin',
-  usdt: 'tether',
-  dai: 'dai',
-  wbtc: 'wrapped-bitcoin',
-  uni: 'uniswap',
-  link: 'chainlink',
-  aave: 'aave',
-  matic: 'matic-network',
-  op: 'optimism',
-  arb: 'arbitrum',
-};
-
 // In-memory cache for icon URLs
 const iconCache = new Map<string, string>();
 
@@ -91,56 +75,6 @@ export async function fetchChainIcon(chain: string): Promise<string | null> {
 
     // Mark as failed to avoid repeated requests
     failedCache.add(lowerChain);
-
-    return null;
-  }
-}
-
-/**
- * Fetches the token icon URL from CoinGecko API
- * @param tokenSymbol - The token symbol (e.g., 'ETH', 'USDC', 'DAI')
- * @returns Promise<string | null> - The icon URL or null if not found
- */
-export async function fetchTokenIcon(tokenSymbol: string): Promise<string | null> {
-  const lowerSymbol = tokenSymbol.toLowerCase();
-  const cacheKey = `token_${lowerSymbol}`;
-
-  // Check cache first
-  if (iconCache.has(cacheKey)) {
-    return iconCache.get(cacheKey)!;
-  }
-
-  // Check if this token previously failed
-  if (failedCache.has(cacheKey)) {
-    return null;
-  }
-
-  // Map token symbol to CoinGecko ID
-  const coinGeckoId = TOKEN_TO_COINGECKO_ID[lowerSymbol] || lowerSymbol;
-
-  try {
-    const response = await fetch(
-      `https://api.coingecko.com/api/v3/coins/${coinGeckoId}`
-    );
-
-    if (!response.ok) {
-      throw new Error(`CoinGecko API error: ${response.status}`);
-    }
-
-    const data: CoinGeckoResponse = await response.json();
-
-    // Always use 'small' size as per requirements
-    const iconUrl = data.image.small;
-
-    // Cache the result
-    iconCache.set(cacheKey, iconUrl);
-
-    return iconUrl;
-  } catch (error) {
-    console.warn(`Failed to fetch icon for token "${tokenSymbol}":`, error);
-
-    // Mark as failed to avoid repeated requests
-    failedCache.add(cacheKey);
 
     return null;
   }

@@ -3,7 +3,7 @@
 import { Button } from "../ui/button";
 import { DefaultDialog } from "../DefaultDialog";
 import { PermissionDialogProps } from "./types";
-import { useIsMobile, useChainIcon, useTokenIcon } from "../../hooks";
+import { useIsMobile, useChainIcon } from "../../hooks";
 import {CopiedIcon, CopyIcon, WalletIcon} from "../../icons";
 import { useState } from "react";
 
@@ -61,7 +61,6 @@ export const PermissionDialog = ({
   };
 
   const tokenSymbol = getTokenSymbol(token);
-  const tokenIcon = useTokenIcon(tokenSymbol, 20);
   const canConfirm = !isProcessing;
 
   return (
@@ -158,10 +157,10 @@ export const PermissionDialog = ({
           {/* Amount Card */}
           <div className="flex flex-row items-center justify-between gap-2.5 p-3.5 border border-border rounded-[6px]">
             <div className="flex flex-row items-center gap-2.5 flex-1">
-              {/* Token Icon */}
-              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
-                {tokenIcon}
-              </div>
+              {/* Token Icon (Later) */}
+              {/*<div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">*/}
+              {/*  */}
+              {/*</div>*/}
               <div className="flex flex-col gap-0.5">
                 <p className="text-xs font-bold leading-[133%] text-foreground">Amount</p>
                 {isLoadingTokenInfo ? (

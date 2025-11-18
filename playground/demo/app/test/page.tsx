@@ -1020,6 +1020,16 @@ Issued At: ${issuedAt}`;
       // Count permissions if it's an array
       if (Array.isArray(permissions)) {
         addLog(`✅ Found ${permissions.length} permission(s)`);
+
+        // If no lastPermissionId is set and permissions exist, set the first one
+        if (!lastPermissionId && permissions.length > 0) {
+          const firstPermission = permissions[0] as { id?: string };
+          if (firstPermission && firstPermission.id) {
+            setLastPermissionId(firstPermission.id);
+            addLog(`📌 Auto-set first permission as lastPermissionId: ${firstPermission.id}`);
+            addLog(`You can now use "Revoke Permissions" button to test revoke functionality`);
+          }
+        }
       } else {
         addLog(`✅ Permissions retrieved successfully`);
       }
