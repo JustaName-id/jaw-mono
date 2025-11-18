@@ -186,6 +186,7 @@ export enum SDKRequestType {
   CHAIN_ID = 'chain_id',
   GET_SUB_ACCOUNTS = 'get_sub_accounts',
   IMPORT_SUB_ACCOUNT = 'import_sub_account',
+  UNSUPPORTED_METHOD = 'unsupported_method',
 }
 
 export interface SDKRequestUI {
