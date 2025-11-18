@@ -9,6 +9,7 @@ import { Eip712Modal } from '../components/Eip712Modal';
 import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
+import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
@@ -289,8 +290,8 @@ export default function KeysJawIdApp() {
       } else if (method === 'wallet_connect') {
         requestType = SDKRequestType.CONNECT;
       } else {
-        console.warn('⚠️ Unknown method:', method);
-        requestType = SDKRequestType.CONNECT; // fallback
+        console.warn('⚠️ Unsupported method:', method);
+        requestType = SDKRequestType.UNSUPPORTED_METHOD;
       }
 
       const origin = communicator.getOrigin() ?? '';
@@ -664,6 +665,27 @@ export default function KeysJawIdApp() {
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
+              window.close();
+            }
+          }}
+        />
+      );
+    }
+
+    // Show unsupported method modal
+    if (!!pendingRequest && pendingRequest?.type === SDKRequestType.UNSUPPORTED_METHOD) {
+      return (
+        <UnsupportedMethodModal
+          origin={pendingRequest.origin}
+          method={pendingRequest.method}
+          appName={pendingRequest.metadata?.appName}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
+          onClose={async (error) => {
+            try {
+              await pendingRequest.onReject(error.message);
+              window.close();
+            } catch (err) {
+              console.error('❌ Failed to reject unsupported method:', err);
               window.close();
             }
           }}

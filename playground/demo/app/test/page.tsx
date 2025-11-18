@@ -1082,6 +1082,46 @@ Issued At: ${issuedAt}`;
     }
   };
 
+  const handleTestUnsupportedMethod = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog('🧪 Testing unsupported method...');
+      addLog('This should open the UnsupportedMethodModal in the popup');
+
+      // Use wallet_sign with an unsupported type code
+      // This will be forwarded to the popup since it's wallet_sign,
+      // but the type 0x99 is not implemented, triggering unsupported method
+      const result = await provider.request({
+        method: 'wallet_sign',
+        params: [{
+          version: '1.0',
+          address: accounts[0],
+          request: {
+            type: '0x99', // Unsupported type - not 0x01 (typed data) or 0x45 (personal sign)
+            data: 'test data'
+          }
+        }]
+      });
+
+      addLog(`Unexpected success: ${JSON.stringify(result)}`);
+    } catch (error) {
+      console.error('Unsupported method error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`✅ Got error (check if modal appeared): ${errorMessage}`);
+    }
+  };
+
   const clearLogs = () => {
     setLogs([]);
   };
@@ -1397,6 +1437,27 @@ Issued At: ${issuedAt}`;
             )}
             <p className="text-sm text-gray-600 dark:text-gray-400">
               <span className="font-medium">Test Flow:</span> 1) Grant Permissions → 2) Get Permissions to verify → 3) Revoke Permissions when done
+            </p>
+          </div>
+        </div>
+
+        {/* Testing & Edge Cases */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Testing & Edge Cases
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <button
+              onClick={handleTestUnsupportedMethod}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Test Unsupported Method
+            </button>
+          </div>
+          <div className="mt-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Note:</span> This button tests the UnsupportedMethodModal by calling <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_sign</code> with an unsupported type code (<code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">0x99</code>). This will open the popup and show the UnsupportedMethodModal with the method details.
             </p>
           </div>
         </div>
