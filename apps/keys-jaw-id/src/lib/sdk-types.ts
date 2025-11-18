@@ -215,6 +215,7 @@ export enum SDKRequestType {
   IMPORT_SUB_ACCOUNT = 'import_sub_account',
   GRANT_PERMISSIONS = 'grant_permissions',
   REVOKE_PERMISSIONS = 'revoke_permissions',
+  UNSUPPORTED_METHOD = 'unsupported_method',
 }
 
 export interface SDKRequestUI {

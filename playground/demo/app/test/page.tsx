@@ -18,7 +18,6 @@ export default function TestPage() {
       defaultChainId: 1,
       preference: {
         keysUrl: 'http://localhost:3001', // Local popup URL
-
         showTestnets: true
       },
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
@@ -872,7 +871,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant (wallet_grantPermissions)...');
 
       // Example spender address (could be a dApp contract)
-      const spenderAddress = '0x1111111254EEB25477B68fb85Ed929f73A960582'; // 1inch Router as example
+      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
 
       // Example: Grant permission to spend 0.0001 ETH per day for 30 days
       const limit = parseEther('0.0001'); // 0.0001 ETH in wei (easy to test)
@@ -938,7 +937,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant for ERC-20 on Base Sepolia...');
 
       // Example spender address
-      const spenderAddress = '0x1111111254EEB25477B68fb85Ed929f73A960582'; // 1inch Router
+      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890'; // 1inch Router
 
       // USDC on Base Sepolia (6 decimals)
       const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
@@ -1080,6 +1079,46 @@ Issued At: ${issuedAt}`;
             ? JSON.stringify(error, null, 2)
             : String(error);
       addLog(`❌ Error revoking permissions: ${errorMessage}`);
+    }
+  };
+
+  const handleTestUnsupportedMethod = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    try {
+      const provider = sdk.getProvider();
+      addLog('🧪 Testing unsupported method...');
+      addLog('This should open the UnsupportedMethodModal in the popup');
+
+      // Use wallet_sign with an unsupported type code
+      // This will be forwarded to the popup since it's wallet_sign,
+      // but the type 0x99 is not implemented, triggering unsupported method
+      const result = await provider.request({
+        method: 'wallet_sign',
+        params: [{
+          version: '1.0',
+          address: accounts[0],
+          request: {
+            type: '0x99', // Unsupported type - not 0x01 (typed data) or 0x45 (personal sign)
+            data: 'test data'
+          }
+        }]
+      });
+
+      addLog(`Unexpected success: ${JSON.stringify(result)}`);
+    } catch (error) {
+      console.error('Unsupported method error details:', error);
+      const errorMessage = error instanceof Error
+        ? error.message
+        : typeof error === 'object' && error !== null && 'message' in error
+          ? (error as { message: string }).message
+          : typeof error === 'object' && error !== null
+            ? JSON.stringify(error, null, 2)
+            : String(error);
+      addLog(`✅ Got error (check if modal appeared): ${errorMessage}`);
     }
   };
 
@@ -1398,6 +1437,27 @@ Issued At: ${issuedAt}`;
             )}
             <p className="text-sm text-gray-600 dark:text-gray-400">
               <span className="font-medium">Test Flow:</span> 1) Grant Permissions → 2) Get Permissions to verify → 3) Revoke Permissions when done
+            </p>
+          </div>
+        </div>
+
+        {/* Testing & Edge Cases */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Testing & Edge Cases
+          </h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <button
+              onClick={handleTestUnsupportedMethod}
+              disabled={!isConnected}
+              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              Test Unsupported Method
+            </button>
+          </div>
+          <div className="mt-3">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              <span className="font-medium">Note:</span> This button tests the UnsupportedMethodModal by calling <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_sign</code> with an unsupported type code (<code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">0x99</code>). This will open the popup and show the UnsupportedMethodModal with the method details.
             </p>
           </div>
         </div>

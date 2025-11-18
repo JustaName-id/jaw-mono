@@ -43,29 +43,29 @@ export interface PermissionModalProps {
 // Format period to human-readable duration
 const formatDuration = (period: SpendPeriod): string => {
   const durations: Record<SpendPeriod, string> = {
-    minute: '1 Minute, 60 seconds',
-    hour: '1 Hour, 60 minutes',
-    day: '1 Day, 24 hours',
-    week: '1 Week, 7 days',
-    month: '1 Month, 30 days',
-    year: '1 Year, 365 days',
+    minute: '1 Minute',
+    hour: '1 Hour',
+    day: '1 Day',
+    week: '1 Week',
+    month: '1 Month',
+    year: '1 Year',
   };
   return durations[period] || period;
 };
 
 // Convert period in seconds to human-readable duration
 const formatDurationFromSeconds = (seconds: number): string => {
-  if (seconds === 60) return '1 Minute, 60 seconds';
-  if (seconds === 3600) return '1 Hour, 60 minutes';
-  if (seconds === 86400) return '1 Day, 24 hours';
-  if (seconds === 604800) return '1 Week, 7 days';
-  if (seconds === 2592000) return '1 Month, 30 days';
-  if (seconds === 31536000) return '1 Year, 365 days';
+  if (seconds === 60) return '1 Minute';
+  if (seconds === 3600) return '1 Hour';
+  if (seconds === 86400) return '1 Day';
+  if (seconds === 604800) return '1 Week';
+  if (seconds === 2592000) return '1 Month';
+  if (seconds === 31536000) return '1 Year';
 
   // Fallback: convert to days if possible
   if (seconds % 86400 === 0) {
     const days = seconds / 86400;
-    return `${days} Day${days > 1 ? 's' : ''}, ${days * 24} hours`;
+    return `${days} Day${days > 1 ? 's' : ''}`;
   }
 
   return `${seconds} seconds`;
