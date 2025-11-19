@@ -1,7 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { createJAWSDK } from '@jaw.id/core';
+import { JAW } from '@jaw.id/core';
 import { parseEther, encodeFunctionData, parseAbi } from 'viem';
 
 export default function TestPage() {
@@ -12,7 +12,7 @@ export default function TestPage() {
   const [lastBatchId, setLastBatchId] = useState<string | null>(null);
   const [lastPermissionId, setLastPermissionId] = useState<string | null>(null);
   const [sdk] = useState(() =>
-    createJAWSDK({
+      JAW.create({
       appName: 'JAW Demo App',
       appLogoUrl: "https://avatars.githubusercontent.com/u/159771991?s=200&v=4",
       defaultChainId: 1,
@@ -31,7 +31,7 @@ export default function TestPage() {
   const handleConnect = async () => {
     try {
       addLog('Connecting to JAW Provider...');
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
 
       const accountsResult = await provider.request({
         method: 'eth_requestAccounts',
@@ -81,7 +81,7 @@ export default function TestPage() {
   const handleConnectWithTextRecords = async () => {
     try {
       addLog('Connecting with subnameTextRecords capability...');
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
 
       // Example text records to test
       const testTextRecords = [
@@ -144,7 +144,11 @@ export default function TestPage() {
   const handleDisconnect = async () => {
     try {
       addLog('Disconnecting...');
-      await sdk.disconnect();
+      const provider = sdk.provider;
+      await provider.request({
+        method: 'wallet_disconnect',
+        params: []
+      });
       setIsConnected(false);
       setAccounts([]);
       setChainId(null);
@@ -163,7 +167,7 @@ export default function TestPage() {
 
     try {
       addLog(`Requesting balance for ${accounts[0]}...`);
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       const balance = await provider.request({
         method: 'eth_getBalance',
         params: [accounts[0], 'latest']
@@ -192,7 +196,7 @@ export default function TestPage() {
 
     try {
       const message = 'Hello from JAW SDK Test!';
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog(`Requesting signature for message: "${message}"...`);
       const signature = await provider.request({
         method: 'personal_sign',
@@ -220,7 +224,7 @@ export default function TestPage() {
 
     try {
       const message = 'Hello from JAW SDK Test (wallet_sign)!';
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog(`Requesting wallet_sign signature for message: "${message}"...`);
       addLog(`Using request.type: 0x45 (Personal Sign per EIP-191)`);
 
@@ -279,7 +283,7 @@ Chain ID: ${chainIdNum}
 Nonce: ${nonce}
 Issued At: ${issuedAt}`;
 
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('🔐 Requesting SIWE (Sign-In with Ethereum) signature...');
       addLog('This should open the special SIWE dialog with logo and "Sign in Request" header');
 
@@ -347,7 +351,7 @@ Issued At: ${issuedAt}`;
         }
       };
 
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Requesting typed data signature...');
       const signature = await provider.request({
         method: 'eth_signTypedData_v4',
@@ -405,7 +409,7 @@ Issued At: ${issuedAt}`;
         }
       };
 
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('🔐 Requesting wallet_sign signature for EIP-712 typed data...');
       addLog('Using request.type: 0x01 (Structured Data per EIP-191/EIP-712)');
 
@@ -442,7 +446,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Sending ETH transaction (eth_sendTransaction)...');
 
       // Example: Send 0.001 ETH to a recipient
@@ -474,7 +478,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Sending batch transaction (wallet_sendCalls - EIP-5792)...');
 
       // Example: Batch multiple calls atomically
@@ -555,7 +559,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Sending contract interaction (eth_sendTransaction)...');
 
       // Example: ERC20 approve function using viem
@@ -598,7 +602,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Requesting transaction signature...');
       const signedTx = await provider.request({
         method: 'eth_signTransaction',
@@ -624,7 +628,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog(`Requesting wallet capabilities for account: ${accounts[0]}...`);
       console.log('[Demo] Calling wallet_getCapabilities with params:', [accounts[0]]);
 
@@ -655,7 +659,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog(`Checking status for batch ID: ${lastBatchId}...`);
 
       const status = await provider.request({
@@ -698,7 +702,7 @@ Issued At: ${issuedAt}`;
 
   const handleWatchAsset = async () => {
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Requesting to watch USDC token...');
       const result = await provider.request({
         method: 'wallet_watchAsset',
@@ -721,7 +725,7 @@ Issued At: ${issuedAt}`;
 
   const handleAddEthereumChain = async () => {
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Requesting to add Polygon chain...');
       const result = await provider.request({
         method: 'wallet_addEthereumChain',
@@ -751,7 +755,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog(`Requesting assets for account: ${accounts[0]}...`);
 
       const assets = await provider.request({
@@ -788,7 +792,7 @@ Issued At: ${issuedAt}`;
 
   const handleGetCoinbase = async () => {
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Requesting coinbase address...');
       const coinbase = await provider.request({
         method: 'eth_coinbase',
@@ -803,7 +807,7 @@ Issued At: ${issuedAt}`;
 
   const handleGetAccounts = async () => {
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Requesting accounts...');
       const accountsResult = await provider.request({
         method: 'eth_accounts',
@@ -818,7 +822,7 @@ Issued At: ${issuedAt}`;
 
   const handleGetChainId = async () => {
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Requesting chain ID...');
       const chainId = await provider.request({
         method: 'eth_chainId',
@@ -833,7 +837,7 @@ Issued At: ${issuedAt}`;
 
   const handleGetNetVersion = async () => {
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('Requesting net version...');
       const netVersion = await provider.request({
         method: 'net_version',
@@ -848,7 +852,7 @@ Issued At: ${issuedAt}`;
 
   const handleSwitchChain = async (targetChainId: string) => {
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       await provider.request({
         method: 'wallet_switchEthereumChain',
         params: [{ chainId: targetChainId }]
@@ -867,7 +871,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('🔑 Requesting permissions grant (wallet_grantPermissions)...');
 
       // Example spender address (could be a dApp contract)
@@ -933,7 +937,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('🔑 Requesting permissions grant for ERC-20 on Base Sepolia...');
 
       // Example spender address
@@ -1003,7 +1007,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog(`📋 Requesting permissions list for account: ${accounts[0]}...`);
 
       const permissions = await provider.request({
@@ -1052,7 +1056,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog(`🚫 Revoking permission with ID: ${lastPermissionId}...`);
 
       const result = await provider.request({
@@ -1089,7 +1093,7 @@ Issued At: ${issuedAt}`;
     }
 
     try {
-      const provider = sdk.getProvider();
+      const provider = sdk.provider;
       addLog('🧪 Testing unsupported method...');
       addLog('This should open the UnsupportedMethodModal in the popup');
 
