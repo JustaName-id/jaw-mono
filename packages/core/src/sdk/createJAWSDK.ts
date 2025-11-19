@@ -1,5 +1,5 @@
 import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
-import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions } from '../provider/interface.js';
+import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions, Mode } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
 import { store, createInitialChains, ChainClients, createClients } from '../store/index.js';
 
@@ -12,7 +12,7 @@ export type CreateJAWSDKOptions = Partial<AppMetadata> & {
 };
 
 const DEFAULT_PREFERENCE: JawProviderPreference = {
-  appSpecific: false,
+  mode: Mode.CrossPlatform,
   keysUrl: JAW_KEYS_URL,
   serverUrl:  JAW_PASSKEYS_URL,
   showTestnets: false,

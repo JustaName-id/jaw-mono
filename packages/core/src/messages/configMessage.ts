@@ -10,4 +10,4 @@ export type ConfigEvent =
     | 'PopupReady'
     | 'selectSignerType'
 
-export type SignerType = 'crossPlatform'; // Add appSpecific
+export type SignerType = 'crossPlatform'; // TODO: Add appSpecific

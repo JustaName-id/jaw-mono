@@ -227,13 +227,13 @@ describe('store', () => {
     it('should set config preference', () => {
       config.set({
         preference: {
-          appSpecific: false,
+          mode: 'CrossPlatform',
           keysUrl: 'https://keys.example.com',
         },
       });
 
       const state = config.get();
-      expect(state.preference?.appSpecific).toBe(false);
+      expect(state.preference?.mode).toBe('CrossPlatform');
       expect(state.preference?.keysUrl).toBe('https://keys.example.com');
     });
 

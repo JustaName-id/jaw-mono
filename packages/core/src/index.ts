@@ -44,7 +44,9 @@ export {
     type ProviderInterface,
     type AppMetadata,
     type JawProviderPreference,
+    type ModeType,
     type ProviderEventCallback,
+    Mode,
     JAWProvider,
     createJAWProvider,
     type CreateProviderOptions

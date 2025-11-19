@@ -1,4 +1,5 @@
 import { AppMetadata, SDKRequestType } from "../../lib/sdk-types";
+import { ModeType } from "@jaw.id/core";
 
 export type ChainId = 1 | 11155111;
 
@@ -9,7 +10,7 @@ export interface PopupConfig {
       options?: string;
       keysUrl: string;
       attribution?: Record<string, unknown>;
-      appSpecific?: boolean;
+      mode?: ModeType;
       serverUrl?: string;
       ens?: string;
     };
