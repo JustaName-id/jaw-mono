@@ -10,7 +10,7 @@ import {
     Chain as ViemChain,
     formatUnits,
     http,
-    createPublicClient
+    createPublicClient, LocalAccount
 } from "viem";
 import {getCode, getGasPrice, readContract} from "viem/actions";
 import {abi, JustanAccountImplementation, toJustanAccount} from "../account/index.js";
@@ -188,11 +188,11 @@ export async function estimateUserOpGas(
 
     return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit
 }
-export async function createSmartAccount(webauthnAccount: WebAuthnAccount, bundlerClient: JustanAccountImplementation["client"]): Promise<SmartAccount> {
+export async function createSmartAccount(account: WebAuthnAccount | LocalAccount, bundlerClient: JustanAccountImplementation["client"]): Promise<SmartAccount> {
     // First create a temporary smart account to get the predicted address
     const tempSmartAccount = await toJustanAccount({
         client: bundlerClient,
-        owners: [webauthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS]
+        owners: [account, SPEND_PERMISSIONS_MANAGER_ADDRESS]
     })
 
     // Get the predicted smart account address
@@ -202,13 +202,13 @@ export async function createSmartAccount(webauthnAccount: WebAuthnAccount, bundl
     const ownerIndex = await findOwnerIndex({
         address: smartAccountAddress,
         client: bundlerClient,
-        publicKey: webauthnAccount.publicKey,
+        publicKey: account.publicKey,
     })
 
     // Create the smart account with the correct owner index
     return await toJustanAccount({
         client: bundlerClient,
-        owners: [webauthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS],
+        owners: [account, SPEND_PERMISSIONS_MANAGER_ADDRESS],
         ownerIndex
     })
 }
