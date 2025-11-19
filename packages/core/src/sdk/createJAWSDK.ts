@@ -21,25 +21,29 @@ const DEFAULT_PREFERENCE: JawProviderPreference = {
  * Create a JAW SDK instance (factory function pattern).
  *
  * @param params - Configuration options for the SDK.
- * @returns An object with SDK methods.
+ * @returns An object with SDK methods and provider access.
  *
  * @example
  * ```typescript
- * import { createJAWSDK } from '@jaw.id/core';
+ * import { JAW } from '@jaw.id/core';
  *
- * const jaw = createJAWSDK({
+ * const jaw = JAW.create({
  *   apiKey: 'your-api-key',
  *   appName: 'My DApp',
  *   appLogoUrl: 'https://example.com/logo.png',
- *   defaultChainId: 8453, // Optional: defaults to mainnet (1)
+ *   defaultChainId: 1,
+ *   preference: {
+ *     keysUrl: 'http://localhost:3001',
+ *     showTestnets: true
+ *   }
  * });
  *
- * const provider = jaw.getProvider();
- * await provider.request({ method: 'eth_requestAccounts' });
+ * await jaw.provider.request({ method: 'eth_requestAccounts' });
+ *
  * ```
  */
 
-export function createJAWSDK(params: CreateJAWSDKOptions) {
+export function create(params: CreateJAWSDKOptions) {
   const options: ConstructorOptions = {
     apiKey: params.apiKey,
     metadata: {
@@ -80,13 +84,13 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
 
   let provider: ProviderInterface | null = null;
 
-  const jaw = {
+  return {
     /**
      * Get the JAW Provider instance.
+     * Direct access to the provider for making requests.
      * Creates a new provider if one doesn't exist yet (lazy initialization).
-     * @returns The JAW Provider instance.
      */
-    getProvider(): ProviderInterface {
+    get provider(): ProviderInterface {
       if (!provider) {
         provider = createJAWProvider(options);
       }
@@ -112,6 +116,4 @@ export function createJAWSDK(params: CreateJAWSDKOptions) {
       return provider !== null;
     },
   };
-
-  return jaw;
 }

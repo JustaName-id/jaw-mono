@@ -5,7 +5,7 @@ export { JAW_KEYS_URL, JAW_PASSKEYS_URL, JAW_RPC_URL, FACTORY_ADDRESS, CONTRACT_
 export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
 
 /** SDK exports **/
-export { createJAWSDK, type CreateJAWSDKOptions } from './sdk/index.js';
+export { create, JAW, type CreateJAWSDKOptions } from './sdk/index.js';
 
 /**  RPC exports **/
 export {
@@ -82,4 +82,4 @@ export * from "./utils/index.js"
 export {type Chain} from "./store/index.js"
 
 /** Default export **/
-export { createJAWSDK as default } from './sdk/createJAWSDK.js';
+export { create as default } from './sdk/createJAWSDK.js';
