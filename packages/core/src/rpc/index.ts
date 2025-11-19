@@ -9,7 +9,6 @@ export {
 export {
     type ViemRPCParams,
     type ViemRPCReturnType,
-    SUPPORTED_METHODS,
 } from './methodTypes.js';
 
 export {storeCallStatus, getCallStatus, waitForReceiptInBackground, getCallStatusEIP5792} from './wallet_sendCalls.js';

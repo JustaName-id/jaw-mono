@@ -28,7 +28,6 @@ export {
     revokePermission,
     getPermissionFromRelay,
     spend,
-    SUPPORTED_METHODS,
 } from './rpc/index.js';
 
 /**  Account exports **/
