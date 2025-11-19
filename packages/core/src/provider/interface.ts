@@ -39,13 +39,20 @@ export interface AppMetadata {
     defaultChainId?: number;
 }
 
+export const Mode = {
+    CrossPlatform: 'CrossPlatform',
+    AppSpecific: 'AppSpecific',
+} as const;
+
+export type ModeType = typeof Mode[keyof typeof Mode];
+
 export interface JawProviderPreference {
     /**
-     * App-specific mode: signs directly in the app without popup (default: false)
-     * - false: Cross-platform mode with popup authentication (default)
-     * - true: App-specific mode with direct signing
+     * Authentication mode (default: Mode.CrossPlatform)
+     * - Mode.CrossPlatform: Cross-platform mode with popup authentication (default)
+     * - Mode.AppSpecific: App-specific mode with direct signing
      */
-    appSpecific?: boolean;
+    mode?: ModeType;
     /** Popup URL for cross-platform mode (default: https://keys.jaw.id) */
     keysUrl?: string;
     /** Backend server URL for passkey storage (default: https://api.justaname.id/wallet/v2/passkeys) */

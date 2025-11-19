@@ -106,7 +106,7 @@ describe('JAWProvider', () => {
       metadata: mockMetadata,
       preference: {
         keysUrl: 'https://keys.test.com',
-        appSpecific: false,
+        mode: 'CrossPlatform',
       },
       apiKey: 'test-api-key',
     };
@@ -142,7 +142,7 @@ describe('JAWProvider', () => {
       expect((provider as any).metadata).toEqual(mockMetadata);
       expect((provider as any).preference).toEqual({
         keysUrl: 'https://keys.test.com',
-        appSpecific: false,
+        mode: 'CrossPlatform',
       });
     });
 
@@ -155,7 +155,7 @@ describe('JAWProvider', () => {
         metadata: mockMetadata,
         preference: {
           keysUrl: 'https://keys.test.com',
-          appSpecific: false,
+          mode: 'CrossPlatform',
         },
       });
     });
@@ -1918,7 +1918,7 @@ describe('createJAWProvider', () => {
     // Arrange
     const preference = {
       keysUrl: 'https://keys.test.com',
-      appSpecific: true,
+      mode: 'AppSpecific' as const,
       serverUrl: 'https://api.test.com',
     };
 
@@ -1934,7 +1934,7 @@ describe('createJAWProvider', () => {
     // Assert
     expect((provider as any).preference).toEqual({
       keysUrl: 'https://keys.test.com',
-      appSpecific: true,
+      mode: 'AppSpecific',
       serverUrl: 'https://api.test.com',
     });
   });

@@ -5,8 +5,10 @@ export {
     type ProviderInterface,
     type AppMetadata,
     type JawProviderPreference,
+    type ModeType,
     type ProviderEventCallback,
-    type ConstructorOptions
+    type ConstructorOptions,
+    Mode
 } from "./interface.js"
 
 export {
