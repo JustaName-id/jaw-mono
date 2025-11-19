@@ -107,13 +107,5 @@ export function create(params: CreateJAWSDKOptions) {
         provider = null;
       }
     },
-
-    /**
-     * Check if the provider is currently connected.
-     * @returns True if a provider exists and is connected.
-     */
-    isConnected(): boolean {
-      return provider !== null;
-    },
   };
 }
