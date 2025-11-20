@@ -1,6 +1,6 @@
 export const JAW_KEYS_URL = "https://keys.jaw.id";
 
-export const JAW_BASE_URL = "http://localhost:8000";
+export const JAW_BASE_URL = "https://api.justaname.id";
 export const JAW_PROXY_URL = `${JAW_BASE_URL}/proxy/v1`;
 export const JAW_RPC_URL = `${JAW_PROXY_URL}/rpc`;
 export const JAW_PASSKEYS_URL = `${JAW_BASE_URL}/wallet/v2/passkeys`;

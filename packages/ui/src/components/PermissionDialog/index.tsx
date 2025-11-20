@@ -172,7 +172,7 @@ export const PermissionDialog = ({
                       ) : (
                         <div className="flex items-center gap-2">
                           <p className="text-xl font-normal leading-[150%] text-foreground">
-                            {spend.amount} {spend.token}
+                            {spend.amount}
                           </p>
                           {spend.amountUsd && (
                             <p className="text-sm font-bold text-muted-foreground">${spend.amountUsd}</p>
@@ -181,7 +181,7 @@ export const PermissionDialog = ({
                       )}
                     </div>
 
-                    {/* Duration and Limit */}
+                    {/* Duration and Token */}
                     <div className="flex flex-row justify-between items-center gap-2.5">
                       <div className="flex flex-col gap-0.5 flex-1">
                         <p className="text-xs font-bold leading-[133%] text-muted-foreground">Duration</p>
@@ -189,8 +189,8 @@ export const PermissionDialog = ({
                       </div>
                       <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[40px]" />
                       <div className="flex flex-col gap-0.5 flex-1">
-                        <p className="text-xs font-bold leading-[133%] text-muted-foreground">Period Limit</p>
-                        <p className="text-base font-normal leading-[150%] text-foreground">{spend.limit}</p>
+                        <p className="text-xs font-bold leading-[133%] text-muted-foreground">Token</p>
+                        <p className="text-base font-normal leading-[150%] text-foreground">{spend.token}</p>
                       </div>
                     </div>
                   </div>

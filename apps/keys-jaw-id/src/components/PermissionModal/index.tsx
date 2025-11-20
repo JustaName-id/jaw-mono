@@ -215,7 +215,11 @@ export const PermissionModal = ({
 
       return {
         amount,
-        token: isNativeToken(tokenAddress) ? 'Native Token (ETH)' : tokenInfo.symbol,
+        token: isNativeToken(tokenAddress)
+          ? 'Native (ETH)'
+          : (tokenInfo.symbol === tokenAddress
+              ? `${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-4)}`
+              : tokenInfo.symbol),
         tokenAddress,
         duration,
         limit,
@@ -396,8 +400,8 @@ export const PermissionModal = ({
           newTokenInfoMap[tokenAddress] = { decimals, symbol };
         } catch (error) {
           console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
-          // Fallback to ETH if fetch fails
-          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+          // Fallback to showing the token address
+          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: tokenAddress };
         }
       }
 
