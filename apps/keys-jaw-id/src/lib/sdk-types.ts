@@ -169,11 +169,16 @@ export interface WalletGrantPermissionsMethod extends RPCMethod {
     expiry: number;
     spender: string;
     permissions: {
-      spend: {
+      spends?: Array<{
         limit: string;
         period: string;
         token: string;
-      };
+      }>;
+      calls?: Array<{
+        target: string;
+        selector?: string;
+        functionSignature?: string;
+      }>;
     };
   }];
 }

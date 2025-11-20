@@ -1,4 +1,4 @@
-import { encodeFunctionData, type Address, type Hex, type WalletClient, decodeEventLog } from 'viem';
+import { encodeFunctionData, type Address, type Hex, type WalletClient, decodeEventLog, toFunctionSelector } from 'viem';
 import { getTransactionReceipt } from 'viem/actions';
 import {PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL, JAW_PROXY_URL} from '../constants.js';
 import { sendTransaction, getBundlerClient } from '../account/smartAccount.js';
@@ -33,6 +33,21 @@ function periodToSeconds(period: SpendPeriod): number {
         year: 31536000, // 365 days
     };
     return periods[period];
+}
+
+/**
+ * Compute function selector from function signature
+ * @param signature - Function signature (e.g., "transfer(address,uint256)")
+ * @returns 4-byte function selector (e.g., "0xa9059cbb")
+ *
+ * @example
+ * ```typescript
+ * const selector = computeFunctionSelector("transfer(address,uint256)");
+ * // Returns: "0xa9059cbb"
+ * ```
+ */
+export function computeFunctionSelector(signature: string): Hex {
+    return toFunctionSelector(signature);
 }
 
 /**
@@ -95,8 +110,10 @@ export type SpendPermissionDetail = {
 export type CallPermissionDetail = {
     /** Target contract address */
     target: Address;
-    /** Function selector (4 bytes, hex format) */
-    selector: Hex;
+    /** Function selector (4 bytes, hex format) - computed from functionSignature if not provided */
+    selector?: Hex;
+    /** Human-readable function signature (e.g., "transfer(address,uint256)") */
+    functionSignature?: string;
 };
 
 /**
@@ -514,11 +531,25 @@ function apiPermissionsToPermission(
             )
     );
 
-    // Convert call permissions
-    const calls: CallPermission[] = (permissions.calls || []).map(call => ({
-        target: call.target,
-        selector: call.selector,
-    }));
+    // Convert call permissions - compute selector from signature if not provided
+    const calls: CallPermission[] = (permissions.calls || []).map(call => {
+        let selector: Hex;
+
+        if (call.selector) {
+            // Use provided selector
+            selector = call.selector;
+        } else if (call.functionSignature) {
+            // Compute selector from function signature
+            selector = computeFunctionSelector(call.functionSignature);
+        } else {
+            throw new Error('Either selector or functionSignature must be provided for call permission');
+        }
+
+        return {
+            target: call.target,
+            selector,
+        };
+    });
 
     // Convert spend permissions
     const spends: SpendLimit[] = (permissions.spends || []).map(spend => {
