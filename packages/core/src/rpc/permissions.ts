@@ -1,6 +1,6 @@
-import { encodeFunctionData, type Address, type Hex, type WalletClient } from 'viem';
-import { readContract } from 'viem/actions';
-import {SPEND_PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL, JAW_PROXY_URL} from '../constants.js';
+import { encodeFunctionData, type Address, type Hex, type WalletClient, decodeEventLog } from 'viem';
+import { getTransactionReceipt } from 'viem/actions';
+import {PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL, JAW_PROXY_URL} from '../constants.js';
 import { sendTransaction, getBundlerClient } from '../account/smartAccount.js';
 import {SmartAccount} from 'viem/account-abstraction';
 import {Chain} from '../store/index.js';
@@ -36,27 +36,45 @@ function periodToSeconds(period: SpendPeriod): number {
 }
 
 /**
- * SpendPermission struct matching the Solidity contract
+ * Call permission for executing specific functions
  */
-export type SpendPermission = {
-    /** Smart account this spend permission is valid for */
-    account: Address;
-    /** Entity that can spend account's tokens */
-    spender: Address;
+export type CallPermission = {
+    /** Target contract address */
+    target: Address;
+    /** Function selector (4 bytes) */
+    selector: Hex;
+};
+
+/**
+ * Spend limit with recurring periods
+ */
+export type SpendLimit = {
     /** Token address (ERC-7528 native token or ERC-20 contract) */
     token: Address;
     /** Maximum allowed value to spend within each period */
     allowance: bigint;
     /** Time duration for resetting used allowance on a recurring basis (seconds) */
     period: number;
-    /** Timestamp this spend permission is valid starting at (inclusive, unix seconds) */
+};
+
+/**
+ * Permission struct matching the Solidity contract
+ */
+export type Permission = {
+    /** Smart account this permission is valid for */
+    account: Address;
+    /** Entity that can use this permission */
+    spender: Address;
+    /** Timestamp this permission is valid starting at (inclusive, unix seconds) */
     start: number;
-    /** Timestamp this spend permission is valid until (exclusive, unix seconds) */
+    /** Timestamp this permission is valid until (exclusive, unix seconds) */
     end: number;
-    /** Arbitrary data to differentiate unique spend permissions with otherwise identical fields */
+    /** Arbitrary data to differentiate unique permissions with otherwise identical fields */
     salt: bigint;
-    /** Arbitrary data to attach to a spend permission which may be consumed by the spender */
-    extraData: Hex;
+    /** Array of call permissions */
+    calls: CallPermission[];
+    /** Array of spend limits */
+    spends: SpendLimit[];
 };
 
 /**
@@ -72,10 +90,23 @@ export type SpendPermissionDetail = {
 };
 
 /**
+ * Call permission detail for API request/response
+ */
+export type CallPermissionDetail = {
+    /** Target contract address */
+    target: Address;
+    /** Function selector (4 bytes, hex format) */
+    selector: Hex;
+};
+
+/**
  * Permissions detail structure
  */
 export type PermissionsDetail = {
-    spend: SpendPermissionDetail;
+    /** Optional array of call permissions */
+    calls?: CallPermissionDetail[];
+    /** Optional array of spend permissions */
+    spends?: SpendPermissionDetail[];
 };
 
 /**
@@ -109,20 +140,23 @@ export type StorePermissionApiRequest = {
     account: string;
     /** Spender address */
     spender: string;
-    /** Token address */
-    token: string;
-    /** Allowance in wei (as hex string) */
-    allowance: string;
-    /** Period in seconds (as string) */
-    period: string;
     /** Start timestamp (unix seconds, as string) */
     start: string;
     /** End timestamp (unix seconds, as string) */
     end: string;
     /** Salt for uniqueness (as string) */
     salt: string;
-    /** Extra data (hex-encoded bytes) */
-    extraData: string;
+    /** Array of call permissions */
+    calls: Array<{
+        target: string;
+        selector: string;
+    }>;
+    /** Array of spend limits */
+    spends: Array<{
+        token: string;
+        allowance: string;
+        period: string;
+    }>;
     /** Chain ID (as hex string) */
     chainId: string;
 };
@@ -130,30 +164,7 @@ export type StorePermissionApiRequest = {
 /**
  * Response from the JAW RPC relay when storing a permission
  */
-export type StorePermissionApiResponse = {
-    /** Hash from the contract (unique identifier) */
-    hash: string;
-    /** Account address */
-    account: string;
-    /** Spender address */
-    spender: string;
-    /** Token address */
-    token: string;
-    /** Allowance in wei (as hex string) */
-    allowance: string;
-    /** Period in seconds (as string) */
-    period: string;
-    /** Start timestamp (unix seconds, as string) */
-    start: string;
-    /** End timestamp (unix seconds, as string) */
-    end: string;
-    /** Salt for uniqueness (as string) */
-    salt: string;
-    /** Extra data (hex-encoded bytes) */
-    extraData: string;
-    /** Chain ID (as hex string) */
-    chainId: string;
-};
+export type StorePermissionApiResponse = StorePermissionApiRequest;
 
 /**
  * Response from wallet_grantPermissions (returned to dApp)
@@ -169,15 +180,10 @@ export type WalletGrantPermissionsResponse = {
     id: Hex;
     /** Spender address that was granted permissions */
     spender: Address;
-    /** Spend permission granted */
-    spend: {
-        /** Spending limit in wei (hex format) */
-        limit: Hex;
-        /** Period of the spend limit */
-        period: SpendPeriod;
-        /** Token address */
-        token: Address;
-    };
+    /** Array of call permissions granted */
+    calls: CallPermissionDetail[];
+    /** Array of spend permissions granted */
+    spends: SpendPermissionDetail[];
 };
 
 /**
@@ -204,12 +210,12 @@ export type WalletRevokePermissionsRequest = {
 };
 
 /**
- * Grant permissions by approving a spend permission on-chain, then storing in relay
+ * Grant permissions by approving on-chain, then storing in relay
  *
  * This function:
- * 1. Converts API permission to SpendPermission struct
- * 2. Approves the permission on-chain
- * 3. Retrieves permission hash from the contract
+ * 1. Converts API permissions to Permission struct
+ * 2. Approves the permission on-chain (which returns the hash)
+ * 3. Extracts the permission hash from the PermissionApproved event
  * 4. Stores the permission in the relay
  * 5. Returns the response to the dApp with the hash as permission ID
  */
@@ -223,24 +229,25 @@ export async function grantPermissions(
     chain: Chain,
     apiKey: string
 ): Promise<WalletGrantPermissionsResponse> {
-    const spendPermission = apiPermissionToSpendPermission(account, spender, expiry, permissions.spend);
+    const permission = apiPermissionsToPermission(account, spender, expiry, permissions);
 
-    const approveCallData = encodeApproveSpendPermission(spendPermission);
+    const approveCallData = encodeApprovePermission(permission);
 
-    await sendTransaction(
+    const txHash = await sendTransaction(
         smartAccount,
         [
             {
-                to: SPEND_PERMISSIONS_MANAGER_ADDRESS as Address,
+                to: PERMISSIONS_MANAGER_ADDRESS as Address,
                 data: approveCallData,
             },
         ],
         chain
     );
 
-    const permissionHash = await getSpendPermissionHash(spendPermission, chain);
+    // Extract the permission hash from the PermissionApproved event
+    const permissionHash = await extractPermissionHashFromTransaction(txHash, chain);
 
-    await storePermissionInRelay(permissionHash, spendPermission, chainId, apiKey);
+    await storePermissionInRelay(permissionHash, permission, chainId, apiKey);
 
     return {
         address: account,
@@ -248,11 +255,8 @@ export async function grantPermissions(
         expiry,
         id: permissionHash,
         spender,
-        spend: {
-            limit: permissions.spend.limit as Hex,
-            period: permissions.spend.period,
-            token: spendPermission.token,
-        },
+        calls: permissions.calls || [],
+        spends: permissions.spends || [],
     };
 }
 
@@ -261,7 +265,7 @@ export async function grantPermissions(
  *
  * This function:
  * 1. Fetches the permission data from the relay
- * 2. Reconstructs the SpendPermission struct
+ * 2. Reconstructs the Permission struct
  * 3. Executes the revoke transaction on-chain
  * 4. Deletes the permission from the relay
  *
@@ -279,15 +283,15 @@ export async function revokePermission(
 ): Promise<RevokePermissionApiResponse> {
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
 
-    const spendPermission = relayPermissionToSpendPermission(relayPermission);
+    const permission = relayPermissionToPermission(relayPermission);
 
-    const revokeCallData = encodeRevokeSpendPermission(spendPermission);
+    const revokeCallData = encodeRevokePermission(permission);
 
     await sendTransaction(
         smartAccount,
         [
             {
-                to: SPEND_PERMISSIONS_MANAGER_ADDRESS as Address,
+                to: PERMISSIONS_MANAGER_ADDRESS as Address,
                 data: revokeCallData,
             },
         ],
@@ -298,19 +302,20 @@ export async function revokePermission(
 }
 
 /**
- * Execute a spend using a granted SpendPermission
+ * Execute a spend using a granted Permission
  *
  * This function allows a spender to spend tokens on behalf of an account
  * that has granted them permission via wallet_grantPermissions.
  *
  * @param walletClient - The viem wallet client to use for the transaction (should be the spender's wallet)
- * @param spendPermission - The SpendPermission struct received from wallet_grantPermissions
+ * @param permission - The Permission struct
+ * @param spendLimit - The specific SpendLimit to use from the permission
  * @param value - The amount to spend (must be <= allowance and within period limits)
  * @returns Transaction hash
  *
  * @example
  * ```typescript
- * import { spend, type SpendPermission } from '@jaw.id/core';
+ * import { spend, type Permission, type SpendLimit } from '@jaw.id/core';
  * import { createWalletClient, http } from 'viem';
  * import { baseSepolia } from 'viem/chains';
  *
@@ -322,7 +327,8 @@ export async function revokePermission(
  *
  * const hash = await spend(
  *   walletClient,
- *   spendPermission,
+ *   permission,
+ *   spendLimit,
  *   BigInt(100000000000000)
  * );
  * console.log('Transaction:', hash);
@@ -330,15 +336,70 @@ export async function revokePermission(
  */
 export async function spend(
     walletClient: WalletClient,
-    spendPermission: SpendPermission,
+    permission: Permission,
+    spendLimit: SpendLimit,
     value: bigint
 ): Promise<Hex> {
     // @ts-expect-error - viem's WalletClient types are too strict about chain parameter
     return walletClient.writeContract({
-        address: SPEND_PERMISSIONS_MANAGER_ADDRESS as Address,
+        address: PERMISSIONS_MANAGER_ADDRESS as Address,
         abi: SPEND_PERMISSIONS_MANAGER_ABI,
         functionName: 'spend',
-        args: [spendPermission, value],
+        args: [permission, spendLimit, value],
+    });
+}
+
+/**
+ * Execute a call using a granted Permission
+ *
+ * This function allows a spender to execute arbitrary contract calls on behalf of an account
+ * that has granted them permission via wallet_grantPermissions.
+ *
+ * @param walletClient - The viem wallet client to use for the transaction (should be the spender's wallet)
+ * @param permission - The Permission struct
+ * @param call - The specific CallPermission to use from the permission
+ * @param data - The calldata to execute (must match the call selector)
+ * @returns Transaction hash
+ *
+ * @example
+ * ```typescript
+ * import { executeCall, type Permission, type CallPermission } from '@jaw.id/core';
+ * import { createWalletClient, http, encodeFunctionData } from 'viem';
+ * import { baseSepolia } from 'viem/chains';
+ *
+ * const walletClient = createWalletClient({
+ *   account,
+ *   chain: baseSepolia,
+ *   transport: http(),
+ * });
+ *
+ * const data = encodeFunctionData({
+ *   abi: targetAbi,
+ *   functionName: 'targetFunction',
+ *   args: [arg1, arg2],
+ * });
+ *
+ * const hash = await executeCall(
+ *   walletClient,
+ *   permission,
+ *   callPermission,
+ *   data
+ * );
+ * console.log('Transaction:', hash);
+ * ```
+ */
+export async function executeCall(
+    walletClient: WalletClient,
+    permission: Permission,
+    call: CallPermission,
+    data: Hex
+): Promise<Hex> {
+    // @ts-expect-error - viem's WalletClient types are too strict about chain parameter
+    return walletClient.writeContract({
+        address: PERMISSIONS_MANAGER_ADDRESS as Address,
+        abi: SPEND_PERMISSIONS_MANAGER_ABI,
+        functionName: 'executeCall',
+        args: [permission, call, data],
     });
 }
 
@@ -363,21 +424,32 @@ export async function getPermissionFromRelay(
 }
 
 /**
- * Convert relay permission data to SpendPermission struct
+ * Convert relay permission data to Permission struct
  */
-function relayPermissionToSpendPermission(
+function relayPermissionToPermission(
     relayPermission: StorePermissionApiResponse
-): SpendPermission {
+): Permission {
+    // Convert call permissions
+    const calls: CallPermission[] = relayPermission.calls.map(call => ({
+        target: call.target as Address,
+        selector: call.selector as Hex,
+    }));
+
+    // Convert spend limits
+    const spends: SpendLimit[] = relayPermission.spends.map(spend => ({
+        token: spend.token as Address,
+        allowance: BigInt(spend.allowance),
+        period: parseInt(spend.period, 10),
+    }));
+
     return {
         account: relayPermission.account as Address,
         spender: relayPermission.spender as Address,
-        token: relayPermission.token as Address,
-        allowance: BigInt(relayPermission.allowance),
-        period: parseInt(relayPermission.period, 10),
         start: parseInt(relayPermission.start, 10),
         end: parseInt(relayPermission.end, 10),
         salt: BigInt(relayPermission.salt),
-        extraData: relayPermission.extraData as Hex,
+        calls,
+        spends,
     };
 }
 
@@ -424,14 +496,14 @@ export async function handleGetPermissionsRequest(
 }
 
 /**
- * Convert API spend permission detail to SpendPermission struct
+ * Convert API permissions detail to Permission struct
  */
-function apiPermissionToSpendPermission(
+function apiPermissionsToPermission(
     account: Address,
     spender: Address,
     expiry: number,
-    detail: SpendPermissionDetail
-): SpendPermission {
+    permissions: PermissionsDetail
+): Permission {
     const start = Math.floor(Date.now() / 1000);
 
     // Generate a random salt for uniqueness
@@ -442,21 +514,34 @@ function apiPermissionToSpendPermission(
             )
     );
 
-    // Use native token address if token is empty or undefined
-    const token = detail.token && detail.token.trim() !== ''
-        ? (detail.token as Address)
-        : NATIVE_TOKEN;
+    // Convert call permissions
+    const calls: CallPermission[] = (permissions.calls || []).map(call => ({
+        target: call.target,
+        selector: call.selector,
+    }));
+
+    // Convert spend permissions
+    const spends: SpendLimit[] = (permissions.spends || []).map(spend => {
+        // Use native token address if token is empty or undefined
+        const token = spend.token && spend.token.trim() !== ''
+            ? (spend.token as Address)
+            : NATIVE_TOKEN;
+
+        return {
+            token,
+            allowance: BigInt(spend.limit),
+            period: periodToSeconds(spend.period),
+        };
+    });
 
     return {
         account,
         spender,
-        token,
-        allowance: BigInt(detail.limit),
-        period: periodToSeconds(detail.period),
         start,
         end: expiry,
         salt,
-        extraData: '0x' as Hex,
+        calls,
+        spends,
     };
 }
 
@@ -465,21 +550,26 @@ function apiPermissionToSpendPermission(
  */
 async function storePermissionInRelay(
     permissionHash: Hex,
-    spendPermission: SpendPermission,
+    permission: Permission,
     chainId: string,
     apiKey: string
 ): Promise<StorePermissionApiResponse> {
     const requestData: StorePermissionApiRequest = {
         hash: permissionHash,
-        account: spendPermission.account,
-        spender: spendPermission.spender,
-        token: spendPermission.token,
-        allowance: `0x${spendPermission.allowance.toString(16)}`,
-        period: spendPermission.period.toString(),
-        start: spendPermission.start.toString(),
-        end: spendPermission.end.toString(),
-        salt: spendPermission.salt.toString(),
-        extraData: spendPermission.extraData,
+        account: permission.account,
+        spender: permission.spender,
+        start: permission.start.toString(),
+        end: permission.end.toString(),
+        salt: permission.salt.toString(),
+        calls: permission.calls.map(call => ({
+            target: call.target,
+            selector: call.selector,
+        })),
+        spends: permission.spends.map(spend => ({
+            token: spend.token,
+            allowance: `0x${spend.allowance.toString(16)}`,
+            period: spend.period.toString(),
+        })),
         chainId,
     };
 
@@ -517,73 +607,141 @@ async function deletePermissionFromRelay(
 }
 
 /**
- * Get the hash of a spend permission from the contract
- * Uses the cached public client from the store
+ * Extract the permission hash from the PermissionApproved event in a transaction receipt
  */
-async function getSpendPermissionHash(
-    spendPermission: SpendPermission,
+async function extractPermissionHashFromTransaction(
+    txHash: Hex,
     chain: Chain
 ): Promise<Hex> {
-     const bundlerClient = getBundlerClient(chain)
+    const bundlerClient = getBundlerClient(chain);
 
-    const hash = await readContract(bundlerClient, {
-        address: SPEND_PERMISSIONS_MANAGER_ADDRESS as Address,
-        abi: SPEND_PERMISSIONS_MANAGER_ABI,
-        functionName: 'getHash',
-        args: [spendPermission],
+    const receipt = await getTransactionReceipt(bundlerClient, {
+        hash: txHash,
     });
 
-    return hash as Hex;
+    // Find the PermissionApproved event in the logs
+    for (const log of receipt.logs) {
+        if (log.address.toLowerCase() !== PERMISSIONS_MANAGER_ADDRESS.toLowerCase()) {
+            continue;
+        }
+
+        try {
+            const decoded = decodeEventLog({
+                abi: SPEND_PERMISSIONS_MANAGER_ABI,
+                data: log.data,
+                topics: log.topics,
+            });
+
+            if (decoded.eventName === 'PermissionApproved') {
+                return decoded.args.hash as Hex;
+            }
+        } catch {
+            // Skip logs that don't match our ABI
+            continue;
+        }
+    }
+
+    throw new Error('PermissionApproved event not found in transaction receipt');
 }
 
 /**
- * Encode the approve function call for SpendPermissionsManager
+ * Encode the approve function call for JustaPermissionManager
  */
-function encodeApproveSpendPermission(spendPermission: SpendPermission): Hex {
+function encodeApprovePermission(permission: Permission): Hex {
     return encodeFunctionData({
         abi: SPEND_PERMISSIONS_MANAGER_ABI,
         functionName: 'approve',
-        args: [spendPermission],
+        args: [permission],
     });
 }
 
 /**
- * Encode the revoke function call for SpendPermissionsManager
+ * Encode the revoke function call for JustaPermissionManager
  */
-function encodeRevokeSpendPermission(spendPermission: SpendPermission): Hex {
+function encodeRevokePermission(permission: Permission): Hex {
     return encodeFunctionData({
         abi: SPEND_PERMISSIONS_MANAGER_ABI,
         functionName: 'revoke',
-        args: [spendPermission],
+        args: [permission],
     });
 }
 
 /**
- * ABI for the SpendPermissionsManager contract
+ * ABI for the JustaPermissionManager contract
  */
 const SPEND_PERMISSIONS_MANAGER_ABI = [
+    {
+        name: 'PermissionApproved',
+        type: 'event',
+        anonymous: false,
+        inputs: [
+            { name: 'hash', type: 'bytes32', indexed: true },
+            {
+                name: 'permission',
+                type: 'tuple',
+                indexed: false,
+                components: [
+                    { name: 'account', type: 'address' },
+                    { name: 'spender', type: 'address' },
+                    { name: 'start', type: 'uint48' },
+                    { name: 'end', type: 'uint48' },
+                    { name: 'salt', type: 'uint256' },
+                    {
+                        name: 'calls',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'target', type: 'address' },
+                            { name: 'selector', type: 'bytes4' },
+                        ],
+                    },
+                    {
+                        name: 'spends',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'token', type: 'address' },
+                            { name: 'allowance', type: 'uint160' },
+                            { name: 'period', type: 'uint48' },
+                        ],
+                    },
+                ],
+            },
+        ],
+    },
     {
         name: 'approve',
         type: 'function',
         stateMutability: 'nonpayable',
         inputs: [
             {
-                name: 'spendPermission',
+                name: 'permission',
                 type: 'tuple',
                 components: [
                     { name: 'account', type: 'address' },
                     { name: 'spender', type: 'address' },
-                    { name: 'token', type: 'address' },
-                    { name: 'allowance', type: 'uint160' },
-                    { name: 'period', type: 'uint48' },
                     { name: 'start', type: 'uint48' },
                     { name: 'end', type: 'uint48' },
                     { name: 'salt', type: 'uint256' },
-                    { name: 'extraData', type: 'bytes' },
+                    {
+                        name: 'calls',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'target', type: 'address' },
+                            { name: 'selector', type: 'bytes4' },
+                        ],
+                    },
+                    {
+                        name: 'spends',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'token', type: 'address' },
+                            { name: 'allowance', type: 'uint160' },
+                            { name: 'period', type: 'uint48' },
+                        ],
+                    },
                 ],
             },
         ],
-        outputs: [{ name: 'approved', type: 'bool' }],
+        outputs: [{ name: 'hash', type: 'bytes32' }],
     },
     {
         name: 'revoke',
@@ -591,18 +749,31 @@ const SPEND_PERMISSIONS_MANAGER_ABI = [
         stateMutability: 'nonpayable',
         inputs: [
             {
-                name: 'spendPermission',
+                name: 'permission',
                 type: 'tuple',
                 components: [
                     { name: 'account', type: 'address' },
                     { name: 'spender', type: 'address' },
-                    { name: 'token', type: 'address' },
-                    { name: 'allowance', type: 'uint160' },
-                    { name: 'period', type: 'uint48' },
                     { name: 'start', type: 'uint48' },
                     { name: 'end', type: 'uint48' },
                     { name: 'salt', type: 'uint256' },
-                    { name: 'extraData', type: 'bytes' },
+                    {
+                        name: 'calls',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'target', type: 'address' },
+                            { name: 'selector', type: 'bytes4' },
+                        ],
+                    },
+                    {
+                        name: 'spends',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'token', type: 'address' },
+                            { name: 'allowance', type: 'uint160' },
+                            { name: 'period', type: 'uint48' },
+                        ],
+                    },
                 ],
             },
         ],
@@ -614,18 +785,31 @@ const SPEND_PERMISSIONS_MANAGER_ABI = [
         stateMutability: 'view',
         inputs: [
             {
-                name: 'spendPermission',
+                name: 'permission',
                 type: 'tuple',
                 components: [
                     { name: 'account', type: 'address' },
                     { name: 'spender', type: 'address' },
-                    { name: 'token', type: 'address' },
-                    { name: 'allowance', type: 'uint160' },
-                    { name: 'period', type: 'uint48' },
                     { name: 'start', type: 'uint48' },
                     { name: 'end', type: 'uint48' },
                     { name: 'salt', type: 'uint256' },
-                    { name: 'extraData', type: 'bytes' },
+                    {
+                        name: 'calls',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'target', type: 'address' },
+                            { name: 'selector', type: 'bytes4' },
+                        ],
+                    },
+                    {
+                        name: 'spends',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'token', type: 'address' },
+                            { name: 'allowance', type: 'uint160' },
+                            { name: 'period', type: 'uint48' },
+                        ],
+                    },
                 ],
             },
         ],
@@ -637,22 +821,125 @@ const SPEND_PERMISSIONS_MANAGER_ABI = [
         stateMutability: 'nonpayable',
         inputs: [
             {
-                name: 'spendPermission',
+                name: 'permission',
                 type: 'tuple',
                 components: [
                     { name: 'account', type: 'address' },
                     { name: 'spender', type: 'address' },
-                    { name: 'token', type: 'address' },
-                    { name: 'allowance', type: 'uint160' },
-                    { name: 'period', type: 'uint48' },
                     { name: 'start', type: 'uint48' },
                     { name: 'end', type: 'uint48' },
                     { name: 'salt', type: 'uint256' },
-                    { name: 'extraData', type: 'bytes' },
+                    {
+                        name: 'calls',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'target', type: 'address' },
+                            { name: 'selector', type: 'bytes4' },
+                        ],
+                    },
+                    {
+                        name: 'spends',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'token', type: 'address' },
+                            { name: 'allowance', type: 'uint160' },
+                            { name: 'period', type: 'uint48' },
+                        ],
+                    },
+                ],
+            },
+            {
+                name: 'spendLimit',
+                type: 'tuple',
+                components: [
+                    { name: 'token', type: 'address' },
+                    { name: 'allowance', type: 'uint160' },
+                    { name: 'period', type: 'uint48' },
                 ],
             },
             { name: 'value', type: 'uint160' },
         ],
         outputs: [],
+    },
+    {
+        name: 'executeCall',
+        type: 'function',
+        stateMutability: 'nonpayable',
+        inputs: [
+            {
+                name: 'permission',
+                type: 'tuple',
+                components: [
+                    { name: 'account', type: 'address' },
+                    { name: 'spender', type: 'address' },
+                    { name: 'start', type: 'uint48' },
+                    { name: 'end', type: 'uint48' },
+                    { name: 'salt', type: 'uint256' },
+                    {
+                        name: 'calls',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'target', type: 'address' },
+                            { name: 'selector', type: 'bytes4' },
+                        ],
+                    },
+                    {
+                        name: 'spends',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'token', type: 'address' },
+                            { name: 'allowance', type: 'uint160' },
+                            { name: 'period', type: 'uint48' },
+                        ],
+                    },
+                ],
+            },
+            {
+                name: 'call',
+                type: 'tuple',
+                components: [
+                    { name: 'target', type: 'address' },
+                    { name: 'selector', type: 'bytes4' },
+                ],
+            },
+            { name: 'data', type: 'bytes' },
+        ],
+        outputs: [],
+    },
+    {
+        name: 'isValid',
+        type: 'function',
+        stateMutability: 'view',
+        inputs: [
+            {
+                name: 'permission',
+                type: 'tuple',
+                components: [
+                    { name: 'account', type: 'address' },
+                    { name: 'spender', type: 'address' },
+                    { name: 'start', type: 'uint48' },
+                    { name: 'end', type: 'uint48' },
+                    { name: 'salt', type: 'uint256' },
+                    {
+                        name: 'calls',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'target', type: 'address' },
+                            { name: 'selector', type: 'bytes4' },
+                        ],
+                    },
+                    {
+                        name: 'spends',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'token', type: 'address' },
+                            { name: 'allowance', type: 'uint160' },
+                            { name: 'period', type: 'uint48' },
+                        ],
+                    },
+                ],
+            },
+        ],
+        outputs: [{ name: '', type: 'bool' }],
     },
 ] as const;

@@ -18,7 +18,7 @@ export { handleGetAssetsRequest } from './wallet_getAssets.js';
 export { getCapabilities, handleGetCapabilitiesRequest } from './capabilities.js';
 
 export {
-    type SpendPermission,
+    type Permission,
     type SpendPeriod,
     type SpendPermissionDetail,
     type PermissionsDetail,
