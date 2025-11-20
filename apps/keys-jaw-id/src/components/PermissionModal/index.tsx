@@ -350,7 +350,7 @@ export const PermissionModal = ({
       const newTokenInfoMap: TokenInfoMap = {};
 
       // Get unique token addresses
-      const uniqueTokens = [...new Set(spendsData.map((spend: any) => spend.token))];
+      const uniqueTokens = Array.from(new Set(spendsData.map((spend: any) => spend.token as string))) as string[];
 
       for (const tokenAddress of uniqueTokens) {
         // Skip if already fetched
@@ -429,6 +429,22 @@ export const PermissionModal = ({
         if (!('expiry' in permissionDetails) || !('spender' in permissionDetails) ||
             !('address' in permissionDetails) || !('chainId' in permissionDetails)) {
           throw new Error('Invalid grant permission parameters.');
+        }
+
+        if (!permissionDetails.address) {
+          throw new Error('Address is required for granting permissions.');
+        }
+
+        if (!permissionDetails.chainId) {
+          throw new Error('Chain ID is required for granting permissions.');
+        }
+
+        if (!permissionDetails.expiry) {
+          throw new Error('Expiry is required for granting permissions.');
+        }
+
+        if (!permissionDetails.spender) {
+          throw new Error('Spender is required for granting permissions.');
         }
 
         const result = await grantPermissions(
