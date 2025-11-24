@@ -50,6 +50,7 @@ const formatDuration = (period: SpendPeriod): string => {
     week: '1 Week',
     month: '1 Month',
     year: '1 Year',
+    forever: 'Forever',
   };
   return durations[period] || period;
 };
