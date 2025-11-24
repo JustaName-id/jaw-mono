@@ -27,7 +27,9 @@ export {
     grantPermissions,
     revokePermission,
     getPermissionFromRelay,
-    spend,
+    ANY_TARGET,
+    ANY_FN_SEL,
+    EMPTY_CALLDATA_FN_SEL
 } from './rpc/index.js';
 
 /**  Account exports **/

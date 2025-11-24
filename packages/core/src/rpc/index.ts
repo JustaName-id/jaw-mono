@@ -32,5 +32,7 @@ export {
     revokePermission,
     handleGetPermissionsRequest,
     getPermissionFromRelay,
-    spend
+    ANY_TARGET,
+    ANY_FN_SEL,
+    EMPTY_CALLDATA_FN_SEL
 } from './permissions.js';

@@ -1,0 +1,23 @@
+{
+  "name": "@jaw-mono/docs",
+  "version": "0.0.1",
+  "private": true,
+  "type": "module",
+  "nx": {
+    "name": "docs"
+  },
+  "dependencies": {
+    "next": "~15.2.4",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "nextra": "^4.6.0",
+    "nextra-theme-docs": "^4.6.0",
+    "@mdx-js/loader": "^3.1.1",
+    "@mdx-js/react": "^3.1.1",
+    "@next/mdx": "^16.0.3"
+  },
+  "devDependencies": {
+    "@types/minimatch": "^6.0.0",
+    "docs": "^0.3.2-canary.0"
+  }
+}

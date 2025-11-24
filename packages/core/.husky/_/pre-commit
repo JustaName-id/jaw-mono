@@ -1,0 +1,4 @@
+#!/bin/sh
+
+# Run tests for all projects except docs
+nx affected --base=main --target=test --exclude=docs --parallel=1
