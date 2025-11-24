@@ -1,0 +1,370 @@
+# defaultChainId
+
+The default blockchain network to connect to when the SDK initializes.
+
+**Type:** `number`
+**Required:** No
+**Default:** `1` (Ethereum Mainnet)
+
+---
+
+## Usage
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 137, // Polygon
+});
+```
+
+---
+
+## Description
+
+The `defaultChainId` determines which blockchain network your application connects to initially. Users can switch networks later using `wallet_switchEthereumChain`.
+
+This setting affects:
+- Initial RPC endpoint selection
+- Default network for transactions
+- Chain-specific asset queries
+- Network display in wallet UI
+
+---
+
+## Supported Networks
+
+### Mainnets
+
+| Network | Chain ID | Description |
+|---------|----------|-------------|
+| Ethereum | `1` | Ethereum Mainnet (default) |
+| Optimism | `10` | Optimism Mainnet |
+| BNB Chain | `56` | Binance Smart Chain |
+| Polygon | `137` | Polygon PoS |
+| Base | `8453` | Base Mainnet |
+| Arbitrum One | `42161` | Arbitrum Mainnet |
+| Avalanche | `43114` | Avalanche C-Chain |
+
+### Testnets
+
+Enable testnets via `preference.showTestnets`:
+
+| Network | Chain ID | Description |
+|---------|----------|-------------|
+| Sepolia | `11155111` | Ethereum Testnet |
+| Optimism Sepolia | `11155420` | Optimism Testnet |
+| Base Sepolia | `84532` | Base Testnet |
+| Arbitrum Sepolia | `421614` | Arbitrum Testnet |
+| Polygon Amoy | `80002` | Polygon Testnet |
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 11155111, // Sepolia
+  preference: {
+    showTestnets: true,
+  },
+});
+```
+
+---
+
+## Best Practices
+
+### Match Your Application's Primary Network
+
+Choose the network where your application's main smart contracts are deployed:
+
+```typescript
+// ✅ Good - NFT marketplace on Polygon
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'NFT Marketplace',
+  defaultChainId: 137, // Polygon for lower fees
+});
+
+// ✅ Good - DeFi protocol on Ethereum
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'DeFi Protocol',
+  defaultChainId: 1, // Ethereum Mainnet
+});
+```
+
+### Consider Transaction Costs
+
+Lower-cost networks for high-volume applications:
+
+```typescript
+// Gaming app with frequent transactions
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 8453, // Base - low fees, fast confirmations
+});
+
+// Social app with many small transactions
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 10, // Optimism - optimized for rollups
+});
+```
+
+### Development vs Production
+
+Use testnets during development:
+
+```typescript
+const getDefaultChainId = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return 1; // Ethereum Mainnet
+  } else {
+    return 11155111; // Sepolia Testnet
+  }
+};
+
+const jaw = JAW.create({
+  apiKey: process.env.JAW_API_KEY,
+  defaultChainId: getDefaultChainId(),
+  preference: {
+    showTestnets: process.env.NODE_ENV !== 'production',
+  },
+});
+```
+
+---
+
+## Examples
+
+### Multi-Chain Applications
+
+```typescript
+// Allow user to select their preferred chain
+function createJAWWithChain(chainId: number) {
+  return JAW.create({
+    apiKey: process.env.JAW_API_KEY,
+    defaultChainId: chainId,
+  });
+}
+
+// User selects Polygon
+const jaw = createJAWWithChain(137);
+```
+
+### Regional Optimization
+
+```typescript
+// Optimize for user's region
+function getOptimalChain(region: string) {
+  switch (region) {
+    case 'US':
+      return 8453; // Base - Coinbase-optimized
+    case 'EU':
+      return 137; // Polygon - global presence
+    case 'ASIA':
+      return 56; // BNB Chain - popular in Asia
+    default:
+      return 1; // Ethereum Mainnet
+  }
+}
+
+const userRegion = getUserRegion();
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: getOptimalChain(userRegion),
+});
+```
+
+### Application-Specific Chains
+
+```typescript
+// NFT Marketplace - Polygon for lower minting costs
+const nftMarketplace = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'NFT Marketplace',
+  defaultChainId: 137, // Polygon
+});
+
+// Gaming - Base for fast, cheap transactions
+const gamingApp = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'Web3 Game',
+  defaultChainId: 8453, // Base
+});
+
+// DeFi - Ethereum for liquidity
+const defiApp = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'DeFi Protocol',
+  defaultChainId: 1, // Ethereum
+});
+
+// Social - Optimism for many small transactions
+const socialApp = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'Social Network',
+  defaultChainId: 10, // Optimism
+});
+```
+
+---
+
+## Switching Networks
+
+Users can switch networks after initialization:
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 1, // Start on Ethereum
+});
+
+// Later, switch to Polygon
+await jaw.provider.request({
+  method: 'wallet_switchEthereumChain',
+  params: [{ chainId: '0x89' }], // 137 in hex
+});
+```
+
+---
+
+## Listening for Network Changes
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 1,
+});
+
+// Listen for chain changes
+jaw.provider.on('chainChanged', (chainId: string) => {
+  console.log('Network changed to:', parseInt(chainId, 16));
+  // Update UI, refetch data, etc.
+});
+```
+
+---
+
+## Chain ID Format
+
+Chain IDs are numbers in configuration, but hex strings in RPC calls:
+
+```typescript
+// ✅ Configuration - decimal number
+const jaw = JAW.create({
+  defaultChainId: 137, // decimal
+});
+
+// ✅ RPC calls - hex string
+await jaw.provider.request({
+  method: 'wallet_switchEthereumChain',
+  params: [{ chainId: '0x89' }], // hex
+});
+```
+
+### Conversion Helpers
+
+```typescript
+// Decimal to hex
+function toHex(chainId: number): string {
+  return `0x${chainId.toString(16)}`;
+}
+
+// Hex to decimal
+function toDecimal(chainId: string): number {
+  return parseInt(chainId, 16);
+}
+
+console.log(toHex(137)); // "0x89"
+console.log(toDecimal('0x89')); // 137
+```
+
+---
+
+## Chain-Specific Features
+
+### Paymaster Support
+
+Different chains may have different paymaster configurations:
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 137, // Polygon
+  paymasterUrls: {
+    1: 'https://paymaster.example.com/mainnet',
+    137: 'https://paymaster.example.com/polygon',
+    8453: 'https://paymaster.example.com/base',
+  },
+});
+```
+
+### Asset Queries
+
+Query assets on the default chain:
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 137,
+});
+
+// Get assets on Polygon
+const assets = await jaw.provider.request({
+  method: 'wallet_getAssets',
+  params: [
+    {
+      address: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+      chainIds: [137], // Current chain
+    },
+  ],
+});
+```
+
+---
+
+## Common Issues
+
+### Invalid Chain ID
+
+```typescript
+// ❌ Bad - Unsupported chain
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 9999, // Not supported
+});
+// Will fail when making requests
+```
+
+Solution: Use supported chain IDs from the table above.
+
+### Testnet Not Available
+
+```typescript
+// ❌ Bad - Testnet without flag
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 11155111, // Sepolia
+  // Missing showTestnets: true
+});
+```
+
+Solution: Enable testnets in preferences:
+
+```typescript
+// ✅ Good
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 11155111,
+  preference: {
+    showTestnets: true,
+  },
+});
+```
+
+---
+
+## Related Configuration
+
+- [preference](/configuration/preference) - Advanced options including testnet visibility
+- [paymasterUrls](/configuration/paymasterUrls) - Chain-specific paymaster configuration
+- [wallet_switchEthereumChain](/api-reference/wallet_switchEthereumChain) - Switch networks programmatically

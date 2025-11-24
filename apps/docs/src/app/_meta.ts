@@ -1,7 +1,5 @@
 export default {
-  index: 'Introduction',
-  'getting-started': 'Getting Started',
+  index: 'Getting Started',
+  configuration: 'Configuration',
   'api-reference': 'API Reference',
-  guides: 'Guides',
-  examples: 'Examples',
 }

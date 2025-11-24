@@ -1,0 +1,304 @@
+# appLogoUrl
+
+URL to your application's logo image. Displayed alongside your app name in the authentication interface.
+
+**Type:** `string | null`
+**Required:** No
+**Default:** `null` (uses default icon)
+
+---
+
+## Usage
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'My DApp',
+  appLogoUrl: 'https://my-dapp.com/logo.png',
+});
+```
+
+---
+
+## Description
+
+The application logo is displayed to users in:
+- Authentication popup header
+- Transaction approval screens
+- Permission grant dialogs
+- Connected apps list
+
+A professional logo helps users recognize your application and builds brand trust.
+
+---
+
+## Image Requirements
+
+### Format
+
+Supported formats:
+- **PNG** (recommended for logos with transparency)
+- **JPG/JPEG** (for photos or complex images)
+- **SVG** (vector format, scales perfectly)
+
+```typescript
+// ✅ Good - Supported formats
+appLogoUrl: 'https://my-dapp.com/logo.png'
+appLogoUrl: 'https://my-dapp.com/logo.jpg'
+appLogoUrl: 'https://my-dapp.com/logo.svg'
+
+// ❌ Bad - Unsupported formats
+appLogoUrl: 'https://my-dapp.com/logo.gif'
+appLogoUrl: 'https://my-dapp.com/logo.webp'
+```
+
+### Size
+
+**Recommended:** 200x200px minimum
+
+```typescript
+// ✅ Good - Square, high quality
+// 200x200px or larger
+appLogoUrl: 'https://my-dapp.com/logo-200.png'
+
+// ⚠️ Acceptable but not ideal
+// Will be scaled, may look pixelated
+appLogoUrl: 'https://my-dapp.com/logo-64.png'
+```
+
+### Aspect Ratio
+
+**Recommended:** Square (1:1) for best results
+
+```typescript
+// ✅ Best - Square logo
+// 200x200, 400x400, 512x512
+appLogoUrl: 'https://my-dapp.com/logo-square.png'
+
+// ⚠️ Acceptable - Will be cropped or padded
+// 300x200, 400x300, etc.
+appLogoUrl: 'https://my-dapp.com/logo-wide.png'
+```
+
+### File Size
+
+**Recommended:** Under 500KB for optimal loading
+
+- Smaller files load faster
+- Better user experience
+- Reduce bandwidth costs
+
+```typescript
+// ✅ Good - Optimized size
+// 50KB PNG or 30KB JPG
+appLogoUrl: 'https://my-dapp.com/logo-optimized.png'
+
+// ❌ Bad - Too large
+// 5MB unoptimized image
+appLogoUrl: 'https://my-dapp.com/logo-huge.png'
+```
+
+---
+
+## Best Practices
+
+### Use CDN or Fast Hosting
+
+```typescript
+// ✅ Good - CDN hosted
+appLogoUrl: 'https://cdn.my-dapp.com/logo.png'
+
+// ✅ Good - Cloud storage
+appLogoUrl: 'https://my-bucket.s3.amazonaws.com/logo.png'
+
+// ⚠️ Slow - Direct server
+appLogoUrl: 'https://slow-server.com/logo.png'
+```
+
+### Use HTTPS
+
+Always use HTTPS URLs for security:
+
+```typescript
+// ✅ Good - Secure HTTPS
+appLogoUrl: 'https://my-dapp.com/logo.png'
+
+// ❌ Bad - Insecure HTTP
+appLogoUrl: 'http://my-dapp.com/logo.png'
+```
+
+### Transparent Background
+
+For PNG logos, use transparent background:
+
+```typescript
+// ✅ Best - PNG with transparency
+appLogoUrl: 'https://my-dapp.com/logo-transparent.png'
+
+// ⚠️ Okay - Will have white/colored background
+appLogoUrl: 'https://my-dapp.com/logo-white-bg.png'
+```
+
+### High DPI Support
+
+Provide 2x resolution for retina displays:
+
+```typescript
+// ✅ Best - High resolution
+// 400x400 for 200x200 display size
+appLogoUrl: 'https://my-dapp.com/logo@2x.png'
+```
+
+---
+
+## Examples
+
+### Basic Setup
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'My DApp',
+  appLogoUrl: 'https://my-dapp.com/logo.png',
+});
+```
+
+### Using Public Assets
+
+```typescript
+// Next.js public folder
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'My DApp',
+  appLogoUrl: `${window.location.origin}/logo.png`,
+});
+
+// Or with environment variable
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'My DApp',
+  appLogoUrl: `${process.env.PUBLIC_URL}/logo.png`,
+});
+```
+
+### Cloud Storage
+
+```typescript
+// AWS S3
+appLogoUrl: 'https://my-app-assets.s3.amazonaws.com/logo.png'
+
+// Google Cloud Storage
+appLogoUrl: 'https://storage.googleapis.com/my-bucket/logo.png'
+
+// Cloudflare Images
+appLogoUrl: 'https://imagedelivery.net/account/logo/public'
+
+// ImgIx
+appLogoUrl: 'https://my-app.imgix.net/logo.png?w=200&h=200'
+```
+
+### Fallback to Default
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'My DApp',
+  appLogoUrl: null, // Uses default icon
+});
+```
+
+---
+
+## Dynamic Logo
+
+### Environment-Specific Logos
+
+```typescript
+const getLogoUrl = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return 'https://my-dapp.com/logo.png';
+  } else {
+    return 'https://my-dapp.com/logo-dev.png';
+  }
+};
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appLogoUrl: getLogoUrl(),
+});
+```
+
+### White-Label Solutions
+
+```typescript
+function createJAWForTenant(tenantId: string) {
+  const tenants = {
+    tenant1: {
+      name: 'Brand A',
+      logo: 'https://brand-a.com/logo.png',
+    },
+    tenant2: {
+      name: 'Brand B',
+      logo: 'https://brand-b.com/logo.png',
+    },
+  };
+
+  const tenant = tenants[tenantId];
+
+  return JAW.create({
+    apiKey: process.env.API_KEY,
+    appName: tenant.name,
+    appLogoUrl: tenant.logo,
+  });
+}
+```
+
+---
+
+## Image Optimization Tips
+
+### Use Image Optimization Services
+
+```typescript
+// Cloudinary
+appLogoUrl: 'https://res.cloudinary.com/demo/image/upload/w_200,h_200,c_fill/logo.png'
+
+// ImgIx with parameters
+appLogoUrl: 'https://my-app.imgix.net/logo.png?w=200&h=200&fit=crop&fm=png'
+
+// Next.js Image Optimization
+appLogoUrl: '/_next/image?url=/logo.png&w=200&q=75'
+```
+
+### Compress Images
+
+Tools for compression:
+- **TinyPNG** - PNG compression
+- **JPEGmini** - JPEG compression
+- **Squoosh** - Modern compression
+- **ImageOptim** - Mac app
+
+---
+
+## Common Issues
+
+### Logo Not Showing
+
+1. **Check URL accessibility**: Open URL in browser
+2. **Verify HTTPS**: Must use secure protocol
+3. **Check CORS**: Server must allow image requests
+4. **Verify format**: Use PNG, JPG, or SVG
+
+### Logo Quality Issues
+
+1. **Too small**: Use at least 200x200px
+2. **Pixelated**: Provide 2x resolution
+3. **Wrong aspect ratio**: Use square (1:1)
+4. **Too large**: Optimize file size
+
+---
+
+## Related Configuration
+
+- [appName](/configuration/appName) - Application name
+- [apiKey](/configuration/apiKey) - API key for authentication

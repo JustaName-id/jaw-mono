@@ -1,0 +1,67 @@
+# wallet_disconnect
+
+Disconnect the current session and clean up all authentication state.
+
+**Authentication Required:** No
+
+---
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_disconnect',
+});
+```
+
+### Parameters
+
+None
+
+---
+
+## Response
+
+Returns `null` on success.
+
+**Type:** `null`
+
+---
+
+## Behavior
+
+- Clears the active session and authentication state
+- Emits `disconnect` event
+- Same effect as calling `jaw.disconnect()`
+
+---
+
+## Example Usage
+
+### Disconnect Button
+
+```typescript
+await jaw.provider.request({
+    method: 'wallet_disconnect',
+});
+```
+
+### Listen to Disconnect Event
+
+```typescript
+// Listen for disconnect events
+jaw.provider.on('disconnect', (error) => {
+  console.log('Wallet disconnected:', error.message);
+});
+
+await jaw.provider.request({
+  method: 'wallet_disconnect',
+});
+```
+
+---
+
+## Related Methods
+
+- [eth_requestAccounts](/api-reference/eth_requestAccounts) - Reconnect wallet
+- [wallet_connect](/api-reference/wallet_connect) - Connect with capabilities

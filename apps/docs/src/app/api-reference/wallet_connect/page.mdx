@@ -1,0 +1,246 @@
+# wallet_connect
+
+Connect wallet with advanced capabilities including Sign-In With Ethereum (SIWE) and ENS subname issuance.
+
+**Authentication Required:** No (triggers authentication)
+
+---
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    version: '1.0',
+    capabilities: {
+      signInWithEthereum: {
+        nonce: 'random-nonce',
+        chainId: '0x1',
+        domain: 'my-dapp.com',
+        uri: 'https://my-dapp.com',
+        statement: 'Sign in to My DApp',
+      },
+    },
+  }],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `version` | `string` | Yes | Protocol version (use "1.0") |
+| `capabilities` | `object` | No | Requested capabilities |
+
+### Capabilities
+
+#### signInWithEthereum
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `nonce` | `string` | Yes | Random nonce for SIWE |
+| `chainId` | `string` | Yes | Chain ID (hex format) |
+| `domain` | `string` | No | Domain requesting signature |
+| `uri` | `string` | No | URI of the application |
+| `statement` | `string` | No | Human-readable statement |
+| `version` | `string` | No | SIWE version (default: "1") |
+| `issuedAt` | `string` | No | ISO 8601 timestamp |
+| `expirationTime` | `string` | No | ISO 8601 expiration |
+
+#### subnameTextRecords
+
+Array of key-value pairs for ENS text records.
+
+| Name | Type | Description |
+|------|------|-------------|
+| `key` | `string` | Text record key (e.g., "avatar", "url") |
+| `value` | `string` | Text record value |
+
+### Example
+
+```json
+[{
+  "version": "1.0",
+  "capabilities": {
+    "signInWithEthereum": {
+      "nonce": "abc123xyz789",
+      "chainId": "0x1",
+      "domain": "my-dapp.com",
+      "uri": "https://my-dapp.com",
+      "statement": "Sign in to My DApp with your JAW account"
+    },
+    "subnameTextRecords": [
+      { "key": "avatar", "value": "https://my-dapp.com/avatars/1.png" },
+      { "key": "description", "value": "Premium member" }
+    ]
+  }
+}]
+```
+
+---
+
+## Response
+
+Returns connection result with accounts and capabilities.
+
+**Type:** `object`
+
+### Example
+
+```json
+{
+  "accounts": [{
+    "address": "0x1234567890123456789012345678901234567890",
+    "capabilities": {
+      "signInWithEthereum": {
+        "message": "my-dapp.com wants you to sign in with your Ethereum account:\n0x1234...",
+        "signature": "0xabcdef..."
+      }
+    }
+  }]
+}
+```
+
+---
+
+## Behavior
+
+- Opens authentication popup
+- User creates account or signs in with passkey
+- Generates SIWE message if `signInWithEthereum` requested
+- Signs SIWE message automatically
+- Issues ENS subname if `ens` configured in SDK and `subnameTextRecords` provided
+- Sets text records on the subname
+- Returns accounts with capability responses
+
+---
+
+## Errors
+
+| Code | Description |
+|------|-------------|
+| 4001 | User rejected the request |
+| 4100 | Unauthorized (authentication failed) |
+| -32602 | Invalid params |
+
+---
+
+## Example Usage
+
+### Basic Connection
+
+```typescript
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    version: '1.0',
+  }],
+});
+
+console.log('Connected:', result.accounts[0].address);
+```
+
+### SIWE Authentication
+
+```typescript
+// Generate nonce from backend
+const nonce = await fetch('/api/nonce').then(r => r.text());
+
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    version: '1.0',
+    capabilities: {
+      signInWithEthereum: {
+        nonce,
+        chainId: '0x1',
+        domain: 'my-dapp.com',
+        uri: 'https://my-dapp.com',
+        statement: 'Sign in to access your account',
+      },
+    },
+  }],
+});
+
+const account = result.accounts[0];
+const siwe = account.capabilities?.signInWithEthereum;
+
+if (siwe && 'message' in siwe && 'signature' in siwe) {
+  // Send to backend for verification
+  const response = await fetch('/api/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      address: account.address,
+      message: siwe.message,
+      signature: siwe.signature,
+    }),
+  });
+
+  const session = await response.json();
+  console.log('Authenticated with session:', session);
+}
+```
+
+### Issue Subname with Profile
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  preference: {
+    ens: 'myapp.eth', // Must own this ENS domain
+  },
+});
+
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    version: '1.0',
+    capabilities: {
+      subnameTextRecords: [
+        { key: 'avatar', value: 'https://myapp.com/avatars/alice.png' },
+        { key: 'description', value: 'Game master level 50' },
+        { key: 'url', value: 'https://myapp.com/profile/alice' },
+        { key: 'com.twitter', value: '@alice' },
+      ],
+    },
+  }],
+});
+
+// User now has alice.myapp.eth pointing to their account
+console.log('Subname issued for:', result.accounts[0].address);
+```
+
+### Combined: SIWE + Subname
+
+```typescript
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    version: '1.0',
+    capabilities: {
+      signInWithEthereum: {
+        nonce: await fetch('/api/nonce').then(r => r.text()),
+        chainId: '0x1',
+        domain: 'my-dapp.com',
+        uri: 'https://my-dapp.com',
+        statement: 'Sign in and claim your username',
+      },
+      subnameTextRecords: [
+        { key: 'avatar', value: userAvatarUrl },
+        { key: 'description', value: userBio },
+      ],
+    },
+  }],
+});
+
+// User is authenticated AND has a subname with profile
+```
+
+---
+
+## Related Methods
+
+- [eth_requestAccounts](/api-reference/eth_requestAccounts) - Simple authentication without capabilities
+- [personal_sign](/api-reference/personal_sign) - Sign messages after connection

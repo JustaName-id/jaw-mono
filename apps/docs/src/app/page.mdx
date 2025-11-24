@@ -1,28 +1,305 @@
-# Welcome to JAW Core Documentation
+# Getting Started
 
-Welcome to the official documentation for `@jaw.id/core`, the core package of the JAW Accounts monorepo.
+The JAW SDK is a TypeScript library designed for applications to create, manage, and interact with smart contract wallets on Ethereum and EVM-compatible chains.
 
-## What is @jaw.id/core?
+## Overview
 
-`@jaw.id/core` is the foundational package that provides core functionality for the JAW Accounts ecosystem.
+JAW SDK provides a comprehensive solution for integrating account abstraction (ERC-4337) into your application with features like:
 
-## Getting Started
+- **Passkey Authentication** - Secure, passwordless authentication using WebAuthn
+- **Gasless Transactions** - Built-in paymaster support for sponsored transactions
+- **Atomic Batch Operations** - Execute multiple calls atomically via `wallet_sendCalls` (EIP-5792)
+- **Permission System** - Grant granular spend and call permissions to third parties
+- **Multi-Chain Support** - Works across Ethereum and EVM-compatible chains
+- **EIP-1193 Provider** - Standard Ethereum provider interface for compatibility
 
-To get started with `@jaw.id/core`, check out the following sections:
+## Installation
 
-- **[Getting Started](/getting-started)**: Learn how to install and set up the package
-- **[API Reference](/api-reference)**: Explore the complete API documentation
-- **[Guides](/guides)**: Follow step-by-step guides for common use cases
-- **[Examples](/examples)**: See real-world examples and code snippets
+Install the JAW SDK package:
 
-## Quick Links
+```bash npm2yarn
+npm install @jaw.id/core viem
+```
 
-- [GitHub Repository](https://github.com/JustaName-id/accounts)
-- [NPM Package](https://www.npmjs.com/package/@jaw.id/core)
+JAW SDK uses `viem` as a peer dependency for Ethereum utilities and type definitions.
 
-## Need Help?
+## Setup
 
-If you encounter any issues or have questions, please:
-- Check the documentation sections in the sidebar
-- Open an issue on [GitHub](https://github.com/JustaName-id/accounts/issues)
-- Join our community discussions
+### 1. Initialize the SDK
+
+Create a JAW SDK instance with your configuration:
+
+```typescript
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key-here',
+  appName: 'My DApp',
+  appLogoUrl: 'https://my-dapp.com/logo.png',
+  defaultChainId: 1,
+});
+```
+
+The SDK returns an object with two properties:
+
+- **`provider`** - An EIP-1193 compatible Ethereum provider for making RPC requests
+- **`disconnect()`** - Method to disconnect the current session and clean up resources
+
+### 2. Connect a Wallet
+
+Request user authentication to connect their wallet:
+
+```typescript
+const accounts = await jaw.provider.request({
+  method: 'eth_requestAccounts'
+});
+
+console.log('Connected:', accounts[0]);
+```
+
+This opens the JAW authentication interface where users can create a new account or sign in with an existing passkey.
+
+### 3. Make Requests
+
+Use the provider to interact with the connected wallet:
+
+```typescript
+// Get current chain ID
+const chainId = await jaw.provider.request({
+  method: 'eth_chainId'
+});
+
+// Send a transaction
+const txHash = await jaw.provider.request({
+  method: 'eth_sendTransaction',
+  params: [{
+    to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+    value: '0x9184e72a000',
+    data: '0x',
+  }],
+});
+
+// Sign a message
+const signature = await jaw.provider.request({
+  method: 'personal_sign',
+  params: ['Hello World', accounts[0]],
+});
+```
+
+## React Example
+
+Here's a complete example for React applications:
+
+```typescript
+import { useState, useEffect } from 'react';
+import { JAW } from '@jaw.id/core';
+
+// Initialize outside component (singleton)
+const jaw = JAW.create({
+  apiKey: 'your-api-key-here',
+  appName: 'My DApp',
+  appLogoUrl: 'https://my-dapp.com/logo.png',
+});
+
+function App() {
+  const [account, setAccount] = useState<string | null>(null);
+  const [chainId, setChainId] = useState<string | null>(null);
+
+  useEffect(() => {
+    // Listen for account changes
+    jaw.provider.on('accountsChanged', (accounts) => {
+      setAccount(accounts[0] || null);
+    });
+
+    // Listen for chain changes
+    jaw.provider.on('chainChanged', (chainId) => {
+      setChainId(chainId);
+    });
+
+    // Check if already connected
+    jaw.provider.request({ method: 'eth_accounts' })
+      .then((accounts) => {
+        if (accounts.length > 0) {
+          setAccount(accounts[0]);
+          return jaw.provider.request({ method: 'eth_chainId' });
+        }
+      })
+      .then((chainId) => {
+        if (chainId) setChainId(chainId as string);
+      })
+      .catch(console.error);
+  }, []);
+
+  const connect = async () => {
+    try {
+      const accounts = await jaw.provider.request({
+        method: 'eth_requestAccounts',
+      });
+      setAccount(accounts[0]);
+
+      const chainId = await jaw.provider.request({
+        method: 'eth_chainId'
+      });
+      setChainId(chainId as string);
+    } catch (error) {
+      console.error('Failed to connect:', error);
+    }
+  };
+
+  const disconnect = async () => {
+    await jaw.disconnect();
+    setAccount(null);
+    setChainId(null);
+  };
+
+  const sendTransaction = async () => {
+    if (!account) return;
+
+    try {
+      const txHash = await jaw.provider.request({
+        method: 'eth_sendTransaction',
+        params: [{
+          to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+          value: '0x9184e72a000',
+        }],
+      });
+      console.log('Transaction sent:', txHash);
+    } catch (error) {
+      console.error('Transaction failed:', error);
+    }
+  };
+
+  return (
+    <div>
+      {!account ? (
+        <button onClick={connect}>Connect Wallet</button>
+      ) : (
+        <div>
+          <p>Account: {account}</p>
+          <p>Chain: {chainId}</p>
+          <button onClick={sendTransaction}>Send Transaction</button>
+          <button onClick={disconnect}>Disconnect</button>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+## Using with Viem
+
+JAW provider can be used with viem's custom transports:
+
+```typescript
+import { createWalletClient, custom } from 'viem';
+import { mainnet } from 'viem/chains';
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key-here',
+  appName: 'My DApp',
+});
+
+// Connect first
+await jaw.provider.request({ method: 'eth_requestAccounts' });
+
+// Create viem wallet client
+const walletClient = createWalletClient({
+  chain: mainnet,
+  transport: custom(jaw.provider),
+});
+
+// Use viem methods
+const hash = await walletClient.sendTransaction({
+  to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+  value: 1000000000000000n,
+});
+```
+
+## Advanced Features
+
+### Batch Transactions
+
+Send multiple transactions atomically using EIP-5792:
+
+```typescript
+const result = await jaw.provider.request({
+  method: 'wallet_sendCalls',
+  params: [{
+    version: '1.0',
+    chainId: '0x1',
+    from: account,
+    calls: [
+      {
+        to: '0xContractA...',
+        data: '0x...',
+      },
+      {
+        to: '0xContractB...',
+        data: '0x...',
+      },
+    ],
+  }],
+});
+
+// Check status later
+const status = await jaw.provider.request({
+  method: 'wallet_getCallsStatus',
+  params: [result.id],
+});
+```
+
+### Chain Switching
+
+Switch between supported chains:
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_switchEthereumChain',
+  params: [{ chainId: '0x89' }], // Polygon
+});
+```
+
+### Sign-In With Ethereum (SIWE)
+
+Authenticate users with Sign-In With Ethereum during connection:
+
+```typescript
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    version: '1.0',
+    capabilities: {
+      signInWithEthereum: {
+        nonce: 'your-nonce',
+        chainId: '0x1',
+        domain: 'your-domain.com',
+        uri: 'https://your-domain.com',
+        statement: 'Sign in to My DApp',
+      },
+    },
+  }],
+});
+
+// SIWE signature in result.accounts[0].capabilities.signInWithEthereum
+```
+
+## TypeScript
+
+JAW SDK is fully typed with TypeScript:
+
+```typescript
+import type { RequestArguments, ProviderInterface } from '@jaw.id/core';
+
+const provider: ProviderInterface = jaw.provider;
+
+const request: RequestArguments = {
+  method: 'eth_requestAccounts',
+  params: [],
+};
+```
+
+## Next Steps
+
+- **[Configuration](/configuration)** - Learn about all configuration options
+- **[API Reference](/api-reference)** - Complete RPC method reference with request/response formats

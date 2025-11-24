@@ -1,0 +1,192 @@
+# apiKey
+
+Your JAW API key for authentication with JAW services.
+
+**Type:** `string`
+**Required:** Yes
+
+---
+
+## Usage
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key-here',
+});
+```
+
+---
+
+## Description
+
+The API key is used to authenticate all requests to JAW backend services. It enables:
+
+- **Authentication** - Verify your application with JAW services
+- **Chain Configuration** - Access chain configuration and RPC endpoints
+- **Paymaster Access** - Enable gasless transactions via paymasters
+- **Permission Storage** - Store and retrieve permission grants
+- **Asset Queries** - Fetch token balances across chains
+
+---
+
+## How to Get an API Key
+
+Contact the JAW team or visit the JAW dashboard to obtain your API key.
+
+**Different keys for different environments:**
+- Development key for local testing
+- Staging key for staging environment
+- Production key for live application
+
+---
+
+## Security Best Practices
+
+### Never Commit to Version Control
+
+```typescript
+// ❌ Bad - Hardcoded key
+const jaw = JAW.create({
+  apiKey: 'jaw_live_1234567890abcdef',
+});
+
+// ✅ Good - Environment variable
+const jaw = JAW.create({
+  apiKey: process.env.JAW_API_KEY,
+});
+```
+
+### Use Environment Variables
+
+Create a `.env` file:
+
+```bash
+# .env
+JAW_API_KEY=your-api-key-here
+```
+
+Add to `.gitignore`:
+
+```bash
+# .gitignore
+.env
+.env.local
+```
+
+Use in your application:
+
+```typescript
+const jaw = JAW.create({
+  apiKey: process.env.JAW_API_KEY || '',
+});
+```
+
+### Separate Keys per Environment
+
+```typescript
+const getApiKey = () => {
+  if (process.env.NODE_ENV === 'production') {
+    return process.env.JAW_API_KEY_PROD;
+  } else if (process.env.NODE_ENV === 'staging') {
+    return process.env.JAW_API_KEY_STAGING;
+  } else {
+    return process.env.JAW_API_KEY_DEV;
+  }
+};
+
+const jaw = JAW.create({
+  apiKey: getApiKey(),
+});
+```
+
+### Rotate Keys Regularly
+
+- Rotate keys every 3-6 months
+- Rotate immediately if key is compromised
+- Update across all environments
+
+---
+
+## Framework-Specific Setup
+
+### Next.js
+
+```typescript
+// lib/jaw.ts
+import { JAW } from '@jaw.id/core';
+
+export const jaw = JAW.create({
+  apiKey: process.env.NEXT_PUBLIC_JAW_API_KEY!,
+});
+```
+
+### Vite
+
+```typescript
+// lib/jaw.ts
+import { JAW } from '@jaw.id/core';
+
+export const jaw = JAW.create({
+  apiKey: import.meta.env.VITE_JAW_API_KEY,
+});
+```
+
+### Create React App
+
+```typescript
+// lib/jaw.ts
+import { JAW } from '@jaw.id/core';
+
+export const jaw = JAW.create({
+  apiKey: process.env.REACT_APP_JAW_API_KEY!,
+});
+```
+
+---
+
+## Error Handling
+
+Missing or invalid API key will cause errors:
+
+```typescript
+try {
+  const jaw = JAW.create({
+    apiKey: '', // Empty key
+  });
+
+  await jaw.provider.request({
+    method: 'eth_requestAccounts',
+  });
+} catch (error) {
+  if (error.code === -32603) {
+    console.error('Invalid or missing API key');
+  }
+}
+```
+
+---
+
+## Validation
+
+Always validate the API key exists before initializing:
+
+```typescript
+function initializeJAW() {
+  const apiKey = process.env.JAW_API_KEY;
+
+  if (!apiKey) {
+    throw new Error('JAW_API_KEY environment variable is not set');
+  }
+
+  return JAW.create({ apiKey });
+}
+
+const jaw = initializeJAW();
+```
+
+---
+
+## Related Configuration
+
+- [appName](/configuration/appName) - Application name
+- [preference](/configuration/preference) - Advanced options

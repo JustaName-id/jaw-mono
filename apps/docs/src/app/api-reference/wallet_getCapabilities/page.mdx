@@ -1,0 +1,115 @@
+# wallet_getCapabilities
+
+Get wallet capabilities for supported chains. Implements EIP-5792 for capability discovery.
+
+**Authentication Required:** No
+
+---
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_getCapabilities',
+  params: ['0x1234...', ['0x1', '0x89']],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `address` | `string` | No | Account address |
+| `chainIds` | `string[]` | No | Filter by specific chain IDs (hex) |
+
+### Example
+
+```json
+["0x1234567890123456789012345678901234567890", ["0x1", "0x89"]]
+```
+
+Or without filtering:
+
+```json
+[]
+```
+
+---
+
+## Response
+
+Returns capabilities per chain as an object keyed by chain ID (hex).
+
+**Type:** `Record<string, object>`
+
+### Example
+
+```json
+{
+  "0x1": {
+    "atomicBatch": { "supported": true },
+    "atomic": { "status": "supported" },
+    "paymasterService": { "supported": true },
+    "permissions": { "supported": true }
+  },
+  "0x89": {
+    "atomicBatch": { "supported": true },
+    "atomic": { "status": "supported" },
+    "paymasterService": { "supported": true },
+    "permissions": { "supported": true }
+  }
+}
+```
+
+---
+
+## Capabilities Explained
+
+### atomicBatch
+
+**Value:** `{ supported: true }`
+
+Indicates support for `wallet_sendCalls` - the ability to send multiple transactions atomically (all succeed or all fail).
+
+### atomic
+
+**Value:** `{ status: "supported" }`
+
+Indicates atomic transaction execution where all operations in a batch are guaranteed to succeed or fail together.
+
+### paymasterService
+
+**Value:** `{ supported: true }`
+
+Indicates support for ERC-7677 paymaster service - gasless transactions sponsored by paymasters.
+
+### permissions
+
+**Value:** `{ supported: true }`
+
+Indicates support for the permission system (`wallet_grantPermissions`, `wallet_revokePermissions`).
+
+---
+
+## Behavior
+
+- Can be called without authentication
+- Returns capabilities for all supported chains by default
+- Filters by chain IDs if `chainIds` parameter provided
+
+---
+
+## Example
+
+```typescript
+const capabilities = await jaw.provider.request({
+  method: 'wallet_getCapabilities',
+});
+```
+
+---
+
+## Related Methods
+
+- [wallet_sendCalls](/api-reference/wallet_sendCalls) - Use atomic batch capability
+- [wallet_grantPermissions](/api-reference/wallet_grantPermissions) - Use permission capability

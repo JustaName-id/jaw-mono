@@ -1,0 +1,75 @@
+# eth_requestAccounts
+
+Request user authentication and account access. Opens the JAW authentication interface where users can create a new account or sign in with an existing one.
+
+**Authentication Required:** No (triggers authentication)
+
+---
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'eth_requestAccounts',
+});
+```
+
+### Parameters
+
+None
+
+---
+
+## Response
+
+Returns an array of account addresses.
+
+**Type:** `0x${string}[]`
+
+### Example
+
+```typescript
+["0x1234567890123456789012345678901234567890"]
+```
+
+---
+
+## Behavior
+
+- Opens authentication popup (in CrossPlatform mode)
+- User creates a new account or signs in with an existing one
+- Returns array with single account address
+- Emits `accountsChanged` event with the connected accounts
+- Subsequent calls return cached accounts without opening popup
+
+---
+
+## Errors
+
+| Code | Description |
+|------|-------------|
+| 4001 | User rejected the request |
+| 4100 | Unauthorized (authentication failed) |
+
+---
+
+## Example
+
+```typescript
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+});
+
+ const accounts = await jaw.provider.request({
+   method: 'eth_requestAccounts',
+ });
+```
+
+---
+
+## Related Methods
+
+- [eth_accounts](/api-reference/eth_accounts) - Get accounts without triggering authentication
+- [wallet_connect](/api-reference/wallet_connect) - Connect with advanced capabilities (SIWE, subnames)
