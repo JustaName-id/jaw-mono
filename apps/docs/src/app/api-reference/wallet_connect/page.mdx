@@ -1,6 +1,6 @@
 # wallet_connect
 
-Connect wallet with advanced capabilities including Sign-In With Ethereum (SIWE) and ENS subname issuance.
+Requests to connect account(s) with optional capabilities.
 
 **Authentication Required:** No (triggers authentication)
 
@@ -12,16 +12,19 @@ Connect wallet with advanced capabilities including Sign-In With Ethereum (SIWE)
 await jaw.provider.request({
   method: 'wallet_connect',
   params: [{
-    version: '1.0',
     capabilities: {
       signInWithEthereum: {
-        nonce: 'random-nonce',
+        nonce: 'abc123xyz789',
         chainId: '0x1',
         domain: 'my-dapp.com',
         uri: 'https://my-dapp.com',
-        statement: 'Sign in to My DApp',
+        statement: 'Sign in to My DApp with your JAW account'
       },
-    },
+      subnameTextRecords: [
+        { key: 'avatar', value: 'https://my-dapp.com/avatars/1.png' },
+        { key: 'description', value: 'Premium member' }
+      ]
+    }
   }],
 });
 ```
@@ -30,7 +33,6 @@ await jaw.provider.request({
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `version` | `string` | Yes | Protocol version (use "1.0") |
 | `capabilities` | `object` | No | Requested capabilities |
 
 ### Capabilities
@@ -50,33 +52,14 @@ await jaw.provider.request({
 
 #### subnameTextRecords
 
-Array of key-value pairs for ENS text records.
+Array of key-value pairs to attach as ENS text records to the user's subname on account creation.
+
+**Note:** This capability is only used if an ENS domain is configured in the SDK preferences (via the `ens` option). If no ENS domain is configured, these records are disregarded.
 
 | Name | Type | Description |
 |------|------|-------------|
 | `key` | `string` | Text record key (e.g., "avatar", "url") |
 | `value` | `string` | Text record value |
-
-### Example
-
-```json
-[{
-  "version": "1.0",
-  "capabilities": {
-    "signInWithEthereum": {
-      "nonce": "abc123xyz789",
-      "chainId": "0x1",
-      "domain": "my-dapp.com",
-      "uri": "https://my-dapp.com",
-      "statement": "Sign in to My DApp with your JAW account"
-    },
-    "subnameTextRecords": [
-      { "key": "avatar", "value": "https://my-dapp.com/avatars/1.png" },
-      { "key": "description", "value": "Premium member" }
-    ]
-  }
-}]
-```
 
 ---
 
@@ -107,11 +90,12 @@ Returns connection result with accounts and capabilities.
 ## Behavior
 
 - Opens authentication popup
-- User creates account or signs in with passkey
-- Generates SIWE message if `signInWithEthereum` requested
-- Signs SIWE message automatically
-- Issues ENS subname if `ens` configured in SDK and `subnameTextRecords` provided
-- Sets text records on the subname
+- User creates account or signs in with existing account
+- If `signInWithEthereum` capability is requested:
+  - Generates and signs a SIWE message with the provided parameters
+  - Returns the signed message in the response capabilities
+- If `subnameTextRecords` capability is provided and `ens` is configured in SDK preferences:
+  - Attaches the provided text records to the subname
 - Returns accounts with capability responses
 
 ---
@@ -126,116 +110,13 @@ Returns connection result with accounts and capabilities.
 
 ---
 
-## Example Usage
-
-### Basic Connection
+## Example
 
 ```typescript
 const result = await jaw.provider.request({
   method: 'wallet_connect',
-  params: [{
-    version: '1.0',
-  }],
+  params: [{}],
 });
-
-console.log('Connected:', result.accounts[0].address);
-```
-
-### SIWE Authentication
-
-```typescript
-// Generate nonce from backend
-const nonce = await fetch('/api/nonce').then(r => r.text());
-
-const result = await jaw.provider.request({
-  method: 'wallet_connect',
-  params: [{
-    version: '1.0',
-    capabilities: {
-      signInWithEthereum: {
-        nonce,
-        chainId: '0x1',
-        domain: 'my-dapp.com',
-        uri: 'https://my-dapp.com',
-        statement: 'Sign in to access your account',
-      },
-    },
-  }],
-});
-
-const account = result.accounts[0];
-const siwe = account.capabilities?.signInWithEthereum;
-
-if (siwe && 'message' in siwe && 'signature' in siwe) {
-  // Send to backend for verification
-  const response = await fetch('/api/verify', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      address: account.address,
-      message: siwe.message,
-      signature: siwe.signature,
-    }),
-  });
-
-  const session = await response.json();
-  console.log('Authenticated with session:', session);
-}
-```
-
-### Issue Subname with Profile
-
-```typescript
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  preference: {
-    ens: 'myapp.eth', // Must own this ENS domain
-  },
-});
-
-const result = await jaw.provider.request({
-  method: 'wallet_connect',
-  params: [{
-    version: '1.0',
-    capabilities: {
-      subnameTextRecords: [
-        { key: 'avatar', value: 'https://myapp.com/avatars/alice.png' },
-        { key: 'description', value: 'Game master level 50' },
-        { key: 'url', value: 'https://myapp.com/profile/alice' },
-        { key: 'com.twitter', value: '@alice' },
-      ],
-    },
-  }],
-});
-
-// User now has alice.myapp.eth pointing to their account
-console.log('Subname issued for:', result.accounts[0].address);
-```
-
-### Combined: SIWE + Subname
-
-```typescript
-const result = await jaw.provider.request({
-  method: 'wallet_connect',
-  params: [{
-    version: '1.0',
-    capabilities: {
-      signInWithEthereum: {
-        nonce: await fetch('/api/nonce').then(r => r.text()),
-        chainId: '0x1',
-        domain: 'my-dapp.com',
-        uri: 'https://my-dapp.com',
-        statement: 'Sign in and claim your username',
-      },
-      subnameTextRecords: [
-        { key: 'avatar', value: userAvatarUrl },
-        { key: 'description', value: userBio },
-      ],
-    },
-  }],
-});
-
-// User is authenticated AND has a subname with profile
 ```
 
 ---
@@ -243,4 +124,3 @@ const result = await jaw.provider.request({
 ## Related Methods
 
 - [eth_requestAccounts](/api-reference/eth_requestAccounts) - Simple authentication without capabilities
-- [personal_sign](/api-reference/personal_sign) - Sign messages after connection

@@ -268,7 +268,6 @@ Authenticate users with Sign-In With Ethereum during connection:
 const result = await jaw.provider.request({
   method: 'wallet_connect',
   params: [{
-    version: '1.0',
     capabilities: {
       signInWithEthereum: {
         nonce: 'your-nonce',

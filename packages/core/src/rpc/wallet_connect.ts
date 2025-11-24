@@ -28,8 +28,6 @@ export type WalletConnectRequest = {
     method: 'wallet_connect';
     params: [
         {
-            // JSON-RPC method version.
-            version: string;
             // Optional capabilities to request (e.g. Sign In With Ethereum, subname text records).
             capabilities?: {
                 signInWithEthereum?: SignInWithEthereumCapabilityRequest;

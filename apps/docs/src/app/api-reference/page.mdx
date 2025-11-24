@@ -49,7 +49,6 @@ Methods for managing user accounts and authentication.
 |--------|-------------|---------------|
 | [eth_requestAccounts](/api-reference/eth_requestAccounts) | Request user authentication and account access | No |
 | [eth_accounts](/api-reference/eth_accounts) | Get currently connected accounts | No |
-| [eth_coinbase](/api-reference/eth_coinbase) | Get the first connected account | Yes |
 
 ---
 
@@ -60,7 +59,6 @@ Methods for querying and switching blockchain networks.
 | Method | Description | Auth Required |
 |--------|-------------|---------------|
 | [eth_chainId](/api-reference/eth_chainId) | Get current chain ID (hex) | No |
-| [net_version](/api-reference/net_version) | Get current chain ID (decimal) | No |
 | [wallet_switchEthereumChain](/api-reference/wallet_switchEthereumChain) | Switch to a different chain | Yes |
 
 ---
@@ -71,8 +69,8 @@ Methods for sending transactions and batch operations.
 
 | Method | Description | Auth Required |
 |--------|-------------|---------------|
-| [eth_sendTransaction](/api-reference/eth_sendTransaction) | Send a single transaction | Yes |
-| [wallet_sendCalls](/api-reference/wallet_sendCalls) | Send multiple transactions atomically (EIP-5792) | Yes |
+| [eth_sendTransaction](/api-reference/eth_sendTransaction) | Broadcast a transaction to the network | Yes |
+| [wallet_sendCalls](/api-reference/wallet_sendCalls) | Broadcast bundle of calls to the network | Yes |
 | [wallet_showCallsStatus](/api-reference/wallet_showCallsStatus) | Show batch transaction status UI | Yes |
 | [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) | Get batch transaction status | No |
 
@@ -86,7 +84,7 @@ Methods for signing messages and typed data.
 |--------|-------------|---------------|
 | [personal_sign](/api-reference/personal_sign) | Sign a message with EIP-191 | Yes |
 | [eth_signTypedData_v4](/api-reference/eth_signTypedData_v4) | Sign structured typed data (EIP-712) | Yes |
-| [wallet_sign](/api-reference/wallet_sign) | Generic signing method | No* |
+| [wallet_sign](/api-reference/wallet_sign) | Unified signing method supporting multiple message formats | No* |
 
 *Can use ephemeral signer if not authenticated
 
@@ -139,41 +137,6 @@ Methods for querying token balances.
 
 ---
 
-## Unsupported Methods
-
-The following methods are **not supported** and will throw an error with code `4200`:
-
-- **eth_sign** - Deprecated and unsafe (can sign arbitrary data)
-- **eth_signTransaction** - Use `eth_sendTransaction` instead
-- **eth_signTypedData (v1, v2, v3)** - Use `eth_signTypedData_v4` instead
-- **eth_ecRecover / personal_ecRecover** - Recovery should be done client-side
-
----
-
-## Proxied Methods
-
-Methods not listed above are automatically proxied to the chain's RPC endpoint:
-
-```typescript
-// These are sent directly to the chain RPC
-await jaw.provider.request({ method: 'eth_blockNumber' });
-await jaw.provider.request({ method: 'eth_getBalance', params: [...] });
-await jaw.provider.request({ method: 'eth_call', params: [...] });
-```
-
-**Common proxied methods:**
-- `eth_blockNumber` - Get latest block number
-- `eth_getBalance` - Get account balance
-- `eth_getCode` - Get contract code
-- `eth_getTransactionCount` - Get nonce
-- `eth_call` - Execute read-only call
-- `eth_estimateGas` - Estimate gas for transaction
-- `eth_getTransactionByHash` - Get transaction details
-- `eth_getTransactionReceipt` - Get transaction receipt
-- `eth_getLogs` - Query event logs
-
----
-
 ## Error Codes
 
 JAW SDK follows EIP-1193 error codes:
@@ -190,42 +153,3 @@ JAW SDK follows EIP-1193 error codes:
 | -32601 | Method Not Found | Method doesn't exist |
 | -32602 | Invalid Params | Invalid parameters |
 | -32603 | Internal Error | Internal JSON-RPC error |
-
-**Error Handling Example:**
-```typescript
-try {
-  await jaw.provider.request({ method: 'eth_sendTransaction', params: [...] });
-} catch (error) {
-  if (error.code === 4001) {
-    console.log('User rejected the request');
-  } else if (error.code === 4100) {
-    console.log('Not authenticated - please connect wallet');
-  }
-}
-```
-
----
-
-## TypeScript Types
-
-Import TypeScript types for type safety:
-
-```typescript
-import type {
-  RequestArguments,
-  ProviderInterface,
-  ProviderRpcError,
-  Address,
-} from '@jaw.id/core';
-
-// For specific RPC methods
-import type {
-  WalletConnectRequest,
-  WalletConnectResponse,
-  WalletGrantPermissionsRequest,
-  WalletGrantPermissionsResponse,
-  Permission,
-  SpendLimit,
-  CallPermission,
-} from '@jaw.id/core';
-```

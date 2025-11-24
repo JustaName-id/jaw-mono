@@ -317,7 +317,7 @@ describe('JAWProvider', () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_connect',
-        params: [{ version: '1.0', capabilities: {} }],
+        params: [{ capabilities: {} }],
       };
       const mockResponse = {
         accounts: [{ address: '0x1234567890123456789012345678901234567890' }],
@@ -345,7 +345,7 @@ describe('JAWProvider', () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_connect',
-        params: [{ version: '1.0', capabilities: {} }],
+        params: [{ capabilities: {} }],
       };
       (mockSigner.handshake as Mock).mockRejectedValue(new Error('Handshake failed'));
 
