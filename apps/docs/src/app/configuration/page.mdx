@@ -13,17 +13,7 @@ const jaw = JAW.create({
   apiKey: 'your-api-key-here',
   appName: 'My DApp',
   appLogoUrl: 'https://my-dapp.com/logo.png',
-  defaultChainId: 1,
-  preference: {
-    mode: 'CrossPlatform',
-    serverUrl: 'https://api.justaname.id/wallet/v2/passkeys',
-    showTestnets: false,
-    ens: 'myapp.eth',
-  },
-  paymasterUrls: {
-    1: 'https://paymaster.example.com/mainnet',
-    137: 'https://paymaster.example.com/polygon',
-  },
+  ens: 'myapp.eth'
 });
 ```
 
@@ -38,6 +28,7 @@ const jaw = JAW.create({
 | [apiKey](/configuration/apiKey) | `string` | Yes | API key for JAW services authentication |
 | [appName](/configuration/appName) | `string` | No | Application name displayed to users |
 | [appLogoUrl](/configuration/appLogoUrl) | `string \| null` | No | URL to application logo image |
+| [ens](/configuration/preference) | `string` | No | ENS to issue subnames from |
 | [defaultChainId](/configuration/defaultChainId) | `number` | No | Default blockchain network |
 | [preference](/configuration/preference) | `object` | No | Preference options for SDK behavior |
 | [paymasterUrls](/configuration/paymasterUrls) | `Record<number, string>` | No | Custom paymaster URLs per chain |
@@ -50,10 +41,9 @@ The `preference` object contains advanced configuration:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| mode | `'CrossPlatform' \| 'AppSpecific'` | `'CrossPlatform'` | Authentication mode |
-| serverUrl | `string` | JAW backend | Passkey storage backend URL |
+| mode | `Mode.CrossPlatform` \| `Mode.AppSpecific` | `Mode.CrossPlatform` | Authentication mode |
+| serverUrl | `string` | JAW Server | Passkey server URL |
 | showTestnets | `boolean` | `false` | Include testnet networks |
-| ens | `string` | - | ENS domain for subnames |
 
 [See all preference options →](/configuration/preference)
 
@@ -74,7 +64,7 @@ const jaw = JAW.create({ apiKey: 'your-api-key' });
 
 // Use the provider
 const accounts = await jaw.provider.request({
-  method: 'eth_requestAccounts',
+  method: 'wallet_connect',
 });
 ```
 
@@ -86,111 +76,4 @@ Method to disconnect the current session and clean up resources.
 
 ```typescript
 await jaw.disconnect();
-```
-
----
-
-## Quick Examples
-
-### Minimal Configuration
-
-```typescript
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-});
-```
-
-### Production Configuration
-
-```typescript
-const jaw = JAW.create({
-  apiKey: process.env.JAW_API_KEY,
-  appName: 'My DApp',
-  appLogoUrl: 'https://my-dapp.com/logo.png',
-  defaultChainId: 1,
-  preference: {
-    showTestnets: false,
-  },
-  paymasterUrls: {
-    1: process.env.MAINNET_PAYMASTER_URL,
-    137: process.env.POLYGON_PAYMASTER_URL,
-  },
-});
-```
-
-### Development Configuration
-
-```typescript
-const jaw = JAW.create({
-  apiKey: 'dev-api-key',
-  appName: 'My DApp (Dev)',
-  preference: {
-    showTestnets: true,
-    serverUrl: 'http://localhost:3000/passkeys',
-  },
-});
-```
-
----
-
-## Best Practices
-
-### Security
-
-- Never commit API keys to version control
-- Use environment variables: `process.env.JAW_API_KEY`
-- Rotate keys periodically
-- Use different keys for dev/staging/production
-
-### Performance
-
-- Initialize once and reuse the instance
-- Don't recreate on every render in React
-- Use `useMemo` for React initialization if needed
-
-```typescript
-// Good: Initialize once
-const jaw = JAW.create({ apiKey: process.env.API_KEY });
-
-function App() {
-  // Use the same instance
-}
-
-// Bad: Recreating on every render
-function App() {
-  const jaw = JAW.create({ apiKey: process.env.API_KEY }); // ❌
-}
-```
-
-### User Experience
-
-- Use clear, recognizable `appName` and `appLogoUrl`
-- Set appropriate `defaultChainId` for your app's primary network
-- Use `showTestnets: false` in production
-- Provide user feedback during connection/disconnection
-
----
-
-## TypeScript Types
-
-All configuration options are fully typed:
-
-```typescript
-import type {
-  CreateJAWSDKOptions,
-  JawProviderPreference,
-  Mode,
-  AppMetadata,
-} from '@jaw.id/core';
-
-const options: CreateJAWSDKOptions = {
-  apiKey: 'your-api-key',
-  appName: 'My DApp',
-  preference: {
-    mode: Mode.CrossPlatform,
-    showTestnets: false,
-  },
-};
-
-const jaw = JAW.create(options);
 ```

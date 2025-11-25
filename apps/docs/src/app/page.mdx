@@ -4,14 +4,13 @@ The JAW SDK is a TypeScript library designed for applications to create, manage,
 
 ## Overview
 
-JAW SDK provides a comprehensive solution for integrating account abstraction (ERC-4337) into your application with features like:
+JAW SDK provides a comprehensive solution for integrating advanced functionalities into your application with features like:
 
 - **Passkey Authentication** - Secure, passwordless authentication using WebAuthn
-- **Gasless Transactions** - Built-in paymaster support for sponsored transactions
+- **Gasless Transactions** - Built-in paymaster support for sponsored transactions. Users can also pay gas with ERC-20 tokens natively.
 - **Atomic Batch Operations** - Execute multiple calls atomically via `wallet_sendCalls` (EIP-5792)
-- **Permission System** - Grant granular spend and call permissions to third parties
+- **Permission System** - Grant granular spend and call permissions to third parties in a permissionless and trustless way
 - **Multi-Chain Support** - Works across Ethereum and EVM-compatible chains
-- **EIP-1193 Provider** - Standard Ethereum provider interface for compatibility
 
 ## Installation
 
@@ -35,8 +34,7 @@ import { JAW } from '@jaw.id/core';
 const jaw = JAW.create({
   apiKey: 'your-api-key-here',
   appName: 'My DApp',
-  appLogoUrl: 'https://my-dapp.com/logo.png',
-  defaultChainId: 1,
+  appLogoUrl: 'https://my-dapp.com/logo.png'
 });
 ```
 
@@ -51,7 +49,7 @@ Request user authentication to connect their wallet:
 
 ```typescript
 const accounts = await jaw.provider.request({
-  method: 'eth_requestAccounts'
+  method: 'wallet_connect'
 });
 
 console.log('Connected:', accounts[0]);
@@ -69,161 +67,8 @@ const chainId = await jaw.provider.request({
   method: 'eth_chainId'
 });
 
-// Send a transaction
-const txHash = await jaw.provider.request({
-  method: 'eth_sendTransaction',
-  params: [{
-    to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-    value: '0x9184e72a000',
-    data: '0x',
-  }],
-});
-
-// Sign a message
-const signature = await jaw.provider.request({
-  method: 'personal_sign',
-  params: ['Hello World', accounts[0]],
-});
-```
-
-## React Example
-
-Here's a complete example for React applications:
-
-```typescript
-import { useState, useEffect } from 'react';
-import { JAW } from '@jaw.id/core';
-
-// Initialize outside component (singleton)
-const jaw = JAW.create({
-  apiKey: 'your-api-key-here',
-  appName: 'My DApp',
-  appLogoUrl: 'https://my-dapp.com/logo.png',
-});
-
-function App() {
-  const [account, setAccount] = useState<string | null>(null);
-  const [chainId, setChainId] = useState<string | null>(null);
-
-  useEffect(() => {
-    // Listen for account changes
-    jaw.provider.on('accountsChanged', (accounts) => {
-      setAccount(accounts[0] || null);
-    });
-
-    // Listen for chain changes
-    jaw.provider.on('chainChanged', (chainId) => {
-      setChainId(chainId);
-    });
-
-    // Check if already connected
-    jaw.provider.request({ method: 'eth_accounts' })
-      .then((accounts) => {
-        if (accounts.length > 0) {
-          setAccount(accounts[0]);
-          return jaw.provider.request({ method: 'eth_chainId' });
-        }
-      })
-      .then((chainId) => {
-        if (chainId) setChainId(chainId as string);
-      })
-      .catch(console.error);
-  }, []);
-
-  const connect = async () => {
-    try {
-      const accounts = await jaw.provider.request({
-        method: 'eth_requestAccounts',
-      });
-      setAccount(accounts[0]);
-
-      const chainId = await jaw.provider.request({
-        method: 'eth_chainId'
-      });
-      setChainId(chainId as string);
-    } catch (error) {
-      console.error('Failed to connect:', error);
-    }
-  };
-
-  const disconnect = async () => {
-    await jaw.disconnect();
-    setAccount(null);
-    setChainId(null);
-  };
-
-  const sendTransaction = async () => {
-    if (!account) return;
-
-    try {
-      const txHash = await jaw.provider.request({
-        method: 'eth_sendTransaction',
-        params: [{
-          to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-          value: '0x9184e72a000',
-        }],
-      });
-      console.log('Transaction sent:', txHash);
-    } catch (error) {
-      console.error('Transaction failed:', error);
-    }
-  };
-
-  return (
-    <div>
-      {!account ? (
-        <button onClick={connect}>Connect Wallet</button>
-      ) : (
-        <div>
-          <p>Account: {account}</p>
-          <p>Chain: {chainId}</p>
-          <button onClick={sendTransaction}>Send Transaction</button>
-          <button onClick={disconnect}>Disconnect</button>
-        </div>
-      )}
-    </div>
-  );
-}
-```
-
-## Using with Viem
-
-JAW provider can be used with viem's custom transports:
-
-```typescript
-import { createWalletClient, custom } from 'viem';
-import { mainnet } from 'viem/chains';
-import { JAW } from '@jaw.id/core';
-
-const jaw = JAW.create({
-  apiKey: 'your-api-key-here',
-  appName: 'My DApp',
-});
-
-// Connect first
-await jaw.provider.request({ method: 'eth_requestAccounts' });
-
-// Create viem wallet client
-const walletClient = createWalletClient({
-  chain: mainnet,
-  transport: custom(jaw.provider),
-});
-
-// Use viem methods
-const hash = await walletClient.sendTransaction({
-  to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-  value: 1000000000000000n,
-});
-```
-
-## Advanced Features
-
-### Batch Transactions
-
-Send multiple transactions atomically using EIP-5792:
-
-```typescript
-const result = await jaw.provider.request({
+// Send a call bundle
+const bundleId = await jaw.provider.request({
   method: 'wallet_sendCalls',
   params: [{
     version: '1.0',
@@ -242,60 +87,11 @@ const result = await jaw.provider.request({
   }],
 });
 
-// Check status later
-const status = await jaw.provider.request({
-  method: 'wallet_getCallsStatus',
-  params: [result.id],
+// Sign a message
+const signature = await jaw.provider.request({
+  method: 'personal_sign',
+  params: ['Hello World', accounts[0]],
 });
-```
-
-### Chain Switching
-
-Switch between supported chains:
-
-```typescript
-await jaw.provider.request({
-  method: 'wallet_switchEthereumChain',
-  params: [{ chainId: '0x89' }], // Polygon
-});
-```
-
-### Sign-In With Ethereum (SIWE)
-
-Authenticate users with Sign-In With Ethereum during connection:
-
-```typescript
-const result = await jaw.provider.request({
-  method: 'wallet_connect',
-  params: [{
-    capabilities: {
-      signInWithEthereum: {
-        nonce: 'your-nonce',
-        chainId: '0x1',
-        domain: 'your-domain.com',
-        uri: 'https://your-domain.com',
-        statement: 'Sign in to My DApp',
-      },
-    },
-  }],
-});
-
-// SIWE signature in result.accounts[0].capabilities.signInWithEthereum
-```
-
-## TypeScript
-
-JAW SDK is fully typed with TypeScript:
-
-```typescript
-import type { RequestArguments, ProviderInterface } from '@jaw.id/core';
-
-const provider: ProviderInterface = jaw.provider;
-
-const request: RequestArguments = {
-  method: 'eth_requestAccounts',
-  params: [],
-};
 ```
 
 ## Next Steps

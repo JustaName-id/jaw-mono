@@ -1,0 +1,34 @@
+# ens
+
+ENS domain used to issue subnames to users during authentication.
+
+**Type:** `string`
+**Required:** No
+
+---
+
+## Usage
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  ens: 'myapp.eth',
+});
+```
+
+---
+
+## Description
+
+When configured, users can receive a subname under your ENS domain during the authentication flow. For example, if your `ens` is set to `myapp.eth`, users can get subnames like `alice.myapp.eth`.
+By default, subname will be active on all supported networks.
+
+To attach text records on creation, please check the [wallet_connect](/api-reference/wallet_connect) `subnameTextRecords` capability.
+
+
+---
+
+## Related Configuration
+
+- [apiKey](/configuration/apiKey) - API key for authentication
+- [wallet_connect](/api-reference/wallet_connect) - Add subname text records using wallet_connect capability

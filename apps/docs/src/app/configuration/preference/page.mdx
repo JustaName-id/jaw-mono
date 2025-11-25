@@ -11,12 +11,13 @@ Advanced configuration options to customize SDK behavior and authentication mode
 ## Usage
 
 ```typescript
+import {JAW, Mode} from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key',
   preference: {
-    mode: 'CrossPlatform',
-    serverUrl: 'https://api.justaname.id/wallet/v2/passkeys',
-    showTestnets: false,
+    mode: Mode.AppSpecific,
+    showTestnets: true,
     ens: 'myapp.eth',
   },
 });
@@ -30,8 +31,18 @@ const jaw = JAW.create({
 
 Authentication mode that determines where passkey operations occur.
 
-**Type:** `'CrossPlatform' | 'AppSpecific'`
-**Default:** `'CrossPlatform'`
+**Type:** `Mode.CrossPlatform` | `Mode.AppSpecific`
+**Default:** `Mode.CrossPlatform`
+
+#### Mode Comparison
+
+| Feature | Mode.CrossPlatform | Mode.AppSpecific |
+|---------|---------------|-------------|
+| **Passkey operations** | On `keys.jaw.id` (popup) | Within your dApp |
+| **User experience** | Redirects to popup | Stays in your app |
+| **Wallet reuse** | ✅ Universal | ❌ App-specific only |
+| **Origin binding** | `keys.jaw.id` | Your domain |
+| **Branding** | JAW interface | Can use custom UI |
 
 **Important:** Passkeys are always stored by the browser/device (not on any server). The mode determines where passkey operations happen and whether wallets can be reused across applications.
 
@@ -40,10 +51,12 @@ Authentication mode that determines where passkey operations occur.
 Passkey operations redirect to `keys.jaw.id` in a popup, enabling wallet reuse across multiple applications.
 
 ```typescript
+import {JAW, Mode} from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key',
   preference: {
-    mode: 'CrossPlatform',
+    mode: Mode.CrossPlatform,
   },
 });
 ```
@@ -60,20 +73,17 @@ const jaw = JAW.create({
 - Users don't recreate wallets for each app
 - Consistent authentication flow
 
-**Use Cases:**
-- Multi-application ecosystems
-- Shared wallet infrastructure
-- When you want users to access same wallet across different dApps
-
 #### AppSpecific Mode
 
 Passkey operations stay within your dApp (no redirect). Wallets are specific to your application's origin.
 
 ```typescript
+import {JAW, Mode} from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key',
   preference: {
-    mode: 'AppSpecific',
+    mode: Mode.AppSpecific,
   },
 });
 ```
@@ -90,12 +100,6 @@ const jaw = JAW.create({
 - White-label experience
 - No external redirects
 
-**Use Cases:**
-- Standalone applications
-- White-label solutions
-- When you want users to stay within your brand experience
-- Applications requiring no external dependencies
-
 ---
 
 ### serverUrl
@@ -104,13 +108,15 @@ URL to a passkey metadata server for managing passkey credentials (credential ID
 
 **Type:** `string`
 **Default:** `'https://api.justaname.id/wallet/v2/passkeys'`
-**Only works with:** `AppSpecific` mode
+**Only works with:** `Mode.AppSpecific`
 
 ```typescript
+import {JAW, Mode} from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key',
   preference: {
-    mode: 'AppSpecific',
+    mode: Mode.AppSpecific,
     serverUrl: 'https://custom-backend.example.com/passkeys',
   },
 });
@@ -120,7 +126,6 @@ const jaw = JAW.create({
 
 **When to Customize:**
 - Self-hosted passkey metadata server
-- Regional data requirements
 - Development/staging environments
 - Custom passkey management logic
 
@@ -190,32 +195,6 @@ Response:
 - **Credential IDs**: Base64url-encoded strings (standard WebAuthn format)
 - **Display Names**: Human-readable names for the passkeys
 
-#### Development Setup
-
-```typescript
-const jaw = JAW.create({
-  apiKey: 'dev-api-key',
-  preference: {
-    mode: 'AppSpecific',
-    serverUrl: process.env.NODE_ENV === 'production'
-      ? 'https://api.justaname.id/wallet/v2/passkeys'
-      : 'http://localhost:3000/passkeys',
-  },
-});
-```
-
-#### Self-Hosted Example
-
-```typescript
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  preference: {
-    mode: 'AppSpecific',
-    serverUrl: 'https://passkeys.mydapp.com',
-  },
-});
-```
-
 ---
 
 ### showTestnets
@@ -234,360 +213,9 @@ const jaw = JAW.create({
 });
 ```
 
-#### Production (Mainnets Only)
-
-```typescript
-// ✅ Production - Hide testnets
-const jaw = JAW.create({
-  apiKey: process.env.JAW_API_KEY,
-  preference: {
-    showTestnets: false, // Only Ethereum, Polygon, Base, etc.
-  },
-});
-```
-
-#### Development (Include Testnets)
-
-```typescript
-// ✅ Development - Show testnets
-const jaw = JAW.create({
-  apiKey: 'dev-api-key',
-  preference: {
-    showTestnets: true, // Includes Sepolia, Amoy, etc.
-  },
-});
-```
-
-#### Environment-Based
-
-```typescript
-const jaw = JAW.create({
-  apiKey: process.env.JAW_API_KEY,
-  preference: {
-    showTestnets: process.env.NODE_ENV !== 'production',
-  },
-});
-```
-
-**Available Testnets:**
-- Sepolia (Ethereum)
-- Optimism Sepolia
-- Base Sepolia
-- Arbitrum Sepolia
-- Polygon Amoy
-
----
-
-### ens
-
-ENS domain for issuing subnames to users during account creation.
-
-**Type:** `string | undefined`
-**Required:** No
-
-```typescript
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  preference: {
-    ens: 'myapp.eth',
-  },
-});
-```
-
-When configured, new users automatically receive a subdomain:
-- User registers → Gets `alice.myapp.eth`
-- Another user → Gets `bob.myapp.eth`
-
-#### Benefits
-
-- **User-Friendly Addresses**: `alice.myapp.eth` instead of `0x742d35...`
-- **Brand Identity**: Users carry your app's brand
-- **Easy Recognition**: Memorable names for social features
-- **Transfer History**: Trackable on-chain identity
-
-#### Setup Requirements
-
-1. **Own an ENS Domain**: Register a `.eth` domain on ENS
-2. **Configure Subdomain Issuance**: Grant JAW permission to issue subdomains
-3. **Provide Domain**: Set `ens` parameter to your domain
-
-```typescript
-// Users get subnames like alice.dapp.eth, bob.dapp.eth
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  appName: 'My DApp',
-  preference: {
-    ens: 'dapp.eth',
-  },
-});
-```
-
-#### Without ENS
-
-```typescript
-// Users get standard addresses only
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  // No ens parameter
-});
-```
-
----
-
-## Complete Examples
-
-### Production Configuration
-
-```typescript
-const jaw = JAW.create({
-  apiKey: process.env.JAW_API_KEY,
-  appName: 'My DApp',
-  appLogoUrl: 'https://my-dapp.com/logo.png',
-  defaultChainId: 1,
-  preference: {
-    mode: 'CrossPlatform',
-    serverUrl: 'https://api.justaname.id/wallet/v2/passkeys',
-    showTestnets: false,
-    ens: 'mydapp.eth',
-  },
-});
-```
-
-### Development Configuration
-
-```typescript
-const jaw = JAW.create({
-  apiKey: 'dev-api-key',
-  appName: 'My DApp (Dev)',
-  defaultChainId: 11155111, // Sepolia
-  preference: {
-    mode: 'CrossPlatform',
-    serverUrl: 'http://localhost:3000/passkeys',
-    showTestnets: true,
-  },
-});
-```
-
-### Privacy-Focused Configuration
-
-```typescript
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  preference: {
-    mode: 'AppSpecific', // Local storage only
-    showTestnets: false,
-  },
-});
-```
-
-### White-Label Configuration
-
-```typescript
-function createJAWForTenant(tenantId: string) {
-  const tenants = {
-    tenant1: {
-      name: 'Brand A',
-      logo: 'https://brand-a.com/logo.png',
-      ens: 'brand-a.eth',
-    },
-    tenant2: {
-      name: 'Brand B',
-      logo: 'https://brand-b.com/logo.png',
-      ens: 'brand-b.eth',
-    },
-  };
-
-  const tenant = tenants[tenantId];
-
-  return JAW.create({
-    apiKey: process.env.JAW_API_KEY,
-    appName: tenant.name,
-    appLogoUrl: tenant.logo,
-    preference: {
-      mode: 'CrossPlatform',
-      ens: tenant.ens,
-    },
-  });
-}
-```
-
----
-
-## Mode Comparison
-
-| Feature | CrossPlatform | AppSpecific |
-|---------|---------------|-------------|
-| **Passkey operations** | On `keys.jaw.id` (popup) | Within your dApp |
-| **User experience** | Redirects to popup | Stays in your app |
-| **Wallet reuse** | ✅ Across all apps | ❌ App-specific only |
-| **Origin binding** | `keys.jaw.id` | Your domain |
-| **Branding** | JAW interface | Your interface |
-| **Setup complexity** | Simple | Requires passkey server |
-
----
-
-## Advanced Patterns
-
-### Environment-Aware Configuration
-
-```typescript
-function getPreferences() {
-  const base = {
-    mode: 'CrossPlatform' as const,
-  };
-
-  if (process.env.NODE_ENV === 'production') {
-    return {
-      ...base,
-      serverUrl: 'https://api.justaname.id/wallet/v2/passkeys',
-      showTestnets: false,
-      ens: process.env.PRODUCTION_ENS_DOMAIN,
-    };
-  }
-
-  if (process.env.NODE_ENV === 'staging') {
-    return {
-      ...base,
-      serverUrl: 'https://staging.api.justaname.id/wallet/v2/passkeys',
-      showTestnets: true,
-      ens: process.env.STAGING_ENS_DOMAIN,
-    };
-  }
-
-  return {
-    ...base,
-    serverUrl: 'http://localhost:3000/passkeys',
-    showTestnets: true,
-  };
-}
-
-const jaw = JAW.create({
-  apiKey: process.env.JAW_API_KEY,
-  preference: getPreferences(),
-});
-```
-
-### Feature Flags
-
-```typescript
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  preference: {
-    mode: process.env.ENABLE_CROSS_PLATFORM === 'true'
-      ? 'CrossPlatform'
-      : 'AppSpecific',
-    showTestnets: process.env.ENABLE_TESTNETS === 'true',
-    ens: process.env.ENS_DOMAIN || undefined,
-  },
-});
-```
-
-### Regional Compliance
-
-```typescript
-function getRegionalPreference(region: string) {
-  // EU users require data residency
-  if (region === 'EU') {
-    return {
-      mode: 'CrossPlatform' as const,
-      serverUrl: 'https://eu.api.justaname.id/wallet/v2/passkeys',
-    };
-  }
-
-  // US users on main infrastructure
-  if (region === 'US') {
-    return {
-      mode: 'CrossPlatform' as const,
-      serverUrl: 'https://api.justaname.id/wallet/v2/passkeys',
-    };
-  }
-
-  // Other regions use app-specific for privacy
-  return {
-    mode: 'AppSpecific' as const,
-  };
-}
-
-const userRegion = getUserRegion();
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  preference: getRegionalPreference(userRegion),
-});
-```
-
----
-
-## Migration Guide
-
-### Switching from AppSpecific to CrossPlatform
-
-```typescript
-// Old configuration
-const oldJaw = JAW.create({
-  apiKey: 'your-api-key',
-  preference: {
-    mode: 'AppSpecific',
-  },
-});
-
-// New configuration
-const newJaw = JAW.create({
-  apiKey: 'your-api-key',
-  preference: {
-    mode: 'CrossPlatform',
-    serverUrl: 'https://api.justaname.id/wallet/v2/passkeys',
-  },
-});
-
-// Users need to re-authenticate to migrate passkeys
-```
-
----
-
-## Common Issues
-
-### Testnet Not Showing
-
-```typescript
-// ❌ Problem - Trying to use Sepolia without flag
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  defaultChainId: 11155111, // Sepolia
-  // Missing showTestnets: true
-});
-```
-
-Solution:
-
-```typescript
-// ✅ Solution
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  defaultChainId: 11155111,
-  preference: {
-    showTestnets: true,
-  },
-});
-```
-
-### Server Connection Failed
-
-```typescript
-// ❌ Problem - Wrong server URL
-const jaw = JAW.create({
-  apiKey: 'your-api-key',
-  preference: {
-    serverUrl: 'https://wrong-url.com/passkeys',
-  },
-});
-```
-
-Solution: Verify server URL is accessible and correct.
-
 ---
 
 ## Related Configuration
 
 - [apiKey](/configuration/apiKey) - API key for authentication
 - [defaultChainId](/configuration/defaultChainId) - Default network selection
-- [mode](/configuration/preference#mode) - Authentication mode details

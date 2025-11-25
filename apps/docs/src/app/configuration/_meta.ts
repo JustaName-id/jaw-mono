@@ -5,6 +5,7 @@ export default {
     title: 'Core Parameters',
   },
   apiKey: 'apiKey',
+  ens: 'ens',
   appName: 'appName',
   appLogoUrl: 'appLogoUrl',
   defaultChainId: 'defaultChainId',
