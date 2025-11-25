@@ -1,0 +1,129 @@
+# wallet_getAssets
+
+Get token balances across multiple chains for an account. Implements EIP-7811.
+
+**Authentication Required:** No (requires address parameter)
+
+---
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_getAssets',
+  params: [{
+    address: '0x1234...',
+    chainFilter: ['0x1', '0x89'],
+  }],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `address` | `string` | Yes | Account address to query |
+| `chainFilter` | `string[]` | No | Limit to specific chains (hex chain IDs) |
+
+### Example
+
+```json
+[{
+  "address": "0x1234567890123456789012345678901234567890",
+  "chainFilter": ["0x1", "0x89"]
+}]
+```
+
+Or without chain filter (all chains):
+
+```json
+[{
+  "address": "0x1234567890123456789012345678901234567890"
+}]
+```
+
+---
+
+## Response
+
+Returns an array of asset objects with balances.
+
+**Type:** `array`
+
+### Example
+
+```json
+[
+  {
+    "chainId": "0x1",
+    "address": "0x0000000000000000000000000000000000000000",
+    "symbol": "ETH",
+    "decimals": 18,
+    "balance": "0x1bc16d674ec80000",
+    "name": "Ether",
+    "logoUri": "https://..."
+  },
+  {
+    "chainId": "0x1",
+    "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "symbol": "USDC",
+    "decimals": 6,
+    "balance": "0x5f5e100",
+    "name": "USD Coin",
+    "logoUri": "https://..."
+  },
+  {
+    "chainId": "0x89",
+    "address": "0x0000000000000000000000000000000000000000",
+    "symbol": "MATIC",
+    "decimals": 18,
+    "balance": "0x2b5e3af16b1880000",
+    "name": "Polygon",
+    "logoUri": "https://..."
+  }
+]
+```
+
+### Asset Object Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `chainId` | `string` | Chain ID (hex) |
+| `address` | `string` | Token contract address (0x0...0 for native) |
+| `symbol` | `string` | Token symbol (e.g., "ETH", "USDC") |
+| `decimals` | `number` | Token decimals |
+| `balance` | `string` | Balance in smallest unit (wei/raw), hex format |
+| `name` | `string` | Token name |
+| `logoUri` | `string` | URL to token logo image |
+
+---
+
+## Behavior
+
+- Includes native tokens (ETH, MATIC, etc.)
+- Includes ERC-20 tokens with non-zero balances
+- Auto-filters by `showTestnets` SDK preference
+- Can be called without authentication
+- Returns only tokens with non-zero balances
+
+---
+
+## Example
+
+### Get All Assets
+
+```typescript
+const assets = await jaw.provider.request({
+  method: 'wallet_getAssets',
+  params: [{
+    address: account,
+  }],
+});
+```
+
+---
+
+## Related Methods
+
+- [eth_getBalance](/api-reference) (Proxied) - Get native balance for single chain
+- [wallet_getCapabilities](/api-reference/wallet_getCapabilities) - Check supported chains

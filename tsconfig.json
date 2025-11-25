@@ -14,6 +14,9 @@
     },
     {
       "path": "./packages/ui"
+    },
+    {
+      "path": "./apps/docs"
     }
   ]
 }

@@ -1,0 +1,43 @@
+# appLogoUrl
+
+URL to your application's logo image. Displayed alongside your app name in the authentication interface.
+
+**Type:** `string | null`
+**Required:** No
+**Default:** `null` (uses default icon)
+
+---
+
+## Usage
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'My DApp',
+  appLogoUrl: 'https://my-dapp.com/logo.png',
+});
+```
+
+---
+
+## Where It Appears
+
+Your app logo is shown to users in:
+- Authentication popup header
+- Transaction approval screens
+- Permission grant dialogs
+
+---
+
+## Image Requirements
+
+- **Format:** PNG, JPG, or SVG
+- **Size:** 200x200px minimum (square recommended)
+- **Protocol:** Must use HTTPS
+
+---
+
+## Related Configuration
+
+- [appName](/configuration/appName) - Application name
+- [apiKey](/configuration/apiKey) - API key for authentication

@@ -6,7 +6,7 @@ import type { Address, PublicClient } from 'viem';
 import {  toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, createPublicClient, http, Chain as ViemChain } from 'viem';
 import { mainnet } from 'viem/chains';
-import {type Chain, SPEND_PERMISSIONS_MANAGER_ADDRESS, getBundlerClient } from '@jaw.id/core';
+import {type Chain, PERMISSIONS_MANAGER_ADDRESS, getBundlerClient } from '@jaw.id/core';
 
 
 export interface PasskeyCreationResult {
@@ -258,7 +258,7 @@ storeAuthState(address: Address, credentialId: string): void {
 
     const tempSmartAccount = await toJustanAccount({
       client,
-      owners: [webAuthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS],
+      owners: [webAuthnAccount, PERMISSIONS_MANAGER_ADDRESS],
     });
 
     const smartAccountAddress = await tempSmartAccount.getAddress();
@@ -273,7 +273,7 @@ storeAuthState(address: Address, credentialId: string): void {
     // Use toJustanAccount to derive the smart contract wallet address
     const smartAccount = await toJustanAccount({
       client,
-      owners: [webAuthnAccount, SPEND_PERMISSIONS_MANAGER_ADDRESS],
+      owners: [webAuthnAccount, PERMISSIONS_MANAGER_ADDRESS],
       ownerIndex
     });
 

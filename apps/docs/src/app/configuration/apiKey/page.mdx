@@ -1,0 +1,47 @@
+# apiKey
+
+Your JAW API key for authentication with JAW services.
+
+**Type:** `string`
+**Required:** Yes
+
+---
+
+## Usage
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key-here',
+});
+```
+
+---
+
+## How to Get an API Key
+
+1. Visit the [JAW Dashboard](https://dashboard.jaw.id/)
+2. Create a new project or select an existing one
+3. Navigate to the API Keys section
+4. Generate a new API key
+
+---
+
+## Setting Up Allowed Domains
+
+For security, you must configure which domains are allowed to use your API key:
+
+1. In the [JAW Dashboard](https://dashboard.jaw.id/), go to your api-key settings
+2. Find the **Allowed Domains** section
+3. Add the domains where your application will run:
+   - `localhost` for local development
+   - `yourdomain.com` for production
+   - `staging.yourdomain.com` for staging environments
+
+Requests from domains not in your allowed list will be rejected.
+
+---
+
+## Related Configuration
+
+- [appName](/configuration/appName) - Application name
+- [preference](/configuration/preference) - Advanced options

@@ -1,0 +1,159 @@
+# wallet_grantPermissions
+
+Grant granular permissions to a spender address for delegated transaction execution with spending limits and call restrictions.
+
+**Authentication Required:** Yes
+
+---
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_grantPermissions',
+  params: [{
+    address: '0x1234...', // Your account
+    chainId: '0x1',
+    expiry: 1735689600, // Unix timestamp
+    spender: '0x5678...', // Who gets permissions
+    permissions: {
+      calls: [{
+        target: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+        functionSignature: 'transfer(address,uint256)',
+      }],
+      spends: [{
+        token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+        limit: '0x16345785d8a0000', // 0.1 ETH
+        period: 'day',
+      }],
+    },
+  }],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `address` | `0x${string}` | Yes | Your account address (must be explicitly provided) |
+| `chainId` | `0x${string}` | Yes | Chain ID (hex) |
+| `expiry` | `number` | Yes | Expiration timestamp (seconds) |
+| `spender` | `0x${string}` | Yes | Address receiving permissions |
+| `permissions` | `object` | Yes | Permission details |
+
+### Permission Details
+
+#### calls
+
+Array of call permissions. Each permission:
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `target` | `0x${string}` | Yes | Contract address |
+| `functionSignature` | `string` | No* | Function signature (e.g., "transfer(address,uint256)") |
+| `selector` | `0x${string}` | No* | 4-byte function selector (0x...) |
+
+*Either `functionSignature` or `selector` is required.
+
+#### spends (Optional*)
+
+Array of spend limits. Each limit:
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `token` | `0x${string}` | Yes | Token address (`0xEeee...` for native token) |
+| `limit` | `0x${string}` | Yes | Spending limit in wei (hex) |
+| `period` | `string` | Yes | Time period for limit reset |
+
+**Valid Periods:**
+- `minute` - Resets every minute
+- `hour` - Resets every hour
+- `day` - Resets every day
+- `week` - Resets every week
+- `month` - Resets every month
+- `year` - Resets every year
+- `forever` - Never resets (one-time allowance)
+
+*Spend Limits are required if moving funds.
+
+
+---
+
+## Response
+
+Returns permission grant result with generated permission ID.
+
+```json
+{
+  "address": "0x1234567890123456789012345678901234567890",
+  "chainId": "0x1",
+  "expiry": 1735689600,
+  "id": "0xabc123...",
+  "spender": "0x5678901234567890123456789012345678901234",
+  "calls": [{
+    "target": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+    "selector": "0xa9059cbb"
+  }],
+  "spends": [{
+    "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+    "limit": "0x16345785d8a0000",
+    "period": "day"
+  }]
+}
+```
+
+---
+
+## Behavior
+
+- Opens popup for user approval
+- Approves permission
+- Returns permission ID for future revocation
+
+---
+
+## Errors
+
+| Code | Description |
+|------|-------------|
+| 4001 | User rejected the request |
+| 4100 | Unauthorized (not authenticated) |
+| -32602 | Invalid params |
+
+---
+
+## Example
+
+```typescript
+// Allow DeFi protocol to swap USDC with daily limit
+const permission = await jaw.provider.request({
+  method: 'wallet_grantPermissions',
+  params: [{
+    address: myAccount,
+    chainId: '0x1',
+    expiry: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60), // 1 year
+    spender: dexRouterAddress,
+    permissions: {
+      calls: [{
+        target: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+        functionSignature: 'approve(address,uint256)',
+      }, {
+        target: dexRouterAddress,
+        functionSignature: 'swap(address,address,uint256,uint256)',
+      }],
+      spends: [{
+        token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+        limit: '0x' + (1000n * 10n**6n).toString(16),
+        period: 'day',
+      }],
+    },
+  }],
+});
+```
+
+---
+
+## Related Methods
+
+- [wallet_revokePermissions](/api-reference/wallet_revokePermissions) - Revoke permissions
+- [wallet_getPermissions](/api-reference/wallet_getPermissions) - Query permissions

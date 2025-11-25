@@ -41,6 +41,7 @@
     },
     {
       "plugin": "@nx/next/plugin",
+      "exclude": ["apps/docs/**/*"],
       "options": {
         "startTargetName": "start",
         "buildTargetName": "build",

@@ -109,7 +109,6 @@ export class JAWSigner implements Signer {
                     await this._request({
                         method: 'wallet_connect',
                         params: [{
-                            version: '1.0',
                             capabilities: {}
                         }]
                     });
@@ -248,11 +247,6 @@ export class JAWSigner implements Signer {
 
         const firstParam = params[0];
         if (typeof firstParam !== 'object' || firstParam === null) {
-            return false;
-        }
-
-        // Validate version property exists and is a string
-        if (!('version' in firstParam) || typeof firstParam.version !== 'string') {
             return false;
         }
 

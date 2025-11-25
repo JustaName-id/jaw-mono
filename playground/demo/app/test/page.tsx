@@ -877,14 +877,15 @@ Issued At: ${issuedAt}`;
       // Example spender address (could be a dApp contract)
       const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
 
-      // Example: Grant permission to spend 0.0001 ETH per day for 30 days
-      const limit = parseEther('0.0001'); // 0.0001 ETH in wei (easy to test)
+      // Example: Grant multiple permissions (spend + calls) for 30 days
+      const ethLimit = parseEther('0.0001'); // 0.0001 ETH per day
       const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days from now
 
       const currentChainId = chainId || '0x1';
 
-      addLog(`Granting permissions to spender: ${spenderAddress}`);
-      addLog(`Spend limit: 0.0001 ETH per day`);
+      addLog(`Granting multiple permissions to spender: ${spenderAddress}`);
+      addLog(`1. Spend: 0.0001 ETH per day`);
+      addLog(`2. Call: transfer(address,uint256) on any contract`);
       addLog(`Expiry: ${new Date(expiryTimestamp * 1000).toISOString()}`);
 
       const result = await provider.request({
@@ -895,23 +896,23 @@ Issued At: ${issuedAt}`;
           expiry: expiryTimestamp,
           spender: spenderAddress,
           permissions: {
-            spend: {
-              limit: `0x${limit.toString(16)}`,
-              period: 'day' as const,
-              token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' // Native token (ETH)
-            }
+            spends: [
+              {
+                limit: `0x${ethLimit.toString(16)}`,
+                period: 'day' as const,
+                token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' // Native token (ETH)
+              }
+            ],
           }
         }]
       });
 
       console.log('[Demo] Grant permissions result:', result);
 
-      // Expected response format:
-      // { address, chainId, expiry, id, spender, spend: { limit, period, token } }
       if (result && typeof result === 'object' && 'id' in result) {
-        const response = result as { id: string; address: string; spender: string; spend: { limit: string; period: string; token: string } };
+        const response = result as { id: string; address: string; spender: string };
         setLastPermissionId(response.id);
-        addLog(`✅ Permission granted successfully!`);
+        addLog(`✅ Permissions granted successfully!`);
         addLog(`Permission ID: ${response.id}`);
         addLog(`Full response: ${JSON.stringify(result, null, 2)}`);
       } else {
@@ -938,25 +939,34 @@ Issued At: ${issuedAt}`;
 
     try {
       const provider = sdk.provider;
-      addLog('🔑 Requesting permissions grant for ERC-20 on Base Sepolia...');
+      addLog('🔑 Requesting permissions grant for multiple ERC-20s on Base Sepolia...');
 
       // Example spender address
-      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890'; // 1inch Router
+      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
 
       // USDC on Base Sepolia (6 decimals)
       const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 
+      // DAI on Base Sepolia (18 decimals) - example
+      const daiAddress = '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb';
+
       // 1 USDC with 6 decimals = 1 * 10^6 = 1000000
-      const limit = BigInt(1_000_000); // 1 USDC for testing
+      const usdcLimit = BigInt(1_000_000);
+
+      // 10 DAI with 18 decimals
+      const daiLimit = parseEther('10');
+
       const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
 
       // Base Sepolia chain ID
       const baseSepoliaChainId = '0x14a34'; // 84532 in hex
 
       addLog(`Chain: Base Sepolia (${baseSepoliaChainId})`);
-      addLog(`Token: USDC at ${usdcAddress}`);
       addLog(`Spender: ${spenderAddress}`);
-      addLog(`Limit: 1 USDC per day`);
+      addLog(`Permissions:`);
+      addLog(`  1. Spend: 1 USDC per day (${usdcAddress})`);
+      addLog(`  2. Spend: 10 DAI per week (${daiAddress})`);
+      addLog(`  3. Call: approve(address,uint256) on any contract`);
       addLog(`Expiry: ${new Date(expiryTimestamp * 1000).toISOString()}`);
 
       const result = await provider.request({
@@ -967,21 +977,28 @@ Issued At: ${issuedAt}`;
           expiry: expiryTimestamp,
           spender: spenderAddress,
           permissions: {
-            spend: {
-              limit: `0x${limit.toString(16)}`,
-              period: 'day' as const,
-              token: usdcAddress // ERC-20 USDC token
-            }
+            spends: [
+              {
+                limit: `0x${usdcLimit.toString(16)}`,
+                period: 'day' as const,
+                token: usdcAddress
+              },
+              {
+                limit: `0x${daiLimit.toString(16)}`,
+                period: 'week' as const,
+                token: daiAddress
+              }
+            ],
           }
         }]
       });
 
-      console.log('[Demo] Grant ERC-20 permissions result:', result);
+      console.log('[Demo] Grant multiple ERC-20 permissions result:', result);
 
       if (result && typeof result === 'object' && 'id' in result) {
-        const response = result as { id: string; address: string; spender: string; spend: { limit: string; period: string; token: string } };
+        const response = result as { id: string; address: string; spender: string };
         setLastPermissionId(response.id);
-        addLog(`✅ ERC-20 Permission granted successfully!`);
+        addLog(`✅ Multiple permissions granted successfully!`);
         addLog(`Permission ID: ${response.id}`);
         addLog(`Full response: ${JSON.stringify(result, null, 2)}`);
       } else {

@@ -1,5 +1,20 @@
 import { ReactElement } from 'react';
 
+export interface SpendPermission {
+  amount: string;
+  amountUsd?: string;
+  token: string;
+  tokenAddress: string;
+  duration: string;
+  limit: string;
+}
+
+export interface CallPermission {
+  target: string;
+  selector: string;
+  functionSignature: string;
+}
+
 export interface PermissionDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -12,16 +27,12 @@ export interface PermissionDialogProps {
   spenderAddress: string;
   origin: string; // Requesting dApp origin
 
-  // Amount and token info
-  amount: string; // Amount in ETH (formatted)
-  amountUsd?: string; // USD equivalent
-  token: string; // Token name (e.g., "Native Token (ETH)")
-  tokenAddress?: string; // Token contract address (if ERC-20)
+  // Arrays of permissions
+  spends?: SpendPermission[];
+  calls?: CallPermission[];
 
   // Period and expiry
-  duration: string; // Human-readable duration (e.g., "1 Day, 24 hours")
   expiryDate: string; // Formatted expiry date
-  limit: string; // Daily limit (e.g., "10 ETH")
 
   // Network info
   networkName: string;
@@ -29,7 +40,7 @@ export interface PermissionDialogProps {
   chainIconKey?: string;
 
   // Actions
-  onConfirm: () => Promise<void>;
+  onConfirm: () => void;
   onCancel: () => void;
 
   // Status

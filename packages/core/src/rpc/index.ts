@@ -18,7 +18,7 @@ export { handleGetAssetsRequest } from './wallet_getAssets.js';
 export { getCapabilities, handleGetCapabilitiesRequest } from './capabilities.js';
 
 export {
-    type SpendPermission,
+    type Permission,
     type SpendPeriod,
     type SpendPermissionDetail,
     type PermissionsDetail,
@@ -32,5 +32,7 @@ export {
     revokePermission,
     handleGetPermissionsRequest,
     getPermissionFromRelay,
-    spend
+    ANY_TARGET,
+    ANY_FN_SEL,
+    EMPTY_CALLDATA_FN_SEL
 } from './permissions.js';

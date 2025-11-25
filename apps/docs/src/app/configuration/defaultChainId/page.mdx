@@ -1,0 +1,42 @@
+# defaultChainId
+
+The default blockchain network to connect to when the SDK initializes.
+
+**Type:** `number`
+**Required:** No
+**Default:** `1` (Ethereum Mainnet)
+
+---
+
+## Usage
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 137, // Polygon
+});
+```
+
+---
+
+## Using Testnets
+
+To use a testnet as the default chain, enable `showTestnets` in preferences:
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 11155111, // Sepolia
+  preference: {
+    showTestnets: true,
+  },
+});
+```
+
+---
+
+## Related
+
+- [Supported Networks](/supported-networks) - Full list of supported chains
+- [preference](/configuration/preference) - Advanced options including testnet visibility
+- [wallet_switchEthereumChain](/api-reference/wallet_switchEthereumChain) - Switch networks programmatically

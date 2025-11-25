@@ -1,0 +1,79 @@
+# paymasterUrls
+
+Custom paymaster service URLs for sponsoring gas fees on different blockchain networks.
+
+**Type:** `Record<number, string>`
+**Required:** No
+**Default:** `{}` (uses JAW default paymasters)
+
+---
+
+## Usage
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  paymasterUrls: {
+    1: 'https://paymaster.example.com/mainnet',
+    137: 'https://paymaster.example.com/polygon',
+    8453: 'https://paymaster.example.com/base',
+  },
+});
+```
+
+---
+
+## Description
+
+Paymasters are services that sponsor transaction gas fees, enabling gasless transactions for your users. The `paymasterUrls` configuration allows you to specify custom paymaster endpoints for each supported network.
+
+**Benefits:**
+- **Gasless Transactions**: Users don't need native tokens to pay gas
+- **Better UX**: Remove friction from onboarding
+- **Flexible Sponsorship**: Control which transactions to sponsor
+- **Cost Management**: Use your own paymaster infrastructure
+
+**Compliance:** Paymasters must follow [EIP-7677](https://eips.ethereum.org/EIPS/eip-7677) standard, and work with [EntryPoint v0.8](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.8.0).
+
+---
+
+## Configuration Format
+
+```typescript
+paymasterUrls: {
+  [chainId: number]: string // Paymaster URL
+}
+```
+
+The key is the chain ID (decimal number), and the value is the paymaster service URL.
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  paymasterUrls: {
+    1: 'https://pm.example.com/eth',      // Ethereum Mainnet
+    10: 'https://pm.example.com/op',      // Optimism
+    137: 'https://pm.example.com/polygon', // Polygon
+    8453: 'https://pm.example.com/base',  // Base
+    42161: 'https://pm.example.com/arb',  // Arbitrum
+  },
+});
+```
+
+---
+
+## Paymaster Services
+
+### Third-Party Providers
+
+Popular paymaster service providers:
+
+- [Etherspot](https://etherspot.io/)
+- [Pimlico](https://www.pimlico.io/)
+
+---
+
+## Related Configuration
+
+- [eth_sendTransaction](/api-reference/eth_sendTransaction) - Sponsor Transactions
+- [wallet_sendCalls](/api-reference/wallet_sendCalls) - Sponsor Calls Bundle

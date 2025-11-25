@@ -1,0 +1,163 @@
+# wallet_sign
+
+Unified signing method supporting multiple message formats (ERC-7871). Delegates to `personal_sign` or `eth_signTypedData_v4` based on the request type.
+
+**Authentication Required:** Yes
+
+---
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_sign',
+  params: [{
+    request: {
+      type: '0x45', // or '0x01'
+      data: '0x...' // or typed data object
+    },
+  }],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `request.type` | `string` | Yes | Signature type: `"0x45"` (personal_sign) or `"0x01"` (signTypedData_v4) |
+| `request.data` | `0x${string}` or `object` | Yes | Message to sign (hex for 0x45, typed data object for 0x01) |
+
+### Supported Types
+
+| Type | EIP Standard | Description | Delegates To |
+|------|--------------|-------------|--------------|
+| `0x45` | EIP-191 | Personal message signing | `personal_sign` |
+| `0x01` | EIP-712 | Structured typed data signing | `eth_signTypedData_v4` |
+
+---
+
+## Response
+
+Returns the signature as a hexadecimal string.
+
+**Type:** `0x${string}`
+
+### Example
+
+```typescript
+"0x1234567890abcdef..."
+```
+
+---
+
+## Behavior
+
+- **Type 0x45**: Delegates to `personal_sign` - adds EIP-191 prefix and signs
+- **Type 0x01**: Delegates to `eth_signTypedData_v4` - signs structured EIP-712 data
+- Opens popup for user approval
+- Returns signature in same format as the underlying method
+
+---
+
+## Errors
+
+| Code | Description |
+|------|-------------|
+| 4001 | User rejected the request |
+| 4100 | Unauthorized (not authenticated) |
+| -32602 | Invalid params (unsupported type or malformed data) |
+
+---
+
+## Example
+
+### Personal Message (Type 0x45)
+
+```typescript
+import { toHex } from 'viem';
+
+const message = 'Hello World';
+const messageHex = toHex(message);
+
+const signature = await jaw.provider.request({
+  method: 'wallet_sign',
+  params: [{
+    request: {
+      type: '0x45',
+      data: messageHex,
+    },
+  }],
+});
+```
+
+### Typed Data (Type 0x01)
+
+```typescript
+const typedData = {
+  types: {
+    EIP712Domain: [
+      { name: 'name', type: 'string' },
+      { name: 'version', type: 'string' },
+      { name: 'chainId', type: 'uint256' },
+    ],
+    Person: [
+      { name: 'name', type: 'string' },
+      { name: 'wallet', type: 'address' },
+    ],
+  },
+  primaryType: 'Person',
+  domain: {
+    name: 'My DApp',
+    version: '1',
+    chainId: 1,
+  },
+  message: {
+    name: 'Alice',
+    wallet: '0x...',
+  },
+};
+
+const signature = await jaw.provider.request({
+  method: 'wallet_sign',
+  params: [{
+    request: {
+      type: '0x01',
+      data: typedData,
+    },
+  }],
+});
+```
+
+### SIWE (Sign-In With Ethereum)
+
+```typescript
+import { toHex } from 'viem';
+
+const siweMessage = `example.com wants you to sign in with your Ethereum account:
+0x1234...
+
+Sign in to Example DApp
+
+URI: https://example.com
+Version: 1
+Chain ID: 1
+Nonce: ${crypto.randomUUID()}
+Issued At: ${new Date().toISOString()}`;
+
+const signature = await jaw.provider.request({
+  method: 'wallet_sign',
+  params: [{
+    request: {
+      type: '0x45',
+      data: toHex(siweMessage),
+    },
+  }],
+});
+```
+
+---
+
+## Related Methods
+
+- [personal_sign](/api-reference/personal_sign) - Direct EIP-191 message signing (type 0x45)
+- [eth_signTypedData_v4](/api-reference/eth_signTypedData_v4) - Direct EIP-712 typed data signing (type 0x01)

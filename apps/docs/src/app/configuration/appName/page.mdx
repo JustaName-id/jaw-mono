@@ -1,0 +1,34 @@
+# appName
+
+The name of your application, displayed to users during authentication and transaction signing.
+
+**Type:** `string`
+**Required:** No
+**Default:** `'DApp'`
+
+---
+
+## Usage
+
+```typescript
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'My Awesome DApp',
+});
+```
+
+---
+
+## Where It Appears
+
+Your app name is shown to users in:
+- Authentication popup header
+- Transaction approval screens
+- Permission grant dialogs
+
+---
+
+## Related Configuration
+
+- [appLogoUrl](/configuration/appLogoUrl) - Application logo
+- [apiKey](/configuration/apiKey) - API key for authentication

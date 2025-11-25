@@ -1,0 +1,79 @@
+# Configuration
+
+Learn how to configure the JAW SDK to customize its behavior for your application.
+
+## JAW.create()
+
+The SDK is initialized using the `JAW.create()` factory function:
+
+```typescript
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key-here',
+  appName: 'My DApp',
+  appLogoUrl: 'https://my-dapp.com/logo.png',
+  ens: 'myapp.eth'
+});
+```
+
+---
+
+## Configuration Options
+
+### Core Parameters
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| [apiKey](/configuration/apiKey) | `string` | Yes | API key for JAW services authentication |
+| [appName](/configuration/appName) | `string` | No | Application name displayed to users |
+| [appLogoUrl](/configuration/appLogoUrl) | `string \| null` | No | URL to application logo image |
+| [ens](/configuration/preference) | `string` | No | ENS to issue subnames from |
+| [defaultChainId](/configuration/defaultChainId) | `number` | No | Default blockchain network |
+| [preference](/configuration/preference) | `object` | No | Preference options for SDK behavior |
+| [paymasterUrls](/configuration/paymasterUrls) | `Record<number, string>` | No | Custom paymaster URLs per chain |
+
+---
+
+## Preference Options
+
+The `preference` object contains advanced configuration:
+
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| mode | `Mode.CrossPlatform` \| `Mode.AppSpecific` | `Mode.CrossPlatform` | Authentication mode |
+| serverUrl | `string` | JAW Server | Passkey server URL |
+| showTestnets | `boolean` | `false` | Include testnet networks |
+
+[See all preference options →](/configuration/preference)
+
+---
+
+## Return Value
+
+The `JAW.create()` function returns an object with:
+
+### provider
+
+**Type:** `ProviderInterface`
+
+An EIP-1193 compatible Ethereum provider for making RPC requests.
+
+```typescript
+const jaw = JAW.create({ apiKey: 'your-api-key' });
+
+// Use the provider
+const accounts = await jaw.provider.request({
+  method: 'wallet_connect',
+});
+```
+
+### disconnect()
+
+**Type:** `() => Promise<void>`
+
+Method to disconnect the current session and clean up resources.
+
+```typescript
+await jaw.disconnect();
+```

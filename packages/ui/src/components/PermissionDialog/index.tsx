@@ -14,12 +14,9 @@ export const PermissionDialog = ({
   permissionId,
   spenderAddress,
   origin,
-  amount,
-  amountUsd,
-  token,
-  duration,
+  spends = [],
+  calls = [],
   expiryDate,
-  limit,
   networkName,
   chainIcon,
   chainIconKey,
@@ -52,16 +49,12 @@ export const PermissionDialog = ({
     }
   };
 
-  // Extract token symbol from token prop
-  // "Native Token (ETH)" -> "ETH"
-  // "USDC" -> "USDC"
-  const getTokenSymbol = (tokenDisplay: string) => {
-    const match = tokenDisplay.match(/\(([^)]+)\)/);
-    return match ? match[1] : tokenDisplay;
-  };
-
-  const tokenSymbol = getTokenSymbol(token);
   const canConfirm = !isProcessing;
+
+  // Count total permissions
+  const totalSpends = spends.length;
+  const totalCalls = calls.length;
+  const totalPermissions = totalSpends + totalCalls;
 
   return (
     <DefaultDialog
@@ -82,7 +75,7 @@ export const PermissionDialog = ({
             })}
           </p>
           <p className="text-[30px] font-normal leading-[100%] text-foreground">
-            {mode === 'grant' ? 'Spend Permission Request' : 'Revoke Spend Permission'}
+            {mode === 'grant' ? 'Permission Request' : 'Revoke Permission'}
           </p>
         </div>
       }
@@ -95,6 +88,8 @@ export const PermissionDialog = ({
       } : {
         width: '500px',
         minWidth: '500px',
+        maxHeight: '90vh',
+        overflowY: 'auto',
       }}
     >
       <div className="flex flex-col gap-6 justify-between max-md:h-full">
@@ -141,41 +136,7 @@ export const PermissionDialog = ({
             </div>
           </div>
 
-          {/* Duration + Expiry Date */}
-          <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
-            <div className="flex flex-col text-foreground gap-0.5 flex-1">
-              <p className="text-xs font-bold leading-[133%]">Spend Limit</p>
-              <p className="text-base bold leading-[150%]">{duration}</p>
-            </div>
-            <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[50px]" />
-            <div className="flex flex-col text-foreground gap-0.5 flex-1">
-              <p className="text-xs font-bold leading-[133%]">Expiry Date</p>
-              <p className="text-base font-normal leading-[150%]">{expiryDate}</p>
-            </div>
-          </div>
-
-          {/* Amount Card */}
-          <div className="flex flex-row items-center justify-between gap-2.5 p-3.5 border border-border rounded-[6px]">
-            <div className="flex flex-row items-center gap-2.5 flex-1">
-              {/* Token Icon (Later) */}
-              {/*<div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">*/}
-              {/*  */}
-              {/*</div>*/}
-              <div className="flex flex-col gap-0.5">
-                <p className="text-xs font-bold leading-[133%] text-foreground">Amount</p>
-                {isLoadingTokenInfo ? (
-                  <div className="h-[30px] w-32 bg-muted animate-pulse rounded" />
-                ) : (
-                  <p className="text-xl font-normal leading-[150%] text-foreground">{amount} {tokenSymbol}</p>
-                )}
-              </div>
-            </div>
-            {amountUsd && (
-              <p className="text-sm font-bold text-muted-foreground">${amountUsd}</p>
-            )}
-          </div>
-
-          {/* Network + Token */}
+          {/* Permissions Summary */}
           <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
             <div className="flex flex-col text-foreground gap-0.5 flex-1">
               <p className="text-xs font-bold leading-[133%]">Network</p>
@@ -186,10 +147,87 @@ export const PermissionDialog = ({
             </div>
             <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[50px]" />
             <div className="flex flex-col text-foreground gap-0.5 flex-1">
-              <p className="text-xs font-bold leading-[133%]">Token</p>
-              <p className="text-base font-normal leading-[150%]">{token}</p>
+              <p className="text-xs font-bold leading-[133%]">Expiry Date</p>
+              <p className="text-base font-normal leading-[150%]">{expiryDate}</p>
             </div>
           </div>
+
+          {/* Spend Permissions Section */}
+          {totalSpends > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-bold text-foreground px-1">
+                Spend Permissions ({totalSpends})
+              </p>
+              <div className="flex flex-col gap-2">
+                {spends.map((spend, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-col gap-3 p-3.5 border border-border rounded-[6px] bg-background"
+                  >
+                    {/* Amount */}
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-xs font-bold leading-[133%] text-muted-foreground">Amount</p>
+                      {isLoadingTokenInfo ? (
+                        <div className="h-[30px] w-32 bg-muted animate-pulse rounded" />
+                      ) : (
+                        <div className="flex items-center gap-2">
+                          <p className="text-xl font-normal leading-[150%] text-foreground">
+                            {spend.amount}
+                          </p>
+                          {spend.amountUsd && (
+                            <p className="text-sm font-bold text-muted-foreground">${spend.amountUsd}</p>
+                          )}
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Duration and Token */}
+                    <div className="flex flex-row justify-between items-center gap-2.5">
+                      <div className="flex flex-col gap-0.5 flex-1">
+                        <p className="text-xs font-bold leading-[133%] text-muted-foreground">Duration</p>
+                        <p className="text-base font-normal leading-[150%] text-foreground">{spend.duration}</p>
+                      </div>
+                      <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[40px]" />
+                      <div className="flex flex-col gap-0.5 flex-1">
+                        <p className="text-xs font-bold leading-[133%] text-muted-foreground">Token</p>
+                        <p className="text-base font-normal leading-[150%] text-foreground">{spend.token}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Call Permissions Section */}
+          {totalCalls > 0 && (
+            <div className="flex flex-col gap-2">
+              <p className="text-sm font-bold text-foreground px-1">
+                Call Permissions ({totalCalls})
+              </p>
+              <div className="flex flex-col gap-2">
+                {calls.map((call, index) => (
+                  <div
+                    key={index}
+                    className="flex flex-col gap-2.5 p-3.5 border border-border rounded-[6px] bg-background"
+                  >
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-xs font-bold leading-[133%] text-muted-foreground">Function</p>
+                      <code className="text-sm font-mono leading-[150%] text-foreground break-all">
+                        {call.functionSignature}
+                      </code>
+                    </div>
+                    <div className="flex flex-col gap-0.5">
+                      <p className="text-xs font-bold leading-[133%] text-muted-foreground">Contract</p>
+                      <p className="text-sm font-mono leading-[150%] text-foreground break-all">
+                        {call.target}
+                      </p>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Warning (Grant) / Info (Revoke) Card */}
           {mode === 'grant' ? (
@@ -225,7 +263,14 @@ export const PermissionDialog = ({
               <div className="flex flex-col gap-1">
                 <p className="text-xs font-bold leading-[133%] text-yellow-800">Warning</p>
                 <p className="text-xs font-normal leading-[150%] text-yellow-900">
-                  This will allow the spender to transfer up to {limit} per day from your account until {expiryDate}. Only approve if you trust this dApp.
+                  You are granting {totalPermissions} permission{totalPermissions > 1 ? 's' : ''}
+                  {totalSpends > 0 && ` (${totalSpends} spend`}
+                  {totalSpends > 1 && 's'}
+                  {totalSpends > 0 && ')'}
+                  {totalCalls > 0 && ` (${totalCalls} call`}
+                  {totalCalls > 1 && 's'}
+                  {totalCalls > 0 && ')'}
+                  {' '}to this dApp until {expiryDate}. Only approve if you trust this dApp.
                 </p>
               </div>
             </div>
@@ -262,7 +307,7 @@ export const PermissionDialog = ({
               <div className="flex flex-col gap-1">
                 <p className="text-xs font-bold leading-[133%] text-blue-800">Info</p>
                 <p className="text-xs font-normal leading-[150%] text-blue-900">
-                  This will revoke the permission and prevent the spender from making any further transactions on your behalf.
+                  This will revoke all permissions and prevent the spender from making any further transactions on your behalf.
                 </p>
               </div>
             </div>

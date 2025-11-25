@@ -59,6 +59,10 @@ export function create(params: CreateJAWSDKOptions) {
     paymasterUrls: params.paymasterUrls,
   };
 
+  if (options.preference?.serverUrl != JAW_PASSKEYS_URL && options.preference.mode == Mode.CrossPlatform) {
+    throw new Error('Custom Server Url not available with Cross Platform Mode.');
+  }
+
   // Store the config
   const storedOptions = {
     metadata: options.metadata,

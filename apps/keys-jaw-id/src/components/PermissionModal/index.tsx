@@ -13,7 +13,8 @@ import {
     type WalletGrantPermissionsRequest,
     type WalletRevokePermissionsRequest,
     type WalletGrantPermissionsResponse,
-    type SpendPeriod, getPermissionFromRelay,
+    type SpendPeriod,
+    getPermissionFromRelay,
 } from "@jaw.id/core";
 
 // ERC-7528 native token address
@@ -49,6 +50,7 @@ const formatDuration = (period: SpendPeriod): string => {
     week: '1 Week',
     month: '1 Month',
     year: '1 Year',
+    forever: 'Forever',
   };
   return durations[period] || period;
 };
@@ -85,6 +87,9 @@ const formatExpiryDate = (timestamp: number): string => {
   });
 };
 
+// Token info cache type
+type TokenInfoMap = Record<string, { decimals: number; symbol: string }>;
+
 export const PermissionModal = ({
   permissionRequest,
   chain,
@@ -97,7 +102,7 @@ export const PermissionModal = ({
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
-  const [tokenInfo, setTokenInfo] = useState<{ decimals: number; symbol: string }>({ decimals: 18, symbol: 'ETH' });
+  const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(false);
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(false);
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
@@ -119,8 +124,6 @@ export const PermissionModal = ({
     return '';
   }, [apiKey, chain?.rpcUrl]);
 
-  console.log("api key permission", extractedApiKey);
-
   // Determine mode from request method
   const mode = useMemo(() => {
     if (!permissionRequest) return 'grant';
@@ -140,9 +143,8 @@ export const PermissionModal = ({
         spender: grantParams.spender,
         chainId: grantParams.chainId,
         expiry: grantParams.expiry,
-        limit: grantParams.permissions.spend.limit,
-        period: grantParams.permissions.spend.period,
-        token: grantParams.permissions.spend.token,
+        spends: grantParams.permissions.spends || [],
+        calls: grantParams.permissions.calls || [],
       };
     } else {
       const params = permissionRequest.params as WalletRevokePermissionsRequest['params'];
@@ -168,87 +170,101 @@ export const PermissionModal = ({
     return getChainIconKeyFromId(chainId);
   }, [chain]);
 
-  // Format amount for display using token decimals
-  const formattedAmount = useMemo(() => {
-    if (!permissionDetails) return '0.0034';
+  // Get spends array based on mode
+  const spendsData = useMemo(() => {
+    if (mode === 'revoke' && fetchedPermissionData?.spends) {
+      return fetchedPermissionData.spends;
+    }
+    if (mode === 'grant' && permissionDetails && 'spends' in permissionDetails) {
+      return permissionDetails.spends;
+    }
+    return [];
+  }, [mode, fetchedPermissionData, permissionDetails]);
 
-    // For revoke mode, use fetched data from relay
-    if (mode === 'revoke' && fetchedPermissionData) {
-      try {
-        // Convert hex allowance to BigInt
-        const limitBigInt = BigInt(fetchedPermissionData.allowance);
-        return formatUnits(limitBigInt, tokenInfo.decimals);
-      } catch (error) {
-        console.error('Error formatting revoke amount:', error);
-        return '0.0034';
+  // Get calls array based on mode
+  const callsData = useMemo(() => {
+    if (mode === 'revoke' && fetchedPermissionData?.calls) {
+      return fetchedPermissionData.calls;
+    }
+    if (mode === 'grant' && permissionDetails && 'calls' in permissionDetails) {
+      return permissionDetails.calls;
+    }
+    return [];
+  }, [mode, fetchedPermissionData, permissionDetails]);
+
+  // Format spend permissions with token info
+  const formattedSpends = useMemo(() => {
+    return spendsData.map((spend: any) => {
+      const tokenAddress = spend.token;
+      const tokenInfo = tokenInfoMap[tokenAddress] || { decimals: 18, symbol: 'ETH' };
+
+      let amount, limit, duration;
+
+      if (mode === 'revoke') {
+        // From relay - allowance is hex string, period is seconds string
+        const allowance = BigInt(spend.allowance);
+        amount = formatUnits(allowance, tokenInfo.decimals);
+        limit = `${amount} ${tokenInfo.symbol}`;
+        duration = formatDurationFromSeconds(parseInt(spend.period, 10));
+      } else {
+        // From grant request - limit is string, period is SpendPeriod
+        const allowance = BigInt(spend.limit);
+        amount = formatUnits(allowance, tokenInfo.decimals);
+        limit = `${amount} ${tokenInfo.symbol}`;
+        duration = formatDuration(spend.period as SpendPeriod);
       }
-    }
 
-    // For grant mode, use permission details
-    if (!('limit' in permissionDetails) || !permissionDetails.limit) return '0.0034';
+      return {
+        amount,
+        token: isNativeToken(tokenAddress)
+          ? 'Native (ETH)'
+          : (tokenInfo.symbol === tokenAddress
+              ? `${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-4)}`
+              : tokenInfo.symbol),
+        tokenAddress,
+        duration,
+        limit,
+      };
+    });
+  }, [spendsData, tokenInfoMap, mode]);
 
-    try {
-      const limitBigInt = BigInt(permissionDetails.limit);
-      return formatUnits(limitBigInt, tokenInfo.decimals);
-    } catch (error) {
-      console.error('Error formatting amount:', error);
-      return '0.0034';
-    }
-  }, [permissionDetails, mode, fetchedPermissionData, tokenInfo.decimals]);
+  // Format call permissions
+  const formattedCalls = useMemo(() => {
+    return callsData.map((call: any) => ({
+      target: call.target,
+      selector: call.selector,
+      functionSignature: call.functionSignature || call.selector,
+    }));
+  }, [callsData]);
 
-  // Format daily limit using token decimals and symbol
-  const dailyLimit = useMemo(() => {
-    if (!permissionDetails) return `10 ${tokenInfo.symbol}`;
-
-    // For revoke mode, use fetched data from relay
-    if (mode === 'revoke' && fetchedPermissionData) {
-      try {
-        const limitBigInt = BigInt(fetchedPermissionData.allowance);
-        return `${formatUnits(limitBigInt, tokenInfo.decimals)} ${tokenInfo.symbol}`;
-      } catch (error) {
-        return `10 ${tokenInfo.symbol}`;
-      }
-    }
-
-    // For grant mode, use permission details
-    if (!('limit' in permissionDetails) || !permissionDetails.limit) return `10 ${tokenInfo.symbol}`;
-
-    try {
-      const limitBigInt = BigInt(permissionDetails.limit);
-      return `${formatUnits(limitBigInt, tokenInfo.decimals)} ${tokenInfo.symbol}`;
-    } catch (error) {
-      return `10 ${tokenInfo.symbol}`;
-    }
-  }, [permissionDetails, mode, fetchedPermissionData, tokenInfo.decimals, tokenInfo.symbol]);
-
-  // Duration and expiry
-  const duration = useMemo(() => {
-    if (!permissionDetails) return '';
-
-    // For revoke mode, use fetched data from relay
-    if (mode === 'revoke' && fetchedPermissionData) {
-      const periodInSeconds = parseInt(fetchedPermissionData.period, 10);
-      return formatDurationFromSeconds(periodInSeconds);
-    }
-
-    // For grant mode, use permission details
-    if (!('period' in permissionDetails) || !permissionDetails.period) return '';
-    return formatDuration(permissionDetails.period);
-  }, [permissionDetails, mode, fetchedPermissionData]);
-
+  // Expiry date
   const expiryDate = useMemo(() => {
     if (!permissionDetails) return '';
 
-    // For revoke mode, use fetched data from relay
     if (mode === 'revoke' && fetchedPermissionData) {
       const endTimestamp = parseInt(fetchedPermissionData.end, 10);
       return formatExpiryDate(endTimestamp);
     }
 
-    // For grant mode, use permission details
-    if (!('expiry' in permissionDetails) || !permissionDetails.expiry) return '';
-    return formatExpiryDate(permissionDetails.expiry);
+    if ('expiry' in permissionDetails && permissionDetails.expiry) {
+      return formatExpiryDate(permissionDetails.expiry);
+    }
+
+    return '';
   }, [permissionDetails, mode, fetchedPermissionData]);
+
+  // Spender address
+  const spenderAddress = useMemo(() => {
+    if (mode === 'revoke' && fetchedPermissionData?.spender) {
+      return fetchedPermissionData.spender;
+    }
+
+    if (permissionDetails && 'spender' in permissionDetails && permissionDetails.spender) {
+      return permissionDetails.spender;
+    }
+
+    return '0x43e...ead3';
+  }, [mode, fetchedPermissionData, permissionDetails]);
 
   // Reset state
   const resetModalState = useCallback(() => {
@@ -326,84 +342,81 @@ export const PermissionModal = ({
     };
   }, [chain, getSmartAccount, onError]);
 
-  // Fetch token info for ERC-20 tokens
+  // Fetch token info for all unique tokens in spends
   useEffect(() => {
-    if (!chain || !permissionDetails) {
+    if (!chain || spendsData.length === 0) {
       setIsLoadingTokenInfo(false);
       return;
     }
 
-    // For revoke mode, use fetched permission data
-    let tokenAddress: string | undefined;
-    if (mode === 'revoke') {
-      if (!fetchedPermissionData?.token) {
-        setIsLoadingTokenInfo(false);
-        return;
-      }
-      tokenAddress = fetchedPermissionData.token;
-    } else {
-      // For grant mode, use permission details
-      if (!('token' in permissionDetails)) {
-        setIsLoadingTokenInfo(false);
-        return;
-      }
-      tokenAddress = permissionDetails.token;
-    }
-
-    // If native token, use ETH defaults
-    if (isNativeToken(tokenAddress)) {
-      setTokenInfo({ decimals: 18, symbol: 'ETH' });
-      setIsLoadingTokenInfo(false);
-      return;
-    }
-
-    // Fetch ERC-20 token info
     setIsLoadingTokenInfo(true);
-    const fetchTokenInfo = async () => {
-      try {
-        const publicClient = createPublicClient({
-          chain: {
-            id: chain.id,
-            name: networkName,
-            nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-            rpcUrls: {
-              default: { http: [chain.rpcUrl || ''] },
-              public: { http: [chain.rpcUrl || ''] },
+
+    const fetchAllTokenInfo = async () => {
+      const newTokenInfoMap: TokenInfoMap = {};
+
+      // Get unique token addresses
+      const uniqueTokens = Array.from(new Set(spendsData.map((spend: any) => spend.token as string))) as string[];
+
+      for (const tokenAddress of uniqueTokens) {
+        // Skip if already fetched
+        if (tokenInfoMap[tokenAddress]) {
+          newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
+          continue;
+        }
+
+        // If native token, use ETH defaults
+        if (isNativeToken(tokenAddress)) {
+          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+          continue;
+        }
+
+        // Fetch ERC-20 token info
+        try {
+          const publicClient = createPublicClient({
+            chain: {
+              id: chain.id,
+              name: networkName,
+              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              rpcUrls: {
+                default: { http: [chain.rpcUrl || ''] },
+                public: { http: [chain.rpcUrl || ''] },
+              },
             },
-          },
-          transport: http(chain.rpcUrl),
-        });
+            transport: http(chain.rpcUrl),
+          });
 
-        const [decimals, symbol] = await Promise.all([
-          publicClient.readContract({
-            address: tokenAddress as Address,
-            abi: erc20Abi,
-            functionName: 'decimals',
-          }),
-          publicClient.readContract({
-            address: tokenAddress as Address,
-            abi: erc20Abi,
-            functionName: 'symbol',
-          }),
-        ]);
+          const [decimals, symbol] = await Promise.all([
+            publicClient.readContract({
+              address: tokenAddress as Address,
+              abi: erc20Abi,
+              functionName: 'decimals',
+            }),
+            publicClient.readContract({
+              address: tokenAddress as Address,
+              abi: erc20Abi,
+              functionName: 'symbol',
+            }),
+          ]);
 
-        setTokenInfo({ decimals, symbol });
-        setIsLoadingTokenInfo(false);
-      } catch (error) {
-        console.error('Failed to fetch token info:', error);
-        // Fallback to ETH if fetch fails
-        setTokenInfo({ decimals: 18, symbol: 'ETH' });
-        setIsLoadingTokenInfo(false);
+          newTokenInfoMap[tokenAddress] = { decimals, symbol };
+        } catch (error) {
+          console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
+          // Fallback to showing the token address
+          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: tokenAddress };
+        }
       }
+
+      setTokenInfoMap(prev => ({ ...prev, ...newTokenInfoMap }));
+      setIsLoadingTokenInfo(false);
     };
 
-    fetchTokenInfo();
-  }, [chain, permissionDetails, mode, fetchedPermissionData, networkName]);
+    fetchAllTokenInfo();
+  }, [chain, spendsData, networkName]);
 
   const handleConfirm = useCallback(async () => {
     try {
       setIsProcessing(true);
-      setStatus(mode === 'grant' ? 'Granting permission...' : 'Revoking permission...');
+      setStatus(mode === 'grant' ? 'Granting permissions...' : 'Revoking permission...');
 
       if (!smartAccount) {
         throw new Error('Smart account not initialized. Please try again.');
@@ -419,17 +432,24 @@ export const PermissionModal = ({
 
       if (mode === 'grant') {
         if (!('expiry' in permissionDetails) || !('spender' in permissionDetails) ||
-            !('address' in permissionDetails) || !('chainId' in permissionDetails) ||
-            !('limit' in permissionDetails) || !('period' in permissionDetails) ||
-            !('token' in permissionDetails)) {
+            !('address' in permissionDetails) || !('chainId' in permissionDetails)) {
           throw new Error('Invalid grant permission parameters.');
         }
 
-        if (!permissionDetails.address || !permissionDetails.chainId ||
-            !permissionDetails.expiry || !permissionDetails.spender ||
-            !permissionDetails.limit || !permissionDetails.period ||
-            !permissionDetails.token) {
-          throw new Error('Missing required permission parameters.');
+        if (!permissionDetails.address) {
+          throw new Error('Address is required for granting permissions.');
+        }
+
+        if (!permissionDetails.chainId) {
+          throw new Error('Chain ID is required for granting permissions.');
+        }
+
+        if (!permissionDetails.expiry) {
+          throw new Error('Expiry is required for granting permissions.');
+        }
+
+        if (!permissionDetails.spender) {
+          throw new Error('Spender is required for granting permissions.');
         }
 
         const result = await grantPermissions(
@@ -439,18 +459,15 @@ export const PermissionModal = ({
           permissionDetails.expiry,
           permissionDetails.spender,
           {
-            spend: {
-              limit: permissionDetails.limit,
-              period: permissionDetails.period,
-              token: permissionDetails.token,
-            }
+            spends: permissionDetails.spends,
+            calls: permissionDetails.calls,
           },
           chain,
           extractedApiKey
         );
 
-        console.log('✅ Permission granted:', result);
-        setStatus('Permission granted successfully!');
+        console.log('✅ Permissions granted:', result);
+        setStatus('Permissions granted successfully!');
         onSuccess?.(result);
       } else {
         // Revoke mode
@@ -495,42 +512,6 @@ export const PermissionModal = ({
     }
   }, [isProcessing, onError]);
 
-  // Determine token display text
-  const tokenDisplay = useMemo(() => {
-    // For revoke mode, use fetched data
-    if (mode === 'revoke' && fetchedPermissionData?.token) {
-      if (isNativeToken(fetchedPermissionData.token)) {
-        return 'Native Token (ETH)';
-      }
-      return tokenInfo.symbol;
-    }
-
-    // For grant mode
-    if (!permissionDetails || !('token' in permissionDetails)) return 'Native Token (ETH)';
-
-    const tokenAddress = permissionDetails.token;
-    if (isNativeToken(tokenAddress)) {
-      return 'Native Token (ETH)';
-    }
-
-    return tokenInfo.symbol;
-  }, [mode, fetchedPermissionData, permissionDetails, tokenInfo.symbol]);
-
-  // Determine spender address
-  const spenderAddress = useMemo(() => {
-    // For revoke mode, use fetched data
-    if (mode === 'revoke' && fetchedPermissionData?.spender) {
-      return fetchedPermissionData.spender;
-    }
-
-    // For grant mode
-    if (permissionDetails && 'spender' in permissionDetails && permissionDetails.spender) {
-      return permissionDetails.spender;
-    }
-
-    return '0x43e...ead3';
-  }, [mode, fetchedPermissionData, permissionDetails]);
-
   // Don't render if no permission details
   if (!permissionDetails) {
     return null;
@@ -544,11 +525,9 @@ export const PermissionModal = ({
       permissionId={mode === 'revoke' && 'permissionId' in permissionDetails ? permissionDetails.permissionId : undefined}
       spenderAddress={spenderAddress}
       origin={origin}
-      amount={formattedAmount}
-      token={tokenDisplay}
-      duration={duration}
+      spends={formattedSpends}
+      calls={formattedCalls}
       expiryDate={expiryDate}
-      limit={dailyLimit}
       networkName={networkName}
       chainIconKey={chainIconKey}
       onConfirm={handleConfirm}
