@@ -7,7 +7,6 @@ const __dirname = dirname(__filename);
 
 const nextConfig = {
   nx: {},
-  output: 'export',
   typescript: {
     ignoreBuildErrors: true,
   },
