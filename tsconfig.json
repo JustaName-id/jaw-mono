@@ -16,6 +16,9 @@
       "path": "./packages/ui"
     },
     {
+      "path": "./packages/react"
+    },
+    {
       "path": "./apps/docs"
     }
   ]
