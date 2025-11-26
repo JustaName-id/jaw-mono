@@ -4,6 +4,53 @@ module.exports = {
     content: [
     "./src/**/*.{js,ts,jsx,tsx}",
   ],
+  // Disable preflight to prevent global CSS resets in consuming apps
+  corePlugins: {
+    preflight: false,
+  },
+  // Safelist ensures all Tailwind classes used by components are included
+  safelist: [
+    // Color variants for all semantic colors
+    {
+      pattern: /^(bg|text|border|ring)-(background|foreground|card|popover|primary|secondary|muted|accent|destructive|input|border|ring)/,
+      variants: ['hover', 'focus', 'active', 'dark'],
+    },
+    // Common utilities used in dialogs
+    {
+      pattern: /^(rounded|shadow|opacity|z)-/,
+      variants: ['hover', 'focus'],
+    },
+    // Layout and positioning
+    {
+      pattern: /^(fixed|absolute|relative|inset|top|bottom|left|right)-/,
+    },
+    // Spacing
+    {
+      pattern: /^(p|m|gap|space)-(0|1|2|3|4|5|6|8|10|12|16|20|24)/,
+    },
+    // Flexbox and Grid
+    {
+      pattern: /^(flex|grid|items|justify|content)-.*/,
+    },
+    // Animation classes from tailwindcss-animate
+    'animate-in',
+    'animate-out',
+    'fade-in-0',
+    'fade-out-0',
+    'zoom-in-95',
+    'zoom-out-95',
+    'slide-in-from-left-1/2',
+    'slide-in-from-top-1/2',
+    'slide-out-to-left-1/2',
+    'slide-out-to-top-1/2',
+    // Common z-index values
+    'z-50',
+    'z-40',
+    'z-10',
+    // Radix UI data attributes
+    '[&[data-state=open]]',
+    '[&[data-state=closed]]',
+  ],
   theme: {
   	extend: {
   		borderRadius: {
@@ -12,45 +59,45 @@ module.exports = {
   			sm: 'calc(var(--radius) - 4px)'
   		},
   		colors: {
-  			background: 'hsl(var(--background))',
-  			foreground: 'hsl(var(--foreground))',
+  			background: 'var(--background)',
+  			foreground: 'var(--foreground)',
   			card: {
-  				DEFAULT: 'hsl(var(--card))',
-  				foreground: 'hsl(var(--card-foreground))'
+  				DEFAULT: 'var(--card)',
+  				foreground: 'var(--card-foreground)'
   			},
   			popover: {
-  				DEFAULT: 'hsl(var(--popover))',
-  				foreground: 'hsl(var(--popover-foreground))'
+  				DEFAULT: 'var(--popover)',
+  				foreground: 'var(--popover-foreground)'
   			},
   			primary: {
-  				DEFAULT: 'hsl(var(--primary))',
-  				foreground: 'hsl(var(--primary-foreground))'
+  				DEFAULT: 'var(--primary)',
+  				foreground: 'var(--primary-foreground)'
   			},
   			secondary: {
-  				DEFAULT: 'hsl(var(--secondary))',
-  				foreground: 'hsl(var(--secondary-foreground))'
+  				DEFAULT: 'var(--secondary)',
+  				foreground: 'var(--secondary-foreground)'
   			},
   			muted: {
-  				DEFAULT: 'hsl(var(--muted))',
-  				foreground: 'hsl(var(--muted-foreground))'
+  				DEFAULT: 'var(--muted)',
+  				foreground: 'var(--muted-foreground)'
   			},
   			accent: {
-  				DEFAULT: 'hsl(var(--accent))',
-  				foreground: 'hsl(var(--accent-foreground))'
+  				DEFAULT: 'var(--accent)',
+  				foreground: 'var(--accent-foreground)'
   			},
   			destructive: {
-  				DEFAULT: 'hsl(var(--destructive))',
-  				foreground: 'hsl(var(--destructive-foreground))'
+  				DEFAULT: 'var(--destructive)',
+  				foreground: 'var(--destructive-foreground)'
   			},
-  			border: 'hsl(var(--border))',
-  			input: 'hsl(var(--input))',
-  			ring: 'hsl(var(--ring))',
+  			border: 'var(--border)',
+  			input: 'var(--input)',
+  			ring: 'var(--ring)',
   			chart: {
-  				'1': 'hsl(var(--chart-1))',
-  				'2': 'hsl(var(--chart-2))',
-  				'3': 'hsl(var(--chart-3))',
-  				'4': 'hsl(var(--chart-4))',
-  				'5': 'hsl(var(--chart-5))'
+  				'1': 'var(--chart-1)',
+  				'2': 'var(--chart-2)',
+  				'3': 'var(--chart-3)',
+  				'4': 'var(--chart-4)',
+  				'5': 'var(--chart-5)'
   			}
   		},
   		keyframes: {

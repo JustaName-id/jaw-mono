@@ -10,6 +10,7 @@ import {
     ProviderEventEmitter,
     ProviderInterface,
     RequestArguments,
+    Mode,
 } from './interface.js';
 
 import {
@@ -76,16 +77,20 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         }
         this.signer = null;
         correlationIds.clear();
+        this.emit('accountsChanged', []);
         this.emit('disconnect', standardErrors.provider.disconnected('User initiated disconnection'));
     }
 
     private async _request<T>(args: RequestArguments): Promise<T> {
+        const signerType = this.preference.mode === Mode.AppSpecific
+            ? 'appSpecific'
+            : 'crossPlatform';
+
         try {
             checkErrorForInvalidRequestArgs(args);
             if (!this.signer) {
                 switch (args.method) {
                     case 'eth_requestAccounts': {
-                        const signerType = "crossPlatform";
                         const signer = this.initSigner(signerType);
                         await signer.handshake(args);
 
@@ -94,7 +99,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         break;
                     }
                     case 'wallet_connect': {
-                        const signer = this.initSigner('crossPlatform');
+                        const signer = this.initSigner(signerType);
                         await signer.handshake({ method: 'handshake' }); // exchange session keys
                         const result = await signer.request(args); // send diffie-hellman encrypted request
                         this.signer = signer;
@@ -106,7 +111,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     }
                     case 'wallet_sendCalls': 
                     case 'wallet_sign': {
-                        const ephemeralSigner = this.initSigner('crossPlatform');
+                        const ephemeralSigner = this.initSigner(signerType);
                         await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
                         const result = await ephemeralSigner.request(args); // send diffie-hellman encrypted request
                         try {
@@ -181,7 +186,8 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         return createSigner({
             signerType,
             metadata: this.metadata,
-            communicator: this.communicator,
+            communicator: signerType === 'crossPlatform' ? this.communicator : undefined,
+            uiHandler: signerType === 'appSpecific' ? this.preference.uiHandler : undefined,
             callback: this.emit.bind(this),
         });
     }
