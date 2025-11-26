@@ -1,3 +1,4 @@
 #!/bin/sh
 # Run all tests with Vitest
+export PATH="$HOME/.bun/bin:$PATH"
 bunx vitest run

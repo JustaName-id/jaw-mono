@@ -17,12 +17,16 @@ export type SyncStorage = {
 
 /**
  * Create localStorage-based storage
+ * Handles SSR by checking if localStorage is available
  */
 export function createLocalStorage(scope: string, name: string): SyncStorage {
     const prefix = `${scope}:${name}`;
 
     return {
         getItem: <T>(key: string): T | null => {
+            if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+                return null;
+            }
             const fullKey = `${prefix}:${key}`;
             const value = localStorage.getItem(fullKey);
             if (!value) return null;
@@ -33,10 +37,16 @@ export function createLocalStorage(scope: string, name: string): SyncStorage {
             }
         },
         removeItem: (key: string): void => {
+            if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+                return;
+            }
             const fullKey = `${prefix}:${key}`;
             localStorage.removeItem(fullKey);
         },
         setItem: (key: string, value: unknown): void => {
+            if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+                return;
+            }
             const fullKey = `${prefix}:${key}`;
             const serialized = typeof value === 'string' ? value : JSON.stringify(value);
             localStorage.setItem(fullKey, serialized);
