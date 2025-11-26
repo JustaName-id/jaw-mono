@@ -2,6 +2,7 @@ import { Footer, Layout, Navbar } from 'nextra-theme-docs'
 import { Head } from 'nextra/components'
 import { getPageMap } from 'nextra/page-map'
 import 'nextra-theme-docs/style.css'
+import './globals.css'
 
 export const metadata = {
   title: 'JAW Core Documentation',
@@ -10,8 +11,8 @@ export const metadata = {
 
 const navbar = (
   <Navbar
-    logo={<span style={{ fontWeight: 'bold' }}>JAW Accounts</span>}
-    projectLink="https://github.com/JustaName-id/accounts"
+    logo={<span style={{ fontWeight: 'bold' }}>JAW</span>}
+    projectLink="https://github.com/JustaName-id/jaw-mono"
   />
 )
 
@@ -33,7 +34,7 @@ export default async function RootLayout({
         <Layout
           navbar={navbar}
           pageMap={await getPageMap()}
-          docsRepositoryBase="https://github.com/JustaName-id/accounts/tree/main/apps/docs"
+          docsRepositoryBase="https://github.com/JustaName-id/jaw-mono/tree/main/apps/docs"
           footer={footer}
         >
           {children}

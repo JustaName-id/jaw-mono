@@ -44,7 +44,9 @@ Authentication mode that determines where passkey operations occur.
 | **Origin binding** | `keys.jaw.id` | Your domain |
 | **Branding** | JAW interface | Can use custom UI |
 
+<Callout type="warning">
 **Important:** Passkeys are always stored by the browser/device (not on any server). The mode determines where passkey operations happen and whether wallets can be reused across applications.
+</Callout>
 
 #### CrossPlatform Mode
 
@@ -122,7 +124,9 @@ const jaw = JAW.create({
 });
 ```
 
+<Callout type="warning">
 **Important:** This is NOT for storing passkeys themselves (passkeys are always stored by the browser/device). The server stores metadata about passkeys to enable passkey lookups and management.
+</Callout>
 
 **When to Customize:**
 - Self-hosted passkey metadata server

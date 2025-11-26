@@ -4,9 +4,9 @@ import { DocsThemeConfig } from 'nextra-theme-docs'
 const config: DocsThemeConfig = {
   logo: <span>JAW Accounts - Core Package Documentation</span>,
   project: {
-    link: 'https://github.com/JustaName-id/accounts',
+    link: 'https://github.com/JustaName-id/jaw-mono',
   },
-  docsRepositoryBase: 'https://github.com/JustaName-id/accounts',
+  docsRepositoryBase: 'https://github.com/JustaName-id/jaw-mono',
   footer: {
     text: 'JAW Accounts Documentation',
   },
