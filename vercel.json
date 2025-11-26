@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "nx build docs --prod",
-  "outputDirectory": "dist/apps/docs/.next",
+  "buildCommand": "npx nx build docs --prod",
+  "outputDirectory": "apps/docs/.next",
   "installCommand": "bun install"
 }
