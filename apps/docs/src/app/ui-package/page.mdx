@@ -1,0 +1,200 @@
+# @jaw/ui Package
+
+Pre-built React components for app-specific mode UI. This package provides a ready-to-use `JAWProvider` component that handles all wallet approval dialogs automatically.
+
+---
+
+## Installation
+
+```bash
+npm install @jaw/ui
+# or
+yarn add @jaw/ui
+# or
+bun add @jaw/ui
+```
+
+---
+
+## JAWProvider
+
+A React provider component that wraps your app and provides built-in UI dialogs for wallet operations.
+
+### Usage
+
+```typescript
+import { JAWProvider, useJAW } from '@jaw/ui';
+
+function App() {
+  return (
+    <JAWProvider
+      apiKey="your-api-key"
+      appName="My DApp"
+      appLogoUrl="https://my-dapp.com/logo.png"
+      defaultChainId={1}
+      paymasterUrls={{
+        1: 'https://paymaster.example.com/ethereum',
+        8453: 'https://paymaster.example.com/base',
+      }}
+    >
+      <MyApp />
+    </JAWProvider>
+  );
+}
+
+function MyApp() {
+  const provider = useJAW();
+
+  const connect = async () => {
+    const result = await provider.request({
+      method: 'wallet_connect',
+      params: [{ version: '1.0' }],
+    });
+  };
+
+  return <button onClick={connect}>Connect</button>;
+}
+```
+
+### Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `apiKey` | `string` | Yes | JAW API key from dashboard |
+| `appName` | `string` | No | App name shown in dialogs |
+| `appLogoUrl` | `string` | No | App logo URL (HTTPS, 200x200px min) |
+| `defaultChainId` | `number` | No | Default chain (default: 1) |
+| `paymasterUrls` | `Record<number, string>` | No | Paymaster URLs per chain for gasless transactions |
+| `preference` | `object` | No | Additional SDK preferences (serverUrl, showTestnets) |
+| `children` | `ReactNode` | Yes | Child components |
+
+---
+
+## Built-in Dialogs
+
+JAWProvider automatically renders appropriate dialogs for each wallet operation:
+
+| Dialog | Triggered By | Description |
+|--------|--------------|-------------|
+| **OnboardingDialog** | `wallet_connect` (new user) | Account creation with passkey |
+| **ConnectDialog** | `wallet_connect` (existing user) | Connection confirmation |
+| **SignatureDialog** | `personal_sign` | EIP-191 message signing |
+| **SiweDialog** | `personal_sign` (SIWE message) | Sign-In with Ethereum |
+| **Eip712Dialog** | `eth_signTypedData_v4` | EIP-712 typed data signing |
+| **TransactionDialog** | `wallet_sendCalls`, `eth_sendTransaction` | Transaction approval |
+| **PermissionDialog** | `wallet_grantPermissions`, `wallet_revokePermissions` | Permission management |
+
+Features:
+- **TransactionDialog**: Automatic gas estimation with paymaster sponsorship indication
+- **All dialogs**: Address resolution (ENS/subnames), mobile-responsive design
+
+---
+
+## Hooks
+
+### useJAW()
+
+Returns the EIP-1193 provider instance for making RPC requests.
+
+```typescript
+import { useJAW } from '@jaw/ui';
+
+function Component() {
+  const provider = useJAW();
+
+  const sendTransaction = async () => {
+    const result = await provider.request({
+      method: 'wallet_sendCalls',
+      params: [{
+        version: '1.0',
+        from: address,
+        calls: [{
+          to: '0x...',
+          value: '0x...',
+          data: '0x...',
+        }],
+      }],
+    });
+  };
+
+  return <button onClick={sendTransaction}>Send</button>;
+}
+```
+
+---
+
+## Complete Example
+
+```typescript
+'use client';
+
+import { JAWProvider, useJAW } from '@jaw/ui';
+import { useState } from 'react';
+
+function WalletApp() {
+  const provider = useJAW();
+  const [address, setAddress] = useState<string | null>(null);
+
+  const connect = async () => {
+    try {
+      const result = await provider.request({
+        method: 'wallet_connect',
+        params: [{ version: '1.0' }],
+      });
+      setAddress(result.accounts[0]);
+    } catch (error) {
+      console.error('Connection failed:', error);
+    }
+  };
+
+  const signMessage = async () => {
+    if (!address) return;
+
+    const message = 'Hello from my dApp!';
+    const hexMessage = '0x' + Buffer.from(message).toString('hex');
+
+    const signature = await provider.request({
+      method: 'personal_sign',
+      params: [hexMessage, address],
+    });
+
+    console.log('Signature:', signature);
+  };
+
+  return (
+    <div>
+      {address ? (
+        <>
+          <p>Connected: {address}</p>
+          <button onClick={signMessage}>Sign Message</button>
+        </>
+      ) : (
+        <button onClick={connect}>Connect Wallet</button>
+      )}
+    </div>
+  );
+}
+
+export default function App() {
+  return (
+    <JAWProvider
+      apiKey={process.env.NEXT_PUBLIC_JAW_API_KEY!}
+      appName="My DApp"
+      defaultChainId={8453} // Base
+      paymasterUrls={{
+        8453: 'https://paymaster.example.com/base',
+      }}
+    >
+      <WalletApp />
+    </JAWProvider>
+  );
+}
+```
+
+---
+
+## Related
+
+- [Configuration](/configuration) - SDK configuration options
+- [preference.uiHandler](/configuration/preference#uihandler) - Custom UI handler documentation
+- [API Reference](/api-reference) - All supported RPC methods

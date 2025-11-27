@@ -219,6 +219,127 @@ const jaw = JAW.create({
 
 ---
 
+### uiHandler
+
+Custom UI handler for rendering approval dialogs in app-specific mode. When provided, the SDK will use this handler instead of redirecting to external popups.
+
+**Type:** `UIHandler`
+**Default:** `undefined`
+**Only works with:** `Mode.AppSpecific`
+
+<Callout type="info">
+For React applications, use `JAWProvider` from `@jaw/ui` which provides a pre-built UIHandler implementation. See the [UI Package documentation](/ui-package) for details.
+</Callout>
+
+#### Using @jaw/ui (Recommended for React)
+
+```typescript
+import { JAWProvider } from '@jaw/ui';
+
+function App() {
+  return (
+    <JAWProvider
+      apiKey="your-api-key"
+      appName="My DApp"
+      defaultChainId={1}
+      paymasterUrls={{ 1: 'https://...' }}
+    >
+      <YourApp />
+    </JAWProvider>
+  );
+}
+```
+
+#### Custom UIHandler Implementation
+
+For non-React apps or custom UI, implement the `UIHandler` interface:
+
+```typescript
+import {
+  JAW,
+  Mode,
+  UIHandler,
+  UIRequest,
+  UIResponse
+} from '@jaw.id/core';
+
+const customUIHandler: UIHandler = {
+  async request<T>(request: UIRequest): Promise<UIResponse<T>> {
+    // Render your custom UI based on request.type
+    switch (request.type) {
+      case 'wallet_connect':
+        // Show connection dialog
+        break;
+      case 'personal_sign':
+        // Show signature dialog
+        break;
+      case 'eth_signTypedData_v4':
+        // Show EIP-712 dialog
+        break;
+      case 'wallet_sendCalls':
+        // Show transaction dialog
+        break;
+      case 'wallet_grantPermissions':
+        // Show permission grant dialog
+        break;
+      case 'wallet_revokePermissions':
+        // Show permission revoke dialog
+        break;
+      case 'wallet_sign':
+        // Handle unified signing (0x45 or 0x01)
+        break;
+    }
+
+    return {
+      id: request.id,
+      approved: true, // or false if rejected
+      data: result,
+    };
+  },
+
+  canHandle(request: UIRequest): boolean {
+    return true; // Return true for supported request types
+  },
+
+  async cleanup(): Promise<void> {
+    // Clean up any open dialogs
+  },
+};
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: customUIHandler,
+  },
+});
+```
+
+#### UIRequest Types
+
+| Type | Description | Data Fields |
+|------|-------------|-------------|
+| `wallet_connect` | Connection request | `appName`, `appLogoUrl`, `origin`, `chainId`, `capabilities` |
+| `personal_sign` | EIP-191 signature | `message`, `address` |
+| `eth_signTypedData_v4` | EIP-712 signature | `typedData` (JSON), `address` |
+| `wallet_sendCalls` | Transaction batch | `version`, `from`, `calls[]`, `chainId` |
+| `wallet_grantPermissions` | Permission grant | `address`, `chainId`, `expiry`, `spender`, `permissions` |
+| `wallet_revokePermissions` | Permission revoke | `permissionId`, `address`, `chainId` |
+| `wallet_sign` | Unified signing | `address`, `chainId`, `request: { type, data }` |
+
+#### UIResponse Structure
+
+```typescript
+interface UIResponse<T> {
+  id: string;        // Must match request.id
+  approved: boolean; // User approved or rejected
+  data?: T;          // Result data (signature, tx hash, etc.)
+  error?: UIError;   // Error if rejected
+}
+```
+
+---
+
 ## Related Configuration
 
 - [apiKey](/configuration/apiKey) - API key for authentication
