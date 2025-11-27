@@ -95,6 +95,8 @@ export type {
     TypedDataUIRequest,
     TransactionUIRequest,
     PermissionUIRequest,
+    RevokePermissionUIRequest,
+    WalletSignUIRequest,
     UIHandlerOptions,
     BaseUIRequest,
 } from './ui/interface.js';

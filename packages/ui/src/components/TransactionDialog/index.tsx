@@ -119,6 +119,7 @@ export const TransactionDialog = ({
       onOpenChange={isProcessing ? undefined : () => {
         // Empty handler to prevent dialog close
       }}
+      handleClose={isProcessing ? undefined : onCancel}
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
           <p className="text-xs font-bold text-muted-foreground leading-[100%]">
@@ -152,9 +153,10 @@ export const TransactionDialog = ({
       } : {
         width: '500px',
         minWidth: '500px',
+        maxHeight: !isSingleTransaction ? '85vh' : undefined,
       }}
     >
-      <div className="flex flex-col gap-6 justify-between max-md:h-full">
+      <div className={`flex flex-col gap-6 justify-between max-md:h-full ${!isSingleTransaction ? 'overflow-hidden h-full' : ''}`}>
         {isSingleTransaction ? (
           // Single Transaction Layout
           <>
@@ -319,9 +321,9 @@ export const TransactionDialog = ({
         ) : (
           // Multiple Transactions Layout with Accordion
           <>
-            <div className="flex flex-col gap-3 flex-1 overflow-hidden">
+            <div className="flex flex-col gap-3 flex-1 min-h-0">
               {/* From Address */}
-              <div className="p-3.5 border border-border rounded-[6px]">
+              <div className="p-3.5 border border-border rounded-[6px] flex-shrink-0">
                 <p className="text-xs font-bold leading-[133%] text-foreground mb-1">From</p>
                 <div className="flex flex-row items-center gap-1">
                   <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
@@ -330,7 +332,7 @@ export const TransactionDialog = ({
               </div>
 
               {/* Accordion for Transactions */}
-              <div className="flex-1 overflow-y-auto">
+              <div className="flex-1 overflow-y-auto min-h-0">
                 <Accordion type="multiple" className="w-full space-y-3" defaultValue={transactions.map((_, index) => `transaction-${index}`)}>
                   {transactions.map((transaction, index) => (
                     <AccordionItem key={index} value={`transaction-${index}`} className="border border-border rounded-[6px] overflow-hidden">
@@ -423,7 +425,7 @@ export const TransactionDialog = ({
             </div>
 
             {/* Fixed Bottom Section */}
-            <div className="border-t pt-3 space-y-3">
+            <div className="border-t pt-3 space-y-3 flex-shrink-0">
               {/* Network and Fees */}
               <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
                 <div className="flex flex-col text-foreground flex-1 gap-0.5">
@@ -450,7 +452,7 @@ export const TransactionDialog = ({
                           {sponsored && gasFee && gasFee !== 'sponsored' && (
                             <div className="flex flex-col line-through text-muted-foreground">
                               <p className="text-base font-normal">
-                                ${(ethPrice * Number(gasFee)).toFixed(4)}
+                                ${(ethPrice * Number( gasFee)).toFixed(4)}
                               </p>
                             </div>
                           )}
