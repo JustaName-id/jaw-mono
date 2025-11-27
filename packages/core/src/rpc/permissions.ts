@@ -126,10 +126,6 @@ export type WalletGrantPermissionsRequest = {
     method: 'wallet_grantPermissions';
     params: [
         {
-            /** Account address to grant permissions from */
-            address: Address;
-            /** Chain ID in hex format */
-            chainId: string;
             /** Timestamp this permission is valid until (exclusive, unix seconds) */
             expiry: number;
             /** Spender address */
@@ -231,14 +227,16 @@ export type WalletRevokePermissionsRequest = {
  */
 export async function grantPermissions(
     smartAccount: SmartAccount,
-    account: Address,
-    chainId: string,
     expiry: number,
     spender: Address,
     permissions: PermissionsDetail,
     chain: Chain,
     apiKey: string
 ): Promise<WalletGrantPermissionsResponse> {
+    // Derive address and chainId from smart account and chain
+    const account = smartAccount.address;
+    const chainId = `0x${chain.id.toString(16)}` as Hex;
+
     const permission = apiPermissionsToPermission(account, spender, expiry, permissions);
 
     const approveCallData = encodeApprovePermission(permission);

@@ -36,6 +36,7 @@ export interface PermissionDialogProps {
 
   // Network info
   networkName: string;
+  chainId?: number;
   chainIcon?: ReactElement;
   chainIconKey?: string;
 
