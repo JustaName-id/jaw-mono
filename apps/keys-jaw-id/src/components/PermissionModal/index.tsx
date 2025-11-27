@@ -102,6 +102,7 @@ export const PermissionModal = ({
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
+  const [isLoadingSmartAccount, setIsLoadingSmartAccount] = useState<boolean>(false);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(false);
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(false);
@@ -139,9 +140,7 @@ export const PermissionModal = ({
       const [grantParams] = params;
 
       return {
-        address: grantParams.address,
         spender: grantParams.spender,
-        chainId: grantParams.chainId,
         expiry: grantParams.expiry,
         spends: grantParams.permissions.spends || [],
         calls: grantParams.permissions.calls || [],
@@ -307,7 +306,7 @@ export const PermissionModal = ({
     fetchPermissionDetails();
   }, [mode, permissionDetails, extractedApiKey]);
 
-  // Initialize smart account when modal opens
+  // Initialize smart account when modal opens or permission request changes
   useEffect(() => {
     let isMounted = true;
 
@@ -315,21 +314,25 @@ export const PermissionModal = ({
       if (chain) {
         try {
           setIsProcessing(false);
+          setIsLoadingSmartAccount(true);
           console.log('🔐 Initializing permission modal');
           const account = await getSmartAccount(chain);
 
           if (isMounted) {
             setSmartAccount(account);
+            setIsLoadingSmartAccount(false);
           }
         } catch (error) {
           console.error("Error initializing smart account:", error);
           if (isMounted) {
+            setIsLoadingSmartAccount(false);
             setStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
             onError?.(error as Error);
           }
         }
       } else {
         setSmartAccount(null);
+        setIsLoadingSmartAccount(false);
         setStatus('');
         setIsProcessing(false);
       }
@@ -340,7 +343,7 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, getSmartAccount, onError]);
+  }, [chain, permissionRequest, getSmartAccount, onError]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
@@ -431,17 +434,8 @@ export const PermissionModal = ({
       }
 
       if (mode === 'grant') {
-        if (!('expiry' in permissionDetails) || !('spender' in permissionDetails) ||
-            !('address' in permissionDetails) || !('chainId' in permissionDetails)) {
+        if (!('expiry' in permissionDetails) || !('spender' in permissionDetails)) {
           throw new Error('Invalid grant permission parameters.');
-        }
-
-        if (!permissionDetails.address) {
-          throw new Error('Address is required for granting permissions.');
-        }
-
-        if (!permissionDetails.chainId) {
-          throw new Error('Chain ID is required for granting permissions.');
         }
 
         if (!permissionDetails.expiry) {
@@ -454,8 +448,6 @@ export const PermissionModal = ({
 
         const result = await grantPermissions(
           smartAccount,
-          permissionDetails.address,
-          permissionDetails.chainId,
           permissionDetails.expiry,
           permissionDetails.spender,
           {
@@ -535,7 +527,7 @@ export const PermissionModal = ({
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
-      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails}
+      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isLoadingSmartAccount}
     />
   );
 };

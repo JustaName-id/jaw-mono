@@ -903,6 +903,12 @@ Issued At: ${issuedAt}`;
                 token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' // Native token (ETH)
               }
             ],
+            calls: [
+              {
+                target: spenderAddress,
+                functionSignature: 'transfer(address,uint256)',
+              }
+            ]
           }
         }]
       });
@@ -983,12 +989,13 @@ Issued At: ${issuedAt}`;
                 period: 'day' as const,
                 token: usdcAddress
               },
-              {
-                limit: `0x${daiLimit.toString(16)}`,
-                period: 'week' as const,
-                token: daiAddress
-              }
             ],
+            calls: [
+              {
+                target: spenderAddress,
+                functionSignature: 'transfer(address,uint256)',
+              }
+            ]
           }
         }]
       });
