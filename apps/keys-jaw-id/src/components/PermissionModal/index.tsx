@@ -529,6 +529,7 @@ export const PermissionModal = ({
       calls={formattedCalls}
       expiryDate={expiryDate}
       networkName={networkName}
+      chainId={chain?.id}
       chainIconKey={chainIconKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}

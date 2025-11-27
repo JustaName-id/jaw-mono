@@ -5,7 +5,8 @@ import { DefaultDialog } from "../DefaultDialog";
 import { PermissionDialogProps } from "./types";
 import { useIsMobile, useChainIcon } from "../../hooks";
 import {CopiedIcon, CopyIcon, WalletIcon} from "../../icons";
-import { useState } from "react";
+import { useState, useEffect } from "react";
+import { getJustaNameInstance } from "../../utils/justaNameInstance";
 
 export const PermissionDialog = ({
   open,
@@ -18,6 +19,7 @@ export const PermissionDialog = ({
   calls = [],
   expiryDate,
   networkName,
+  chainId,
   chainIcon,
   chainIconKey,
   onConfirm,
@@ -29,6 +31,44 @@ export const PermissionDialog = ({
 }: PermissionDialogProps) => {
   const isMobile = useIsMobile();
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
+  const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
+
+  // Resolve addresses to human-readable names
+  useEffect(() => {
+    if (!chainId) return;
+
+    const justaName = getJustaNameInstance();
+
+    // Resolve spender address
+    if (spenderAddress) {
+      justaName.subnames.reverseResolve({
+        address: spenderAddress as `0x${string}`,
+        chainId: chainId,
+      }).then((result) => {
+        if (result) {
+          setResolvedAddresses(prev => ({ ...prev, [spenderAddress]: result }));
+        }
+      }).catch(() => {
+        // Silently fail if resolution fails
+      });
+    }
+
+    // Resolve call target addresses
+    calls.forEach((call) => {
+      if (call.target) {
+        justaName.subnames.reverseResolve({
+          address: call.target as `0x${string}`,
+          chainId: chainId,
+        }).then((result) => {
+          if (result) {
+            setResolvedAddresses(prev => ({ ...prev, [call.target]: result }));
+          }
+        }).catch(() => {
+          // Silently fail if resolution fails
+        });
+      }
+    });
+  }, [spenderAddress, calls, chainId]);
 
   // Get chain icon using the hook
   const defaultChainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 24);
@@ -130,7 +170,7 @@ export const PermissionDialog = ({
               <div className="flex flex-row items-center gap-1">
                   <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
                   <p className="text-base font-normal leading-[150%] truncate overflow-hidden">
-                  {truncateAddress(spenderAddress)}
+                  {resolvedAddresses[spenderAddress] || truncateAddress(spenderAddress)}
                 </p>
               </div>
             </div>
@@ -220,7 +260,7 @@ export const PermissionDialog = ({
                     <div className="flex flex-col gap-0.5">
                       <p className="text-xs font-bold leading-[133%] text-muted-foreground">Contract</p>
                       <p className="text-sm font-mono leading-[150%] text-foreground break-all">
-                        {call.target}
+                        {resolvedAddresses[call.target] || call.target}
                       </p>
                     </div>
                   </div>
