@@ -83,15 +83,48 @@ export interface PermissionUIRequest extends BaseUIRequest {
   type: 'wallet_grantPermissions';
   data: {
     address: Address;
-    chainId: number;
+    chainId: number | string; // can be hex string like '0x1'
     expiry: number;
     spender: Address;
     permissions: {
-      spend: {
+      spends?: Array<{
         limit: string;
-        period: 'day' | 'week' | 'month' | 'year';
+        period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
         token: Address;
-      };
+      }>;
+      calls?: Array<{
+        target: Address;
+        selector: `0x${string}`;
+        functionSignature?: string;
+      }>;
+    };
+  };
+}
+
+/**
+ * Permission revoke request (wallet_revokePermissions)
+ */
+export interface RevokePermissionUIRequest extends BaseUIRequest {
+  type: 'wallet_revokePermissions';
+  data: {
+    permissionId: string;
+    address: Address;
+    chainId?: number;
+  };
+}
+
+/**
+ * Wallet sign request (wallet_sign)
+ * Type 0x45 = personal sign, Type 0x01 = EIP-712 typed data
+ */
+export interface WalletSignUIRequest extends BaseUIRequest {
+  type: 'wallet_sign';
+  data: {
+    address: Address;
+    chainId?: number;
+    request: {
+      type: '0x45' | '0x01';
+      data: string;
     };
   };
 }
@@ -104,7 +137,9 @@ export type UIRequest =
   | SignatureUIRequest
   | TypedDataUIRequest
   | TransactionUIRequest
-  | PermissionUIRequest;
+  | PermissionUIRequest
+  | RevokePermissionUIRequest
+  | WalletSignUIRequest;
 
 /**
  * UI response structure

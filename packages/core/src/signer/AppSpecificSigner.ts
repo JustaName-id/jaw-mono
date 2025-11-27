@@ -8,6 +8,8 @@ import {
   TypedDataUIRequest,
   TransactionUIRequest,
   PermissionUIRequest,
+  RevokePermissionUIRequest,
+  WalletSignUIRequest,
 } from '../ui/interface.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/interface.js';
 import { standardErrors } from '../errors/index.js';
@@ -260,6 +262,27 @@ export class AppSpecificSigner implements Signer {
         return response.data;
       }
 
+      case 'wallet_sign': {
+        const params = request.params as any[];
+        const signParams = params[0];
+
+        const uiRequest: WalletSignUIRequest = {
+          id: crypto.randomUUID(),
+          type: 'wallet_sign',
+          timestamp: Date.now(),
+          correlationId,
+          data: signParams,
+        };
+
+        const response = await this.uiHandler.request<string>(uiRequest);
+
+        if (!response.approved) {
+          throw response.error || UIError.userRejected();
+        }
+
+        return response.data;
+      }
+
       case 'wallet_sendCalls': {
         const params = request.params as any[];
         const callsData = params[0];
@@ -292,6 +315,51 @@ export class AppSpecificSigner implements Signer {
         return response.data;
       }
 
+      case 'eth_sendTransaction': {
+        const params = request.params as any[];
+        const txData = params[0];
+
+        // Convert eth_sendTransaction format to wallet_sendCalls format
+        const callsData = {
+          version: '1.0' as const,
+          from: this.accounts[0] as Address,
+          calls: [{
+            to: txData.to,
+            value: txData.value,
+            data: txData.data,
+          }],
+          chainId: this.chain.id,
+        };
+
+        const uiRequest: TransactionUIRequest = {
+          id: crypto.randomUUID(),
+          type: 'wallet_sendCalls',
+          timestamp: Date.now(),
+          correlationId,
+          data: callsData,
+        };
+
+        const response = await this.uiHandler.request<{ id: string; chainId: number }>(uiRequest);
+
+        if (!response.approved) {
+          throw response.error || UIError.userRejected();
+        }
+
+        // Handle background receipt tracking
+        const userOpHash = response.data?.id;
+        const chainId = response.data?.chainId;
+
+        if (userOpHash && chainId) {
+          storeCallStatus(userOpHash, chainId);
+          waitForReceiptInBackground(userOpHash, chainId).catch((error) => {
+            console.error('Background receipt wait failed:', error);
+          });
+        }
+
+        // For eth_sendTransaction, return just the hash (not the sendCalls format)
+        return response.data?.id;
+      }
+
       case 'wallet_grantPermissions': {
         const params = request.params as any[];
         const permissionData = params[0];
@@ -302,6 +370,31 @@ export class AppSpecificSigner implements Signer {
           timestamp: Date.now(),
           correlationId,
           data: permissionData,
+        };
+
+        const response = await this.uiHandler.request(uiRequest);
+
+        if (!response.approved) {
+          throw response.error || UIError.userRejected();
+        }
+
+        return response.data;
+      }
+
+      case 'wallet_revokePermissions': {
+        const params = request.params as any[];
+        const revokeData = params[0];
+
+        const uiRequest: RevokePermissionUIRequest = {
+          id: crypto.randomUUID(),
+          type: 'wallet_revokePermissions',
+          timestamp: Date.now(),
+          correlationId,
+          data: {
+            permissionId: revokeData.permissionId,
+            address: this.accounts[0] as Address,
+            chainId: this.chain.id,
+          },
         };
 
         const response = await this.uiHandler.request(uiRequest);

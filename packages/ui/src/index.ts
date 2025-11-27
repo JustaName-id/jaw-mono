@@ -30,3 +30,6 @@ export * from './lib/utils';
 export * from './icons';
 export * from './hooks';
 export * from './utils';
+
+// React integration
+export * from './react';
