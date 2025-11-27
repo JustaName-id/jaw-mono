@@ -180,8 +180,12 @@ export type WalletGrantPermissionsResponse = {
     address: Address;
     /** Chain ID in hex format */
     chainId: Hex;
+    /** Timestamp (in seconds) that specifies when this permission becomes valid */
+    start: number;
     /** Timestamp (in seconds) that specifies the time by which this permission expires */
     expiry: number;
+    /** Salt used for permission uniqueness (as hex string) */
+    salt: Hex;
     /** Permission identifier - the permission hash from the contract */
     id: Hex;
     /** Spender address that was granted permissions */
@@ -257,10 +261,13 @@ export async function grantPermissions(
 
     await storePermissionInRelay(permissionHash, permission, chainId, apiKey);
 
+
     return {
         address: account,
         chainId: chainId as Hex,
+        start: permission.start,
         expiry,
+        salt: `0x${permission.salt.toString(16)}` as Hex,
         id: permissionHash,
         spender,
         calls: permissions.calls || [],

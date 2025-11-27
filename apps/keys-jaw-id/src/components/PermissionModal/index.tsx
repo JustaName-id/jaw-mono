@@ -102,10 +102,10 @@ export const PermissionModal = ({
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
-  const [isLoadingSmartAccount, setIsLoadingSmartAccount] = useState<boolean>(false);
+  const [isLoadingSmartAccount, setIsLoadingSmartAccount] = useState<boolean>(true); // Start true to prevent early clicks
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
-  const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(false);
-  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(false);
+  const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
+  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
 
   // Extract API key from rpcUrl if not provided as prop
