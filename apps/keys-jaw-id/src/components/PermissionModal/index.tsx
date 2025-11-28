@@ -283,6 +283,56 @@ export const PermissionModal = ({
     return '0x43e...ead3';
   }, [mode, fetchedPermissionData, permissionDetails]);
 
+  // Generate warning message based on actual permissions
+  const warningMessage = useMemo(() => {
+    if (mode !== 'grant') return undefined;
+
+    const parts: string[] = [];
+
+    // Describe spend permissions
+    if (formattedSpends.length > 0) {
+      const spendDescriptions = formattedSpends.map(
+        (spend: { limit: string; duration: string }) => {
+          // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
+          const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
+          // Handle "forever" specially - no "per" prefix needed
+          if (normalizedDuration === 'forever') {
+            return spend.limit;
+          }
+          return `${spend.limit} per ${normalizedDuration}`;
+        }
+      );
+      parts.push(`spend up to ${spendDescriptions.join(', ')}`);
+    }
+
+    // Describe call permissions
+    if (formattedCalls.length > 0) {
+      const callDescriptions = formattedCalls.map((call: { functionSignature: string }) => {
+        const fnName = call.functionSignature;
+        // Check for special selectors
+        if (fnName === 'Any Function') {
+          return 'call any function';
+        }
+        if (fnName === 'Empty Calldata') {
+          return 'send transactions with empty calldata';
+        }
+        // Extract just the function name from signature like "transfer(address,uint256)"
+        const simpleName = fnName.split('(')[0];
+        return `call ${simpleName}`;
+      });
+
+      // Deduplicate and join
+      const uniqueCalls = [...new Set(callDescriptions)];
+      parts.push(uniqueCalls.join(', '));
+    }
+
+    if (parts.length === 0) {
+      return `You are granting permissions to this dApp until ${expiryDate}. Only approve if you trust this dApp.`;
+    }
+
+    return `This will allow the dApp to ${parts.join(' and ')} on your behalf until ${expiryDate}. Only approve if you trust this dApp.`;
+  }, [mode, formattedSpends, formattedCalls, expiryDate]);
+
   // Reset state
   const resetModalState = useCallback(() => {
     setStatus('');
@@ -546,6 +596,7 @@ export const PermissionModal = ({
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isLoadingSmartAccount}
+      warningMessage={warningMessage}
     />
   );
 };

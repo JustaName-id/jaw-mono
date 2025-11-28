@@ -28,6 +28,7 @@ export const PermissionDialog = ({
   status,
   isLoadingTokenInfo = false,
   timestamp = new Date(),
+  warningMessage,
 }: PermissionDialogProps) => {
   const isMobile = useIsMobile();
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
@@ -321,14 +322,7 @@ export const PermissionDialog = ({
               <div className="flex flex-col gap-1">
                 <p className="text-xs font-bold leading-[133%] text-yellow-800">Warning</p>
                 <p className="text-xs font-normal leading-[150%] text-yellow-900">
-                  You are granting {totalPermissions} permission{totalPermissions > 1 ? 's' : ''}
-                  {totalSpends > 0 && ` (${totalSpends} spend`}
-                  {totalSpends > 1 && 's'}
-                  {totalSpends > 0 && ')'}
-                  {totalCalls > 0 && ` (${totalCalls} call`}
-                  {totalCalls > 1 && 's'}
-                  {totalCalls > 0 && ')'}
-                  {' '}to this dApp until {expiryDate}. Only approve if you trust this dApp.
+                  {warningMessage || `You are granting ${totalPermissions} permission${totalPermissions > 1 ? 's' : ''} to this dApp until ${expiryDate}. Only approve if you trust this dApp.`}
                 </p>
               </div>
             </div>
