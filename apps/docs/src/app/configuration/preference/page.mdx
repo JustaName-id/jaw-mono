@@ -228,24 +228,24 @@ Custom UI handler for rendering approval dialogs in app-specific mode. When prov
 **Only works with:** `Mode.AppSpecific`
 
 <Callout type="info">
-For React applications, use `JAWProvider` from `@jaw/ui` which provides a pre-built UIHandler implementation. See the [UI Package documentation](/ui-package) for details.
+For React applications, use `JAWUIProvider` from `@jaw/ui` which provides a pre-built UIHandler implementation. See the [UI Package documentation](/ui-package) for details.
 </Callout>
 
 #### Using @jaw/ui (Recommended for React)
 
 ```typescript
-import { JAWProvider } from '@jaw/ui';
+import { JAWUIProvider } from '@jaw/ui';
 
 function App() {
   return (
-    <JAWProvider
+    <JAWUIProvider
       apiKey="your-api-key"
       appName="My DApp"
       defaultChainId={1}
       paymasterUrls={{ 1: 'https://...' }}
     >
       <YourApp />
-    </JAWProvider>
+    </JAWUIProvider>
   );
 }
 ```

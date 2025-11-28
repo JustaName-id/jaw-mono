@@ -3,9 +3,8 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
-  JAW,
-  CreateJAWSDKOptions,
   UIHandler,
+  UIHandlerConfig,
   UIRequest,
   UIResponse,
   UIError,
@@ -49,8 +48,6 @@ import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
 import { useChainIcon } from '../hooks/useChainIcon';
-
-import { JAWContext } from './context';
 
 // ============================================================================
 // SIWE (Sign-In with Ethereum) Detection Utilities
@@ -181,57 +178,87 @@ type TokenInfoMap = Record<string, { decimals: number; symbol: string }>;
 // Type assertion to fix React types version mismatch
 const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> = DefaultDialog as React.ComponentType<DefaultDialogProps>;
 
-interface ReactWebUIHandlerConfig {
-  apiKey?: string;
-  defaultChainId?: number;
-  paymasterUrls?: Record<number, string>;
-}
+/**
+ * React UI handler for app-specific mode
+ *
+ * This handler is automatically initialized by the SDK with the necessary configuration.
+ * Simply pass a new instance to JAW.create() and the SDK will call init() with the config.
+ *
+ * @example
+ * ```typescript
+ * import { JAW, Mode } from '@jaw.id/core';
+ * import { ReactUIHandler } from '@jaw/ui';
+ *
+ * const jaw = JAW.create({
+ *   apiKey: 'your-api-key',
+ *   defaultChainId: 1,
+ *   preference: {
+ *     mode: Mode.AppSpecific,
+ *     uiHandler: new ReactUIHandler(),
+ *   },
+ * });
+ * ```
+ */
+export class ReactUIHandler implements UIHandler {
+  private config: UIHandlerConfig = {};
 
-class ReactWebUIHandler implements UIHandler {
-  private config: ReactWebUIHandlerConfig;
-
-  constructor(config: ReactWebUIHandlerConfig = {}) {
+  /**
+   * Initialize the handler with SDK configuration
+   * Called automatically by the SDK - do not call directly
+   */
+  init(config: UIHandlerConfig): void {
     this.config = config;
   }
 
   async request<T = unknown>(request: UIRequest): Promise<UIResponse<T>> {
-    return new Promise((resolve) => {
-      const container = document.createElement('div');
-      container.setAttribute('data-jaw-modal-container', '');
+    return new Promise((resolve, reject) => {
+      try {
+        const container = document.createElement('div');
+        container.setAttribute('data-jaw-modal-container', '');
 
-      // Append to body - Radix UI Dialog will handle all positioning
-      document.body.appendChild(container);
+        // Append to body - Radix UI Dialog will handle all positioning
+        document.body.appendChild(container);
 
-      const root = createRoot(container);
+        const root = createRoot(container);
 
-      const cleanup = () => {
-        root.unmount();
-        if (container.parentNode) {
-          container.parentNode.removeChild(container);
-        }
-      };
+        const cleanup = () => {
+          try {
+            root.unmount();
+            if (container.parentNode) {
+              container.parentNode.removeChild(container);
+            }
+          } catch (cleanupError) {
+            console.error('[ReactUIHandler] Cleanup error:', cleanupError);
+          }
+        };
 
-      const handleApprove = (data: T) => {
-        cleanup();
-        resolve({
-          id: request.id,
-          approved: true,
-          data,
-        });
-      };
+        const handleApprove = (data: T) => {
+          cleanup();
+          resolve({
+            id: request.id,
+            approved: true,
+            data,
+          });
+        };
 
-      const handleReject = (error?: Error) => {
-        cleanup();
-        resolve({
-          id: request.id,
-          approved: false,
-          error: error as UIError || UIError.userRejected(),
-        });
-      };
+        const handleReject = (error?: Error) => {
+          cleanup();
+          resolve({
+            id: request.id,
+            approved: false,
+            error: error as UIError || UIError.userRejected(),
+          });
+        };
 
-      // Render appropriate dialog based on request type
-      const dialog = this.renderDialog(request, handleApprove, handleReject);
-      root.render(dialog);
+        // Render appropriate dialog based on request type
+        console.log('[ReactUIHandler] Rendering dialog for request type:', request.type);
+        const dialog = this.renderDialog(request, handleApprove, handleReject);
+        root.render(dialog);
+        console.log('[ReactUIHandler] Dialog rendered');
+      } catch (error) {
+        console.error('[ReactUIHandler] Error in request:', error);
+        reject(error);
+      }
     });
   }
 
@@ -501,6 +528,10 @@ function OnboardingDialogWrapper({
   const [pendingAddress, setPendingAddress] = useState<string | null>(null);
   const [pendingUsername, setPendingUsername] = useState<string | null>(null);
 
+  // Use refs to store pending values that callbacks can access immediately
+  const pendingAddressRef = React.useRef<string | null>(null);
+  const pendingUsernameRef = React.useRef<string | null>(null);
+
   // State for ConnectDialog confirmation
   const [showConnectDialog, setShowConnectDialog] = useState(false);
   const [authenticatedAccountName, setAuthenticatedAccountName] = useState<string | null>(null);
@@ -687,8 +718,11 @@ function OnboardingDialogWrapper({
       passkeyManager.storeAuthState(address, credentialId);
 
       // Store address and username for completion callback
+      // Update both state and refs - refs are immediately available for callbacks
       setPendingAddress(address);
       setPendingUsername(username);
+      pendingAddressRef.current = address;
+      pendingUsernameRef.current = username;
 
       return address;
     } catch (error) {
@@ -699,12 +733,18 @@ function OnboardingDialogWrapper({
   };
 
   // Handle account creation completion (after subname registration if applicable)
+  // Note: We use the refs since state updates may not be synchronous when this callback is called
   const handleAccountCreationComplete = async () => {
-    if (pendingAddress) {
+    const address = pendingAddressRef.current;
+    const username = pendingUsernameRef.current;
+
+    if (address) {
       // Show ConnectDialog for confirmation instead of immediately approving
-      setAuthenticatedAccountName(pendingUsername || 'New Account');
-      setAuthenticatedWalletAddress(pendingAddress);
+      setAuthenticatedAccountName(username || 'New Account');
+      setAuthenticatedWalletAddress(address);
       setShowConnectDialog(true);
+    } else {
+      console.error('[OnboardingDialogWrapper] handleAccountCreationComplete called but pendingAddress is null');
     }
     setIsCreating(false);
   };
@@ -1549,54 +1589,3 @@ function UnsupportedMethodDialogWrapper({
   );
 }
 
-// Provider props - extends SDK options with UI-specific props
-export interface JAWProviderProps extends CreateJAWSDKOptions {
-  children: React.ReactNode;
-  paymasterUrls?: Record<number, string>;
-}
-
-// Main provider component that combines SDK creation with UI handler
-export function JAWProvider({
-  children,
-  preference,
-  apiKey,
-  defaultChainId,
-  paymasterUrls,
-  ...sdkOptions
-}: JAWProviderProps): React.ReactElement {
-  // Create UI handler with apiKey, defaultChainId, and paymasterUrls for passkey operations
-  const uiHandler = useMemo(() => new ReactWebUIHandler({
-    apiKey,
-    defaultChainId,
-    paymasterUrls,
-  }), [apiKey, defaultChainId, paymasterUrls]);
-
-  // Merge uiHandler into preference
-  const preferenceWithHandler = useMemo(() => ({
-    ...preference,
-    uiHandler,
-  }), [preference, uiHandler]);
-
-  // Create JAW SDK instance
-  const jaw = useMemo(() => JAW.create({
-    ...sdkOptions,
-    apiKey,
-    defaultChainId,
-    preference: preferenceWithHandler,
-  }), [sdkOptions, apiKey, defaultChainId, preferenceWithHandler]);
-
-  const provider = useMemo(() => jaw.provider, [jaw]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      jaw.disconnect();
-    };
-  }, [jaw]);
-
-  return (
-    <JAWContext.Provider value={provider}>
-      {children}
-    </JAWContext.Provider>
-  );
-}

@@ -194,12 +194,36 @@ export class UIError extends Error {
 }
 
 /**
+ * Configuration passed to UIHandler during initialization
+ * Contains SDK configuration that the UI handler may need
+ */
+export interface UIHandlerConfig {
+  /** JAW API key for RPC URL resolution */
+  apiKey?: string;
+  /** Default chain ID */
+  defaultChainId?: number;
+  /** Paymaster URLs per chain for gasless transactions */
+  paymasterUrls?: Record<number, string>;
+  /** App name shown in dialogs */
+  appName?: string;
+  /** App logo URL */
+  appLogoUrl?: string | null;
+}
+
+/**
  * Platform-agnostic UI handler interface
  *
  * Implement this interface to provide custom UI for app-specific mode.
  * The SDK will call the request method when user approval is needed.
  */
 export interface UIHandler {
+  /**
+   * Initialize the handler with SDK configuration
+   * Called by the SDK before any requests are made
+   * @param config - SDK configuration the handler may need
+   */
+  init?(config: UIHandlerConfig): void;
+
   /**
    * Request user approval for an action
    * @param request - The UI request containing action details

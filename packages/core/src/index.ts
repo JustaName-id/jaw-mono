@@ -87,6 +87,7 @@ export {type Chain} from "./store/index.js"
 /** UI Handler exports (for app-specific mode) **/
 export type {
     UIHandler,
+    UIHandlerConfig,
     UIRequest,
     UIResponse,
     UIRequestType,

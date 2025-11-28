@@ -28,6 +28,8 @@ type ConstructorOptions = {
   metadata: AppMetadata;
   uiHandler: UIHandler;
   callback: ProviderEventCallback | null;
+  apiKey?: string;
+  paymasterUrls?: Record<number, string>;
 };
 
 export class AppSpecificSigner implements Signer {
@@ -50,12 +52,24 @@ export class AppSpecificSigner implements Signer {
     this.chain = account.chain ?? {
       id: params.metadata.defaultChainId ?? 1,
     };
+
+    // Initialize the UI handler with SDK configuration
+    if (this.uiHandler.init) {
+      this.uiHandler.init({
+        apiKey: params.apiKey,
+        defaultChainId: params.metadata.defaultChainId,
+        paymasterUrls: params.paymasterUrls,
+        appName: params.metadata.appName,
+        appLogoUrl: params.metadata.appLogoUrl,
+      });
+    }
   }
 
   /**
    * Handshake establishes connection with user approval
    */
   async handshake(args: RequestArguments): Promise<void> {
+    console.log('[AppSpecificSigner] handshake called');
     const correlationId = correlationIds.get(args);
 
     // Create connect UI request
@@ -72,8 +86,10 @@ export class AppSpecificSigner implements Signer {
       },
     };
 
+    console.log('[AppSpecificSigner] Requesting UI handler for wallet_connect');
     // Request user approval via UI handler
     const response = await this.uiHandler.request<WalletConnectResponse>(uiRequest);
+    console.log('[AppSpecificSigner] UI handler response:', response);
 
     if (!response.approved) {
       throw response.error || UIError.userRejected();

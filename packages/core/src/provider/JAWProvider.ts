@@ -36,14 +36,16 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     private readonly preference: JawProviderPreference;
     private readonly communicator: Communicator;
     private readonly apiKey: string;
+    private readonly paymasterUrls?: Record<number, string>;
 
     private signer: Signer | null = null;
 
-    constructor({ metadata, preference, apiKey }: Readonly<ConstructorOptions>) {
+    constructor({ metadata, preference, apiKey, paymasterUrls }: Readonly<ConstructorOptions>) {
         super();
         this.metadata = metadata;
         this.preference = preference;
         this.apiKey = apiKey;
+        this.paymasterUrls = paymasterUrls;
         this.communicator = new Communicator({
             metadata,
             preference,
@@ -82,17 +84,28 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     }
 
     private async _request<T>(args: RequestArguments): Promise<T> {
+        console.log('[JAWProvider] _request called with method:', args.method);
+        console.log('[JAWProvider] preference.mode:', this.preference.mode);
+        console.log('[JAWProvider] Mode.AppSpecific:', Mode.AppSpecific);
+        console.log('[JAWProvider] mode === AppSpecific:', this.preference.mode === Mode.AppSpecific);
+
         const signerType = this.preference.mode === Mode.AppSpecific
             ? 'appSpecific'
             : 'crossPlatform';
 
+        console.log('[JAWProvider] signerType:', signerType);
+
         try {
             checkErrorForInvalidRequestArgs(args);
             if (!this.signer) {
+                console.log('[JAWProvider] No signer, creating new signer for method:', args.method);
                 switch (args.method) {
                     case 'eth_requestAccounts': {
+                        console.log('[JAWProvider] Initializing signer for eth_requestAccounts');
                         const signer = this.initSigner(signerType);
+                        console.log('[JAWProvider] Signer created, calling handshake');
                         await signer.handshake(args);
+                        console.log('[JAWProvider] Handshake complete');
 
                         this.signer = signer;
                         storeSignerType(signerType);
@@ -189,6 +202,8 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             communicator: signerType === 'crossPlatform' ? this.communicator : undefined,
             uiHandler: signerType === 'appSpecific' ? this.preference.uiHandler : undefined,
             callback: this.emit.bind(this),
+            apiKey: signerType === 'appSpecific' ? this.apiKey: undefined,
+            paymasterUrls: signerType === 'appSpecific' ? this.paymasterUrls: undefined,
         });
     }
 

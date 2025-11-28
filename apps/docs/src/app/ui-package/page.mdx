@@ -1,78 +1,59 @@
 # @jaw/ui Package
 
-Pre-built React components for app-specific mode UI. This package provides a ready-to-use `JAWProvider` component that handles all wallet approval dialogs automatically.
+Pre-built React UI handler for app-specific mode. This package provides a `ReactUIHandler` that handles all wallet approval dialogs automatically when used with the core `JAW.create()` function.
 
 ---
 
 ## Installation
 
 ```bash
-npm install @jaw/ui
+npm install @jaw/ui @jaw.id/core
 # or
-yarn add @jaw/ui
+yarn add @jaw/ui @jaw.id/core
 # or
-bun add @jaw/ui
+bun add @jaw/ui @jaw.id/core
 ```
 
 ---
 
-## JAWProvider
+## ReactUIHandler
 
-A React provider component that wraps your app and provides built-in UI dialogs for wallet operations.
+A UIHandler implementation for React that renders built-in UI dialogs for wallet operations.
 
 ### Usage
 
 ```typescript
-import { JAWProvider, useJAW } from '@jaw/ui';
+import { JAW, Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw/ui';
 
-function App() {
-  return (
-    <JAWProvider
-      apiKey="your-api-key"
-      appName="My DApp"
-      appLogoUrl="https://my-dapp.com/logo.png"
-      defaultChainId={1}
-      paymasterUrls={{
-        1: 'https://paymaster.example.com/ethereum',
-        8453: 'https://paymaster.example.com/base',
-      }}
-    >
-      <MyApp />
-    </JAWProvider>
-  );
-}
+// Create JAW SDK with app-specific mode
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 1,
+  paymasterUrls: {
+    1: 'https://paymaster.example.com/ethereum',
+    8453: 'https://paymaster.example.com/base',
+  },
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: new ReactUIHandler(),
+  },
+});
 
-function MyApp() {
-  const provider = useJAW();
-
-  const connect = async () => {
-    const result = await provider.request({
-      method: 'wallet_connect',
-      params: [{ version: '1.0' }],
-    });
-  };
-
-  return <button onClick={connect}>Connect</button>;
-}
+// Use the provider
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{ version: '1.0' }],
+});
 ```
 
-### Props
-
-| Prop | Type | Required | Description |
-|------|------|----------|-------------|
-| `apiKey` | `string` | Yes | JAW API key from dashboard |
-| `appName` | `string` | No | App name shown in dialogs |
-| `appLogoUrl` | `string` | No | App logo URL (HTTPS, 200x200px min) |
-| `defaultChainId` | `number` | No | Default chain (default: 1) |
-| `paymasterUrls` | `Record<number, string>` | No | Paymaster URLs per chain for gasless transactions |
-| `preference` | `object` | No | Additional SDK preferences (serverUrl, showTestnets) |
-| `children` | `ReactNode` | Yes | Child components |
+The `ReactUIHandler` is automatically initialized by the SDK with the necessary configuration (`apiKey`, `defaultChainId`, `paymasterUrls`). You don't need to pass any parameters to the constructor - the SDK handles this for you via the `init()` method.
 
 ---
 
 ## Built-in Dialogs
 
-JAWProvider automatically renders appropriate dialogs for each wallet operation:
+ReactUIHandler automatically renders appropriate dialogs for each wallet operation:
 
 | Dialog | Triggered By | Description |
 |--------|--------------|-------------|
@@ -90,49 +71,16 @@ Features:
 
 ---
 
-## Hooks
-
-### useJAW()
-
-Returns the EIP-1193 provider instance for making RPC requests.
-
-```typescript
-import { useJAW } from '@jaw/ui';
-
-function Component() {
-  const provider = useJAW();
-
-  const sendTransaction = async () => {
-    const result = await provider.request({
-      method: 'wallet_sendCalls',
-      params: [{
-        version: '1.0',
-        from: address,
-        calls: [{
-          to: '0x...',
-          value: '0x...',
-          data: '0x...',
-        }],
-      }],
-    });
-  };
-
-  return <button onClick={sendTransaction}>Send</button>;
-}
-```
-
----
-
 ## Complete Example
 
 ```typescript
 'use client';
 
-import { JAWProvider, useJAW } from '@jaw/ui';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { JAW, Mode, ProviderInterface } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw/ui';
 
-function WalletApp() {
-  const provider = useJAW();
+function WalletApp({ provider }: { provider: ProviderInterface }) {
   const [address, setAddress] = useState<string | null>(null);
 
   const connect = async () => {
@@ -141,7 +89,7 @@ function WalletApp() {
         method: 'wallet_connect',
         params: [{ version: '1.0' }],
       });
-      setAddress(result.accounts[0]);
+      setAddress(result.accounts[0].address);
     } catch (error) {
       console.error('Connection failed:', error);
     }
@@ -176,18 +124,31 @@ function WalletApp() {
 }
 
 export default function App() {
-  return (
-    <JAWProvider
-      apiKey={process.env.NEXT_PUBLIC_JAW_API_KEY!}
-      appName="My DApp"
-      defaultChainId={8453} // Base
-      paymasterUrls={{
+  const [provider, setProvider] = useState<ProviderInterface | null>(null);
+
+  useEffect(() => {
+    const jaw = JAW.create({
+      apiKey: process.env.NEXT_PUBLIC_JAW_API_KEY!,
+      defaultChainId: 8453,
+      paymasterUrls: {
         8453: 'https://paymaster.example.com/base',
-      }}
-    >
-      <WalletApp />
-    </JAWProvider>
-  );
+      },
+      preference: {
+        mode: Mode.AppSpecific,
+        uiHandler: new ReactUIHandler(),
+      },
+    });
+
+    setProvider(jaw.provider);
+
+    return () => {
+      jaw.disconnect();
+    };
+  }, []);
+
+  if (!provider) return <div>Loading...</div>;
+
+  return <WalletApp provider={provider} />;
 }
 ```
 
