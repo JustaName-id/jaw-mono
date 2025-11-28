@@ -525,9 +525,6 @@ function OnboardingDialogWrapper({
   const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  const [pendingAddress, setPendingAddress] = useState<string | null>(null);
-  const [pendingUsername, setPendingUsername] = useState<string | null>(null);
-
   // Use refs to store pending values that callbacks can access immediately
   const pendingAddressRef = React.useRef<string | null>(null);
   const pendingUsernameRef = React.useRef<string | null>(null);
@@ -718,9 +715,7 @@ function OnboardingDialogWrapper({
       passkeyManager.storeAuthState(address, credentialId);
 
       // Store address and username for completion callback
-      // Update both state and refs - refs are immediately available for callbacks
-      setPendingAddress(address);
-      setPendingUsername(username);
+      // Use refs since they are immediately available for callbacks
       pendingAddressRef.current = address;
       pendingUsernameRef.current = username;
 
