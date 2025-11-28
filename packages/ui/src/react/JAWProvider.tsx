@@ -1131,8 +1131,6 @@ function PermissionDialogWrapper({
       // Grant permissions using core SDK
       const result = await grantPermissions(
         smartAccount,
-        request.data.address,
-        String(chainId), // grantPermissions expects chainId as string
         request.data.expiry,
         request.data.spender,
         permissionsDetail,
