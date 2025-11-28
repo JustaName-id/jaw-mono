@@ -20,6 +20,24 @@ import {
 // ERC-7528 native token address
 const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
+// Known function selectors mapping
+const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
+  '0x32323232': 'Any Function',
+  '0xe0e0e0e0': 'Empty Calldata',
+  '0xcc53287f': 'lockdown((address,address)[])',
+  '0x87517c45': 'approve(address,address,uint160,uint48)',
+  '0x095ea7b3': 'approve(address,uint256)',
+  '0x23b872dd': 'transferFrom(address,address,uint256)',
+  '0xa9059cbb': 'transfer(address,uint256)',
+};
+
+// Resolve function selector to human-readable name
+const resolveFunctionSelector = (selector: string): string => {
+  const normalizedSelector = selector.toLowerCase();
+  const knownName = KNOWN_FUNCTION_SELECTORS[normalizedSelector];
+  return knownName || selector;
+};
+
 // Check if token is native
 const isNativeToken = (tokenAddress?: string): boolean => {
   if (!tokenAddress) return true;
@@ -102,10 +120,10 @@ export const PermissionModal = ({
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
-  const [isLoadingSmartAccount, setIsLoadingSmartAccount] = useState<boolean>(false);
+  const [isLoadingSmartAccount, setIsLoadingSmartAccount] = useState<boolean>(true); // Start true to prevent early clicks
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
-  const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(false);
-  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(false);
+  const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
+  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
 
   // Extract API key from rpcUrl if not provided as prop
@@ -232,7 +250,7 @@ export const PermissionModal = ({
     return callsData.map((call: any) => ({
       target: call.target,
       selector: call.selector,
-      functionSignature: call.functionSignature || call.selector,
+      functionSignature: call.functionSignature || resolveFunctionSelector(call.selector),
     }));
   }, [callsData]);
 
@@ -264,6 +282,56 @@ export const PermissionModal = ({
 
     return '0x43e...ead3';
   }, [mode, fetchedPermissionData, permissionDetails]);
+
+  // Generate warning message based on actual permissions
+  const warningMessage = useMemo(() => {
+    if (mode !== 'grant') return undefined;
+
+    const parts: string[] = [];
+
+    // Describe spend permissions
+    if (formattedSpends.length > 0) {
+      const spendDescriptions = formattedSpends.map(
+        (spend: { limit: string; duration: string }) => {
+          // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
+          const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
+          // Handle "forever" specially - no "per" prefix needed
+          if (normalizedDuration === 'forever') {
+            return spend.limit;
+          }
+          return `${spend.limit} per ${normalizedDuration}`;
+        }
+      );
+      parts.push(`spend up to ${spendDescriptions.join(', ')}`);
+    }
+
+    // Describe call permissions
+    if (formattedCalls.length > 0) {
+      const callDescriptions = formattedCalls.map((call: { functionSignature: string }) => {
+        const fnName = call.functionSignature;
+        // Check for special selectors
+        if (fnName === 'Any Function') {
+          return 'call any function';
+        }
+        if (fnName === 'Empty Calldata') {
+          return 'send transactions with empty calldata';
+        }
+        // Extract just the function name from signature like "transfer(address,uint256)"
+        const simpleName = fnName.split('(')[0];
+        return `call ${simpleName}`;
+      });
+
+      // Deduplicate and join
+      const uniqueCalls = [...new Set(callDescriptions)];
+      parts.push(uniqueCalls.join(', '));
+    }
+
+    if (parts.length === 0) {
+      return `You are granting permissions to this dApp until ${expiryDate}. Only approve if you trust this dApp.`;
+    }
+
+    return `This will allow the dApp to ${parts.join(' and ')} on your behalf until ${expiryDate}. Only approve if you trust this dApp.`;
+  }, [mode, formattedSpends, formattedCalls, expiryDate]);
 
   // Reset state
   const resetModalState = useCallback(() => {
@@ -528,6 +596,7 @@ export const PermissionModal = ({
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isLoadingSmartAccount}
+      warningMessage={warningMessage}
     />
   );
 };

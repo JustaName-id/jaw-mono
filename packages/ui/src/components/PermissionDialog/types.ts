@@ -51,4 +51,7 @@ export interface PermissionDialogProps {
 
   // Timestamp
   timestamp?: Date;
+
+  // Custom warning message for grant mode
+  warningMessage?: string;
 }
