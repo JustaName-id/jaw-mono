@@ -20,6 +20,24 @@ import {
 // ERC-7528 native token address
 const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
+// Known function selectors mapping
+const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
+  '0x32323232': 'Any Function',
+  '0xe0e0e0e0': 'Empty Calldata',
+  '0xcc53287f': 'lockdown((address,address)[])',
+  '0x87517c45': 'approve(address,address,uint160,uint48)',
+  '0x095ea7b3': 'approve(address,uint256)',
+  '0x23b872dd': 'transferFrom(address,address,uint256)',
+  '0xa9059cbb': 'transfer(address,uint256)',
+};
+
+// Resolve function selector to human-readable name
+const resolveFunctionSelector = (selector: string): string => {
+  const normalizedSelector = selector.toLowerCase();
+  const knownName = KNOWN_FUNCTION_SELECTORS[normalizedSelector];
+  return knownName || selector;
+};
+
 // Check if token is native
 const isNativeToken = (tokenAddress?: string): boolean => {
   if (!tokenAddress) return true;
@@ -232,7 +250,7 @@ export const PermissionModal = ({
     return callsData.map((call: any) => ({
       target: call.target,
       selector: call.selector,
-      functionSignature: call.functionSignature || call.selector,
+      functionSignature: call.functionSignature || resolveFunctionSelector(call.selector),
     }));
   }, [callsData]);
 
