@@ -878,7 +878,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant (wallet_grantPermissions)...');
 
       // Example spender address (could be a dApp contract)
-      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
+      const spenderAddress = '0xE08224B2CfaF4f27E2DC7cB3f6B99AcC68Cf06c0';
 
       // Example: Grant multiple permissions (spend + calls) for 30 days
       const ethLimit = parseEther('0.0001'); // 0.0001 ETH per day
@@ -909,7 +909,7 @@ Issued At: ${issuedAt}`;
             calls: [
               {
                 target: spenderAddress,
-                functionSignature: 'transfer(address,uint256)',
+               selector: '0x32323232'
               }
             ]
           }
@@ -951,7 +951,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant for multiple ERC-20s on Base Sepolia...');
 
       // Example spender address
-      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
+      const spenderAddress = '0xE08224B2CfaF4f27E2DC7cB3f6B99AcC68Cf06c0';
 
       // USDC on Base Sepolia (6 decimals)
       const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';

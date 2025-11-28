@@ -28,45 +28,64 @@ export const PermissionDialog = ({
   status,
   isLoadingTokenInfo = false,
   timestamp = new Date(),
+  warningMessage,
 }: PermissionDialogProps) => {
   const isMobile = useIsMobile();
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
+  const [isResolvingAddresses, setIsResolvingAddresses] = useState(true); // Start true to prevent early clicks
 
   // Resolve addresses to human-readable names
   useEffect(() => {
-    if (!chainId) return;
-
-    const justaName = getJustaNameInstance();
-
-    // Resolve spender address
-    if (spenderAddress) {
-      justaName.subnames.reverseResolve({
-        address: spenderAddress as `0x${string}`,
-        chainId: chainId,
-      }).then((result) => {
-        if (result) {
-          setResolvedAddresses(prev => ({ ...prev, [spenderAddress]: result }));
-        }
-      }).catch(() => {
-        // Silently fail if resolution fails
-      });
+    if (!chainId) {
+      setIsResolvingAddresses(false);
+      return;
     }
 
-    // Resolve call target addresses
+    const justaName = getJustaNameInstance();
+    const addressesToResolve: string[] = [];
+
+    if (spenderAddress) {
+      addressesToResolve.push(spenderAddress);
+    }
+
     calls.forEach((call) => {
-      if (call.target) {
-        justaName.subnames.reverseResolve({
-          address: call.target as `0x${string}`,
-          chainId: chainId,
-        }).then((result) => {
-          if (result) {
-            setResolvedAddresses(prev => ({ ...prev, [call.target]: result }));
-          }
-        }).catch(() => {
-          // Silently fail if resolution fails
-        });
+      if (call.target && !addressesToResolve.includes(call.target)) {
+        addressesToResolve.push(call.target);
       }
+    });
+
+    if (addressesToResolve.length === 0) {
+      setIsResolvingAddresses(false);
+      return;
+    }
+
+    setIsResolvingAddresses(true);
+
+    const resolvePromises = addressesToResolve.map(async (address) => {
+      try {
+        const result = await justaName.subnames.reverseResolve({
+          address: address as `0x${string}`,
+          chainId: chainId,
+        });
+        if (result) {
+          return { address, name: result };
+        }
+      } catch {
+        // Silently fail if resolution fails
+      }
+      return null;
+    });
+
+    Promise.all(resolvePromises).then((results) => {
+      const newResolved: Record<string, string> = {};
+      results.forEach((result) => {
+        if (result) {
+          newResolved[result.address] = result.name;
+        }
+      });
+      setResolvedAddresses(prev => ({ ...prev, ...newResolved }));
+      setIsResolvingAddresses(false);
     });
   }, [spenderAddress, calls, chainId]);
 
@@ -89,7 +108,7 @@ export const PermissionDialog = ({
     }
   };
 
-  const canConfirm = !isProcessing;
+  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses;
 
   // Count total permissions
   const totalSpends = spends.length;
@@ -303,14 +322,7 @@ export const PermissionDialog = ({
               <div className="flex flex-col gap-1">
                 <p className="text-xs font-bold leading-[133%] text-yellow-800">Warning</p>
                 <p className="text-xs font-normal leading-[150%] text-yellow-900">
-                  You are granting {totalPermissions} permission{totalPermissions > 1 ? 's' : ''}
-                  {totalSpends > 0 && ` (${totalSpends} spend`}
-                  {totalSpends > 1 && 's'}
-                  {totalSpends > 0 && ')'}
-                  {totalCalls > 0 && ` (${totalCalls} call`}
-                  {totalCalls > 1 && 's'}
-                  {totalCalls > 0 && ')'}
-                  {' '}to this dApp until {expiryDate}. Only approve if you trust this dApp.
+                  {warningMessage || `You are granting ${totalPermissions} permission${totalPermissions > 1 ? 's' : ''} to this dApp until ${expiryDate}. Only approve if you trust this dApp.`}
                 </p>
               </div>
             </div>
@@ -381,7 +393,7 @@ export const PermissionDialog = ({
             disabled={!canConfirm}
             className="flex-1"
           >
-            {isProcessing ? 'Processing...' : mode === 'grant' ? 'Accept' : 'Revoke'}
+            {isProcessing ? 'Processing...' : (isLoadingTokenInfo || isResolvingAddresses) ? 'Loading...' : mode === 'grant' ? 'Accept' : 'Revoke'}
           </Button>
         </div>
       </div>
