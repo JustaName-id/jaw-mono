@@ -69,6 +69,7 @@ export const ConnectModal = ({
       accountName={accountName}
       walletAddress={walletAddress}
       chainName={chainName}
+      chainId={chain?.id}
       chainIcon={chainIcon}
       onConnect={handleConnect}
       onCancel={handleCancel}

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useIsMobile } from "../../hooks";
 import { CopyIcon } from "../../icons";
-import { getJustaNameInstance } from "../../utils/justaNameInstance";
+import { getJustaNameInstance, getDisplayAddress } from "../../utils";
 import { DefaultDialog } from "../DefaultDialog";
 import { Button } from "../ui/button";
 import { SiweDialogProps } from "./types";
@@ -45,8 +45,8 @@ export const SiweDialog = ({
     }
   }, [accountAddress, chainId]);
 
-  // Get resolved address or fallback to original
-  const displayAddress = resolvedAddress || accountAddress || '';
+  // Get display address - use resolved name or formatted address
+  const displayAddress = getDisplayAddress(resolvedAddress, accountAddress || '');
 
   // Format origin to display only domain (remove protocol)
   const formatOrigin = (url: string) => {

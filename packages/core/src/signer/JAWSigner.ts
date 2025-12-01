@@ -20,7 +20,8 @@ import {
     WalletConnectRequest,
     SignInWithEthereumCapabilityRequest,
     SubnameTextRecordCapabilityRequest,
-    handleGetPermissionsRequest
+    handleGetPermissionsRequest,
+    handleGetCapabilitiesRequest
 } from '../rpc/index.js';
 import {
     fetchRPCRequest,
@@ -187,6 +188,9 @@ export abstract class JAWSigner implements Signer {
 
                 return await handleGetPermissionsRequest(request, apiKey, this.accounts[0]);
             }
+
+            case 'wallet_getCapabilities':
+                return handleGetCapabilitiesRequest(request);
 
             case 'wallet_switchEthereumChain':
                 return this.handleSwitchChainRequest(request);

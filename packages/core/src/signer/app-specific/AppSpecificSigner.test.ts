@@ -134,6 +134,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse<{ accounts: { address: string }[] }> = {
+        id: 'test-response-id',
         approved: true,
         data: {
           accounts: [{ address: '0x1234567890123456789012345678901234567890' }],
@@ -171,6 +172,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse = {
+        id: 'test-response-id',
         approved: false,
         error: UIError.userRejected(),
       };
@@ -188,8 +190,9 @@ describe('AppSpecificSigner', () => {
         params: [],
       };
 
-      const customError = new Error('Custom rejection reason');
+      const customError = UIError.userRejected('Custom rejection reason');
       const mockResponse: UIResponse = {
+        id: 'test-response-id',
         approved: false,
         error: customError,
       };
@@ -210,6 +213,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockHandshakeResponse: UIResponse<{ accounts: { address: string }[] }> = {
+        id: 'test-response-id',
         approved: true,
         data: {
           accounts: [{ address: '0x1234567890123456789012345678901234567890' }],
@@ -258,6 +262,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse<string> = {
+        id: 'test-response-id',
         approved: true,
         data: '0xsignature...',
       };
@@ -289,6 +294,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse<string> = {
+        id: 'test-response-id',
         approved: true,
         data: '0xtypedsignature...',
       };
@@ -326,6 +332,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse<{ id: string; chainId: number }> = {
+        id: 'test-response-id',
         approved: true,
         data: { id: '0xbatchId', chainId: 1 },
       };
@@ -361,6 +368,7 @@ describe('AppSpecificSigner', () => {
 
       // eth_sendTransaction returns a transaction hash string directly
       const mockResponse: UIResponse<string> = {
+        id: 'test-response-id',
         approved: true,
         data: '0xtxhash',
       };
@@ -402,6 +410,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse = {
+        id: 'test-response-id',
         approved: true,
         data: { permissionId: '0xpermission123' },
       };
@@ -439,6 +448,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse = {
+        id: 'test-response-id',
         approved: true,
         data: { success: true },
       };
@@ -478,6 +488,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse<string> = {
+        id: 'test-response-id',
         approved: true,
         data: '0xwalletsignature...',
       };
@@ -512,6 +523,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse = {
+        id: 'test-response-id',
         approved: false,
         error: UIError.userRejected(),
       };
@@ -620,6 +632,7 @@ describe('AppSpecificSigner', () => {
     it('should trigger wallet_connect automatically for eth_requestAccounts', async () => {
       // Arrange
       const mockWalletConnectResponse: UIResponse<{ accounts: { address: string }[] }> = {
+        id: 'test-response-id',
         approved: true,
         data: {
           accounts: [{ address: '0x1234567890123456789012345678901234567890' }],
@@ -692,6 +705,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockHandshakeResponse: UIResponse<{ accounts: { address: string }[] }> = {
+        id: 'test-response-id',
         approved: true,
         data: {
           accounts: [{ address: '0x1234567890123456789012345678901234567890' }],
@@ -742,6 +756,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockHandshakeResponse: UIResponse<{ accounts: { address: string }[] }> = {
+        id: 'test-response-id',
         approved: true,
         data: {
           accounts: [{ address: '0x1234567890123456789012345678901234567890' }],
@@ -763,6 +778,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockResponse: UIResponse<{ accounts: { address: string }[] }> = {
+        id: 'test-response-id',
         approved: true,
         data: {
           accounts: [{ address: '0x1234567890123456789012345678901234567890' }],
@@ -798,6 +814,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockHandshakeResponse: UIResponse<{ accounts: { address: string }[] }> = {
+        id: 'test-response-id',
         approved: true,
         data: {
           accounts: [{ address: '0x1234567890123456789012345678901234567890' }],
@@ -847,6 +864,7 @@ describe('AppSpecificSigner', () => {
       };
 
       const mockHandshakeResponse: UIResponse<{ accounts: { address: string }[] }> = {
+        id: 'test-response-id',
         approved: true,
         data: {
           accounts: [{ address: '0x1234567890123456789012345678901234567890' }],

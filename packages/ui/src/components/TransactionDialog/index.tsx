@@ -8,7 +8,7 @@ import { useState, useEffect } from "react";
 import { formatEther } from "viem";
 import { TransactionDialogProps } from "./types";
 import { useIsMobile, useChainIcon } from "../../hooks";
-import { getJustaNameInstance } from "../../utils/justaNameInstance";
+import { getJustaNameInstance, getDisplayAddress } from "../../utils";
 
 export const TransactionDialog = ({
   // open,
@@ -74,9 +74,11 @@ export const TransactionDialog = ({
     });
   }, [walletAddress, transactions, currentTransaction?.chainId]);
 
-  // Get resolved addresses or fallback to original
-  const resolvedWalletAddress = resolvedAddresses[walletAddress] || walletAddress;
-  const resolvedToAddress = currentTransaction?.to ? (resolvedAddresses[currentTransaction.to] || currentTransaction.to) : '';
+  // Get display addresses - use resolved name or formatted address
+  const displayWalletAddress = getDisplayAddress(resolvedAddresses[walletAddress], walletAddress);
+  const displayToAddress = currentTransaction?.to
+    ? getDisplayAddress(resolvedAddresses[currentTransaction.to], currentTransaction.to)
+    : '';
 
   // Helper function to format value for display
   const formatTransactionValue = (value?: string) => {
@@ -167,7 +169,7 @@ export const TransactionDialog = ({
                   <p className="text-xs font-bold leading-[133%]">From</p>
                   <div className="flex flex-row items-center gap-1 min-w-0">
                     <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
-                    <p className="text-base font-normal text-ellipsis leading-[150%] truncate overflow-hidden">{resolvedWalletAddress}</p>
+                    <p className="text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                   </div>
                 </div>
                 <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[70px]" />
@@ -175,8 +177,8 @@ export const TransactionDialog = ({
                   <p className="text-xs font-bold leading-[133%]">To</p>
                   <div className="flex flex-row items-center gap-1 min-w-0">
                     <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
-                    <p className="text-base font-normal text-ellipsis leading-[150%] truncate overflow-hidden">
-                      {resolvedToAddress}
+                    <p className="text-base font-normal leading-[150%]">
+                      {displayToAddress}
                     </p>
                   </div>
                 </div>
@@ -327,7 +329,7 @@ export const TransactionDialog = ({
                 <p className="text-xs font-bold leading-[133%] text-foreground mb-1">From</p>
                 <div className="flex flex-row items-center gap-1">
                   <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
-                  <p className="text-base font-normal text-ellipsis leading-[150%] truncate overflow-hidden">{resolvedWalletAddress}</p>
+                  <p className="text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                 </div>
               </div>
 
@@ -346,8 +348,8 @@ export const TransactionDialog = ({
                             <p className="text-xs font-bold leading-[133%] text-black">Interacting with (to)</p>
                             <div className="flex flex-row items-center gap-1">
                               <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
-                              <p className="text-sm font-normal text-ellipsis leading-[150%] truncate overflow-hidden">
-                                {resolvedAddresses[transaction.to] || transaction.to}
+                              <p className="text-sm font-normal leading-[150%]">
+                                {getDisplayAddress(resolvedAddresses[transaction.to], transaction.to)}
                               </p>
                             </div>
                           </div>

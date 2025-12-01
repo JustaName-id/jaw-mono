@@ -16,6 +16,7 @@ export interface ConnectDialogProps {
 
   // Chain information
   chainName?: string;
+  chainId?: number;
   chainIcon?: JSX.Element;
 
   // Actions
