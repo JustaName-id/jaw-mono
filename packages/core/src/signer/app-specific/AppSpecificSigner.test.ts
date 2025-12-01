@@ -157,6 +157,7 @@ describe('AppSpecificSigner', () => {
           }),
         })
       );
+      // Only first account is emitted (matching CrossPlatformSigner behavior)
       expect(mockCallback).toHaveBeenCalledWith('accountsChanged', [
         '0x1234567890123456789012345678901234567890',
       ]);
@@ -358,9 +359,10 @@ describe('AppSpecificSigner', () => {
         params: [txData],
       };
 
-      const mockResponse: UIResponse<{ id: string; chainId: number }> = {
+      // eth_sendTransaction returns a transaction hash string directly
+      const mockResponse: UIResponse<string> = {
         approved: true,
-        data: { id: '0xtxhash', chainId: 1 },
+        data: '0xtxhash',
       };
 
       (mockUIHandler.request as Mock).mockResolvedValue(mockResponse);
@@ -368,15 +370,16 @@ describe('AppSpecificSigner', () => {
       // Act
       const result = await signer.request(request);
 
-      // Assert - eth_sendTransaction should return just the hash
+      // Assert - eth_sendTransaction should return the hash
       expect(result).toBe('0xtxhash');
       expect(mockUIHandler.request).toHaveBeenCalledWith(
         expect.objectContaining({
-          type: 'wallet_sendCalls',
+          type: 'eth_sendTransaction',
           data: expect.objectContaining({
-            version: '1.0',
-            from: '0x1234567890123456789012345678901234567890',
-            calls: [{ to: txData.to, value: txData.value, data: txData.data }],
+            from: txData.from,
+            to: txData.to,
+            value: txData.value,
+            data: txData.data,
             chainId: 1,
           }),
         })
@@ -384,10 +387,13 @@ describe('AppSpecificSigner', () => {
     });
 
     it('should handle wallet_grantPermissions request', async () => {
-      // Arrange
+      // Arrange - Using WalletGrantPermissionsRequest params structure
       const permissionData = {
         expiry: 1234567890,
-        permissions: [{ type: 'native-token-limit', data: { amount: '0x1000' } }],
+        spender: '0xspender1234567890123456789012345678901234' as `0x${string}`,
+        permissions: {
+          spends: [{ limit: '0x1000', period: 'day' as const, token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as `0x${string}` }],
+        },
       };
 
       const request: RequestArguments = {
@@ -410,15 +416,21 @@ describe('AppSpecificSigner', () => {
       expect(mockUIHandler.request).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'wallet_grantPermissions',
-          data: permissionData,
+          data: expect.objectContaining({
+            address: '0x1234567890123456789012345678901234567890',
+            chainId: 1,
+            expiry: permissionData.expiry,
+            spender: permissionData.spender,
+            permissions: permissionData.permissions,
+          }),
         })
       );
     });
 
     it('should handle wallet_revokePermissions request', async () => {
-      // Arrange
+      // Arrange - Using WalletRevokePermissionsRequest params structure
       const revokeData = {
-        permissionId: '0xpermission123',
+        id: '0xpermission123' as `0x${string}`,
       };
 
       const request: RequestArguments = {
@@ -452,9 +464,12 @@ describe('AppSpecificSigner', () => {
 
     it('should handle wallet_sign request', async () => {
       // Arrange
+      // wallet_sign params follow the format: { request: { type: '0x45' | '0x01'; data: string } }
       const signParams = {
-        address: '0x1234567890123456789012345678901234567890',
-        message: '0x48656c6c6f',
+        request: {
+          type: '0x45' as const, // Personal sign (EIP-191)
+          data: '0x48656c6c6f', // "Hello" in hex
+        },
       };
 
       const request: RequestArguments = {
@@ -477,7 +492,14 @@ describe('AppSpecificSigner', () => {
       expect(mockUIHandler.request).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'wallet_sign',
-          data: signParams,
+          data: expect.objectContaining({
+            address: '0x1234567890123456789012345678901234567890',
+            chainId: 1,
+            request: {
+              type: '0x45',
+              data: '0x48656c6c6f',
+            },
+          }),
         })
       );
     });
@@ -737,7 +759,7 @@ describe('AppSpecificSigner', () => {
       // Arrange
       const request: RequestArguments = {
         method: 'wallet_connect',
-        params: [{ version: '1.0', capabilities: { signInWithEthereum: { nonce: '123' } } }],
+        params: [{ version: '1.0', capabilities: { signInWithEthereum: { nonce: '123', chainId: '0x1' } } }],
       };
 
       const mockResponse: UIResponse<{ accounts: { address: string }[] }> = {
@@ -760,7 +782,7 @@ describe('AppSpecificSigner', () => {
         expect.objectContaining({
           type: 'wallet_connect',
           data: expect.objectContaining({
-            capabilities: { signInWithEthereum: { nonce: '123' } },
+            capabilities: { signInWithEthereum: { nonce: '123', chainId: '0x1' } },
           }),
         })
       );

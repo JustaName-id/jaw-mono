@@ -6,6 +6,7 @@ import { Address } from '../provider/interface.js';
 export type UIRequestType =
   | 'wallet_connect'
   | 'wallet_sendCalls'
+  | 'eth_sendTransaction'
   | 'wallet_grantPermissions'
   | 'wallet_revokePermissions'
   | 'personal_sign'
@@ -77,6 +78,26 @@ export interface TransactionUIRequest extends BaseUIRequest {
 }
 
 /**
+ * Legacy transaction request (eth_sendTransaction)
+ * Returns a transaction hash string instead of { id, chainId }
+ */
+export interface SendTransactionUIRequest extends BaseUIRequest {
+  type: 'eth_sendTransaction';
+  data: {
+    from: Address;
+    to: Address;
+    value?: string;
+    data?: string;
+    gas?: string;
+    gasPrice?: string;
+    maxFeePerGas?: string;
+    maxPriorityFeePerGas?: string;
+    nonce?: string;
+    chainId: number;
+  };
+}
+
+/**
  * Permission grant request (wallet_grantPermissions)
  */
 export interface PermissionUIRequest extends BaseUIRequest {
@@ -94,7 +115,9 @@ export interface PermissionUIRequest extends BaseUIRequest {
       }>;
       calls?: Array<{
         target: Address;
-        selector: `0x${string}`;
+        /** Function selector (4 bytes, hex format) - computed from functionSignature if not provided */
+        selector?: `0x${string}`;
+        /** Human-readable function signature (e.g., "transfer(address,uint256)") */
         functionSignature?: string;
       }>;
     };
@@ -137,6 +160,7 @@ export type UIRequest =
   | SignatureUIRequest
   | TypedDataUIRequest
   | TransactionUIRequest
+  | SendTransactionUIRequest
   | PermissionUIRequest
   | RevokePermissionUIRequest
   | WalletSignUIRequest;

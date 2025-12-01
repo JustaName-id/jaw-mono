@@ -1,10 +1,6 @@
 import { UUID } from 'crypto';
 
 import { JAWSigner } from '../JAWSigner.js';
-import {
-    getCachedWalletConnectResponse,
-    injectRequestCapabilities,
-} from '../SignerUtils.js';
 
 import { Communicator } from '../../communicator/index.js';
 import { standardErrors } from '../../errors/index.js';
@@ -12,7 +8,6 @@ import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../../messag
 import { KeyManager } from '../../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/index.js';
 import { store } from '../../store/index.js';
-import { SignInWithEthereumCapabilityRequest, SubnameTextRecordCapabilityRequest, WalletConnectRequest } from '../../rpc/index.js';
 import {
     decryptContent,
     encryptContent,
@@ -77,7 +72,7 @@ export class CrossPlatformSigner extends JAWSigner {
 
     protected override async handleWalletConnect(request: RequestArguments): Promise<unknown> {
         // Return cached wallet connect response if available
-        const cachedResponse = await getCachedWalletConnectResponse();
+        const cachedResponse = await this.getCachedWalletConnectResponse();
         if (cachedResponse) {
             return cachedResponse;
         }
@@ -85,7 +80,8 @@ export class CrossPlatformSigner extends JAWSigner {
         // Wait for the popup to be loaded before making async calls
         await this.communicator.waitForPopupLoaded?.();
 
-        const modifiedRequest = this.extractAndInjectCapabilities(request);
+        // Validate and inject capabilities using base class method
+        const modifiedRequest = this.validateAndInjectCapabilities(request);
 
         this.emitConnect();
         return this.sendRequestToPopup(modifiedRequest);
@@ -95,7 +91,8 @@ export class CrossPlatformSigner extends JAWSigner {
         // Wait for the popup to be loaded before making async calls
         await this.communicator.waitForPopupLoaded?.();
 
-        const modifiedRequest = this.extractAndInjectCapabilities(request);
+        // Validate and inject capabilities using base class method
+        const modifiedRequest = this.validateAndInjectCapabilities(request);
         return this.sendRequestToPopup(modifiedRequest);
     }
 
@@ -106,101 +103,6 @@ export class CrossPlatformSigner extends JAWSigner {
     override async cleanup(): Promise<void> {
         await this.keyManager.clear();
         await super.cleanup();
-    }
-
-    /**
-     * Type guard to validate if request matches WalletConnectRequest structure
-     */
-    private isValidWalletConnectRequest(request: RequestArguments): request is WalletConnectRequest {
-        if (request.method !== 'wallet_connect') {
-            return false;
-        }
-
-        const params = request.params;
-        if (!Array.isArray(params) || params.length === 0) {
-            return false;
-        }
-
-        const firstParam = params[0];
-        if (typeof firstParam !== 'object' || firstParam === null) {
-            return false;
-        }
-
-        // Validate capabilities structure if present
-        if ('capabilities' in firstParam && firstParam.capabilities !== undefined) {
-            const capabilities = firstParam.capabilities;
-            if (typeof capabilities !== 'object' || capabilities === null) {
-                return false;
-            }
-
-            // Validate signInWithEthereum structure if present
-            if ('signInWithEthereum' in capabilities && capabilities.signInWithEthereum !== undefined) {
-                const siwe = capabilities.signInWithEthereum;
-                if (typeof siwe !== 'object' || siwe === null) {
-                    return false;
-                }
-                if (!('nonce' in siwe) || typeof siwe.nonce !== 'string') {
-                    return false;
-                }
-                if (!('chainId' in siwe) || typeof siwe.chainId !== 'string') {
-                    return false;
-                }
-            }
-
-            // Validate subnameTextRecords structure if present
-            if ('subnameTextRecords' in capabilities && capabilities.subnameTextRecords !== undefined) {
-                const records = capabilities.subnameTextRecords;
-                if (!Array.isArray(records)) {
-                    return false;
-                }
-                for (const record of records) {
-                    if (typeof record !== 'object' || record === null) {
-                        return false;
-                    }
-                    if (!('key' in record) || typeof record.key !== 'string') {
-                        return false;
-                    }
-                    if (!('value' in record) || typeof record.value !== 'string') {
-                        return false;
-                    }
-                }
-            }
-        }
-
-        return true;
-    }
-
-    /**
-     * Extracts capabilities from request params and injects them into the request.
-     * This function handles any capabilities generically, not just specific ones.
-     * Validates that the request matches WalletConnectRequest structure before processing.
-     *
-     * @param request - The request arguments containing potential capabilities
-     * @returns The modified request with capabilities injected
-     * @throws {EthereumRpcError} If the request doesn't match WalletConnectRequest structure
-     */
-    private extractAndInjectCapabilities(request: RequestArguments): RequestArguments {
-        // Validate and type cast to WalletConnectRequest
-        if (!this.isValidWalletConnectRequest(request)) {
-            throw standardErrors.rpc.invalidParams(
-                'Invalid wallet_connect request structure. Request must match WalletConnectRequest type.'
-            );
-        }
-
-        // Now we can safely access params[0] as WalletConnectRequest['params'][0]
-        const walletConnectRequest = request as WalletConnectRequest;
-        const firstParam = walletConnectRequest.params[0];
-
-        // Extract capabilities from request params if present
-        const requestCapabilities = firstParam.capabilities;
-
-        // If capabilities exist, inject them into the request
-        if (requestCapabilities) {
-            const capabilitiesToInject: Record<string, SignInWithEthereumCapabilityRequest | SubnameTextRecordCapabilityRequest> = { ...requestCapabilities };
-            return injectRequestCapabilities(request, capabilitiesToInject);
-        }
-
-        return request;
     }
 
     private async sendRequestToPopup(request: RequestArguments): Promise<unknown> {

@@ -1,7 +1,12 @@
 import { Address, numberToHex } from 'viem';
 
 import { Signer } from './interface.js';
-import { assertParamsChainId } from './SignerUtils.js';
+
+import {
+    assertParamsChainId,
+    getCachedWalletConnectResponse,
+    injectRequestCapabilities,
+} from './SignerUtils.js';
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
@@ -10,7 +15,13 @@ import { standardErrors } from '../errors/index.js';
 import { RPCResponse } from '../messages/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/index.js';
 import { SDKChain, correlationIds, store } from '../store/index.js';
-import { WalletConnectResponse, handleGetPermissionsRequest } from '../rpc/index.js';
+import {
+    WalletConnectResponse,
+    WalletConnectRequest,
+    SignInWithEthereumCapabilityRequest,
+    SubnameTextRecordCapabilityRequest,
+    handleGetPermissionsRequest
+} from '../rpc/index.js';
 import {
     fetchRPCRequest,
     ensureIntNumber,
@@ -185,7 +196,6 @@ export abstract class JAWSigner implements Signer {
             case 'wallet_sign':
             case 'eth_sendTransaction':
             case 'eth_signTypedData_v4':
-            case 'wallet_showCallsStatus':
             case 'wallet_grantPermissions':
             case 'wallet_revokePermissions':
                 return this.handleSigningRequest(request);
@@ -350,5 +360,118 @@ export abstract class JAWSigner implements Signer {
      */
     protected getCorrelationId(request: RequestArguments): string | undefined {
         return correlationIds.get(request);
+    }
+
+    /**
+     * Gets cached wallet_connect response if user is already authenticated.
+     * Returns null if no cached response is available.
+     */
+    protected async getCachedWalletConnectResponse(): Promise<WalletConnectResponse | null> {
+        return getCachedWalletConnectResponse();
+    }
+
+    /**
+     * Type guard to validate if request matches WalletConnectRequest structure.
+     * Validates capabilities structure including signInWithEthereum and subnameTextRecords.
+     */
+    protected isValidWalletConnectRequest(request: RequestArguments): request is WalletConnectRequest {
+        if (request.method !== 'wallet_connect') {
+            return false;
+        }
+
+        const params = request.params;
+        if (!Array.isArray(params) || params.length === 0) {
+            return false;
+        }
+
+        const firstParam = params[0];
+        if (typeof firstParam !== 'object' || firstParam === null) {
+            return false;
+        }
+
+        // Validate capabilities structure if present
+        if ('capabilities' in firstParam && firstParam.capabilities !== undefined) {
+            const capabilities = firstParam.capabilities;
+            if (typeof capabilities !== 'object' || capabilities === null) {
+                return false;
+            }
+
+            // Validate signInWithEthereum structure if present
+            if ('signInWithEthereum' in capabilities && capabilities.signInWithEthereum !== undefined) {
+                const siwe = capabilities.signInWithEthereum;
+                if (typeof siwe !== 'object' || siwe === null) {
+                    return false;
+                }
+                if (!('nonce' in siwe) || typeof siwe.nonce !== 'string') {
+                    return false;
+                }
+                if (!('chainId' in siwe) || typeof siwe.chainId !== 'string') {
+                    return false;
+                }
+            }
+
+            // Validate subnameTextRecords structure if present
+            if ('subnameTextRecords' in capabilities && capabilities.subnameTextRecords !== undefined) {
+                const records = capabilities.subnameTextRecords;
+                if (!Array.isArray(records)) {
+                    return false;
+                }
+                for (const record of records) {
+                    if (typeof record !== 'object' || record === null) {
+                        return false;
+                    }
+                    if (!('key' in record) || typeof record.key !== 'string') {
+                        return false;
+                    }
+                    if (!('value' in record) || typeof record.value !== 'string') {
+                        return false;
+                    }
+                }
+            }
+        }
+
+        return true;
+    }
+
+    /**
+     * Validates and extracts capabilities from a wallet_connect request.
+     * Injects capabilities into the request if present.
+     *
+     * For requests without params or with empty params, this returns the request as-is
+     * (no capabilities to validate or inject). For requests with params, it validates
+     * the structure and injects capabilities if present.
+     *
+     * @param request - The request arguments to validate and process
+     * @returns The modified request with capabilities injected
+     * @throws {EthereumRpcError} If the request has params but doesn't match WalletConnectRequest structure
+     */
+    protected validateAndInjectCapabilities(request: RequestArguments): RequestArguments {
+        // If no params or empty params, just return the request as-is (no capabilities)
+        const params = request.params;
+        if (!params || !Array.isArray(params) || params.length === 0) {
+            return request;
+        }
+
+        // If params exist, validate they match WalletConnectRequest structure
+        if (!this.isValidWalletConnectRequest(request)) {
+            throw standardErrors.rpc.invalidParams(
+                'Invalid wallet_connect request structure. Request must match WalletConnectRequest type.'
+            );
+        }
+
+        // Now we can safely access params[0] as WalletConnectRequest['params'][0]
+        const walletConnectRequest = request as WalletConnectRequest;
+        const firstParam = walletConnectRequest.params[0];
+
+        // Extract capabilities from request params if present
+        const requestCapabilities = firstParam.capabilities;
+
+        // If capabilities exist, inject them into the request
+        if (requestCapabilities) {
+            const capabilitiesToInject: Record<string, SignInWithEthereumCapabilityRequest | SubnameTextRecordCapabilityRequest> = { ...requestCapabilities };
+            return injectRequestCapabilities(request, capabilitiesToInject);
+        }
+
+        return request;
     }
 }

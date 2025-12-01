@@ -7,13 +7,19 @@ import {
     SignatureUIRequest,
     TypedDataUIRequest,
     TransactionUIRequest,
+    SendTransactionUIRequest,
     PermissionUIRequest,
     RevokePermissionUIRequest,
     WalletSignUIRequest,
 } from '../../ui/interface.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/interface.js';
-import { WalletConnectResponse } from '../../rpc/index.js';
-import { store } from '../../store/index.js';
+import {
+    WalletConnectResponse,
+    WalletConnectRequest,
+    WalletGrantPermissionsRequest,
+    WalletRevokePermissionsRequest,
+} from '../../rpc/index.js';
+import { store, SDKChain } from '../../store/index.js';
 
 type ConstructorOptions = {
     metadata: AppMetadata;
@@ -46,46 +52,54 @@ export class AppSpecificSigner extends JAWSigner {
     }
 
     /**
-     * Handshake establishes connection with user approval
+     * Handshake establishes connection with user approval.
+     * Sends raw params without validation (same as CrossPlatformSigner).
+     * Capabilities validation only happens in handleWalletConnect/handleWalletConnectUnauthenticated.
      */
     async handshake(args: RequestArguments): Promise<void> {
-        const correlationId = this.getCorrelationId(args);
-
-        // Create connect UI request
-        const uiRequest: ConnectUIRequest = {
-            id: crypto.randomUUID(),
-            type: 'wallet_connect',
-            timestamp: Date.now(),
-            correlationId,
-            data: {
-                appName: this.metadata.appName,
-                appLogoUrl: this.metadata.appLogoUrl,
-                origin: typeof window !== 'undefined' ? window.location.origin : 'unknown',
-                chainId: this.chain.id,
-            },
-        };
-
-        // Request user approval via UI handler
-        const response = await this.uiHandler.request<WalletConnectResponse>(uiRequest);
-
-        if (!response.approved) {
-            throw response.error || UIError.userRejected();
-        }
-
-        // Extract accounts from response
-        const accounts = response.data?.accounts?.map((acc) => acc.address) ?? [];
-        this.accounts = accounts;
-
-        store.account.set({
-            accounts,
-            chain: this.chain,
-        });
-
-        this.callback?.('accountsChanged', accounts);
+        await this.performWalletConnect(args, { skipCapabilitiesValidation: true });
     }
 
     protected async handleWalletConnect(request: RequestArguments): Promise<unknown> {
+        // Return cached wallet connect response if available (same as CrossPlatformSigner)
+        const cachedResponse = await this.getCachedWalletConnectResponse();
+        if (cachedResponse) {
+            return cachedResponse;
+        }
+
+        this.emitConnect();
+
+        return this.performWalletConnect(request);
+    }
+
+    protected async handleWalletConnectUnauthenticated(request: RequestArguments): Promise<unknown> {
+        // For unauthenticated, we don't emit connect (same as CrossPlatformSigner)
+        return this.performWalletConnect(request);
+    }
+
+    /**
+     * Core wallet_connect flow used by handshake, handleWalletConnect, and handleWalletConnectUnauthenticated.
+     * This ensures consistent behavior across all connect paths.
+     *
+     * @param options.skipCapabilitiesValidation - If true, skips capabilities validation (used by handshake)
+     */
+    private async performWalletConnect(
+        request: RequestArguments,
+        options?: { skipCapabilitiesValidation?: boolean }
+    ): Promise<WalletConnectResponse> {
+        // Validate and inject capabilities using base class method (same as CrossPlatformSigner)
+        const modifiedRequest = options?.skipCapabilitiesValidation
+            ? request
+            : this.validateAndInjectCapabilities(request);
+
         const correlationId = this.getCorrelationId(request);
+
+        const chains = store.getState().chains;
+        const chain = chains?.find((c: SDKChain) => c.id === this.chain.id) ?? this.chain;
+
+        // Extract capabilities from request params
+        const walletConnectParams = modifiedRequest.params as WalletConnectRequest['params'] | undefined;
+        const capabilities = walletConnectParams?.[0]?.capabilities;
 
         const uiRequest: ConnectUIRequest = {
             id: crypto.randomUUID(),
@@ -96,8 +110,8 @@ export class AppSpecificSigner extends JAWSigner {
                 appName: this.metadata.appName,
                 appLogoUrl: this.metadata.appLogoUrl,
                 origin: typeof window !== 'undefined' ? window.location.origin : 'unknown',
-                chainId: this.chain.id,
-                capabilities: (request.params as any)?.[0]?.capabilities,
+                chainId: chain.id,
+                capabilities,
             },
         };
 
@@ -107,20 +121,27 @@ export class AppSpecificSigner extends JAWSigner {
             throw response.error || UIError.userRejected();
         }
 
-        const accounts = response.data?.accounts?.map((acc) => acc.address) ?? [];
+        if (!response.data) {
+            throw UIError.userRejected('Invalid wallet_connect response: missing data');
+        }
+
+        // Extract accounts from response
+        const accounts = response.data.accounts?.map((acc) => acc.address) ?? [];
         this.accounts = accounts;
+
+        // Store capabilities from response (same as CrossPlatformSigner does in decryptResponseMessage)
+        // The capabilities are per-account in WalletConnectResponse
+        const walletCapabilities = response.data.accounts?.[0]?.capabilities;
 
         store.account.set({
             accounts,
             chain: this.chain,
+            ...(walletCapabilities && { capabilities: walletCapabilities }),
         });
 
-        this.callback?.('accountsChanged', accounts);
+        // Only emit first account in array (same as CrossPlatformSigner handleResponse for wallet_connect)
+        this.callback?.('accountsChanged', [accounts[0]]);
         return response.data;
-    }
-
-    protected async handleWalletConnectUnauthenticated(request: RequestArguments): Promise<unknown> {
-        return this.handleWalletConnect(request);
     }
 
     protected async handleSigningRequest(request: RequestArguments): Promise<unknown> {
@@ -176,7 +197,8 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_sign': {
-                const params = request.params as any[];
+                type WalletSignParams = { request: WalletSignUIRequest['data']['request'] };
+                const params = request.params as [WalletSignParams];
                 const signParams = params[0];
 
                 const uiRequest: WalletSignUIRequest = {
@@ -184,7 +206,11 @@ export class AppSpecificSigner extends JAWSigner {
                     type: 'wallet_sign',
                     timestamp: Date.now(),
                     correlationId,
-                    data: signParams,
+                    data: {
+                        address: this.accounts[0],
+                        chainId: this.chain.id,
+                        request: signParams.request,
+                    },
                 };
 
                 const response = await this.uiHandler.request<string>(uiRequest);
@@ -197,7 +223,7 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_sendCalls': {
-                const params = request.params as any[];
+                const params = request.params as [TransactionUIRequest['data']];
                 const callsData = params[0];
 
                 const uiRequest: TransactionUIRequest = {
@@ -223,54 +249,61 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'eth_sendTransaction': {
-                const params = request.params as any[];
+                // eth_sendTransaction params don't include chainId (we add it) and from is optional
+                type EthSendTransactionParams = Omit<SendTransactionUIRequest['data'], 'chainId' | 'from'> & { from?: Address };
+                const params = request.params as [EthSendTransactionParams];
                 const txData = params[0];
 
-                // Convert eth_sendTransaction format to wallet_sendCalls format
-                const callsData = {
-                    version: '1.0' as const,
-                    from: this.accounts[0] as Address,
-                    calls: [{
+                const uiRequest: SendTransactionUIRequest = {
+                    id: crypto.randomUUID(),
+                    type: 'eth_sendTransaction',
+                    timestamp: Date.now(),
+                    correlationId,
+                    data: {
+                        from: txData.from ?? this.accounts[0],
                         to: txData.to,
                         value: txData.value,
                         data: txData.data,
-                    }],
-                    chainId: this.chain.id,
+                        gas: txData.gas,
+                        gasPrice: txData.gasPrice,
+                        maxFeePerGas: txData.maxFeePerGas,
+                        maxPriorityFeePerGas: txData.maxPriorityFeePerGas,
+                        nonce: txData.nonce,
+                        chainId: this.chain.id,
+                    },
                 };
 
-                const uiRequest: TransactionUIRequest = {
-                    id: crypto.randomUUID(),
-                    type: 'wallet_sendCalls',
-                    timestamp: Date.now(),
-                    correlationId,
-                    data: callsData,
-                };
-
-                const response = await this.uiHandler.request<{ id: string; chainId: number }>(uiRequest);
+                // eth_sendTransaction returns transaction hash string directly
+                const response = await this.uiHandler.request<string>(uiRequest);
 
                 if (!response.approved) {
                     throw response.error || UIError.userRejected();
                 }
 
-                // Handle background receipt tracking
+                // Handle background receipt tracking using txHash as id
                 if (response.data) {
-                    this.trackSendCallsResult(response.data);
+                    this.trackSendCallsResult({ id: response.data, chainId: this.chain.id });
                 }
 
-                // For eth_sendTransaction, return just the hash (not the sendCalls format)
-                return response.data?.id;
+                return response.data;
             }
 
             case 'wallet_grantPermissions': {
-                const params = request.params as any[];
-                const permissionData = params[0];
+                const grantParams = request.params as WalletGrantPermissionsRequest['params'];
+                const permissionData = grantParams[0];
 
                 const uiRequest: PermissionUIRequest = {
                     id: crypto.randomUUID(),
                     type: 'wallet_grantPermissions',
                     timestamp: Date.now(),
                     correlationId,
-                    data: permissionData,
+                    data: {
+                        address: this.accounts[0],
+                        chainId: this.chain.id,
+                        expiry: permissionData.expiry,
+                        spender: permissionData.spender,
+                        permissions: permissionData.permissions,
+                    },
                 };
 
                 const response = await this.uiHandler.request(uiRequest);
@@ -283,8 +316,8 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_revokePermissions': {
-                const params = request.params as any[];
-                const revokeData = params[0];
+                const revokeParams = request.params as WalletRevokePermissionsRequest['params'];
+                const revokeData = revokeParams[0];
 
                 const uiRequest: RevokePermissionUIRequest = {
                     id: crypto.randomUUID(),
@@ -292,8 +325,8 @@ export class AppSpecificSigner extends JAWSigner {
                     timestamp: Date.now(),
                     correlationId,
                     data: {
-                        permissionId: revokeData.permissionId,
-                        address: this.accounts[0] as Address,
+                        permissionId: revokeData.id,
+                        address: revokeData.address ?? this.accounts[0],
                         chainId: this.chain.id,
                     },
                 };
