@@ -29,6 +29,7 @@ import {
     createSigner,
     loadSignerType,
     storeSignerType,
+    clearSignerType,
 } from '../signer/index.js';
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
@@ -51,9 +52,22 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             preference,
         });
 
-        const signerType = loadSignerType();
-        if (signerType) {
-            this.signer = this.initSigner(signerType);
+        // Determine the expected signer type from current preference
+        const expectedSignerType: SignerType = preference.mode === Mode.AppSpecific
+            ? 'appSpecific'
+            : 'crossPlatform';
+
+        const storedSignerType = loadSignerType();
+
+        // Only restore signer if the stored type matches the current preference
+        // If they don't match, clear the stored type to avoid using wrong signer
+        if (storedSignerType) {
+            if (storedSignerType === expectedSignerType) {
+                this.signer = this.initSigner(storedSignerType);
+            } else {
+                // Mode has changed, clear the old signer type
+                clearSignerType();
+            }
         }
     }
 
@@ -116,6 +130,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         await signer.handshake({ method: 'handshake' }); // exchange session keys
                         const result = await signer.request(args); // send diffie-hellman encrypted request
                         this.signer = signer;
+                        storeSignerType(signerType);
                         return result as T;
                     }
                     case 'wallet_disconnect': {

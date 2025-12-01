@@ -1,22 +1,22 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock, Mocked } from 'vitest';
-import { JAWSigner } from './JAWSigner.js';
-import { Communicator } from '../communicator/index.js';
-import { KeyManager } from '../key-manager/index.js';
-import { store } from '../store/index.js';
-import type { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/interface.js';
-import type { RPCResponseMessage, RPCResponse, RPCRequestMessage } from '../messages/index.js';
+import { CrossPlatformSigner } from './CrossPlatformSigner.js';
+import { Communicator } from '../../communicator/index.js';
+import { KeyManager } from '../../key-manager/index.js';
+import { store } from '../../store/index.js';
+import type { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/interface.js';
+import type { RPCResponseMessage, RPCResponse, RPCRequestMessage } from '../../messages/index.js';
 import {
   exportKeyToHexString,
   importKeyFromHexString,
   encryptContent,
   decryptContent,
-} from '../utils/index.js';
-import { fetchRPCRequest } from '../utils/index.js';
-import { correlationIds } from '../store/correlation-ids/store.js';
-import { getCallStatusEIP5792 } from '../rpc/wallet_sendCalls.js';
+} from '../../utils/index.js';
+import { fetchRPCRequest } from '../../utils/index.js';
+import { correlationIds } from '../../store/correlation-ids/store.js';
+import { getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
 
 // Mock dependencies
-vi.mock('../communicator/index.js', () => ({
+vi.mock('../../communicator/index.js', () => ({
   Communicator: vi.fn(() => ({
     waitForPopupLoaded: vi.fn(),
     postRequestAndWaitForResponse: vi.fn(),
@@ -24,7 +24,7 @@ vi.mock('../communicator/index.js', () => ({
   })),
 }));
 
-vi.mock('../key-manager/index.js', () => ({
+vi.mock('../../key-manager/index.js', () => ({
   KeyManager: vi.fn(() => ({
     getOwnPublicKey: vi.fn(),
     setPeerPublicKey: vi.fn(),
@@ -33,8 +33,8 @@ vi.mock('../key-manager/index.js', () => ({
   })),
 }));
 
-vi.mock('../utils/index.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('../utils/index.js')>();
+vi.mock('../../utils/index.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../utils/index.js')>();
   return {
     ...actual,
     exportKeyToHexString: vi.fn(),
@@ -45,15 +45,11 @@ vi.mock('../utils/index.js', async (importOriginal) => {
   };
 });
 
-vi.mock('./utils.js', async (importOriginal) => {
-  const actual = await importOriginal<typeof import('./utils.js')>();
-  return {
-    ...actual,
-    clearSignerType: vi.fn(),
-  };
-});
+vi.mock('../signerStorage.js', () => ({
+  clearSignerType: vi.fn(),
+}));
 
-vi.mock('../rpc/wallet_sendCalls.js', () => ({
+vi.mock('../../rpc/wallet_sendCalls.js', () => ({
   getCallStatus: vi.fn(),
   getCallStatusEIP5792: vi.fn(),
   waitForReceiptInBackground: vi.fn(),
@@ -68,8 +64,8 @@ const mockEncryptedData = {
 const mockCorrelationId = 'test-correlation-id';
 const mockMessageId = '12345678-1234-1234-1234-123456789012' as const;
 
-describe('JAWSigner', () => {
-  let signer: JAWSigner;
+describe('CrossPlatformSigner', () => {
+  let signer: CrossPlatformSigner;
   let mockCommunicator: Mocked<Communicator>;
   let mockKeyManager: Mocked<KeyManager>;
   let mockCallback: ProviderEventCallback;
@@ -152,7 +148,7 @@ describe('JAWSigner', () => {
     vi.spyOn(store.chains, 'clear').mockReturnValue(undefined);
 
     // Create signer instance
-    signer = new JAWSigner({
+    signer = new CrossPlatformSigner({
       metadata: mockMetadata,
       communicator: mockCommunicator,
       callback: mockCallback,
@@ -610,7 +606,7 @@ describe('JAWSigner', () => {
 
     it('should throw unauthorized error for unauthenticated requests', async () => {
       // Arrange - Create new signer without handshake
-      const unauthenticatedSigner = new JAWSigner({
+      const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -728,7 +724,7 @@ describe('JAWSigner', () => {
   describe('eth_requestAccounts Flow', () => {
     it('should trigger wallet_connect automatically when unauthenticated', async () => {
       // Arrange - Create new signer without handshake
-      const unauthenticatedSigner = new JAWSigner({
+      const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -775,7 +771,7 @@ describe('JAWSigner', () => {
 
     it('should trigger accountsChanged callback after eth_requestAccounts', async () => {
       // Arrange - Create new signer without handshake
-      const unauthenticatedSigner = new JAWSigner({
+      const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -932,7 +928,7 @@ describe('JAWSigner', () => {
 
     it('should throw error when forwarding to RPC without rpcUrl', async () => {
       // Arrange - Create new signer with chain that has no rpcUrl
-      const signerWithNoRpc = new JAWSigner({
+      const signerWithNoRpc = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -1135,7 +1131,7 @@ describe('JAWSigner', () => {
   describe('Unauthenticated Scenarios', () => {
     it('should allow wallet_switchEthereumChain when unauthenticated if chain is supported', async () => {
       // Arrange - Create new signer without handshake
-      const unauthenticatedSigner = new JAWSigner({
+      const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -1166,12 +1162,12 @@ describe('JAWSigner', () => {
       const result = await unauthenticatedSigner.request(request);
 
       // Assert - Should not throw and should update local chain
-      expect(result).toBeUndefined();
+      expect(result).toBeNull();
     });
 
     it('should allow wallet_sendCalls when unauthenticated', async () => {
       // Arrange - Create new signer without handshake
-      const unauthenticatedSigner = new JAWSigner({
+      const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -1211,7 +1207,7 @@ describe('JAWSigner', () => {
 
     it('should allow wallet_sign when unauthenticated', async () => {
       // Arrange - Create new signer without handshake
-      const unauthenticatedSigner = new JAWSigner({
+      const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -1251,7 +1247,7 @@ describe('JAWSigner', () => {
 
     it('should allow wallet_connect when unauthenticated', async () => {
       // Arrange - Create new signer without handshake
-      const unauthenticatedSigner = new JAWSigner({
+      const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -1306,7 +1302,7 @@ describe('JAWSigner', () => {
   describe('Chain & Capabilities Updates', () => {
     it('should update capabilities from response data', async () => {
       // Arrange - Create new signer without handshake
-      const unauthenticatedSigner = new JAWSigner({
+      const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -1363,7 +1359,7 @@ describe('JAWSigner', () => {
 
     it('should not store chains from response data', async () => {
       // Arrange - Create new signer without handshake
-      const unauthenticatedSigner = new JAWSigner({
+      const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -1870,7 +1866,7 @@ describe('JAWSigner', () => {
       });
 
       // Act
-      const newSigner = new JAWSigner({
+      const newSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -1905,7 +1901,7 @@ describe('JAWSigner', () => {
       };
 
       // Act
-      const newSigner = new JAWSigner({
+      const newSigner = new CrossPlatformSigner({
         metadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -1937,7 +1933,7 @@ describe('JAWSigner', () => {
       };
 
       // Act
-      const newSigner = new JAWSigner({
+      const newSigner = new CrossPlatformSigner({
         metadata,
         communicator: mockCommunicator,
         callback: mockCallback,
@@ -2033,7 +2029,7 @@ describe('JAWSigner', () => {
 
     it('should create handshake message with proper structure', async () => {
       // Arrange
-      const newSigner = new JAWSigner({
+      const newSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
         communicator: mockCommunicator,
         callback: mockCallback,

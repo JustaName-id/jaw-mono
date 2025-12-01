@@ -12,6 +12,7 @@ import {
   SignatureUIRequest,
   TypedDataUIRequest,
   TransactionUIRequest,
+  SendTransactionUIRequest,
   PermissionUIRequest,
   RevokePermissionUIRequest,
   WalletSignUIRequest,
@@ -22,8 +23,8 @@ import {
   SUPPORTED_CHAINS,
   Chain,
   JAW_RPC_URL,
-  toJustanAccount,
   sendBundledTransaction,
+  sendTransaction,
   grantPermissions,
   revokePermission,
   getPermissionFromRelay,
@@ -31,11 +32,11 @@ import {
   calculateGas,
   SubnameTextRecordCapabilityRequest,
   type JustanAccountImplementation,
-  type ToJustanAccountReturnType,
 } from '@jaw.id/core';
+import type { SmartAccount } from 'viem/account-abstraction';
 import { toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, parseEther, formatUnits, erc20Abi, createPublicClient, http } from 'viem';
-import type { Address, Hex } from 'viem';
+import type { Address, Hex, Hash } from 'viem';
 
 // Import UI components using relative paths (we're inside @jaw/ui)
 import { OnboardingDialog } from '../components/OnboardingDialog';
@@ -268,6 +269,7 @@ export class ReactUIHandler implements UIHandler {
       'personal_sign',
       'eth_signTypedData_v4',
       'wallet_sendCalls',
+      'eth_sendTransaction',
       'wallet_grantPermissions',
       'wallet_revokePermissions',
       'wallet_sign',
@@ -345,6 +347,7 @@ export class ReactUIHandler implements UIHandler {
                   data: {
                     message,
                     address: walletSignRequest.data.address,
+                    chainId: walletSignRequest.data.chainId,
                   },
                 } as SignatureUIRequest}
                 onApprove={onApprove}
@@ -363,6 +366,7 @@ export class ReactUIHandler implements UIHandler {
                 data: {
                   message,
                   address: walletSignRequest.data.address,
+                  chainId: walletSignRequest.data.chainId,
                 },
               } as SignatureUIRequest}
               onApprove={onApprove}
@@ -382,6 +386,7 @@ export class ReactUIHandler implements UIHandler {
                 data: {
                   typedData: walletSignRequest.data.request.data,
                   address: walletSignRequest.data.address,
+                  chainId: walletSignRequest.data.chainId,
                 },
               } as TypedDataUIRequest}
               onApprove={onApprove}
@@ -418,6 +423,18 @@ export class ReactUIHandler implements UIHandler {
         return (
           <TransactionDialogWrapper
             request={request as TransactionUIRequest}
+            onApprove={onApprove}
+            onReject={onReject}
+            apiKey={this.config.apiKey}
+            defaultChainId={this.config.defaultChainId}
+            paymasterUrls={this.config.paymasterUrls}
+          />
+        );
+
+      case 'eth_sendTransaction':
+        return (
+          <SendTransactionDialogWrapper
+            request={request as SendTransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
             apiKey={this.config.apiKey}
@@ -496,10 +513,9 @@ async function recreateSmartAccountForSigning(
   const chain = buildChainConfigFromApiKey(targetChainId, apiKey, paymasterUrl);
   const client = getBundlerClient(chain);
 
-  const smartAccount = await toJustanAccount({
-    client: client as JustanAccountImplementation['client'],
-    owners: [webAuthnAccount],
-  });
+  // Use createSmartAccount which properly includes PERMISSIONS_MANAGER_ADDRESS
+  // and finds the correct owner index for deployed accounts
+  const smartAccount = await createSmartAccount(webAuthnAccount, client as JustanAccountImplementation['client']);
 
   return { smartAccount, chain, webAuthnAccount };
 }
@@ -764,6 +780,7 @@ function OnboardingDialogWrapper({
         accountName={authenticatedAccountName || 'Account'}
         walletAddress={authenticatedWalletAddress}
         chainName={chainName}
+        chainId={targetChainId}
         chainIcon={chainIcon}
         onConnect={async () => handleConnectConfirm()}
         onCancel={handleConnectCancel}
@@ -819,8 +836,8 @@ function SignatureDialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // SignatureUIRequest doesn't have chainId, use defaultChainId
-  const chainId = defaultChainId || 1;
+  // Use chainId from request (current chain), fallback to defaultChainId
+  const chainId = request.data.chainId || defaultChainId || 1;
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -886,8 +903,8 @@ function Eip712DialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // TypedDataUIRequest doesn't have chainId, use defaultChainId
-  const chainId = defaultChainId || 1;
+  // Use chainId from request (current chain), fallback to defaultChainId
+  const chainId = request.data.chainId || defaultChainId || 1;
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -963,7 +980,7 @@ function TransactionDialogWrapper({
   const [gasFee, setGasFee] = useState<string>('');
   const [gasFeeLoading, setGasFeeLoading] = useState(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
-  const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
+  const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const chain = useMemo(
@@ -1121,6 +1138,199 @@ function TransactionDialogWrapper({
   );
 }
 
+// SendTransactionDialogWrapper - handles eth_sendTransaction (legacy single transaction)
+function SendTransactionDialogWrapper({
+  request,
+  onApprove,
+  onReject,
+  apiKey,
+  defaultChainId,
+  paymasterUrls,
+}: {
+  request: SendTransactionUIRequest;
+  onApprove: (data: any) => void;
+  onReject: (error?: Error) => void;
+  apiKey?: string;
+  defaultChainId?: number;
+  paymasterUrls?: Record<number, string>;
+}) {
+  const [open, setOpen] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [gasFee, setGasFee] = useState<string>('');
+  const [gasFeeLoading, setGasFeeLoading] = useState(true);
+  const [gasEstimationError, setGasEstimationError] = useState<string>('');
+  const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
+
+  const chainId = request.data.chainId || defaultChainId || 1;
+  const chain = useMemo(
+    () => buildChainConfigFromApiKey(chainId, apiKey, paymasterUrls?.[chainId]),
+    [chainId, apiKey, paymasterUrls]
+  );
+  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
+  const networkName = viemChain?.name || 'Unknown Network';
+  const isSponsored = !!paymasterUrls?.[chainId];
+
+  // Transform eth_sendTransaction data to transactions format expected by dialog
+  const transactions = useMemo(() => [{
+    to: request.data.to,
+    data: request.data.data,
+    value: request.data.value,
+    chainId: request.data.chainId,
+  }], [request.data]);
+
+  // Convert to call format for smart account operations
+  const transactionCalls = useMemo(() => {
+    let value = 0n;
+    if (request.data.value && request.data.value !== '0') {
+      if (request.data.value.startsWith('0x')) {
+        value = BigInt(request.data.value);
+      } else if (/^\d+$/.test(request.data.value)) {
+        value = BigInt(request.data.value);
+      } else {
+        value = parseEther(request.data.value);
+      }
+    }
+    return [{
+      to: request.data.to as Address,
+      value,
+      data: (request.data.data || '0x') as Hex,
+    }];
+  }, [request.data]);
+
+  // Initialize smart account
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeSmartAccount = async () => {
+      try {
+        const { smartAccount: account } = await recreateSmartAccountForSigning(
+          apiKey,
+          chainId,
+          paymasterUrls?.[chainId]
+        );
+        if (isMounted) {
+          setSmartAccount(account);
+        }
+      } catch (error) {
+        console.error('Error initializing smart account:', error);
+        if (isMounted) {
+          setGasEstimationError('Failed to initialize account');
+          setGasFeeLoading(false);
+        }
+      }
+    };
+
+    initializeSmartAccount();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiKey, chainId, paymasterUrls]);
+
+  // Gas estimation using core package
+  useEffect(() => {
+    if (!smartAccount || transactionCalls.length === 0) return;
+
+    const estimateGas = async () => {
+      try {
+        setGasFeeLoading(true);
+        setGasEstimationError('');
+
+        // Estimate gas using core package
+        const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls, chain);
+        const gasPrice = await calculateGas(chain, gasEstimate);
+        setGasFee(gasPrice);
+
+        // Override with sponsored if paymaster is available
+        if (isSponsored) {
+          setGasFee('sponsored');
+        }
+      } catch (error) {
+        console.error('Error estimating gas:', error);
+
+        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
+          if (isSponsored) {
+            setGasFee('sponsored');
+            setGasEstimationError('');
+          } else {
+            setGasFee('');
+            setGasEstimationError('Insufficient funds');
+          }
+        } else {
+          setGasFee('');
+          setGasEstimationError('Failed to estimate gas');
+        }
+      } finally {
+        setGasFeeLoading(false);
+      }
+    };
+
+    estimateGas();
+  }, [smartAccount, transactionCalls, chain, isSponsored]);
+
+  const handleConfirm = async () => {
+    setIsProcessing(true);
+    try {
+      if (!smartAccount) {
+        throw new Error('Smart account not initialized');
+      }
+
+      // Use sendTransaction which waits for receipt and returns the actual transaction hash
+      const txHash: Hash = await sendTransaction(smartAccount, transactionCalls, chain);
+
+      // eth_sendTransaction returns transaction hash string
+      onApprove(txHash);
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      onReject(error as Error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setOpen(false);
+    onReject(UIError.userRejected());
+  };
+
+  return (
+    <TransactionDialog
+      open={open}
+      onOpenChange={setOpen}
+      transactions={transactions}
+      walletAddress={request.data.from}
+      gasFee={gasFee}
+      gasFeeLoading={gasFeeLoading}
+      gasEstimationError={gasEstimationError}
+      sponsored={isSponsored}
+      ethPrice={0}
+      onConfirm={handleConfirm}
+      onCancel={handleCancel}
+      isProcessing={isProcessing}
+      transactionStatus="pending"
+      networkName={networkName}
+    />
+  );
+}
+
+// Known function selectors mapping
+const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
+  '0x32323232': 'Any Function',
+  '0xe0e0e0e0': 'Empty Calldata',
+  '0xcc53287f': 'lockdown((address,address)[])',
+  '0x87517c45': 'approve(address,address,uint160,uint48)',
+  '0x095ea7b3': 'approve(address,uint256)',
+  '0x23b872dd': 'transferFrom(address,address,uint256)',
+  '0xa9059cbb': 'transfer(address,uint256)',
+};
+
+// Resolve function selector to human-readable name
+const resolveFunctionSelector = (selector: string): string => {
+  const normalizedSelector = selector.toLowerCase();
+  const knownName = KNOWN_FUNCTION_SELECTORS[normalizedSelector];
+  return knownName || selector;
+};
+
 function PermissionDialogWrapper({
   request,
   onApprove,
@@ -1138,6 +1348,9 @@ function PermissionDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [status, setStatus] = useState<string>('');
+  const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
+  const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState(true);
 
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
@@ -1146,12 +1359,175 @@ function PermissionDialogWrapper({
     : (requestChainId || defaultChainId || 1);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
+  const chainIconKey = getChainIconKeyFromId(chainId);
+  const chain = useMemo(
+    () => buildChainConfigFromApiKey(chainId, apiKey, paymasterUrls?.[chainId]),
+    [chainId, apiKey, paymasterUrls]
+  );
+
+  // Get spends array from request (now using spends plural)
+  const spendsData = request.data.permissions.spends || [];
+
+  // Get calls array from request
+  const callsData = request.data.permissions.calls || [];
+
+  // Fetch token info for all unique tokens in spends
+  useEffect(() => {
+    if (spendsData.length === 0) {
+      setIsLoadingTokenInfo(false);
+      return;
+    }
+
+    setIsLoadingTokenInfo(true);
+
+    const fetchAllTokenInfo = async () => {
+      const newTokenInfoMap: TokenInfoMap = {};
+
+      // Get unique token addresses
+      const uniqueTokens = Array.from(new Set(spendsData.map((spend) => spend.token))) as string[];
+
+      for (const tokenAddress of uniqueTokens) {
+        // Skip if already fetched
+        if (tokenInfoMap[tokenAddress]) {
+          newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
+          continue;
+        }
+
+        // If native token, use ETH defaults
+        if (isNativeToken(tokenAddress)) {
+          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+          continue;
+        }
+
+        // Fetch ERC-20 token info
+        try {
+          const publicClient = createPublicClient({
+            chain: {
+              id: chainId,
+              name: networkName,
+              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              rpcUrls: {
+                default: { http: [chain.rpcUrl || ''] },
+                public: { http: [chain.rpcUrl || ''] },
+              },
+            },
+            transport: http(chain.rpcUrl),
+          });
+
+          const [decimals, symbol] = await Promise.all([
+            publicClient.readContract({
+              address: tokenAddress as Address,
+              abi: erc20Abi,
+              functionName: 'decimals',
+            }),
+            publicClient.readContract({
+              address: tokenAddress as Address,
+              abi: erc20Abi,
+              functionName: 'symbol',
+            }),
+          ]);
+
+          newTokenInfoMap[tokenAddress] = { decimals, symbol };
+        } catch (error) {
+          console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
+          // Fallback to showing truncated token address
+          newTokenInfoMap[tokenAddress] = {
+            decimals: 18,
+            symbol: tokenAddress.slice(0, 6) + '...' + tokenAddress.slice(-4),
+          };
+        }
+      }
+
+      setTokenInfoMap(prev => ({ ...prev, ...newTokenInfoMap }));
+      setIsLoadingTokenInfo(false);
+    };
+
+    fetchAllTokenInfo();
+  }, [chainId, spendsData, networkName, chain.rpcUrl]);
+
+  // Convert to SpendPermission array format expected by PermissionDialog
+  const spends = useMemo(() => spendsData.map(spend => {
+    const tokenInfo = tokenInfoMap[spend.token] || (isNativeToken(spend.token)
+      ? { decimals: 18, symbol: 'ETH' }
+      : { decimals: 18, symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4) });
+
+    const allowance = BigInt(spend.limit);
+    const amount = formatUnits(allowance, tokenInfo.decimals);
+    const limit = `${amount} ${tokenInfo.symbol}`;
+
+    return {
+      amount,
+      token: isNativeToken(spend.token) ? 'Native (ETH)' : tokenInfo.symbol,
+      tokenAddress: spend.token,
+      duration: `1 ${spend.period}`,
+      limit,
+    };
+  }), [spendsData, tokenInfoMap]);
+
+  // Format call permissions
+  const calls = useMemo(() => callsData.map(call => ({
+    target: call.target,
+    selector: call.selector || '',
+    functionSignature: call.functionSignature || resolveFunctionSelector(call.selector || ''),
+  })), [callsData]);
+
+  // Format expiry date
+  const expiryDate = useMemo(() => {
+    return formatExpiryDate(request.data.expiry);
+  }, [request.data.expiry]);
+
+  // Generate warning message based on actual permissions
+  const warningMessage = useMemo(() => {
+    const parts: string[] = [];
+
+    // Describe spend permissions
+    if (spends.length > 0) {
+      const spendDescriptions = spends.map(spend => {
+        // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
+        const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
+        // Handle "forever" specially - no "per" prefix needed
+        if (normalizedDuration === 'forever') {
+          return spend.limit;
+        }
+        return `${spend.limit} per ${normalizedDuration}`;
+      });
+      parts.push(`spend up to ${spendDescriptions.join(', ')}`);
+    }
+
+    // Describe call permissions
+    if (calls.length > 0) {
+      const callDescriptions = calls.map(call => {
+        const fnName = call.functionSignature;
+        // Check for special selectors
+        if (fnName === 'Any Function') {
+          return 'call any function';
+        }
+        if (fnName === 'Empty Calldata') {
+          return 'send transactions with empty calldata';
+        }
+        // Extract just the function name from signature like "transfer(address,uint256)"
+        const simpleName = fnName.split('(')[0];
+        return `call ${simpleName}`;
+      });
+
+      // Deduplicate and join
+      const uniqueCalls = [...new Set(callDescriptions)];
+      parts.push(uniqueCalls.join(', '));
+    }
+
+    if (parts.length === 0) {
+      return `You are granting permissions to this dApp until ${expiryDate}. Only approve if you trust this dApp.`;
+    }
+
+    return `This will allow the dApp to ${parts.join(' and ')} on your behalf until ${expiryDate}. Only approve if you trust this dApp.`;
+  }, [spends, calls, expiryDate]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
+    setStatus('Granting permissions...');
     try {
       // Recreate smart account for signing
-      const { smartAccount, chain } = await recreateSmartAccountForSigning(
+      const { smartAccount, chain: signingChain } = await recreateSmartAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
@@ -1169,13 +1545,15 @@ function PermissionDialogWrapper({
         request.data.expiry,
         request.data.spender,
         permissionsDetail,
-        chain,
+        signingChain,
         apiKey || ''
       );
 
+      setStatus('Permissions granted successfully!');
       onApprove(result);
     } catch (error) {
       console.error('Permission grant failed:', error);
+      setStatus(`Error: ${(error as Error).message}`);
       onReject(error as Error);
     } finally {
       setIsProcessing(false);
@@ -1187,18 +1565,6 @@ function PermissionDialogWrapper({
     onReject(UIError.userRejected());
   };
 
-  // Get spends array from request (now using spends plural)
-  const spendsData = request.data.permissions.spends || [];
-
-  // Convert to SpendPermission array format expected by PermissionDialog
-  const spends = spendsData.map(spend => ({
-    amount: spend.limit,
-    token: spend.token.slice(0, 10) + '...',  // Display truncated token
-    tokenAddress: spend.token,
-    duration: `1 ${spend.period}`,
-    limit: spend.limit,
-  }));
-
   return (
     <PermissionDialog
       open={open}
@@ -1207,12 +1573,18 @@ function PermissionDialogWrapper({
       spenderAddress={request.data.spender}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={spends}
-      expiryDate={new Date(request.data.expiry).toLocaleDateString()}
+      calls={calls}
+      expiryDate={expiryDate}
       networkName={networkName}
+      chainId={chainId}
+      chainIconKey={chainIconKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      status={status}
+      isLoadingTokenInfo={isLoadingTokenInfo}
       timestamp={new Date(request.timestamp)}
+      warningMessage={warningMessage}
     />
   );
 }
@@ -1237,7 +1609,8 @@ function SiweDialogWrapper({
   const [isProcessing, setIsProcessing] = useState(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
 
-  const chainId = defaultChainId || 1;
+  // Use chainId from request (current chain), fallback to defaultChainId
+  const chainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(chainId);
   const chainIconKey = getChainIconKeyFromId(chainId);
   const chainIcon = useChainIcon(chainIconKey, 24);
@@ -1333,6 +1706,7 @@ function RevokePermissionDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [status, setStatus] = useState<string>('');
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState(true);
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
@@ -1432,6 +1806,17 @@ function RevokePermissionDialogWrapper({
     });
   }, [fetchedPermissionData, tokenInfoMap]);
 
+  // Format call permissions from fetched data
+  const formattedCalls = useMemo(() => {
+    if (!fetchedPermissionData?.calls) return [];
+
+    return fetchedPermissionData.calls.map((call: any) => ({
+      target: call.target,
+      selector: call.selector || '',
+      functionSignature: call.functionSignature || resolveFunctionSelector(call.selector || ''),
+    }));
+  }, [fetchedPermissionData]);
+
   // Expiry date from fetched permission
   const expiryDate = useMemo(() => {
     if (!fetchedPermissionData) return '';
@@ -1444,6 +1829,7 @@ function RevokePermissionDialogWrapper({
 
   const handleConfirm = async () => {
     setIsProcessing(true);
+    setStatus('Revoking permission...');
     try {
       // Recreate smart account for revoking
       const { smartAccount } = await recreateSmartAccountForSigning(
@@ -1461,9 +1847,11 @@ function RevokePermissionDialogWrapper({
       );
 
       console.log('✅ Permission revoked');
+      setStatus('Permission revoked successfully!');
       onApprove({ success: true });
     } catch (error) {
       console.error('Permission revoke failed:', error);
+      setStatus(`Error: ${(error as Error).message}`);
       onReject(error as Error);
     } finally {
       setIsProcessing(false);
@@ -1484,12 +1872,15 @@ function RevokePermissionDialogWrapper({
       spenderAddress={spenderAddress}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={formattedSpends}
+      calls={formattedCalls}
       expiryDate={expiryDate}
       networkName={networkName}
+      chainId={chainId}
       chainIconKey={chainIconKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      status={status}
       isLoadingTokenInfo={isLoadingPermissionDetails}
       timestamp={new Date(request.timestamp)}
     />

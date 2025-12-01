@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { DefaultDialog } from "../DefaultDialog";
 import { SignatureDialogProps } from "./types";
 import { useIsMobile } from "../../hooks";
-import { getJustaNameInstance } from "../../utils/justaNameInstance";
+import { getJustaNameInstance, getDisplayAddress } from "../../utils";
 import { useState, useEffect } from "react";
 
 
@@ -44,8 +44,8 @@ export const SignatureDialog = ({
     }
   }, [accountAddress, chainId]);
 
-  // Get resolved address or fallback to original
-  const displayAddress = resolvedAddress || accountAddress || '';
+  // Get display address - use resolved name or formatted address
+  const displayAddress = getDisplayAddress(resolvedAddress, accountAddress || '');
 
   // Format origin to display only domain (remove protocol)
   const formatOrigin = (url: string) => {

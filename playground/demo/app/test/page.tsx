@@ -454,7 +454,7 @@ Issued At: ${issuedAt}`;
 
       // Example: Send 0.001 ETH to a recipient
       // Use viem's parseEther to convert ETH to wei
-      const value = parseEther('0.001');
+      const value = parseEther('0.0001');
 
       const txHash = await provider.request({
         method: 'eth_sendTransaction',
@@ -489,7 +489,7 @@ Issued At: ${issuedAt}`;
       // 2. Call a contract function (ERC20 transfer)
 
       // Prepare values using viem
-      const ethValue = parseEther('0.001');
+      const ethValue = parseEther('0.0001');
 
       // Encode ERC20 transfer function call: transfer(address recipient, uint256 amount)
       const erc20Abi = parseAbi([
@@ -527,8 +527,6 @@ Issued At: ${issuedAt}`;
               data: '0x',
             },
           ],
-          // Optional parameters supported by current implementation
-          chainId: currentChainId ? `0x${currentChainId.toString(16)}` : undefined,
           atomicRequired: true, // All calls must succeed or all fail
         }]
       });
