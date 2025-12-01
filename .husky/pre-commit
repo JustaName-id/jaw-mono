@@ -1,3 +1,4 @@
 #!/bin/sh
+export PATH="$HOME/.bun/bin:$PATH"
 # Run all tests with Vitest, excluding docs app
 bunx vitest run --exclude='**/apps/docs/**'

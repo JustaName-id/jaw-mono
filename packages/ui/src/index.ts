@@ -1,3 +1,4 @@
+import './styles.css';
 
 export * from './components/ui/button';
 export * from './components/ui/card';
@@ -29,3 +30,6 @@ export * from './lib/utils';
 export * from './icons';
 export * from './hooks';
 export * from './utils';
+
+// React integration
+export * from './react';

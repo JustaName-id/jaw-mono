@@ -84,5 +84,26 @@ export * from "./utils/index.js"
 /** Store exports **/
 export {type Chain} from "./store/index.js"
 
+/** UI Handler exports (for app-specific mode) **/
+export type {
+    UIHandler,
+    UIHandlerConfig,
+    UIRequest,
+    UIResponse,
+    UIRequestType,
+    ConnectUIRequest,
+    SignatureUIRequest,
+    TypedDataUIRequest,
+    TransactionUIRequest,
+    PermissionUIRequest,
+    RevokePermissionUIRequest,
+    SendTransactionUIRequest,
+    WalletSignUIRequest,
+    UIHandlerOptions,
+    BaseUIRequest,
+} from './ui/interface.js';
+
+export { UIError, UIErrorCode } from './ui/interface.js';
+
 /** Default export **/
 export { create as default } from './sdk/createJAWSDK.js';

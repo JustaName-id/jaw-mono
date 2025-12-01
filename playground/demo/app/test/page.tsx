@@ -1,8 +1,9 @@
 'use client';
 
 import { useState } from 'react';
-import { JAW } from '@jaw.id/core';
+import { JAW, Mode } from '@jaw.id/core';
 import { parseEther, encodeFunctionData, parseAbi } from 'viem';
+import {ReactUIHandler} from "@jaw/ui";
 
 export default function TestPage() {
   const [isConnected, setIsConnected] = useState(false);
@@ -13,15 +14,17 @@ export default function TestPage() {
   const [lastPermissionId, setLastPermissionId] = useState<string | null>(null);
   const [sdk] = useState(() =>
       JAW.create({
-      appName: 'JAW Demo App',
-      appLogoUrl: "https://avatars.githubusercontent.com/u/159771991?s=200&v=4",
-      defaultChainId: 1,
-      preference: {
-        keysUrl: 'http://localhost:3001', // Local popup URL
-        showTestnets: true
-      },
-      apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
-    })
+        appName: 'JAW Playground',
+        appLogoUrl: "https://avatars.githubusercontent.com/u/159771991?s=200&v=4",
+        defaultChainId: 1,
+        preference: {
+          keysUrl: 'http://localhost:3001', // Local popup URL
+          showTestnets: true,
+          mode: Mode.AppSpecific,
+          uiHandler: new ReactUIHandler()
+        },
+        apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
+      })
   );
 
   const addLog = (message: string) => {
@@ -68,12 +71,12 @@ export default function TestPage() {
     } catch (error) {
       console.error('[Demo] Connection error:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`Error connecting: ${errorMessage}`);
     }
   };
@@ -131,12 +134,12 @@ export default function TestPage() {
     } catch (error) {
       console.error('[Demo] Connection error:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`❌ Error connecting with text records: ${errorMessage}`);
     }
   };
@@ -176,14 +179,14 @@ export default function TestPage() {
     } catch (error) {
       console.error('Balance error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          // eslint-disable-next-line @typescript-eslint/ban-ts-comment
-          // @ts-ignore
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              // eslint-disable-next-line @typescript-eslint/ban-ts-comment
+              // @ts-ignore
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`Error getting balance: ${errorMessage}`);
     }
   };
@@ -206,12 +209,12 @@ export default function TestPage() {
     } catch (error) {
       console.error('Sign message error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`Error signing message: ${errorMessage}`);
     }
   };
@@ -244,12 +247,12 @@ export default function TestPage() {
     } catch (error) {
       console.error('Wallet sign error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`Error signing with wallet_sign: ${errorMessage}`);
     }
   };
@@ -296,12 +299,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('SIWE sign error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`❌ Error signing SIWE message: ${errorMessage}`);
     }
   };
@@ -429,12 +432,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('Wallet sign typed data error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`❌ Error signing with wallet_sign (type 0x01): ${errorMessage}`);
     }
   };
@@ -451,7 +454,7 @@ Issued At: ${issuedAt}`;
 
       // Example: Send 0.001 ETH to a recipient
       // Use viem's parseEther to convert ETH to wei
-      const value = parseEther('0.001');
+      const value = parseEther('0.0001');
 
       const txHash = await provider.request({
         method: 'eth_sendTransaction',
@@ -486,7 +489,7 @@ Issued At: ${issuedAt}`;
       // 2. Call a contract function (ERC20 transfer)
 
       // Prepare values using viem
-      const ethValue = parseEther('0.001');
+      const ethValue = parseEther('0.0001');
 
       // Encode ERC20 transfer function call: transfer(address recipient, uint256 amount)
       const erc20Abi = parseAbi([
@@ -524,8 +527,6 @@ Issued At: ${issuedAt}`;
               data: '0x',
             },
           ],
-          // Optional parameters supported by current implementation
-          chainId: currentChainId ? `0x${currentChainId.toString(16)}` : undefined,
           atomicRequired: true, // All calls must succeed or all fail
         }]
       });
@@ -535,8 +536,8 @@ Issued At: ${issuedAt}`;
 
       // Extract batch ID from result
       const batchId = typeof result === 'object' && result !== null && 'id' in result
-        ? (result as { id: string }).id
-        : null;
+          ? (result as { id: string }).id
+          : null;
 
       if (batchId) {
         setLastBatchId(batchId);
@@ -642,12 +643,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('[Demo] Get capabilities error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`Error getting capabilities: ${errorMessage}`);
     }
   };
@@ -672,12 +673,12 @@ Issued At: ${issuedAt}`;
       // Status codes: 100 = pending, 200 = completed, 400 = failed
       const statusObj = status as { id: string; status: number; receipts: unknown[] };
       const statusText = statusObj.status === 100
-        ? 'pending'
-        : statusObj.status === 200
-          ? 'completed'
-          : statusObj.status === 400
-            ? 'failed'
-            : `unknown (${statusObj.status})`;
+          ? 'pending'
+          : statusObj.status === 200
+              ? 'completed'
+              : statusObj.status === 400
+                  ? 'failed'
+                  : `unknown (${statusObj.status})`;
 
       addLog(`Batch ID: ${statusObj.id}`);
       addLog(`Status: ${statusText} (code: ${statusObj.status})`);
@@ -690,12 +691,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('[Demo] Get calls status error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`Error getting calls status: ${errorMessage}`);
     }
   };
@@ -780,12 +781,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('[Demo] Get assets error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`Error getting assets: ${errorMessage}`);
     }
   };
@@ -927,12 +928,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('[Demo] Grant permissions error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`❌ Error granting permissions: ${errorMessage}`);
     }
   };
@@ -1014,12 +1015,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('[Demo] Grant ERC-20 permissions error:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`❌ Error granting ERC-20 permissions: ${errorMessage}`);
     }
   };
@@ -1063,12 +1064,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('[Demo] Get permissions error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`❌ Error getting permissions: ${errorMessage}`);
     }
   };
@@ -1100,12 +1101,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('[Demo] Revoke permissions error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`❌ Error revoking permissions: ${errorMessage}`);
     }
   };
@@ -1140,12 +1141,12 @@ Issued At: ${issuedAt}`;
     } catch (error) {
       console.error('Unsupported method error details:', error);
       const errorMessage = error instanceof Error
-        ? error.message
-        : typeof error === 'object' && error !== null && 'message' in error
-          ? (error as { message: string }).message
-          : typeof error === 'object' && error !== null
-            ? JSON.stringify(error, null, 2)
-            : String(error);
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
       addLog(`✅ Got error (check if modal appeared): ${errorMessage}`);
     }
   };
@@ -1155,390 +1156,390 @@ Issued At: ${issuedAt}`;
   };
 
   return (
-    <div className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
-      <div className="max-w-4xl mx-auto">
-        <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">
-          JAW SDK Test Page
-        </h1>
+      <div className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
+        <div className="max-w-4xl mx-auto">
+          <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">
+            JAW SDK Test Page
+          </h1>
 
-        {/* Connection Status */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Connection Status
-          </h2>
-          <div className="space-y-2">
-            <p className="text-gray-700 dark:text-gray-300">
-              <span className="font-medium">Status:</span>{' '}
-              <span className={isConnected ? 'text-green-600' : 'text-red-600'}>
+          {/* Connection Status */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              Connection Status
+            </h2>
+            <div className="space-y-2">
+              <p className="text-gray-700 dark:text-gray-300">
+                <span className="font-medium">Status:</span>{' '}
+                <span className={isConnected ? 'text-green-600' : 'text-red-600'}>
                 {isConnected ? 'Connected' : 'Disconnected'}
               </span>
-            </p>
-            {accounts.length > 0 && (
-              <p className="text-gray-700 dark:text-gray-300">
-                <span className="font-medium">Accounts:</span>{' '}
-                <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
-                  {accounts.join(', ')}
-                </code>
               </p>
-            )}
-            {chainId && (
-              <p className="text-gray-700 dark:text-gray-300">
-                <span className="font-medium">Chain ID:</span>{' '}
-                <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
-                  {chainId}
-                </code>
-              </p>
-            )}
+              {accounts.length > 0 && (
+                  <p className="text-gray-700 dark:text-gray-300">
+                    <span className="font-medium">Accounts:</span>{' '}
+                    <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
+                      {accounts.join(', ')}
+                    </code>
+                  </p>
+              )}
+              {chainId && (
+                  <p className="text-gray-700 dark:text-gray-300">
+                    <span className="font-medium">Chain ID:</span>{' '}
+                    <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
+                      {chainId}
+                    </code>
+                  </p>
+              )}
+            </div>
           </div>
-        </div>
 
-        {/* Actions */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Connection Actions
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <button
-              onClick={handleConnect}
-              disabled={isConnected}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Connect (eth_requestAccounts)
-            </button>
-            <button
-              onClick={handleConnectWithTextRecords}
-              disabled={isConnected}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Connect with Text Records
-            </button>
-            <button
-              onClick={handleDisconnect}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Disconnect
-            </button>
-          </div>
-          <div className="mt-3">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Note:</span> "Connect with Text Records" uses <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_connect</code> with <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">subnameTextRecords</code> capability. These text records will be applied when creating a <span className="font-medium">NEW account</span> during onboarding (not when connecting to existing accounts).
-            </p>
-          </div>
-        </div>
-
-        {/* Account & Chain Info */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Account & Chain Info
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <button
-              onClick={handleGetAccounts}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Get Accounts
-            </button>
-            <button
-              onClick={handleGetCoinbase}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Get Coinbase
-            </button>
-            <button
-              onClick={handleGetChainId}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Get Chain ID
-            </button>
-            <button
-              onClick={handleGetNetVersion}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Get Net Version
-            </button>
-            <button
-              onClick={handleGetBalance}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Get Balance
-            </button>
-            <button
-              onClick={handleGetCapabilities}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Get Capabilities
-            </button>
-            <button
-              onClick={handleGetCallsStatus}
-              disabled={!isConnected || !lastBatchId}
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Get Calls Status
-            </button>
-          </div>
-        </div>
-
-        {/* Signing Actions */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Signing Actions
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <button
-              onClick={handleSignMessage}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Sign Message (personal_sign)
-            </button>
-            <button
-              onClick={handleWalletSign}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Wallet Sign (0x45)
-            </button>
-            <button
-              onClick={handleSiweSign}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Sign-In with Ethereum (SIWE)
-            </button>
-            <button
-              onClick={handleSignTypedData}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Sign Typed Data (eth_signTypedData_v4)
-            </button>
-            <button
-              onClick={handleWalletSignTypedData}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-pink-600 text-white rounded hover:bg-pink-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Wallet Sign Typed Data (0x01)
-            </button>
-            <button
-              onClick={handleSignTransaction}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Sign Transaction
-            </button>
-          </div>
-          <div className="mt-3">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Note:</span> Both <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">eth_signTypedData_v4</code> and <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_sign (type 0x01)</code> perform EIP-712 typed data signing. The difference is in the parameter format: eth_signTypedData_v4 uses standard params, while wallet_sign uses a structured format with type specification per EIP-191.
-            </p>
-          </div>
-        </div>
-
-        {/* Transaction Actions */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Transaction Actions
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <button
-              onClick={handleSendTransaction}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Send ETH (eth_sendTransaction)
-            </button>
-            <button
-              onClick={handleSendContractInteraction}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Contract Call (ERC20 Approve)
-            </button>
-            <button
-              onClick={handleSendBatchTransaction}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Batch Transaction (wallet_sendCalls)
-            </button>
-          </div>
-          <div className="mt-3 space-y-2">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Note:</span> wallet_sendCalls (EIP-5792) executes multiple calls atomically in a single user operation. Returns a batch ID that can be used with wallet_getCallsStatus to check transaction status.
-            </p>
-            {lastBatchId && (
-              <p className="text-sm text-blue-600 dark:text-blue-400">
-                <span className="font-medium">Last Batch ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{lastBatchId}</code>
-              </p>
-            )}
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Test Networks:</span> This demo uses Sepolia and Base Sepolia testnets. Get test ETH from faucets before testing transactions.
-            </p>
-          </div>
-        </div>
-
-        {/* Wallet Actions */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Wallet Actions
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <button
-              onClick={handleGetAssets}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Get Assets (wallet_getAssets)
-            </button>
-            <button
-              onClick={handleWatchAsset}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Watch Asset (USDC)
-            </button>
-            <button
-              onClick={handleAddEthereumChain}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Add Ethereum Chain
-            </button>
-          </div>
-          <div className="mt-3">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Note:</span> wallet_getAssets (EIP-7811) retrieves assets across all supported chains. The chainFilter is automatically set based on the showTestnets preference (default: mainnet chains only).
-            </p>
-          </div>
-        </div>
-
-        {/* Permissions Actions */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Permissions Actions
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-            <button
-              onClick={handleGrantPermissions}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Grant Permissions (ETH)
-            </button>
-            <button
-              onClick={handleGrantPermissionsBaseSepolia}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Grant Permissions (USDC)
-            </button>
-            <button
-              onClick={handleGetPermissions}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Get Permissions
-            </button>
-            <button
-              onClick={handleRevokePermissions}
-              disabled={!isConnected || !lastPermissionId}
-              className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Revoke Permissions
-            </button>
-          </div>
-          <div className="mt-3 space-y-2">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Note:</span> Permissions allow a dApp or contract (spender) to spend tokens on behalf of your account within specified limits and time periods. This test grants permission to spend 0.0001 ETH per day for 30 days.
-            </p>
-            {lastPermissionId && (
-              <p className="text-sm text-green-600 dark:text-green-400">
-                <span className="font-medium">Last Permission ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{lastPermissionId}</code>
-              </p>
-            )}
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Test Flow:</span> 1) Grant Permissions → 2) Get Permissions to verify → 3) Revoke Permissions when done
-            </p>
-          </div>
-        </div>
-
-        {/* Testing & Edge Cases */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Testing & Edge Cases
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-            <button
-              onClick={handleTestUnsupportedMethod}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Test Unsupported Method
-            </button>
-          </div>
-          <div className="mt-3">
-            <p className="text-sm text-gray-600 dark:text-gray-400">
-              <span className="font-medium">Note:</span> This button tests the UnsupportedMethodModal by calling <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_sign</code> with an unsupported type code (<code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">0x99</code>). This will open the popup and show the UnsupportedMethodModal with the method details.
-            </p>
-          </div>
-        </div>
-
-        {/* Chain Switching */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
-          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            Switch Chain
-          </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-              onClick={() => handleSwitchChain('0xaa36a7')}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Sepolia (0xaa36a7)
-            </button>
-            <button
-              onClick={() => handleSwitchChain('0x14a34')}
-              disabled={!isConnected}
-              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
-            >
-              Base Sepolia (0x14a34)
-            </button>
-          </div>
-        </div>
-
-        {/* Logs */}
-        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
-          <div className="flex justify-between items-center mb-4">
-            <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
-              Activity Logs
+          {/* Actions */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              Connection Actions
             </h2>
-            <button
-              onClick={clearLogs}
-              className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
-            >
-              Clear Logs
-            </button>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <button
+                  onClick={handleConnect}
+                  disabled={isConnected}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Connect (eth_requestAccounts)
+              </button>
+              <button
+                  onClick={handleConnectWithTextRecords}
+                  disabled={isConnected}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Connect with Text Records
+              </button>
+              <button
+                  onClick={handleDisconnect}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Disconnect
+              </button>
+            </div>
+            <div className="mt-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Note:</span> "Connect with Text Records" uses <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_connect</code> with <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">subnameTextRecords</code> capability. These text records will be applied when creating a <span className="font-medium">NEW account</span> during onboarding (not when connecting to existing accounts).
+              </p>
+            </div>
           </div>
-          <div className="bg-gray-100 dark:bg-gray-900 rounded p-4 h-64 overflow-y-auto font-mono text-sm">
-            {logs.length === 0 ? (
-              <p className="text-gray-500 dark:text-gray-400">No activity yet...</p>
-            ) : (
-              logs.map((log, index) => (
-                <div key={index} className="text-gray-700 dark:text-gray-300 mb-1">
-                  {log}
-                </div>
-              ))
-            )}
+
+          {/* Account & Chain Info */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              Account & Chain Info
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <button
+                  onClick={handleGetAccounts}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Get Accounts
+              </button>
+              <button
+                  onClick={handleGetCoinbase}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Get Coinbase
+              </button>
+              <button
+                  onClick={handleGetChainId}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Get Chain ID
+              </button>
+              <button
+                  onClick={handleGetNetVersion}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Get Net Version
+              </button>
+              <button
+                  onClick={handleGetBalance}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Get Balance
+              </button>
+              <button
+                  onClick={handleGetCapabilities}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Get Capabilities
+              </button>
+              <button
+                  onClick={handleGetCallsStatus}
+                  disabled={!isConnected || !lastBatchId}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Get Calls Status
+              </button>
+            </div>
+          </div>
+
+          {/* Signing Actions */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              Signing Actions
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <button
+                  onClick={handleSignMessage}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Sign Message (personal_sign)
+              </button>
+              <button
+                  onClick={handleWalletSign}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Wallet Sign (0x45)
+              </button>
+              <button
+                  onClick={handleSiweSign}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Sign-In with Ethereum (SIWE)
+              </button>
+              <button
+                  onClick={handleSignTypedData}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Sign Typed Data (eth_signTypedData_v4)
+              </button>
+              <button
+                  onClick={handleWalletSignTypedData}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-pink-600 text-white rounded hover:bg-pink-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Wallet Sign Typed Data (0x01)
+              </button>
+              <button
+                  onClick={handleSignTransaction}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Sign Transaction
+              </button>
+            </div>
+            <div className="mt-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Note:</span> Both <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">eth_signTypedData_v4</code> and <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_sign (type 0x01)</code> perform EIP-712 typed data signing. The difference is in the parameter format: eth_signTypedData_v4 uses standard params, while wallet_sign uses a structured format with type specification per EIP-191.
+              </p>
+            </div>
+          </div>
+
+          {/* Transaction Actions */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              Transaction Actions
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <button
+                  onClick={handleSendTransaction}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Send ETH (eth_sendTransaction)
+              </button>
+              <button
+                  onClick={handleSendContractInteraction}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Contract Call (ERC20 Approve)
+              </button>
+              <button
+                  onClick={handleSendBatchTransaction}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Batch Transaction (wallet_sendCalls)
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Note:</span> wallet_sendCalls (EIP-5792) executes multiple calls atomically in a single user operation. Returns a batch ID that can be used with wallet_getCallsStatus to check transaction status.
+              </p>
+              {lastBatchId && (
+                  <p className="text-sm text-blue-600 dark:text-blue-400">
+                    <span className="font-medium">Last Batch ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{lastBatchId}</code>
+                  </p>
+              )}
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Test Networks:</span> This demo uses Sepolia and Base Sepolia testnets. Get test ETH from faucets before testing transactions.
+              </p>
+            </div>
+          </div>
+
+          {/* Wallet Actions */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              Wallet Actions
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <button
+                  onClick={handleGetAssets}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-emerald-600 text-white rounded hover:bg-emerald-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Get Assets (wallet_getAssets)
+              </button>
+              <button
+                  onClick={handleWatchAsset}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Watch Asset (USDC)
+              </button>
+              <button
+                  onClick={handleAddEthereumChain}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Add Ethereum Chain
+              </button>
+            </div>
+            <div className="mt-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Note:</span> wallet_getAssets (EIP-7811) retrieves assets across all supported chains. The chainFilter is automatically set based on the showTestnets preference (default: mainnet chains only).
+              </p>
+            </div>
+          </div>
+
+          {/* Permissions Actions */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              Permissions Actions
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              <button
+                  onClick={handleGrantPermissions}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-yellow-600 text-white rounded hover:bg-yellow-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Grant Permissions (ETH)
+              </button>
+              <button
+                  onClick={handleGrantPermissionsBaseSepolia}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Grant Permissions (USDC)
+              </button>
+              <button
+                  onClick={handleGetPermissions}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Get Permissions
+              </button>
+              <button
+                  onClick={handleRevokePermissions}
+                  disabled={!isConnected || !lastPermissionId}
+                  className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Revoke Permissions
+              </button>
+            </div>
+            <div className="mt-3 space-y-2">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Note:</span> Permissions allow a dApp or contract (spender) to spend tokens on behalf of your account within specified limits and time periods. This test grants permission to spend 0.0001 ETH per day for 30 days.
+              </p>
+              {lastPermissionId && (
+                  <p className="text-sm text-green-600 dark:text-green-400">
+                    <span className="font-medium">Last Permission ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{lastPermissionId}</code>
+                  </p>
+              )}
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Test Flow:</span> 1) Grant Permissions → 2) Get Permissions to verify → 3) Revoke Permissions when done
+              </p>
+            </div>
+          </div>
+
+          {/* Testing & Edge Cases */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              Testing & Edge Cases
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              <button
+                  onClick={handleTestUnsupportedMethod}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Test Unsupported Method
+              </button>
+            </div>
+            <div className="mt-3">
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Note:</span> This button tests the UnsupportedMethodModal by calling <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_sign</code> with an unsupported type code (<code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">0x99</code>). This will open the popup and show the UnsupportedMethodModal with the method details.
+              </p>
+            </div>
+          </div>
+
+          {/* Chain Switching */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+            <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+              Switch Chain
+            </h2>
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <button
+                  onClick={() => handleSwitchChain('0xaa36a7')}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Sepolia (0xaa36a7)
+              </button>
+              <button
+                  onClick={() => handleSwitchChain('0x14a34')}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Base Sepolia (0x14a34)
+              </button>
+            </div>
+          </div>
+
+          {/* Logs */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-xl font-semibold text-gray-900 dark:text-white">
+                Activity Logs
+              </h2>
+              <button
+                  onClick={clearLogs}
+                  className="px-3 py-1 text-sm bg-gray-500 text-white rounded hover:bg-gray-600 transition-colors"
+              >
+                Clear Logs
+              </button>
+            </div>
+            <div className="bg-gray-100 dark:bg-gray-900 rounded p-4 h-64 overflow-y-auto font-mono text-sm">
+              {logs.length === 0 ? (
+                  <p className="text-gray-500 dark:text-gray-400">No activity yet...</p>
+              ) : (
+                  logs.map((log, index) => (
+                      <div key={index} className="text-gray-700 dark:text-gray-300 mb-1">
+                        {log}
+                      </div>
+                  ))
+              )}
+            </div>
           </div>
         </div>
       </div>
-    </div>
   );
 }

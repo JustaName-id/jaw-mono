@@ -1,4 +1,5 @@
 import { EventEmitter } from 'eventemitter3';
+import { UIHandler } from '../ui/interface.js';
 
 export interface RequestArguments {
     readonly method: string;
@@ -61,6 +62,8 @@ export interface JawProviderPreference {
     ens?: string;
     /** Whether to show testnet chains (default: false) */
     showTestnets?: boolean;
+    /** UI handler for app-specific mode (required when mode is Mode.AppSpecific) */
+    uiHandler?: UIHandler;
 }
 
 export type ProviderEventCallback = ProviderInterface['emit'];

@@ -3,6 +3,14 @@ export {
 } from "./JAWSigner.js"
 
 export {
+    CrossPlatformSigner
+} from "./cross-platform/CrossPlatformSigner.js"
+
+export {
+    AppSpecificSigner
+} from "./app-specific/AppSpecificSigner.js"
+
+export {
     type Signer
 } from "./interface.js"
 

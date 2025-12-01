@@ -10,6 +10,7 @@ import {
     ProviderEventEmitter,
     ProviderInterface,
     RequestArguments,
+    Mode,
 } from './interface.js';
 
 import {
@@ -28,6 +29,7 @@ import {
     createSigner,
     loadSignerType,
     storeSignerType,
+    clearSignerType,
 } from '../signer/index.js';
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
@@ -35,22 +37,37 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     private readonly preference: JawProviderPreference;
     private readonly communicator: Communicator;
     private readonly apiKey: string;
+    private readonly paymasterUrls?: Record<number, string>;
 
     private signer: Signer | null = null;
 
-    constructor({ metadata, preference, apiKey }: Readonly<ConstructorOptions>) {
+    constructor({ metadata, preference, apiKey, paymasterUrls }: Readonly<ConstructorOptions>) {
         super();
         this.metadata = metadata;
         this.preference = preference;
         this.apiKey = apiKey;
+        this.paymasterUrls = paymasterUrls;
         this.communicator = new Communicator({
             metadata,
             preference,
         });
 
-        const signerType = loadSignerType();
-        if (signerType) {
-            this.signer = this.initSigner(signerType);
+        // Determine the expected signer type from current preference
+        const expectedSignerType: SignerType = preference.mode === Mode.AppSpecific
+            ? 'appSpecific'
+            : 'crossPlatform';
+
+        const storedSignerType = loadSignerType();
+
+        // Only restore signer if the stored type matches the current preference
+        // If they don't match, clear the stored type to avoid using wrong signer
+        if (storedSignerType) {
+            if (storedSignerType === expectedSignerType) {
+                this.signer = this.initSigner(storedSignerType);
+            } else {
+                // Mode has changed, clear the old signer type
+                clearSignerType();
+            }
         }
     }
 
@@ -76,28 +93,44 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         }
         this.signer = null;
         correlationIds.clear();
+        this.emit('accountsChanged', []);
         this.emit('disconnect', standardErrors.provider.disconnected('User initiated disconnection'));
     }
 
     private async _request<T>(args: RequestArguments): Promise<T> {
+        console.log('[JAWProvider] _request called with method:', args.method);
+        console.log('[JAWProvider] preference.mode:', this.preference.mode);
+        console.log('[JAWProvider] Mode.AppSpecific:', Mode.AppSpecific);
+        console.log('[JAWProvider] mode === AppSpecific:', this.preference.mode === Mode.AppSpecific);
+
+        const signerType = this.preference.mode === Mode.AppSpecific
+            ? 'appSpecific'
+            : 'crossPlatform';
+
+        console.log('[JAWProvider] signerType:', signerType);
+
         try {
             checkErrorForInvalidRequestArgs(args);
             if (!this.signer) {
+                console.log('[JAWProvider] No signer, creating new signer for method:', args.method);
                 switch (args.method) {
                     case 'eth_requestAccounts': {
-                        const signerType = "crossPlatform";
+                        console.log('[JAWProvider] Initializing signer for eth_requestAccounts');
                         const signer = this.initSigner(signerType);
+                        console.log('[JAWProvider] Signer created, calling handshake');
                         await signer.handshake(args);
+                        console.log('[JAWProvider] Handshake complete');
 
                         this.signer = signer;
                         storeSignerType(signerType);
                         break;
                     }
                     case 'wallet_connect': {
-                        const signer = this.initSigner('crossPlatform');
+                        const signer = this.initSigner(signerType);
                         await signer.handshake({ method: 'handshake' }); // exchange session keys
                         const result = await signer.request(args); // send diffie-hellman encrypted request
                         this.signer = signer;
+                        storeSignerType(signerType);
                         return result as T;
                     }
                     case 'wallet_disconnect': {
@@ -106,7 +139,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     }
                     case 'wallet_sendCalls': 
                     case 'wallet_sign': {
-                        const ephemeralSigner = this.initSigner('crossPlatform');
+                        const ephemeralSigner = this.initSigner(signerType);
                         await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
                         const result = await ephemeralSigner.request(args); // send diffie-hellman encrypted request
                         try {
@@ -181,8 +214,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         return createSigner({
             signerType,
             metadata: this.metadata,
-            communicator: this.communicator,
+            communicator: signerType === 'crossPlatform' ? this.communicator : undefined,
+            uiHandler: signerType === 'appSpecific' ? this.preference.uiHandler : undefined,
             callback: this.emit.bind(this),
+            apiKey: signerType === 'appSpecific' ? this.apiKey: undefined,
+            paymasterUrls: signerType === 'appSpecific' ? this.paymasterUrls: undefined,
         });
     }
 

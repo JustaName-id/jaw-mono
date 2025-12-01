@@ -12,7 +12,8 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    }
+    },
+    "./style.css": "./dist/index.css"
   },
   "devDependencies": {
     "autoprefixer": "^10.4.21",

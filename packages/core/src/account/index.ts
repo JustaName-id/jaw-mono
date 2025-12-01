@@ -19,6 +19,7 @@ export {
     type FindOwnerIndexParams,
     getBundlerClient,
     sendTransaction,
+    sendBundledTransaction,
     estimateUserOpGas,
     createSmartAccount,
     findOwnerIndex,

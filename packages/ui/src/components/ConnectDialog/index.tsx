@@ -1,10 +1,12 @@
 'use client'
 
+import { useState, useEffect } from "react";
 import { BadgeDollarIcon, EyeIcon } from "../../icons";
 import { useIsMobile } from "../../hooks";
 import { DefaultDialog } from "../DefaultDialog";
 import { Button } from "../ui/button";
 import { ConnectDialogProps } from "./types";
+import { getJustaNameInstance } from "../../utils/justaNameInstance";
 
 export const ConnectDialog = ({
   open,
@@ -16,12 +18,34 @@ export const ConnectDialog = ({
   accountName,
   walletAddress,
   chainName,
+  chainId,
   chainIcon,
   onConnect,
   onCancel,
   isProcessing,
 }: ConnectDialogProps) => {
   const isMobile = useIsMobile();
+  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+
+  // Resolve wallet address to human-readable name
+  useEffect(() => {
+    if (walletAddress && chainId) {
+      const justaName = getJustaNameInstance();
+      justaName.subnames.reverseResolve({
+        address: walletAddress as `0x${string}`,
+        chainId: chainId,
+      }).then((result) => {
+        if (result) {
+          setResolvedAddress(result);
+        }
+      }).catch(() => {
+        // Silently fail if resolution fails
+      });
+    }
+  }, [walletAddress, chainId]);
+
+  // Use resolved address, then accountName prop, then truncated address
+  const displayName = resolvedAddress || accountName;
 
   // Format origin to display only domain (remove protocol)
   const formatOrigin = (url: string) => {
@@ -60,9 +84,9 @@ export const ConnectDialog = ({
           </p>
           <div className="flex flex-col gap-1">
             <p className="text-sm leading-none text-muted-foreground">
-              Sign in as {accountName || formatAddress(walletAddress)}
+              Sign in as {displayName || formatAddress(walletAddress)}
             </p>
-            {accountName && (
+            {displayName && (
               <p className="text-sm leading-none text-muted-foreground">
                 {formatAddress(walletAddress)}
               </p>
