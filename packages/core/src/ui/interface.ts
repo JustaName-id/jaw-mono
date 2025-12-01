@@ -45,6 +45,7 @@ export interface SignatureUIRequest extends BaseUIRequest {
   data: {
     message: string;
     address: Address;
+    chainId: number;
   };
 }
 
@@ -56,6 +57,7 @@ export interface TypedDataUIRequest extends BaseUIRequest {
   data: {
     typedData: string; // JSON string
     address: Address;
+    chainId: number;
   };
 }
 

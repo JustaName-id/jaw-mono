@@ -97,6 +97,7 @@ export type {
     TransactionUIRequest,
     PermissionUIRequest,
     RevokePermissionUIRequest,
+    SendTransactionUIRequest,
     WalletSignUIRequest,
     UIHandlerOptions,
     BaseUIRequest,

@@ -272,10 +272,10 @@ describe('AppSpecificSigner', () => {
       expect(mockUIHandler.request).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'personal_sign',
-          data: {
+          data: expect.objectContaining({
             message: '0x48656c6c6f',
             address: '0x1234567890123456789012345678901234567890',
-          },
+          }),
         })
       );
     });
@@ -303,10 +303,10 @@ describe('AppSpecificSigner', () => {
       expect(mockUIHandler.request).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'eth_signTypedData_v4',
-          data: {
+          data: expect.objectContaining({
             address: '0x1234567890123456789012345678901234567890',
             typedData,
-          },
+          }),
         })
       );
     });

@@ -12,6 +12,7 @@ import {
   SignatureUIRequest,
   TypedDataUIRequest,
   TransactionUIRequest,
+  SendTransactionUIRequest,
   PermissionUIRequest,
   RevokePermissionUIRequest,
   WalletSignUIRequest,
@@ -22,8 +23,8 @@ import {
   SUPPORTED_CHAINS,
   Chain,
   JAW_RPC_URL,
-  toJustanAccount,
   sendBundledTransaction,
+  sendTransaction,
   grantPermissions,
   revokePermission,
   getPermissionFromRelay,
@@ -31,11 +32,11 @@ import {
   calculateGas,
   SubnameTextRecordCapabilityRequest,
   type JustanAccountImplementation,
-  type ToJustanAccountReturnType,
 } from '@jaw.id/core';
+import type { SmartAccount } from 'viem/account-abstraction';
 import { toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, parseEther, formatUnits, erc20Abi, createPublicClient, http } from 'viem';
-import type { Address, Hex } from 'viem';
+import type { Address, Hex, Hash } from 'viem';
 
 // Import UI components using relative paths (we're inside @jaw/ui)
 import { OnboardingDialog } from '../components/OnboardingDialog';
@@ -268,6 +269,7 @@ export class ReactUIHandler implements UIHandler {
       'personal_sign',
       'eth_signTypedData_v4',
       'wallet_sendCalls',
+      'eth_sendTransaction',
       'wallet_grantPermissions',
       'wallet_revokePermissions',
       'wallet_sign',
@@ -345,6 +347,7 @@ export class ReactUIHandler implements UIHandler {
                   data: {
                     message,
                     address: walletSignRequest.data.address,
+                    chainId: walletSignRequest.data.chainId,
                   },
                 } as SignatureUIRequest}
                 onApprove={onApprove}
@@ -363,6 +366,7 @@ export class ReactUIHandler implements UIHandler {
                 data: {
                   message,
                   address: walletSignRequest.data.address,
+                  chainId: walletSignRequest.data.chainId,
                 },
               } as SignatureUIRequest}
               onApprove={onApprove}
@@ -382,6 +386,7 @@ export class ReactUIHandler implements UIHandler {
                 data: {
                   typedData: walletSignRequest.data.request.data,
                   address: walletSignRequest.data.address,
+                  chainId: walletSignRequest.data.chainId,
                 },
               } as TypedDataUIRequest}
               onApprove={onApprove}
@@ -418,6 +423,18 @@ export class ReactUIHandler implements UIHandler {
         return (
           <TransactionDialogWrapper
             request={request as TransactionUIRequest}
+            onApprove={onApprove}
+            onReject={onReject}
+            apiKey={this.config.apiKey}
+            defaultChainId={this.config.defaultChainId}
+            paymasterUrls={this.config.paymasterUrls}
+          />
+        );
+
+      case 'eth_sendTransaction':
+        return (
+          <SendTransactionDialogWrapper
+            request={request as SendTransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
             apiKey={this.config.apiKey}
@@ -496,10 +513,9 @@ async function recreateSmartAccountForSigning(
   const chain = buildChainConfigFromApiKey(targetChainId, apiKey, paymasterUrl);
   const client = getBundlerClient(chain);
 
-  const smartAccount = await toJustanAccount({
-    client: client as JustanAccountImplementation['client'],
-    owners: [webAuthnAccount],
-  });
+  // Use createSmartAccount which properly includes PERMISSIONS_MANAGER_ADDRESS
+  // and finds the correct owner index for deployed accounts
+  const smartAccount = await createSmartAccount(webAuthnAccount, client as JustanAccountImplementation['client']);
 
   return { smartAccount, chain, webAuthnAccount };
 }
@@ -819,8 +835,8 @@ function SignatureDialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // SignatureUIRequest doesn't have chainId, use defaultChainId
-  const chainId = defaultChainId || 1;
+  // Use chainId from request (current chain), fallback to defaultChainId
+  const chainId = request.data.chainId || defaultChainId || 1;
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -886,8 +902,8 @@ function Eip712DialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  // TypedDataUIRequest doesn't have chainId, use defaultChainId
-  const chainId = defaultChainId || 1;
+  // Use chainId from request (current chain), fallback to defaultChainId
+  const chainId = request.data.chainId || defaultChainId || 1;
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -963,7 +979,7 @@ function TransactionDialogWrapper({
   const [gasFee, setGasFee] = useState<string>('');
   const [gasFeeLoading, setGasFeeLoading] = useState(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
-  const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
+  const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const chain = useMemo(
@@ -1121,6 +1137,181 @@ function TransactionDialogWrapper({
   );
 }
 
+// SendTransactionDialogWrapper - handles eth_sendTransaction (legacy single transaction)
+function SendTransactionDialogWrapper({
+  request,
+  onApprove,
+  onReject,
+  apiKey,
+  defaultChainId,
+  paymasterUrls,
+}: {
+  request: SendTransactionUIRequest;
+  onApprove: (data: any) => void;
+  onReject: (error?: Error) => void;
+  apiKey?: string;
+  defaultChainId?: number;
+  paymasterUrls?: Record<number, string>;
+}) {
+  const [open, setOpen] = useState(true);
+  const [isProcessing, setIsProcessing] = useState(false);
+  const [gasFee, setGasFee] = useState<string>('');
+  const [gasFeeLoading, setGasFeeLoading] = useState(true);
+  const [gasEstimationError, setGasEstimationError] = useState<string>('');
+  const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
+
+  const chainId = request.data.chainId || defaultChainId || 1;
+  const chain = useMemo(
+    () => buildChainConfigFromApiKey(chainId, apiKey, paymasterUrls?.[chainId]),
+    [chainId, apiKey, paymasterUrls]
+  );
+  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
+  const networkName = viemChain?.name || 'Unknown Network';
+  const isSponsored = !!paymasterUrls?.[chainId];
+
+  // Transform eth_sendTransaction data to transactions format expected by dialog
+  const transactions = useMemo(() => [{
+    to: request.data.to,
+    data: request.data.data,
+    value: request.data.value,
+    chainId: request.data.chainId,
+  }], [request.data]);
+
+  // Convert to call format for smart account operations
+  const transactionCalls = useMemo(() => {
+    let value = 0n;
+    if (request.data.value && request.data.value !== '0') {
+      if (request.data.value.startsWith('0x')) {
+        value = BigInt(request.data.value);
+      } else if (/^\d+$/.test(request.data.value)) {
+        value = BigInt(request.data.value);
+      } else {
+        value = parseEther(request.data.value);
+      }
+    }
+    return [{
+      to: request.data.to as Address,
+      value,
+      data: (request.data.data || '0x') as Hex,
+    }];
+  }, [request.data]);
+
+  // Initialize smart account
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeSmartAccount = async () => {
+      try {
+        const { smartAccount: account } = await recreateSmartAccountForSigning(
+          apiKey,
+          chainId,
+          paymasterUrls?.[chainId]
+        );
+        if (isMounted) {
+          setSmartAccount(account);
+        }
+      } catch (error) {
+        console.error('Error initializing smart account:', error);
+        if (isMounted) {
+          setGasEstimationError('Failed to initialize account');
+          setGasFeeLoading(false);
+        }
+      }
+    };
+
+    initializeSmartAccount();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiKey, chainId, paymasterUrls]);
+
+  // Gas estimation using core package
+  useEffect(() => {
+    if (!smartAccount || transactionCalls.length === 0) return;
+
+    const estimateGas = async () => {
+      try {
+        setGasFeeLoading(true);
+        setGasEstimationError('');
+
+        // Estimate gas using core package
+        const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls, chain);
+        const gasPrice = await calculateGas(chain, gasEstimate);
+        setGasFee(gasPrice);
+
+        // Override with sponsored if paymaster is available
+        if (isSponsored) {
+          setGasFee('sponsored');
+        }
+      } catch (error) {
+        console.error('Error estimating gas:', error);
+
+        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
+          if (isSponsored) {
+            setGasFee('sponsored');
+            setGasEstimationError('');
+          } else {
+            setGasFee('');
+            setGasEstimationError('Insufficient funds');
+          }
+        } else {
+          setGasFee('');
+          setGasEstimationError('Failed to estimate gas');
+        }
+      } finally {
+        setGasFeeLoading(false);
+      }
+    };
+
+    estimateGas();
+  }, [smartAccount, transactionCalls, chain, isSponsored]);
+
+  const handleConfirm = async () => {
+    setIsProcessing(true);
+    try {
+      if (!smartAccount) {
+        throw new Error('Smart account not initialized');
+      }
+
+      // Use sendTransaction which waits for receipt and returns the actual transaction hash
+      const txHash: Hash = await sendTransaction(smartAccount, transactionCalls, chain);
+
+      // eth_sendTransaction returns transaction hash string
+      onApprove(txHash);
+    } catch (error) {
+      console.error('Transaction failed:', error);
+      onReject(error as Error);
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const handleCancel = () => {
+    setOpen(false);
+    onReject(UIError.userRejected());
+  };
+
+  return (
+    <TransactionDialog
+      open={open}
+      onOpenChange={setOpen}
+      transactions={transactions}
+      walletAddress={request.data.from}
+      gasFee={gasFee}
+      gasFeeLoading={gasFeeLoading}
+      gasEstimationError={gasEstimationError}
+      sponsored={isSponsored}
+      ethPrice={0}
+      onConfirm={handleConfirm}
+      onCancel={handleCancel}
+      isProcessing={isProcessing}
+      transactionStatus="pending"
+      networkName={networkName}
+    />
+  );
+}
+
 function PermissionDialogWrapper({
   request,
   onApprove,
@@ -1237,7 +1428,8 @@ function SiweDialogWrapper({
   const [isProcessing, setIsProcessing] = useState(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
 
-  const chainId = defaultChainId || 1;
+  // Use chainId from request (current chain), fallback to defaultChainId
+  const chainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(chainId);
   const chainIconKey = getChainIconKeyFromId(chainId);
   const chainIcon = useChainIcon(chainIconKey, 24);

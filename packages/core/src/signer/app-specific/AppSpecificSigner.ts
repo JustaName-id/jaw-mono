@@ -160,6 +160,7 @@ export class AppSpecificSigner extends JAWSigner {
                     data: {
                         message,
                         address,
+                        chainId: this.chain.id,
                     },
                 };
 
@@ -184,6 +185,7 @@ export class AppSpecificSigner extends JAWSigner {
                     data: {
                         address,
                         typedData,
+                        chainId: this.chain.id,
                     },
                 };
 
@@ -231,7 +233,11 @@ export class AppSpecificSigner extends JAWSigner {
                     type: 'wallet_sendCalls',
                     timestamp: Date.now(),
                     correlationId,
-                    data: callsData,
+                    data: {
+                        ...callsData,
+                        // Use current chain if no chainId provided (same as CrossPlatformSigner)
+                        chainId: callsData.chainId ?? this.chain.id,
+                    },
                 };
 
                 const response = await this.uiHandler.request<{ id: string; chainId: number }>(uiRequest);
@@ -249,7 +255,6 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'eth_sendTransaction': {
-                // eth_sendTransaction params don't include chainId (we add it) and from is optional
                 type EthSendTransactionParams = Omit<SendTransactionUIRequest['data'], 'chainId' | 'from'> & { from?: Address };
                 const params = request.params as [EthSendTransactionParams];
                 const txData = params[0];
