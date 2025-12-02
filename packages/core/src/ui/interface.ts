@@ -139,7 +139,25 @@ export interface RevokePermissionUIRequest extends BaseUIRequest {
 }
 
 /**
- * Wallet sign request (wallet_sign)
+ * ERC-7871 PersonalSign request data
+ */
+export interface PersonalSignRequestData {
+  type: '0x45';
+  data: {
+    message: string; // UTF-8 message string
+  };
+}
+
+/**
+ * ERC-7871 TypedData request data
+ */
+export interface TypedDataRequestData {
+  type: '0x01';
+  data: Record<string, unknown>; // TypedData as defined by EIP-712
+}
+
+/**
+ * Wallet sign request (wallet_sign) - ERC-7871
  * Type 0x45 = personal sign, Type 0x01 = EIP-712 typed data
  */
 export interface WalletSignUIRequest extends BaseUIRequest {
@@ -147,10 +165,7 @@ export interface WalletSignUIRequest extends BaseUIRequest {
   data: {
     address: Address;
     chainId?: number;
-    request: {
-      type: '0x45' | '0x01';
-      data: string;
-    };
+    request: PersonalSignRequestData | TypedDataRequestData;
   };
 }
 

@@ -20,8 +20,8 @@ export default function TestPage() {
         preference: {
           keysUrl: 'http://localhost:3001', // Local popup URL
           showTestnets: true,
-          mode: Mode.AppSpecific,
-          uiHandler: new ReactUIHandler()
+          // mode: Mode.AppSpecific,
+          // uiHandler: new ReactUIHandler()
         },
         apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
       })
@@ -238,7 +238,7 @@ export default function TestPage() {
           address: accounts[0],
           request: {
             type: '0x45', // Personal Sign (EIP-191)
-            data: message
+            data: { message } // ERC-7871: data must be { message: string } for type 0x45
           }
         }]
       });

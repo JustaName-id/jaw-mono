@@ -11,6 +11,8 @@ import {
     PermissionUIRequest,
     RevokePermissionUIRequest,
     WalletSignUIRequest,
+    PersonalSignRequestData,
+    TypedDataRequestData,
 } from '../../ui/interface.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/interface.js';
 import {
@@ -199,7 +201,8 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_sign': {
-                type WalletSignParams = { request: WalletSignUIRequest['data']['request'] };
+                // ERC-7871 wallet_sign params structure
+                type WalletSignParams = { request: PersonalSignRequestData | TypedDataRequestData };
                 const params = request.params as [WalletSignParams];
                 const signParams = params[0];
 

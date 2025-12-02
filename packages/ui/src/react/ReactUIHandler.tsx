@@ -336,8 +336,9 @@ export class ReactUIHandler implements UIHandler {
         const signType = walletSignRequest.data.request.type;
 
         if (signType === '0x45') {
-          // Personal sign - check for SIWE
-          const message = walletSignRequest.data.request.data;
+          // ERC-7871 PersonalSign - data is { message: string }
+          const requestData = walletSignRequest.data.request.data as { message: string };
+          const message = requestData.message;
           if (isSiweMessage(message)) {
             return (
               <SiweDialogWrapper
@@ -377,14 +378,15 @@ export class ReactUIHandler implements UIHandler {
             />
           );
         } else if (signType === '0x01') {
-          // EIP-712 typed data
+          // ERC-7871 TypedData - data is the TypedData object directly
+          const typedData = walletSignRequest.data.request.data as Record<string, unknown>;
           return (
             <Eip712DialogWrapper
               request={{
                 ...walletSignRequest,
                 type: 'eth_signTypedData_v4',
                 data: {
-                  typedData: walletSignRequest.data.request.data,
+                  typedData: JSON.stringify(typedData),
                   address: walletSignRequest.data.address,
                   chainId: walletSignRequest.data.chainId,
                 },

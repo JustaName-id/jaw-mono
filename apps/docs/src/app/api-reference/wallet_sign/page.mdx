@@ -14,7 +14,7 @@ await jaw.provider.request({
   params: [{
     request: {
       type: '0x45', // or '0x01'
-      data: '0x...' // or typed data object
+      data: { message: 'Hello World' } // or TypedData object for 0x01
     },
   }],
 });
@@ -25,14 +25,14 @@ await jaw.provider.request({
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `request.type` | `string` | Yes | Signature type: `"0x45"` (personal_sign) or `"0x01"` (signTypedData_v4) |
-| `request.data` | `0x${string}` or `object` | Yes | Message to sign (hex for 0x45, typed data object for 0x01) |
+| `request.data` | `object` | Yes | For 0x45: `{ message: string }`. For 0x01: TypedData object (EIP-712) |
 
 ### Supported Types
 
-| Type | EIP Standard | Description | Delegates To |
-|------|--------------|-------------|--------------|
-| `0x45` | EIP-191 | Personal message signing | `personal_sign` |
-| `0x01` | EIP-712 | Structured typed data signing | `eth_signTypedData_v4` |
+| Type | EIP Standard | Description | Data Format |
+|------|--------------|-------------|-------------|
+| `0x45` | EIP-191 | Personal message signing | `{ message: string }` - UTF-8 message string |
+| `0x01` | EIP-712 | Structured typed data signing | TypedData object with `types`, `domain`, `primaryType`, `message` |
 
 ---
 
@@ -52,7 +52,7 @@ Returns the signature as a hexadecimal string.
 
 ## Behavior
 
-- **Type 0x45**: Delegates to `personal_sign` - adds EIP-191 prefix and signs
+- **Type 0x45**: Delegates to `personal_sign` - adds EIP-191 prefix and signs the UTF-8 message
 - **Type 0x01**: Delegates to `eth_signTypedData_v4` - signs structured EIP-712 data
 - Opens popup for user approval
 - Returns signature in same format as the underlying method
@@ -74,17 +74,16 @@ Returns the signature as a hexadecimal string.
 ### Personal Message (Type 0x45)
 
 ```typescript
-import { toHex } from 'viem';
-
 const message = 'Hello World';
-const messageHex = toHex(message);
 
 const signature = await jaw.provider.request({
   method: 'wallet_sign',
   params: [{
     request: {
       type: '0x45',
-      data: messageHex,
+      data: {
+        message: message, // UTF-8 message string
+      },
     },
   }],
 });
@@ -122,7 +121,7 @@ const signature = await jaw.provider.request({
   params: [{
     request: {
       type: '0x01',
-      data: typedData,
+      data: typedData, // TypedData object directly
     },
   }],
 });
@@ -131,8 +130,6 @@ const signature = await jaw.provider.request({
 ### SIWE (Sign-In With Ethereum)
 
 ```typescript
-import { toHex } from 'viem';
-
 const siweMessage = `example.com wants you to sign in with your Ethereum account:
 0x1234...
 
@@ -149,7 +146,9 @@ const signature = await jaw.provider.request({
   params: [{
     request: {
       type: '0x45',
-      data: toHex(siweMessage),
+      data: {
+        message: siweMessage, // UTF-8 message string
+      },
     },
   }],
 });

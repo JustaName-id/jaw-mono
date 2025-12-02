@@ -443,9 +443,10 @@ export default function KeysJawIdApp() {
 
       if (pendingRequest.method === 'wallet_sign') {
         // wallet_sign: params[0] is SignParams object
+        // ERC-7871: For type 0x45, data is { message: string }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const signParams = pendingRequest.params[0] as { request: { type: string; data: any }; address?: string };
-        messageToSign = typeof signParams?.request?.data === 'string' ? signParams.request.data : String(signParams?.request?.data || '');
+        const signParams = pendingRequest.params[0] as { request: { type: string; data: { message: string } }; address?: string };
+        messageToSign = signParams?.request?.data?.message || '';
         address = signParams?.address;
       } else {
         // personal_sign: params[0] is message, params[1] is address
@@ -537,8 +538,9 @@ export default function KeysJawIdApp() {
       let typedDataJson: string;
 
       if (pendingRequest.method === 'wallet_sign') {
+        // ERC-7871: For type 0x01, data is the TypedData object directly
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const signParams = pendingRequest.params[0] as { request: { type: string; data: any }; address?: string };
+        const signParams = pendingRequest.params[0] as { request: { type: string; data: Record<string, unknown> }; address?: string };
 
         const data = signParams?.request?.data;
         typedDataJson = typeof data === 'string' ? data : JSON.stringify(data);

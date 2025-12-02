@@ -474,11 +474,13 @@ describe('AppSpecificSigner', () => {
 
     it('should handle wallet_sign request', async () => {
       // Arrange
-      // wallet_sign params follow the format: { request: { type: '0x45' | '0x01'; data: string } }
+      // ERC-7871 wallet_sign params: { request: { type: '0x45' | '0x01'; data: { message: string } | TypedData } }
       const signParams = {
         request: {
           type: '0x45' as const, // Personal sign (EIP-191)
-          data: '0x48656c6c6f', // "Hello" in hex
+          data: {
+            message: 'Hello', // UTF-8 message string per ERC-7871
+          },
         },
       };
 
@@ -508,7 +510,9 @@ describe('AppSpecificSigner', () => {
             chainId: 1,
             request: {
               type: '0x45',
-              data: '0x48656c6c6f',
+              data: {
+                message: 'Hello',
+              },
             },
           }),
         })

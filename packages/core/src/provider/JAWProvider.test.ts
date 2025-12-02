@@ -581,10 +581,10 @@ describe('JAWProvider', () => {
     });
 
     it('should create ephemeral signer and cleanup after request', async () => {
-      // Arrange
+      // Arrange - ERC-7871 wallet_sign format
       const request: RequestArguments = {
         method: 'wallet_sign',
-        params: ['0x1234567890123456789012345678901234567890', '0x48656c6c6f'],
+        params: [{ request: { type: '0x45', data: { message: 'Hello' } } }],
       };
       const mockSignature = '0xsignature';
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
@@ -603,10 +603,10 @@ describe('JAWProvider', () => {
     });
 
     it('should return result even if cleanup fails', async () => {
-      // Arrange
+      // Arrange - ERC-7871 wallet_sign format
       const request: RequestArguments = {
         method: 'wallet_sign',
-        params: ['0x1234567890123456789012345678901234567890', '0x48656c6c6f'],
+        params: [{ request: { type: '0x45', data: { message: 'Hello' } } }],
       };
       const mockSignature = '0xsignature';
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
