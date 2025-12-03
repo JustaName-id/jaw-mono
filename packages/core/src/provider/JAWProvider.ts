@@ -149,18 +149,32 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         await this.disconnect();
                         return null as T;
                     }
-                    case 'wallet_sendCalls': 
+                    case 'wallet_sendCalls':
                     case 'wallet_sign': {
                         const ephemeralSigner = this.initSigner(signerType);
-                        await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
-                        const result = await ephemeralSigner.request(args); // send diffie-hellman encrypted request
-                        try {
-                            await ephemeralSigner.cleanup(); // clean up (rotate) the ephemeral session keys
-                        } catch (cleanupError) {
-                            // Log cleanup error but don't fail the request
-                            console.warn('Ephemeral signer cleanup failed:', cleanupError);
+
+                        if (signerType === 'appSpecific') {
+                            // AppSpecific needs wallet_connect handshake to establish account
+                            await ephemeralSigner.handshake({ method: 'wallet_connect' });
+                            const result = await ephemeralSigner.request(args);
+                            try {
+                                await ephemeralSigner.cleanup();
+                            } catch (cleanupError) {
+                                console.warn('Ephemeral signer cleanup failed:', cleanupError);
+                            }
+                            return result as T;
+                        } else {
+                            // CrossPlatform uses Diffie-Hellman key exchange
+                            await ephemeralSigner.handshake({ method: 'handshake' }); // exchange session keys
+                            const result = await ephemeralSigner.request(args); // send diffie-hellman encrypted request
+                            try {
+                                await ephemeralSigner.cleanup(); // clean up (rotate) the ephemeral session keys
+                            } catch (cleanupError) {
+                                // Log cleanup error but don't fail the request
+                                console.warn('Ephemeral signer cleanup failed:', cleanupError);
+                            }
+                            return result as T;
                         }
-                        return result as T;
                     }
                     case 'wallet_getAssets': {
                         const result = await handleGetAssetsRequest(
