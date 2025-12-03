@@ -127,11 +127,23 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     }
                     case 'wallet_connect': {
                         const signer = this.initSigner(signerType);
-                        await signer.handshake({ method: 'handshake' }); // exchange session keys
-                        const result = await signer.request(args); // send diffie-hellman encrypted request
-                        this.signer = signer;
-                        storeSignerType(signerType);
-                        return result as T;
+                        // For AppSpecific mode, pass full args to handshake so capabilities are available
+                        // For CrossPlatform mode, handshake only exchanges session keys
+                        if (signerType === 'appSpecific') {
+                            await signer.handshake(args); // pass full args with capabilities
+                            this.signer = signer;
+                            storeSignerType(signerType);
+                            // For AppSpecific, handshake already handles the full wallet_connect flow
+                            // and returns the result, so we get it from the cached response
+                            const result = await signer.request(args);
+                            return result as T;
+                        } else {
+                            await signer.handshake({ method: 'handshake' }); // exchange session keys
+                            const result = await signer.request(args); // send diffie-hellman encrypted request
+                            this.signer = signer;
+                            storeSignerType(signerType);
+                            return result as T;
+                        }
                     }
                     case 'wallet_disconnect': {
                         await this.disconnect();
