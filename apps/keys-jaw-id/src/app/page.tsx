@@ -6,7 +6,7 @@ import { SignInScreen } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
-import { ConnectModal } from '../components/ConnectModal';
+import { ConnectModal, type SignInWithEthereumCapabilityRequest } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
@@ -18,6 +18,7 @@ import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
 import { isSiweMessage } from '../lib/siwe-handler';
+import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
 import type { PopupConfig, PendingRequest } from '../utils/types';
 import { extractSubnameTextRecords } from '../lib/extractSubnameTexts';
@@ -202,7 +203,7 @@ export default function KeysJawIdApp() {
       // For pure key exchange handshake (method: 'handshake'), send immediate response
       if (method === 'handshake') {
         // Send empty accounts response for key exchange handshake
-        const response = await cryptoHandler.createHandshakeResponse(request.id, []);
+        const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         communicator.sendMessage(response as unknown as Message);
         return;
@@ -221,8 +222,10 @@ export default function KeysJawIdApp() {
           params: Array.isArray(params) ? params : [],
           chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', paymasterUrl: chain.paymasterUrl } : undefined,
           onApprove: async (result: unknown) => {
-            const accounts = result as string[];
-            const response = await cryptoHandler.createHandshakeResponse(request.id, accounts);
+            const response = await cryptoHandler.createHandshakeResponse(
+              request.id,
+              result as { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> }
+            );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(response as any);
           },
@@ -305,19 +308,10 @@ export default function KeysJawIdApp() {
         params: Array.isArray(params) ? params : [],
         chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', paymasterUrl: chain.paymasterUrl } : undefined,
         onApprove: async (result: unknown) => {
-          // For wallet_connect, format as WalletConnectResponse
-          let responseData: unknown = result;
-          if (method === 'wallet_connect') {
-            const accounts = Array.isArray(result) ? result : [result];
-            responseData = {
-              accounts: accounts.map((address: string) => ({ address }))
-            };
-          }
-
           const response = await cryptoHandler.createEncryptedResponse(
             request.id || '',
             request.correlationId || '',
-            responseData
+            result
           );
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           communicator.sendMessage(response as any);
@@ -917,19 +911,121 @@ export default function KeysJawIdApp() {
 
     // Show connection approval (account-selection state)
     if (state === 'account-selection' && pendingRequest?.type === SDKRequestType.CONNECT) {
+      // Extract signInWithEthereum capability from wallet_connect params
+      // params structure: [{ capabilities?: { signInWithEthereum?: {...} } }]
+      const walletConnectParams = pendingRequest.params as [{ capabilities?: { signInWithEthereum?: SignInWithEthereumCapabilityRequest } }] | undefined;
+      const signInWithEthereumCapability = walletConnectParams?.[0]?.capabilities?.signInWithEthereum;
+      const walletAddress = authQuery.walletAddress || '0x0000000000000000000000000000000000000000';
+
+      // If SIWE capability is requested, show SiweModal instead of ConnectModal
+      if (signInWithEthereumCapability && pendingRequest.chain) {
+        // Build the SIWE message using viem's createSiweMessage
+        const buildSiweMessageFromCapability = () => {
+          const origin = pendingRequest.origin;
+          let defaultDomain: string;
+          let defaultUri: string;
+
+          try {
+            const url = new URL(origin);
+            defaultDomain = url.host;
+            defaultUri = origin;
+          } catch {
+            defaultDomain = origin;
+            defaultUri = origin;
+          }
+
+          // Convert hex chainId to number
+          const chainIdNumber = parseInt(signInWithEthereumCapability.chainId, 16);
+
+          return createSiweMessage({
+            address: walletAddress as `0x${string}`,
+            chainId: chainIdNumber,
+            domain: signInWithEthereumCapability.domain || defaultDomain,
+            nonce: signInWithEthereumCapability.nonce,
+            uri: signInWithEthereumCapability.uri || defaultUri,
+            version: '1',
+            statement: signInWithEthereumCapability.statement,
+            issuedAt: signInWithEthereumCapability.issuedAt ? new Date(signInWithEthereumCapability.issuedAt) : new Date(),
+            expirationTime: signInWithEthereumCapability.expirationTime ? new Date(signInWithEthereumCapability.expirationTime) : undefined,
+            notBefore: signInWithEthereumCapability.notBefore ? new Date(signInWithEthereumCapability.notBefore) : undefined,
+            requestId: signInWithEthereumCapability.requestId,
+            resources: signInWithEthereumCapability.resources,
+          });
+        };
+
+        const siweMessage = buildSiweMessageFromCapability();
+
+        return (
+          <SiweModal
+            origin={pendingRequest.origin}
+            message={siweMessage}
+            address={walletAddress}
+            chain={pendingRequest.chain}
+            appName={pendingRequest.metadata?.appName}
+            appLogoUrl={pendingRequest.metadata?.appLogoUrl}
+            onSuccess={async (signature: string, message: string) => {
+              setState('processing');
+              try {
+                console.log('✅ User signed SIWE message');
+
+                // Build response per ERC-7846 format with SIWE capability
+                const response = {
+                  accounts: [{
+                    address: walletAddress,
+                    capabilities: {
+                      signInWithEthereum: {
+                        message,
+                        signature: signature as `0x${string}`
+                      }
+                    }
+                  }]
+                };
+
+                console.log('✅ SIWE response:', response);
+                await pendingRequest.onApprove(response);
+                setState('success');
+                setTimeout(() => window.close(), 1500);
+              } catch (err) {
+                console.error('❌ Failed to approve connection with SIWE:', err);
+                setError(err instanceof Error ? err.message : 'Failed to approve connection');
+                setState('error');
+              }
+            }}
+            onError={async (error) => {
+              try {
+                await pendingRequest.onReject(error.message);
+                window.close();
+              } catch (err) {
+                console.error('❌ Failed to reject:', err);
+                window.close();
+              }
+            }}
+          />
+        );
+      }
+
+      // No SIWE capability - show regular ConnectModal
       return (
         <ConnectModal
           origin={pendingRequest.origin}
           appName={pendingRequest.metadata?.appName || 'dApp'}
           appLogoUrl={pendingRequest.metadata?.appLogoUrl}
           accountName={authQuery.accountName || currentAccount?.username}
-          walletAddress={authQuery.walletAddress || '0x0000000000000000000000000000000000000000'}
+          walletAddress={walletAddress}
           chain={pendingRequest.chain}
           onSuccess={async () => {
             setState('processing');
             try {
               console.log('✅ User approved connection');
-              await pendingRequest.onApprove([authQuery.walletAddress || '0x0000000000000000000000000000000000000000']);
+
+              // Build response per ERC-7846 format (no capabilities)
+              const response = {
+                accounts: [{
+                  address: walletAddress
+                }]
+              };
+
+              await pendingRequest.onApprove(response);
               setState('success');
               setTimeout(() => window.close(), 1500);
             } catch (err) {

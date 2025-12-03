@@ -5,6 +5,32 @@ import { useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 
+/**
+ * SignInWithEthereum capability request parameters per ERC-7846
+ */
+export interface SignInWithEthereumCapabilityRequest {
+  nonce: string;
+  chainId: string; // EIP-155 hex-encoded (e.g., "0x1")
+  version?: string;
+  scheme?: string;
+  domain?: string;
+  uri?: string;
+  statement?: string;
+  issuedAt?: string;
+  expirationTime?: string;
+  notBefore?: string;
+  requestId?: string;
+  resources?: string[];
+}
+
+/**
+ * SignInWithEthereum capability response per ERC-7846
+ */
+export interface SignInWithEthereumCapabilityResponse {
+  message: string;
+  signature: `0x${string}`;
+}
+
 export interface ConnectModalProps {
   origin: string;
   appName: string;
@@ -38,8 +64,6 @@ export const ConnectModal = ({
     try {
       setIsProcessing(true);
       console.log('🔗 User approved connection to', appName);
-
-      // Call onSuccess - parent will handle the actual connection logic
       onSuccess();
     } catch (error) {
       console.error("Error connecting:", error);
