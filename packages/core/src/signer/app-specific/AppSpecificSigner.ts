@@ -20,8 +20,10 @@ import {
     WalletConnectRequest,
     WalletGrantPermissionsRequest,
     WalletRevokePermissionsRequest,
+    getPermissionFromRelay,
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
+import { standardErrors } from '../../errors/index.js';
 
 type ConstructorOptions = {
     metadata: AppMetadata;
@@ -349,6 +351,23 @@ export class AppSpecificSigner extends JAWSigner {
                 const revokeParams = request.params as WalletRevokePermissionsRequest['params'];
                 const revokeData = revokeParams[0];
 
+                // Fetch permission from relay to get the correct chainId
+                // (permission may have been granted on a different chain than current)
+                const apiKey = store.config.get().apiKey;
+                if (!apiKey) {
+                    throw standardErrors.rpc.internal('No API key configured');
+                }
+
+                let relayPermission;
+                try {
+                    relayPermission = await getPermissionFromRelay(revokeData.id, apiKey);
+                } catch {
+                    throw standardErrors.rpc.invalidParams(
+                        `Permission not found: ${revokeData.id}. It may have already been revoked.`
+                    );
+                }
+                const permissionChainId = parseInt(relayPermission.chainId, 16);
+
                 const uiRequest: RevokePermissionUIRequest = {
                     id: crypto.randomUUID(),
                     type: 'wallet_revokePermissions',
@@ -357,7 +376,7 @@ export class AppSpecificSigner extends JAWSigner {
                     data: {
                         permissionId: revokeData.id,
                         address: revokeData.address ?? this.accounts[0],
-                        chainId: this.chain.id,
+                        chainId: permissionChainId,
                     },
                 };
 

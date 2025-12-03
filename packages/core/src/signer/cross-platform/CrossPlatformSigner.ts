@@ -3,6 +3,7 @@ import { UUID } from 'crypto';
 import { JAWSigner } from '../JAWSigner.js';
 
 import { Communicator } from '../../communicator/index.js';
+import { getPermissionFromRelay } from '../../rpc/index.js';
 import { standardErrors } from '../../errors/index.js';
 import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../../messages/index.js';
 import { KeyManager } from '../../key-manager/index.js';
@@ -97,8 +98,32 @@ export class CrossPlatformSigner extends JAWSigner {
     }
 
     protected override async handleSigningRequest(request: RequestArguments): Promise<unknown> {
-        // For methods that support chainId in params, resolve the chain before sending to popup
-        const resolvedChain = this.resolveChainFromRequest(request);
+        let resolvedChain: SDKChain | undefined;
+
+        // wallet_revokePermissions needs chainId from relay (not in request params)
+        // because the permission may have been granted on a different chain
+        if (request.method === 'wallet_revokePermissions') {
+            const params = request.params as [{ id: `0x${string}` }];
+            const permissionId = params[0]?.id;
+            if (permissionId) {
+                const apiKey = store.config.get().apiKey;
+                if (!apiKey) {
+                    throw standardErrors.rpc.internal('No API key configured');
+                }
+                try {
+                    const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
+                    resolvedChain = this.resolveChain(relayPermission.chainId);
+                } catch {
+                    throw standardErrors.rpc.invalidParams(
+                        `Permission not found: ${permissionId}. It may have already been revoked.`
+                    );
+                }
+            }
+        } else {
+            // For other methods, resolve chain from request params if present
+            resolvedChain = this.resolveChainFromRequest(request);
+        }
+
         return this.sendRequestToPopup(request, resolvedChain);
     }
 
