@@ -7,6 +7,7 @@ import { UIError } from '../../ui/interface.js';
 import { correlationIds } from '../../store/correlation-ids/store.js';
 import { getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
 import { fetchRPCRequest } from '../../utils/index.js';
+import { getPermissionFromRelay } from '../../rpc/permissions.js';
 
 // Mock dependencies
 vi.mock('../signerStorage.js', () => ({
@@ -25,6 +26,14 @@ vi.mock('../../utils/index.js', async (importOriginal) => {
   return {
     ...actual,
     fetchRPCRequest: vi.fn(),
+  };
+});
+
+vi.mock('../../rpc/permissions.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../../rpc/permissions.js')>();
+  return {
+    ...actual,
+    getPermissionFromRelay: vi.fn(),
   };
 });
 
@@ -79,6 +88,7 @@ describe('AppSpecificSigner', () => {
     vi.spyOn(store.config, 'get').mockReturnValue({
       metadata: mockMetadata,
       version: '1.0.0',
+      apiKey: 'test-api-key',
     });
 
     vi.spyOn(store.account, 'set').mockReturnValue(undefined);
@@ -456,6 +466,19 @@ describe('AppSpecificSigner', () => {
         data: { success: true },
       };
 
+      // Mock the relay permission response with chainId
+      (getPermissionFromRelay as Mock).mockResolvedValue({
+        hash: '0xpermission123',
+        account: '0x1234567890123456789012345678901234567890',
+        spender: '0xspender',
+        start: '0',
+        end: '9999999999',
+        salt: '0',
+        calls: [],
+        spends: [],
+        chainId: '0x1', // Chain ID 1 in hex
+      });
+
       (mockUIHandler.request as Mock).mockResolvedValue(mockResponse);
 
       // Act
@@ -463,6 +486,7 @@ describe('AppSpecificSigner', () => {
 
       // Assert
       expect(result).toEqual({ success: true });
+      expect(getPermissionFromRelay).toHaveBeenCalledWith('0xpermission123', 'test-api-key');
       expect(mockUIHandler.request).toHaveBeenCalledWith(
         expect.objectContaining({
           type: 'wallet_revokePermissions',
@@ -473,6 +497,28 @@ describe('AppSpecificSigner', () => {
           }),
         })
       );
+    });
+
+    it('should throw error when permission not found in relay', async () => {
+      // Arrange
+      const revokeData = {
+        id: '0xnonexistent' as `0x${string}`,
+      };
+
+      const request: RequestArguments = {
+        method: 'wallet_revokePermissions',
+        params: [revokeData],
+      };
+
+      // Mock the relay to throw an error (permission not found)
+      (getPermissionFromRelay as Mock).mockRejectedValue(new Error('Permission not found'));
+
+      // Act & Assert
+      await expect(signer.request(request)).rejects.toThrow(
+        'Permission not found: 0xnonexistent. It may have already been revoked.'
+      );
+      expect(getPermissionFromRelay).toHaveBeenCalledWith('0xnonexistent', 'test-api-key');
+      expect(mockUIHandler.request).not.toHaveBeenCalled();
     });
 
     it('should handle wallet_sign request', async () => {
