@@ -36,7 +36,7 @@ await jaw.provider.request({
 | `calls[].to` | `0x${string}` | Yes | Recipient address |
 | `calls[].value` | `0x${string}` | No | Value in wei (hex), default "0x0" |
 | `calls[].data` | `0x${string}` | No | Call data (hex), default "0x" |
-| `chainId` | `0x${string}` | No | Chain ID (defaults to currently connected chain) |
+| `chainId` | `0x${string}` | No | Target chain ID (defaults to connected chain) |
 | `capabilities` | `object` | No | Additional capabilities (e.g., paymasterService) |
 
 ---

@@ -12,8 +12,6 @@ Grant granular permissions to a spender address for delegated transaction execut
 await jaw.provider.request({
   method: 'wallet_grantPermissions',
   params: [{
-    address: '0x1234...', // Your account
-    chainId: '0x1',
     expiry: 1735689600, // Unix timestamp
     spender: '0x5678...', // Who gets permissions
     permissions: {
@@ -27,6 +25,7 @@ await jaw.provider.request({
         period: 'day',
       }],
     },
+    // chainId: '0x1', // Optional - defaults to connected chain
   }],
 });
 ```
@@ -35,11 +34,10 @@ await jaw.provider.request({
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
-| `address` | `0x${string}` | Yes | Your account address (must be explicitly provided) |
-| `chainId` | `0x${string}` | Yes | Chain ID (hex) |
 | `expiry` | `number` | Yes | Expiration timestamp (seconds) |
 | `spender` | `0x${string}` | Yes | Address receiving permissions |
 | `permissions` | `object` | Yes | Permission details |
+| `chainId` | `0x${string}` | No | Target chain ID (defaults to connected chain) |
 
 ### Permission Details
 
@@ -131,8 +129,6 @@ Returns permission grant result with generated permission ID.
 const permission = await jaw.provider.request({
   method: 'wallet_grantPermissions',
   params: [{
-    address: myAccount,
-    chainId: '0x1',
     expiry: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60), // 1 year
     spender: dexRouterAddress,
     permissions: {
@@ -149,6 +145,7 @@ const permission = await jaw.provider.request({
         period: 'day',
       }],
     },
+    // chainId: '0x1', // Optional - defaults to connected chain
   }],
 });
 ```

@@ -75,7 +75,6 @@ const chainId = await jaw.provider.request({
 const bundleId = await jaw.provider.request({
   method: 'wallet_sendCalls',
   params: [{
-    version: '1.0',
     chainId: '0x1',
     from: account,
     calls: [
