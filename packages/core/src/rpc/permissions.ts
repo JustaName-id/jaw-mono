@@ -132,6 +132,8 @@ export type WalletGrantPermissionsRequest = {
             spender: Address;
             /** Permissions details */
             permissions: PermissionsDetail;
+            /** Target chain ID. Defaults to the connected chain. */
+            chainId?: string;
         }
     ];
 };

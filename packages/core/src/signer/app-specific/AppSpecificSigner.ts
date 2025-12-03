@@ -228,8 +228,21 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_sendCalls': {
-                const params = request.params as [TransactionUIRequest['data']];
+                // EIP-5792 wallet_sendCalls params - chainId can be hex string or number
+                type WalletSendCallsParams = Omit<TransactionUIRequest['data'], 'chainId'> & {
+                    /** Target chain ID. Defaults to the connected chain. */
+                    chainId?: string | number;
+                };
+                const params = request.params as [WalletSendCallsParams];
                 const callsData = params[0];
+
+                // Convert chainId to hex string if it's a number for resolveChain
+                const chainIdParam = typeof callsData.chainId === 'number'
+                    ? `0x${callsData.chainId.toString(16)}`
+                    : callsData.chainId;
+
+                // Resolve chain: param chainId -> current chain -> defaultChainId
+                const resolvedChain = this.resolveChain(chainIdParam);
 
                 const uiRequest: TransactionUIRequest = {
                     id: crypto.randomUUID(),
@@ -238,8 +251,7 @@ export class AppSpecificSigner extends JAWSigner {
                     correlationId,
                     data: {
                         ...callsData,
-                        // Use current chain if no chainId provided (same as CrossPlatformSigner)
-                        chainId: callsData.chainId ?? this.chain.id,
+                        chainId: resolvedChain.id,
                     },
                 };
 
@@ -258,9 +270,16 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'eth_sendTransaction': {
-                type EthSendTransactionParams = Omit<SendTransactionUIRequest['data'], 'chainId' | 'from'> & { from?: Address };
+                type EthSendTransactionParams = Omit<SendTransactionUIRequest['data'], 'chainId' | 'from'> & {
+                    from?: Address;
+                    /** Target chain ID. Defaults to the connected chain. */
+                    chainId?: string;
+                };
                 const params = request.params as [EthSendTransactionParams];
                 const txData = params[0];
+
+                // Resolve chain: param chainId -> current chain -> defaultChainId
+                const resolvedChain = this.resolveChain(txData.chainId);
 
                 const uiRequest: SendTransactionUIRequest = {
                     id: crypto.randomUUID(),
@@ -277,7 +296,7 @@ export class AppSpecificSigner extends JAWSigner {
                         maxFeePerGas: txData.maxFeePerGas,
                         maxPriorityFeePerGas: txData.maxPriorityFeePerGas,
                         nonce: txData.nonce,
-                        chainId: this.chain.id,
+                        chainId: resolvedChain.id,
                     },
                 };
 
@@ -290,7 +309,7 @@ export class AppSpecificSigner extends JAWSigner {
 
                 // Handle background receipt tracking using txHash as id
                 if (response.data) {
-                    this.trackSendCallsResult({ id: response.data, chainId: this.chain.id });
+                    this.trackSendCallsResult({ id: response.data, chainId: resolvedChain.id });
                 }
 
                 return response.data;
@@ -300,6 +319,9 @@ export class AppSpecificSigner extends JAWSigner {
                 const grantParams = request.params as WalletGrantPermissionsRequest['params'];
                 const permissionData = grantParams[0];
 
+                // Resolve chain: param chainId -> current chain -> defaultChainId
+                const resolvedChain = this.resolveChain(permissionData.chainId);
+
                 const uiRequest: PermissionUIRequest = {
                     id: crypto.randomUUID(),
                     type: 'wallet_grantPermissions',
@@ -307,7 +329,7 @@ export class AppSpecificSigner extends JAWSigner {
                     correlationId,
                     data: {
                         address: this.accounts[0],
-                        chainId: this.chain.id,
+                        chainId: resolvedChain.id,
                         expiry: permissionData.expiry,
                         spender: permissionData.spender,
                         permissions: permissionData.permissions,

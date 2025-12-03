@@ -64,7 +64,10 @@ describe('AppSpecificSigner', () => {
         chain: undefined,
         capabilities: undefined,
       },
-      chains: [],
+      chains: [
+        { id: 1, rpcUrl: 'https://mainnet.test.com' },
+        { id: 11155111, rpcUrl: 'https://sepolia.test.com' },
+      ],
       config: {
         metadata: mockMetadata,
         version: '1.0.0',

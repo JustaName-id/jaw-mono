@@ -7,7 +7,7 @@ import { standardErrors } from '../../errors/index.js';
 import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../../messages/index.js';
 import { KeyManager } from '../../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/index.js';
-import { store } from '../../store/index.js';
+import { store, SDKChain } from '../../store/index.js';
 import {
     decryptContent,
     encryptContent,
@@ -97,7 +97,57 @@ export class CrossPlatformSigner extends JAWSigner {
     }
 
     protected override async handleSigningRequest(request: RequestArguments): Promise<unknown> {
-        return this.sendRequestToPopup(request);
+        // For methods that support chainId in params, resolve the chain before sending to popup
+        const resolvedChain = this.resolveChainFromRequest(request);
+        return this.sendRequestToPopup(request, resolvedChain);
+    }
+
+    /**
+     * Extracts chainId from request params and resolves the chain.
+     * Supports eth_sendTransaction, wallet_grantPermissions, and wallet_sendCalls.
+     */
+    private resolveChainFromRequest(request: RequestArguments): SDKChain | undefined {
+        const params = request.params as unknown[];
+        if (!params || !Array.isArray(params) || params.length === 0) {
+            return undefined;
+        }
+
+        const firstParam = params[0] as Record<string, unknown> | undefined;
+        if (!firstParam || typeof firstParam !== 'object') {
+            return undefined;
+        }
+
+        let chainIdParam: string | undefined;
+
+        switch (request.method) {
+            case 'eth_sendTransaction':
+            case 'wallet_grantPermissions': {
+                // These methods accept chainId as hex string
+                const chainId = firstParam.chainId;
+                if (typeof chainId === 'string') {
+                    chainIdParam = chainId;
+                }
+                break;
+            }
+            case 'wallet_sendCalls': {
+                // wallet_sendCalls accepts chainId as hex string or number
+                const chainId = firstParam.chainId;
+                if (typeof chainId === 'string') {
+                    chainIdParam = chainId;
+                } else if (typeof chainId === 'number') {
+                    chainIdParam = `0x${chainId.toString(16)}`;
+                }
+                break;
+            }
+            default:
+                return undefined;
+        }
+
+        if (chainIdParam) {
+            return this.resolveChain(chainIdParam);
+        }
+
+        return undefined;
     }
 
     override async cleanup(): Promise<void> {
@@ -105,25 +155,37 @@ export class CrossPlatformSigner extends JAWSigner {
         await super.cleanup();
     }
 
-    private async sendRequestToPopup(request: RequestArguments): Promise<unknown> {
+    private async sendRequestToPopup(
+        request: RequestArguments,
+        overrideChain?: SDKChain
+    ): Promise<unknown> {
         // Open the popup before constructing the request message.
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
         await this.communicator.waitForPopupLoaded?.();
 
-        const response = await this.sendEncryptedRequest(request);
+        const response = await this.sendEncryptedRequest(request, overrideChain);
         const decrypted = await this.decryptResponseMessage(response);
 
         return this.handleResponse(request, decrypted);
     }
 
-    private async sendEncryptedRequest(request: RequestArguments): Promise<RPCResponseMessage> {
+    private async sendEncryptedRequest(
+        request: RequestArguments,
+        overrideChain?: SDKChain
+    ): Promise<RPCResponseMessage> {
         const sharedSecret = await this.keyManager.getSharedSecret();
         if (!sharedSecret) {
             throw standardErrors.provider.unauthorized('No shared secret found when encrypting request');
         }
 
-        const chains = store.getState().chains;
-        const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+        // Use override chain if provided, otherwise use current chain
+        let chain: SDKChain;
+        if (overrideChain) {
+            chain = overrideChain;
+        } else {
+            const chains = store.getState().chains;
+            chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+        }
 
         const encrypted = await encryptContent(
             {

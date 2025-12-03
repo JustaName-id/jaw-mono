@@ -353,6 +353,49 @@ export abstract class JAWSigner implements Signer {
     }
 
     /**
+     * Resolves the chainId to use based on priority:
+     * 1. If chainId param is provided (hex string), use that chain
+     * 2. Otherwise, use the current chain (set via wallet_switchEthereumChain)
+     * 3. Fallback to defaultChainId
+     *
+     * @param chainIdHex - Optional chainId in hex format (e.g., '0x1')
+     * @returns The resolved SDKChain object
+     * @throws {EthereumRpcError} If the resolved chain is not supported
+     */
+    protected resolveChain(chainIdHex?: string): SDKChain {
+        const state = store.getState();
+        const chains = state.chains ?? [];
+
+        // Priority 1: Use provided chainId if present
+        if (chainIdHex) {
+            const chainId = ensureIntNumber(chainIdHex);
+            const chain = chains.find((c) => c.id === chainId);
+            if (!chain) {
+                throw standardErrors.provider.unsupportedMethod(
+                    `Chain ${chainIdHex} (${chainId}) is not supported`
+                );
+            }
+            return chain;
+        }
+
+        // Priority 2: Use current chain (set via wallet_switchEthereumChain)
+        const currentChain = chains.find((c) => c.id === this.chain.id);
+        if (currentChain) {
+            return currentChain;
+        }
+
+        // Priority 3: Fallback to defaultChainId
+        const defaultChainId = this.metadata.defaultChainId ?? 1;
+        const defaultChain = chains.find((c) => c.id === defaultChainId);
+        if (defaultChain) {
+            return defaultChain;
+        }
+
+        // If nothing found, return current chain object (may be incomplete)
+        return this.chain;
+    }
+
+    /**
      * Emits a connect event with the current chain ID.
      */
     protected emitConnect(): void {
