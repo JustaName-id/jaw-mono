@@ -120,6 +120,30 @@ export type PermissionsDetail = {
 };
 
 /**
+ * EIP-5792 Paymaster Service capability
+ * Allows dApps to specify a paymaster URL for sponsored transactions
+ * @see https://eips.ethereum.org/EIPS/eip-5792
+ * @see https://www.eip5792.xyz/capabilities/paymasterService
+ */
+export type PaymasterServiceCapability = {
+    /** URL of the paymaster service (ERC-7677 compliant) */
+    url: string;
+    /** Optional flag indicating if paymaster is optional (transaction can proceed without it) */
+    optional?: boolean;
+};
+
+/**
+ * Request capabilities for wallet methods
+ * Used in wallet_sendCalls, wallet_grantPermissions, wallet_revokePermissions
+ */
+export type RequestCapabilities = {
+    /** Paymaster service for sponsored transactions */
+    paymasterService?: PaymasterServiceCapability;
+    /** Additional capabilities can be added here */
+    [key: string]: unknown;
+};
+
+/**
  * Request parameters for wallet_grantPermissions
  */
 export type WalletGrantPermissionsRequest = {
@@ -134,6 +158,8 @@ export type WalletGrantPermissionsRequest = {
             permissions: PermissionsDetail;
             /** Target chain ID. Defaults to the connected chain. */
             chainId?: string;
+            /** Optional capabilities including paymaster service */
+            capabilities?: RequestCapabilities;
         }
     ];
 };
@@ -217,6 +243,8 @@ export type WalletRevokePermissionsRequest = {
             address?: Address;
             /** ID of the permission to revoke (permission hash from contract) */
             id: Hex;
+            /** Optional capabilities including paymaster service */
+            capabilities?: RequestCapabilities;
         }
     ];
 };

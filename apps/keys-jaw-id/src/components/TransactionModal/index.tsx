@@ -5,8 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, parseEther, Hash } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
-import {sendTransaction, estimateUserOpGas, type Chain, calculateGas, ToJustanAccountReturnType} from "@jaw.id/core";
-import { sendBundledTransaction } from "packages/core/src/account/smartAccount";
+import {sendTransaction, sendBundledTransaction, estimateUserOpGas, type Chain, calculateGas, ToJustanAccountReturnType} from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {

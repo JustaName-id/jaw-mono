@@ -149,6 +149,16 @@ export const PermissionModal = ({
     return permissionRequest.method === 'wallet_grantPermissions' ? 'grant' : 'revoke';
   }, [permissionRequest]);
 
+  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.url > chain.paymasterUrl
+  const effectivePaymasterUrl = useMemo(() => {
+    if (!permissionRequest) return chain?.paymasterUrl;
+
+    const params = permissionRequest.params[0];
+    const capabilitiesPaymasterUrl = params?.capabilities?.paymasterService?.url;
+    return capabilitiesPaymasterUrl || chain?.paymasterUrl;
+  }, [permissionRequest, chain?.paymasterUrl]);
+
   // Extract permission details from request
   const permissionDetails = useMemo(() => {
     if (!permissionRequest) return null;
@@ -501,8 +511,7 @@ export const PermissionModal = ({
         throw new Error('Permission details are missing.');
       }
 
-      // Use paymasterUrl from chain config for sponsored permission transactions
-      const effectivePaymasterUrl = chain?.paymasterUrl;
+      // effectivePaymasterUrl is extracted from capabilities or chain config via useMemo above
 
       if (mode === 'grant') {
         if (!('expiry' in permissionDetails) || !('spender' in permissionDetails)) {
@@ -564,7 +573,7 @@ export const PermissionModal = ({
       onError?.(errorObj);
       setIsProcessing(false);
     }
-  }, [smartAccount, chain, permissionDetails, mode, extractedApiKey, onSuccess, onError]);
+  }, [smartAccount, chain, permissionDetails, mode, extractedApiKey, onSuccess, onError, effectivePaymasterUrl]);
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {

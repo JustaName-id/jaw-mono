@@ -20,6 +20,8 @@ export {
     type SpendPeriod,
     type SpendPermissionDetail,
     type PermissionsDetail,
+    type PaymasterServiceCapability,
+    type RequestCapabilities,
     type WalletGrantPermissionsRequest,
     type WalletGrantPermissionsResponse,
     type WalletRevokePermissionsRequest,

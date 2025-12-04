@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import type { ViemRPCReturnType, ViemRPCParams } from '@jaw.id/core';
+import type { ViemRPCReturnType, ViemRPCParams, RequestCapabilities } from '@jaw.id/core';
 import type { TransactionRequestData } from '../components/TransactionModal';
 
 // ==========================================
@@ -9,16 +9,6 @@ import type { TransactionRequestData } from '../components/TransactionModal';
 // Type-safe parameter extraction from Viem
 export type WalletSendCallsParams = ViemRPCParams<'wallet_sendCalls'>;
 export type EthSendTransactionParams = ViemRPCParams<'eth_sendTransaction'>;
-
-// EIP-5792 capabilities structure for wallet_sendCalls
-// The paymasterService capability allows apps to specify a paymaster URL per-request
-interface WalletSendCallsCapabilities {
-  paymasterService?: {
-    url?: string;
-    optional?: boolean;
-  };
-  [key: string]: unknown;
-}
 
 // Type-safe return types from Viem
 export type WalletSendCallsReturn = ViemRPCReturnType<'wallet_sendCalls'> & {
@@ -78,7 +68,7 @@ export function extractTransactionData(
 
       // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
       // Priority: capabilities.paymasterService.url > chain.paymasterUrl
-      const capabilities = (sendCallsParams as unknown as { capabilities?: WalletSendCallsCapabilities }).capabilities;
+      const capabilities = (sendCallsParams as unknown as { capabilities?: RequestCapabilities }).capabilities;
       const capabilitiesPaymasterUrl = capabilities?.paymasterService?.url;
       const effectivePaymasterUrl = capabilitiesPaymasterUrl || chain?.paymasterUrl;
 
