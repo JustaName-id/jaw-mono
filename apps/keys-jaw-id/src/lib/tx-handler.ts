@@ -10,6 +10,16 @@ import type { TransactionRequestData } from '../components/TransactionModal';
 export type WalletSendCallsParams = ViemRPCParams<'wallet_sendCalls'>;
 export type EthSendTransactionParams = ViemRPCParams<'eth_sendTransaction'>;
 
+// EIP-5792 capabilities structure for wallet_sendCalls
+// The paymasterService capability allows apps to specify a paymaster URL per-request
+interface WalletSendCallsCapabilities {
+  paymasterService?: {
+    url?: string;
+    optional?: boolean;
+  };
+  [key: string]: unknown;
+}
+
 // Type-safe return types from Viem
 export type WalletSendCallsReturn = ViemRPCReturnType<'wallet_sendCalls'> & {
   id: `0x${string}`;
@@ -66,6 +76,12 @@ export function extractTransactionData(
           : parseInt(sendCallsParams.chainId, 16);
       }
 
+      // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
+      // Priority: capabilities.paymasterService.url > chain.paymasterUrl
+      const capabilities = (sendCallsParams as unknown as { capabilities?: WalletSendCallsCapabilities }).capabilities;
+      const capabilitiesPaymasterUrl = capabilities?.paymasterService?.url;
+      const effectivePaymasterUrl = capabilitiesPaymasterUrl || chain?.paymasterUrl;
+
       // Map to internal format for type conversion, then to modal format
       const internalTxs: NormalizedTransaction[] = sendCallsParams.calls.map(call => ({
         to: call.to,
@@ -83,7 +99,7 @@ export function extractTransactionData(
           chainId: tx.chainId,
         })),
         chainId: paramsChainId,
-        paymasterUrl: chain?.paymasterUrl,
+        paymasterUrl: effectivePaymasterUrl,
         atomicRequired: sendCallsParams.atomicRequired,
         callsId: sendCallsParams.id,
       };

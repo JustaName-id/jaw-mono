@@ -230,6 +230,14 @@ export type WalletRevokePermissionsRequest = {
  * 3. Extracts the permission hash from the PermissionApproved event
  * 4. Stores the permission in the relay
  * 5. Returns the response to the dApp with the hash as permission ID
+ *
+ * @param smartAccount - Smart account to execute the approve transaction
+ * @param expiry - Timestamp when the permission expires
+ * @param spender - Address that will be granted the permissions
+ * @param permissions - Permissions detail (calls and spends)
+ * @param chain - Chain configuration
+ * @param apiKey - API key for relay authentication
+ * @param paymasterUrlOverride - Optional paymaster URL that overrides chain.paymasterUrl
  */
 export async function grantPermissions(
     smartAccount: SmartAccount,
@@ -237,7 +245,8 @@ export async function grantPermissions(
     spender: Address,
     permissions: PermissionsDetail,
     chain: Chain,
-    apiKey: string
+    apiKey: string,
+    paymasterUrlOverride?: string
 ): Promise<WalletGrantPermissionsResponse> {
     // Derive address and chainId from smart account and chain
     const account = smartAccount.address;
@@ -255,7 +264,8 @@ export async function grantPermissions(
                 data: approveCallData,
             },
         ],
-        chain
+        chain,
+        paymasterUrlOverride
     );
 
     // Extract the permission hash from the PermissionApproved event
@@ -290,13 +300,15 @@ export async function grantPermissions(
  * @param permissionId - The permission hash/ID to revoke
  * @param chain - Chain configuration
  * @param apiKey - API key for relay authentication
+ * @param paymasterUrlOverride - Optional paymaster URL that overrides chain.paymasterUrl
  * @returns Response from the relay indicating success
  */
 export async function revokePermission(
     smartAccount: SmartAccount,
     permissionId: Hex,
     chain: Chain,
-    apiKey: string
+    apiKey: string,
+    paymasterUrlOverride?: string
 ): Promise<RevokePermissionApiResponse> {
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
 
@@ -312,7 +324,8 @@ export async function revokePermission(
                 data: revokeCallData,
             },
         ],
-        chain
+        chain,
+        paymasterUrlOverride
     );
 
     return await deletePermissionFromRelay(permissionId, apiKey);

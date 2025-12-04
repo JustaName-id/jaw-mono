@@ -85,10 +85,12 @@ export function getSupportedChains(showTestnets = false) {
  * Clients are cached in the store and created only when first accessed.
  *
  * @param chain - The chain to get the bundler client for
+ * @param paymasterUrlOverride - Optional paymaster URL that takes priority over chain.paymasterUrl.
+ *                               Used when wallet_sendCalls includes a paymasterService capability.
  * @returns The bundler client for the specified chain
  * @throws Error if the chain is not supported or client creation fails
  */
-export const getBundlerClient = (chain: Chain): BundlerClient<Transport, ViemChain> => {
+export const getBundlerClient = (chain: Chain, paymasterUrlOverride?: string): BundlerClient<Transport, ViemChain> => {
     console.log('🔍 Getting bundler client for chain:', chain);
     // const bundlerClient = getBundlerClientFromStore(chain.id);
     const viemChain = SUPPORTED_CHAINS.find(c => c.id === chain.id);
@@ -99,9 +101,11 @@ export const getBundlerClient = (chain: Chain): BundlerClient<Transport, ViemCha
         transport: http(chain.rpcUrl),
     });
 
-    const paymasterClient = chain.paymasterUrl
+    // Priority: paymasterUrlOverride (from capabilities) > chain.paymasterUrl (from SDK config)
+    const effectivePaymasterUrl = paymasterUrlOverride || chain.paymasterUrl;
+    const paymasterClient = effectivePaymasterUrl
         ? createPaymasterClient({
-            transport: http(chain.paymasterUrl)
+            transport: http(effectivePaymasterUrl)
         })
         : undefined;
 
@@ -119,9 +123,10 @@ export async function sendTransaction(
         value?: bigint;
         data?: Hex;
     }>,
-    chain: Chain
+    chain: Chain,
+    paymasterUrlOverride?: string
 ): Promise<Hash> {
-    const bundlerClient = getBundlerClient(chain)
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride)
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
@@ -147,9 +152,10 @@ export async function sendBundledTransaction(
         value?: bigint;
         data?: Hex;
     }>,
-    chain: Chain
+    chain: Chain,
+    paymasterUrlOverride?: string
 ): Promise<BundledTransactionResult> {
-    const bundlerClient = getBundlerClient(chain)
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride)
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
@@ -173,9 +179,10 @@ export async function estimateUserOpGas(
         value?: bigint;
         data?: Hex;
     }>,
-    chain: Chain
+    chain: Chain,
+    paymasterUrlOverride?: string
 ): Promise<bigint> {
-    const bundlerClient = getBundlerClient(chain);
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride);
 
     const gasEstimate = await bundlerClient.estimateUserOperationGas({
         account: smartAccount,
@@ -273,8 +280,9 @@ export function formatPublicKey(publicKey: Hex): Hex {
 export async function calculateGas(
     chain: Chain,
     gas: bigint,
+    paymasterUrlOverride?: string
 ): Promise<string> {
-    const bundlerClient = getBundlerClient(chain)
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride)
     const gasPrice = await getGasPrice(bundlerClient)
     const result = formatUnits(gas * gasPrice, 18)
     return result

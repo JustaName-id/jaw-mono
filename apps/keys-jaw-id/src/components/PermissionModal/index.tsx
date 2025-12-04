@@ -501,6 +501,9 @@ export const PermissionModal = ({
         throw new Error('Permission details are missing.');
       }
 
+      // Use paymasterUrl from chain config for sponsored permission transactions
+      const effectivePaymasterUrl = chain?.paymasterUrl;
+
       if (mode === 'grant') {
         if (!('expiry' in permissionDetails) || !('spender' in permissionDetails)) {
           throw new Error('Invalid grant permission parameters.');
@@ -523,7 +526,8 @@ export const PermissionModal = ({
             calls: permissionDetails.calls,
           },
           chain,
-          extractedApiKey
+          extractedApiKey,
+          effectivePaymasterUrl
         );
 
         console.log('✅ Permissions granted:', result);
@@ -543,7 +547,8 @@ export const PermissionModal = ({
           smartAccount,
           permissionDetails.permissionId,
           chain,
-          extractedApiKey
+          extractedApiKey,
+          effectivePaymasterUrl
         );
 
         console.log('✅ Permission revoked');

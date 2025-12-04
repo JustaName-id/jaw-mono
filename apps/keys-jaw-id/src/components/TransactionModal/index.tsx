@@ -165,6 +165,9 @@ export const TransactionModal = ({
     };
   }, [chain, getSmartAccount, onError]);
 
+  // Get the effective paymaster URL (from transactionRequest which already has priority logic applied)
+  const effectivePaymasterUrl = transactionRequest?.paymasterUrl;
+
   // Gas estimation using core package
   useEffect(() => {
     if (!smartAccount || !chain || normalizedTransactions.length === 0) return;
@@ -199,9 +202,9 @@ export const TransactionModal = ({
           };
         });
 
-        // Estimate gas using core package
-        const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls, chain);
-        const gasPrice = await calculateGas(chain, gasEstimate);
+        // Estimate gas using core package - pass paymasterUrl from capabilities/config
+        const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls, chain, effectivePaymasterUrl);
+        const gasPrice = await calculateGas(chain, gasEstimate, effectivePaymasterUrl);
         setGasFee(gasPrice);
         setGasEstimationError('');
 
@@ -230,7 +233,7 @@ export const TransactionModal = ({
     };
 
     estimateGas();
-  }, [smartAccount, chain, normalizedTransactions, isSponsored]);
+  }, [smartAccount, chain, normalizedTransactions, isSponsored, effectivePaymasterUrl]);
 
   const handleConfirm = useCallback(async () => {
     try {
@@ -274,19 +277,20 @@ export const TransactionModal = ({
       });
 
       // Send transaction using core package
+      // Pass paymasterUrl from capabilities/config to use sponsored transactions
       let result: TransactionResult ;
       // This handles bundler communication and returns the final transaction hash
       if(transactionRequest?.method === 'wallet_sendCalls') {
-        const bundledResult = await sendBundledTransaction(smartAccount, transactionCalls, chain);
+        const bundledResult = await sendBundledTransaction(smartAccount, transactionCalls, chain, effectivePaymasterUrl);
            // Return the transaction result with proper format based on method
        result = {
         id: bundledResult.id,
         chainId: bundledResult.chainId,
       };
 
-   
+
       }else{
-       const  txHash = await sendTransaction(smartAccount, transactionCalls, chain);
+       const  txHash = await sendTransaction(smartAccount, transactionCalls, chain, effectivePaymasterUrl);
        result = {
         hash: txHash,
       };
@@ -320,7 +324,7 @@ export const TransactionModal = ({
       onError?.(errorObj);
       setIsProcessing(false);
     }
-  }, [smartAccount, chain, normalizedTransactions, onSuccess, onError]);
+  }, [smartAccount, chain, normalizedTransactions, onSuccess, onError, effectivePaymasterUrl, transactionRequest?.method]);
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
