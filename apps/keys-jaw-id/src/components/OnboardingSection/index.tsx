@@ -17,7 +17,7 @@ interface SignInScreenProps {
 }
 
 export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConfig, subnameTextRecords }: SignInScreenProps) {
-    const { accounts, refetchAccounts } = usePasskeys();
+    const { accounts, refetchAccounts } = usePasskeys({ apiKey });
     const { mutateAsync: login } = useLogin();
     const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
     const { refetch: refetchAuth } = useAuth();
@@ -58,6 +58,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
                 chainId: targetChain,
                 credentialId: account.credentialId,
                 isImported: account.isImported,
+                apiKey,
             })
             onComplete()
         } catch (error) {
@@ -76,7 +77,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
 
             const fullUsername = ensConfig ? `${username.trim()}.${ensConfig}` : username.trim();
 
-            const result = await register(fullUsername);
+            const result = await register({ username: fullUsername, apiKey });
 
             if (!result.address) {
                 throw new Error('Failed to get address from passkey registration');
@@ -97,7 +98,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
 
     const handleImportAccount = async () => {
         try {
-            await passkeyLogin();
+            await passkeyLogin({ apiKey });
             onComplete();
         } catch (error) {
             console.error('❌ Import failed:', error);

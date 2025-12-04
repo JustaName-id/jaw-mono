@@ -13,7 +13,7 @@ import {
     createPublicClient, LocalAccount
 } from "viem";
 import {getCode, getGasPrice, readContract} from "viem/actions";
-import {abi, JustanAccountImplementation, toJustanAccount} from "../account/index.js";
+import {abi, JustanAccountImplementation, toJustanAccount} from "./toJustanAccount.js";
 import {
     BundlerClient,
     SmartAccount,

@@ -1,38 +1,42 @@
 import { useMutation } from "@tanstack/react-query";
-import { Chain } from "@jaw.id/core";
-import { PasskeyService } from "../../lib/passkey-service";
+import { Account, type Chain } from "@jaw.id/core";
 import { useAuth } from "../useAuth";
 
 interface LoginParams {
   chainId: Chain;
   credentialId: string;
   isImported?: boolean;
+  apiKey?: string;
 }
 
 export const useLogin = () => {
   const { refetch } = useAuth();
 
   return useMutation({
-    mutationFn: async ({ chainId, credentialId, isImported }: LoginParams) => {
+    mutationFn: async ({ chainId, credentialId, apiKey }: LoginParams) => {
         try {
-            const service = new PasskeyService({ localOnly: true });
-            const result = await service.authenticateWithPasskey(credentialId);
+            // Use apiKey from params, fallback to env var
+            const effectiveApiKey = apiKey || process.env.NEXT_PUBLIC_API_KEY;
 
-            if (!result) {
-                throw new Error('Passkey authentication failed');
-            }
+            // Use Account.login which handles WebAuthn auth and smart account creation
+            const account = await Account.login(
+              {
+                chainId: chainId.id,
+                apiKey: effectiveApiKey,
+                paymasterUrl: chainId.paymasterUrl,
+              },
+              credentialId
+            );
 
-            const smartAccount = await service.recreateSmartAccount(chainId);
-            const address = await smartAccount.getAddress();
-
-            service.storeAuthState(address, credentialId);
+            const metadata = account.getMetadata();
+            const address = await account.getAddress();
 
             return {
-              account: smartAccount,
+              account,
               address,
-              passkeyCredential: result.account.credentialId,
-              username: result.account.username,
-              creationDate: result.account.creationDate
+              passkeyCredential: credentialId,
+              username: metadata?.username || '',
+              creationDate: metadata?.creationDate || new Date().toISOString()
             };
         } catch (error) {
             console.error('Login failed:', error);

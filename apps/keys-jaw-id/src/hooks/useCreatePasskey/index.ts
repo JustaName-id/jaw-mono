@@ -6,10 +6,15 @@ export interface UseCreatePasskeyResult {
   credentialId: string;
 }
 
+interface CreatePasskeyParams {
+  username: string;
+  apiKey?: string;
+}
+
 export function useCreatePasskey() {
   const mutation = useMutation({
-    mutationFn: async (username: string): Promise<UseCreatePasskeyResult> => {
-      const service = new PasskeyService();
+    mutationFn: async ({ username, apiKey }: CreatePasskeyParams): Promise<UseCreatePasskeyResult> => {
+      const service = new PasskeyService({ apiKey });
       const result = await service.createPasskey(username);
 
       return {

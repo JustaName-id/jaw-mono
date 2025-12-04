@@ -263,6 +263,12 @@ export default function KeysJawIdApp() {
       const params = decrypted.action.params;
       const chain = decrypted.chain;
 
+      // Extract API key from chain rpcUrl if present
+      const apiKeyFromProvider = chain?.rpcUrl?.split('api-key=')[1];
+      if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
+        setApiKey(apiKeyFromProvider);
+      }
+
       // Determine request type and show appropriate UI
       let requestType: SDKRequestType;
 
@@ -385,6 +391,7 @@ export default function KeysJawIdApp() {
         <TransactionModal
           transactionRequest={txData}
           chain={pendingRequest.chain as chain}
+          apiKey={apiKey}
           onSuccess={async (result: TransactionResult) => {
             setState('processing');
             try {
@@ -465,6 +472,7 @@ export default function KeysJawIdApp() {
             message={messageToSign}
             address={address}
             chain={pendingRequest.chain as chain}
+            apiKey={apiKey}
             appName={pendingRequest.metadata?.appName || 'dApp'}
             appLogoUrl={pendingRequest.metadata?.appLogoUrl}
             onSuccess={async (signature, message) => {
@@ -501,6 +509,7 @@ export default function KeysJawIdApp() {
           message={messageToSign}
           address={address}
           chain={pendingRequest.chain as chain}
+          apiKey={apiKey}
           onSuccess={async (signature, message) => {
             setState('processing');
             try {
@@ -562,6 +571,7 @@ export default function KeysJawIdApp() {
           typedDataJson={typedDataJson}
           address={address}
           chain={pendingRequest.chain as chain}
+          apiKey={apiKey}
           onSuccess={async (signature) => {
             setState('processing');
             try {

@@ -2,13 +2,17 @@ import { useMutation } from "@tanstack/react-query";
 import { useAuth } from "../useAuth";
 import { PasskeyService } from "../../lib/passkey-service";
 
+interface PasskeyLoginParams {
+  apiKey?: string;
+}
+
 export const usePasskeyLogin = () => {
   const { refetch } = useAuth();
 
   return useMutation({
-    mutationFn: async () => {
+    mutationFn: async (params?: PasskeyLoginParams) => {
         try {
-            const service = new PasskeyService({ localOnly: true });
+            const service = new PasskeyService({ localOnly: true, apiKey: params?.apiKey });
             // Call without credentialId to use the first available passkey
             const result = await service.importPasskeyAccount();
 

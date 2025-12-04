@@ -5,13 +5,14 @@ import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import {ToJustanAccountReturnType} from "@jaw.id/core";
+import { Account } from "@jaw.id/core";
 
 export interface SiweModalProps {
   origin: string;
   message: string;
   address?: string;
   chain: chain;
+  apiKey?: string;
   appName?: string;
   appLogoUrl?: string;
   onSuccess: (signature: string, message: string) => void;
@@ -23,6 +24,7 @@ export const SiweModal = ({
   message: messageToSign,
   address,
   chain,
+  apiKey,
   appName,
   appLogoUrl,
   onSuccess,
@@ -30,10 +32,24 @@ export const SiweModal = ({
 }: SiweModalProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
-  const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
   const [timestamp] = useState(() => new Date());
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { getSmartAccount } = usePasskeys();
+  const { getAccount } = usePasskeys();
+
+  // Extract API key from rpcUrl if not provided as prop
+  const effectiveApiKey = useMemo(() => {
+    if (apiKey) return apiKey;
+    if (chain?.rpcUrl) {
+      try {
+        const url = new URL(chain.rpcUrl);
+        return url.searchParams.get('api-key') || '';
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }, [apiKey, chain?.rpcUrl]);
 
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
@@ -45,14 +61,12 @@ export const SiweModal = ({
       setIsProcessing(true);
       setSiweStatus('Signing in...');
 
-      if (!smartAccount) {
-        throw new Error('Smart account not initialized. Please try again.');
+      if (!account) {
+        throw new Error('Account not initialized. Please try again.');
       }
 
-      const signature = await smartAccount.signMessage({
-        message: messageToSign
-      });
-      console.log('🔍 SIWE Signature:', signature);
+      const signature = await account.signMessage(messageToSign);
+      console.log('SIWE Signature:', signature);
 
       setSiweStatus('Sign in successful!');
 
@@ -65,15 +79,15 @@ export const SiweModal = ({
       onError(error as Error);
       setIsProcessing(false);
     }
-  }, [messageToSign, smartAccount, onSuccess, onError]);
+  }, [messageToSign, account, onSuccess, onError]);
 
   const handleCancel = () => {
     if (!isProcessing) {
-      setSmartAccount(null);
+      setAccount(null);
       // Create a standard user rejected error (EIP-1193 code 4001)
       const rejectionError = new Error('User rejected the request');
       (rejectionError as any).code = 4001;
-      console.log('❌ User cancelled SIWE sign in request');
+      console.log('User cancelled SIWE sign in request');
       onError(rejectionError);
       setSiweStatus('');
     }
@@ -86,16 +100,16 @@ export const SiweModal = ({
       if (chain) {
         try {
           setIsProcessing(false); // Reset processing state when opening
-          console.log('🔐 Initializing SIWE modal with message:', messageToSign);
-          console.log('📍 Address:', address);
-          const smartAccount = await getSmartAccount(chain);
+          console.log('Initializing SIWE modal with message:', messageToSign);
+          console.log('Address:', address);
+          const restoredAccount = await getAccount(chain, effectiveApiKey);
 
           // Only update state if component is still mounted
           if (isMounted) {
-            setSmartAccount(smartAccount);
+            setAccount(restoredAccount);
           }
         } catch (error) {
-          console.error("Error initializing smart account:", error);
+          console.error("Error initializing account:", error);
           // Only update state if component is still mounted
           if (isMounted) {
             setSiweStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
@@ -104,7 +118,7 @@ export const SiweModal = ({
         }
       } else {
         // Reset everything when modal closes
-        setSmartAccount(null);
+        setAccount(null);
         setSiweStatus('');
         setIsProcessing(false);
       }
@@ -121,9 +135,9 @@ export const SiweModal = ({
         timeoutRef.current = null;
       }
     };
-  }, [messageToSign, address, onError, getSmartAccount, chain]);
+  }, [messageToSign, address, effectiveApiKey, onError, getAccount, chain]);
 
-  const canSign = !isProcessing && !!messageToSign && !!smartAccount;
+  const canSign = !isProcessing && !!messageToSign && !!account;
 
   return (
     <SiweDialog

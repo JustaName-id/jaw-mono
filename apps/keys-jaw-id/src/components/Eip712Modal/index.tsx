@@ -5,13 +5,14 @@ import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import {ToJustanAccountReturnType} from "@jaw.id/core";
+import { Account } from "@jaw.id/core";
 
 export interface Eip712ModalProps {
   origin: string;
   typedDataJson: string;
   address?: string;
   chain: chain;
+  apiKey?: string;
   onSuccess: (signature: string) => void;
   onError: (error: Error) => void;
 }
@@ -29,15 +30,30 @@ export const Eip712Modal = ({
   typedDataJson,
   address,
   chain,
+  apiKey,
   onSuccess,
   onError
 }: Eip712ModalProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
   const [timestamp] = useState(() => new Date());
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { getSmartAccount } = usePasskeys();
+  const { getAccount } = usePasskeys();
+
+  // Extract API key from rpcUrl if not provided as prop
+  const effectiveApiKey = useMemo(() => {
+    if (apiKey) return apiKey;
+    if (chain?.rpcUrl) {
+      try {
+        const url = new URL(chain.rpcUrl);
+        return url.searchParams.get('api-key') || '';
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }, [apiKey, chain?.rpcUrl]);
 
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
@@ -59,21 +75,21 @@ export const Eip712Modal = ({
       setIsProcessing(true);
       setSignatureStatus('Signing typed data...');
 
-      if (!smartAccount) {
-        throw new Error('Smart account not initialized. Please try again.');
+      if (!account) {
+        throw new Error('Account not initialized. Please try again.');
       }
 
       if (!typedData) {
         throw new Error('Invalid typed data');
       }
 
-      const signature = await smartAccount.signTypedData({
+      const signature = await account.signTypedData({
         domain: typedData.domain,
-        types: typedData.types,
+        types: typedData.types as any,
         primaryType: typedData.primaryType,
         message: typedData.message,
       });
-      console.log('🔍 Typed Data Signature:', signature);
+      console.log('Typed Data Signature:', signature);
 
       setSignatureStatus('Signature created successfully!');
 
@@ -86,15 +102,15 @@ export const Eip712Modal = ({
       onError(error as Error);
       setIsProcessing(false);
     }
-  }, [typedData, smartAccount, onSuccess, onError]);
+  }, [typedData, account, onSuccess, onError]);
 
   const handleCancel = () => {
     if (!isProcessing) {
-      setSmartAccount(null);
+      setAccount(null);
       // Create a standard user rejected error (EIP-1193 code 4001)
       const rejectionError = new Error('User rejected the request');
       (rejectionError as any).code = 4001;
-      console.log('❌ User cancelled typed data signature request');
+      console.log('User cancelled typed data signature request');
       onError(rejectionError);
       setSignatureStatus('');
     }
@@ -107,17 +123,17 @@ export const Eip712Modal = ({
       if (chain) {
         try {
           setIsProcessing(false); // Reset processing state when opening
-          console.log('🔐 Initializing EIP-712 signature modal');
-          console.log('📍 Address:', address);
-          console.log('📝 Typed Data:', typedData);
-          const smartAccount = await getSmartAccount(chain);
+          console.log('Initializing EIP-712 signature modal');
+          console.log('Address:', address);
+          console.log('Typed Data:', typedData);
+          const restoredAccount = await getAccount(chain, effectiveApiKey);
 
           // Only update state if component is still mounted
           if (isMounted) {
-            setSmartAccount(smartAccount);
+            setAccount(restoredAccount);
           }
         } catch (error) {
-          console.error("Error initializing smart account:", error);
+          console.error("Error initializing account:", error);
           // Only update state if component is still mounted
           if (isMounted) {
             setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
@@ -126,7 +142,7 @@ export const Eip712Modal = ({
         }
       } else {
         // Reset everything when modal closes
-        setSmartAccount(null);
+        setAccount(null);
         setSignatureStatus('');
         setIsProcessing(false);
       }
@@ -143,9 +159,9 @@ export const Eip712Modal = ({
         timeoutRef.current = null;
       }
     };
-  }, [typedDataJson, address, onError, getSmartAccount, chain, typedData]);
+  }, [typedDataJson, address, effectiveApiKey, onError, getAccount, chain, typedData]);
 
-  const canSign = !isProcessing && !!typedDataJson && !!smartAccount && !!typedData;
+  const canSign = !isProcessing && !!typedDataJson && !!account && !!typedData;
 
   return (
     <Eip712Dialog

@@ -16,27 +16,16 @@ import {
   PermissionUIRequest,
   RevokePermissionUIRequest,
   WalletSignUIRequest,
-  PasskeyManager,
   PasskeyAccount,
-  createSmartAccount,
-  getBundlerClient,
+  Account,
   SUPPORTED_CHAINS,
-  Chain,
   JAW_RPC_URL,
-  sendBundledTransaction,
-  sendTransaction,
-  grantPermissions,
-  revokePermission,
-  getPermissionFromRelay,
-  estimateUserOpGas,
-  calculateGas,
   SubnameTextRecordCapabilityRequest,
-  type JustanAccountImplementation,
+  getPermissionFromRelay,
+  type Chain,
 } from '@jaw.id/core';
-import type { SmartAccount } from 'viem/account-abstraction';
-import { toWebAuthnAccount } from 'viem/account-abstraction';
-import { getAddress, parseEther, formatUnits, erc20Abi, createPublicClient, http } from 'viem';
-import type { Address, Hex, Hash } from 'viem';
+import { formatUnits, erc20Abi, createPublicClient, http } from 'viem';
+import type { Address, Hex } from 'viem';
 
 // Import UI components using relative paths (we're inside @jaw/ui)
 import { OnboardingDialog } from '../components/OnboardingDialog';
@@ -378,15 +367,19 @@ export class ReactUIHandler implements UIHandler {
             />
           );
         } else if (signType === '0x01') {
-          // ERC-7871 TypedData - data is the TypedData object directly
-          const typedData = walletSignRequest.data.request.data as Record<string, unknown>;
+          // ERC-7871 TypedData - data can be either a JSON string or an object
+          const typedDataRaw = walletSignRequest.data.request.data;
+          // If it's already a string, use it directly; otherwise JSON.stringify it
+          const typedDataJson = typeof typedDataRaw === 'string'
+            ? typedDataRaw
+            : JSON.stringify(typedDataRaw);
           return (
             <Eip712DialogWrapper
               request={{
                 ...walletSignRequest,
                 type: 'eth_signTypedData_v4',
                 data: {
-                  typedData: JSON.stringify(typedData),
+                  typedData: typedDataJson,
                   address: walletSignRequest.data.address,
                   chainId: walletSignRequest.data.chainId,
                 },
@@ -483,43 +476,27 @@ export class ReactUIHandler implements UIHandler {
 }
 
 // Helper to build chain config with auto-resolved RPC URL from API key
+// Used by OnboardingDialogWrapper which needs lower-level control
 function buildChainConfigFromApiKey(chainId: number, apiKey?: string, paymasterUrl?: string): Chain {
   return {
     id: chainId,
-    rpcUrl: apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : undefined,
+    rpcUrl: apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`,
     paymasterUrl,
   };
 }
 
-// Helper to recreate smart account for signing operations
-async function recreateSmartAccountForSigning(
+// Helper to restore Account for signing operations
+async function restoreAccountForSigning(
   apiKey?: string,
   chainId?: number,
   paymasterUrl?: string
-) {
-  const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-  const currentAccount = passkeyManager.getCurrentAccount();
-
-  if (!currentAccount) {
-    throw new Error('No authenticated account found. Please connect first.');
-  }
-
-  const webAuthnAccount = toWebAuthnAccount({
-    credential: {
-      id: currentAccount.credentialId,
-      publicKey: currentAccount.publicKey,
-    },
-  });
-
+): Promise<Account> {
   const targetChainId = chainId || 1;
-  const chain = buildChainConfigFromApiKey(targetChainId, apiKey, paymasterUrl);
-  const client = getBundlerClient(chain);
-
-  // Use createSmartAccount which properly includes PERMISSIONS_MANAGER_ADDRESS
-  // and finds the correct owner index for deployed accounts
-  const smartAccount = await createSmartAccount(webAuthnAccount, client as JustanAccountImplementation['client']);
-
-  return { smartAccount, chain, webAuthnAccount };
+  return await Account.restore({
+    chainId: targetChainId,
+    apiKey,
+    paymasterUrl,
+  });
 }
 
 // OnboardingDialogWrapper - handles passkey authentication flow with ConnectDialog confirmation
@@ -564,13 +541,10 @@ function OnboardingDialogWrapper({
   const chainIconKey = getChainIconKeyFromId(targetChainId);
   const chainIcon = useChainIcon(chainIconKey, 24);
 
-  // Initialize PasskeyManager and load accounts
-  const passkeyManager = useMemo(() => new PasskeyManager(undefined, undefined, apiKey), [apiKey]);
-
-  // Load accounts on mount
+  // Load accounts on mount using Account class
   useEffect(() => {
     const loadAccounts = () => {
-      const storedAccounts = passkeyManager.fetchAccounts();
+      const storedAccounts = Account.getStoredAccounts(apiKey);
       setAccounts(storedAccounts.map(acc => ({
         username: acc.username,
         creationDate: new Date(acc.creationDate),
@@ -579,7 +553,7 @@ function OnboardingDialogWrapper({
       })));
     };
     loadAccounts();
-  }, [passkeyManager]);
+  }, [apiKey]);
 
   const handleCancel = () => {
     setOpen(false);
@@ -617,37 +591,21 @@ function OnboardingDialogWrapper({
     try {
       setLoggingInAccount(account.username);
 
-      // Authenticate with WebAuthn
-      await passkeyManager.authenticateWithWebAuthn(rpId, account.credentialId, {
-        userVerification: 'preferred',
-        timeout: 60000,
-        transports: ['internal', 'hybrid'],
-      });
+      // Authenticate with WebAuthn using Account class
+      await Account.authenticateWithWebAuthn(account.credentialId, apiKey);
 
-      // Get the stored account to recreate smart account
-      const storedAccount = passkeyManager.getAccountByCredentialId(account.credentialId);
-      if (!storedAccount) {
-        throw new Error('Account not found');
-      }
-
-      // Create WebAuthn account from stored credential
-      const webAuthnAccount = toWebAuthnAccount({
-        credential: {
-          id: storedAccount.credentialId,
-          publicKey: storedAccount.publicKey,
+      // Get the smart account address using Account class
+      const address = await Account.getAddressForCredential(
+        {
+          chainId: targetChainId,
+          apiKey,
+          paymasterUrl: paymasterUrls?.[targetChainId],
         },
-      });
+        account.credentialId
+      );
 
-      // Get chainId from request or default and build chain config with auto-resolved RPC URL
-      const targetChain = buildChainConfigFromApiKey(targetChainId, apiKey, paymasterUrls?.[targetChainId]);
-      const client = getBundlerClient(targetChain);
-
-      // Create smart account
-      const smartAccount = await createSmartAccount(webAuthnAccount, client as JustanAccountImplementation['client']);
-      const address = getAddress(smartAccount.address);
-
-      // Store auth state
-      passkeyManager.storeAuthState(address, account.credentialId);
+      // Store auth state using Account class
+      Account.storeAuthState(address, account.credentialId, apiKey);
 
       // Show ConnectDialog for confirmation instead of immediately approving
       setAuthenticatedAccountName(account.username);
@@ -664,30 +622,24 @@ function OnboardingDialogWrapper({
     try {
       setIsImporting(true);
 
-      // Import passkey (prompts user to select from cloud backup)
-      const result = await passkeyManager.importPasskeyAccount();
-      const { name, credential } = result;
+      // Import passkey using Account class (prompts user to select from cloud backup)
+      const { name, credential } = await Account.importPasskeyCredential(apiKey);
 
-      // Create WebAuthn account
-      const webAuthnAccount = toWebAuthnAccount({
-        credential: {
-          id: credential.id,
-          publicKey: credential.publicKey,
+      // Get the smart account address using Account class
+      const address = await Account.getAddressForPublicKey(
+        {
+          chainId: targetChainId,
+          apiKey,
+          paymasterUrl: paymasterUrls?.[targetChainId],
         },
-      });
+        credential.id,
+        credential.publicKey
+      );
 
-      // Get chainId from request or default and build chain config with auto-resolved RPC URL
-      const targetChain = buildChainConfigFromApiKey(targetChainId, apiKey, paymasterUrls?.[targetChainId]);
-      const client = getBundlerClient(targetChain);
+      // Store auth state using Account class
+      Account.storeAuthState(address, credential.id, apiKey);
 
-      // Create smart account
-      const smartAccount = await createSmartAccount(webAuthnAccount, client as JustanAccountImplementation['client']);
-      const address = getAddress(smartAccount.address);
-
-      // Store auth state
-      passkeyManager.storeAuthState(address, credential.id);
-
-      // Add to accounts list
+      // Add to accounts list using Account class
       const newAccount: PasskeyAccount = {
         credentialId: credential.id,
         publicKey: credential.publicKey,
@@ -695,7 +647,7 @@ function OnboardingDialogWrapper({
         creationDate: new Date().toISOString(),
         isImported: true,
       };
-      passkeyManager.addAccountToList(newAccount);
+      Account.storePasskeyAccount(newAccount, apiKey);
 
       // Show ConnectDialog for confirmation instead of immediately approving
       setAuthenticatedAccountName(name);
@@ -713,24 +665,29 @@ function OnboardingDialogWrapper({
     try {
       setIsCreating(true);
 
-      // Create passkey
-      const { credentialId, webAuthnAccount } = await passkeyManager.createPasskey(
+      // Create passkey using Account class
+      const { credentialId, publicKey } = await Account.createPasskeyCredential(
         username,
-        rpId,
-        rpName
+        apiKey,
+        { rpId, rpName }
       );
 
-      // Get chainId from request or default and build chain config with auto-resolved RPC URL
-      const targetChainId = request.data.chainId || defaultChainId || 1;
-      const targetChain = buildChainConfigFromApiKey(targetChainId, apiKey, paymasterUrls?.[targetChainId]);
-      const client = getBundlerClient(targetChain);
+      // Get chainId from request or default
+      const createChainId = request.data.chainId || defaultChainId || 1;
 
-      // Create smart account
-      const smartAccount = await createSmartAccount(webAuthnAccount, client as JustanAccountImplementation['client']);
-      const address = getAddress(smartAccount.address);
+      // Get the smart account address using Account class
+      const address = await Account.getAddressForPublicKey(
+        {
+          chainId: createChainId,
+          apiKey,
+          paymasterUrl: paymasterUrls?.[createChainId],
+        },
+        credentialId,
+        publicKey
+      );
 
-      // Store auth state
-      passkeyManager.storeAuthState(address, credentialId);
+      // Store auth state using Account class
+      Account.storeAuthState(address, credentialId, apiKey);
 
       // Store address and username for completion callback
       // Use refs since they are immediately available for callbacks
@@ -844,17 +801,15 @@ function SignatureDialogWrapper({
   const handleSign = async () => {
     setIsProcessing(true);
     try {
-      // Recreate smart account for signing
-      const { smartAccount } = await recreateSmartAccountForSigning(
+      // Restore account for signing
+      const account = await restoreAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
       );
 
       // Sign the message
-      const signature = await smartAccount.signMessage({
-        message: request.data.message
-      });
+      const signature = await account.signMessage(request.data.message);
 
       onApprove(signature);
     } catch (error) {
@@ -911,8 +866,8 @@ function Eip712DialogWrapper({
   const handleSign = async () => {
     setIsProcessing(true);
     try {
-      // Recreate smart account for signing
-      const { smartAccount } = await recreateSmartAccountForSigning(
+      // Restore account for signing
+      const account = await restoreAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
@@ -924,7 +879,7 @@ function Eip712DialogWrapper({
         : request.data.typedData;
 
       // Sign the typed data
-      const signature = await smartAccount.signTypedData({
+      const signature = await account.signTypedData({
         domain: typedData.domain,
         types: typedData.types,
         primaryType: typedData.primaryType,
@@ -982,18 +937,14 @@ function TransactionDialogWrapper({
   const [gasFee, setGasFee] = useState<string>('');
   const [gasFeeLoading, setGasFeeLoading] = useState(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
-  const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
 
   const chainId = request.data.chainId || defaultChainId || 1;
-  const chain = useMemo(
-    () => buildChainConfigFromApiKey(chainId, apiKey, paymasterUrls?.[chainId]),
-    [chainId, apiKey, paymasterUrls]
-  );
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
   const isSponsored = !!paymasterUrls?.[chainId];
 
-  // Transform calls to transactions format expected by dialog and gas estimation
+  // Transform calls to transactions format expected by dialog
   const transactions = useMemo(() => request.data.calls.map(call => ({
     to: call.to,
     data: call.data,
@@ -1001,43 +952,31 @@ function TransactionDialogWrapper({
     chainId: request.data.chainId,
   })), [request.data.calls, request.data.chainId]);
 
-  // Convert transactions to call format for smart account operations
+  // Convert transactions to call format for Account operations
   const transactionCalls = useMemo(() => {
-    return request.data.calls.map(call => {
-      let value = 0n;
-      if (call.value && call.value !== '0') {
-        if (call.value.startsWith('0x')) {
-          value = BigInt(call.value);
-        } else if (/^\d+$/.test(call.value)) {
-          value = BigInt(call.value);
-        } else {
-          value = parseEther(call.value);
-        }
-      }
-      return {
-        to: call.to as Address,
-        value,
-        data: (call.data || '0x') as Hex,
-      };
-    });
+    return request.data.calls.map(call => ({
+      to: call.to as Address,
+      value: call.value,
+      data: (call.data || '0x') as Hex,
+    }));
   }, [request.data.calls]);
 
-  // Initialize smart account
+  // Initialize account
   useEffect(() => {
     let isMounted = true;
 
-    const initializeSmartAccount = async () => {
+    const initializeAccount = async () => {
       try {
-        const { smartAccount: account } = await recreateSmartAccountForSigning(
+        const restoredAccount = await restoreAccountForSigning(
           apiKey,
           chainId,
           paymasterUrls?.[chainId]
         );
         if (isMounted) {
-          setSmartAccount(account);
+          setAccount(restoredAccount);
         }
       } catch (error) {
-        console.error('Error initializing smart account:', error);
+        console.error('Error initializing account:', error);
         if (isMounted) {
           setGasEstimationError('Failed to initialize account');
           setGasFeeLoading(false);
@@ -1045,25 +984,24 @@ function TransactionDialogWrapper({
       }
     };
 
-    initializeSmartAccount();
+    initializeAccount();
 
     return () => {
       isMounted = false;
     };
   }, [apiKey, chainId, paymasterUrls]);
 
-  // Gas estimation using core package
+  // Gas estimation using Account class
   useEffect(() => {
-    if (!smartAccount || transactionCalls.length === 0) return;
+    if (!account || transactionCalls.length === 0) return;
 
     const estimateGas = async () => {
       try {
         setGasFeeLoading(true);
         setGasEstimationError('');
 
-        // Estimate gas using core package
-        const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls, chain);
-        const gasPrice = await calculateGas(chain, gasEstimate);
+        // Estimate gas using Account class
+        const gasPrice = await account.calculateGasCost(transactionCalls);
         setGasFee(gasPrice);
 
         // Override with sponsored if paymaster is available
@@ -1091,17 +1029,17 @@ function TransactionDialogWrapper({
     };
 
     estimateGas();
-  }, [smartAccount, transactionCalls, chain, isSponsored]);
+  }, [account, transactionCalls, isSponsored]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
     try {
-      if (!smartAccount) {
-        throw new Error('Smart account not initialized');
+      if (!account) {
+        throw new Error('Account not initialized');
       }
 
-      // Send bundled transaction using core SDK
-      const result = await sendBundledTransaction(smartAccount, transactionCalls, chain);
+      // Send bundled transaction using Account class
+      const result = await account.sendBundledTransaction(transactionCalls);
 
       onApprove({
         id: result.id,
@@ -1161,13 +1099,9 @@ function SendTransactionDialogWrapper({
   const [gasFee, setGasFee] = useState<string>('');
   const [gasFeeLoading, setGasFeeLoading] = useState(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
-  const [smartAccount, setSmartAccount] = useState<SmartAccount | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
 
   const chainId = request.data.chainId || defaultChainId || 1;
-  const chain = useMemo(
-    () => buildChainConfigFromApiKey(chainId, apiKey, paymasterUrls?.[chainId]),
-    [chainId, apiKey, paymasterUrls]
-  );
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
   const isSponsored = !!paymasterUrls?.[chainId];
@@ -1180,41 +1114,29 @@ function SendTransactionDialogWrapper({
     chainId: request.data.chainId,
   }], [request.data]);
 
-  // Convert to call format for smart account operations
-  const transactionCalls = useMemo(() => {
-    let value = 0n;
-    if (request.data.value && request.data.value !== '0') {
-      if (request.data.value.startsWith('0x')) {
-        value = BigInt(request.data.value);
-      } else if (/^\d+$/.test(request.data.value)) {
-        value = BigInt(request.data.value);
-      } else {
-        value = parseEther(request.data.value);
-      }
-    }
-    return [{
-      to: request.data.to as Address,
-      value,
-      data: (request.data.data || '0x') as Hex,
-    }];
-  }, [request.data]);
+  // Convert to call format for Account operations
+  const transactionCalls = useMemo(() => [{
+    to: request.data.to as Address,
+    value: request.data.value,
+    data: (request.data.data || '0x') as Hex,
+  }], [request.data]);
 
-  // Initialize smart account
+  // Initialize account
   useEffect(() => {
     let isMounted = true;
 
-    const initializeSmartAccount = async () => {
+    const initializeAccount = async () => {
       try {
-        const { smartAccount: account } = await recreateSmartAccountForSigning(
+        const restoredAccount = await restoreAccountForSigning(
           apiKey,
           chainId,
           paymasterUrls?.[chainId]
         );
         if (isMounted) {
-          setSmartAccount(account);
+          setAccount(restoredAccount);
         }
       } catch (error) {
-        console.error('Error initializing smart account:', error);
+        console.error('Error initializing account:', error);
         if (isMounted) {
           setGasEstimationError('Failed to initialize account');
           setGasFeeLoading(false);
@@ -1222,25 +1144,24 @@ function SendTransactionDialogWrapper({
       }
     };
 
-    initializeSmartAccount();
+    initializeAccount();
 
     return () => {
       isMounted = false;
     };
   }, [apiKey, chainId, paymasterUrls]);
 
-  // Gas estimation using core package
+  // Gas estimation using Account class
   useEffect(() => {
-    if (!smartAccount || transactionCalls.length === 0) return;
+    if (!account || transactionCalls.length === 0) return;
 
     const estimateGas = async () => {
       try {
         setGasFeeLoading(true);
         setGasEstimationError('');
 
-        // Estimate gas using core package
-        const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls, chain);
-        const gasPrice = await calculateGas(chain, gasEstimate);
+        // Estimate gas using Account class
+        const gasPrice = await account.calculateGasCost(transactionCalls);
         setGasFee(gasPrice);
 
         // Override with sponsored if paymaster is available
@@ -1268,17 +1189,17 @@ function SendTransactionDialogWrapper({
     };
 
     estimateGas();
-  }, [smartAccount, transactionCalls, chain, isSponsored]);
+  }, [account, transactionCalls, isSponsored]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
     try {
-      if (!smartAccount) {
-        throw new Error('Smart account not initialized');
+      if (!account) {
+        throw new Error('Account not initialized');
       }
 
       // Use sendTransaction which waits for receipt and returns the actual transaction hash
-      const txHash: Hash = await sendTransaction(smartAccount, transactionCalls, chain);
+      const txHash = await account.sendTransaction(transactionCalls);
 
       // eth_sendTransaction returns transaction hash string
       onApprove(txHash);
@@ -1528,8 +1449,8 @@ function PermissionDialogWrapper({
     setIsProcessing(true);
     setStatus('Granting permissions...');
     try {
-      // Recreate smart account for signing
-      const { smartAccount, chain: signingChain } = await recreateSmartAccountForSigning(
+      // Restore account for permission granting
+      const account = await restoreAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
@@ -1541,14 +1462,11 @@ function PermissionDialogWrapper({
         calls: request.data.permissions.calls,
       };
 
-      // Grant permissions using core SDK
-      const result = await grantPermissions(
-        smartAccount,
+      // Grant permissions using Account class
+      const result = await account.grantPermissions(
         request.data.expiry,
-        request.data.spender,
-        permissionsDetail,
-        signingChain,
-        apiKey || ''
+        request.data.spender as Address,
+        permissionsDetail
       );
 
       setStatus('Permissions granted successfully!');
@@ -1641,17 +1559,15 @@ function SiweDialogWrapper({
     setIsProcessing(true);
     setSiweStatus('Signing message...');
     try {
-      // Recreate smart account for signing
-      const { smartAccount } = await recreateSmartAccountForSigning(
+      // Restore account for signing
+      const account = await restoreAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
       );
 
       // Sign the message
-      const signature = await smartAccount.signMessage({
-        message: request.data.message
-      });
+      const signature = await account.signMessage(request.data.message);
 
       setSiweStatus('Sign-in successful!');
       onApprove(signature);
@@ -1833,22 +1749,17 @@ function RevokePermissionDialogWrapper({
     setIsProcessing(true);
     setStatus('Revoking permission...');
     try {
-      // Recreate smart account for revoking
-      const { smartAccount } = await recreateSmartAccountForSigning(
+      // Restore account for revoking
+      const account = await restoreAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
       );
 
-      // Revoke permission
-      await revokePermission(
-        smartAccount,
-        request.data.permissionId as `0x${string}`,
-        chain,
-        apiKey || ''
-      );
+      // Revoke permission using Account class
+      await account.revokePermission(request.data.permissionId as `0x${string}`);
 
-      console.log('✅ Permission revoked');
+      console.log('Permission revoked');
       setStatus('Permission revoked successfully!');
       onApprove({ success: true });
     } catch (error) {
