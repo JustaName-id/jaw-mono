@@ -9,12 +9,13 @@ export interface UseCreatePasskeyResult {
 interface CreatePasskeyParams {
   username: string;
   apiKey?: string;
+  defaultChainId?: number;
 }
 
 export function useCreatePasskey() {
   const mutation = useMutation({
-    mutationFn: async ({ username, apiKey }: CreatePasskeyParams): Promise<UseCreatePasskeyResult> => {
-      const service = new PasskeyService({ apiKey });
+    mutationFn: async ({ username, apiKey, defaultChainId }: CreatePasskeyParams): Promise<UseCreatePasskeyResult> => {
+      const service = new PasskeyService({ apiKey, defaultChainId });
       const result = await service.createPasskey(username);
 
       return {

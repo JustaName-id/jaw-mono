@@ -4,7 +4,7 @@ import { toWebAuthnAccount, type SmartAccount } from 'viem/account-abstraction';
 import {
   createSmartAccount,
   sendTransaction as sendSmartAccountTransaction,
-  sendBundledTransaction as sendSmartAccountBundledTransaction,
+  sendCalls as sendSmartAccountCalls,
   estimateUserOpGas,
   calculateGas,
   getBundlerClient,
@@ -126,113 +126,91 @@ export class Account {
   // ============================================
 
   /**
-   * Load an authenticated account from storage (triggers WebAuthn re-authentication)
+   * Get an account - restores if already authenticated, or triggers login if credentialId provided
    *
-   * This method verifies the user still owns the passkey by triggering WebAuthn.
-   * For restoring an account without re-authentication (e.g., after initial connect),
-   * use `Account.restore()` instead.
+   * This is the primary method to get an Account instance:
+   * - If already authenticated: restores account from storage (no WebAuthn prompt)
+   * - If credentialId provided and not authenticated: triggers WebAuthn login
+   * - If not authenticated and no credentialId: throws error
    *
    * @param config - Account configuration
-   * @returns Promise resolving to the loaded Account instance
-   * @throws Error if not authenticated or loading fails
+   * @param credentialId - Optional credential ID to login with (triggers WebAuthn if not already authenticated)
+   * @returns Promise resolving to the Account instance
+   * @throws Error if not authenticated and no credentialId provided
    *
    * @example
    * ```typescript
-   * const account = await Account.load({ chainId: 1, apiKey: 'your-api-key' });
-   * console.log('Address:', account.address);
+   * // Restore existing session (no prompt)
+   * const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
+   *
+   * // Login with specific credential (triggers WebAuthn if needed)
+   * const accounts = Account.getStoredAccounts('your-api-key');
+   * const account = await Account.get(
+   *   { chainId: 1, apiKey: 'your-api-key' },
+   *   accounts[0].credentialId
+   * );
    * ```
    */
-  static async load(config: AccountConfig): Promise<Account> {
+  static async get(config: AccountConfig, credentialId?: string): Promise<Account> {
     const { chainId, apiKey = '', paymasterUrl } = config;
 
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
     const authResult = passkeyManager.checkAuth();
 
-    if (!authResult.isAuthenticated || !authResult.address) {
-      throw new Error('Not authenticated. Please login or create an account first.');
+    // If credentialId is explicitly provided, always require WebAuthn authentication
+    // This ensures user verification when selecting a specific account to login with
+    if (credentialId) {
+      const passkeyAccount = passkeyManager.getAccountByCredentialId(credentialId);
+      if (!passkeyAccount) {
+        throw new Error(`No account found for credential ID: ${credentialId}`);
+      }
+
+      const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+
+      // Authenticate with WebAuthn
+      await passkeyManager.authenticateWithWebAuthn(rpId, credentialId);
+
+      const webAuthnAccount = toWebAuthnAccount({
+        credential: {
+          id: credentialId,
+          publicKey: passkeyAccount.publicKey,
+        },
+      });
+
+      const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+      const bundlerClient = getBundlerClient(chain);
+      const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
+      const address = await smartAccount.getAddress();
+
+      // Store auth state
+      passkeyManager.storeAuthState(address, credentialId);
+
+      return new Account(smartAccount, chain, apiKey, passkeyAccount);
     }
 
-    const credentialId = passkeyManager.fetchActiveCredentialId();
-    if (!credentialId) {
-      throw new Error('No active credential found.');
+    // No credentialId provided - restore from existing auth state if available
+    if (authResult.isAuthenticated && authResult.address) {
+      const currentAccount = passkeyManager.getCurrentAccount();
+      if (currentAccount) {
+        const webAuthnAccount = toWebAuthnAccount({
+          credential: {
+            id: currentAccount.credentialId,
+            publicKey: currentAccount.publicKey,
+          },
+        });
+
+        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+        const bundlerClient = getBundlerClient(chain);
+        const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
+
+        return new Account(smartAccount, chain, apiKey, currentAccount);
+      }
     }
 
-    const passkeyAccount = passkeyManager.getAccountByCredentialId(credentialId);
-    if (!passkeyAccount) {
-      throw new Error('Passkey account not found for active credential.');
-    }
-
-    const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
-
-    // Authenticate with WebAuthn to verify the user owns the passkey
-    await passkeyManager.authenticateWithWebAuthn(
-      typeof window !== 'undefined' ? window.location.hostname : 'localhost',
-      credentialId
-    );
-
-    // Use stored credential info to create WebAuthn account
-    const webAuthnAccount = toWebAuthnAccount({
-      credential: {
-        id: credentialId,
-        publicKey: passkeyAccount.publicKey,
-      },
-    });
-
-    const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
-
-    return new Account(smartAccount, chain, apiKey, passkeyAccount);
+    // Not authenticated and no credentialId provided
+    throw new Error('Not authenticated. Please provide a credentialId to login, or create an account first.');
   }
 
-  /**
-   * Restore an authenticated account from storage WITHOUT triggering WebAuthn
-   *
-   * This method recreates the Account from stored credentials assuming the user
-   * has already authenticated (e.g., during wallet_connect). Use this for subsequent
-   * operations like signing and transactions after initial authentication.
-   *
-   * For initial authentication that verifies passkey ownership, use `Account.load()` instead.
-   *
-   * @param config - Account configuration
-   * @returns Promise resolving to the restored Account instance
-   * @throws Error if not authenticated or no account found
-   *
-   * @example
-   * ```typescript
-   * // After user has authenticated via wallet_connect
-   * const account = await Account.restore({ chainId: 1, apiKey: 'your-api-key' });
-   * const signature = await account.signMessage('Hello');
-   * ```
-   */
-  static async restore(config: AccountConfig): Promise<Account> {
-    const { chainId, apiKey = '', paymasterUrl } = config;
-
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    const authResult = passkeyManager.checkAuth();
-
-    if (!authResult.isAuthenticated || !authResult.address) {
-      throw new Error('Not authenticated. Please connect first.');
-    }
-
-    const currentAccount = passkeyManager.getCurrentAccount();
-    if (!currentAccount) {
-      throw new Error('No authenticated account found. Please connect first.');
-    }
-
-    // Use stored credential info to create WebAuthn account (no re-auth)
-    const webAuthnAccount = toWebAuthnAccount({
-      credential: {
-        id: currentAccount.credentialId,
-        publicKey: currentAccount.publicKey,
-      },
-    });
-
-    const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
-    const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
-
-    return new Account(smartAccount, chain, apiKey, currentAccount);
-  }
 
   /**
    * Create a new account with a passkey
@@ -325,56 +303,6 @@ export class Account {
     return new Account(smartAccount, chain, apiKey, passkeyAccount);
   }
 
-  /**
-   * Login with an existing passkey
-   *
-   * @param config - Account configuration
-   * @param credentialId - The credential ID of the passkey to login with
-   * @returns Promise resolving to the logged-in Account instance
-   *
-   * @example
-   * ```typescript
-   * const accounts = Account.getStoredAccounts('your-api-key');
-   * const account = await Account.login(
-   *   { chainId: 1, apiKey: 'your-api-key' },
-   *   accounts[0].credentialId
-   * );
-   * ```
-   */
-  static async login(config: AccountConfig, credentialId: string): Promise<Account> {
-    const { chainId, apiKey = '', paymasterUrl } = config;
-
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-
-    const passkeyAccount = passkeyManager.getAccountByCredentialId(credentialId);
-    if (!passkeyAccount) {
-      throw new Error(`No account found for credential ID: ${credentialId}`);
-    }
-
-    const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-
-    // Authenticate with WebAuthn to verify the user owns the passkey
-    await passkeyManager.authenticateWithWebAuthn(rpId, credentialId);
-
-    // Use stored credential info to create WebAuthn account
-    const webAuthnAccount = toWebAuthnAccount({
-      credential: {
-        id: credentialId,
-        publicKey: passkeyAccount.publicKey,
-      },
-    });
-
-    const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
-
-    const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
-    const address = await smartAccount.getAddress();
-
-    // Update auth state
-    passkeyManager.storeAuthState(address, credentialId);
-
-    return new Account(smartAccount, chain, apiKey, passkeyAccount);
-  }
 
   /**
    * Create an account from a LocalAccount (e.g., from Privy, Dynamic, or private key)
@@ -424,25 +352,9 @@ export class Account {
   // ============================================
 
   /**
-   * Check if a user is authenticated
-   *
-   * @param apiKey - Optional API key
-   * @returns true if authenticated, false otherwise
-   *
-   * @example
-   * ```typescript
-   * if (Account.isAuthenticated('your-api-key')) {
-   *   const account = await Account.load({ chainId: 1, apiKey: 'your-api-key' });
-   * }
-   * ```
-   */
-  static isAuthenticated(apiKey?: string): boolean {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    return passkeyManager.checkAuth().isAuthenticated;
-  }
-
-  /**
    * Get the authenticated account address without fully loading the account
+   *
+   * Use this to check if authenticated: `Account.getAuthenticatedAddress() !== null`
    *
    * @param apiKey - Optional API key
    * @returns The account address or null if not authenticated
@@ -452,6 +364,7 @@ export class Account {
    * const address = Account.getAuthenticatedAddress('your-api-key');
    * if (address) {
    *   console.log('Current address:', address);
+   *   const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
    * }
    * ```
    */
@@ -493,270 +406,6 @@ export class Account {
   static logout(apiKey?: string): void {
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
     passkeyManager.logout();
-  }
-
-  /**
-   * Get the counterfactual smart account address for a stored credential without triggering WebAuthn
-   *
-   * This is useful for UI flows where you need to display the address before
-   * the user confirms (e.g., in a connect dialog). It computes the address
-   * from the stored credential without requiring user interaction.
-   *
-   * @param config - Account configuration (chainId, apiKey, paymasterUrl)
-   * @param credentialId - The credential ID to get the address for
-   * @returns Promise resolving to the smart account address
-   * @throws Error if the credential is not found
-   *
-   * @example
-   * ```typescript
-   * // Get address to display in UI before user confirms
-   * const address = await Account.getAddressForCredential(
-   *   { chainId: 1, apiKey: 'your-api-key' },
-   *   'credential-id'
-   * );
-   * // Show confirmation dialog with address...
-   * // Then on confirm, call Account.login()
-   * ```
-   */
-  static async getAddressForCredential(
-    config: AccountConfig,
-    credentialId: string
-  ): Promise<Address> {
-    const { apiKey = '' } = config;
-
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    const passkeyAccount = passkeyManager.getAccountByCredentialId(credentialId);
-
-    if (!passkeyAccount) {
-      throw new Error(`No account found for credential ID: ${credentialId}`);
-    }
-
-    return Account.getAddressForPublicKey(config, credentialId, passkeyAccount.publicKey);
-  }
-
-  /**
-   * Get the counterfactual smart account address for a credential ID and public key
-   *
-   * This is useful for UI flows where you have just created or imported a passkey
-   * and need to compute the address before storing the account. It does not
-   * require the credential to be stored yet.
-   *
-   * @param config - Account configuration (chainId, apiKey, paymasterUrl)
-   * @param credentialId - The credential ID
-   * @param publicKey - The public key as a hex string
-   * @returns Promise resolving to the smart account address
-   *
-   * @example
-   * ```typescript
-   * // After creating a passkey, get the address before storing
-   * const { credentialId, publicKey } = await passkeyManager.createPasskey(...);
-   * const address = await Account.getAddressForPublicKey(
-   *   { chainId: 1, apiKey: 'your-api-key' },
-   *   credentialId,
-   *   publicKey
-   * );
-   * // Show confirmation dialog with address...
-   * ```
-   */
-  static async getAddressForPublicKey(
-    config: AccountConfig,
-    credentialId: string,
-    publicKey: Hex
-  ): Promise<Address> {
-    const { chainId, apiKey = '', paymasterUrl } = config;
-
-    // Create WebAuthn account from credential (no WebAuthn prompt)
-    const webAuthnAccount = toWebAuthnAccount({
-      credential: {
-        id: credentialId,
-        publicKey,
-      },
-    });
-
-    const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
-    const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
-
-    return smartAccount.address;
-  }
-
-  /**
-   * Get the currently authenticated account details
-   *
-   * @param apiKey - Optional API key
-   * @returns The current PasskeyAccount or undefined if not authenticated
-   *
-   * @example
-   * ```typescript
-   * const currentAccount = Account.getCurrentAccount('your-api-key');
-   * if (currentAccount) {
-   *   console.log('Logged in as:', currentAccount.username);
-   * }
-   * ```
-   */
-  static getCurrentAccount(apiKey?: string): PasskeyAccount | undefined {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    return passkeyManager.getCurrentAccount();
-  }
-
-  /**
-   * Authenticate with WebAuthn for a specific credential
-   *
-   * This is useful for UI flows where you need to verify the user owns a passkey
-   * before proceeding with an operation. It triggers the WebAuthn prompt.
-   *
-   * @param credentialId - The credential ID to authenticate with
-   * @param apiKey - Optional API key
-   * @param options - Optional WebAuthn options
-   * @returns Promise resolving to the authentication result with challenge
-   *
-   * @example
-   * ```typescript
-   * // Authenticate user before showing confirmation dialog
-   * const result = await Account.authenticateWithWebAuthn('credential-id', 'your-api-key');
-   * // Now show confirmation dialog...
-   * ```
-   */
-  static async authenticateWithWebAuthn(
-    credentialId: string,
-    apiKey?: string,
-    options?: {
-      userVerification?: 'preferred' | 'required' | 'discouraged';
-      timeout?: number;
-      transports?: AuthenticatorTransport[];
-    }
-  ): Promise<{ challenge: Uint8Array }> {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-
-    return passkeyManager.authenticateWithWebAuthn(rpId, credentialId, {
-      userVerification: options?.userVerification ?? 'preferred',
-      timeout: options?.timeout ?? 60000,
-      transports: options?.transports ?? ['internal', 'hybrid'],
-    });
-  }
-
-  /**
-   * Store authentication state after successful authentication
-   *
-   * This should be called after authenticating to persist the auth state.
-   *
-   * @param address - The wallet address
-   * @param credentialId - The credential ID that was authenticated
-   * @param apiKey - Optional API key
-   *
-   * @example
-   * ```typescript
-   * // After authentication and getting address
-   * Account.storeAuthState(address, credentialId, 'your-api-key');
-   * ```
-   */
-  static storeAuthState(address: Address, credentialId: string, apiKey?: string): void {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    passkeyManager.storeAuthState(address, credentialId);
-  }
-
-  /**
-   * Create a new passkey credential
-   *
-   * This triggers the WebAuthn registration flow to create a new passkey.
-   * After creation, use `getAddressForPublicKey` to get the wallet address,
-   * then `storePasskeyAccount` to persist the account.
-   *
-   * @param username - Display name for the passkey
-   * @param apiKey - Optional API key
-   * @param options - Optional creation options
-   * @returns Promise resolving to the created credential details
-   *
-   * @example
-   * ```typescript
-   * // Create a new passkey
-   * const { credentialId, publicKey, passkeyAccount } = await Account.createPasskeyCredential(
-   *   'myuser',
-   *   'your-api-key'
-   * );
-   * // Get the wallet address
-   * const address = await Account.getAddressForPublicKey(config, credentialId, publicKey);
-   * // Store the account
-   * Account.storePasskeyAccount(passkeyAccount, 'your-api-key');
-   * ```
-   */
-  static async createPasskeyCredential(
-    username: string,
-    apiKey?: string,
-    options?: {
-      rpId?: string;
-      rpName?: string;
-    }
-  ): Promise<{
-    credentialId: string;
-    publicKey: Hex;
-    passkeyAccount: PasskeyAccount;
-  }> {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    const rpId = options?.rpId ?? (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
-    const rpName = options?.rpName ?? 'JAW Wallet';
-
-    const { credentialId, publicKey, passkeyAccount } = await passkeyManager.createPasskey(
-      username,
-      rpId,
-      rpName
-    );
-
-    return { credentialId, publicKey, passkeyAccount };
-  }
-
-  /**
-   * Import a passkey from cloud backup
-   *
-   * This triggers the WebAuthn flow to import an existing passkey from the cloud.
-   * After import, use `getAddressForPublicKey` to get the wallet address,
-   * then `storePasskeyAccount` to persist the account.
-   *
-   * @param apiKey - Optional API key
-   * @returns Promise resolving to the imported credential details
-   *
-   * @example
-   * ```typescript
-   * // Import a passkey from cloud
-   * const { name, credential } = await Account.importPasskeyCredential('your-api-key');
-   * // Get the wallet address
-   * const address = await Account.getAddressForPublicKey(config, credential.id, credential.publicKey);
-   * // Create and store the account
-   * const account = { credentialId: credential.id, publicKey: credential.publicKey, username: name, ... };
-   * Account.storePasskeyAccount(account, 'your-api-key');
-   * ```
-   */
-  static async importPasskeyCredential(apiKey?: string): Promise<{
-    name: string;
-    credential: { id: string; publicKey: Hex };
-  }> {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    return passkeyManager.importPasskeyAccount();
-  }
-
-  /**
-   * Store a passkey account to the local account list
-   *
-   * This adds an account to the stored accounts list without setting it as active.
-   *
-   * @param account - The passkey account to store
-   * @param apiKey - Optional API key
-   *
-   * @example
-   * ```typescript
-   * Account.storePasskeyAccount({
-   *   credentialId: 'cred-id',
-   *   publicKey: '0x...',
-   *   username: 'myuser',
-   *   creationDate: new Date().toISOString(),
-   *   isImported: false,
-   * }, 'your-api-key');
-   * ```
-   */
-  static storePasskeyAccount(account: PasskeyAccount, apiKey?: string): void {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    passkeyManager.addAccountToList(account);
   }
 
   // ============================================
@@ -929,27 +578,27 @@ export class Account {
   }
 
   /**
-   * Send a bundled transaction (user operation) without waiting for receipt
+   * Send multiple calls as a bundled user operation without waiting for receipt
    *
    * @param calls - Array of transaction calls
    * @returns Promise resolving to the user operation ID and chain ID
    *
    * @example
    * ```typescript
-   * const { id, chainId } = await account.sendBundledTransaction([
+   * const { id, chainId } = await account.sendCalls([
    *   { to: '0x...', value: '0.1' }
    * ]);
    * console.log('UserOp hash:', id);
    * ```
    */
-  async sendBundledTransaction(calls: TransactionCall[]): Promise<BundledTransactionResult> {
+  async sendCalls(calls: TransactionCall[]): Promise<BundledTransactionResult> {
     const formattedCalls = calls.map(call => ({
       to: call.to,
       value: Account.parseValue(call.value),
       data: call.data,
     }));
 
-    return await sendSmartAccountBundledTransaction(
+    return await sendSmartAccountCalls(
       this._smartAccount,
       formattedCalls,
       this._chain
@@ -1065,21 +714,21 @@ export class Account {
   }
 
   /**
-   * Fetch details of a previously granted permission from the relay
+   * Get details of a previously granted permission from the relay
    *
    * @param permissionId - The permission ID (hash) to fetch
    * @returns Promise resolving to the permission details in the same format as grantPermissions response
    *
    * @example
    * ```typescript
-   * const details = await account.fetchPermissionDetails('0x...');
+   * const details = await account.getPermission('0x...');
    * console.log('Spender:', details.spender);
    * console.log('Expires:', new Date(details.expiry * 1000));
    * console.log('Calls:', details.calls);
    * console.log('Spends:', details.spends);
    * ```
    */
-  async fetchPermissionDetails(permissionId: Hex): Promise<WalletGrantPermissionsResponse> {
+  async getPermission(permissionId: Hex): Promise<WalletGrantPermissionsResponse> {
     const relayResponse = await getPermissionFromRelay(permissionId, this._apiKey);
 
     // Transform relay response to WalletGrantPermissionsResponse format

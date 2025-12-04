@@ -140,7 +140,7 @@ export async function sendTransaction(
     return receipt.receipt.transactionHash
 }
 
-export async function sendBundledTransaction(
+export async function sendCalls(
     smartAccount: SmartAccount,
     calls: Array<{
         to: Address;

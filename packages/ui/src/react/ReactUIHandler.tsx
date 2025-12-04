@@ -16,7 +16,6 @@ import {
   PermissionUIRequest,
   RevokePermissionUIRequest,
   WalletSignUIRequest,
-  PasskeyAccount,
   Account,
   SUPPORTED_CHAINS,
   JAW_RPC_URL,
@@ -485,14 +484,14 @@ function buildChainConfigFromApiKey(chainId: number, apiKey?: string, paymasterU
   };
 }
 
-// Helper to restore Account for signing operations
-async function restoreAccountForSigning(
+// Helper to get Account for signing operations
+async function getAccountForSigning(
   apiKey?: string,
   chainId?: number,
   paymasterUrl?: string
 ): Promise<Account> {
   const targetChainId = chainId || 1;
-  return await Account.restore({
+  return await Account.get({
     chainId: targetChainId,
     apiKey,
     paymasterUrl,
@@ -591,11 +590,8 @@ function OnboardingDialogWrapper({
     try {
       setLoggingInAccount(account.username);
 
-      // Authenticate with WebAuthn using Account class
-      await Account.authenticateWithWebAuthn(account.credentialId, apiKey);
-
-      // Get the smart account address using Account class
-      const address = await Account.getAddressForCredential(
+      // Use Account.get which handles WebAuthn authentication and stores auth state
+      const accountInstance = await Account.get(
         {
           chainId: targetChainId,
           apiKey,
@@ -604,12 +600,9 @@ function OnboardingDialogWrapper({
         account.credentialId
       );
 
-      // Store auth state using Account class
-      Account.storeAuthState(address, account.credentialId, apiKey);
-
       // Show ConnectDialog for confirmation instead of immediately approving
       setAuthenticatedAccountName(account.username);
-      setAuthenticatedWalletAddress(address);
+      setAuthenticatedWalletAddress(accountInstance.address);
       setShowConnectDialog(true);
     } catch (error) {
       console.error('Login failed:', error);
@@ -622,36 +615,18 @@ function OnboardingDialogWrapper({
     try {
       setIsImporting(true);
 
-      // Import passkey using Account class (prompts user to select from cloud backup)
-      const { name, credential } = await Account.importPasskeyCredential(apiKey);
+      // Use Account.import which handles everything
+      const accountInstance = await Account.import({
+        chainId: targetChainId,
+        apiKey,
+        paymasterUrl: paymasterUrls?.[targetChainId],
+      });
 
-      // Get the smart account address using Account class
-      const address = await Account.getAddressForPublicKey(
-        {
-          chainId: targetChainId,
-          apiKey,
-          paymasterUrl: paymasterUrls?.[targetChainId],
-        },
-        credential.id,
-        credential.publicKey
-      );
-
-      // Store auth state using Account class
-      Account.storeAuthState(address, credential.id, apiKey);
-
-      // Add to accounts list using Account class
-      const newAccount: PasskeyAccount = {
-        credentialId: credential.id,
-        publicKey: credential.publicKey,
-        username: name,
-        creationDate: new Date().toISOString(),
-        isImported: true,
-      };
-      Account.storePasskeyAccount(newAccount, apiKey);
+      const metadata = accountInstance.getMetadata();
 
       // Show ConnectDialog for confirmation instead of immediately approving
-      setAuthenticatedAccountName(name);
-      setAuthenticatedWalletAddress(address);
+      setAuthenticatedAccountName(metadata?.username || 'Imported Account');
+      setAuthenticatedWalletAddress(accountInstance.address);
       setShowConnectDialog(true);
       setIsImporting(false);
     } catch (error) {
@@ -665,36 +640,29 @@ function OnboardingDialogWrapper({
     try {
       setIsCreating(true);
 
-      // Create passkey using Account class
-      const { credentialId, publicKey } = await Account.createPasskeyCredential(
-        username,
-        apiKey,
-        { rpId, rpName }
-      );
-
       // Get chainId from request or default
       const createChainId = request.data.chainId || defaultChainId || 1;
 
-      // Get the smart account address using Account class
-      const address = await Account.getAddressForPublicKey(
+      // Use Account.create which handles everything
+      const accountInstance = await Account.create(
         {
           chainId: createChainId,
           apiKey,
           paymasterUrl: paymasterUrls?.[createChainId],
         },
-        credentialId,
-        publicKey
+        {
+          username,
+          rpId,
+          rpName,
+        }
       );
-
-      // Store auth state using Account class
-      Account.storeAuthState(address, credentialId, apiKey);
 
       // Store address and username for completion callback
       // Use refs since they are immediately available for callbacks
-      pendingAddressRef.current = address;
+      pendingAddressRef.current = accountInstance.address;
       pendingUsernameRef.current = username;
 
-      return address;
+      return accountInstance.address;
     } catch (error) {
       console.error('Account creation failed:', error);
       setIsCreating(false);
@@ -802,7 +770,7 @@ function SignatureDialogWrapper({
     setIsProcessing(true);
     try {
       // Restore account for signing
-      const account = await restoreAccountForSigning(
+      const account = await getAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
@@ -867,7 +835,7 @@ function Eip712DialogWrapper({
     setIsProcessing(true);
     try {
       // Restore account for signing
-      const account = await restoreAccountForSigning(
+      const account = await getAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
@@ -967,7 +935,7 @@ function TransactionDialogWrapper({
 
     const initializeAccount = async () => {
       try {
-        const restoredAccount = await restoreAccountForSigning(
+        const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
           paymasterUrls?.[chainId]
@@ -1038,8 +1006,8 @@ function TransactionDialogWrapper({
         throw new Error('Account not initialized');
       }
 
-      // Send bundled transaction using Account class
-      const result = await account.sendBundledTransaction(transactionCalls);
+      // Send calls using Account class
+      const result = await account.sendCalls(transactionCalls);
 
       onApprove({
         id: result.id,
@@ -1127,7 +1095,7 @@ function SendTransactionDialogWrapper({
 
     const initializeAccount = async () => {
       try {
-        const restoredAccount = await restoreAccountForSigning(
+        const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
           paymasterUrls?.[chainId]
@@ -1450,7 +1418,7 @@ function PermissionDialogWrapper({
     setStatus('Granting permissions...');
     try {
       // Restore account for permission granting
-      const account = await restoreAccountForSigning(
+      const account = await getAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
@@ -1560,7 +1528,7 @@ function SiweDialogWrapper({
     setSiweStatus('Signing message...');
     try {
       // Restore account for signing
-      const account = await restoreAccountForSigning(
+      const account = await getAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]
@@ -1750,7 +1718,7 @@ function RevokePermissionDialogWrapper({
     setStatus('Revoking permission...');
     try {
       // Restore account for revoking
-      const account = await restoreAccountForSigning(
+      const account = await getAccountForSigning(
         apiKey,
         chainId,
         paymasterUrls?.[chainId]

@@ -4,6 +4,7 @@ import { PasskeyService } from "../../lib/passkey-service";
 
 interface PasskeyLoginParams {
   apiKey?: string;
+  defaultChainId?: number;
 }
 
 export const usePasskeyLogin = () => {
@@ -12,7 +13,7 @@ export const usePasskeyLogin = () => {
   return useMutation({
     mutationFn: async (params?: PasskeyLoginParams) => {
         try {
-            const service = new PasskeyService({ localOnly: true, apiKey: params?.apiKey });
+            const service = new PasskeyService({ localOnly: true, apiKey: params?.apiKey, defaultChainId: params?.defaultChainId });
             // Call without credentialId to use the first available passkey
             const result = await service.importPasskeyAccount();
 

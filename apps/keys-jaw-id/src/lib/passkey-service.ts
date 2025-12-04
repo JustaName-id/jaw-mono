@@ -16,7 +16,6 @@ export interface PasskeyAuthenticationResult {
   credentialId: string;
   address: Address;
   account: PasskeyAccount;
-  challenge?: Uint8Array;
 }
 
 /**
@@ -27,9 +26,11 @@ export class PasskeyService {
   private rpId: string;
   private rpName: string;
   private apiKey: string;
+  private defaultChainId: number;
 
-  constructor(preference?: { serverUrl?: string; apiKey?: string; localOnly?: boolean }) {
+  constructor(preference?: { serverUrl?: string; apiKey?: string; localOnly?: boolean; defaultChainId?: number }) {
     this.apiKey = preference?.apiKey || process.env.NEXT_PUBLIC_API_KEY || '';
+    this.defaultChainId = preference?.defaultChainId ?? +(process.env.NEXT_PUBLIC_CHAIN_ID || 1);
     // For local development, use localhost
     // For production, use your actual domain
     this.rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
@@ -37,7 +38,7 @@ export class PasskeyService {
   }
 
   private getDefaultChainId(): number {
-    return +(process.env.NEXT_PUBLIC_CHAIN_ID || 1);
+    return this.defaultChainId;
   }
 
   /**
@@ -55,9 +56,10 @@ export class PasskeyService {
    * Check if user is already authenticated
    */
   checkAuth() {
+    const address = Account.getAuthenticatedAddress(this.apiKey);
     return {
-      isAuthenticated: Account.isAuthenticated(this.apiKey),
-      address: Account.getAuthenticatedAddress(this.apiKey),
+      isAuthenticated: address !== null,
+      address,
     };
   }
 
@@ -66,17 +68,6 @@ export class PasskeyService {
    */
   fetchAccounts(): PasskeyAccount[] {
     return Account.getStoredAccounts(this.apiKey);
-  }
-
-  storeAuthState(address: Address, credentialId: string): void {
-    Account.storeAuthState(address, credentialId, this.apiKey);
-  }
-
-  /**
-   * Get currently active account
-   */
-  getCurrentAccount(): PasskeyAccount | undefined {
-    return Account.getCurrentAccount(this.apiKey);
   }
 
   /**
@@ -90,31 +81,38 @@ export class PasskeyService {
     }
 
     try {
-      // Create passkey using Account class
-      const { credentialId, publicKey, passkeyAccount } = await Account.createPasskeyCredential(
-        username,
-        this.apiKey,
-        { rpId: this.rpId, rpName: this.rpName }
-      );
-
-      // Get address using Account class
-      const address = await Account.getAddressForPublicKey(
+      // Create account using Account.create which handles everything
+      const account = await Account.create(
         {
           chainId: this.getDefaultChainId(),
           apiKey: this.apiKey,
         },
-        credentialId,
-        publicKey
+        {
+          username,
+          rpId: this.rpId,
+          rpName: this.rpName,
+        }
       );
 
-      console.log('🔍 Smart account address:', address);
+      const metadata = account.getMetadata();
+      if (!metadata) {
+        throw new Error('Failed to get account metadata after creation');
+      }
 
-      Account.storeAuthState(address, credentialId, this.apiKey);
+      // Get the passkey account from stored accounts
+      const storedAccounts = Account.getStoredAccounts(this.apiKey);
+      const passkeyAccount = storedAccounts.find(acc => acc.username === username);
+
+      if (!passkeyAccount) {
+        throw new Error('Failed to retrieve created passkey account');
+      }
+
+      console.log('🔍 Smart account address:', account.address);
 
       return {
-        credentialId,
-        publicKey,
-        address,
+        credentialId: passkeyAccount.credentialId,
+        publicKey: passkeyAccount.publicKey,
+        address: account.address,
         account: passkeyAccount,
       };
     } catch (error) {
@@ -124,7 +122,7 @@ export class PasskeyService {
   }
 
   /**
-   * Authenticate with existing passkey
+   * Authenticate with existing passkey (login)
    * @param credentialId - specific credential ID to authenticate with
    * @returns Authentication result with address and account
    */
@@ -145,7 +143,7 @@ export class PasskeyService {
       console.log('🔍 Found accounts:', existingAccounts.length);
       console.log('🌐 Using rpId:', this.rpId);
 
-      // Filter passkey data from found accounts
+      // Find the passkey data
       const passkeyData = existingAccounts.find(acc => acc.credentialId === credentialId);
       if (!passkeyData) {
         throw new Error(`Passkey with ID ${credentialId} not found`);
@@ -153,11 +151,8 @@ export class PasskeyService {
 
       console.log('✅ Using account:', passkeyData.username, credentialId);
 
-      // Perform WebAuthn authentication using Account class
-      const { challenge } = await Account.authenticateWithWebAuthn(credentialId, this.apiKey);
-
-      // Get address using Account class
-      const address = await Account.getAddressForCredential(
+      // Use Account.get which handles WebAuthn authentication
+      const account = await Account.get(
         {
           chainId: this.getDefaultChainId(),
           apiKey: this.apiKey,
@@ -165,13 +160,10 @@ export class PasskeyService {
         credentialId
       );
 
-      Account.storeAuthState(address, credentialId, this.apiKey);
-
       return {
         credentialId,
-        address,
+        address: account.address,
         account: passkeyData,
-        challenge,
       };
     } catch (error) {
       console.error('Failed to authenticate with passkey:', error);
@@ -180,40 +172,33 @@ export class PasskeyService {
   }
 
   /**
-   * Import a passkey account from the backend
+   * Import a passkey account from the cloud
    * @returns PasskeyAuthenticationResult
-   * @throws {PasskeyLookupError} If backend lookup fails or passkey not found
    */
   async importPasskeyAccount(): Promise<PasskeyAuthenticationResult> {
-    // Import passkey using Account class
-    const { name, credential } = await Account.importPasskeyCredential(this.apiKey);
+    // Import passkey using Account.import which handles everything
+    const account = await Account.import({
+      chainId: this.getDefaultChainId(),
+      apiKey: this.apiKey,
+    });
 
-    // Get address using Account class
-    const address = await Account.getAddressForPublicKey(
-      {
-        chainId: this.getDefaultChainId(),
-        apiKey: this.apiKey,
-      },
-      credential.id,
-      credential.publicKey
-    );
+    const metadata = account.getMetadata();
+    if (!metadata) {
+      throw new Error('Failed to get account metadata after import');
+    }
 
-    Account.storeAuthState(address, credential.id, this.apiKey);
+    // Get the imported passkey account from stored accounts
+    const storedAccounts = Account.getStoredAccounts(this.apiKey);
+    const passkeyAccount = storedAccounts.find(acc => acc.isImported && acc.username === metadata.username);
 
-    const newAccount: PasskeyAccount = {
-      credentialId: credential.id,
-      publicKey: credential.publicKey,
-      username: name,
-      creationDate: new Date().toISOString(),
-      isImported: true,
-    };
-
-    Account.storePasskeyAccount(newAccount, this.apiKey);
+    if (!passkeyAccount) {
+      throw new Error('Failed to retrieve imported passkey account');
+    }
 
     return {
-      credentialId: credential.id,
-      address,
-      account: newAccount,
+      credentialId: passkeyAccount.credentialId,
+      address: account.address,
+      account: passkeyAccount,
     };
   }
 
@@ -223,7 +208,7 @@ export class PasskeyService {
    * @returns Account instance
    */
   async getAccount(chain: Chain): Promise<Account> {
-    return Account.restore({
+    return Account.get({
       chainId: chain.id,
       apiKey: this.apiKey,
       paymasterUrl: chain.paymasterUrl,

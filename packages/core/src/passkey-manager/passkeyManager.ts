@@ -7,7 +7,7 @@ import {
 } from './types.js';
 import type { JawProviderPreference } from '../provider/index.js';
 import { registerPasskeyInBackend, lookupPasskeyFromBackend, WebAuthnAuthenticationResult , authenticateWithWebAuthnUtils, createPasskeyUtils, ImportWebAuthnAuthenticationResult, importPasskeyUtils} from './utils.js';
-import {JAW_PASSKEYS_URL} from "../constants.js";
+import {JAW_BASE_URL} from "../constants.js";
 import type { WebAuthnAccount } from "viem/account-abstraction";
 
 /**
@@ -198,8 +198,8 @@ export class PasskeyManager {
     this.validateDisplayName(name);
     this.validateCredentialId(credentialId);
 
-    // Register with backend
-    const serverUrl = this.preference.serverUrl ?? JAW_PASSKEYS_URL;
+    // Register with backend - use base URL since the route path is already defined in Routes
+    const serverUrl = this.preference.serverUrl ?? JAW_BASE_URL;
     await registerPasskeyInBackend(
       {
         credentialId,
@@ -240,8 +240,8 @@ export class PasskeyManager {
     address: Address,
     dev = false
   ): Promise<void> {
-    // Lookup from backend first
-    const serverUrl = this.preference.serverUrl ?? JAW_PASSKEYS_URL;
+    // Lookup from backend first - use base URL since the route path is already defined in Routes
+    const serverUrl = this.preference.serverUrl ?? JAW_BASE_URL;
     const passkeyData = await lookupPasskeyFromBackend(
       credentialId,
       this.apiKey,

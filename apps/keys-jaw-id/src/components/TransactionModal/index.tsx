@@ -251,9 +251,9 @@ export const TransactionModal = ({
 
       // Send transaction using Account class
       let result: TransactionResult;
-      // Use sendBundledTransaction for wallet_sendCalls, sendTransaction for eth_sendTransaction
+      // Use sendCalls for wallet_sendCalls, sendTransaction for eth_sendTransaction
       if (transactionRequest?.method === 'wallet_sendCalls') {
-        const bundledResult = await account.sendBundledTransaction(transactionCalls);
+        const bundledResult = await account.sendCalls(transactionCalls);
         // Return the transaction result with proper format based on method
         result = {
           id: bundledResult.id,

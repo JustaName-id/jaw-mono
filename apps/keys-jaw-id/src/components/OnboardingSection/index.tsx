@@ -77,7 +77,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
 
             const fullUsername = ensConfig ? `${username.trim()}.${ensConfig}` : username.trim();
 
-            const result = await register({ username: fullUsername, apiKey });
+            const result = await register({ username: fullUsername, apiKey, defaultChainId: chainId });
 
             if (!result.address) {
                 throw new Error('Failed to get address from passkey registration');
@@ -98,7 +98,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
 
     const handleImportAccount = async () => {
         try {
-            await passkeyLogin({ apiKey });
+            await passkeyLogin({ apiKey, defaultChainId: chainId });
             onComplete();
         } catch (error) {
             console.error('❌ Import failed:', error);

@@ -21,7 +21,7 @@ vi.mock('../passkey-manager/index.js', () => ({
 vi.mock('./smartAccount.js', () => ({
   createSmartAccount: vi.fn(),
   sendTransaction: vi.fn(),
-  sendBundledTransaction: vi.fn(),
+  sendCalls: vi.fn(),
   estimateUserOpGas: vi.fn(),
   calculateGas: vi.fn(),
   getBundlerClient: vi.fn().mockReturnValue({ client: 'mockBundlerClient' }),
@@ -58,8 +58,8 @@ describe('Account', () => {
   });
 
   describe('Static method signatures', () => {
-    it('should have load static method', () => {
-      expect(typeof Account.load).toBe('function');
+    it('should have get static method', () => {
+      expect(typeof Account.get).toBe('function');
     });
 
     it('should have create static method', () => {
@@ -70,16 +70,8 @@ describe('Account', () => {
       expect(typeof Account.import).toBe('function');
     });
 
-    it('should have login static method', () => {
-      expect(typeof Account.login).toBe('function');
-    });
-
     it('should have fromLocalAccount static method', () => {
       expect(typeof Account.fromLocalAccount).toBe('function');
-    });
-
-    it('should have isAuthenticated static method', () => {
-      expect(typeof Account.isAuthenticated).toBe('function');
     });
 
     it('should have getAuthenticatedAddress static method', () => {
@@ -96,14 +88,15 @@ describe('Account', () => {
   });
 
   describe('Static utility methods', () => {
-    it('isAuthenticated should return false when not authenticated', () => {
-      const result = Account.isAuthenticated();
-      expect(result).toBe(false);
-    });
-
     it('getAuthenticatedAddress should return null when not authenticated', () => {
       const result = Account.getAuthenticatedAddress();
       expect(result).toBeNull();
+    });
+
+    it('isAuthenticated pattern should work via getAuthenticatedAddress', () => {
+      // The recommended pattern for checking authentication
+      const isAuthenticated = Account.getAuthenticatedAddress() !== null;
+      expect(isAuthenticated).toBe(false);
     });
 
     it('getStoredAccounts should return empty array when no accounts', () => {
@@ -197,8 +190,8 @@ describe('Account', () => {
       expect(typeof Account.prototype.sendTransaction).toBe('function');
     });
 
-    it('should have sendBundledTransaction method on prototype', () => {
-      expect(typeof Account.prototype.sendBundledTransaction).toBe('function');
+    it('should have sendCalls method on prototype', () => {
+      expect(typeof Account.prototype.sendCalls).toBe('function');
     });
 
     it('should have estimateGas method on prototype', () => {
@@ -273,9 +266,9 @@ describe('Account', () => {
   });
 
   describe('Error handling', () => {
-    it('load should throw when not authenticated', async () => {
+    it('get should throw when not authenticated and no credentialId provided', async () => {
       await expect(
-        Account.load({ chainId: 1, apiKey: 'test' })
+        Account.get({ chainId: 1, apiKey: 'test' })
       ).rejects.toThrow('Not authenticated');
     });
   });

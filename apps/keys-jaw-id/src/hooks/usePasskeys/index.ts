@@ -33,7 +33,7 @@ export const usePasskeys = (options?: UsePasskeysOptions) => {
 
   const getAccount = useCallback(async (chain: chain, overrideApiKey?: string) => {
     const effectiveApiKey = overrideApiKey || apiKey || process.env.NEXT_PUBLIC_API_KEY;
-    const account = await Account.restore({
+    const account = await Account.get({
       chainId: chain.id,
       apiKey: effectiveApiKey,
       paymasterUrl: chain.paymasterUrl,

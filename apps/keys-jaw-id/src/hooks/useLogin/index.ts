@@ -18,8 +18,8 @@ export const useLogin = () => {
             // Use apiKey from params, fallback to env var
             const effectiveApiKey = apiKey || process.env.NEXT_PUBLIC_API_KEY;
 
-            // Use Account.login which handles WebAuthn auth and smart account creation
-            const account = await Account.login(
+            // Use Account.get which handles WebAuthn auth and smart account creation
+            const account = await Account.get(
               {
                 chainId: chainId.id,
                 apiKey: effectiveApiKey,
