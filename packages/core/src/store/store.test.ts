@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 
 import { sdkstore, account, chains, keys, config, callStatuses, store } from './store.js';
 import { SDK_VERSION } from '../sdk-info.js';
+import type { SignInWithEthereumCapabilityResponse } from '../rpc/index.js';
 
 describe('store', () => {
   beforeEach(() => {
@@ -40,13 +41,14 @@ describe('store', () => {
         accounts: ['0x1234567890123456789012345678901234567890'],
       });
 
+      const siweCapability: SignInWithEthereumCapabilityResponse = { message: 'test message', signature: '0x123' };
       account.set({
-        capabilities: { test: true },
+        capabilities: { signInWithEthereum: siweCapability },
       });
 
       const state = account.get();
       expect(state.accounts?.length).toBe(1);
-      expect(state.capabilities).toEqual({ test: true });
+      expect(state.capabilities).toEqual({ signInWithEthereum: siweCapability });
     });
 
     it('should set chain data in account', () => {
@@ -65,7 +67,7 @@ describe('store', () => {
     it('should clear account data', () => {
       account.set({
         accounts: ['0x1234567890123456789012345678901234567890'],
-        capabilities: { test: true },
+        capabilities: { signInWithEthereum: { message: 'test', signature: '0x123' } as SignInWithEthereumCapabilityResponse },
       });
 
       account.clear();

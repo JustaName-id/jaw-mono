@@ -32,11 +32,14 @@ import {
   calculateGas,
   SubnameTextRecordCapabilityRequest,
   type JustanAccountImplementation,
+  type SignInWithEthereumCapabilityRequest,
+  ensureIntNumber,
 } from '@jaw.id/core';
 import type { SmartAccount } from 'viem/account-abstraction';
 import { toWebAuthnAccount } from 'viem/account-abstraction';
 import { getAddress, parseEther, formatUnits, erc20Abi, createPublicClient, http } from 'viem';
 import type { Address, Hex, Hash } from 'viem';
+import { createSiweMessage } from 'viem/siwe';
 
 // Import UI components using relative paths (we're inside @jaw/ui)
 import { OnboardingDialog } from '../components/OnboardingDialog';
@@ -50,9 +53,6 @@ import { ConnectDialog } from '../components/ConnectDialog';
 import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
 import { useChainIcon } from '../hooks/useChainIcon';
 
-// ============================================================================
-// SIWE (Sign-In with Ethereum) Detection Utilities
-// ============================================================================
 
 /**
  * Converts hex string to UTF-8 string
@@ -553,6 +553,10 @@ function OnboardingDialogWrapper({
   const [authenticatedWalletAddress, setAuthenticatedWalletAddress] = useState<string | null>(null);
   const [isConnecting, setIsConnecting] = useState(false);
 
+  // State for SIWE signing flow
+  const [isSiweSigning, setIsSiweSigning] = useState(false);
+  const [siweStatus, setSiweStatus] = useState<string>('');
+
   // Get rpId from current domain
   const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
   const rpName = 'JAW Wallet';
@@ -767,7 +771,138 @@ function OnboardingDialogWrapper({
   const chainId = request.data.chainId || defaultChainId || 1;
   const subnameTextRecords = request.data.capabilities?.subnameTextRecords as SubnameTextRecordCapabilityRequest | undefined;
 
-  // If showing ConnectDialog confirmation, render that instead
+  // Extract signInWithEthereum capability if present
+  const signInWithEthereumCapability = request.data.capabilities?.signInWithEthereum as SignInWithEthereumCapabilityRequest | undefined;
+
+  // Build SIWE message from capability if present
+  const siweMessage = useMemo(() => {
+    if (!signInWithEthereumCapability || !authenticatedWalletAddress) return null;
+
+    try {
+      // Extract domain and URI from origin
+      let defaultDomain: string;
+      let defaultUri: string;
+
+      try {
+        const url = new URL(origin);
+        defaultDomain = url.host;
+        defaultUri = origin;
+      } catch {
+        defaultDomain = origin;
+        defaultUri = origin;
+      }
+
+      // Convert hex chainId to number
+      const chainIdNumber = ensureIntNumber(signInWithEthereumCapability.chainId);
+
+      return createSiweMessage({
+        address: authenticatedWalletAddress as `0x${string}`,
+        chainId: chainIdNumber,
+        domain: signInWithEthereumCapability.domain || defaultDomain,
+        nonce: signInWithEthereumCapability.nonce,
+        uri: signInWithEthereumCapability.uri || defaultUri,
+        version: '1',
+        statement: signInWithEthereumCapability.statement,
+        issuedAt: signInWithEthereumCapability.issuedAt ? new Date(signInWithEthereumCapability.issuedAt) : new Date(),
+        expirationTime: signInWithEthereumCapability.expirationTime ? new Date(signInWithEthereumCapability.expirationTime) : undefined,
+        notBefore: signInWithEthereumCapability.notBefore ? new Date(signInWithEthereumCapability.notBefore) : undefined,
+        requestId: signInWithEthereumCapability.requestId,
+        resources: signInWithEthereumCapability.resources,
+      });
+    } catch (error) {
+      console.error('Failed to build SIWE message:', error);
+      return null;
+    }
+  }, [signInWithEthereumCapability, authenticatedWalletAddress, origin]);
+
+  // Handle SIWE sign action
+  const handleSiweSign = async () => {
+    if (!authenticatedWalletAddress || !siweMessage) return;
+
+    setIsSiweSigning(true);
+    setSiweStatus('Signing message...');
+
+    try {
+      // Recreate smart account for signing
+      const { smartAccount } = await recreateSmartAccountForSigning(
+        apiKey,
+        targetChainId,
+        paymasterUrls?.[targetChainId]
+      );
+
+      // Sign the SIWE message
+      const signature = await smartAccount.signMessage({
+        message: siweMessage
+      });
+
+      setSiweStatus('Sign-in successful!');
+      console.log('🔗 User signed SIWE message');
+
+      // Build response per ERC-7846 format with SIWE capability
+      onApprove({
+        accounts: [{
+          address: authenticatedWalletAddress,
+          capabilities: {
+            signInWithEthereum: {
+              message: siweMessage,
+              signature: signature as `0x${string}`
+            }
+          }
+        }]
+      });
+    } catch (error) {
+      console.error('SIWE signature failed:', error);
+      setSiweStatus(`Error: ${(error as Error).message}`);
+      setIsSiweSigning(false);
+    }
+  };
+
+  // Handle SIWE cancel
+  const handleSiweCancel = () => {
+    if (!isSiweSigning) {
+      setShowConnectDialog(false);
+      setAuthenticatedAccountName(null);
+      setAuthenticatedWalletAddress(null);
+      setLoggingInAccount(null);
+      setSiweStatus('');
+      // Return to account selection
+    }
+  };
+
+  // If showing confirmation dialog and SIWE capability is present, show SiweDialog
+  // Note: We check signInWithEthereumCapability first, then siweMessage will be computed
+  if (showConnectDialog && authenticatedWalletAddress && signInWithEthereumCapability) {
+    // siweMessage should be available since authenticatedWalletAddress is set
+    if (!siweMessage) {
+      // This shouldn't happen normally, but if SIWE message couldn't be built, fall through to ConnectDialog
+      console.error('SIWE capability present but message could not be built');
+    } else {
+      return (
+        <SiweDialog
+          open={true}
+          onOpenChange={(newOpen) => {
+            if (!newOpen) handleSiweCancel();
+          }}
+          message={siweMessage}
+          origin={origin}
+          timestamp={new Date()}
+          appName={request.data.appName || 'dApp'}
+          appLogoUrl={request.data.appLogoUrl ?? undefined}
+          accountAddress={authenticatedWalletAddress}
+          chainName={chainName}
+          chainId={targetChainId}
+          chainIcon={chainIcon}
+          onSign={handleSiweSign}
+          onCancel={handleSiweCancel}
+          isProcessing={isSiweSigning}
+          siweStatus={siweStatus}
+          canSign={!isSiweSigning}
+        />
+      );
+    }
+  }
+
+  // If showing ConnectDialog confirmation (no SIWE), render that instead
   if (showConnectDialog && authenticatedWalletAddress) {
     return (
       <ConnectDialog

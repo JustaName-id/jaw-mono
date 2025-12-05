@@ -1,4 +1,5 @@
 import { Address , AppMetadata , JawProviderPreference} from "../provider/interface.js";
+import type { WalletConnectResponse } from '../rpc/index.js';
 
 
 
@@ -17,7 +18,7 @@ export type Chain = {
 
 export type Account = {
     accounts?: Address[];
-    capabilities?: Record<string, unknown>;
+    capabilities?: WalletConnectResponse['accounts'][number]['capabilities'];
     chain?: Chain;
 };
 

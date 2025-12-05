@@ -32,5 +32,5 @@ export interface PopupConfig {
       paymasterUrl?: string;
     } | undefined;
     onApprove: (result: unknown) => Promise<void>;
-    onReject: (error: string) => Promise<void>;
+    onReject: (error: string, errorCode?: number) => Promise<void>;
   }
