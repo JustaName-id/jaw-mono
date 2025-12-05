@@ -134,6 +134,7 @@ describe('AppSpecificSigner', () => {
         metadata: mockMetadata,
         uiHandler: handlerWithoutInit,
         callback: mockCallback,
+        apiKey: 'test-api-key',
       });
     });
   });
@@ -791,6 +792,7 @@ describe('AppSpecificSigner', () => {
         metadata: mockMetadata,
         uiHandler: handlerWithoutCleanup,
         callback: mockCallback,
+        apiKey: 'test-api-key',
       });
 
       await signerWithoutCleanup.handshake({ method: 'wallet_connect', params: [] });
