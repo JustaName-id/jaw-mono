@@ -36,6 +36,12 @@ vi.mock('../rpc/permissions.js', () => ({
   revokePermission: vi.fn(),
 }));
 
+vi.mock('../rpc/wallet_sendCalls.js', () => ({
+  storeCallStatus: vi.fn(),
+  waitForReceiptInBackground: vi.fn(),
+  getCallStatusEIP5792: vi.fn(),
+}));
+
 vi.mock('viem', async () => {
   const actual = await vi.importActual('viem');
   return {
@@ -194,6 +200,10 @@ describe('Account', () => {
       expect(typeof Account.prototype.sendCalls).toBe('function');
     });
 
+    it('should have getCallStatus method on prototype', () => {
+      expect(typeof Account.prototype.getCallStatus).toBe('function');
+    });
+
     it('should have estimateGas method on prototype', () => {
       expect(typeof Account.prototype.estimateGas).toBe('function');
     });
@@ -270,6 +280,141 @@ describe('Account', () => {
       await expect(
         Account.get({ chainId: 1, apiKey: 'test' })
       ).rejects.toThrow('Not authenticated');
+    });
+  });
+
+  describe('sendCalls and getCallStatus', () => {
+    it('sendCalls should store call status and wait for receipt in background', async () => {
+      const { createSmartAccount, sendCalls: sendSmartAccountCalls } = await import('./smartAccount.js');
+      const { storeCallStatus, waitForReceiptInBackground } = await import('../rpc/wallet_sendCalls.js');
+
+      const mockSmartAccount = {
+        address: '0x1234567890123456789012345678901234567890',
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        getAddress: vi.fn().mockResolvedValue('0x1234567890123456789012345678901234567890'),
+      };
+      vi.mocked(createSmartAccount).mockResolvedValue(mockSmartAccount as never);
+
+      const mockUserOpHash = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+      vi.mocked(sendSmartAccountCalls).mockResolvedValue({
+        id: mockUserOpHash,
+        chainId: 1,
+      });
+
+      const mockLocalAccount = {
+        address: '0xabcdef1234567890abcdef1234567890abcdef12',
+        type: 'local',
+        publicKey: '0x04abc123',
+        sign: vi.fn(),
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        signTransaction: vi.fn(),
+        source: 'privateKey',
+      };
+
+      const account = await Account.fromLocalAccount(
+        { chainId: 1, apiKey: 'test-api-key' },
+        mockLocalAccount as never
+      );
+
+      const result = await account.sendCalls([
+        { to: '0x1234567890123456789012345678901234567890', value: 100000000000000000n }
+      ]);
+
+      expect(result.id).toBe(mockUserOpHash);
+      expect(result.chainId).toBe(1);
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1);
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1);
+    });
+
+    it('getCallStatus should return status from getCallStatusEIP5792', async () => {
+      const { createSmartAccount } = await import('./smartAccount.js');
+      const { getCallStatusEIP5792 } = await import('../rpc/wallet_sendCalls.js');
+
+      const mockSmartAccount = {
+        address: '0x1234567890123456789012345678901234567890',
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        getAddress: vi.fn().mockResolvedValue('0x1234567890123456789012345678901234567890'),
+      };
+      vi.mocked(createSmartAccount).mockResolvedValue(mockSmartAccount as never);
+
+      const mockBatchId = '0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890';
+      const mockStatus = {
+        version: '2.0.0',
+        id: mockBatchId as `0x${string}`,
+        chainId: '0x1' as `0x${string}`,
+        status: 200,
+        atomic: true,
+        receipts: [{
+          logs: [],
+          status: '0x1' as `0x${string}`,
+          blockHash: '0x123' as `0x${string}`,
+          blockNumber: '0x100' as `0x${string}`,
+          gasUsed: '0x5208' as `0x${string}`,
+          transactionHash: '0x456' as `0x${string}`,
+        }],
+      };
+      vi.mocked(getCallStatusEIP5792).mockReturnValue(mockStatus);
+
+      const mockLocalAccount = {
+        address: '0xabcdef1234567890abcdef1234567890abcdef12',
+        type: 'local',
+        publicKey: '0x04abc123',
+        sign: vi.fn(),
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        signTransaction: vi.fn(),
+        source: 'privateKey',
+      };
+
+      const account = await Account.fromLocalAccount(
+        { chainId: 1, apiKey: 'test-api-key' },
+        mockLocalAccount as never
+      );
+
+      const status = account.getCallStatus(mockBatchId as `0x${string}`);
+
+      expect(getCallStatusEIP5792).toHaveBeenCalledWith(mockBatchId);
+      expect(status).toEqual(mockStatus);
+      expect(status?.status).toBe(200);
+      expect(status?.receipts?.[0].transactionHash).toBe('0x456');
+    });
+
+    it('getCallStatus should return undefined when status not found', async () => {
+      const { createSmartAccount } = await import('./smartAccount.js');
+      const { getCallStatusEIP5792 } = await import('../rpc/wallet_sendCalls.js');
+
+      const mockSmartAccount = {
+        address: '0x1234567890123456789012345678901234567890',
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        getAddress: vi.fn().mockResolvedValue('0x1234567890123456789012345678901234567890'),
+      };
+      vi.mocked(createSmartAccount).mockResolvedValue(mockSmartAccount as never);
+
+      vi.mocked(getCallStatusEIP5792).mockReturnValue(undefined);
+
+      const mockLocalAccount = {
+        address: '0xabcdef1234567890abcdef1234567890abcdef12',
+        type: 'local',
+        publicKey: '0x04abc123',
+        sign: vi.fn(),
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        signTransaction: vi.fn(),
+        source: 'privateKey',
+      };
+
+      const account = await Account.fromLocalAccount(
+        { chainId: 1, apiKey: 'test-api-key' },
+        mockLocalAccount as never
+      );
+
+      const status = account.getCallStatus('0xnonexistent' as `0x${string}`);
+
+      expect(status).toBeUndefined();
     });
   });
 
@@ -393,7 +538,7 @@ describe('Account', () => {
 
       // Should not throw when apiKey is not provided
       const account = await Account.fromLocalAccount(
-        { chainId: 1 },
+        { chainId: 1, apiKey: 'test' },
         mockLocalAccount as never
       );
 

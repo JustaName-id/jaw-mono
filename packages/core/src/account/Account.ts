@@ -10,6 +10,12 @@ import {
   getBundlerClient,
   type BundledTransactionResult,
 } from './smartAccount.js';
+import {
+  storeCallStatus,
+  waitForReceiptInBackground,
+  getCallStatusEIP5792,
+  type CallStatusResponse,
+} from '../rpc/wallet_sendCalls.js';
 import type { JustanAccountImplementation } from './toJustanAccount.js';
 import { PasskeyManager, type PasskeyAccount } from '../passkey-manager/index.js';
 import {
@@ -593,6 +599,9 @@ export class Account {
    *   { to: '0x...', value: parseEther('0.1') }
    * ]);
    * console.log('UserOp hash:', id);
+   *
+   * // Check status later
+   * const status = account.getCallStatus(id);
    * ```
    */
   async sendCalls(calls: TransactionCall[]): Promise<BundledTransactionResult> {
@@ -602,11 +611,41 @@ export class Account {
       data: call.data,
     }));
 
-    return await sendSmartAccountCalls(
+    const result = await sendSmartAccountCalls(
       this._smartAccount,
       formattedCalls,
       this._chain
     );
+
+    // Store call status as pending and start background receipt waiting
+    storeCallStatus(result.id, result.chainId);
+    waitForReceiptInBackground(result.id, result.chainId);
+
+    return result;
+  }
+
+  /**
+   * Get the status of a previously submitted call batch
+   *
+   * @param batchId - The batch ID (userOpHash) returned from sendCalls
+   * @returns The call status in EIP-5792 format, or undefined if not found
+   *
+   * @example
+   * ```typescript
+   * const { id } = await account.sendCalls([{ to: '0x...', value: '0.1' }]);
+   *
+   * // Check status
+   * const status = account.getCallStatus(id);
+   * if (status) {
+   *   console.log('Status code:', status.status); // 100=pending, 200=completed, 400=failed, 500=reverted
+   *   if (status.receipts) {
+   *     console.log('Transaction hash:', status.receipts[0].transactionHash);
+   *   }
+   * }
+   * ```
+   */
+  getCallStatus(batchId: Hash): CallStatusResponse | undefined {
+    return getCallStatusEIP5792(batchId);
   }
 
   /**

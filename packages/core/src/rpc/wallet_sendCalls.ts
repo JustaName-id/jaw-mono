@@ -4,6 +4,40 @@ import type { BundlerClient } from 'viem/account-abstraction';
 import { numberToHex } from 'viem';
 
 /**
+ * Receipt in EIP-5792 format
+ */
+export interface CallReceipt {
+    logs: Array<{
+        address: `0x${string}`;
+        data: `0x${string}`;
+        topics: `0x${string}`[];
+    }>;
+    status: `0x${string}`;
+    blockHash: `0x${string}`;
+    blockNumber: `0x${string}`;
+    gasUsed: `0x${string}`;
+    transactionHash: `0x${string}`;
+}
+
+/**
+ * Call status response in EIP-5792 format
+ */
+export interface CallStatusResponse {
+    /** EIP-5792 version */
+    version: string;
+    /** The batch ID (userOpHash) */
+    id: `0x${string}`;
+    /** Chain ID in hex format */
+    chainId: `0x${string}`;
+    /** Status code: 100=pending, 200=completed, 400=offchain failure, 500=onchain revert */
+    status: number;
+    /** Whether the operation is atomic (always true for ERC-4337) */
+    atomic: boolean;
+    /** Transaction receipts (present when completed or reverted) */
+    receipts?: CallReceipt[];
+}
+
+/**
  * Stores a call status as pending when wallet_sendCalls is called
  * @param userOpHash - The user operation hash returned from sendUserOperation
  * @param chainId - The chain ID where the operation was submitted
@@ -54,18 +88,7 @@ export function getCallStatus(batchId: string) {
  * @param receipts - Raw receipts from storage
  * @returns Transformed receipts in EIP-5792 format
  */
-export function transformReceiptsToEIP5792(receipts: unknown[]): Array<{
-    logs: Array<{
-        address: `0x${string}`;
-        data: `0x${string}`;
-        topics: `0x${string}`[];
-    }>;
-    status: `0x${string}`;
-    blockHash: `0x${string}`;
-    blockNumber: `0x${string}`;
-    gasUsed: `0x${string}`;
-    transactionHash: `0x${string}`;
-}> {
+export function transformReceiptsToEIP5792(receipts: unknown[]): CallReceipt[] {
     if (!receipts || receipts.length === 0) {
         return [];
     }
@@ -123,25 +146,7 @@ export function transformReceiptsToEIP5792(receipts: unknown[]): Array<{
  * @param batchId - The batch ID (userOpHash) to get status for
  * @returns EIP-5792 formatted response or undefined if not found
  */
-    export function getCallStatusEIP5792(batchId: string): {
-        version: string;
-    id: `0x${string}`;
-    chainId: `0x${string}`;
-    status: number;
-    atomic: boolean;
-    receipts?: Array<{
-        logs: Array<{
-            address: `0x${string}`;
-            data: `0x${string}`;
-            topics: `0x${string}`[];
-        }>;
-        status: `0x${string}`;
-        blockHash: `0x${string}`;
-        blockNumber: `0x${string}`;
-        gasUsed: `0x${string}`;
-        transactionHash: `0x${string}`;
-    }>;
-} | undefined {
+export function getCallStatusEIP5792(batchId: string): CallStatusResponse | undefined {
     const callStatus = getCallStatus(batchId);
     
     if (!callStatus) {

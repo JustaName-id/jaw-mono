@@ -7,6 +7,12 @@ export {
     type AccountMetadata,
 } from "./Account.js"
 
+// Call status types (EIP-5792)
+export {
+    type CallReceipt,
+    type CallStatusResponse,
+} from "../rpc/wallet_sendCalls.js"
+
 // Chain configuration
 export {
     SUPPORTED_CHAINS,
