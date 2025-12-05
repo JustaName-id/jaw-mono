@@ -189,7 +189,7 @@ const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> = DefaultD
  * ```
  */
 export class ReactUIHandler implements UIHandler {
-  private config: UIHandlerConfig = {};
+  private config: UIHandlerConfig = {} as UIHandlerConfig;
 
   /**
    * Initialize the handler with SDK configuration
@@ -490,6 +490,9 @@ async function getAccountForSigning(
   chainId?: number,
   paymasterUrl?: string
 ): Promise<Account> {
+  if (!apiKey) {
+    throw new Error('API key is required for signing operations');
+  }
   const targetChainId = chainId || 1;
   return await Account.get({
     chainId: targetChainId,
@@ -588,6 +591,9 @@ function OnboardingDialogWrapper({
     }
 
     try {
+      if (!apiKey) {
+        throw new Error('API key is required');
+      }
       setLoggingInAccount(account.username);
 
       // Use Account.get which handles WebAuthn authentication and stores auth state
@@ -613,6 +619,9 @@ function OnboardingDialogWrapper({
   // Handle importing an existing passkey from cloud
   const handleImportAccount = async () => {
     try {
+      if (!apiKey) {
+        throw new Error('API key is required');
+      }
       setIsImporting(true);
 
       // Use Account.import which handles everything
@@ -638,6 +647,9 @@ function OnboardingDialogWrapper({
   // Handle creating a new account
   const handleCreateAccount = async (username: string): Promise<string> => {
     try {
+      if (!apiKey) {
+        throw new Error('API key is required');
+      }
       setIsCreating(true);
 
       // Get chainId from request or default

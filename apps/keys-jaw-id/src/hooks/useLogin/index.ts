@@ -16,7 +16,7 @@ export const useLogin = () => {
     mutationFn: async ({ chainId, credentialId, apiKey }: LoginParams) => {
         try {
             // Use apiKey from params, fallback to env var
-            const effectiveApiKey = apiKey || process.env.NEXT_PUBLIC_API_KEY;
+            const effectiveApiKey = apiKey
 
             if (!effectiveApiKey) {
               throw new Error('API key is required. Provide it via apiKey parameter or NEXT_PUBLIC_API_KEY environment variable.');

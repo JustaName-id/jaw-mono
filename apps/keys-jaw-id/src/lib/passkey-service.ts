@@ -29,7 +29,7 @@ export class PasskeyService {
   private defaultChainId: number;
 
   constructor(preference?: { serverUrl?: string; apiKey?: string; localOnly?: boolean; defaultChainId?: number }) {
-    this.apiKey = preference?.apiKey || process.env.NEXT_PUBLIC_API_KEY || '';
+    this.apiKey = preference?.apiKey || '';
     this.defaultChainId = preference?.defaultChainId ?? +(process.env.NEXT_PUBLIC_CHAIN_ID || 1);
     // For local development, use localhost
     // For production, use your actual domain
