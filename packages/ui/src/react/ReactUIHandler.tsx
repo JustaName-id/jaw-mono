@@ -32,6 +32,8 @@ import {
   calculateGas,
   SubnameTextRecordCapabilityRequest,
   type JustanAccountImplementation,
+  type SignInWithEthereumCapabilityRequest,
+  ensureIntNumber,
 } from '@jaw.id/core';
 import type { SmartAccount } from 'viem/account-abstraction';
 import { toWebAuthnAccount } from 'viem/account-abstraction';
@@ -51,27 +53,6 @@ import { ConnectDialog } from '../components/ConnectDialog';
 import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
 import { useChainIcon } from '../hooks/useChainIcon';
 
-// ============================================================================
-// SIWE (Sign-In with Ethereum) Types and Detection Utilities
-// ============================================================================
-
-/**
- * SignInWithEthereum capability request parameters per ERC-7846
- */
-interface SignInWithEthereumCapabilityRequest {
-  nonce: string;
-  chainId: string; // EIP-155 hex-encoded (e.g., "0x1")
-  version?: string;
-  scheme?: string;
-  domain?: string;
-  uri?: string;
-  statement?: string;
-  issuedAt?: string;
-  expirationTime?: string;
-  notBefore?: string;
-  requestId?: string;
-  resources?: string[];
-}
 
 /**
  * Converts hex string to UTF-8 string
@@ -812,7 +793,7 @@ function OnboardingDialogWrapper({
       }
 
       // Convert hex chainId to number
-      const chainIdNumber = parseInt(signInWithEthereumCapability.chainId, 16);
+      const chainIdNumber = ensureIntNumber(signInWithEthereumCapability.chainId);
 
       return createSiweMessage({
         address: authenticatedWalletAddress as `0x${string}`,

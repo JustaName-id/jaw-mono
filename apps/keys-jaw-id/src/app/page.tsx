@@ -6,7 +6,7 @@ import { SignInScreen } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
-import type { SignInWithEthereumCapabilityRequest } from '@jaw.id/core';
+import { ensureIntNumber, type SignInWithEthereumCapabilityRequest } from '@jaw.id/core';
 import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
@@ -230,13 +230,13 @@ export default function KeysJawIdApp() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(response as any);
           },
-          onReject: async (error: string) => {
+          onReject: async (error: string, errorCode?: number) => {
             // Send error response for handshake rejection
             try {
               const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
                 request.id,
                 request.correlationId || '',
-                4001, // User rejected request (EIP-1193 standard)
+                errorCode ?? 4001, // Default to user rejected request (EIP-1193 standard)
                 error || 'User rejected the request'
               );
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -317,13 +317,13 @@ export default function KeysJawIdApp() {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           communicator.sendMessage(response as any);
         },
-        onReject: async (error: string) => {
-          // Send standard error response (EIP-1193 code 4001)
+        onReject: async (error: string, errorCode?: number) => {
+          // Send standard error response (default: EIP-1193 code 4001)
           try {
             const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
               request.id || '',
               request.correlationId || '',
-              4001, // User rejected request (EIP-1193 standard)
+              errorCode ?? 4001, // Default to user rejected request (EIP-1193 standard)
               error || 'User rejected the request'
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -916,7 +916,13 @@ export default function KeysJawIdApp() {
       // params structure: [{ capabilities?: { signInWithEthereum?: {...} } }]
       const walletConnectParams = pendingRequest.params as [{ capabilities?: { signInWithEthereum?: SignInWithEthereumCapabilityRequest } }] | undefined;
       const signInWithEthereumCapability = walletConnectParams?.[0]?.capabilities?.signInWithEthereum;
-      const walletAddress = authQuery.walletAddress || '0x0000000000000000000000000000000000000000';
+
+      if (!authQuery.walletAddress) {
+        // Reject with internal error (JSON-RPC code -32603)
+        pendingRequest.onReject('Internal error: wallet address not available', -32603);
+        return null;
+      }
+      const walletAddress = authQuery.walletAddress;
 
       // If SIWE capability is requested, show SiweModal instead of ConnectModal
       if (signInWithEthereumCapability && pendingRequest.chain) {
@@ -936,7 +942,7 @@ export default function KeysJawIdApp() {
           }
 
           // Convert hex chainId to number
-          const chainIdNumber = parseInt(signInWithEthereumCapability.chainId, 16);
+          const chainIdNumber = ensureIntNumber(signInWithEthereumCapability.chainId);
 
           return createSiweMessage({
             address: walletAddress as `0x${string}`,
