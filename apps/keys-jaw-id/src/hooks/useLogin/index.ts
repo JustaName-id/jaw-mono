@@ -18,6 +18,10 @@ export const useLogin = () => {
             // Use apiKey from params, fallback to env var
             const effectiveApiKey = apiKey || process.env.NEXT_PUBLIC_API_KEY;
 
+            if (!effectiveApiKey) {
+              throw new Error('API key is required. Provide it via apiKey parameter or NEXT_PUBLIC_API_KEY environment variable.');
+            }
+
             // Use Account.get which handles WebAuthn auth and smart account creation
             const account = await Account.get(
               {
