@@ -132,18 +132,18 @@ describe('Account', () => {
       expect(BigInt(hexValue)).toBe(1000000000000000000n);
     });
 
-    it('should handle decimal string value', () => {
-      // Decimal strings like "1000000000000000000" should be converted to bigint
-      const decimalValue = '1000000000000000000';
-      expect(/^\d+$/.test(decimalValue)).toBe(true);
-      expect(BigInt(decimalValue)).toBe(1000000000000000000n);
-    });
+    it('should reject non-hex string values', () => {
+      // Non-hex strings should throw an error - use parseEther() at call site
+      // This test documents the expected behavior
+      const { isHex } = require('viem');
 
-    it('should handle ether string value via parseEther', async () => {
-      // Ether strings like "0.1" or "1.5" should be converted using parseEther
-      const { parseEther } = await import('viem');
-      const etherValue = '0.1';
-      expect(parseEther(etherValue)).toBe(100000000000000000n);
+      // These are NOT valid - parseValue will throw
+      expect(isHex('0.1')).toBe(false);
+      expect(isHex('1')).toBe(false);
+      expect(isHex('100')).toBe(false);
+
+      // Only hex strings and bigint are valid
+      expect(isHex('0x0de0b6b3a7640000')).toBe(true);
     });
   });
 

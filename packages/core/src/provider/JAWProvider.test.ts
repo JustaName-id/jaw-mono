@@ -333,7 +333,10 @@ describe('JAWProvider', () => {
         signerType: 'crossPlatform',
         metadata: mockMetadata,
         communicator: (provider as any).communicator,
+        uiHandler: undefined,
         callback: expect.any(Function),
+        apiKey: 'test-api-key',
+        paymasterUrls: undefined,
       });
       expect(mockSigner.handshake).toHaveBeenCalledWith({ method: 'handshake' });
       expect(mockSigner.request).toHaveBeenCalledWith(request);

@@ -1,0 +1,125 @@
+# account.getChain()
+
+Get the chain configuration.
+
+**Type:** `instance`
+
+---
+
+## Signature
+
+```typescript
+getChain(): Chain
+```
+
+---
+
+## Parameters
+
+None.
+
+---
+
+## Returns
+
+`Chain` - The chain configuration object.
+
+### Chain
+
+```typescript
+interface Chain {
+  /** Chain ID */
+  id: number;
+  /** RPC URL for the chain */
+  rpcUrl: string;
+  /** Optional paymaster URL for gas sponsorship */
+  paymasterUrl?: string;
+}
+```
+
+---
+
+## Behavior
+
+Returns a copy of the chain configuration used by this account instance. Modifying the returned object does not affect the account.
+
+---
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const account = await Account.get({
+  chainId: 1,
+  apiKey: 'your-api-key',
+});
+
+const chain = account.getChain();
+
+console.log('Chain ID:', chain.id);
+console.log('RPC URL:', chain.rpcUrl);
+console.log('Paymaster URL:', chain.paymasterUrl);
+```
+
+### Check Sponsorship Availability
+
+```typescript
+const chain = account.getChain();
+
+if (chain.paymasterUrl) {
+  console.log('Transactions will be sponsored');
+} else {
+  console.log('User pays gas fees');
+}
+```
+
+### Display Network Info
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const CHAIN_NAMES: Record<number, string> = {
+  1: 'Ethereum Mainnet',
+  8453: 'Base',
+  84532: 'Base Sepolia',
+  11155111: 'Sepolia',
+};
+
+function NetworkBadge({ account }: { account: Account }) {
+  const chain = account.getChain();
+  const name = CHAIN_NAMES[chain.id] || `Chain ${chain.id}`;
+
+  return (
+    <span className="network-badge">
+      {name}
+      {chain.paymasterUrl && <span className="sponsored">Sponsored</span>}
+    </span>
+  );
+}
+```
+
+### Use RPC URL for Custom Queries
+
+```typescript
+import { createPublicClient, http } from 'viem';
+
+const chain = account.getChain();
+
+const publicClient = createPublicClient({
+  transport: http(chain.rpcUrl),
+});
+
+// Make custom RPC calls
+const blockNumber = await publicClient.getBlockNumber();
+```
+
+---
+
+## Related
+
+- [account.chainId](/account#instance-properties) - Quick access to chain ID
+- [account.getSmartAccount()](/account/getSmartAccount) - Get underlying smart account
+- [AccountConfig](/account#accountconfig) - Configuration interface

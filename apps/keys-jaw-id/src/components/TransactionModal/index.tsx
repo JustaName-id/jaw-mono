@@ -191,7 +191,7 @@ export const TransactionModal = ({
         // Convert normalized transactions to TransactionCall format
         const transactionCalls: TransactionCall[] = normalizedTransactions.map(tx => ({
           to: tx.to as Address,
-          value: tx.value, // Account.calculateGasCost handles value parsing internally
+          value: tx.value ? BigInt(tx.value) : undefined, // Convert string wei to bigint
           data: (tx.data as `0x${string}`) || '0x'
         }));
 
@@ -245,7 +245,7 @@ export const TransactionModal = ({
       // Convert normalized transactions to TransactionCall format
       const transactionCalls: TransactionCall[] = normalizedTransactions.map(tx => ({
         to: tx.to as Address,
-        value: tx.value, // Account handles value parsing internally
+        value: tx.value ? BigInt(tx.value) : undefined, // Convert string wei to bigint
         data: (tx.data as `0x${string}`) || '0x'
       }));
 

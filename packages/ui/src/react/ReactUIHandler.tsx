@@ -924,7 +924,7 @@ function TransactionDialogWrapper({
   const transactionCalls = useMemo(() => {
     return request.data.calls.map(call => ({
       to: call.to as Address,
-      value: call.value,
+      value: call.value ? BigInt(call.value) : undefined, // Convert string wei to bigint
       data: (call.data || '0x') as Hex,
     }));
   }, [request.data.calls]);
@@ -1085,7 +1085,7 @@ function SendTransactionDialogWrapper({
   // Convert to call format for Account operations
   const transactionCalls = useMemo(() => [{
     to: request.data.to as Address,
-    value: request.data.value,
+    value: request.data.value ? BigInt(request.data.value) : undefined, // Convert string wei to bigint
     data: (request.data.data || '0x') as Hex,
   }], [request.data]);
 

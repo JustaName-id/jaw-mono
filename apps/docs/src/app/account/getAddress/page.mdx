@@ -1,0 +1,130 @@
+# account.getAddress()
+
+Get the smart account address (async).
+
+**Type:** `instance async`
+
+---
+
+## Signature
+
+```typescript
+async getAddress(): Promise<Address>
+```
+
+---
+
+## Parameters
+
+None.
+
+---
+
+## Returns
+
+`Promise<Address>` - The smart account address.
+
+---
+
+## Behavior
+
+This async method returns the smart account address. It's useful for:
+
+1. **Counterfactual addresses** - Getting the address before the account is deployed on-chain
+2. **Address verification** - Confirming the computed address matches expectations
+
+For deployed accounts, this returns the same value as the synchronous `address` property.
+
+---
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const account = await Account.get({
+  chainId: 1,
+  apiKey: 'your-api-key',
+});
+
+const address = await account.getAddress();
+console.log('Address:', address);
+```
+
+### Compare with Property
+
+```typescript
+const account = await Account.get({
+  chainId: 1,
+  apiKey: 'your-api-key',
+});
+
+// These return the same value for deployed accounts
+console.log('Property:', account.address);
+console.log('Method:', await account.getAddress());
+```
+
+### Counterfactual Address (Before Deployment)
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// Create a new account
+const account = await Account.create(
+  { chainId: 1, apiKey: 'your-api-key' },
+  { username: 'alice' }
+);
+
+// Get the counterfactual address
+// This works even before any transaction deploys the account
+const address = await account.getAddress();
+console.log('Counterfactual address:', address);
+
+// User can receive funds at this address
+// Account will be deployed on first transaction
+```
+
+### Verify Address Before Transaction
+
+```typescript
+async function sendFunds(account: Account, to: Address, amount: string) {
+  const myAddress = await account.getAddress();
+
+  // Verify we're not sending to ourselves
+  if (myAddress.toLowerCase() === to.toLowerCase()) {
+    throw new Error('Cannot send to yourself');
+  }
+
+  return account.sendTransaction([{ to, value: amount }]);
+}
+```
+
+---
+
+## address Property vs getAddress() Method
+
+| | `account.address` | `await account.getAddress()` |
+|---|---|---|
+| Type | Synchronous | Asynchronous |
+| Use case | Quick access | Counterfactual computation |
+| Deployed accounts | Same value | Same value |
+
+For most cases, use the `address` property for simplicity:
+
+```typescript
+// Preferred for most use cases
+const address = account.address;
+
+// Use getAddress() only when you need async computation
+const address = await account.getAddress();
+```
+
+---
+
+## Related
+
+- [account.address](/account#instance-properties) - Synchronous address property
+- [account.getSmartAccount()](/account/getSmartAccount) - Get underlying smart account
+- [account.sendTransaction()](/account/sendTransaction) - Deploys account if needed

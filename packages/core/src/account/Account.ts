@@ -1,5 +1,5 @@
 import type { Address, Hash, Hex, TypedDataDefinition, TypedData, LocalAccount } from 'viem';
-import { parseEther, isHex } from 'viem';
+import { isHex } from 'viem';
 import { toWebAuthnAccount, type SmartAccount } from 'viem/account-abstraction';
 import {
   createSmartAccount,
@@ -32,8 +32,8 @@ import type { Chain } from '../store/index.js';
 export interface AccountConfig {
   /** Chain ID for the account */
   chainId: number;
-  /** API key for JAW services */
-  apiKey?: string;
+  /** API key for JAW services (required) */
+  apiKey: string;
   /** Custom paymaster URL for gas sponsorship */
   paymasterUrl?: string;
 }
@@ -56,7 +56,7 @@ export interface CreateAccountOptions {
 export interface TransactionCall {
   /** Target contract address */
   to: Address;
-  /** Value to send (supports bigint, hex string, decimal string, or ether string like "0.1") */
+  /** Value to send in wei (bigint or hex string) */
   value?: bigint | string;
   /** Call data */
   data?: Hex;
@@ -94,9 +94,9 @@ export interface AccountMetadata {
  *   { username: 'myuser' }
  * );
  *
- * // Send transaction
+ * // Send transaction (value in wei)
  * const hash = await account.sendTransaction([
- *   { to: '0x...', value: '0.1', data: '0x' }
+ *   { to: '0x...', value: 100000000000000000n, data: '0x' }
  * ]);
  * ```
  */
@@ -152,7 +152,7 @@ export class Account {
    * ```
    */
   static async get(config: AccountConfig, credentialId?: string): Promise<Account> {
-    const { chainId, apiKey = '', paymasterUrl } = config;
+    const { chainId, apiKey, paymasterUrl } = config;
 
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
     const authResult = passkeyManager.checkAuth();
@@ -228,7 +228,7 @@ export class Account {
    * ```
    */
   static async create(config: AccountConfig, options: CreateAccountOptions): Promise<Account> {
-    const { chainId, apiKey = '', paymasterUrl } = config;
+    const { chainId, apiKey, paymasterUrl } = config;
     const { username, rpId, rpName } = options;
 
     const resolvedRpId = rpId ?? (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
@@ -272,7 +272,7 @@ export class Account {
    * ```
    */
   static async import(config: AccountConfig): Promise<Account> {
-    const { chainId, apiKey = '', paymasterUrl } = config;
+    const { chainId, apiKey, paymasterUrl } = config;
 
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
 
@@ -337,7 +337,7 @@ export class Account {
     config: AccountConfig,
     localAccount: LocalAccount
   ): Promise<Account> {
-    const { chainId, apiKey = '', paymasterUrl } = config;
+    const { chainId, apiKey, paymasterUrl } = config;
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
 
@@ -557,9 +557,11 @@ export class Account {
    *
    * @example
    * ```typescript
+   * import { parseEther } from 'viem';
+   *
    * const hash = await account.sendTransaction([
-   *   { to: '0x...', value: '0.1' },           // Send 0.1 ETH
-   *   { to: '0x...', data: '0x...' }           // Contract call
+   *   { to: '0x...', value: parseEther('0.1') },  // Send 0.1 ETH
+   *   { to: '0x...', data: '0x...' }              // Contract call
    * ]);
    * ```
    */
@@ -585,8 +587,10 @@ export class Account {
    *
    * @example
    * ```typescript
+   * import { parseEther } from 'viem';
+   *
    * const { id, chainId } = await account.sendCalls([
-   *   { to: '0x...', value: '0.1' }
+   *   { to: '0x...', value: parseEther('0.1') }
    * ]);
    * console.log('UserOp hash:', id);
    * ```
@@ -613,8 +617,10 @@ export class Account {
    *
    * @example
    * ```typescript
+   * import { parseEther } from 'viem';
+   *
    * const gas = await account.estimateGas([
-   *   { to: '0x...', value: '0.1' }
+   *   { to: '0x...', value: parseEther('0.1') }
    * ]);
    * console.log('Estimated gas:', gas.toString());
    * ```
@@ -641,8 +647,10 @@ export class Account {
    *
    * @example
    * ```typescript
+   * import { parseEther } from 'viem';
+   *
    * const cost = await account.calculateGasCost([
-   *   { to: '0x...', value: '0.1' }
+   *   { to: '0x...', value: parseEther('0.1') }
    * ]);
    * console.log('Gas cost:', cost, 'ETH');
    * ```
@@ -781,8 +789,7 @@ export class Account {
   }
 
   /**
-   * Parse value from various formats to bigint
-   * Handles: undefined, bigint, hex string, decimal string, ether string
+   * Parse value from bigint or hex string to bigint (wei)
    * @internal
    */
   private static parseValue(value: bigint | string | undefined): bigint | undefined {
@@ -794,24 +801,12 @@ export class Account {
       return value;
     }
 
-    // At this point, value is a string
-    // Hex string (e.g., "0x1234")
+    // Hex string for wei (e.g., "0x0de0b6b3a7640000")
     if (isHex(value)) {
       return BigInt(value);
     }
 
-    // Decimal string (e.g., "1000000000000000000")
-    if (/^\d+$/.test(value)) {
-      return BigInt(value);
-    }
-
-    // Ether string (e.g., "0.1", "1.5")
-    // This handles decimal ETH values
-    try {
-      return parseEther(value);
-    } catch {
-      throw new Error(`Invalid value format: ${value}`);
-    }
+    throw new Error(`Invalid value format: ${value}. Use bigint or hex string (wei).`);
   }
 }
 

@@ -1,0 +1,182 @@
+# account.revokePermission()
+
+Revoke a previously granted permission.
+
+**Type:** `instance async`
+
+---
+
+## Signature
+
+```typescript
+async revokePermission(permissionId: Hex): Promise<RevokePermissionApiResponse>
+```
+
+---
+
+## Parameters
+
+### permissionId
+
+Type: `Hex`
+
+The permission ID (hash) to revoke. This is the `id` field returned from `grantPermissions()`.
+
+---
+
+## Returns
+
+`Promise<RevokePermissionApiResponse>` - The revocation response.
+
+```typescript
+interface RevokePermissionApiResponse {
+  /** Whether the revocation was successful */
+  success: boolean;
+  /** Transaction hash if on-chain revocation was needed */
+  transactionHash?: Hex;
+}
+```
+
+---
+
+## Behavior
+
+1. Sends a revocation request to the JAW relay
+2. Signs the revocation with the smart account
+3. The permission is invalidated and can no longer be used
+4. Returns confirmation of the revocation
+
+---
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const account = await Account.get({
+  chainId: 1,
+  apiKey: 'your-api-key',
+});
+
+// Revoke a permission by its ID
+const response = await account.revokePermission(
+  '0x1234567890abcdef...' // Permission ID from grantPermissions()
+);
+
+if (response.success) {
+  console.log('Permission revoked successfully');
+} else {
+  console.log('Revocation failed');
+}
+```
+
+### Revoke After Grant
+
+```typescript
+// Grant a permission
+const permission = await account.grantPermissions(
+  Math.floor(Date.now() / 1000) + 3600,
+  '0xSpender...',
+  {
+    calls: [{ target: '0x...', selector: '0x...' }],
+  }
+);
+
+console.log('Granted permission:', permission.id);
+
+// Later, revoke it
+const response = await account.revokePermission(permission.id);
+console.log('Revoked:', response.success);
+```
+
+### Revoke All Permissions
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+async function revokeAllPermissions(
+  account: Account,
+  permissionIds: Hex[]
+) {
+  const results = await Promise.allSettled(
+    permissionIds.map(id => account.revokePermission(id))
+  );
+
+  const successful = results.filter(
+    r => r.status === 'fulfilled' && r.value.success
+  ).length;
+
+  console.log(`Revoked ${successful}/${permissionIds.length} permissions`);
+}
+```
+
+### UI with Revoke Button
+
+```typescript
+function PermissionCard({ account, permission }: Props) {
+  const [revoking, setRevoking] = useState(false);
+
+  const handleRevoke = async () => {
+    setRevoking(true);
+    try {
+      const response = await account.revokePermission(permission.id);
+      if (response.success) {
+        showToast('Permission revoked');
+        onRevoked(permission.id);
+      }
+    } catch (error) {
+      showToast('Failed to revoke: ' + error.message);
+    } finally {
+      setRevoking(false);
+    }
+  };
+
+  return (
+    <div className="permission-card">
+      <p>Spender: {permission.spender}</p>
+      <p>Expires: {new Date(permission.expiry * 1000).toLocaleString()}</p>
+      <button onClick={handleRevoke} disabled={revoking}>
+        {revoking ? 'Revoking...' : 'Revoke'}
+      </button>
+    </div>
+  );
+}
+```
+
+### Emergency Revoke
+
+```typescript
+// If you suspect a session key is compromised, revoke immediately
+async function emergencyRevoke(account: Account, permissionId: Hex) {
+  try {
+    const response = await account.revokePermission(permissionId);
+    if (response.success) {
+      console.log('Emergency revocation successful');
+      // Notify user
+      sendSecurityAlert('A permission was emergency-revoked');
+    }
+  } catch (error) {
+    console.error('Emergency revocation failed:', error);
+    // Try alternative revocation methods or alert admin
+  }
+}
+```
+
+---
+
+## Important Notes
+
+- Revoked permissions cannot be restored - you must grant a new permission
+- Revocation is effective immediately
+- The permission ID is a hash that uniquely identifies the permission
+- Store permission IDs if you need to revoke them later
+
+---
+
+## Related
+
+- [account.grantPermissions()](/account/grantPermissions) - Grant new permissions
+- [account.getPermission()](/account/getPermission) - Get permission details
+- [Permissions Overview](/advanced/permissions) - Learn about the permission system

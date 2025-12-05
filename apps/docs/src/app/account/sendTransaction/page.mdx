@@ -1,0 +1,218 @@
+# account.sendTransaction()
+
+Send a transaction and wait for the receipt.
+
+**Type:** `instance async`
+
+---
+
+## Signature
+
+```typescript
+async sendTransaction(calls: TransactionCall[]): Promise<Hash>
+```
+
+---
+
+## Parameters
+
+### calls
+
+Type: `TransactionCall[]`
+
+Array of transaction calls to execute.
+
+```typescript
+interface TransactionCall {
+  /** Target contract address */
+  to: Address;
+  /** Value to send in wei (bigint or hex string) */
+  value?: bigint | string;
+  /** Call data */
+  data?: Hex;
+}
+```
+
+---
+
+## Returns
+
+`Promise<Hash>` - The transaction hash after the transaction is included in a block.
+
+---
+
+## Behavior
+
+1. Bundles all calls into a single user operation
+2. Sends the user operation to the bundler
+3. **Waits** for the transaction to be included in a block
+4. Returns the final transaction hash
+
+For sending without waiting, use [`sendCalls()`](/account/sendCalls).
+
+---
+
+## Value Format
+
+The `value` field must be in **wei** (the smallest unit of ETH):
+
+```typescript
+import { parseEther } from 'viem';
+
+// BigInt (wei)
+{ to: '0x...', value: 1000000000000000000n }  // 1 ETH in wei
+
+// Hex string (wei)
+{ to: '0x...', value: '0x0de0b6b3a7640000' }  // 1 ETH in wei
+
+// Using parseEther for convenience
+{ to: '0x...', value: parseEther('1') }    // 1 ETH
+{ to: '0x...', value: parseEther('0.1') }  // 0.1 ETH
+```
+
+---
+
+## Examples
+
+### Getting an Account Instance
+
+Before calling instance methods, create an account using one of the factory methods:
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// Option 1: Restore existing session or login with passkey
+const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 2: Create a new account with passkey
+const account = await Account.create(
+  { chainId: 1, apiKey: 'your-api-key' },
+  { username: 'alice' }
+);
+
+// Option 3: Import from cloud backup
+const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 4: From a local account (server-side / embedded wallets)
+const account = await Account.fromLocalAccount(
+  { chainId: 1, apiKey: 'your-api-key' },
+  localAccount
+);
+```
+
+### Send ETH
+
+```typescript
+import { parseEther } from 'viem';
+
+// Send 0.1 ETH
+const hash = await account.sendTransaction([
+  { to: '0xRecipient...', value: parseEther('0.1') }
+]);
+
+console.log('Transaction hash:', hash);
+```
+
+### Contract Call
+
+```typescript
+import { encodeFunctionData } from 'viem';
+
+// Encode the function call
+const data = encodeFunctionData({
+  abi: erc20Abi,
+  functionName: 'transfer',
+  args: ['0xRecipient...', 1000000n], // 1 USDC (6 decimals)
+});
+
+const hash = await account.sendTransaction([
+  { to: USDC_ADDRESS, data }
+]);
+```
+
+### Multiple Calls (Batched)
+
+```typescript
+import { encodeFunctionData } from 'viem';
+
+// Approve and swap in one transaction
+const approveData = encodeFunctionData({
+  abi: erc20Abi,
+  functionName: 'approve',
+  args: [ROUTER_ADDRESS, 1000000n],
+});
+
+const swapData = encodeFunctionData({
+  abi: routerAbi,
+  functionName: 'swap',
+  args: [/* ... */],
+});
+
+const hash = await account.sendTransaction([
+  { to: USDC_ADDRESS, data: approveData },
+  { to: ROUTER_ADDRESS, data: swapData },
+]);
+
+// Both calls executed atomically in one transaction
+```
+
+### Send ETH with Contract Call
+
+```typescript
+import { parseEther } from 'viem';
+
+// Deposit ETH into WETH contract
+const hash = await account.sendTransaction([
+  {
+    to: WETH_ADDRESS,
+    value: parseEther('1'), // 1 ETH
+    data: '0xd0e30db0', // deposit() selector
+  }
+]);
+```
+
+### With Gas Sponsorship
+
+```typescript
+// Create account with paymaster for gas sponsorship
+const account = await Account.get({
+  chainId: 8453, // Base
+  apiKey: 'your-api-key',
+  paymasterUrl: 'https://your-paymaster.com/base',
+});
+
+// Transaction will be sponsored - user pays no gas
+const hash = await account.sendTransaction([
+  { to: '0x...', value: parseEther('0.1') }
+]);
+```
+
+---
+
+## Error Handling
+
+```typescript
+import { parseEther } from 'viem';
+
+try {
+  const hash = await account.sendTransaction([
+    { to: '0x...', value: parseEther('0.1') }
+  ]);
+  console.log('Success:', hash);
+} catch (error) {
+  if (error.message.includes('insufficient funds')) {
+    console.error('Not enough ETH for gas');
+  } else if (error.message.includes('user rejected')) {
+    console.error('User cancelled the transaction');
+  } else {
+    console.error('Transaction failed:', error.message);
+  }
+}
+```
+
+---
+
+## Related
+
+- [account.sendCalls()](/account/sendCalls) - Send without waiting for receipt
+- [account.estimateGas()](/account/estimateGas) - Estimate gas before sending
