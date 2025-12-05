@@ -262,9 +262,11 @@ export abstract class JAWSigner implements Signer {
                 }
                 const accounts = walletResponse.accounts.map((account) => account.address);
                 this.accounts = accounts;
+                const walletCapabilities = walletResponse.accounts[0]?.capabilities;
                 store.account.set({
                     accounts,
                     chain: this.chain,
+                    ...(walletCapabilities && { capabilities: walletCapabilities }),
                 });
 
                 const accounts_ = [this.accounts[0]];
