@@ -47,9 +47,7 @@ interface AccountMetadata {
 
 ---
 
-## Examples
-
-### Basic Usage
+## Example
 
 ```typescript
 import { Account } from '@jaw.id/core';
@@ -69,76 +67,6 @@ if (metadata) {
   console.log('Local account - no metadata available');
 }
 ```
-
-### Display Account Info
-
-```typescript
-import { Account } from '@jaw.id/core';
-
-function AccountInfo({ account }: { account: Account }) {
-  const metadata = account.getMetadata();
-
-  return (
-    <div>
-      <p>Address: {account.address}</p>
-      {metadata ? (
-        <>
-          <p>Username: {metadata.username}</p>
-          <p>
-            Created: {new Date(metadata.creationDate).toLocaleDateString()}
-          </p>
-          {metadata.isImported && <span>Imported from cloud</span>}
-        </>
-      ) : (
-        <p>Local account</p>
-      )}
-    </div>
-  );
-}
-```
-
-### Conditional Features
-
-```typescript
-import { Account } from '@jaw.id/core';
-
-async function setupAccount(account: Account) {
-  const metadata = account.getMetadata();
-
-  if (metadata) {
-    // Passkey account - can use cloud sync features
-    enableCloudSync();
-  } else {
-    // Local account - show backup warning
-    showBackupWarning();
-  }
-}
-```
-
-### Format Creation Date
-
-```typescript
-const metadata = account.getMetadata();
-
-if (metadata) {
-  const createdAt = new Date(metadata.creationDate);
-
-  // Relative time
-  const rtf = new Intl.RelativeTimeFormat('en', { numeric: 'auto' });
-  const daysAgo = Math.floor(
-    (Date.now() - createdAt.getTime()) / (1000 * 60 * 60 * 24)
-  );
-  console.log(`Created ${rtf.format(-daysAgo, 'day')}`);
-
-  // Formatted date
-  console.log(createdAt.toLocaleDateString('en-US', {
-    year: 'numeric',
-    month: 'long',
-    day: 'numeric',
-  }));
-}
-```
-
 ---
 
 ## Related

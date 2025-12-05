@@ -103,75 +103,7 @@ interface WalletGrantPermissionsResponse {
 
 ---
 
-## Examples
-
-### Grant Call Permission
-
-```typescript
-import { Account } from '@jaw.id/core';
-
-const account = await Account.get({
-  chainId: 1,
-  apiKey: 'your-api-key',
-});
-
-// Grant permission to call transfer() on USDC
-const permission = await account.grantPermissions(
-  Math.floor(Date.now() / 1000) + 3600, // 1 hour from now
-  '0xSpenderAddress...',
-  {
-    calls: [
-      {
-        target: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-        selector: '0xa9059cbb', // transfer(address,uint256)
-      }
-    ],
-  }
-);
-
-console.log('Permission ID:', permission.id);
-console.log('Expires:', new Date(permission.expiry * 1000));
-```
-
-### Grant Spend Permission
-
-```typescript
-// Grant permission to spend up to 100 USDC per day
-const permission = await account.grantPermissions(
-  Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
-  '0xSpenderAddress...',
-  {
-    spends: [
-      {
-        token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-        limit: '100000000', // 100 USDC (6 decimals)
-        period: 'day',
-      }
-    ],
-  }
-);
-```
-
-### Grant Native ETH Spending
-
-```typescript
-// Grant permission to spend up to 0.1 ETH per hour
-const permission = await account.grantPermissions(
-  Math.floor(Date.now() / 1000) + 86400, // 24 hours
-  '0xSpenderAddress...',
-  {
-    spends: [
-      {
-        token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // Native ETH
-        limit: '100000000000000000', // 0.1 ETH
-        period: 'hour',
-      }
-    ],
-  }
-);
-```
-
-### Combined Permissions
+## Example
 
 ```typescript
 // Grant both call and spend permissions
@@ -199,33 +131,6 @@ const permission = await account.grantPermissions(
   }
 );
 ```
-
-### Session Key Pattern
-
-```typescript
-import { generatePrivateKey, privateKeyToAccount } from 'viem/accounts';
-
-// Generate a session key
-const sessionPrivateKey = generatePrivateKey();
-const sessionAccount = privateKeyToAccount(sessionPrivateKey);
-
-// Grant permissions to the session key
-const permission = await account.grantPermissions(
-  Math.floor(Date.now() / 1000) + 3600, // 1 hour session
-  sessionAccount.address,
-  {
-    calls: [
-      { target: GAME_CONTRACT, selector: '0x...' }, // play()
-      { target: GAME_CONTRACT, selector: '0x...' }, // move()
-    ],
-  }
-);
-
-// Session key can now execute these calls without user interaction
-// Store sessionPrivateKey securely for the session duration
-```
-
----
 
 ## Use Cases
 

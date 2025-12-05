@@ -41,17 +41,6 @@ interface TransactionCall {
 
 ---
 
-## Behavior
-
-1. Bundles all calls into a single user operation
-2. Sends the user operation to the bundler
-3. **Waits** for the transaction to be included in a block
-4. Returns the final transaction hash
-
-For sending without waiting, use [`sendCalls()`](/account/sendCalls).
-
----
-
 ## Value Format
 
 The `value` field must be in **wei** (the smallest unit of ETH):
@@ -72,7 +61,7 @@ import { parseEther } from 'viem';
 
 ---
 
-## Examples
+## Example
 
 ### Getting an Account Instance
 
@@ -128,86 +117,6 @@ const data = encodeFunctionData({
 const hash = await account.sendTransaction([
   { to: USDC_ADDRESS, data }
 ]);
-```
-
-### Multiple Calls (Batched)
-
-```typescript
-import { encodeFunctionData } from 'viem';
-
-// Approve and swap in one transaction
-const approveData = encodeFunctionData({
-  abi: erc20Abi,
-  functionName: 'approve',
-  args: [ROUTER_ADDRESS, 1000000n],
-});
-
-const swapData = encodeFunctionData({
-  abi: routerAbi,
-  functionName: 'swap',
-  args: [/* ... */],
-});
-
-const hash = await account.sendTransaction([
-  { to: USDC_ADDRESS, data: approveData },
-  { to: ROUTER_ADDRESS, data: swapData },
-]);
-
-// Both calls executed atomically in one transaction
-```
-
-### Send ETH with Contract Call
-
-```typescript
-import { parseEther } from 'viem';
-
-// Deposit ETH into WETH contract
-const hash = await account.sendTransaction([
-  {
-    to: WETH_ADDRESS,
-    value: parseEther('1'), // 1 ETH
-    data: '0xd0e30db0', // deposit() selector
-  }
-]);
-```
-
-### With Gas Sponsorship
-
-```typescript
-// Create account with paymaster for gas sponsorship
-const account = await Account.get({
-  chainId: 8453, // Base
-  apiKey: 'your-api-key',
-  paymasterUrl: 'https://your-paymaster.com/base',
-});
-
-// Transaction will be sponsored - user pays no gas
-const hash = await account.sendTransaction([
-  { to: '0x...', value: parseEther('0.1') }
-]);
-```
-
----
-
-## Error Handling
-
-```typescript
-import { parseEther } from 'viem';
-
-try {
-  const hash = await account.sendTransaction([
-    { to: '0x...', value: parseEther('0.1') }
-  ]);
-  console.log('Success:', hash);
-} catch (error) {
-  if (error.message.includes('insufficient funds')) {
-    console.error('Not enough ETH for gas');
-  } else if (error.message.includes('user rejected')) {
-    console.error('User cancelled the transaction');
-  } else {
-    console.error('Transaction failed:', error.message);
-  }
-}
 ```
 
 ---

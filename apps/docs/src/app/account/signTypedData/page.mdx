@@ -55,7 +55,7 @@ interface TypedDataDefinition {
 
 ---
 
-## Examples
+## Example
 
 ### Getting an Account Instance
 
@@ -103,113 +103,6 @@ const signature = await account.signTypedData({
   message: {
     content: 'Hello, World!',
     timestamp: BigInt(Date.now()),
-  },
-});
-```
-
-### ERC-2612 Permit
-
-```typescript
-async function signPermit(
-  account: Account,
-  tokenAddress: Address,
-  spender: Address,
-  value: bigint,
-  deadline: bigint
-) {
-  const nonce = await getPermitNonce(tokenAddress, account.address);
-
-  const signature = await account.signTypedData({
-    domain: {
-      name: 'USD Coin', // Token name
-      version: '2',
-      chainId: account.chainId,
-      verifyingContract: tokenAddress,
-    },
-    types: {
-      Permit: [
-        { name: 'owner', type: 'address' },
-        { name: 'spender', type: 'address' },
-        { name: 'value', type: 'uint256' },
-        { name: 'nonce', type: 'uint256' },
-        { name: 'deadline', type: 'uint256' },
-      ],
-    },
-    primaryType: 'Permit',
-    message: {
-      owner: account.address,
-      spender,
-      value,
-      nonce,
-      deadline,
-    },
-  });
-
-  return signature;
-}
-```
-
-### Order Signing (e.g., DEX)
-
-```typescript
-async function signOrder(account: Account, order: Order) {
-  const signature = await account.signTypedData({
-    domain: {
-      name: 'MyDEX',
-      version: '1',
-      chainId: account.chainId,
-      verifyingContract: DEX_CONTRACT_ADDRESS,
-    },
-    types: {
-      Order: [
-        { name: 'maker', type: 'address' },
-        { name: 'tokenIn', type: 'address' },
-        { name: 'tokenOut', type: 'address' },
-        { name: 'amountIn', type: 'uint256' },
-        { name: 'minAmountOut', type: 'uint256' },
-        { name: 'deadline', type: 'uint256' },
-        { name: 'nonce', type: 'uint256' },
-      ],
-    },
-    primaryType: 'Order',
-    message: order,
-  });
-
-  return signature;
-}
-```
-
-### Nested Types
-
-```typescript
-const signature = await account.signTypedData({
-  domain: {
-    name: 'MyApp',
-    version: '1',
-    chainId: 1,
-  },
-  types: {
-    Person: [
-      { name: 'name', type: 'string' },
-      { name: 'wallet', type: 'address' },
-    ],
-    Mail: [
-      { name: 'from', type: 'Person' },
-      { name: 'to', type: 'Person' },
-      { name: 'contents', type: 'string' },
-    ],
-  },
-  primaryType: 'Mail',
-  message: {
-    from: {
-      name: 'Alice',
-      wallet: '0x...',
-    },
-    to: {
-      name: 'Bob',
-      wallet: '0x...',
-    },
-    contents: 'Hello!',
   },
 });
 ```

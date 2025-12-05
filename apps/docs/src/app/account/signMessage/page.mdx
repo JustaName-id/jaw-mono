@@ -38,9 +38,7 @@ The message to sign.
 
 ---
 
-## Examples
-
-### Getting an Account Instance
+## Example
 
 Before calling instance methods, create an account using one of the factory methods:
 
@@ -100,44 +98,6 @@ await fetch('/api/verify-siwe', {
   }),
 });
 ```
-
-### Verify Ownership
-
-```typescript
-async function proveOwnership(account: Account, nonce: string) {
-  const message = `Prove ownership of ${account.address}\nNonce: ${nonce}`;
-  const signature = await account.signMessage(message);
-
-  return {
-    address: account.address,
-    message,
-    signature,
-  };
-}
-```
-
-### Off-chain Authorization
-
-```typescript
-async function createAuthToken(account: Account) {
-  const timestamp = Date.now();
-  const message = `Authorize session\nTimestamp: ${timestamp}`;
-
-  const signature = await account.signMessage(message);
-
-  return {
-    address: account.address,
-    timestamp,
-    signature,
-  };
-}
-```
-
----
-
-## Signature Format
-
-Smart account signatures are wrapped according to ERC-6492 format for counterfactual accounts, ensuring they can be verified even before the account is deployed.
 
 ---
 

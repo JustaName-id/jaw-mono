@@ -52,7 +52,7 @@ This estimate is used by the bundler to determine if the operation can be submit
 
 ---
 
-## Examples
+## Example
 
 ### Getting an Account Instance
 
@@ -90,117 +90,6 @@ const gas = await account.estimateGas([
 ]);
 
 console.log('Estimated gas:', gas.toString());
-```
-
-### Pre-flight Check
-
-```typescript
-import { formatEther } from 'viem';
-
-async function canAffordTransaction(
-  account: Account,
-  calls: TransactionCall[]
-): Promise<boolean> {
-  try {
-    const gas = await account.estimateGas(calls);
-    const gasCost = await account.calculateGasCost(calls);
-
-    console.log('Gas units:', gas.toString());
-    console.log('Gas cost:', gasCost, 'ETH');
-
-    // Check if user has enough balance
-    // (implementation depends on your balance checking)
-    return true;
-  } catch (error) {
-    console.error('Estimation failed:', error.message);
-    return false;
-  }
-}
-```
-
-### Compare Gas for Different Operations
-
-```typescript
-import { encodeFunctionData } from 'viem';
-
-// Estimate transfer
-const transferGas = await account.estimateGas([
-  {
-    to: USDC_ADDRESS,
-    data: encodeFunctionData({
-      abi: erc20Abi,
-      functionName: 'transfer',
-      args: ['0x...', 1000000n],
-    }),
-  }
-]);
-
-// Estimate approve + swap (batched)
-const swapGas = await account.estimateGas([
-  {
-    to: USDC_ADDRESS,
-    data: encodeFunctionData({
-      abi: erc20Abi,
-      functionName: 'approve',
-      args: [ROUTER_ADDRESS, 1000000n],
-    }),
-  },
-  {
-    to: ROUTER_ADDRESS,
-    data: encodeFunctionData({
-      abi: routerAbi,
-      functionName: 'swap',
-      args: [/* ... */],
-    }),
-  }
-]);
-
-console.log('Transfer gas:', transferGas.toString());
-console.log('Swap gas:', swapGas.toString());
-```
-
-### Display Gas Estimate in UI
-
-```typescript
-import { formatUnits } from 'viem';
-
-function GasEstimate({ account, calls }: Props) {
-  const [gas, setGas] = useState<bigint | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    setLoading(true);
-    account.estimateGas(calls)
-      .then(setGas)
-      .catch(console.error)
-      .finally(() => setLoading(false));
-  }, [calls]);
-
-  if (loading) return <span>Estimating...</span>;
-  if (!gas) return <span>Unable to estimate</span>;
-
-  return <span>Gas: {formatUnits(gas, 0)} units</span>;
-}
-```
-
----
-
-## Error Cases
-
-Estimation can fail for various reasons:
-
-```typescript
-try {
-  const gas = await account.estimateGas(calls);
-} catch (error) {
-  if (error.message.includes('execution reverted')) {
-    console.error('Transaction would fail');
-  } else if (error.message.includes('insufficient funds')) {
-    console.error('Not enough ETH');
-  } else {
-    console.error('Estimation failed:', error.message);
-  }
-}
 ```
 
 ---

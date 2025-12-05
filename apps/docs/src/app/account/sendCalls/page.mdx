@@ -61,7 +61,7 @@ For waiting until the transaction is mined, use [`sendTransaction()`](/account/s
 
 ---
 
-## Examples
+## Example
 
 ### Getting an Account Instance
 
@@ -89,40 +89,6 @@ const account = await Account.fromLocalAccount(
 );
 ```
 
-### Basic Usage
-
-```typescript
-import { parseEther } from 'viem';
-
-const { id, chainId } = await account.sendCalls([
-  { to: '0x...', value: parseEther('0.1') }
-]);
-
-console.log('UserOp hash:', id);
-console.log('Chain:', chainId);
-```
-
-### Fire and Forget
-
-```typescript
-import { parseEther } from 'viem';
-
-// Submit transaction and continue without waiting
-const result = await account.sendCalls([
-  { to: '0x...', value: parseEther('0.1') }
-]);
-
-// Store the ID for later status checking
-await saveToDatabase({
-  userOpHash: result.id,
-  chainId: result.chainId,
-  status: 'pending',
-});
-
-// Continue with other work
-continueWorkflow();
-```
-
 ### Batch Multiple Calls
 
 ```typescript
@@ -142,54 +108,6 @@ const { id } = await account.sendCalls(transfers);
 console.log('Batch transfer submitted:', id);
 ```
 
-### Check Status Later
-
-```typescript
-import { createPublicClient, http, parseEther } from 'viem';
-
-// Submit the calls
-const { id, chainId } = await account.sendCalls([
-  { to: '0x...', value: parseEther('0.1') }
-]);
-
-// Later, check the status
-async function checkStatus(userOpHash: Hex) {
-  const chain = account.getChain();
-  const client = createPublicClient({
-    transport: http(chain.rpcUrl),
-  });
-
-  // Poll for receipt
-  // Implementation depends on your bundler's API
-}
-```
-
-### UI with Optimistic Updates
-
-```typescript
-import { parseEther } from 'viem';
-
-async function handleSend(to: Address, amount: bigint) {
-  // Optimistically update UI
-  addPendingTransaction({ to, amount, status: 'pending' });
-
-  try {
-    const { id } = await account.sendCalls([{ to, value: amount }]);
-
-    // Update with actual ID
-    updateTransaction({ id, status: 'submitted' });
-
-    // Optionally wait for confirmation in background
-    waitForConfirmation(id).then(() => {
-      updateTransaction({ id, status: 'confirmed' });
-    });
-  } catch (error) {
-    removePendingTransaction();
-    showError(error.message);
-  }
-}
-```
-
 ---
 
 ## sendTransaction vs sendCalls
@@ -200,17 +118,6 @@ async function handleSend(to: Address, amount: bigint) {
 | Waits | Yes, until mined | No, returns immediately |
 | Use case | Need confirmation | Fire and forget |
 | Error handling | Includes mining errors | Only submission errors |
-
-```typescript
-// Use sendTransaction when you need the final hash
-const hash = await account.sendTransaction(calls);
-console.log('Mined:', hash);
-
-// Use sendCalls when you want to continue immediately
-const { id } = await account.sendCalls(calls);
-console.log('Submitted:', id);
-// Check status separately
-```
 
 ---
 
