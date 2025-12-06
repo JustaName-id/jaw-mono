@@ -22,14 +22,11 @@ import {
   SubnameTextRecordCapabilityRequest,
   getPermissionFromRelay,
   type Chain,
-  type JustanAccountImplementation,
   type SignInWithEthereumCapabilityRequest,
   ensureIntNumber,
 } from '@jaw.id/core';
-import type { SmartAccount } from 'viem/account-abstraction';
-import { toWebAuthnAccount } from 'viem/account-abstraction';
-import { getAddress, parseEther, formatUnits, erc20Abi, createPublicClient, http } from 'viem';
-import type { Address, Hex, Hash } from 'viem';
+import { formatUnits, erc20Abi, createPublicClient, http } from 'viem';
+import type { Address, Hex } from 'viem';
 import { createSiweMessage } from 'viem/siwe';
 
 // Import UI components using relative paths (we're inside @jaw/ui)
