@@ -5,6 +5,8 @@ import { useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 
+
+
 export interface ConnectModalProps {
   origin: string;
   appName: string;
@@ -38,8 +40,6 @@ export const ConnectModal = ({
     try {
       setIsProcessing(true);
       console.log('🔗 User approved connection to', appName);
-
-      // Call onSuccess - parent will handle the actual connection logic
       onSuccess();
     } catch (error) {
       console.error("Error connecting:", error);

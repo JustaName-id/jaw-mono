@@ -46,16 +46,21 @@ export function assertParamsChainId(params: unknown): asserts params is [
 }
 
 export async function getCachedWalletConnectResponse(): Promise<WalletConnectResponse | null> {
-    const accounts = store.account.get().accounts;
+    const accountState = store.account.get();
+    const accounts = accountState.accounts;
 
     if (!accounts) {
         return null;
     }
 
+    // Get stored capabilities (e.g., signInWithEthereum response)
+    const storedCapabilities = accountState.capabilities;
+
     const walletConnectAccounts = accounts?.map<WalletConnectResponse['accounts'][number]>(
-        (account) => ({
+        (account, index) => ({
             address: account,
-            capabilities: {},
+            // Only include capabilities for the first account (where they're typically stored)
+            capabilities: index === 0 && storedCapabilities ? storedCapabilities : {},
         })
     );
 

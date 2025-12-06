@@ -20,8 +20,8 @@ export default function TestPage() {
         preference: {
           keysUrl: 'http://localhost:3001', // Local popup URL
           showTestnets: true,
-          // mode: Mode.AppSpecific,
-          // uiHandler: new ReactUIHandler()
+          mode: Mode.AppSpecific,
+          uiHandler: new ReactUIHandler()
         },
         apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
       })
@@ -141,6 +141,93 @@ export default function TestPage() {
                   ? JSON.stringify(error, null, 2)
                   : String(error);
       addLog(`❌ Error connecting with text records: ${errorMessage}`);
+    }
+  };
+
+  const handleConnectWithSiwe = async () => {
+    try {
+      addLog('🔐 Connecting with SIWE (Sign-In with Ethereum) capability...');
+      const provider = sdk.provider;
+
+      // Generate nonce and current chain ID for SIWE
+      const nonce = Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+      const currentChainId = chainId || '0x1'; // Default to mainnet if not set
+
+      addLog(`Nonce: ${nonce}`);
+      addLog(`Chain ID: ${currentChainId}`);
+
+      const accountsResult = await provider.request({
+        method: 'wallet_connect',
+        params: [{
+          capabilities: {
+            signInWithEthereum: {
+              nonce,
+              chainId: currentChainId,
+              statement: 'Sign in to JAW SDK Demo with your Ethereum account',
+              // domain and uri will default to current origin in the wallet
+            }
+          }
+        }]
+      });
+
+      console.log('[Demo] wallet_connect with SIWE result:', accountsResult);
+
+      // Handle WalletConnectResponse format with SIWE capability response
+      type SiweCapabilityResponse = { message: string; signature: string };
+      type WalletConnectResponseWithSiwe = {
+        accounts: Array<{
+          address: string;
+          capabilities?: {
+            signInWithEthereum?: SiweCapabilityResponse;
+          };
+        }>;
+      };
+
+      let accounts: string[];
+      let siweResponse: SiweCapabilityResponse | undefined;
+
+      if (accountsResult && typeof accountsResult === 'object' && 'accounts' in accountsResult) {
+        const walletConnectResponse = accountsResult as WalletConnectResponseWithSiwe;
+        accounts = walletConnectResponse.accounts.map(acc => acc.address);
+
+        // Extract SIWE response from first account's capabilities
+        siweResponse = walletConnectResponse.accounts[0]?.capabilities?.signInWithEthereum;
+      } else if (Array.isArray(accountsResult)) {
+        accounts = accountsResult as string[];
+      } else {
+        throw new Error('Unexpected accounts format: ' + JSON.stringify(accountsResult));
+      }
+
+      setAccounts(accounts);
+      setIsConnected(true);
+      console.log('[Demo] Connection with SIWE successful, accounts stored:', accounts);
+      addLog(`✅ Connected with SIWE! Account: ${accounts[0]}`);
+
+      if (siweResponse) {
+        addLog(`📝 SIWE Message:\n${siweResponse.message}`);
+        addLog(`✍️ SIWE Signature: ${siweResponse.signature}`);
+        addLog(`🔒 Authentication complete! You can verify this signature server-side.`);
+      } else {
+        addLog(`⚠️ No SIWE response in capabilities (wallet may not support it)`);
+      }
+
+      // Get chain ID
+      const chainIdResult = await provider.request({
+        method: 'eth_chainId',
+        params: []
+      });
+      setChainId(chainIdResult as string);
+      addLog(`Chain ID: ${chainIdResult}`);
+    } catch (error) {
+      console.error('[Demo] Connection with SIWE error:', error);
+      const errorMessage = error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
+      addLog(`❌ Error connecting with SIWE: ${errorMessage}`);
     }
   };
 
@@ -1198,13 +1285,20 @@ Issued At: ${issuedAt}`;
             <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
               Connection Actions
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
               <button
                   onClick={handleConnect}
                   disabled={isConnected}
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
                 Connect (eth_requestAccounts)
+              </button>
+              <button
+                  onClick={handleConnectWithSiwe}
+                  disabled={isConnected}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Connect with SIWE
               </button>
               <button
                   onClick={handleConnectWithTextRecords}
@@ -1221,9 +1315,12 @@ Issued At: ${issuedAt}`;
                 Disconnect
               </button>
             </div>
-            <div className="mt-3">
+            <div className="mt-3 space-y-2">
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">Note:</span> "Connect with Text Records" uses <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_connect</code> with <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">subnameTextRecords</code> capability. These text records will be applied when creating a <span className="font-medium">NEW account</span> during onboarding (not when connecting to existing accounts).
+                <span className="font-medium">Connect with SIWE:</span> Uses <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">wallet_connect</code> with <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">signInWithEthereum</code> capability. The wallet constructs and signs the SIWE message during connection (ERC-7846). Returns both the message and signature for server-side verification.
+              </p>
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                <span className="font-medium">Connect with Text Records:</span> Uses <code className="bg-gray-100 dark:bg-gray-700 px-1 rounded">subnameTextRecords</code> capability. Text records will be applied when creating a <span className="font-medium">NEW account</span> during onboarding.
               </p>
             </div>
           </div>
