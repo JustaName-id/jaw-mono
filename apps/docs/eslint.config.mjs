@@ -20,6 +20,8 @@ export default [
   })),
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    rules: {},
+    rules: {
+      '@nx/enforce-module-boundaries': 'off',
+    },
   },
 ];
