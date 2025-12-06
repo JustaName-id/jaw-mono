@@ -2,13 +2,13 @@ import React from 'react'
 import { DocsThemeConfig } from 'nextra-theme-docs'
 
 const config: DocsThemeConfig = {
-  logo: <span>JAW Accounts - Core Package Documentation</span>,
+  logo: <span>JAW - Core Package Documentation</span>,
   project: {
     link: 'https://github.com/JustaName-id/jaw-mono',
   },
   docsRepositoryBase: 'https://github.com/JustaName-id/jaw-mono',
   footer: {
-    text: 'JAW Accounts Documentation',
+    text: 'JAW Documentation',
   },
   useNextSeoProps() {
     return {

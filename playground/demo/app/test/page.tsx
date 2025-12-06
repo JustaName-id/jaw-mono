@@ -16,7 +16,7 @@ export default function TestPage() {
       JAW.create({
         appName: 'JAW Playground',
         appLogoUrl: "https://avatars.githubusercontent.com/u/159771991?s=200&v=4",
-        defaultChainId: 1,
+        defaultChainId: 84532,
         preference: {
           keysUrl: 'http://localhost:3001', // Local popup URL
           showTestnets: true,

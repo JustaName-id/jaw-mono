@@ -1,5 +1,5 @@
 /**  Constants **/
-export { JAW_KEYS_URL, JAW_PASSKEYS_URL, JAW_RPC_URL, FACTORY_ADDRESS, CONTRACT_NAME, CONTRACT_VERSION, PERMISSIONS_MANAGER_ADDRESS } from './constants.js';
+export { JAW_RPC_URL } from './constants.js';
 
 /**  SDK Info **/
 export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
@@ -7,15 +7,19 @@ export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
 /** SDK exports **/
 export { create, JAW, type CreateJAWSDKOptions } from './sdk/index.js';
 
-/**  RPC exports **/
+/**  RPC types and utilities **/
 export {
+    // Capability types
     type SignInWithEthereumCapabilityRequest,
     type SignInWithEthereumCapabilityResponse,
     type SubnameTextRecordCapabilityRequest,
+    // Wallet connect types
     type WalletConnectRequest,
     type WalletConnectResponse,
+    // Viem RPC types
     type ViemRPCParams,
     type ViemRPCReturnType,
+    // Permission types (used with Account.grantPermissions/revokePermission)
     type Permission,
     type SpendPeriod,
     type SpendPermissionDetail,
@@ -24,9 +28,9 @@ export {
     type WalletGrantPermissionsResponse,
     type WalletRevokePermissionsRequest,
     type RevokePermissionApiResponse,
-    grantPermissions,
-    revokePermission,
+    // Permission utilities for UI (fetching permission details without Account instance)
     getPermissionFromRelay,
+    // Permission selector constants
     ANY_TARGET,
     ANY_FN_SEL,
     EMPTY_CALLDATA_FN_SEL
@@ -54,20 +58,9 @@ export {
     type CreateProviderOptions
 } from './provider/index.js';
 
-/** Passkey Manager exports **/
+/** Passkey types (used with Account class) **/
 export {
-    PasskeyManager,
-    type PasskeyCredential,
     type PasskeyAccount,
-    type AuthCheckResult,
-    type AuthState,
-    type PasskeyRegistrationRequest,
-    type PasskeyLookupResponse,
-    type BackendResponse,
-    type PasskeysByCredIdsResponse,
-    type LookupPasskeysRequest,
-    type WebAuthnAuthenticationResult,
-    WebAuthnAuthenticationError,
 } from './passkey-manager/index.js';
 
 /** Key Manager exports **/

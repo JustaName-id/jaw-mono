@@ -1,0 +1,76 @@
+# account.getMetadata()
+
+Get account metadata (only available for passkey-based accounts).
+
+**Type:** `instance`
+
+---
+
+## Signature
+
+```typescript
+getMetadata(): AccountMetadata | null
+```
+
+---
+
+## Parameters
+
+None.
+
+---
+
+## Returns
+
+`AccountMetadata | null` - Account metadata or `null` for LocalAccount-based accounts.
+
+### AccountMetadata
+
+```typescript
+interface AccountMetadata {
+  /** Username/display name */
+  username: string;
+  /** ISO date string when the account was created */
+  creationDate: string;
+  /** Whether the account was imported from cloud backup */
+  isImported: boolean;
+}
+```
+
+---
+
+## Behavior
+
+- For accounts created via `Account.create()`: Returns full metadata
+- For accounts created via `Account.import()`: Returns metadata with `isImported: true`
+- For accounts created via `Account.fromLocalAccount()`: Returns `null`
+
+---
+
+## Example
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const account = await Account.get({
+  chainId: 1,
+  apiKey: 'your-api-key',
+});
+
+const metadata = account.getMetadata();
+
+if (metadata) {
+  console.log('Username:', metadata.username);
+  console.log('Created:', metadata.creationDate);
+  console.log('Imported:', metadata.isImported);
+} else {
+  console.log('Local account - no metadata available');
+}
+```
+---
+
+## Related
+
+- [Account.create()](/account/create) - Creates account with metadata
+- [Account.import()](/account/import) - Imports account (sets isImported: true)
+- [Account.fromLocalAccount()](/account/fromLocalAccount) - Creates account without metadata

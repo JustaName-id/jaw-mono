@@ -1,0 +1,89 @@
+# account.getPermission()
+
+Get details of a previously granted permission.
+
+**Type:** `instance async`
+
+---
+
+## Signature
+
+```typescript
+async getPermission(permissionId: Hex): Promise<WalletGrantPermissionsResponse>
+```
+
+---
+
+## Parameters
+
+### permissionId
+
+Type: `Hex`
+
+The permission ID (hash) to fetch. This is the `id` field returned from `grantPermissions()`.
+
+---
+
+## Returns
+
+`Promise<WalletGrantPermissionsResponse>` - The permission details.
+
+```typescript
+interface WalletGrantPermissionsResponse {
+  /** Smart account address */
+  address: Address;
+  /** Chain ID as hex string */
+  chainId: Hex;
+  /** Start timestamp */
+  start: number;
+  /** Expiry timestamp */
+  expiry: number;
+  /** Unique salt for this permission */
+  salt: Hex;
+  /** Permission ID (hash) */
+  id: Hex;
+  /** Spender address */
+  spender: Address;
+  /** Granted call permissions */
+  calls: CallPermissionDetail[];
+  /** Granted spend permissions */
+  spends: SpendPermissionDetail[];
+}
+```
+
+---
+
+## Behavior
+
+1. Fetches the permission from the JAW relay by ID
+2. Returns the full permission details in the same format as `grantPermissions()`
+3. Throws if the permission is not found
+
+---
+
+## Example
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const account = await Account.get({
+  chainId: 1,
+  apiKey: 'your-api-key',
+});
+
+const permission = await account.getPermission(
+  '0x1234567890abcdef...' // Permission ID
+);
+
+console.log('Spender:', permission.spender);
+console.log('Expires:', new Date(permission.expiry * 1000));
+console.log('Call permissions:', permission.calls);
+console.log('Spend permissions:', permission.spends);
+```
+---
+
+## Related
+
+- [account.grantPermissions()](/account/grantPermissions) - Grant new permissions
+- [account.revokePermission()](/account/revokePermission) - Revoke a permission
+- [Permissions Overview](/advanced/permissions) - Learn about the permission system

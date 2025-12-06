@@ -243,8 +243,8 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             communicator: signerType === 'crossPlatform' ? this.communicator : undefined,
             uiHandler: signerType === 'appSpecific' ? this.preference.uiHandler : undefined,
             callback: this.emit.bind(this),
-            apiKey: signerType === 'appSpecific' ? this.apiKey: undefined,
-            paymasterUrls: signerType === 'appSpecific' ? this.paymasterUrls: undefined,
+            apiKey: this.apiKey,
+            paymasterUrls: signerType === 'appSpecific' ? this.paymasterUrls : undefined,
         });
     }
 

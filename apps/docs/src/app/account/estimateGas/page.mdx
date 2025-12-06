@@ -1,0 +1,101 @@
+# account.estimateGas()
+
+Estimate gas for a transaction.
+
+**Type:** `instance async`
+
+---
+
+## Signature
+
+```typescript
+async estimateGas(calls: TransactionCall[]): Promise<bigint>
+```
+
+---
+
+## Parameters
+
+### calls
+
+Type: `TransactionCall[]`
+
+Array of transaction calls to estimate.
+
+```typescript
+interface TransactionCall {
+  /** Target contract address */
+  to: Address;
+  /** Value to send in wei (bigint or hex string) */
+  value?: bigint | string;
+  /** Call data */
+  data?: Hex;
+}
+```
+
+---
+
+## Returns
+
+`Promise<bigint>` - The estimated gas amount in wei.
+
+---
+
+## Behavior
+
+Estimates the total gas required for the user operation, including:
+- Call execution gas
+- Verification gas
+- Pre-verification gas
+
+This estimate is used by the bundler to determine if the operation can be submitted.
+
+---
+
+## Example
+
+### Getting an Account Instance
+
+Before calling instance methods, create an account using one of the factory methods:
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// Option 1: Restore existing session or login with passkey
+const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 2: Create a new account with passkey
+const account = await Account.create(
+  { chainId: 1, apiKey: 'your-api-key' },
+  { username: 'alice' }
+);
+
+// Option 3: Import from cloud backup
+const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 4: From a local account (server-side / embedded wallets)
+const account = await Account.fromLocalAccount(
+  { chainId: 1, apiKey: 'your-api-key' },
+  localAccount
+);
+```
+
+### Basic Usage
+
+```typescript
+import { parseEther } from 'viem';
+
+const gas = await account.estimateGas([
+  { to: '0x...', value: parseEther('0.1') }
+]);
+
+console.log('Estimated gas:', gas.toString());
+```
+
+---
+
+## Related
+
+- [account.calculateGasCost()](/account/calculateGasCost) - Get gas cost in ETH
+- [account.sendTransaction()](/account/sendTransaction) - Send the transaction
+- [account.sendCalls()](/account/sendCalls) - Send without waiting

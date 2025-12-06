@@ -1,0 +1,148 @@
+# account.grantPermissions()
+
+Grant permissions to a spender.
+
+**Type:** `instance async`
+
+---
+
+## Signature
+
+```typescript
+async grantPermissions(
+  expiry: number,
+  spender: Address,
+  permissions: PermissionsDetail
+): Promise<WalletGrantPermissionsResponse>
+```
+
+---
+
+## Parameters
+
+### expiry
+
+Type: `number`
+
+Unix timestamp (in seconds) when the permission expires.
+
+### spender
+
+Type: `Address`
+
+The address that can use this permission to execute calls on behalf of the account.
+
+### permissions
+
+Type: `PermissionsDetail`
+
+The permissions to grant.
+
+```typescript
+interface PermissionsDetail {
+  /** Call permissions - which contracts and functions can be called */
+  calls?: CallPermissionDetail[];
+  /** Spend permissions - token spending limits */
+  spends?: SpendPermissionDetail[];
+}
+
+interface CallPermissionDetail {
+  /** Target contract address */
+  target: Address;
+  /** Function selector (4 bytes) */
+  selector: Hex;
+}
+
+interface SpendPermissionDetail {
+  /** Token address (use 0xEee...EEeE for native ETH) */
+  token: Address;
+  /** Maximum amount that can be spent per period */
+  limit: string;
+  /** Time period for the limit */
+  period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year';
+}
+```
+
+---
+
+## Returns
+
+`Promise<WalletGrantPermissionsResponse>` - The granted permission details.
+
+```typescript
+interface WalletGrantPermissionsResponse {
+  /** Smart account address */
+  address: Address;
+  /** Chain ID as hex string */
+  chainId: Hex;
+  /** Start timestamp */
+  start: number;
+  /** Expiry timestamp */
+  expiry: number;
+  /** Unique salt for this permission */
+  salt: Hex;
+  /** Permission ID (hash) */
+  id: Hex;
+  /** Spender address */
+  spender: Address;
+  /** Granted call permissions */
+  calls: CallPermissionDetail[];
+  /** Granted spend permissions */
+  spends: SpendPermissionDetail[];
+}
+```
+
+---
+
+## Behavior
+
+1. Creates a permission with the specified constraints
+2. Signs the permission with the smart account
+3. Registers the permission with the JAW relay
+4. Returns the permission details including the unique ID
+
+---
+
+## Example
+
+```typescript
+// Grant both call and spend permissions
+const permission = await account.grantPermissions(
+  Math.floor(Date.now() / 1000) + 86400 * 7, // 1 week
+  '0xSpenderAddress...',
+  {
+    calls: [
+      {
+        target: ROUTER_ADDRESS,
+        selector: '0x38ed1739', // swapExactTokensForTokens
+      },
+      {
+        target: ROUTER_ADDRESS,
+        selector: '0x7ff36ab5', // swapExactETHForTokens
+      }
+    ],
+    spends: [
+      {
+        token: USDC_ADDRESS,
+        limit: '1000000000', // 1000 USDC
+        period: 'week',
+      }
+    ],
+  }
+);
+```
+
+## Use Cases
+
+- **Session keys** - Allow a temporary key to perform specific actions
+- **Subscription services** - Grant recurring spending permissions
+- **Automated trading** - Allow a bot to execute specific trades
+- **Gaming** - Let a game contract execute moves without prompts
+
+---
+
+## Related
+
+- [account.revokePermission()](/account/revokePermission) - Revoke a granted permission
+- [account.getPermission()](/account/getPermission) - Get permission details
+- [Permissions Overview](/advanced/permissions) - Learn more about the permission system

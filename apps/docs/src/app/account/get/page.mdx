@@ -1,0 +1,110 @@
+# Account.get()
+
+Get an account instance - restores an existing session or triggers WebAuthn login.
+
+**Type:** `static async`
+
+---
+
+## Signature
+
+```typescript
+static async get(
+  config: AccountConfig,
+  credentialId?: string
+): Promise<Account>
+```
+
+---
+
+## Parameters
+
+### config
+
+Type: `AccountConfig`
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `chainId` | `number` | Yes | Chain ID for the account |
+| `apiKey` | `string` | Yes | API key for JAW services |
+| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
+
+### credentialId
+
+Type: `string | undefined`
+
+Optional credential ID to login with. If provided and not already authenticated, triggers WebAuthn authentication.
+
+---
+
+## Returns
+
+`Promise<Account>` - The Account instance
+
+---
+
+## Behavior
+
+This is the primary method to get an Account instance:
+
+1. **If `credentialId` is provided**: Always triggers WebAuthn authentication, even if already authenticated. This ensures user verification when selecting a specific account.
+
+2. **If no `credentialId` and already authenticated**: Restores the account from storage without prompting WebAuthn.
+
+3. **If no `credentialId` and not authenticated**: Throws an error.
+
+---
+
+## Errors
+
+| Error | Description |
+|-------|-------------|
+| `Not authenticated` | Not authenticated and no credentialId provided |
+| `No account found for credential ID` | Provided credentialId doesn't exist in storage |
+
+---
+
+## Examples
+
+### Restore Existing Session
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// Restore without WebAuthn prompt (if already authenticated)
+try {
+  const account = await Account.get({
+    chainId: 1,
+    apiKey: 'your-api-key',
+  });
+  console.log('Restored account:', account.address);
+} catch (error) {
+  console.log('Not authenticated');
+}
+```
+
+### Login with Specific Account
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// Get stored accounts
+const accounts = Account.getStoredAccounts('your-api-key');
+
+if (accounts.length > 0) {
+  // Login with first account (triggers WebAuthn)
+  const account = await Account.get(
+    { chainId: 1, apiKey: 'your-api-key' },
+    accounts[0].credentialId
+  );
+  console.log('Logged in as:', account.address);
+}
+```
+
+---
+
+## Related
+
+- [Account.create()](/account/create) - Create a new account
+- [Account.getAuthenticatedAddress()](/account/getAuthenticatedAddress) - Check authentication status
+- [Account.getStoredAccounts()](/account/getStoredAccounts) - List available accounts

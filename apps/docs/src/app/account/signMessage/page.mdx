@@ -1,0 +1,108 @@
+# account.signMessage()
+
+Sign a personal message (EIP-191).
+
+**Type:** `instance async`
+
+---
+
+## Signature
+
+```typescript
+async signMessage(message: string): Promise<Hex>
+```
+
+---
+
+## Parameters
+
+### message
+
+Type: `string`
+
+The message to sign.
+
+---
+
+## Returns
+
+`Promise<Hex>` - The signature as a hex string.
+
+---
+
+## Behavior
+
+1. Creates an EIP-191 personal sign message
+2. Signs with the smart account (passkey or local account)
+3. Returns the signature wrapped for smart account validation
+
+---
+
+## Example
+
+Before calling instance methods, create an account using one of the factory methods:
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// Option 1: Restore existing session or login with passkey
+const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 2: Create a new account with passkey
+const account = await Account.create(
+  { chainId: 1, apiKey: 'your-api-key' },
+  { username: 'alice' }
+);
+
+// Option 3: Import from cloud backup
+const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 4: From a local account (server-side / embedded wallets)
+const account = await Account.fromLocalAccount(
+  { chainId: 1, apiKey: 'your-api-key' },
+  localAccount
+);
+```
+
+### Basic Usage
+
+```typescript
+const signature = await account.signMessage('Hello, World!');
+console.log('Signature:', signature);
+```
+
+### Sign-In with Ethereum (SIWE)
+
+```typescript
+// Construct SIWE message
+const siweMessage = `myapp.com wants you to sign in with your Ethereum account:
+${account.address}
+
+Sign in to MyApp
+
+URI: https://myapp.com
+Version: 1
+Chain ID: 1
+Nonce: ${generateNonce()}
+Issued At: ${new Date().toISOString()}`;
+
+const signature = await account.signMessage(siweMessage);
+
+// Send to backend for verification
+await fetch('/api/verify-siwe', {
+  method: 'POST',
+  body: JSON.stringify({
+    message: siweMessage,
+    signature,
+    address: account.address,
+  }),
+});
+```
+
+---
+
+## Related
+
+- [account.signTypedData()](/account/signTypedData) - Sign EIP-712 typed data
+- [account.sendTransaction()](/account/sendTransaction) - Send transactions
+- [Account Overview](/account) - High-level Account API

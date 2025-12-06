@@ -1,0 +1,96 @@
+# Account.fromLocalAccount()
+
+Create an account from a viem LocalAccount. Ideal for server-side usage or integration with embedded wallet providers.
+
+**Type:** `static async`
+
+---
+
+## Signature
+
+```typescript
+static async fromLocalAccount(
+  config: AccountConfig,
+  localAccount: LocalAccount
+): Promise<Account>
+```
+
+---
+
+## Parameters
+
+### config
+
+Type: `AccountConfig`
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `chainId` | `number` | Yes | Chain ID for the account |
+| `apiKey` | `string` | Yes | API key for JAW services |
+| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
+
+### localAccount
+
+Type: `LocalAccount` (from viem)
+
+A viem LocalAccount instance. Can be created from:
+- Private key
+- Mnemonic
+- Embedded wallet providers (Privy, Dynamic, Magic, Turnkey, etc.)
+
+---
+
+## Returns
+
+`Promise<Account>` - The Account instance
+
+---
+
+## Behavior
+
+1. Creates a smart account using the LocalAccount as the owner
+2. No passkey or WebAuthn involved
+3. No authentication state stored (since there's no passkey)
+4. `getMetadata()` returns `null` for these accounts
+
+---
+
+## Examples
+
+### From Private Key
+
+```typescript
+import { Account } from '@jaw.id/core';
+import { privateKeyToAccount } from 'viem/accounts';
+
+const localAccount = privateKeyToAccount('0x...');
+
+const account = await Account.fromLocalAccount(
+  { chainId: 1, apiKey: 'your-api-key' },
+  localAccount
+);
+
+console.log('Smart account address:', account.address);
+console.log('Has metadata:', account.getMetadata()); // null
+```
+
+---
+
+## When to Use
+
+Use `fromLocalAccount()` when:
+
+- **Server-side automation** - Backend services that need to execute transactions
+- **Embedded wallets** - Integrating with Privy, Dynamic, Magic, Turnkey, etc.
+
+Do **not** use when:
+
+- You want passkey-based authentication (use `create()` or `get()`)
+
+---
+
+## Related
+
+- [Account.get()](/account/get) - Passkey-based authentication
+- [Account.create()](/account/create) - Create passkey account
+- [getMetadata()](/account/getMetadata) - Returns null for LocalAccount-based accounts
