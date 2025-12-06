@@ -35,6 +35,7 @@ export default {
   },
   sendTransaction: 'sendTransaction()',
   sendCalls: 'sendCalls()',
+  getCallStatus: 'getCallStatus()',
   estimateGas: 'estimateGas()',
   '---permissions': {
     type: 'separator',
