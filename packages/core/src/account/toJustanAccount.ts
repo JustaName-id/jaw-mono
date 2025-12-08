@@ -382,6 +382,21 @@ export async function sign({
     throw new BaseError('`owner` does not support raw sign.')
 }
 
+/**
+ * Converts BigInt values in an object to hex strings.
+ * Uses JSON.stringify with a replacer for robust handling of all nested structures.
+ * This is needed for LocalAccount signers (like Privy) that try to JSON.stringify
+ * the typed data for display, which fails on BigInt values.
+ */
+function convertBigIntToHex<T>(obj: T): T {
+    if (obj === null || obj === undefined) return obj;
+    return JSON.parse(
+        JSON.stringify(obj, (_, value) =>
+            typeof value === 'bigint' ? numberToHex(value) : value
+        )
+    );
+}
+
 export async function signTypedData({
                                         typedData,
                                         owner,
@@ -397,7 +412,16 @@ export async function signTypedData({
         return toWebAuthnSignature({signature, webauthn})
     }
 
-    if (owner.signTypedData) return owner.signTypedData(typedData)
+    if (owner.signTypedData) {
+        // For LocalAccount signers (like Privy), convert BigInt values to hex strings
+        // to avoid JSON.stringify errors when the signer displays the data
+        const safeTypedData = {
+            ...typedData,
+            message: convertBigIntToHex(typedData.message) as Record<string, unknown>,
+        } as TypedDataDefinition;
+
+        return owner.signTypedData(safeTypedData);
+    }
 
     throw new BaseError('`owner` does not support signTypedData.')
 }

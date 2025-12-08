@@ -129,7 +129,10 @@ export async function sendTransaction(
             to: getAddress(call.to),
             value: call.value ?? 0n,
             data: call.data ?? '0x'
-        }))
+        })),
+        verificationGasLimit: 800_000n,
+        callGasLimit: 1_000_000n,
+        preVerificationGas: 100_000n,
     })
 
     // Wait for the transaction receipt and get the actual transaction hash
@@ -157,7 +160,10 @@ export async function sendCalls(
             to: getAddress(call.to),
             value: call.value ?? 0n,
             data: call.data ?? '0x'
-        }))
+        })),
+        verificationGasLimit: 800_000n,
+        callGasLimit: 1_000_000n,
+        preVerificationGas: 100_000n,
     })
 
     return {
@@ -183,7 +189,8 @@ export async function estimateUserOpGas(
             to: call.to,
             value: call.value ?? 0n,
             data: call.data ?? '0x'
-        }))
+        })),
+        verificationGasLimit: 800_000n,
     })
 
     return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit
@@ -198,11 +205,17 @@ export async function createSmartAccount(account: WebAuthnAccount | LocalAccount
     // Get the predicted smart account address
     const smartAccountAddress = await tempSmartAccount.getAddress()
 
-    // Find the actual owner index for this passkey
+    // Determine the owner bytes to search for based on account type
+    // WebAuthn accounts use publicKey, LocalAccounts use padded address
+    const ownerBytes: Hex = account.type === 'webAuthn'
+        ? account.publicKey
+        : pad(account.address);
+
+    // Find the actual owner index for this account
     const ownerIndex = await findOwnerIndex({
         address: smartAccountAddress,
         client: bundlerClient,
-        publicKey: account.publicKey,
+        publicKey: ownerBytes,
     })
 
     // Create the smart account with the correct owner index
