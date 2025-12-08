@@ -110,18 +110,24 @@ export class PasskeyManager {
 
   /**
    * Add a passkey account to the stored list
+   * If account already exists (by credentialId), updates the isImported flag if needed
    */
   addAccountToList(account: PasskeyAccount): void {
     const existingAccounts = this.fetchAccounts();
 
     // Check if account already exists
-    const accountExists = existingAccounts.some(
+    const existingIndex = existingAccounts.findIndex(
       (existingAccount) => existingAccount.credentialId === account.credentialId
     );
 
-    if (!accountExists) {
+    if (existingIndex === -1) {
       console.log('Adding account to list:', account);
       existingAccounts.push(account);
+      this.storage.setItem('accounts', existingAccounts);
+    } else if (account.isImported && !existingAccounts[existingIndex].isImported) {
+      // Update existing account's isImported flag if importing an existing local account
+      console.log('Updating account isImported flag:', account.credentialId);
+      existingAccounts[existingIndex].isImported = true;
       this.storage.setItem('accounts', existingAccounts);
     }
   }

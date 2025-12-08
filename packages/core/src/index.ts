@@ -77,6 +77,13 @@ export * from "./utils/index.js"
 /** Store exports **/
 export {type Chain} from "./store/index.js"
 
+/** Analytics exports **/
+export {
+    logAccountIssuance,
+    type LogAccountIssuanceParams,
+    type IssuanceType,
+} from "./analytics/index.js"
+
 /** UI Handler exports (for app-specific mode) **/
 export type {
     UIHandler,
