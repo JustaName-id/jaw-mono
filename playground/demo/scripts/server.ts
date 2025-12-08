@@ -7,7 +7,7 @@
  * For server-side, use Account.fromLocalAccount() with a private key.
  */
 import 'dotenv/config';
-import { Account, type TransactionCall } from '@jaw.id/core';
+import { Account, type TransactionCall, ANY_TARGET, ANY_FN_SEL } from '@jaw.id/core';
 import { privateKeyToAccount, generatePrivateKey } from 'viem/accounts';
 import { parseEther, formatEther, createWalletClient, http } from 'viem';
 import { baseSepolia } from 'viem/chains';
@@ -197,8 +197,8 @@ async function main() {
       {
         calls: [
           {
-            target: '0x0000000000000000000000000000000000000000', // Any target for demo
-            selector: '0x00000000', // Any selector
+            target: ANY_TARGET, // Wildcard: allow any target
+            selector: ANY_FN_SEL, // Wildcard: allow any function selector
           },
         ],
         spends: [], // No spend limits for this test
