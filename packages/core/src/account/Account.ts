@@ -30,7 +30,7 @@ import {
   type SpendPermissionDetail,
 } from '../rpc/permissions.js';
 import { JAW_RPC_URL } from '../constants.js';
-import type { Chain } from '../store/index.js';
+import { type Chain, chains as chainStore } from '../store/index.js';
 
 /**
  * Configuration for creating or loading an Account
@@ -346,6 +346,12 @@ export class Account {
     const { chainId, apiKey, paymasterUrl } = config;
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+
+    // Register chain in global store for background operations (e.g., waitForReceiptInBackground)
+    const existingChains = chainStore.get() ?? [];
+    if (!existingChains.some(c => c.id === chain.id)) {
+      chainStore.set([...existingChains, chain]);
+    }
 
     const bundlerClient = getBundlerClient(chain);
     const smartAccount = await createSmartAccount(localAccount, bundlerClient as JustanAccountImplementation['client']);
