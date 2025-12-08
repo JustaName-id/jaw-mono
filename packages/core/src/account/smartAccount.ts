@@ -130,9 +130,6 @@ export async function sendTransaction(
             value: call.value ?? 0n,
             data: call.data ?? '0x'
         })),
-        verificationGasLimit: 800_000n,
-        callGasLimit: 1_000_000n,
-        preVerificationGas: 100_000n,
     })
 
     // Wait for the transaction receipt and get the actual transaction hash
@@ -161,9 +158,6 @@ export async function sendCalls(
             value: call.value ?? 0n,
             data: call.data ?? '0x'
         })),
-        verificationGasLimit: 800_000n,
-        callGasLimit: 1_000_000n,
-        preVerificationGas: 100_000n,
     })
 
     return {
@@ -190,7 +184,6 @@ export async function estimateUserOpGas(
             value: call.value ?? 0n,
             data: call.data ?? '0x'
         })),
-        verificationGasLimit: 800_000n,
     })
 
     return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit
