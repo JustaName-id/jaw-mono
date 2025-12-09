@@ -4,6 +4,7 @@ import { ConnectDialog, useChainIcon } from "@jaw/ui";
 import { useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
+import { createUserRejectedError, categorizeError } from "../../lib/error-utils";
 
 
 
@@ -43,18 +44,17 @@ export const ConnectModal = ({
       onSuccess();
     } catch (error) {
       console.error("Error connecting:", error);
-      onError(error as Error);
+      // Categorize the error to ensure it has a proper error code
+      onError(categorizeError(error));
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
     if (!isProcessing) {
-      // Create a standard user rejected error (EIP-1193 code 4001)
-      const rejectionError = new Error('User rejected the request');
-      (rejectionError as any).code = 4001;
       console.log('❌ User cancelled connection request');
-      onError(rejectionError);
+      // Use standardized user rejection error (EIP-1193 code 4001)
+      onError(createUserRejectedError());
     }
   };
 

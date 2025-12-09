@@ -23,6 +23,7 @@ import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
 import type { PopupConfig, PendingRequest } from '../utils/types';
 import { extractSubnameTextRecords } from '../lib/extractSubnameTexts';
+import { extractErrorCode } from '../lib/error-utils';
 
 
 // Note: TransactionRequestData is now imported from TransactionModal for consistency
@@ -1010,7 +1011,9 @@ export default function KeysJawIdApp() {
             }}
             onError={async (error) => {
               try {
-                await pendingRequest.onReject(error.message);
+                // Extract error code from the error object (defaults to 4001 if not found)
+                const errorCode = extractErrorCode(error);
+                await pendingRequest.onReject(error.message, errorCode);
                 window.close();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
@@ -1053,7 +1056,9 @@ export default function KeysJawIdApp() {
           }}
           onError={async (error) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Extract error code from the error object (defaults to 4001 if not found)
+              const errorCode = extractErrorCode(error);
+              await pendingRequest.onReject(error.message, errorCode);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);

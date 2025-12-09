@@ -315,9 +315,9 @@ export function useSDKCommunicator() {
               const accountsArray = Array.isArray(accounts) ? accounts : [accounts];
               await sendRPCResponse(request, accountsArray, false, true); // includeData=true
             },
-            onReject: async (error) => {
-              console.log('❌ User rejected connection:', error);
-              await sendRPCResponse(request, { code: -32000, message: error }, true);
+            onReject: async (error, errorCode = 4001) => {
+              console.log('❌ User rejected connection:', error, 'code:', errorCode);
+              await sendRPCResponse(request, { code: errorCode, message: error }, true);
             },
           });
           break;
@@ -384,9 +384,9 @@ export function useSDKCommunicator() {
               console.log('✅ User approved signature:', signature);
               await sendRPCResponse(request, signature);
             },
-            onReject: async (error) => {
-              console.log('❌ User rejected signature:', error);
-              await sendRPCResponse(request, { code: -32000, message: error }, true);
+            onReject: async (error, errorCode = 4001) => {
+              console.log('❌ User rejected signature:', error, 'code:', errorCode);
+              await sendRPCResponse(request, { code: errorCode, message: error }, true);
             },
           });
           break;
@@ -406,9 +406,9 @@ export function useSDKCommunicator() {
               console.log('✅ User approved transaction:', txHash);
               await sendRPCResponse(request, txHash);
             },
-            onReject: async (error) => {
-              console.log('❌ User rejected transaction:', error);
-              await sendRPCResponse(request, { code: -32000, message: error }, true);
+            onReject: async (error, errorCode = 4001) => {
+              console.log('❌ User rejected transaction:', error, 'code:', errorCode);
+              await sendRPCResponse(request, { code: errorCode, message: error }, true);
             },
           });
           break;

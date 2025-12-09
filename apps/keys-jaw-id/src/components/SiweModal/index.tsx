@@ -6,6 +6,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { Account } from "@jaw.id/core";
+import { createUserRejectedError, createInternalError, categorizeError } from "../../lib/error-utils";
 
 export interface SiweModalProps {
   origin: string;
@@ -62,7 +63,8 @@ export const SiweModal = ({
       setSiweStatus('Signing in...');
 
       if (!account) {
-        throw new Error('Account not initialized. Please try again.');
+        // Internal error: account should be initialized before signing
+        throw createInternalError('Account not initialized. Please try again.');
       }
 
       const signature = await account.signMessage(messageToSign);
@@ -76,7 +78,8 @@ export const SiweModal = ({
     } catch (error) {
       console.error("Error signing SIWE message:", error);
       setSiweStatus(`Error: ${error instanceof Error ? error.message : 'Sign in failed'}`);
-      onError(error as Error);
+      // Categorize the error to ensure it has a proper error code
+      onError(categorizeError(error));
       setIsProcessing(false);
     }
   }, [messageToSign, account, onSuccess, onError]);
@@ -84,11 +87,9 @@ export const SiweModal = ({
   const handleCancel = () => {
     if (!isProcessing) {
       setAccount(null);
-      // Create a standard user rejected error (EIP-1193 code 4001)
-      const rejectionError = new Error('User rejected the request');
-      (rejectionError as any).code = 4001;
       console.log('User cancelled SIWE sign in request');
-      onError(rejectionError);
+      // Use standardized user rejection error (EIP-1193 code 4001)
+      onError(createUserRejectedError());
       setSiweStatus('');
     }
   };
@@ -113,7 +114,8 @@ export const SiweModal = ({
           // Only update state if component is still mounted
           if (isMounted) {
             setSiweStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            onError(error as Error);
+            // Categorize initialization errors (typically internal errors)
+            onError(categorizeError(error));
           }
         }
       } else {

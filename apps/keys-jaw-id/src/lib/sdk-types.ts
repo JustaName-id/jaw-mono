@@ -232,7 +232,7 @@ export interface SDKRequestUI {
   params: unknown[];
   chainId?: number;
   onApprove: (result: unknown) => Promise<void>; // Now async
-  onReject: (error: string) => Promise<void>; // Now async
+  onReject: (error: string, errorCode?: number) => Promise<void>; // Now async, with optional EIP-1193/JSON-RPC error code
 }
 
 // Event messages (selectSignerType, etc.)
