@@ -5,8 +5,7 @@ import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { Account } from "@jaw.id/core";
-import { createUserRejectedError, createInternalError, categorizeError } from "../../lib/error-utils";
+import { Account, standardErrorCodes } from "@jaw.id/core";
 
 export interface SiweModalProps {
   origin: string;
@@ -17,7 +16,7 @@ export interface SiweModalProps {
   appName?: string;
   appLogoUrl?: string;
   onSuccess: (signature: string, message: string) => void;
-  onError: (error: Error) => void;
+  onError: (error: Error, errorCode?: number) => void;
 }
 
 export const SiweModal = ({
@@ -63,8 +62,7 @@ export const SiweModal = ({
       setSiweStatus('Signing in...');
 
       if (!account) {
-        // Internal error: account should be initialized before signing
-        throw createInternalError('Account not initialized. Please try again.');
+        throw new Error('Account not initialized. Please try again.');
       }
 
       const signature = await account.signMessage(messageToSign);
@@ -78,8 +76,12 @@ export const SiweModal = ({
     } catch (error) {
       console.error("Error signing SIWE message:", error);
       setSiweStatus(`Error: ${error instanceof Error ? error.message : 'Sign in failed'}`);
-      // Categorize the error to ensure it has a proper error code
-      onError(categorizeError(error));
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      const errorCode = error instanceof Error && error.name === 'NotAllowedError'
+        ? standardErrorCodes.provider.userRejectedRequest
+        : standardErrorCodes.rpc.internal;
+      onError(errorObj, errorCode);
       setIsProcessing(false);
     }
   }, [messageToSign, account, onSuccess, onError]);
@@ -88,8 +90,8 @@ export const SiweModal = ({
     if (!isProcessing) {
       setAccount(null);
       console.log('User cancelled SIWE sign in request');
-      // Use standardized user rejection error (EIP-1193 code 4001)
-      onError(createUserRejectedError());
+      // User rejected request (EIP-1193 code 4001)
+      onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setSiweStatus('');
     }
   };
@@ -114,8 +116,12 @@ export const SiweModal = ({
           // Only update state if component is still mounted
           if (isMounted) {
             setSiweStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            // Categorize initialization errors (typically internal errors)
-            onError(categorizeError(error));
+            const errorObj = error instanceof Error ? error : new Error(String(error));
+            // Check if user cancelled passkey prompt (NotAllowedError)
+            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
+              ? standardErrorCodes.provider.userRejectedRequest
+              : standardErrorCodes.rpc.internal;
+            onError(errorObj, errorCode);
           }
         }
       } else {

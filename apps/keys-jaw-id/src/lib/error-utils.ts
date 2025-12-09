@@ -50,7 +50,7 @@ export function extractErrorCode(error: unknown, defaultCode: number = standardE
  * Create a user rejection error (EIP-1193 code 4001)
  * Use when user explicitly cancels/rejects a request
  */
-export function createUserRejectedError(message: string = 'User rejected the request'): Error {
+export function createUserRejectedError(message = 'User rejected the request'): Error {
   return standardErrors.provider.userRejectedRequest({ message });
 }
 

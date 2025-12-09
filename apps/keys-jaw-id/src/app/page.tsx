@@ -23,7 +23,7 @@ import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
 import type { PopupConfig, PendingRequest } from '../utils/types';
 import { extractSubnameTextRecords } from '../lib/extractSubnameTexts';
-import { extractErrorCode } from '../lib/error-utils';
+import { standardErrorCodes } from '@jaw.id/core';
 
 
 // Note: TransactionRequestData is now imported from TransactionModal for consistency
@@ -416,17 +416,13 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              await pendingRequest.onReject(errorMessage);
-              setTimeout(() => window.close(), 1500);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              const rejectMessage = err instanceof Error ? err.message : 'Failed to reject request';
-              setError(rejectMessage);
-              setTimeout(() => window.close(), 1500);
               window.close();
             }
           }}
@@ -484,9 +480,10 @@ export default function KeysJawIdApp() {
                 setState('error');
               }
             }}
-            onError={async (error) => {
+            onError={async (error, errorCode) => {
               try {
-                await pendingRequest.onReject(error.message);
+                // Forward error and code directly from modal
+                await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
                 window.close();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
@@ -519,9 +516,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -581,9 +579,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -624,9 +623,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -667,9 +667,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -688,9 +689,10 @@ export default function KeysJawIdApp() {
           method={pendingRequest.method}
           appName={pendingRequest.metadata?.appName}
           appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-          onClose={async (error) => {
+          onClose={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.rpc.methodNotFound);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject unsupported method:', err);
@@ -1009,11 +1011,10 @@ export default function KeysJawIdApp() {
                 setState('error');
               }
             }}
-            onError={async (error) => {
+            onError={async (error, errorCode) => {
               try {
-                // Extract error code from the error object (defaults to 4001 if not found)
-                const errorCode = extractErrorCode(error);
-                await pendingRequest.onReject(error.message, errorCode);
+                // Forward error and code directly from modal
+                await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
                 window.close();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
@@ -1054,11 +1055,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              // Extract error code from the error object (defaults to 4001 if not found)
-              const errorCode = extractErrorCode(error);
-              await pendingRequest.onReject(error.message, errorCode);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
