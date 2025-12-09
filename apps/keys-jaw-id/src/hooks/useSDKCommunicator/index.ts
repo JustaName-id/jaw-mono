@@ -23,6 +23,7 @@ import {
   DecryptedRequest,
   ResponsePayload,
 } from '../../lib/sdk-types';
+import { standardErrorCodes } from '@jaw.id/core';
 import {
   generateKeyPair,
   importPublicKey,
@@ -217,7 +218,7 @@ export function useSDKCommunicator() {
           const errorPayload: ResponsePayload = {
             result: {
               error: {
-                code: -32603,
+                code: standardErrorCodes.rpc.internal,
                 message: error instanceof Error ? error.message : 'Internal error'
               }
             }
@@ -315,7 +316,7 @@ export function useSDKCommunicator() {
               const accountsArray = Array.isArray(accounts) ? accounts : [accounts];
               await sendRPCResponse(request, accountsArray, false, true); // includeData=true
             },
-            onReject: async (error, errorCode = 4001) => {
+            onReject: async (error, errorCode = standardErrorCodes.provider.userRejectedRequest) => {
               console.log('❌ User rejected connection:', error, 'code:', errorCode);
               await sendRPCResponse(request, { code: errorCode, message: error }, true);
             },
@@ -325,7 +326,7 @@ export function useSDKCommunicator() {
 
         default:
           console.warn(`⚠️ Unsupported handshake method: ${method}`);
-          await sendRPCResponse(request, { code: -32601, message: `Method ${method} not supported` }, true);
+          await sendRPCResponse(request, { code: standardErrorCodes.rpc.methodNotFound, message: `Method ${method} not supported` }, true);
       }
     } catch (error) {
       console.error('❌ Handshake error:', error);
@@ -384,7 +385,7 @@ export function useSDKCommunicator() {
               console.log('✅ User approved signature:', signature);
               await sendRPCResponse(request, signature);
             },
-            onReject: async (error, errorCode = 4001) => {
+            onReject: async (error, errorCode = standardErrorCodes.provider.userRejectedRequest) => {
               console.log('❌ User rejected signature:', error, 'code:', errorCode);
               await sendRPCResponse(request, { code: errorCode, message: error }, true);
             },
@@ -406,7 +407,7 @@ export function useSDKCommunicator() {
               console.log('✅ User approved transaction:', txHash);
               await sendRPCResponse(request, txHash);
             },
-            onReject: async (error, errorCode = 4001) => {
+            onReject: async (error, errorCode = standardErrorCodes.provider.userRejectedRequest) => {
               console.log('❌ User rejected transaction:', error, 'code:', errorCode);
               await sendRPCResponse(request, { code: errorCode, message: error }, true);
             },
@@ -416,19 +417,41 @@ export function useSDKCommunicator() {
 
         case 'eth_chainId': {
           console.log('⛓️  Chain ID Request');
-          const currentChainId = `0x${chainId.toString(16)}`;
-          await sendRPCResponse(request, currentChainId);
+          try {
+            const currentChainId = `0x${chainId.toString(16)}`;
+            await sendRPCResponse(request, currentChainId);
+          } catch (error) {
+            console.error('❌ Failed to handle eth_chainId:', error);
+            await sendRPCResponse(
+              request,
+              { code: standardErrorCodes.rpc.internal, message: error instanceof Error ? error.message : 'Internal error' },
+              true
+            );
+          }
           break;
         }
 
         default:
           console.warn(`⚠️ Unsupported encrypted method: ${method}`);
-          await sendRPCResponse(request, { code: -32601, message: `Method ${method} not supported` }, true);
+          await sendRPCResponse(request, { code: standardErrorCodes.rpc.methodNotFound, message: `Method ${method} not supported` }, true);
       }
-    } catch (error) {
-      console.error('❌ Decryption/handling error:', error);
-      console.error('Error details:', error instanceof Error ? error.message : String(error));
-    }
+      } catch (error) {
+        console.error('❌ Decryption/handling error:', error);
+        console.error('Error details:', error instanceof Error ? error.message : String(error));
+        // Send error response for decryption/handling failures
+        try {
+          await sendRPCResponse(
+            request,
+            {
+              code: standardErrorCodes.rpc.internal,
+              message: error instanceof Error ? error.message : 'Internal error during request processing'
+            },
+            true
+          );
+        } catch (responseError) {
+          console.error('❌ Failed to send error response:', responseError);
+        }
+      }
   }, [sdkState.config, sendRPCResponse]);
 
   // Handle incoming messages

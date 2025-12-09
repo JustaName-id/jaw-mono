@@ -148,6 +148,28 @@ export default function KeysJawIdApp() {
     }
   }, [pendingRequest, state, currentAccount]);
 
+  // Handle eth_chainId request (no UI needed, respond directly)
+  useEffect(() => {
+    if (pendingRequest?.type === SDKRequestType.CHAIN_ID && isSDKMode) {
+      const handleChainId = async () => {
+        try {
+          const chainId = pendingRequest.chain?.id ?? 1;
+          const chainIdHex = `0x${chainId.toString(16)}`;
+          await pendingRequest.onApprove(chainIdHex);
+          setTimeout(() => window.close(), 100);
+        } catch (error) {
+          console.error('❌ Failed to handle eth_chainId:', error);
+          await pendingRequest.onReject(
+            error instanceof Error ? error.message : 'Failed to get chain ID',
+            standardErrorCodes.rpc.internal
+          );
+          setTimeout(() => window.close(), 100);
+        }
+      };
+      handleChainId();
+    }
+  }, [pendingRequest, isSDKMode]);
+
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
     setState('passkey-check');
@@ -237,7 +259,7 @@ export default function KeysJawIdApp() {
               const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
                 request.id,
                 request.correlationId || '',
-                errorCode ?? 4001, // Default to user rejected request (EIP-1193 standard)
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
                 error || 'User rejected the request'
               );
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -291,9 +313,13 @@ export default function KeysJawIdApp() {
       } else if (method === 'eth_chainId') {
         requestType = SDKRequestType.CHAIN_ID;
       } else if (method === 'wallet_getSubAccounts') {
-        requestType = SDKRequestType.GET_SUB_ACCOUNTS;
+        // TODO: Implement wallet_getSubAccounts
+        // For now, mark as unsupported
+        requestType = SDKRequestType.UNSUPPORTED_METHOD;
       } else if (method === 'wallet_importSubAccount') {
-        requestType = SDKRequestType.IMPORT_SUB_ACCOUNT;
+        // TODO: Implement wallet_importSubAccount
+        // For now, mark as unsupported
+        requestType = SDKRequestType.UNSUPPORTED_METHOD;
       } else if (method === 'wallet_grantPermissions') {
         requestType = SDKRequestType.GRANT_PERMISSIONS;
       } else if (method === 'wallet_revokePermissions') {
@@ -330,7 +356,7 @@ export default function KeysJawIdApp() {
             const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
               request.id || '',
               request.correlationId || '',
-              errorCode ?? 4001, // Default to user rejected request (EIP-1193 standard)
+              errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
               error || 'User rejected the request'
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -932,7 +958,7 @@ export default function KeysJawIdApp() {
 
       if (!authQuery.walletAddress) {
         // Reject with internal error (JSON-RPC code -32603)
-        pendingRequest.onReject('Internal error: wallet address not available', -32603);
+        pendingRequest.onReject('Internal error: wallet address not available', standardErrorCodes.rpc.internal);
         return null;
       }
       const walletAddress = authQuery.walletAddress;
