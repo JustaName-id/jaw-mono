@@ -20,8 +20,8 @@ export default function TestPage() {
         preference: {
           keysUrl: 'http://localhost:3001', // Local popup URL
           showTestnets: true,
-          mode: Mode.AppSpecific,
-          uiHandler: new ReactUIHandler()
+          // mode: Mode.AppSpecific,
+          // uiHandler: new ReactUIHandler()
         },
         apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
       })

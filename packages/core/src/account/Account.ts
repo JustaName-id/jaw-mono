@@ -31,6 +31,7 @@ import {
 } from '../rpc/permissions.js';
 import { JAW_RPC_URL } from '../constants.js';
 import { type Chain, chains as chainStore } from '../store/index.js';
+import { logAccountIssuance } from '../analytics/index.js';
 
 /**
  * Configuration for creating or loading an Account
@@ -263,6 +264,9 @@ export class Account {
       address
     );
 
+    // Log account issuance for analytics (fire-and-forget)
+    logAccountIssuance({ address, type: 'create', apiKey });
+
     return new Account(smartAccount, chain, apiKey, passkeyAccount);
   }
 
@@ -305,6 +309,9 @@ export class Account {
     if (!passkeyAccount) {
       throw new Error('Failed to retrieve imported passkey account.');
     }
+
+    // Log account issuance for analytics (fire-and-forget)
+    logAccountIssuance({ address, type: 'import', apiKey });
 
     return new Account(smartAccount, chain, apiKey, passkeyAccount);
   }
@@ -355,6 +362,10 @@ export class Account {
 
     const bundlerClient = getBundlerClient(chain);
     const smartAccount = await createSmartAccount(localAccount, bundlerClient as JustanAccountImplementation['client']);
+    const address = await smartAccount.getAddress();
+
+    // Log account issuance for analytics (fire-and-forget)
+    logAccountIssuance({ address, type: 'fromLocalAccount', apiKey });
 
     return new Account(smartAccount, chain, apiKey);
   }
