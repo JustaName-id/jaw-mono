@@ -312,14 +312,6 @@ export default function KeysJawIdApp() {
         requestType = SDKRequestType.SEND_TRANSACTION;
       } else if (method === 'eth_chainId') {
         requestType = SDKRequestType.CHAIN_ID;
-      } else if (method === 'wallet_getSubAccounts') {
-        // TODO: Implement wallet_getSubAccounts
-        // For now, mark as unsupported
-        requestType = SDKRequestType.UNSUPPORTED_METHOD;
-      } else if (method === 'wallet_importSubAccount') {
-        // TODO: Implement wallet_importSubAccount
-        // For now, mark as unsupported
-        requestType = SDKRequestType.UNSUPPORTED_METHOD;
       } else if (method === 'wallet_grantPermissions') {
         requestType = SDKRequestType.GRANT_PERMISSIONS;
       } else if (method === 'wallet_revokePermissions') {
