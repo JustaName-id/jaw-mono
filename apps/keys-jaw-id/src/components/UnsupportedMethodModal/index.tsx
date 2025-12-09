@@ -1,13 +1,14 @@
 'use client'
 
 import { useState } from "react";
+import { standardErrorCodes } from "@jaw.id/core";
 
 export interface UnsupportedMethodModalProps {
   origin: string;
   method: string;
   appName?: string;
   appLogoUrl?: string;
-  onClose: (error: Error) => void;
+  onClose: (error: Error, errorCode?: number) => void;
 }
 
 export const UnsupportedMethodModal = ({
@@ -22,11 +23,9 @@ export const UnsupportedMethodModal = ({
   const handleClose = () => {
     if (!isClosing) {
       setIsClosing(true);
-      // Create a standard unsupported method error
-      const unsupportedError = new Error(`Method not supported: ${method}`);
-      (unsupportedError as any).code = -32601; // JSON-RPC standard "Method not found" error code
       console.log('❌ Unsupported method:', method);
-      onClose(unsupportedError);
+      // Method not found (JSON-RPC code -32601)
+      onClose(new Error(`Method not supported: ${method}`), standardErrorCodes.rpc.methodNotFound);
     }
   };
 

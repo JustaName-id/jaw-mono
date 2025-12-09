@@ -13,6 +13,7 @@ import {
     type WalletGrantPermissionsResponse,
     type SpendPeriod,
     getPermissionFromRelay,
+    standardErrorCodes,
 } from "@jaw.id/core";
 
 // ERC-7528 native token address
@@ -54,7 +55,7 @@ export interface PermissionModalProps {
   apiKey: string;
   origin?: string;
   onSuccess?: (result: WalletGrantPermissionsResponse | { success: boolean }) => void;
-  onError?: (error: Error) => void;
+  onError?: (error: Error, errorCode?: number) => void;
 }
 
 // Format period to human-readable duration
@@ -393,7 +394,12 @@ export const PermissionModal = ({
           if (isMounted) {
             setIsLoadingSmartAccount(false);
             setStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            onError?.(error as Error);
+            const errorObj = error instanceof Error ? error : new Error(String(error));
+            // Check if user cancelled passkey prompt (NotAllowedError)
+            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
+              ? standardErrorCodes.provider.userRejectedRequest
+              : standardErrorCodes.rpc.internal;
+            onError?.(errorObj, errorCode);
           }
         }
       } else {
@@ -546,7 +552,11 @@ export const PermissionModal = ({
       const errorMessage = error instanceof Error ? error.message : String(error);
       setStatus(`Error: ${errorMessage}`);
       const errorObj = error instanceof Error ? error : new Error(errorMessage);
-      onError?.(errorObj);
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      const errorCode = error instanceof Error && error.name === 'NotAllowedError'
+        ? standardErrorCodes.provider.userRejectedRequest
+        : standardErrorCodes.rpc.internal;
+      onError?.(errorObj, errorCode);
       setIsProcessing(false);
     }
   }, [account, chain, permissionDetails, mode, onSuccess, onError]);
@@ -554,10 +564,9 @@ export const PermissionModal = ({
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
       setAccount(null);
-      const rejectionError = new Error('User rejected the request');
-      (rejectionError as any).code = 4001;
       console.log('❌ User cancelled permission request');
-      onError?.(rejectionError);
+      // User rejected request (EIP-1193 code 4001)
+      onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setStatus('');
     }
   }, [isProcessing, onError]);

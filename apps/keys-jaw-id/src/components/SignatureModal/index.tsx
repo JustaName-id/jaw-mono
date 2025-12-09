@@ -5,7 +5,7 @@ import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { Account } from "@jaw.id/core";
+import { Account, standardErrorCodes } from "@jaw.id/core";
 
 
 
@@ -16,7 +16,7 @@ export interface SignatureModalProps {
   chain: chain;
   apiKey?: string;
   onSuccess: (signature: string, message: string) => void;
-  onError: (error: Error) => void;
+  onError: (error: Error, errorCode?: number) => void;
 }
 
 export const SignatureModal = ({
@@ -76,7 +76,12 @@ export const SignatureModal = ({
     } catch (error) {
       console.error("Error signing message:", error);
       setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Signature failed'}`);
-      onError(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      const errorCode = error instanceof Error && error.name === 'NotAllowedError'
+        ? standardErrorCodes.provider.userRejectedRequest
+        : standardErrorCodes.rpc.internal;
+      onError(errorObj, errorCode);
       setIsProcessing(false);
     }
   }, [messageToSign, account, onSuccess, onError]);
@@ -84,11 +89,9 @@ export const SignatureModal = ({
   const handleCancel = () => {
     if (!isProcessing) {
       setAccount(null);
-      // Create a standard user rejected error (EIP-1193 code 4001)
-      const rejectionError = new Error('User rejected the request');
-      (rejectionError as any).code = 4001;
       console.log('User cancelled signature request');
-      onError(rejectionError);
+      // User rejected request (EIP-1193 code 4001)
+      onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setSignatureStatus('');
     }
   };
@@ -113,7 +116,12 @@ export const SignatureModal = ({
           // Only update state if component is still mounted
           if (isMounted) {
             setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            onError(error as Error);
+            const errorObj = error instanceof Error ? error : new Error(String(error));
+            // Check if user cancelled passkey prompt (NotAllowedError)
+            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
+              ? standardErrorCodes.provider.userRejectedRequest
+              : standardErrorCodes.rpc.internal;
+            onError(errorObj, errorCode);
           }
         }
       } else {

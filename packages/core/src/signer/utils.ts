@@ -17,8 +17,9 @@ export function createSigner(params: {
     callback: ProviderEventCallback;
     apiKey: string;
     paymasterUrls?: Record<number, string>;
+    ens?: string;
 }): Signer {
-    const { signerType, metadata, communicator, uiHandler, callback, apiKey, paymasterUrls } = params;
+    const { signerType, metadata, communicator, uiHandler, callback, apiKey, paymasterUrls, ens } = params;
 
     switch (signerType) {
         case 'crossPlatform': {
@@ -42,6 +43,7 @@ export function createSigner(params: {
                 uiHandler,
                 apiKey,
                 paymasterUrls,
+                ens,
             });
         }
     }
