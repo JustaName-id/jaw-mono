@@ -5,6 +5,7 @@ import {
   createSmartAccount,
   sendTransaction as sendSmartAccountTransaction,
   sendCalls as sendSmartAccountCalls,
+  sendCallsWithPermission as sendSmartAccountCallsWithPermission,
   estimateUserOpGas,
   calculateGas,
   getBundlerClient,
@@ -67,6 +68,14 @@ export interface TransactionCall {
   value?: bigint | string;
   /** Call data */
   data?: Hex;
+}
+
+/**
+ * Options for sendCalls method
+ */
+export interface SendCallsOptions {
+  /** Permission ID to use for executing the calls through the permission manager */
+  permissionId?: Hex;
 }
 
 /**
@@ -606,33 +615,55 @@ export class Account {
    * Send multiple calls as a bundled user operation without waiting for receipt
    *
    * @param calls - Array of transaction calls
+   * @param options - Optional settings including permissionId for permission-based execution
    * @returns Promise resolving to the user operation ID and chain ID
    *
    * @example
    * ```typescript
    * import { parseEther } from 'viem';
    *
+   * // Standard execution
    * const { id, chainId } = await account.sendCalls([
    *   { to: '0x...', value: parseEther('0.1') }
    * ]);
    * console.log('UserOp hash:', id);
    *
+   * // Execution with permission (delegated execution)
+   * const { id, chainId } = await account.sendCalls(
+   *   [{ to: '0x...', value: parseEther('0.1') }],
+   *   { permissionId: '0x...' }
+   * );
+   *
    * // Check status later
    * const status = account.getCallStatus(id);
    * ```
    */
-  async sendCalls(calls: TransactionCall[]): Promise<BundledTransactionResult> {
+  async sendCalls(calls: TransactionCall[], options?: SendCallsOptions): Promise<BundledTransactionResult> {
     const formattedCalls = calls.map(call => ({
       to: call.to,
       value: Account.parseValue(call.value),
       data: call.data,
     }));
 
-    const result = await sendSmartAccountCalls(
-      this._smartAccount,
-      formattedCalls,
-      this._chain
-    );
+    let result: BundledTransactionResult;
+
+    if (options?.permissionId) {
+      // Execute through permission manager
+      result = await sendSmartAccountCallsWithPermission(
+        this._smartAccount,
+        formattedCalls,
+        this._chain,
+        options.permissionId,
+        this._apiKey
+      );
+    } else {
+      // Standard execution
+      result = await sendSmartAccountCalls(
+        this._smartAccount,
+        formattedCalls,
+        this._chain
+      );
+    }
 
     // Store call status as pending and start background receipt waiting
     storeCallStatus(result.id, result.chainId);
@@ -804,7 +835,7 @@ export class Account {
     const spends: SpendPermissionDetail[] = relayResponse.spends.map(spend => ({
       token: spend.token as Address,
       limit: spend.allowance,
-      period: spend.period as SpendPeriod,
+      period: spend.unit as SpendPeriod,
     }));
 
     return {

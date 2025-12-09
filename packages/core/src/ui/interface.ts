@@ -62,6 +62,14 @@ export interface TypedDataUIRequest extends BaseUIRequest {
 }
 
 /**
+ * Permissions capability for wallet_sendCalls
+ */
+export interface PermissionsCapability {
+  /** ID of the permission to use for execution */
+  id: `0x${string}`;
+}
+
+/**
  * Transaction request (wallet_sendCalls)
  */
 export interface TransactionUIRequest extends BaseUIRequest {
@@ -76,6 +84,11 @@ export interface TransactionUIRequest extends BaseUIRequest {
     }>;
     chainId: number;
     atomicRequired?: boolean;
+    /** Capabilities for the transaction */
+    capabilities?: {
+      /** Permissions capability - when provided, executes calls using the specified permission */
+      permissions?: PermissionsCapability;
+    };
   };
 }
 

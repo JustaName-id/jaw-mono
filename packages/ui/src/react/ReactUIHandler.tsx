@@ -1174,8 +1174,11 @@ function TransactionDialogWrapper({
         throw new Error('Account not initialized');
       }
 
-      // Send calls using Account class
-      const result = await account.sendCalls(transactionCalls);
+      // Check if permissions capability is provided
+      const permissionId = request.data.capabilities?.permissions?.id;
+
+      // Send calls using Account class, with optional permission
+      const result = await account.sendCalls(transactionCalls, permissionId ? { permissionId } : undefined);
 
       onApprove({
         id: result.id,

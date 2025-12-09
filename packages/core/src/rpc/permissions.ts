@@ -61,8 +61,10 @@ export type SpendLimit = {
     token: Address;
     /** Maximum allowed value to spend within each period */
     allowance: bigint;
-    /** Time period for resetting used allowance */
-    period: SpendPeriod;
+    /** Period unit (minute, hour, day, week, month, year, forever) */
+    unit: SpendPeriod;
+    /** Multiplier for the period unit (1-255) */
+    multiplier: number;
 };
 
 /**
@@ -163,7 +165,10 @@ export type StorePermissionApiRequest = {
     spends: Array<{
         token: string;
         allowance: string;
-        period: string;
+        /** Period unit (minute, hour, day, week, month, year, forever) */
+        unit: string;
+        /** Multiplier for the period unit (1-255) */
+        multiplier: number;
     }>;
     /** Chain ID (as hex string) */
     chainId: string;
@@ -341,7 +346,7 @@ export async function getPermissionFromRelay(
 /**
  * Convert relay permission data to Permission struct
  */
-function relayPermissionToPermission(
+export function relayPermissionToPermission(
     relayPermission: StorePermissionApiResponse
 ): Permission {
     // Convert call permissions
@@ -350,11 +355,12 @@ function relayPermissionToPermission(
         selector: call.selector as Hex,
     }));
 
-    // Convert spend limits - period is already stored as string in relay
+    // Convert spend limits
     const spends: SpendLimit[] = relayPermission.spends.map(spend => ({
         token: spend.token as Address,
         allowance: BigInt(spend.allowance),
-        period: spend.period as SpendPeriod,
+        unit: spend.unit as SpendPeriod,
+        multiplier: spend.multiplier,
     }));
 
     return {
@@ -451,7 +457,7 @@ function apiPermissionsToPermission(
         };
     });
 
-    // Convert spend permissions - keep as SpendPeriod strings
+    // Convert spend permissions
     const spends: SpendLimit[] = (permissions.spends || []).map(spend => {
         // Use native token address if token is empty or undefined
         const token = spend.token && spend.token.trim() !== ''
@@ -461,7 +467,8 @@ function apiPermissionsToPermission(
         return {
             token,
             allowance: BigInt(spend.limit),
-            period: spend.period,
+            unit: spend.period,
+            multiplier: 1, // Default multiplier
         };
     });
 
@@ -499,7 +506,8 @@ async function storePermissionInRelay(
         spends: permission.spends.map(spend => ({
             token: spend.token,
             allowance: `0x${spend.allowance.toString(16)}`,
-            period: spend.period, // Store as string ('minute', 'hour', etc.)
+            unit: spend.unit,
+            multiplier: spend.multiplier,
         })),
         chainId,
     };
@@ -578,18 +586,25 @@ async function extractPermissionHashFromTransaction(
 }
 
 /**
- * Encode the approve function call for JustaPermissionManager
+ * Convert a Permission to the format expected by the contract ABI
  */
-function encodeApprovePermission(permission: Permission): Hex {
-    // Convert SpendPeriod strings to enum values for ABI encoding
-    const permissionForEncoding = {
+function permissionToContractFormat(permission: Permission) {
+    return {
         ...permission,
         spends: permission.spends.map(spend => ({
             token: spend.token,
             allowance: spend.allowance,
-            period: periodToEnum(spend.period),
+            unit: periodToEnum(spend.unit),
+            multiplier: spend.multiplier,
         })),
     };
+}
+
+/**
+ * Encode the approve function call for JustaPermissionManager
+ */
+function encodeApprovePermission(permission: Permission): Hex {
+    const permissionForEncoding = permissionToContractFormat(permission);
 
     return encodeFunctionData({
         abi: SPEND_PERMISSIONS_MANAGER_ABI,
@@ -602,20 +617,33 @@ function encodeApprovePermission(permission: Permission): Hex {
  * Encode the revoke function call for JustaPermissionManager
  */
 function encodeRevokePermission(permission: Permission): Hex {
-    // Convert SpendPeriod strings to enum values for ABI encoding
-    const permissionForEncoding = {
-        ...permission,
-        spends: permission.spends.map(spend => ({
-            token: spend.token,
-            allowance: spend.allowance,
-            period: periodToEnum(spend.period),
-        })),
-    };
+    const permissionForEncoding = permissionToContractFormat(permission);
 
     return encodeFunctionData({
         abi: SPEND_PERMISSIONS_MANAGER_ABI,
         functionName: 'revoke',
         args: [permissionForEncoding],
+    });
+}
+
+/**
+ * Encode the executeBatch function call for JustaPermissionManager
+ * This is used when executing calls using a permission
+ *
+ * @param permission - The permission to use for execution
+ * @param calls - The calls to execute
+ * @returns Encoded function data for executeBatch
+ */
+export function encodeExecuteBatchWithPermission(
+    permission: Permission,
+    calls: Array<{ target: Address; value: bigint; data: Hex }>
+): Hex {
+    const permissionForEncoding = permissionToContractFormat(permission);
+
+    return encodeFunctionData({
+        abi: SPEND_PERMISSIONS_MANAGER_ABI,
+        functionName: 'executeBatch',
+        args: [permissionForEncoding, calls],
     });
 }
 
@@ -639,7 +667,7 @@ function periodToEnum(period: SpendPeriod): number {
 /**
  * ABI for the JustaPermissionManager contract
  */
-const SPEND_PERMISSIONS_MANAGER_ABI = [
+export const SPEND_PERMISSIONS_MANAGER_ABI = [
     {
         name: 'PermissionApproved',
         type: 'event',
@@ -670,7 +698,8 @@ const SPEND_PERMISSIONS_MANAGER_ABI = [
                         components: [
                             { name: 'token', type: 'address' },
                             { name: 'allowance', type: 'uint160' },
-                            { name: 'period', type: 'uint8' },
+                            { name: 'unit', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint8' },
                         ],
                     },
                 ],
@@ -705,7 +734,8 @@ const SPEND_PERMISSIONS_MANAGER_ABI = [
                         components: [
                             { name: 'token', type: 'address' },
                             { name: 'allowance', type: 'uint160' },
-                            { name: 'period', type: 'uint8' },
+                            { name: 'unit', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint8' },
                         ],
                     },
                 ],
@@ -741,9 +771,56 @@ const SPEND_PERMISSIONS_MANAGER_ABI = [
                         components: [
                             { name: 'token', type: 'address' },
                             { name: 'allowance', type: 'uint160' },
-                            { name: 'period', type: 'uint8' },
+                            { name: 'unit', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint8' },
                         ],
                     },
+                ],
+            },
+        ],
+        outputs: [],
+    },
+    {
+        name: 'executeBatch',
+        type: 'function',
+        stateMutability: 'nonpayable',
+        inputs: [
+            {
+                name: 'permission',
+                type: 'tuple',
+                components: [
+                    { name: 'account', type: 'address' },
+                    { name: 'spender', type: 'address' },
+                    { name: 'start', type: 'uint48' },
+                    { name: 'end', type: 'uint48' },
+                    { name: 'salt', type: 'uint256' },
+                    {
+                        name: 'calls',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'target', type: 'address' },
+                            { name: 'selector', type: 'bytes4' },
+                        ],
+                    },
+                    {
+                        name: 'spends',
+                        type: 'tuple[]',
+                        components: [
+                            { name: 'token', type: 'address' },
+                            { name: 'allowance', type: 'uint160' },
+                            { name: 'unit', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint8' },
+                        ],
+                    },
+                ],
+            },
+            {
+                name: 'calls',
+                type: 'tuple[]',
+                components: [
+                    { name: 'target', type: 'address' },
+                    { name: 'value', type: 'uint256' },
+                    { name: 'data', type: 'bytes' },
                 ],
             },
         ],
@@ -777,7 +854,8 @@ const SPEND_PERMISSIONS_MANAGER_ABI = [
                         components: [
                             { name: 'token', type: 'address' },
                             { name: 'allowance', type: 'uint160' },
-                            { name: 'period', type: 'uint8' },
+                            { name: 'unit', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint8' },
                         ],
                     },
                 ],
