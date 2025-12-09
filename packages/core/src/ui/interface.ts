@@ -249,6 +249,10 @@ export interface UIHandlerConfig {
   appName?: string;
   /** App logo URL */
   appLogoUrl?: string | null;
+  /** ENS to issue subnames from */
+  ens?: string;
+  /** Whether to show testnet chains */
+  showTestnets?: boolean;
 }
 
 /**

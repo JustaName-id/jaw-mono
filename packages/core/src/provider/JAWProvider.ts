@@ -245,6 +245,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             callback: this.emit.bind(this),
             apiKey: this.apiKey,
             paymasterUrls: signerType === 'appSpecific' ? this.paymasterUrls : undefined,
+            ens: signerType === 'appSpecific' ? this.preference.ens : undefined,
         });
     }
 

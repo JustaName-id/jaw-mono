@@ -292,6 +292,7 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasterUrls={this.config.paymasterUrls}
+            ens={this.config.ens}
           />
         );
 
@@ -505,13 +506,14 @@ async function getAccountForSigning(
 }
 
 // OnboardingDialogWrapper - handles passkey authentication flow with ConnectDialog confirmation
-function OnboardingDialogWrapper({
+function OnboardingDialogWrapper({  
   request,
   onApprove,
   onReject,
   apiKey,
   defaultChainId,
   paymasterUrls,
+  ens,
 }: {
   request: ConnectUIRequest;
   onApprove: (data: any) => void;
@@ -519,6 +521,7 @@ function OnboardingDialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasterUrls?: Record<number, string>;
+  ens?: string;
 }) {
   const [open, setOpen] = useState(true);
   const [accounts, setAccounts] = useState<LocalStorageAccount[]>([]);
@@ -707,7 +710,8 @@ function OnboardingDialogWrapper({
   };
 
   // Get config from request - capabilities is Record<string, unknown>
-  const ensDomain = request.data.capabilities?.ensDomain as string | undefined;
+  const ensDomain = ens as string | undefined;
+  console.log('🔗 ENS domain:', ensDomain);
   const chainId = request.data.chainId || defaultChainId || 1;
   const subnameTextRecords = request.data.capabilities?.subnameTextRecords as SubnameTextRecordCapabilityRequest | undefined;
 
