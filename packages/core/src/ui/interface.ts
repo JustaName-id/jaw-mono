@@ -127,6 +127,8 @@ export interface PermissionUIRequest extends BaseUIRequest {
         limit: string;
         period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
         token: Address;
+        /** Multiplier for the period (1-255), defaults to 1 */
+        multiplier?: number;
       }>;
       calls?: Array<{
         target: Address;

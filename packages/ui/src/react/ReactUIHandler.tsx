@@ -1551,11 +1551,15 @@ function PermissionDialogWrapper({
     const amount = formatUnits(allowance, tokenInfo.decimals);
     const limit = `${amount} ${tokenInfo.symbol}`;
 
+    // Format duration with multiplier (defaults to 1 if not provided)
+    const multiplier = spend.multiplier ?? 1;
+    const duration = `${multiplier} ${spend.period}${multiplier > 1 ? 's' : ''}`;
+
     return {
       amount,
       token: isNativeToken(spend.token) ? 'Native (ETH)' : tokenInfo.symbol,
       tokenAddress: spend.token,
-      duration: `1 ${spend.period}`,
+      duration,
       limit,
     };
   }), [spendsData, tokenInfoMap]);

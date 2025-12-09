@@ -836,6 +836,7 @@ export class Account {
       token: spend.token as Address,
       limit: spend.allowance,
       period: spend.unit as SpendPeriod,
+      multiplier: spend.multiplier,
     }));
 
     return {

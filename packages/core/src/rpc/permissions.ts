@@ -93,10 +93,12 @@ export type Permission = {
 export type SpendPermissionDetail = {
     /** Spending limit in wei (hex format) */
     limit: string;
-    /** Period of the spend limit */
+    /** Period unit of the spend limit */
     period: SpendPeriod;
     /** Token address */
     token: Address;
+    /** Multiplier for the period (1-255), defaults to 1 */
+    multiplier?: number;
 };
 
 /**
@@ -468,7 +470,7 @@ function apiPermissionsToPermission(
             token,
             allowance: BigInt(spend.limit),
             unit: spend.period,
-            multiplier: 1, // Default multiplier
+            multiplier: spend.multiplier ?? 1,
         };
     });
 
