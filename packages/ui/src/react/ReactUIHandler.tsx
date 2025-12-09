@@ -8,6 +8,7 @@ import {
   UIRequest,
   UIResponse,
   UIError,
+  UIErrorCode,
   ConnectUIRequest,
   SignatureUIRequest,
   TypedDataUIRequest,
@@ -24,6 +25,7 @@ import {
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   ensureIntNumber,
+  standardErrorCodes,
 } from '@jaw.id/core';
 import { formatUnits, erc20Abi, createPublicClient, http } from 'viem';
 import type { Address, Hex } from 'viem';
@@ -232,11 +234,12 @@ export class ReactUIHandler implements UIHandler {
 
         const handleReject = (error?: Error) => {
           cleanup();
-          resolve({
+          const response = {
             id: request.id,
             approved: false,
             error: error as UIError || UIError.userRejected(),
-          });
+          };
+          resolve(response);
         };
 
         // Render appropriate dialog based on request type
@@ -927,7 +930,14 @@ function SignatureDialogWrapper({
       onApprove(signature);
     } catch (error) {
       console.error('Signature failed:', error);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1002,7 +1012,14 @@ function Eip712DialogWrapper({
       onApprove(signature);
     } catch (error) {
       console.error('EIP-712 signature failed:', error);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1122,13 +1139,15 @@ function TransactionDialogWrapper({
           setGasFee('sponsored');
         }
       } catch (error) {
-        console.error('Error estimating gas:', error);
+        // Log at debug level to avoid polluting console
+        console.log('[TransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
 
-        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
+        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund") || error.message.includes('insufficient'))) {
           if (isSponsored) {
             setGasFee('sponsored');
             setGasEstimationError('');
           } else {
+            // Show insufficient funds in UI - user can still cancel manually
             setGasFee('');
             setGasEstimationError('Insufficient funds');
           }
@@ -1160,7 +1179,23 @@ function TransactionDialogWrapper({
       });
     } catch (error) {
       console.error('Transaction failed:', error);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      const errorMessage = errorObj.message;
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else if (
+        errorMessage.includes('AA21') ||
+        errorMessage.includes("didn't pay prefund") ||
+        errorMessage.includes('insufficient') ||
+        errorMessage.includes('exceeds balance')
+      ) {
+        // Transaction rejected due to funds/gas issues
+        onReject(new UIError(standardErrorCodes.rpc.transactionRejected as UIErrorCode, errorMessage));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1282,13 +1317,15 @@ function SendTransactionDialogWrapper({
           setGasFee('sponsored');
         }
       } catch (error) {
-        console.error('Error estimating gas:', error);
+        // Log at debug level to avoid polluting console
+        console.log('[SendTransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
 
-        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
+        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund") || error.message.includes('insufficient'))) {
           if (isSponsored) {
             setGasFee('sponsored');
             setGasEstimationError('');
           } else {
+            // Show insufficient funds in UI - user can still cancel manually
             setGasFee('');
             setGasEstimationError('Insufficient funds');
           }
@@ -1318,7 +1355,23 @@ function SendTransactionDialogWrapper({
       onApprove(txHash);
     } catch (error) {
       console.error('Transaction failed:', error);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      const errorMessage = errorObj.message;
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else if (
+        errorMessage.includes('AA21') ||
+        errorMessage.includes("didn't pay prefund") ||
+        errorMessage.includes('insufficient') ||
+        errorMessage.includes('exceeds balance')
+      ) {
+        // Transaction rejected due to funds/gas issues
+        onReject(new UIError(standardErrorCodes.rpc.transactionRejected as UIErrorCode, errorMessage));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1586,8 +1639,15 @@ function PermissionDialogWrapper({
       onApprove(result);
     } catch (error) {
       console.error('Permission grant failed:', error);
-      setStatus(`Error: ${(error as Error).message}`);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      setStatus(`Error: ${errorObj.message}`);
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1686,8 +1746,15 @@ function SiweDialogWrapper({
       onApprove(signature);
     } catch (error) {
       console.error('SIWE signature failed:', error);
-      setSiweStatus(`Error: ${(error as Error).message}`);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      setSiweStatus(`Error: ${errorObj.message}`);
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1877,8 +1944,15 @@ function RevokePermissionDialogWrapper({
       onApprove({ success: true });
     } catch (error) {
       console.error('Permission revoke failed:', error);
-      setStatus(`Error: ${(error as Error).message}`);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      setStatus(`Error: ${errorObj.message}`);
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1929,12 +2003,10 @@ function UnsupportedMethodDialogWrapper({
   const handleClose = () => {
     if (!isClosing) {
       setIsClosing(true);
-      // Create a standard unsupported method error
-      const unsupportedError = new Error(`Method not supported: ${method}`);
-      (unsupportedError as any).code = -32601; // JSON-RPC standard "Method not found" error code
       console.log('❌ Unsupported method:', method);
       setOpen(false);
-      onReject(unsupportedError);
+      // Use UIError.unsupportedRequest which has proper error code
+      onReject(UIError.unsupportedRequest(method));
     }
   };
 
