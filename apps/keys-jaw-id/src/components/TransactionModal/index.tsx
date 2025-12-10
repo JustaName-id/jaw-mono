@@ -31,6 +31,8 @@ export interface TransactionRequestData {
   atomicRequired?: boolean;
   version?: string;
   callsId?: string;
+  // Permission ID for permission-based execution
+  permissionId?: `0x${string}`;
 }
 
 export interface TransactionModalProps {
@@ -200,8 +202,14 @@ export const TransactionModal = ({
           data: (tx.data as `0x${string}`) || '0x'
         }));
 
-        // Estimate gas using Account class
-        const gasPrice = await account.calculateGasCost(transactionCalls);
+        // Get permissionId from transactionRequest if available
+        const permissionId = transactionRequest?.permissionId;
+
+        // Estimate gas using Account class (with permission if provided)
+        const gasPrice = await account.calculateGasCost(
+          transactionCalls,
+          permissionId ? { permissionId } : undefined
+        );
         setGasFee(gasPrice);
         setGasEstimationError('');
 
@@ -230,7 +238,7 @@ export const TransactionModal = ({
     };
 
     estimateGas();
-  }, [account, chain, normalizedTransactions, isSponsored]);
+  }, [account, chain, normalizedTransactions, isSponsored, transactionRequest?.permissionId]);
 
   const handleConfirm = useCallback(async () => {
     try {

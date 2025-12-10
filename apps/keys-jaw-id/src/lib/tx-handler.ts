@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import type { ViemRPCReturnType, ViemRPCParams } from '@jaw.id/core';
+import type { ViemRPCReturnType, ViemRPCParams, PermissionsCapability } from '@jaw.id/core';
 import type { TransactionRequestData } from '../components/TransactionModal';
 
 // ==========================================
@@ -74,6 +74,10 @@ export function extractTransactionData(
         chainId: paramsChainId,
       }));
 
+      // Extract permissionId from capabilities if present
+      const capabilities = sendCallsParams.capabilities as { permissions?: PermissionsCapability } | undefined;
+      const permissionId = capabilities?.permissions?.id;
+
       return {
         method: 'wallet_sendCalls',
         transactions: internalTxs.map(tx => ({
@@ -86,6 +90,7 @@ export function extractTransactionData(
         paymasterUrl: chain?.paymasterUrl,
         atomicRequired: sendCallsParams.atomicRequired,
         callsId: sendCallsParams.id,
+        permissionId,
       };
     }
   

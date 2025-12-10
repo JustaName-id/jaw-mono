@@ -24,6 +24,11 @@ import {
 import {Chain} from "../store/index.js";
 import {arbitrum, arbitrumSepolia, base, baseSepolia, mainnet, optimism, optimismSepolia, sepolia} from "viem/chains";
 import {PERMISSIONS_MANAGER_ADDRESS} from "../constants.js";
+import {
+    getPermissionFromRelay,
+    relayPermissionToPermission,
+    encodeExecuteBatchWithPermission,
+} from "../rpc/permissions.js";
 
 export type FindOwnerIndexParams = {
     /**
@@ -166,6 +171,60 @@ export async function sendCalls(
     }
 }
 
+/**
+ * Send multiple calls using a permission.
+ * This encodes the calls and sends them through the JustaPermissionManager contract's executeBatch function.
+ *
+ * @param smartAccount - The smart account to send from
+ * @param calls - Array of calls to execute
+ * @param chain - The chain to send on
+ * @param permissionId - The ID (hash) of the permission to use
+ * @param apiKey - API key for fetching permission from relay
+ * @returns The bundled transaction result with userOpHash and chainId
+ */
+export async function sendCallsWithPermission(
+    smartAccount: SmartAccount,
+    calls: Array<{
+        to: Address;
+        value?: bigint;
+        data?: Hex;
+    }>,
+    chain: Chain,
+    permissionId: Hex,
+    apiKey: string
+): Promise<BundledTransactionResult> {
+    // Fetch the permission from the relay
+    const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
+    const permission = relayPermissionToPermission(relayPermission);
+
+    // Format calls for the contract
+    const formattedCalls = calls.map(call => ({
+        target: getAddress(call.to),
+        value: call.value ?? 0n,
+        data: call.data ?? '0x' as Hex,
+    }));
+
+    // Encode the executeBatch call with permission
+    const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
+
+    // Send a single call to the permissions manager
+    const bundlerClient = getBundlerClient(chain);
+
+    const userOpHash = await bundlerClient.sendUserOperation({
+        account: smartAccount,
+        calls: [{
+            to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+            value: 0n,
+            data: encodedData,
+        }],
+    });
+
+    return {
+        id: userOpHash,
+        chainId: chain.id
+    };
+}
+
 export async function estimateUserOpGas(
     smartAccount: SmartAccount,
     calls: Array<{
@@ -188,6 +247,57 @@ export async function estimateUserOpGas(
 
     return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit
 }
+
+/**
+ * Estimate gas for a user operation using a permission.
+ * This estimates gas for calls routed through the JustaPermissionManager contract's executeBatch function.
+ *
+ * @param smartAccount - The smart account to estimate for
+ * @param calls - Array of calls to execute
+ * @param chain - The chain to estimate on
+ * @param permissionId - The ID (hash) of the permission to use
+ * @param apiKey - API key for fetching permission from relay
+ * @returns The estimated gas amount
+ */
+export async function estimateUserOpGasWithPermission(
+    smartAccount: SmartAccount,
+    calls: Array<{
+        to: Address;
+        value?: bigint;
+        data?: Hex;
+    }>,
+    chain: Chain,
+    permissionId: Hex,
+    apiKey: string
+): Promise<bigint> {
+    // Fetch the permission from the relay
+    const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
+    const permission = relayPermissionToPermission(relayPermission);
+
+    // Format calls for the contract
+    const formattedCalls = calls.map(call => ({
+        target: getAddress(call.to),
+        value: call.value ?? 0n,
+        data: call.data ?? '0x' as Hex,
+    }));
+
+    // Encode the executeBatch call with permission
+    const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
+
+    const bundlerClient = getBundlerClient(chain);
+
+    const gasEstimate = await bundlerClient.estimateUserOperationGas({
+        account: smartAccount,
+        calls: [{
+            to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+            value: 0n,
+            data: encodedData,
+        }],
+    });
+
+    return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;
+}
+
 export async function createSmartAccount(account: WebAuthnAccount | LocalAccount, bundlerClient: JustanAccountImplementation["client"]): Promise<SmartAccount> {
     // First create a temporary smart account to get the predicted address
     const tempSmartAccount = await toJustanAccount({

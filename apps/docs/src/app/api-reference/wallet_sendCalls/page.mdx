@@ -37,7 +37,14 @@ await jaw.provider.request({
 | `calls[].value` | `0x${string}` | No | Value in wei (hex), default "0x0" |
 | `calls[].data` | `0x${string}` | No | Call data (hex), default "0x" |
 | `chainId` | `0x${string}` | No | Target chain ID (defaults to connected chain) |
-| `capabilities` | `object` | No | Additional capabilities (e.g., paymasterService) |
+| `capabilities` | `object` | No | Additional capabilities (see below) |
+
+### Capabilities
+
+| Name | Type | Description |
+|------|------|-------------|
+| `capabilities.permissions` | `object` | Permission capability for delegated execution |
+| `capabilities.permissions.id` | `0x${string}` | ID of the permission to use for execution |
 
 ---
 
@@ -140,7 +147,50 @@ const status = await jaw.provider.request({
 console.log('Status:', status.status);
 ```
 
+### Execute with Permission (Delegated Execution)
+
+When a permission has been granted via `wallet_grantPermissions`, you can execute calls using that permission. This allows the spender to execute transactions on behalf of the account within the permission's constraints.
+
+```typescript
+import { encodeFunctionData } from 'viem';
+
+// First, get the permission ID from a previous wallet_grantPermissions call
+const permissionId = '0x1234...'; // The permission ID returned from grantPermissions
+
+const transferData = encodeFunctionData({
+  abi: erc20Abi,
+  functionName: 'transfer',
+  args: ['0x5678...', 1000000n],
+});
+
+// Execute the transfer using the permission
+const result = await jaw.provider.request({
+  method: 'wallet_sendCalls',
+  params: [{
+    calls: [
+      {
+        to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+        data: transferData,
+      },
+    ],
+    capabilities: {
+      permissions: {
+        id: permissionId,
+      },
+    },
+  }],
+});
+
+console.log('Batch ID:', result.id);
+```
+
+When using the `permissions` capability:
+- The calls are executed through the JustaPermissionManager contract
+- The permission's call and spend limits are enforced
+- The spender must have been granted appropriate permissions for the calls being made
+
 ## Related Methods
 
 - [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) - Get batch status
 - [wallet_showCallsStatus](/api-reference/wallet_showCallsStatus) - Show status UI
+- [wallet_grantPermissions](/api-reference/wallet_grantPermissions) - Grant permissions for delegated execution

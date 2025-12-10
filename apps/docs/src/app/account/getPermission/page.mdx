@@ -20,7 +20,7 @@ async getPermission(permissionId: Hex): Promise<WalletGrantPermissionsResponse>
 
 Type: `Hex`
 
-The permission ID (hash) to fetch. This is the `id` field returned from `grantPermissions()`.
+The permission ID (hash) to fetch. This is the `permissionId` field returned from `grantPermissions()`.
 
 ---
 
@@ -30,24 +30,24 @@ The permission ID (hash) to fetch. This is the `id` field returned from `grantPe
 
 ```typescript
 interface WalletGrantPermissionsResponse {
-  /** Smart account address */
-  address: Address;
-  /** Chain ID as hex string */
-  chainId: Hex;
-  /** Start timestamp */
-  start: number;
-  /** Expiry timestamp */
-  expiry: number;
-  /** Unique salt for this permission */
-  salt: Hex;
-  /** Permission ID (hash) */
-  id: Hex;
-  /** Spender address */
+  /** Smart account this permission is valid for */
+  account: Address;
+  /** Entity that can use this permission */
   spender: Address;
-  /** Granted call permissions */
+  /** Timestamp (in seconds) that specifies when this permission becomes valid */
+  start: number;
+  /** Timestamp (in seconds) that specifies the time by which this permission expires */
+  end: number;
+  /** Salt used for permission uniqueness (as hex string) */
+  salt: Hex;
+  /** Array of call permissions */
   calls: CallPermissionDetail[];
-  /** Granted spend permissions */
+  /** Array of spend permissions */
   spends: SpendPermissionDetail[];
+  /** Permission identifier - the permission hash from the contract */
+  permissionId: Hex;
+  /** Chain ID in hex format */
+  chainId: Hex;
 }
 ```
 
@@ -76,7 +76,7 @@ const permission = await account.getPermission(
 );
 
 console.log('Spender:', permission.spender);
-console.log('Expires:', new Date(permission.expiry * 1000));
+console.log('Expires:', new Date(permission.end * 1000));
 console.log('Call permissions:', permission.calls);
 console.log('Spend permissions:', permission.spends);
 ```
