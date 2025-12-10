@@ -1037,13 +1037,13 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant for multiple ERC-20s on Base Sepolia...');
 
       // Example spender address
-      const spenderAddress = '0xE08224B2CfaF4f27E2DC7cB3f6B99AcC68Cf06c0';
+      const spenderAddress = '0xEc653d5900Ae3B56bdf066DC99F175E3a5cFB712';
 
       // USDC on Base Sepolia (6 decimals)
-      const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+      const usdcAddress = '0xDFfc9C98d62Ae7234D9218315672d6b8CFD0ce59';
 
       // 1 USDC with 6 decimals = 1 * 10^6 = 1000000
-      const usdcLimit = BigInt(1_000_000);
+      const usdcLimit = BigInt(10**18);
 
       const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
 
@@ -1075,7 +1075,7 @@ Issued At: ${issuedAt}`;
             ],
             calls: [
               {
-                target: spenderAddress,
+                target: usdcAddress,
                 functionSignature: 'transfer(address,uint256)',
               }
             ]
