@@ -59,7 +59,7 @@ export interface PermissionModalProps {
 }
 
 // Format period to human-readable duration with multiplier support
-const formatDuration = (period: SpendPeriod, multiplier: number = 1): string => {
+const formatDuration = (period: SpendPeriod, multiplier = 1): string => {
   const periodLabels: Record<SpendPeriod, string> = {
     minute: 'Minute',
     hour: 'Hour',
@@ -83,7 +83,7 @@ const formatDuration = (period: SpendPeriod, multiplier: number = 1): string => 
 };
 
 // Convert period unit and multiplier from relay to human-readable duration
-const formatDurationFromRelay = (unit: string, multiplier: number = 1): string => {
+const formatDurationFromRelay = (unit: string, multiplier = 1): string => {
   const periodLabels: Record<string, string> = {
     minute: 'Minute',
     hour: 'Hour',
