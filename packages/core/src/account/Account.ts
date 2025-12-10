@@ -7,6 +7,7 @@ import {
   sendCalls as sendSmartAccountCalls,
   sendCallsWithPermission as sendSmartAccountCallsWithPermission,
   estimateUserOpGas,
+  estimateUserOpGasWithPermission,
   calculateGas,
   getBundlerClient,
   type BundledTransactionResult,
@@ -700,6 +701,7 @@ export class Account {
    * Estimate gas for a transaction
    *
    * @param calls - Array of transaction calls
+   * @param options - Optional settings including permissionId for permission-based execution
    * @returns Promise resolving to the estimated gas amount
    *
    * @example
@@ -712,12 +714,23 @@ export class Account {
    * console.log('Estimated gas:', gas.toString());
    * ```
    */
-  async estimateGas(calls: TransactionCall[]): Promise<bigint> {
+  async estimateGas(calls: TransactionCall[], options?: { permissionId?: Hex }): Promise<bigint> {
     const formattedCalls = calls.map(call => ({
       to: call.to,
       value: Account.parseValue(call.value),
       data: call.data,
     }));
+
+    if (options?.permissionId) {
+      // Estimate gas for permission-based execution through the permission manager
+      return await estimateUserOpGasWithPermission(
+        this._smartAccount,
+        formattedCalls,
+        this._chain,
+        options.permissionId,
+        this._apiKey
+      );
+    }
 
     return await estimateUserOpGas(
       this._smartAccount,
@@ -730,6 +743,7 @@ export class Account {
    * Calculate gas cost in ETH
    *
    * @param calls - Array of transaction calls
+   * @param options - Optional settings including permissionId for permission-based execution
    * @returns Promise resolving to the gas cost in ETH as a string
    *
    * @example
@@ -742,8 +756,8 @@ export class Account {
    * console.log('Gas cost:', cost, 'ETH');
    * ```
    */
-  async calculateGasCost(calls: TransactionCall[]): Promise<string> {
-    const gas = await this.estimateGas(calls);
+  async calculateGasCost(calls: TransactionCall[], options?: { permissionId?: Hex }): Promise<string> {
+    const gas = await this.estimateGas(calls, options);
     return await calculateGas(this._chain, gas);
   }
 

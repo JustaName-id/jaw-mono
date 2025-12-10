@@ -963,7 +963,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant (wallet_grantPermissions)...');
 
       // Example spender address (could be a dApp contract)
-      const spenderAddress = '0xE08224B2CfaF4f27E2DC7cB3f6B99AcC68Cf06c0';
+      const spenderAddress = '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0';
 
       // Example: Grant multiple permissions (spend + calls) for 30 days
       const ethLimit = parseEther('0.0001'); // 0.0001 ETH per day
@@ -994,8 +994,8 @@ Issued At: ${issuedAt}`;
             ],
             calls: [
               {
-                target: spenderAddress,
-                selector: '0x32323232'
+                target: '0x3232323232323232323232323232323232323232', // ANY_TARGET - can send to any address
+                selector: '0xe0e0e0e0' // EMPTY_CALLDATA_FN_SEL - native ETH transfers
               }
             ]
           }
@@ -1208,30 +1208,18 @@ Issued At: ${issuedAt}`;
       const provider = sdk.provider;
       addLog('🔐 Sending calls with permission (wallet_sendCalls with permissions capability)...');
 
-      // Example spender address (must match the one used in grant)
-      const spenderAddress = '0xE08224B2CfaF4f27E2DC7cB3f6B99AcC68Cf06c0';
+      // Recipient address for ETH transfer
+      const recipientAddress = '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0';
 
-      // Encode a simple transfer call
-      // Using the same target as the permission was granted for
-      const erc20Abi = parseAbi([
-        'function transfer(address to, uint256 amount) returns (bool)'
-      ]);
+      // 0.0001 ETH in wei
+      const ethAmount = BigInt(100000000000000); // 0.0001 ETH = 10^14 wei
 
-      const transferData = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: 'transfer',
-        args: [
-          spenderAddress, // Recipient
-          BigInt(100) // Small amount for testing
-        ]
-      });
+      // Use the last granted permission ID
+      const permissionId = "0x19e2370d8083137a926d0a53b5fd1a0e1dab80fcf5880a5879d3a754d3d99187";
 
-      // USDC on Base Sepolia
-      const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
-
-      addLog(`Permission ID: ${lastPermissionId}`);
-      addLog(`Target: ${usdcAddress} (USDC)`);
-      addLog(`Function: transfer(address,uint256)`);
+      addLog(`Permission ID: ${permissionId}`);
+      addLog(`Recipient: ${recipientAddress}`);
+      addLog(`Amount: 0.0001 ETH`);
 
       const result = await provider.request({
         method: 'wallet_sendCalls',
@@ -1240,13 +1228,13 @@ Issued At: ${issuedAt}`;
           from: accounts[0],
           calls: [
             {
-              to: usdcAddress,
-              data: transferData,
+              to: "0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0",
+              value: `0x${ethAmount.toString(16)}`,
             }
           ],
           capabilities: {
             permissions: {
-              id: lastPermissionId as `0x${string}`,
+              id: permissionId as `0x${string}`,
             },
           },
         }]

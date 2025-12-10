@@ -101,6 +101,7 @@ export type {
     WalletSignUIRequest,
     UIHandlerOptions,
     BaseUIRequest,
+    PermissionsCapability,
 } from './ui/interface.js';
 
 export { UIError, UIErrorCode } from './ui/interface.js';

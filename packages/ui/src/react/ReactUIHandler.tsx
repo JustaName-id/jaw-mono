@@ -1134,8 +1134,14 @@ function TransactionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
-        // Estimate gas using Account class
-        const gasPrice = await account.calculateGasCost(transactionCalls);
+        // Get permissionId from request capabilities if present
+        const permissionId = request.data.capabilities?.permissions?.id;
+
+        // Estimate gas using Account class (with permission if provided)
+        const gasPrice = await account.calculateGasCost(
+          transactionCalls,
+          permissionId ? { permissionId } : undefined
+        );
         setGasFee(gasPrice);
 
         // Override with sponsored if paymaster is available
@@ -1165,7 +1171,7 @@ function TransactionDialogWrapper({
     };
 
     estimateGas();
-  }, [account, transactionCalls, isSponsored]);
+  }, [account, transactionCalls, isSponsored, request.data.capabilities?.permissions?.id]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
