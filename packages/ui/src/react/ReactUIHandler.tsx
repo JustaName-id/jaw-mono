@@ -1134,8 +1134,14 @@ function TransactionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
-        // Estimate gas using Account class
-        const gasPrice = await account.calculateGasCost(transactionCalls);
+        // Get permissionId from request capabilities if present
+        const permissionId = request.data.capabilities?.permissions?.id;
+
+        // Estimate gas using Account class (with permission if provided)
+        const gasPrice = await account.calculateGasCost(
+          transactionCalls,
+          permissionId ? { permissionId } : undefined
+        );
         setGasFee(gasPrice);
 
         // Override with sponsored if paymaster is available
@@ -1165,7 +1171,7 @@ function TransactionDialogWrapper({
     };
 
     estimateGas();
-  }, [account, transactionCalls, isSponsored]);
+  }, [account, transactionCalls, isSponsored, request.data.capabilities?.permissions?.id]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
@@ -1174,8 +1180,11 @@ function TransactionDialogWrapper({
         throw new Error('Account not initialized');
       }
 
-      // Send calls using Account class
-      const result = await account.sendCalls(transactionCalls);
+      // Check if permissions capability is provided
+      const permissionId = request.data.capabilities?.permissions?.id;
+
+      // Send calls using Account class, with optional permission
+      const result = await account.sendCalls(transactionCalls, permissionId ? { permissionId } : undefined);
 
       onApprove({
         id: result.id,
@@ -1548,11 +1557,15 @@ function PermissionDialogWrapper({
     const amount = formatUnits(allowance, tokenInfo.decimals);
     const limit = `${amount} ${tokenInfo.symbol}`;
 
+    // Format duration with multiplier (defaults to 1 if not provided)
+    const multiplier = spend.multiplier ?? 1;
+    const duration = `${multiplier} ${spend.period}${multiplier > 1 ? 's' : ''}`;
+
     return {
       amount,
       token: isNativeToken(spend.token) ? 'Native (ETH)' : tokenInfo.symbol,
       tokenAddress: spend.token,
-      duration: `1 ${spend.period}`,
+      duration,
       limit,
     };
   }), [spendsData, tokenInfoMap]);

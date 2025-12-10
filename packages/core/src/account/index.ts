@@ -4,6 +4,7 @@ export {
     type AccountConfig,
     type CreateAccountOptions,
     type TransactionCall,
+    type SendCallsOptions,
     type AccountMetadata,
 } from "./Account.js"
 
