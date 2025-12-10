@@ -11,7 +11,7 @@ export default function TestPage() {
   const [chainId, setChainId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [lastBatchId, setLastBatchId] = useState<string | null>(null);
-  const [lastPermissionId, setLastPermissionId] = useState<string | null>(null);
+  const [lastPermissionId, setLastPermissionId] = useState<string | null>("0x7a55c56b1051bbef7b310c2eeb781e36f851c52ced34d2c17db941df68216522");
   const [sdk] = useState(() =>
       JAW.create({
         appName: 'JAW Playground',
@@ -20,8 +20,8 @@ export default function TestPage() {
         preference: {
           keysUrl: 'http://localhost:3001', // Local popup URL
           showTestnets: true,
-          // mode: Mode.AppSpecific,
-          // uiHandler: new ReactUIHandler()
+          mode: Mode.AppSpecific,
+          uiHandler: new ReactUIHandler()
         },
         apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
       })
@@ -1215,7 +1215,7 @@ Issued At: ${issuedAt}`;
       const ethAmount = BigInt(100000000000000); // 0.0001 ETH = 10^14 wei
 
       // Use the last granted permission ID
-      const permissionId = "0x19e2370d8083137a926d0a53b5fd1a0e1dab80fcf5880a5879d3a754d3d99187";
+      const permissionId = lastPermissionId;
 
       addLog(`Permission ID: ${permissionId}`);
       addLog(`Recipient: ${recipientAddress}`);
