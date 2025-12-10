@@ -28,8 +28,8 @@ import {
   type WalletGrantPermissionsResponse,
   type RevokePermissionApiResponse,
   type SpendPeriod,
-  type CallPermission,
-  type SpendLimit,
+  type CallPermissionDetail,
+  type SpendPermissionDetail,
 } from '../rpc/permissions.js';
 import { JAW_RPC_URL } from '../constants.js';
 import { type Chain, chains as chainStore } from '../store/index.js';
@@ -841,15 +841,15 @@ export class Account {
     const relayResponse = await getPermissionFromRelay(permissionId, this._apiKey);
 
     // Transform relay response to WalletGrantPermissionsResponse format
-    const calls: CallPermission[] = relayResponse.calls.map(call => ({
+    const calls: CallPermissionDetail[] = relayResponse.calls.map(call => ({
       target: call.target as Address,
       selector: call.selector as Hex,
     }));
 
-    const spends: SpendLimit[] = relayResponse.spends.map(spend => ({
+    const spends: SpendPermissionDetail[] = relayResponse.spends.map(spend => ({
       token: spend.token as Address,
-      allowance: BigInt(spend.allowance),
-      unit: spend.unit as SpendPeriod,
+      limit: spend.allowance,
+      period: spend.unit as SpendPeriod,
       multiplier: spend.multiplier,
     }));
 
@@ -858,7 +858,7 @@ export class Account {
       spender: relayResponse.spender as Address,
       start: parseInt(relayResponse.start, 10),
       end: parseInt(relayResponse.end, 10),
-      salt: BigInt(relayResponse.salt),
+      salt: relayResponse.salt as Hex,
       calls,
       spends,
       permissionId: relayResponse.hash as Hex,

@@ -79,12 +79,12 @@ interface WalletGrantPermissionsResponse {
   start: number;
   /** Timestamp (in seconds) that specifies the time by which this permission expires */
   end: number;
-  /** Salt used for permission uniqueness */
-  salt: bigint;
+  /** Salt used for permission uniqueness (as hex string) */
+  salt: Hex;
   /** Array of call permissions */
-  calls: CallPermission[];
-  /** Array of spend limits */
-  spends: SpendLimit[];
+  calls: CallPermissionDetail[];
+  /** Array of spend permissions */
+  spends: SpendPermissionDetail[];
   /** Permission identifier - the permission hash from the contract */
   permissionId: Hex;
   /** Chain ID in hex format */
