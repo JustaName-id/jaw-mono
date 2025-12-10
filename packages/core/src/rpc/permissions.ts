@@ -183,26 +183,28 @@ export type StorePermissionApiResponse = StorePermissionApiRequest;
 
 /**
  * Response from wallet_grantPermissions (returned to dApp)
+ * Contains the full Permission struct matching the JustaPermissionManager contract,
+ * plus additional metadata (permissionId, chainId)
  */
 export type WalletGrantPermissionsResponse = {
-    /** Account address that granted the permissions */
-    address: Address;
-    /** Chain ID in hex format */
-    chainId: Hex;
+    /** Smart account this permission is valid for */
+    account: Address;
+    /** Entity that can use this permission */
+    spender: Address;
     /** Timestamp (in seconds) that specifies when this permission becomes valid */
     start: number;
     /** Timestamp (in seconds) that specifies the time by which this permission expires */
-    expiry: number;
-    /** Salt used for permission uniqueness (as hex string) */
-    salt: Hex;
+    end: number;
+    /** Salt used for permission uniqueness */
+    salt: bigint;
+    /** Array of call permissions */
+    calls: CallPermission[];
+    /** Array of spend limits */
+    spends: SpendLimit[];
     /** Permission identifier - the permission hash from the contract */
-    id: Hex;
-    /** Spender address that was granted permissions */
-    spender: Address;
-    /** Array of call permissions granted */
-    calls: CallPermissionDetail[];
-    /** Array of spend permissions granted */
-    spends: SpendPermissionDetail[];
+    permissionId: Hex;
+    /** Chain ID in hex format */
+    chainId: Hex;
 };
 
 /**
@@ -272,15 +274,15 @@ export async function grantPermissions(
 
 
     return {
-        address: account,
-        chainId: chainId as Hex,
-        start: permission.start,
-        expiry,
-        salt: `0x${permission.salt.toString(16)}` as Hex,
-        id: permissionHash,
+        account,
         spender,
-        calls: permissions.calls || [],
-        spends: permissions.spends || [],
+        start: permission.start,
+        end: permission.end,
+        salt: permission.salt,
+        calls: permission.calls,
+        spends: permission.spends,
+        permissionId: permissionHash,
+        chainId: chainId as Hex,
     };
 }
 

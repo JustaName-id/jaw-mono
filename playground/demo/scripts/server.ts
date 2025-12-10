@@ -205,25 +205,25 @@ async function main() {
       }
     );
     console.log('Permission granted!');
-    console.log('Permission ID:', permissionResponse.id);
-    console.log('Expiry:', new Date(permissionResponse.expiry * 1000).toISOString());
+    console.log('Permission ID:', permissionResponse.permissionId);
+    console.log('End:', new Date(permissionResponse.end * 1000).toISOString());
 
     // ============================================
     // Test: Get Permission details
     // ============================================
     console.log('\n--- Get Permission Details ---');
-    const permissionDetails = await account.getPermission(permissionResponse.id);
+    const permissionDetails = await account.getPermission(permissionResponse.permissionId);
     console.log('Permission details:');
-    console.log('  Address:', permissionDetails.address);
+    console.log('  Account:', permissionDetails.account);
     console.log('  Spender:', permissionDetails.spender);
-    console.log('  Expiry:', new Date(permissionDetails.expiry * 1000).toISOString());
+    console.log('  End:', new Date(permissionDetails.end * 1000).toISOString());
     console.log('  Calls:', permissionDetails.calls);
 
     // ============================================
     // Test: Revoke Permission
     // ============================================
     console.log('\n--- Revoke Permission ---');
-    const revokeResponse = await account.revokePermission(permissionResponse.id);
+    const revokeResponse = await account.revokePermission(permissionResponse.permissionId);
     console.log('Permission revoked!');
     console.log('Response:', revokeResponse);
   } catch (error) {

@@ -71,24 +71,24 @@ interface SpendPermissionDetail {
 
 ```typescript
 interface WalletGrantPermissionsResponse {
-  /** Smart account address */
-  address: Address;
-  /** Chain ID as hex string */
-  chainId: Hex;
-  /** Start timestamp */
-  start: number;
-  /** Expiry timestamp */
-  expiry: number;
-  /** Unique salt for this permission */
-  salt: Hex;
-  /** Permission ID (hash) */
-  id: Hex;
-  /** Spender address */
+  /** Smart account this permission is valid for */
+  account: Address;
+  /** Entity that can use this permission */
   spender: Address;
-  /** Granted call permissions */
-  calls: CallPermissionDetail[];
-  /** Granted spend permissions */
-  spends: SpendPermissionDetail[];
+  /** Timestamp (in seconds) that specifies when this permission becomes valid */
+  start: number;
+  /** Timestamp (in seconds) that specifies the time by which this permission expires */
+  end: number;
+  /** Salt used for permission uniqueness */
+  salt: bigint;
+  /** Array of call permissions */
+  calls: CallPermission[];
+  /** Array of spend limits */
+  spends: SpendLimit[];
+  /** Permission identifier - the permission hash from the contract */
+  permissionId: Hex;
+  /** Chain ID in hex format */
+  chainId: Hex;
 }
 ```
 
@@ -130,6 +130,9 @@ const permission = await account.grantPermissions(
     ],
   }
 );
+
+console.log('Permission ID:', permission.permissionId);
+console.log('Expires:', new Date(permission.end * 1000));
 ```
 
 ## Use Cases

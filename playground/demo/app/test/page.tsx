@@ -963,7 +963,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant (wallet_grantPermissions)...');
 
       // Example spender address (could be a dApp contract)
-      const spenderAddress = '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0';
+      const spenderAddress = '0xEc653d5900Ae3B56bdf066DC99F175E3a5cFB712';
 
       // Example: Grant multiple permissions (spend + calls) for 30 days
       const ethLimit = parseEther('0.0001'); // 0.0001 ETH per day
@@ -1004,11 +1004,11 @@ Issued At: ${issuedAt}`;
 
       console.log('[Demo] Grant permissions result:', result);
 
-      if (result && typeof result === 'object' && 'id' in result) {
-        const response = result as { id: string; address: string; spender: string };
-        setLastPermissionId(response.id);
+      if (result && typeof result === 'object' && 'permissionId' in result) {
+        const response = result as { permissionId: string; account: string; spender: string };
+        setLastPermissionId(response.permissionId);
         addLog(`✅ Permissions granted successfully!`);
-        addLog(`Permission ID: ${response.id}`);
+        addLog(`Permission ID: ${response.permissionId}`);
         addLog(`Full response: ${JSON.stringify(result, null, 2)}`);
       } else {
         addLog(`✅ Permission result: ${JSON.stringify(result, null, 2)}`);
@@ -1085,11 +1085,11 @@ Issued At: ${issuedAt}`;
 
       console.log('[Demo] Grant multiple ERC-20 permissions result:', result);
 
-      if (result && typeof result === 'object' && 'id' in result) {
-        const response = result as { id: string; address: string; spender: string };
-        setLastPermissionId(response.id);
+      if (result && typeof result === 'object' && 'permissionId' in result) {
+        const response = result as { permissionId: string; account: string; spender: string };
+        setLastPermissionId(response.permissionId);
         addLog(`✅ Multiple permissions granted successfully!`);
-        addLog(`Permission ID: ${response.id}`);
+        addLog(`Permission ID: ${response.permissionId}`);
         addLog(`Full response: ${JSON.stringify(result, null, 2)}`);
       } else {
         addLog(`✅ Permission result: ${JSON.stringify(result, null, 2)}`);

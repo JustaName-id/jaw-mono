@@ -28,8 +28,8 @@ import {
   type WalletGrantPermissionsResponse,
   type RevokePermissionApiResponse,
   type SpendPeriod,
-  type CallPermissionDetail,
-  type SpendPermissionDetail,
+  type CallPermission,
+  type SpendLimit,
 } from '../rpc/permissions.js';
 import { JAW_RPC_URL } from '../constants.js';
 import { type Chain, chains as chainStore } from '../store/index.js';
@@ -832,7 +832,7 @@ export class Account {
    * ```typescript
    * const details = await account.getPermission('0x...');
    * console.log('Spender:', details.spender);
-   * console.log('Expires:', new Date(details.expiry * 1000));
+   * console.log('Expires:', new Date(details.end * 1000));
    * console.log('Calls:', details.calls);
    * console.log('Spends:', details.spends);
    * ```
@@ -841,28 +841,28 @@ export class Account {
     const relayResponse = await getPermissionFromRelay(permissionId, this._apiKey);
 
     // Transform relay response to WalletGrantPermissionsResponse format
-    const calls: CallPermissionDetail[] = relayResponse.calls.map(call => ({
+    const calls: CallPermission[] = relayResponse.calls.map(call => ({
       target: call.target as Address,
       selector: call.selector as Hex,
     }));
 
-    const spends: SpendPermissionDetail[] = relayResponse.spends.map(spend => ({
+    const spends: SpendLimit[] = relayResponse.spends.map(spend => ({
       token: spend.token as Address,
-      limit: spend.allowance,
-      period: spend.unit as SpendPeriod,
+      allowance: BigInt(spend.allowance),
+      unit: spend.unit as SpendPeriod,
       multiplier: spend.multiplier,
     }));
 
     return {
-      address: relayResponse.account as Address,
-      chainId: relayResponse.chainId as Hex,
-      start: parseInt(relayResponse.start, 10),
-      expiry: parseInt(relayResponse.end, 10),
-      salt: relayResponse.salt as Hex,
-      id: relayResponse.hash as Hex,
+      account: relayResponse.account as Address,
       spender: relayResponse.spender as Address,
+      start: parseInt(relayResponse.start, 10),
+      end: parseInt(relayResponse.end, 10),
+      salt: BigInt(relayResponse.salt),
       calls,
       spends,
+      permissionId: relayResponse.hash as Hex,
+      chainId: relayResponse.chainId as Hex,
     };
   }
 
