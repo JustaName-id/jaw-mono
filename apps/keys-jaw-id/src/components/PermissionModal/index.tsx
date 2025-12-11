@@ -164,6 +164,16 @@ export const PermissionModal = ({
     return permissionRequest.method === 'wallet_grantPermissions' ? 'grant' : 'revoke';
   }, [permissionRequest]);
 
+  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.url > chain.paymasterUrl
+  const effectivePaymasterUrl = useMemo(() => {
+    if (!permissionRequest) return chain?.paymasterUrl;
+
+    const params = permissionRequest.params[0];
+    const capabilitiesPaymasterUrl = params?.capabilities?.paymasterService?.url;
+    return capabilitiesPaymasterUrl || chain?.paymasterUrl;
+  }, [permissionRequest, chain?.paymasterUrl]);
+
   // Extract permission details from request
   const permissionDetails = useMemo(() => {
     if (!permissionRequest) return null;
@@ -399,7 +409,14 @@ export const PermissionModal = ({
           setIsProcessing(false);
           setIsLoadingSmartAccount(true);
           console.log('Initializing permission modal');
-          const restoredAccount = await getAccount(chain, extractedApiKey);
+          
+          // Merge paymasterUrl from capabilities into chain before creating account
+          const chainWithPaymaster = {
+            ...chain,
+            paymasterUrl: effectivePaymasterUrl || chain.paymasterUrl,
+          };
+          
+          const restoredAccount = await getAccount(chainWithPaymaster, extractedApiKey);
 
           if (isMounted) {
             setAccount(restoredAccount);
@@ -431,7 +448,7 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, permissionRequest, extractedApiKey, getAccount, onError]);
+  }, [chain, permissionRequest, extractedApiKey, effectivePaymasterUrl, getAccount, onError]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
@@ -521,6 +538,8 @@ export const PermissionModal = ({
         throw new Error('Permission details are missing.');
       }
 
+      // effectivePaymasterUrl is extracted from capabilities or chain config via useMemo above
+
       if (mode === 'grant') {
         if (!('expiry' in permissionDetails) || !('spender' in permissionDetails)) {
           throw new Error('Invalid grant permission parameters.');
@@ -534,6 +553,7 @@ export const PermissionModal = ({
           throw new Error('Spender is required for granting permissions.');
         }
 
+        // Account.grantPermissions uses the chain's paymasterUrl (which we set from capabilities)
         const result = await account.grantPermissions(
           permissionDetails.expiry,
           permissionDetails.spender,
@@ -556,6 +576,7 @@ export const PermissionModal = ({
           throw new Error('Permission ID is missing.');
         }
 
+        // Account.revokePermission uses the chain's paymasterUrl (which we set from capabilities)
         await account.revokePermission(permissionDetails.permissionId);
 
         console.log('Permission revoked');

@@ -1,4 +1,8 @@
 import { Address } from '../provider/interface.js';
+import { RequestCapabilities } from '../rpc/permissions.js';
+
+// Re-export PermissionsCapability from permissions module for backwards compatibility
+export type { PermissionsCapability } from '../rpc/permissions.js';
 
 /**
  * UI request types that require user interaction
@@ -62,14 +66,6 @@ export interface TypedDataUIRequest extends BaseUIRequest {
 }
 
 /**
- * Permissions capability for wallet_sendCalls
- */
-export interface PermissionsCapability {
-  /** ID of the permission to use for execution */
-  id: `0x${string}`;
-}
-
-/**
  * Transaction request (wallet_sendCalls)
  */
 export interface TransactionUIRequest extends BaseUIRequest {
@@ -84,11 +80,8 @@ export interface TransactionUIRequest extends BaseUIRequest {
     }>;
     chainId: number;
     atomicRequired?: boolean;
-    /** Capabilities for the transaction */
-    capabilities?: {
-      /** Permissions capability - when provided, executes calls using the specified permission */
-      permissions?: PermissionsCapability;
-    };
+    /** Optional capabilities including paymaster service for sponsored transactions */
+    capabilities?: RequestCapabilities;
   };
 }
 
@@ -109,6 +102,8 @@ export interface SendTransactionUIRequest extends BaseUIRequest {
     maxPriorityFeePerGas?: string;
     nonce?: string;
     chainId: number;
+    /** Optional capabilities including paymaster service for sponsored transactions */
+    capabilities?: RequestCapabilities;
   };
 }
 
@@ -138,6 +133,8 @@ export interface PermissionUIRequest extends BaseUIRequest {
         functionSignature?: string;
       }>;
     };
+    /** Optional capabilities including paymaster service for sponsored transactions */
+    capabilities?: RequestCapabilities;
   };
 }
 
@@ -150,6 +147,8 @@ export interface RevokePermissionUIRequest extends BaseUIRequest {
     permissionId: string;
     address: Address;
     chainId?: number;
+    /** Optional capabilities including paymaster service for sponsored transactions */
+    capabilities?: RequestCapabilities;
   };
 }
 

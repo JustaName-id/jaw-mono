@@ -1,5 +1,5 @@
 import type { Address, Hex } from 'viem';
-import type { ViemRPCReturnType, ViemRPCParams, PermissionsCapability } from '@jaw.id/core';
+import type { ViemRPCReturnType, ViemRPCParams, RequestCapabilities, PermissionsCapability } from '@jaw.id/core';
 import type { TransactionRequestData } from '../components/TransactionModal';
 
 // ==========================================
@@ -66,6 +66,16 @@ export function extractTransactionData(
           : parseInt(sendCallsParams.chainId, 16);
       }
 
+      // Extract capabilities from sendCallsParams (EIP-5792 paymasterService capability)
+      const capabilities = (sendCallsParams as unknown as { capabilities?: RequestCapabilities }).capabilities;
+
+      // Priority: capabilities.paymasterService.url > chain.paymasterUrl
+      const capabilitiesPaymasterUrl = capabilities?.paymasterService?.url;
+      const effectivePaymasterUrl = capabilitiesPaymasterUrl || chain?.paymasterUrl;
+
+      // Extract permissionId from capabilities if present
+      const permissionId = (capabilities?.permissions as PermissionsCapability | undefined)?.id;
+
       // Map to internal format for type conversion, then to modal format
       const internalTxs: NormalizedTransaction[] = sendCallsParams.calls.map(call => ({
         to: call.to,
@@ -73,10 +83,6 @@ export function extractTransactionData(
         value: call.value?.toString() || '0',
         chainId: paramsChainId,
       }));
-
-      // Extract permissionId from capabilities if present
-      const capabilities = sendCallsParams.capabilities as { permissions?: PermissionsCapability } | undefined;
-      const permissionId = capabilities?.permissions?.id;
 
       return {
         method: 'wallet_sendCalls',
@@ -87,7 +93,7 @@ export function extractTransactionData(
           chainId: tx.chainId,
         })),
         chainId: paramsChainId,
-        paymasterUrl: chain?.paymasterUrl,
+        paymasterUrl: effectivePaymasterUrl,
         atomicRequired: sendCallsParams.atomicRequired,
         callsId: sendCallsParams.id,
         permissionId,

@@ -21,6 +21,7 @@ import {
     WalletGrantPermissionsRequest,
     WalletRevokePermissionsRequest,
     getPermissionFromRelay,
+    RequestCapabilities,
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
 import { standardErrors } from '../../errors/index.js';
@@ -236,6 +237,8 @@ export class AppSpecificSigner extends JAWSigner {
                 type WalletSendCallsParams = Omit<TransactionUIRequest['data'], 'chainId'> & {
                     /** Target chain ID. Defaults to the connected chain. */
                     chainId?: string | number;
+                    /** Optional capabilities including paymaster service */
+                    capabilities?: RequestCapabilities;
                 };
                 const params = request.params as [WalletSendCallsParams];
                 const callsData = params[0];
@@ -256,6 +259,7 @@ export class AppSpecificSigner extends JAWSigner {
                     data: {
                         ...callsData,
                         chainId: resolvedChain.id,
+                        capabilities: callsData.capabilities,
                     },
                 };
 
@@ -278,6 +282,8 @@ export class AppSpecificSigner extends JAWSigner {
                     from?: Address;
                     /** Target chain ID. Defaults to the connected chain. */
                     chainId?: string;
+                    /** Optional capabilities including paymaster service */
+                    capabilities?: RequestCapabilities;
                 };
                 const params = request.params as [EthSendTransactionParams];
                 const txData = params[0];
@@ -301,6 +307,7 @@ export class AppSpecificSigner extends JAWSigner {
                         maxPriorityFeePerGas: txData.maxPriorityFeePerGas,
                         nonce: txData.nonce,
                         chainId: resolvedChain.id,
+                        capabilities: txData.capabilities,
                     },
                 };
 
@@ -337,6 +344,7 @@ export class AppSpecificSigner extends JAWSigner {
                         expiry: permissionData.expiry,
                         spender: permissionData.spender,
                         permissions: permissionData.permissions,
+                        capabilities: permissionData.capabilities,
                     },
                 };
 
@@ -379,6 +387,7 @@ export class AppSpecificSigner extends JAWSigner {
                         permissionId: revokeData.id,
                         address: revokeData.address ?? this.accounts[0],
                         chainId: permissionChainId,
+                        capabilities: revokeData.capabilities,
                     },
                 };
 

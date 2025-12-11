@@ -140,6 +140,15 @@ export const TransactionModal = ({
     }
   }, [chain, resetModalState]);
 
+  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.url > chain.paymasterUrl
+  const effectivePaymasterUrl = useMemo(() => {
+    if (transactionRequest?.paymasterUrl) {
+      return transactionRequest.paymasterUrl;
+    }
+    return chain?.paymasterUrl;
+  }, [transactionRequest?.paymasterUrl, chain?.paymasterUrl]);
+
   // Initialize account when modal opens
   useEffect(() => {
     let isMounted = true;
@@ -149,7 +158,14 @@ export const TransactionModal = ({
         try {
           setIsProcessing(false);
           console.log('🔐 Initializing transaction modal');
-          const restoredAccount = await getAccount(chain, effectiveApiKey);
+          
+          // Merge paymasterUrl from capabilities into chain before creating account
+          const chainWithPaymaster = {
+            ...chain,
+            paymasterUrl: effectivePaymasterUrl || chain.paymasterUrl,
+          };
+          
+          const restoredAccount = await getAccount(chainWithPaymaster, effectiveApiKey);
 
           if (isMounted) {
             setAccount(restoredAccount);
@@ -185,7 +201,7 @@ export const TransactionModal = ({
         timeoutRef.current = null;
       }
     };
-  }, [chain, effectiveApiKey, getAccount, onError]);
+  }, [chain, effectiveApiKey, effectivePaymasterUrl, getAccount, onError]);
 
   // Gas estimation using Account class
   useEffect(() => {
@@ -263,6 +279,7 @@ export const TransactionModal = ({
       }));
 
       // Send transaction using Account class
+      // Account methods use the chain's paymasterUrl (which we set from capabilities)
       let result: TransactionResult;
       // Use sendCalls for wallet_sendCalls, sendTransaction for eth_sendTransaction
       if (transactionRequest?.method === 'wallet_sendCalls') {
