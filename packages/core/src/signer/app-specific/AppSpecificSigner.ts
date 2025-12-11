@@ -32,6 +32,7 @@ type ConstructorOptions = {
     callback: ProviderEventCallback | null;
     apiKey: string;
     paymasterUrls?: Record<number, string>;
+    ens?: string;
 };
 
 export class AppSpecificSigner extends JAWSigner {
@@ -52,6 +53,7 @@ export class AppSpecificSigner extends JAWSigner {
                 paymasterUrls: params.paymasterUrls,
                 appName: params.metadata.appName,
                 appLogoUrl: params.metadata.appLogoUrl,
+                ens: params.ens
             });
         }
     }

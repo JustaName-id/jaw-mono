@@ -8,6 +8,7 @@ import {
   UIRequest,
   UIResponse,
   UIError,
+  UIErrorCode,
   ConnectUIRequest,
   SignatureUIRequest,
   TypedDataUIRequest,
@@ -24,6 +25,7 @@ import {
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   ensureIntNumber,
+  standardErrorCodes,
 } from '@jaw.id/core';
 import { formatUnits, erc20Abi, createPublicClient, http } from 'viem';
 import type { Address, Hex } from 'viem';
@@ -232,11 +234,12 @@ export class ReactUIHandler implements UIHandler {
 
         const handleReject = (error?: Error) => {
           cleanup();
-          resolve({
+          const response = {
             id: request.id,
             approved: false,
             error: error as UIError || UIError.userRejected(),
-          });
+          };
+          resolve(response);
         };
 
         // Render appropriate dialog based on request type
@@ -289,6 +292,7 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasterUrls={this.config.paymasterUrls}
+            ens={this.config.ens}
           />
         );
 
@@ -502,13 +506,14 @@ async function getAccountForSigning(
 }
 
 // OnboardingDialogWrapper - handles passkey authentication flow with ConnectDialog confirmation
-function OnboardingDialogWrapper({
+function OnboardingDialogWrapper({  
   request,
   onApprove,
   onReject,
   apiKey,
   defaultChainId,
   paymasterUrls,
+  ens,
 }: {
   request: ConnectUIRequest;
   onApprove: (data: any) => void;
@@ -516,6 +521,7 @@ function OnboardingDialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasterUrls?: Record<number, string>;
+  ens?: string;
 }) {
   const [open, setOpen] = useState(true);
   const [accounts, setAccounts] = useState<LocalStorageAccount[]>([]);
@@ -704,7 +710,8 @@ function OnboardingDialogWrapper({
   };
 
   // Get config from request - capabilities is Record<string, unknown>
-  const ensDomain = request.data.capabilities?.ensDomain as string | undefined;
+  const ensDomain = ens as string | undefined;
+  console.log('🔗 ENS domain:', ensDomain);
   const chainId = request.data.chainId || defaultChainId || 1;
   const subnameTextRecords = request.data.capabilities?.subnameTextRecords as SubnameTextRecordCapabilityRequest | undefined;
 
@@ -927,7 +934,14 @@ function SignatureDialogWrapper({
       onApprove(signature);
     } catch (error) {
       console.error('Signature failed:', error);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1002,7 +1016,14 @@ function Eip712DialogWrapper({
       onApprove(signature);
     } catch (error) {
       console.error('EIP-712 signature failed:', error);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1121,8 +1142,14 @@ function TransactionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
-        // Estimate gas using Account class
-        const gasPrice = await account.calculateGasCost(transactionCalls);
+        // Get permissionId from request capabilities if present
+        const permissionId = request.data.capabilities?.permissions?.id;
+
+        // Estimate gas using Account class (with permission if provided)
+        const gasPrice = await account.calculateGasCost(
+          transactionCalls,
+          permissionId ? { permissionId } : undefined
+        );
         setGasFee(gasPrice);
 
         // Override with sponsored if paymaster is available
@@ -1130,13 +1157,15 @@ function TransactionDialogWrapper({
           setGasFee('sponsored');
         }
       } catch (error) {
-        console.error('Error estimating gas:', error);
+        // Log at debug level to avoid polluting console
+        console.log('[TransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
 
-        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
+        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund") || error.message.includes('insufficient'))) {
           if (isSponsored) {
             setGasFee('sponsored');
             setGasEstimationError('');
           } else {
+            // Show insufficient funds in UI - user can still cancel manually
             setGasFee('');
             setGasEstimationError('Insufficient funds');
           }
@@ -1150,7 +1179,7 @@ function TransactionDialogWrapper({
     };
 
     estimateGas();
-  }, [account, transactionCalls, isSponsored]);
+  }, [account, transactionCalls, isSponsored, request.data.capabilities?.permissions?.id]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
@@ -1159,8 +1188,11 @@ function TransactionDialogWrapper({
         throw new Error('Account not initialized');
       }
 
-      // Send calls using Account class
-      const result = await account.sendCalls(transactionCalls);
+      // Check if permissions capability is provided
+      const permissionId = request.data.capabilities?.permissions?.id;
+
+      // Send calls using Account class, with optional permission
+      const result = await account.sendCalls(transactionCalls, permissionId ? { permissionId } : undefined);
 
       onApprove({
         id: result.id,
@@ -1168,7 +1200,23 @@ function TransactionDialogWrapper({
       });
     } catch (error) {
       console.error('Transaction failed:', error);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      const errorMessage = errorObj.message;
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else if (
+        errorMessage.includes('AA21') ||
+        errorMessage.includes("didn't pay prefund") ||
+        errorMessage.includes('insufficient') ||
+        errorMessage.includes('exceeds balance')
+      ) {
+        // Transaction rejected due to funds/gas issues
+        onReject(new UIError(standardErrorCodes.rpc.transactionRejected as UIErrorCode, errorMessage));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1298,13 +1346,15 @@ function SendTransactionDialogWrapper({
           setGasFee('sponsored');
         }
       } catch (error) {
-        console.error('Error estimating gas:', error);
+        // Log at debug level to avoid polluting console
+        console.log('[SendTransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
 
-        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
+        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund") || error.message.includes('insufficient'))) {
           if (isSponsored) {
             setGasFee('sponsored');
             setGasEstimationError('');
           } else {
+            // Show insufficient funds in UI - user can still cancel manually
             setGasFee('');
             setGasEstimationError('Insufficient funds');
           }
@@ -1334,7 +1384,23 @@ function SendTransactionDialogWrapper({
       onApprove(txHash);
     } catch (error) {
       console.error('Transaction failed:', error);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      const errorMessage = errorObj.message;
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else if (
+        errorMessage.includes('AA21') ||
+        errorMessage.includes("didn't pay prefund") ||
+        errorMessage.includes('insufficient') ||
+        errorMessage.includes('exceeds balance')
+      ) {
+        // Transaction rejected due to funds/gas issues
+        onReject(new UIError(standardErrorCodes.rpc.transactionRejected as UIErrorCode, errorMessage));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1515,11 +1581,15 @@ function PermissionDialogWrapper({
     const amount = formatUnits(allowance, tokenInfo.decimals);
     const limit = `${amount} ${tokenInfo.symbol}`;
 
+    // Format duration with multiplier (defaults to 1 if not provided)
+    const multiplier = spend.multiplier ?? 1;
+    const duration = `${multiplier} ${spend.period}${multiplier > 1 ? 's' : ''}`;
+
     return {
       amount,
       token: isNativeToken(spend.token) ? 'Native (ETH)' : tokenInfo.symbol,
       tokenAddress: spend.token,
-      duration: `1 ${spend.period}`,
+      duration,
       limit,
     };
   }), [spendsData, tokenInfoMap]);
@@ -1610,8 +1680,15 @@ function PermissionDialogWrapper({
       onApprove(result);
     } catch (error) {
       console.error('Permission grant failed:', error);
-      setStatus(`Error: ${(error as Error).message}`);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      setStatus(`Error: ${errorObj.message}`);
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1710,8 +1787,15 @@ function SiweDialogWrapper({
       onApprove(signature);
     } catch (error) {
       console.error('SIWE signature failed:', error);
-      setSiweStatus(`Error: ${(error as Error).message}`);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      setSiweStatus(`Error: ${errorObj.message}`);
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1909,8 +1993,15 @@ function RevokePermissionDialogWrapper({
       onApprove({ success: true });
     } catch (error) {
       console.error('Permission revoke failed:', error);
-      setStatus(`Error: ${(error as Error).message}`);
-      onReject(error as Error);
+      const errorObj = error instanceof Error ? error : new Error(String(error));
+      setStatus(`Error: ${errorObj.message}`);
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      if (errorObj.name === 'NotAllowedError') {
+        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      } else {
+        // Internal error
+        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+      }
     } finally {
       setIsProcessing(false);
     }
@@ -1961,12 +2052,10 @@ function UnsupportedMethodDialogWrapper({
   const handleClose = () => {
     if (!isClosing) {
       setIsClosing(true);
-      // Create a standard unsupported method error
-      const unsupportedError = new Error(`Method not supported: ${method}`);
-      (unsupportedError as any).code = -32601; // JSON-RPC standard "Method not found" error code
       console.log('❌ Unsupported method:', method);
       setOpen(false);
-      onReject(unsupportedError);
+      // Use UIError.unsupportedRequest which has proper error code
+      onReject(UIError.unsupportedRequest(method));
     }
   };
 

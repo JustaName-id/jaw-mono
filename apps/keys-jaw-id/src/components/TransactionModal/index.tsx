@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, Hash } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
-import { Account, type Chain, type TransactionCall } from "@jaw.id/core";
+import { Account, type Chain, type TransactionCall, standardErrorCodes } from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -31,6 +31,8 @@ export interface TransactionRequestData {
   atomicRequired?: boolean;
   version?: string;
   callsId?: string;
+  // Permission ID for permission-based execution
+  permissionId?: `0x${string}`;
 }
 
 export interface TransactionModalProps {
@@ -40,7 +42,7 @@ export interface TransactionModalProps {
   chain?: Chain;  // Chain info with RPC and paymaster URLs
   apiKey?: string;
   onSuccess?: (result: TransactionResult) => void;
-  onError?: (error: Error) => void;
+  onError?: (error: Error, errorCode?: number) => void;
 }
 
 export const TransactionModal = ({
@@ -172,7 +174,12 @@ export const TransactionModal = ({
           console.error("Error initializing account:", error);
           if (isMounted) {
             setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            onError?.(error as Error);
+            const errorObj = error instanceof Error ? error : new Error(String(error));
+            // Check if user cancelled passkey prompt (NotAllowedError)
+            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
+              ? standardErrorCodes.provider.userRejectedRequest
+              : standardErrorCodes.rpc.internal;
+            onError?.(errorObj, errorCode);
           }
         }
       } else {
@@ -211,8 +218,14 @@ export const TransactionModal = ({
           data: (tx.data as `0x${string}`) || '0x'
         }));
 
-        // Estimate gas using Account class
-        const gasPrice = await account.calculateGasCost(transactionCalls);
+        // Get permissionId from transactionRequest if available
+        const permissionId = transactionRequest?.permissionId;
+
+        // Estimate gas using Account class (with permission if provided)
+        const gasPrice = await account.calculateGasCost(
+          transactionCalls,
+          permissionId ? { permissionId } : undefined
+        );
         setGasFee(gasPrice);
         setGasEstimationError('');
 
@@ -241,7 +254,7 @@ export const TransactionModal = ({
     };
 
     estimateGas();
-  }, [account, chain, normalizedTransactions, isSponsored]);
+  }, [account, chain, normalizedTransactions, isSponsored, transactionRequest?.permissionId]);
 
   const handleConfirm = useCallback(async () => {
     try {
@@ -304,9 +317,25 @@ export const TransactionModal = ({
       console.error("Error in transaction:", error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       setTransactionStatus(`Error: ${errorMessage}`);
-      // Ensure we pass a proper Error object to onError
       const errorObj = error instanceof Error ? error : new Error(errorMessage);
-      onError?.(errorObj);
+      // Determine error code based on error type
+      let errorCode: number;
+      if (error instanceof Error && error.name === 'NotAllowedError') {
+        // User cancelled passkey prompt
+        errorCode = standardErrorCodes.provider.userRejectedRequest;
+      } else if (error instanceof Error && (
+        errorMessage.includes('AA21') ||
+        errorMessage.includes("didn't pay prefund") ||
+        errorMessage.includes('insufficient') ||
+        errorMessage.includes('exceeds balance')
+      )) {
+        // Transaction rejected due to funds/gas issues
+        errorCode = standardErrorCodes.rpc.transactionRejected;
+      } else {
+        // Internal error
+        errorCode = standardErrorCodes.rpc.internal;
+      }
+      onError?.(errorObj, errorCode);
       setIsProcessing(false);
     }
   }, [account, chain, normalizedTransactions, transactionRequest, onSuccess, onError]);
@@ -314,11 +343,9 @@ export const TransactionModal = ({
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
       setAccount(null);
-      // Create a standard user rejected error (EIP-1193 code 4001)
-      const rejectionError = new Error('User rejected the request');
-      (rejectionError as any).code = 4001;
       console.log('❌ User cancelled transaction request');
-      onError?.(rejectionError);
+      // User rejected request (EIP-1193 code 4001)
+      onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setTransactionStatus('');
     }
   }, [isProcessing, onError]);

@@ -13,6 +13,7 @@ import {
     type WalletGrantPermissionsResponse,
     type SpendPeriod,
     getPermissionFromRelay,
+    standardErrorCodes,
 } from "@jaw.id/core";
 
 // ERC-7528 native token address
@@ -54,39 +55,55 @@ export interface PermissionModalProps {
   apiKey: string;
   origin?: string;
   onSuccess?: (result: WalletGrantPermissionsResponse | { success: boolean }) => void;
-  onError?: (error: Error) => void;
+  onError?: (error: Error, errorCode?: number) => void;
 }
 
-// Format period to human-readable duration
-const formatDuration = (period: SpendPeriod): string => {
-  const durations: Record<SpendPeriod, string> = {
-    minute: '1 Minute',
-    hour: '1 Hour',
-    day: '1 Day',
-    week: '1 Week',
-    month: '1 Month',
-    year: '1 Year',
+// Format period to human-readable duration with multiplier support
+const formatDuration = (period: SpendPeriod, multiplier = 1): string => {
+  const periodLabels: Record<SpendPeriod, string> = {
+    minute: 'Minute',
+    hour: 'Hour',
+    day: 'Day',
+    week: 'Week',
+    month: 'Month',
+    year: 'Year',
     forever: 'Forever',
   };
-  return durations[period] || period;
-};
 
-// Convert period in seconds to human-readable duration
-const formatDurationFromSeconds = (seconds: number): string => {
-  if (seconds === 60) return '1 Minute';
-  if (seconds === 3600) return '1 Hour';
-  if (seconds === 86400) return '1 Day';
-  if (seconds === 604800) return '1 Week';
-  if (seconds === 2592000) return '1 Month';
-  if (seconds === 31536000) return '1 Year';
+  const label = periodLabels[period] || period;
 
-  // Fallback: convert to days if possible
-  if (seconds % 86400 === 0) {
-    const days = seconds / 86400;
-    return `${days} Day${days > 1 ? 's' : ''}`;
+  // Forever doesn't need a multiplier
+  if (period === 'forever') {
+    return 'Forever';
   }
 
-  return `${seconds} seconds`;
+  // Add 's' for plural when multiplier > 1
+  const pluralSuffix = multiplier > 1 ? 's' : '';
+  return `${multiplier} ${label}${pluralSuffix}`;
+};
+
+// Convert period unit and multiplier from relay to human-readable duration
+const formatDurationFromRelay = (unit: string, multiplier = 1): string => {
+  const periodLabels: Record<string, string> = {
+    minute: 'Minute',
+    hour: 'Hour',
+    day: 'Day',
+    week: 'Week',
+    month: 'Month',
+    year: 'Year',
+    forever: 'Forever',
+  };
+
+  const label = periodLabels[unit] || unit;
+
+  // Forever doesn't need a multiplier
+  if (unit === 'forever') {
+    return 'Forever';
+  }
+
+  // Add 's' for plural when multiplier > 1
+  const pluralSuffix = multiplier > 1 ? 's' : '';
+  return `${multiplier} ${label}${pluralSuffix}`;
 };
 
 // Format timestamp to readable date
@@ -226,17 +243,17 @@ export const PermissionModal = ({
       let amount, limit, duration;
 
       if (mode === 'revoke') {
-        // From relay - allowance is hex string, period is seconds string
+        // From relay - allowance is hex string, unit is period string, multiplier is number
         const allowance = BigInt(spend.allowance);
         amount = formatUnits(allowance, tokenInfo.decimals);
         limit = `${amount} ${tokenInfo.symbol}`;
-        duration = formatDurationFromSeconds(parseInt(spend.period, 10));
+        duration = formatDurationFromRelay(spend.unit, spend.multiplier ?? 1);
       } else {
-        // From grant request - limit is string, period is SpendPeriod
+        // From grant request - limit is string, period is SpendPeriod, multiplier is optional
         const allowance = BigInt(spend.limit);
         amount = formatUnits(allowance, tokenInfo.decimals);
         limit = `${amount} ${tokenInfo.symbol}`;
-        duration = formatDuration(spend.period as SpendPeriod);
+        duration = formatDuration(spend.period as SpendPeriod, spend.multiplier ?? 1);
       }
 
       return {
@@ -410,7 +427,12 @@ export const PermissionModal = ({
           if (isMounted) {
             setIsLoadingSmartAccount(false);
             setStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            onError?.(error as Error);
+            const errorObj = error instanceof Error ? error : new Error(String(error));
+            // Check if user cancelled passkey prompt (NotAllowedError)
+            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
+              ? standardErrorCodes.provider.userRejectedRequest
+              : standardErrorCodes.rpc.internal;
+            onError?.(errorObj, errorCode);
           }
         }
       } else {
@@ -567,7 +589,11 @@ export const PermissionModal = ({
       const errorMessage = error instanceof Error ? error.message : String(error);
       setStatus(`Error: ${errorMessage}`);
       const errorObj = error instanceof Error ? error : new Error(errorMessage);
-      onError?.(errorObj);
+      // Check if user cancelled passkey prompt (NotAllowedError)
+      const errorCode = error instanceof Error && error.name === 'NotAllowedError'
+        ? standardErrorCodes.provider.userRejectedRequest
+        : standardErrorCodes.rpc.internal;
+      onError?.(errorObj, errorCode);
       setIsProcessing(false);
     }
   }, [account, chain, permissionDetails, mode, onSuccess, onError]);
@@ -575,10 +601,9 @@ export const PermissionModal = ({
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
       setAccount(null);
-      const rejectionError = new Error('User rejected the request');
-      (rejectionError as any).code = 4001;
       console.log('❌ User cancelled permission request');
-      onError?.(rejectionError);
+      // User rejected request (EIP-1193 code 4001)
+      onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setStatus('');
     }
   }, [isProcessing, onError]);

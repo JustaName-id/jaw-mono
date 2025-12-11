@@ -5,7 +5,9 @@ import {
   createSmartAccount,
   sendTransaction as sendSmartAccountTransaction,
   sendCalls as sendSmartAccountCalls,
+  sendCallsWithPermission as sendSmartAccountCallsWithPermission,
   estimateUserOpGas,
+  estimateUserOpGasWithPermission,
   calculateGas,
   getBundlerClient,
   type BundledTransactionResult,
@@ -31,6 +33,7 @@ import {
 } from '../rpc/permissions.js';
 import { JAW_RPC_URL } from '../constants.js';
 import { type Chain, chains as chainStore } from '../store/index.js';
+import { logAccountIssuance } from '../analytics/index.js';
 
 /**
  * Configuration for creating or loading an Account
@@ -66,6 +69,14 @@ export interface TransactionCall {
   value?: bigint | string;
   /** Call data */
   data?: Hex;
+}
+
+/**
+ * Options for sendCalls method
+ */
+export interface SendCallsOptions {
+  /** Permission ID to use for executing the calls through the permission manager */
+  permissionId?: Hex;
 }
 
 /**
@@ -263,6 +274,9 @@ export class Account {
       address
     );
 
+    // Log account issuance for analytics (fire-and-forget)
+    logAccountIssuance({ address, type: 'create', apiKey });
+
     return new Account(smartAccount, chain, apiKey, passkeyAccount);
   }
 
@@ -305,6 +319,9 @@ export class Account {
     if (!passkeyAccount) {
       throw new Error('Failed to retrieve imported passkey account.');
     }
+
+    // Log account issuance for analytics (fire-and-forget)
+    logAccountIssuance({ address, type: 'import', apiKey });
 
     return new Account(smartAccount, chain, apiKey, passkeyAccount);
   }
@@ -355,6 +372,10 @@ export class Account {
 
     const bundlerClient = getBundlerClient(chain);
     const smartAccount = await createSmartAccount(localAccount, bundlerClient as JustanAccountImplementation['client']);
+    const address = await smartAccount.getAddress();
+
+    // Log account issuance for analytics (fire-and-forget)
+    logAccountIssuance({ address, type: 'fromLocalAccount', apiKey });
 
     return new Account(smartAccount, chain, apiKey);
   }
@@ -595,33 +616,55 @@ export class Account {
    * Send multiple calls as a bundled user operation without waiting for receipt
    *
    * @param calls - Array of transaction calls
+   * @param options - Optional settings including permissionId for permission-based execution
    * @returns Promise resolving to the user operation ID and chain ID
    *
    * @example
    * ```typescript
    * import { parseEther } from 'viem';
    *
+   * // Standard execution
    * const { id, chainId } = await account.sendCalls([
    *   { to: '0x...', value: parseEther('0.1') }
    * ]);
    * console.log('UserOp hash:', id);
    *
+   * // Execution with permission (delegated execution)
+   * const { id, chainId } = await account.sendCalls(
+   *   [{ to: '0x...', value: parseEther('0.1') }],
+   *   { permissionId: '0x...' }
+   * );
+   *
    * // Check status later
    * const status = account.getCallStatus(id);
    * ```
    */
-  async sendCalls(calls: TransactionCall[]): Promise<BundledTransactionResult> {
+  async sendCalls(calls: TransactionCall[], options?: SendCallsOptions): Promise<BundledTransactionResult> {
     const formattedCalls = calls.map(call => ({
       to: call.to,
       value: Account.parseValue(call.value),
       data: call.data,
     }));
 
-    const result = await sendSmartAccountCalls(
-      this._smartAccount,
-      formattedCalls,
-      this._chain
-    );
+    let result: BundledTransactionResult;
+
+    if (options?.permissionId) {
+      // Execute through permission manager
+      result = await sendSmartAccountCallsWithPermission(
+        this._smartAccount,
+        formattedCalls,
+        this._chain,
+        options.permissionId,
+        this._apiKey
+      );
+    } else {
+      // Standard execution
+      result = await sendSmartAccountCalls(
+        this._smartAccount,
+        formattedCalls,
+        this._chain
+      );
+    }
 
     // Store call status as pending and start background receipt waiting
     storeCallStatus(result.id, result.chainId);
@@ -658,6 +701,7 @@ export class Account {
    * Estimate gas for a transaction
    *
    * @param calls - Array of transaction calls
+   * @param options - Optional settings including permissionId for permission-based execution
    * @returns Promise resolving to the estimated gas amount
    *
    * @example
@@ -670,12 +714,23 @@ export class Account {
    * console.log('Estimated gas:', gas.toString());
    * ```
    */
-  async estimateGas(calls: TransactionCall[]): Promise<bigint> {
+  async estimateGas(calls: TransactionCall[], options?: { permissionId?: Hex }): Promise<bigint> {
     const formattedCalls = calls.map(call => ({
       to: call.to,
       value: Account.parseValue(call.value),
       data: call.data,
     }));
+
+    if (options?.permissionId) {
+      // Estimate gas for permission-based execution through the permission manager
+      return await estimateUserOpGasWithPermission(
+        this._smartAccount,
+        formattedCalls,
+        this._chain,
+        options.permissionId,
+        this._apiKey
+      );
+    }
 
     return await estimateUserOpGas(
       this._smartAccount,
@@ -688,6 +743,7 @@ export class Account {
    * Calculate gas cost in ETH
    *
    * @param calls - Array of transaction calls
+   * @param options - Optional settings including permissionId for permission-based execution
    * @returns Promise resolving to the gas cost in ETH as a string
    *
    * @example
@@ -700,8 +756,8 @@ export class Account {
    * console.log('Gas cost:', cost, 'ETH');
    * ```
    */
-  async calculateGasCost(calls: TransactionCall[]): Promise<string> {
-    const gas = await this.estimateGas(calls);
+  async calculateGasCost(calls: TransactionCall[], options?: { permissionId?: Hex }): Promise<string> {
+    const gas = await this.estimateGas(calls, options);
     return await calculateGas(this._chain, gas);
   }
 
@@ -776,7 +832,7 @@ export class Account {
    * ```typescript
    * const details = await account.getPermission('0x...');
    * console.log('Spender:', details.spender);
-   * console.log('Expires:', new Date(details.expiry * 1000));
+   * console.log('Expires:', new Date(details.end * 1000));
    * console.log('Calls:', details.calls);
    * console.log('Spends:', details.spends);
    * ```
@@ -793,19 +849,20 @@ export class Account {
     const spends: SpendPermissionDetail[] = relayResponse.spends.map(spend => ({
       token: spend.token as Address,
       limit: spend.allowance,
-      period: spend.period as SpendPeriod,
+      period: spend.unit as SpendPeriod,
+      multiplier: spend.multiplier,
     }));
 
     return {
-      address: relayResponse.account as Address,
-      chainId: relayResponse.chainId as Hex,
-      start: parseInt(relayResponse.start, 10),
-      expiry: parseInt(relayResponse.end, 10),
-      salt: relayResponse.salt as Hex,
-      id: relayResponse.hash as Hex,
+      account: relayResponse.account as Address,
       spender: relayResponse.spender as Address,
+      start: parseInt(relayResponse.start, 10),
+      end: parseInt(relayResponse.end, 10),
+      salt: relayResponse.salt as Hex,
       calls,
       spends,
+      permissionId: relayResponse.hash as Hex,
+      chainId: relayResponse.chainId as Hex,
     };
   }
 

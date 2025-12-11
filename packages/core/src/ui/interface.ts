@@ -63,6 +63,14 @@ export interface TypedDataUIRequest extends BaseUIRequest {
 }
 
 /**
+ * Permissions capability for wallet_sendCalls
+ */
+export interface PermissionsCapability {
+  /** ID of the permission to use for execution */
+  id: `0x${string}`;
+}
+
+/**
  * Transaction request (wallet_sendCalls)
  */
 export interface TransactionUIRequest extends BaseUIRequest {
@@ -119,6 +127,8 @@ export interface PermissionUIRequest extends BaseUIRequest {
         limit: string;
         period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
         token: Address;
+        /** Multiplier for the period (1-255), defaults to 1 */
+        multiplier?: number;
       }>;
       calls?: Array<{
         target: Address;
@@ -258,6 +268,10 @@ export interface UIHandlerConfig {
   appName?: string;
   /** App logo URL */
   appLogoUrl?: string | null;
+  /** ENS to issue subnames from */
+  ens?: string;
+  /** Whether to show testnet chains */
+  showTestnets?: boolean;
 }
 
 /**

@@ -1,11 +1,12 @@
 import axios, { AxiosError, AxiosPromise } from 'axios';
 import { BaseResponse } from './types.js';
+import { JAW_BASE_URL } from '../constants.js';
 
 export function getBaseUrl(dev = false) {
   if (dev) {
     return 'https://api-staging.justaname.id';
   }
-  return 'https://api.justaname.id';
+  return JAW_BASE_URL;
 }
 
 /**

@@ -22,6 +22,7 @@ vi.mock('./smartAccount.js', () => ({
   createSmartAccount: vi.fn(),
   sendTransaction: vi.fn(),
   sendCalls: vi.fn(),
+  sendCallsWithPermission: vi.fn(),
   estimateUserOpGas: vi.fn(),
   calculateGas: vi.fn(),
   getBundlerClient: vi.fn().mockReturnValue({ client: 'mockBundlerClient' }),
@@ -34,6 +35,7 @@ vi.mock('./smartAccount.js', () => ({
 vi.mock('../rpc/permissions.js', () => ({
   grantPermissions: vi.fn(),
   revokePermission: vi.fn(),
+  getPermissionFromRelay: vi.fn(),
 }));
 
 vi.mock('../rpc/wallet_sendCalls.js', () => ({
@@ -415,6 +417,104 @@ describe('Account', () => {
       const status = account.getCallStatus('0xnonexistent' as `0x${string}`);
 
       expect(status).toBeUndefined();
+    });
+
+    it('sendCalls with permissionId should use sendCallsWithPermission', async () => {
+      const { createSmartAccount, sendCallsWithPermission } = await import('./smartAccount.js');
+      const { storeCallStatus, waitForReceiptInBackground } = await import('../rpc/wallet_sendCalls.js');
+
+      const mockSmartAccount = {
+        address: '0x1234567890123456789012345678901234567890',
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        getAddress: vi.fn().mockResolvedValue('0x1234567890123456789012345678901234567890'),
+      };
+      vi.mocked(createSmartAccount).mockResolvedValue(mockSmartAccount as never);
+
+      const mockUserOpHash = '0xpermission1234567890abcdef1234567890abcdef1234567890abcdef12345678';
+      vi.mocked(sendCallsWithPermission).mockResolvedValue({
+        id: mockUserOpHash,
+        chainId: 1,
+      });
+
+      const mockLocalAccount = {
+        address: '0xabcdef1234567890abcdef1234567890abcdef12',
+        type: 'local',
+        publicKey: '0x04abc123',
+        sign: vi.fn(),
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        signTransaction: vi.fn(),
+        source: 'privateKey',
+      };
+
+      const account = await Account.fromLocalAccount(
+        { chainId: 1, apiKey: 'test-api-key' },
+        mockLocalAccount as never
+      );
+
+      const permissionId = '0xabc123def456789012345678901234567890123456789012345678901234567890' as `0x${string}`;
+      const result = await account.sendCalls(
+        [{ to: '0x1234567890123456789012345678901234567890', value: 100000000000000000n }],
+        { permissionId }
+      );
+
+      expect(result.id).toBe(mockUserOpHash);
+      expect(result.chainId).toBe(1);
+      expect(sendCallsWithPermission).toHaveBeenCalledWith(
+        mockSmartAccount,
+        [{ to: '0x1234567890123456789012345678901234567890', value: 100000000000000000n, data: undefined }],
+        expect.objectContaining({ id: 1 }),
+        permissionId,
+        'test-api-key'
+      );
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1);
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1);
+    });
+
+    it('sendCalls without permissionId should use standard sendCalls', async () => {
+      const { createSmartAccount, sendCalls: sendSmartAccountCalls, sendCallsWithPermission } = await import('./smartAccount.js');
+      const { storeCallStatus } = await import('../rpc/wallet_sendCalls.js');
+
+      const mockSmartAccount = {
+        address: '0x1234567890123456789012345678901234567890',
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        getAddress: vi.fn().mockResolvedValue('0x1234567890123456789012345678901234567890'),
+      };
+      vi.mocked(createSmartAccount).mockResolvedValue(mockSmartAccount as never);
+
+      const mockUserOpHash = '0xstandard1234567890abcdef1234567890abcdef1234567890abcdef123456789';
+      vi.mocked(sendSmartAccountCalls).mockResolvedValue({
+        id: mockUserOpHash,
+        chainId: 1,
+      });
+
+      const mockLocalAccount = {
+        address: '0xabcdef1234567890abcdef1234567890abcdef12',
+        type: 'local',
+        publicKey: '0x04abc123',
+        sign: vi.fn(),
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        signTransaction: vi.fn(),
+        source: 'privateKey',
+      };
+
+      const account = await Account.fromLocalAccount(
+        { chainId: 1, apiKey: 'test-api-key' },
+        mockLocalAccount as never
+      );
+
+      // Call without permissionId
+      const result = await account.sendCalls([
+        { to: '0x1234567890123456789012345678901234567890', value: 100000000000000000n }
+      ]);
+
+      expect(result.id).toBe(mockUserOpHash);
+      expect(sendSmartAccountCalls).toHaveBeenCalled();
+      expect(sendCallsWithPermission).not.toHaveBeenCalled();
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1);
     });
   });
 

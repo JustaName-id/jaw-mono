@@ -21,6 +21,7 @@
     "tailwindcss": "3"
   },
   "dependencies": {
+    "@jaw.id/core": "workspace:*",
     "@hookform/resolvers": "^5.2.2",
     "@justaname.id/sdk": "^0.2.204",
     "@radix-ui/react-accordion": "^1.2.12",

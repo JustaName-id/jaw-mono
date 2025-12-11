@@ -11,7 +11,7 @@ export default function TestPage() {
   const [chainId, setChainId] = useState<string | null>(null);
   const [logs, setLogs] = useState<string[]>([]);
   const [lastBatchId, setLastBatchId] = useState<string | null>(null);
-  const [lastPermissionId, setLastPermissionId] = useState<string | null>(null);
+  const [lastPermissionId, setLastPermissionId] = useState<string | null>("0x7a55c56b1051bbef7b310c2eeb781e36f851c52ced34d2c17db941df68216522");
   const [sdk] = useState(() =>
       JAW.create({
         appName: 'JAW Playground',
@@ -963,7 +963,7 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant (wallet_grantPermissions)...');
 
       // Example spender address (could be a dApp contract)
-      const spenderAddress = '0xE08224B2CfaF4f27E2DC7cB3f6B99AcC68Cf06c0';
+      const spenderAddress = '0xEc653d5900Ae3B56bdf066DC99F175E3a5cFB712';
 
       // Example: Grant multiple permissions (spend + calls) for 30 days
       const ethLimit = parseEther('0.0001'); // 0.0001 ETH per day
@@ -972,8 +972,8 @@ Issued At: ${issuedAt}`;
       const currentChainId = chainId || '0x1';
 
       addLog(`Granting multiple permissions to spender: ${spenderAddress}`);
-      addLog(`1. Spend: 0.0001 ETH per day`);
-      addLog(`2. Call: transfer(address,uint256) on any contract`);
+      addLog(`1. Spend: 0.0001 ETH per 2 days (multiplier: 2)`);
+      addLog(`2. Call: selector 0x32323232 on spender`);
       addLog(`Expiry: ${new Date(expiryTimestamp * 1000).toISOString()}`);
 
       const result = await provider.request({
@@ -988,13 +988,14 @@ Issued At: ${issuedAt}`;
               {
                 limit: `0x${ethLimit.toString(16)}`,
                 period: 'day' as const,
-                token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' // Native token (ETH)
+                token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // Native token (ETH)
+                multiplier: 2 // 2 days period
               }
             ],
             calls: [
               {
-                target: spenderAddress,
-               selector: '0x32323232'
+                target: '0x3232323232323232323232323232323232323232', // ANY_TARGET - can send to any address
+                selector: '0xe0e0e0e0' // EMPTY_CALLDATA_FN_SEL - native ETH transfers
               }
             ]
           }
@@ -1003,11 +1004,11 @@ Issued At: ${issuedAt}`;
 
       console.log('[Demo] Grant permissions result:', result);
 
-      if (result && typeof result === 'object' && 'id' in result) {
-        const response = result as { id: string; address: string; spender: string };
-        setLastPermissionId(response.id);
+      if (result && typeof result === 'object' && 'permissionId' in result) {
+        const response = result as { permissionId: string; account: string; spender: string };
+        setLastPermissionId(response.permissionId);
         addLog(`✅ Permissions granted successfully!`);
-        addLog(`Permission ID: ${response.id}`);
+        addLog(`Permission ID: ${response.permissionId}`);
         addLog(`Full response: ${JSON.stringify(result, null, 2)}`);
       } else {
         addLog(`✅ Permission result: ${JSON.stringify(result, null, 2)}`);
@@ -1036,19 +1037,13 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant for multiple ERC-20s on Base Sepolia...');
 
       // Example spender address
-      const spenderAddress = '0xE08224B2CfaF4f27E2DC7cB3f6B99AcC68Cf06c0';
+      const spenderAddress = '0xEc653d5900Ae3B56bdf066DC99F175E3a5cFB712';
 
       // USDC on Base Sepolia (6 decimals)
-      const usdcAddress = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
-
-      // DAI on Base Sepolia (18 decimals) - example
-      const daiAddress = '0x50c5725949A6F0c72E6C4a641F24049A917DB0Cb';
+      const usdcAddress = '0xDFfc9C98d62Ae7234D9218315672d6b8CFD0ce59';
 
       // 1 USDC with 6 decimals = 1 * 10^6 = 1000000
-      const usdcLimit = BigInt(1_000_000);
-
-      // 10 DAI with 18 decimals
-      const daiLimit = parseEther('10');
+      const usdcLimit = BigInt(10**18);
 
       const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
 
@@ -1058,9 +1053,8 @@ Issued At: ${issuedAt}`;
       addLog(`Chain: Base Sepolia (${baseSepoliaChainId})`);
       addLog(`Spender: ${spenderAddress}`);
       addLog(`Permissions:`);
-      addLog(`  1. Spend: 1 USDC per day (${usdcAddress})`);
-      addLog(`  2. Spend: 10 DAI per week (${daiAddress})`);
-      addLog(`  3. Call: approve(address,uint256) on any contract`);
+      addLog(`  1. Spend: 1 USDC per 3 days (multiplier: 3) (${usdcAddress})`);
+      addLog(`  2. Call: transfer(address,uint256) on spender`);
       addLog(`Expiry: ${new Date(expiryTimestamp * 1000).toISOString()}`);
 
       const result = await provider.request({
@@ -1075,12 +1069,13 @@ Issued At: ${issuedAt}`;
               {
                 limit: `0x${usdcLimit.toString(16)}`,
                 period: 'day' as const,
-                token: usdcAddress
+                token: usdcAddress,
+                multiplier: 3 // 3 days period
               },
             ],
             calls: [
               {
-                target: spenderAddress,
+                target: usdcAddress,
                 functionSignature: 'transfer(address,uint256)',
               }
             ]
@@ -1090,11 +1085,11 @@ Issued At: ${issuedAt}`;
 
       console.log('[Demo] Grant multiple ERC-20 permissions result:', result);
 
-      if (result && typeof result === 'object' && 'id' in result) {
-        const response = result as { id: string; address: string; spender: string };
-        setLastPermissionId(response.id);
+      if (result && typeof result === 'object' && 'permissionId' in result) {
+        const response = result as { permissionId: string; account: string; spender: string };
+        setLastPermissionId(response.permissionId);
         addLog(`✅ Multiple permissions granted successfully!`);
-        addLog(`Permission ID: ${response.id}`);
+        addLog(`Permission ID: ${response.permissionId}`);
         addLog(`Full response: ${JSON.stringify(result, null, 2)}`);
       } else {
         addLog(`✅ Permission result: ${JSON.stringify(result, null, 2)}`);
@@ -1195,6 +1190,81 @@ Issued At: ${issuedAt}`;
                   ? JSON.stringify(error, null, 2)
                   : String(error);
       addLog(`❌ Error revoking permissions: ${errorMessage}`);
+    }
+  };
+
+  const handleSendCallsWithPermission = async () => {
+    if (accounts.length === 0) {
+      addLog('No accounts connected');
+      return;
+    }
+
+    if (!lastPermissionId) {
+      addLog('No permission ID available. Grant permissions first using "Grant Permissions (USDC)" button.');
+      return;
+    }
+
+    try {
+      const provider = sdk.provider;
+      addLog('🔐 Sending calls with permission (wallet_sendCalls with permissions capability)...');
+
+      // Recipient address for ETH transfer
+      const recipientAddress = '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0';
+
+      // 0.0001 ETH in wei
+      const ethAmount = BigInt(100000000000000); // 0.0001 ETH = 10^14 wei
+
+      // Use the last granted permission ID
+      const permissionId = lastPermissionId;
+
+      addLog(`Permission ID: ${permissionId}`);
+      addLog(`Recipient: ${recipientAddress}`);
+      addLog(`Amount: 0.0001 ETH`);
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
+        params: [{
+          version: '1.0',
+          from: accounts[0],
+          calls: [
+            {
+              to: "0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0",
+              value: `0x${ethAmount.toString(16)}`,
+            }
+          ],
+          capabilities: {
+            permissions: {
+              id: permissionId as `0x${string}`,
+            },
+          },
+        }]
+      });
+
+      console.log('[Demo] Send calls with permission result:', result);
+
+      const batchId = typeof result === 'object' && result !== null && 'id' in result
+          ? (result as { id: string }).id
+          : null;
+
+      if (batchId) {
+        setLastBatchId(batchId);
+        addLog(`✅ Calls sent with permission successfully!`);
+        addLog(`Batch ID: ${batchId}`);
+        addLog('The calls were executed through the JustaPermissionManager contract');
+        addLog('Use "Get Calls Status" to check the transaction status');
+      } else {
+        addLog(`✅ Result: ${JSON.stringify(result, null, 2)}`);
+      }
+    } catch (error) {
+      console.error('[Demo] Send calls with permission error:', error);
+      const errorMessage = error instanceof Error
+          ? error.message
+          : typeof error === 'object' && error !== null && 'message' in error
+              ? (error as { message: string }).message
+              : typeof error === 'object' && error !== null
+                  ? JSON.stringify(error, null, 2)
+                  : String(error);
+      addLog(`❌ Error sending calls with permission: ${errorMessage}`);
     }
   };
 
@@ -1522,7 +1592,7 @@ Issued At: ${issuedAt}`;
             <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
               Permissions Actions
             </h2>
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4">
               <button
                   onClick={handleGrantPermissions}
                   disabled={!isConnected}
@@ -1545,6 +1615,13 @@ Issued At: ${issuedAt}`;
                 Get Permissions
               </button>
               <button
+                  onClick={handleSendCallsWithPermission}
+                  disabled={!isConnected || !lastPermissionId}
+                  className="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Send Calls with Permission
+              </button>
+              <button
                   onClick={handleRevokePermissions}
                   disabled={!isConnected || !lastPermissionId}
                   className="px-4 py-2 bg-red-600 text-white rounded hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
@@ -1562,7 +1639,7 @@ Issued At: ${issuedAt}`;
                   </p>
               )}
               <p className="text-sm text-gray-600 dark:text-gray-400">
-                <span className="font-medium">Test Flow:</span> 1) Grant Permissions → 2) Get Permissions to verify → 3) Revoke Permissions when done
+                <span className="font-medium">Test Flow:</span> 1) Grant Permissions (USDC) → 2) Send Calls with Permission → 3) Get Calls Status → 4) Revoke when done
               </p>
             </div>
           </div>

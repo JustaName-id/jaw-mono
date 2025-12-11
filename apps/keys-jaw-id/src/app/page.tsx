@@ -23,6 +23,7 @@ import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
 import type { PopupConfig, PendingRequest } from '../utils/types';
 import { extractSubnameTextRecords } from '../lib/extractSubnameTexts';
+import { standardErrorCodes } from '@jaw.id/core';
 
 
 // Note: TransactionRequestData is now imported from TransactionModal for consistency
@@ -147,6 +148,28 @@ export default function KeysJawIdApp() {
     }
   }, [pendingRequest, state, currentAccount]);
 
+  // Handle eth_chainId request (no UI needed, respond directly)
+  useEffect(() => {
+    if (pendingRequest?.type === SDKRequestType.CHAIN_ID && isSDKMode) {
+      const handleChainId = async () => {
+        try {
+          const chainId = pendingRequest.chain?.id ?? 1;
+          const chainIdHex = `0x${chainId.toString(16)}`;
+          await pendingRequest.onApprove(chainIdHex);
+          setTimeout(() => window.close(), 100);
+        } catch (error) {
+          console.error('❌ Failed to handle eth_chainId:', error);
+          await pendingRequest.onReject(
+            error instanceof Error ? error.message : 'Failed to get chain ID',
+            standardErrorCodes.rpc.internal
+          );
+          setTimeout(() => window.close(), 100);
+        }
+      };
+      handleChainId();
+    }
+  }, [pendingRequest, isSDKMode]);
+
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
     setState('passkey-check');
@@ -236,7 +259,7 @@ export default function KeysJawIdApp() {
               const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
                 request.id,
                 request.correlationId || '',
-                errorCode ?? 4001, // Default to user rejected request (EIP-1193 standard)
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
                 error || 'User rejected the request'
               );
               // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -289,10 +312,6 @@ export default function KeysJawIdApp() {
         requestType = SDKRequestType.SEND_TRANSACTION;
       } else if (method === 'eth_chainId') {
         requestType = SDKRequestType.CHAIN_ID;
-      } else if (method === 'wallet_getSubAccounts') {
-        requestType = SDKRequestType.GET_SUB_ACCOUNTS;
-      } else if (method === 'wallet_importSubAccount') {
-        requestType = SDKRequestType.IMPORT_SUB_ACCOUNT;
       } else if (method === 'wallet_grantPermissions') {
         requestType = SDKRequestType.GRANT_PERMISSIONS;
       } else if (method === 'wallet_revokePermissions') {
@@ -329,7 +348,7 @@ export default function KeysJawIdApp() {
             const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
               request.id || '',
               request.correlationId || '',
-              errorCode ?? 4001, // Default to user rejected request (EIP-1193 standard)
+              errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
               error || 'User rejected the request'
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -415,17 +434,13 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              const errorMessage = error instanceof Error ? error.message : String(error);
-              await pendingRequest.onReject(errorMessage);
-              setTimeout(() => window.close(), 1500);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              const rejectMessage = err instanceof Error ? err.message : 'Failed to reject request';
-              setError(rejectMessage);
-              setTimeout(() => window.close(), 1500);
               window.close();
             }
           }}
@@ -483,9 +498,10 @@ export default function KeysJawIdApp() {
                 setState('error');
               }
             }}
-            onError={async (error) => {
+            onError={async (error, errorCode) => {
               try {
-                await pendingRequest.onReject(error.message);
+                // Forward error and code directly from modal
+                await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
                 window.close();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
@@ -518,9 +534,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -580,9 +597,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -623,9 +641,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -666,9 +685,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -687,9 +707,10 @@ export default function KeysJawIdApp() {
           method={pendingRequest.method}
           appName={pendingRequest.metadata?.appName}
           appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-          onClose={async (error) => {
+          onClose={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.rpc.methodNotFound);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject unsupported method:', err);
@@ -929,7 +950,7 @@ export default function KeysJawIdApp() {
 
       if (!authQuery.walletAddress) {
         // Reject with internal error (JSON-RPC code -32603)
-        pendingRequest.onReject('Internal error: wallet address not available', -32603);
+        pendingRequest.onReject('Internal error: wallet address not available', standardErrorCodes.rpc.internal);
         return null;
       }
       const walletAddress = authQuery.walletAddress;
@@ -1008,9 +1029,10 @@ export default function KeysJawIdApp() {
                 setState('error');
               }
             }}
-            onError={async (error) => {
+            onError={async (error, errorCode) => {
               try {
-                await pendingRequest.onReject(error.message);
+                // Forward error and code directly from modal
+                await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
                 window.close();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
@@ -1051,9 +1073,10 @@ export default function KeysJawIdApp() {
               setState('error');
             }
           }}
-          onError={async (error) => {
+          onError={async (error, errorCode) => {
             try {
-              await pendingRequest.onReject(error.message);
+              // Forward error and code directly from modal
+              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
