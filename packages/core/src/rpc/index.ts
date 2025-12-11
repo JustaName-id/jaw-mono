@@ -30,6 +30,7 @@ export {
     type StorePermissionApiRequest,
     type StorePermissionApiResponse,
     type RevokePermissionApiResponse,
+    type PermissionsCapability,
     grantPermissions,
     revokePermission,
     handleGetPermissionsRequest,

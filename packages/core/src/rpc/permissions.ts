@@ -137,12 +137,22 @@ export type PaymasterServiceCapability = {
 };
 
 /**
+ * Permissions capability for wallet_sendCalls
+ */
+export type PermissionsCapability = {
+    /** ID of the permission to use for execution */
+    id: `0x${string}`;
+};
+
+/**
  * Request capabilities for wallet methods
  * Used in wallet_sendCalls, wallet_grantPermissions, wallet_revokePermissions
  */
 export type RequestCapabilities = {
     /** Paymaster service for sponsored transactions */
     paymasterService?: PaymasterServiceCapability;
+    /** Permissions capability for wallet_sendCalls */
+    permissions?: PermissionsCapability;    
     /** Additional capabilities can be added here */
     [key: string]: unknown;
 };

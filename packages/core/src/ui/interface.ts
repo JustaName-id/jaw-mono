@@ -1,6 +1,9 @@
 import { Address } from '../provider/interface.js';
 import { RequestCapabilities } from '../rpc/permissions.js';
 
+// Re-export PermissionsCapability from permissions module for backwards compatibility
+export type { PermissionsCapability } from '../rpc/permissions.js';
+
 /**
  * UI request types that require user interaction
  */
@@ -60,14 +63,6 @@ export interface TypedDataUIRequest extends BaseUIRequest {
     address: Address;
     chainId: number;
   };
-}
-
-/**
- * Permissions capability for wallet_sendCalls
- */
-export interface PermissionsCapability {
-  /** ID of the permission to use for execution */
-  id: `0x${string}`;
 }
 
 /**
