@@ -134,21 +134,6 @@ const isNativeToken = (tokenAddress?: string): boolean => {
   return tokenAddress.toLowerCase() === NATIVE_TOKEN.toLowerCase();
 };
 
-// Convert period in seconds to human-readable duration
-const formatDurationFromSeconds = (seconds: number): string => {
-  if (seconds === 60) return '1 Minute';
-  if (seconds === 3600) return '1 Hour';
-  if (seconds === 86400) return '1 Day';
-  if (seconds === 604800) return '1 Week';
-  if (seconds === 2592000) return '1 Month';
-  if (seconds === 31536000) return '1 Year';
-  if (seconds % 86400 === 0) {
-    const days = seconds / 86400;
-    return `${days} Day${days > 1 ? 's' : ''}`;
-  }
-  return `${seconds} seconds`;
-};
-
 // Format timestamp to readable date
 const formatExpiryDate = (timestamp: number): string => {
   const date = new Date(timestamp * 1000);
@@ -1553,13 +1538,13 @@ function PermissionDialogWrapper({
       ? { decimals: 18, symbol: 'ETH' }
       : { decimals: 18, symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4) });
 
-    const allowance = BigInt(spend.limit);
+    const allowance = BigInt(spend.allowance);
     const amount = formatUnits(allowance, tokenInfo.decimals);
     const limit = `${amount} ${tokenInfo.symbol}`;
 
     // Format duration with multiplier (defaults to 1 if not provided)
     const multiplier = spend.multiplier ?? 1;
-    const duration = `${multiplier} ${spend.period}${multiplier > 1 ? 's' : ''}`;
+    const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? 's' : ''}`;
 
     return {
       amount,
@@ -1907,7 +1892,9 @@ function RevokePermissionDialogWrapper({
       const allowance = BigInt(spend.allowance);
       const amount = formatUnits(allowance, tokenInfo.decimals);
       const limit = `${amount} ${tokenInfo.symbol}`;
-      const duration = formatDurationFromSeconds(parseInt(spend.period, 10));
+      // Format duration with multiplier (unit is period string like 'day', 'week', etc.)
+      const multiplier = spend.multiplier ?? 1;
+      const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? 's' : ''}`;
 
       return {
         amount,

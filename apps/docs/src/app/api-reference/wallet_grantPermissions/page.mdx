@@ -21,8 +21,8 @@ await jaw.provider.request({
       }],
       spends: [{
         token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-        limit: '0x16345785d8a0000', // 0.1 ETH
-        period: 'day',
+        allowance: '0x16345785d8a0000', // 0.1 ETH
+        unit: 'day',
       }],
     },
     // chainId: '0x1', // Optional - defaults to connected chain
@@ -60,10 +60,11 @@ Array of spend limits. Each limit:
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `token` | `0x${string}` | Yes | Token address (`0xEeee...` for native token) |
-| `limit` | `0x${string}` | Yes | Spending limit in wei (hex) |
-| `period` | `string` | Yes | Time period for limit reset |
+| `allowance` | `0x${string}` | Yes | Spending allowance in wei (hex) |
+| `unit` | `string` | Yes | Time unit for allowance reset |
+| `multiplier` | `number` | No | Multiplier for the time unit (default: 1) |
 
-**Valid Periods:**
+**Valid Units:**
 - `minute` - Resets every minute
 - `hour` - Resets every hour
 - `day` - Resets every day
@@ -83,22 +84,23 @@ Returns permission grant result with generated permission ID.
 
 ```json
 {
-  "address": "0x1234567890123456789012345678901234567890",
-  "chainId": "0x1",
-  "start": 1704067200,
-  "expiry": 1735689600,
-  "salt": "0x1a2b3c...",
-  "id": "0xabc123...",
+  "account": "0x1234567890123456789012345678901234567890",
   "spender": "0x5678901234567890123456789012345678901234",
+  "start": 1704067200,
+  "end": 1735689600,
+  "salt": "0x1a2b3c...",
   "calls": [{
     "target": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
     "selector": "0xa9059cbb"
   }],
   "spends": [{
     "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-    "limit": "0x16345785d8a0000",
-    "period": "day"
-  }]
+    "allowance": "0x16345785d8a0000",
+    "unit": "day",
+    "multiplier": 1
+  }],
+  "permissionId": "0xabc123...",
+  "chainId": "0x1"
 }
 ```
 
@@ -141,8 +143,8 @@ const permission = await jaw.provider.request({
       }],
       spends: [{
         token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-        limit: '0x' + (1000n * 10n**6n).toString(16),
-        period: 'day',
+        allowance: '0x' + (1000n * 10n**6n).toString(16),
+        unit: 'day',
       }],
     },
     // chainId: '0x1', // Optional - defaults to connected chain
