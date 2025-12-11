@@ -23,6 +23,12 @@
     ],
     "baseUrl": ".",
     "paths": {
+      "@jaw.id/core": [
+        "packages/core/src/index.ts"
+      ],
+      "@jaw.id/core/*": [
+        "packages/core/src/*"
+      ],
       "@jaw/ui": [
         "packages/ui/src/index.ts"
       ],
