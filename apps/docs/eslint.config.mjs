@@ -10,7 +10,7 @@ const compat = new FlatCompat({
 export default [
   ...baseConfig,
   ...compat.config({
-    extends: ['plugin:@nx/react', 'next', 'next/core-web-vitals'],
+    extends: ['next', 'next/core-web-vitals'],
   }).map((config) => ({
     ...config,
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
@@ -20,6 +20,8 @@ export default [
   })),
   {
     files: ['**/*.ts', '**/*.tsx', '**/*.js', '**/*.jsx'],
-    rules: {},
+    rules: {
+      '@nx/enforce-module-boundaries': 'off',
+    },
   },
 ];

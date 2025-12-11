@@ -1,0 +1,47 @@
+export default {
+  index: 'Overview',
+  '---factory': {
+    type: 'separator',
+    title: 'Factory Methods',
+  },
+  get: 'get()',
+  create: 'create()',
+  import: 'import()',
+  fromLocalAccount: 'fromLocalAccount()',
+  '---utility': {
+    type: 'separator',
+    title: 'Utility Methods',
+  },
+  getAuthenticatedAddress: 'getAuthenticatedAddress()',
+  getStoredAccounts: 'getStoredAccounts()',
+  logout: 'logout()',
+  '---info': {
+    type: 'separator',
+    title: 'Instance - Info',
+  },
+  getMetadata: 'getMetadata()',
+  getSmartAccount: 'getSmartAccount()',
+  getChain: 'getChain()',
+  getAddress: 'getAddress()',
+  '---signing': {
+    type: 'separator',
+    title: 'Instance - Signing',
+  },
+  signMessage: 'signMessage()',
+  signTypedData: 'signTypedData()',
+  '---transactions': {
+    type: 'separator',
+    title: 'Instance - Transactions',
+  },
+  sendTransaction: 'sendTransaction()',
+  sendCalls: 'sendCalls()',
+  getCallStatus: 'getCallStatus()',
+  estimateGas: 'estimateGas()',
+  '---permissions': {
+    type: 'separator',
+    title: 'Instance - Permissions',
+  },
+  grantPermissions: 'grantPermissions()',
+  revokePermission: 'revokePermission()',
+  getPermission: 'getPermission()',
+}

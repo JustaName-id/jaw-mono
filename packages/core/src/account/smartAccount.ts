@@ -13,7 +13,7 @@ import {
     createPublicClient, LocalAccount
 } from "viem";
 import {getCode, getGasPrice, readContract} from "viem/actions";
-import {abi, JustanAccountImplementation, toJustanAccount} from "../account/index.js";
+import {abi, JustanAccountImplementation, toJustanAccount} from "./toJustanAccount.js";
 import {
     BundlerClient,
     SmartAccount,
@@ -134,7 +134,7 @@ export async function sendTransaction(
             to: getAddress(call.to),
             value: call.value ?? 0n,
             data: call.data ?? '0x'
-        }))
+        })),
     })
 
     // Wait for the transaction receipt and get the actual transaction hash
@@ -145,7 +145,7 @@ export async function sendTransaction(
     return receipt.receipt.transactionHash
 }
 
-export async function sendBundledTransaction(
+export async function sendCalls(
     smartAccount: SmartAccount,
     calls: Array<{
         to: Address;
@@ -163,7 +163,7 @@ export async function sendBundledTransaction(
             to: getAddress(call.to),
             value: call.value ?? 0n,
             data: call.data ?? '0x'
-        }))
+        })),
     })
 
     return {
@@ -190,7 +190,7 @@ export async function estimateUserOpGas(
             to: call.to,
             value: call.value ?? 0n,
             data: call.data ?? '0x'
-        }))
+        })),
     })
 
     return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit
@@ -205,11 +205,17 @@ export async function createSmartAccount(account: WebAuthnAccount | LocalAccount
     // Get the predicted smart account address
     const smartAccountAddress = await tempSmartAccount.getAddress()
 
-    // Find the actual owner index for this passkey
+    // Determine the owner bytes to search for based on account type
+    // WebAuthn accounts use publicKey, LocalAccounts use padded address
+    const ownerBytes: Hex = account.type === 'webAuthn'
+        ? account.publicKey
+        : pad(account.address);
+
+    // Find the actual owner index for this account
     const ownerIndex = await findOwnerIndex({
         address: smartAccountAddress,
         client: bundlerClient,
-        publicKey: account.publicKey,
+        publicKey: ownerBytes,
     })
 
     // Create the smart account with the correct owner index

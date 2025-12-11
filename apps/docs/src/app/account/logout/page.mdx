@@ -1,0 +1,71 @@
+# Account.logout()
+
+Clear authentication state (logout).
+
+**Type:** `static`
+
+---
+
+## Signature
+
+```typescript
+static logout(apiKey: string): void
+```
+
+---
+
+## Parameters
+
+### apiKey
+
+Type: `string`
+
+API key for JAW services. Used to scope the storage operation.
+
+---
+
+## Returns
+
+`void`
+
+---
+
+## Behavior
+
+This method clears the current authentication state:
+
+1. Removes the authenticated address from storage
+2. Clears the current credential ID association
+3. Does **not** remove stored passkey accounts (user can still login later)
+
+After logout:
+- `Account.getAuthenticatedAddress()` returns `null`
+- `Account.get()` without credentialId will throw
+- `Account.getStoredAccounts()` still returns all accounts
+
+---
+
+## Example
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+Account.logout('your-api-key');
+console.log('Logged out');
+```
+
+---
+
+## Important Notes
+
+- Logout is **local only** - it doesn't affect the smart account
+- Stored passkey accounts remain available for future login
+- The user can still access their account by logging in again
+
+---
+
+## Related
+
+- [Account.get()](/account/get) - Login to an account
+- [Account.getAuthenticatedAddress()](/account/getAuthenticatedAddress) - Check authentication status
+- [Account.getStoredAccounts()](/account/getStoredAccounts) - List available accounts

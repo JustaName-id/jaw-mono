@@ -15,7 +15,7 @@ export function createSigner(params: {
     communicator?: Communicator;
     uiHandler?: UIHandler;
     callback: ProviderEventCallback;
-    apiKey?: string;
+    apiKey: string;
     paymasterUrls?: Record<number, string>;
 }): Signer {
     const { signerType, metadata, communicator, uiHandler, callback, apiKey, paymasterUrls } = params;

@@ -239,8 +239,8 @@ export class UIError extends Error {
  * Contains SDK configuration that the UI handler may need
  */
 export interface UIHandlerConfig {
-  /** JAW API key for RPC URL resolution */
-  apiKey?: string;
+  /** JAW API key for RPC URL resolution (required) */
+  apiKey: string;
   /** Default chain ID */
   defaultChainId?: number;
   /** Paymaster URLs per chain for gasless transactions */

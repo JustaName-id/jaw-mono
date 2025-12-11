@@ -2,10 +2,10 @@
 
 import { TransactionDialog, TransactionData } from "@jaw/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Address, parseEther, Hash } from "viem";
+import { Address, Hash } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
-import {sendTransaction, sendBundledTransaction, estimateUserOpGas, type Chain, calculateGas, ToJustanAccountReturnType} from "@jaw.id/core";
+import { Account, type Chain, type TransactionCall } from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -38,6 +38,7 @@ export interface TransactionModalProps {
   transactions?: TransactionData[];
   sponsored?: boolean;
   chain?: Chain;  // Chain info with RPC and paymaster URLs
+  apiKey?: string;
   onSuccess?: (result: TransactionResult) => void;
   onError?: (error: Error) => void;
 }
@@ -47,18 +48,33 @@ export const TransactionModal = ({
   transactions,
   sponsored = false,
   chain,
+  apiKey,
   onSuccess,
   onError
 }: TransactionModalProps) => {
-  const { getSmartAccount } = usePasskeys();
+  const { getAccount } = usePasskeys();
   const { walletAddress } = useAuth();
   const [gasFee, setGasFee] = useState<string>('');
   const [gasFeeLoading, setGasFeeLoading] = useState<boolean>(false);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Extract API key from rpcUrl if not provided as prop
+  const effectiveApiKey = useMemo(() => {
+    if (apiKey) return apiKey;
+    if (chain?.rpcUrl) {
+      try {
+        const url = new URL(chain.rpcUrl);
+        return url.searchParams.get('api-key') || '';
+      } catch {
+        return '';
+      }
+    }
+    return '';
+  }, [apiKey, chain?.rpcUrl]);
 
   // Determine if sponsored based on transactionRequest or prop
   const isSponsored = useMemo(() => {
@@ -122,7 +138,16 @@ export const TransactionModal = ({
     }
   }, [chain, resetModalState]);
 
-  // Initialize smart account when modal opens
+  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.url > chain.paymasterUrl
+  const effectivePaymasterUrl = useMemo(() => {
+    if (transactionRequest?.paymasterUrl) {
+      return transactionRequest.paymasterUrl;
+    }
+    return chain?.paymasterUrl;
+  }, [transactionRequest?.paymasterUrl, chain?.paymasterUrl]);
+
+  // Initialize account when modal opens
   useEffect(() => {
     let isMounted = true;
 
@@ -131,13 +156,20 @@ export const TransactionModal = ({
         try {
           setIsProcessing(false);
           console.log('🔐 Initializing transaction modal');
-          const account = await getSmartAccount(chain);
+          
+          // Merge paymasterUrl from capabilities into chain before creating account
+          const chainWithPaymaster = {
+            ...chain,
+            paymasterUrl: effectivePaymasterUrl || chain.paymasterUrl,
+          };
+          
+          const restoredAccount = await getAccount(chainWithPaymaster, effectiveApiKey);
 
           if (isMounted) {
-            setSmartAccount(account);
+            setAccount(restoredAccount);
           }
         } catch (error) {
-          console.error("Error initializing smart account:", error);
+          console.error("Error initializing account:", error);
           if (isMounted) {
             setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
             onError?.(error as Error);
@@ -145,7 +177,7 @@ export const TransactionModal = ({
         }
       } else {
         // Reset when chain is not provided
-        setSmartAccount(null);
+        setAccount(null);
         setTransactionStatus('');
         setIsProcessing(false);
         setGasFee('');
@@ -162,48 +194,25 @@ export const TransactionModal = ({
         timeoutRef.current = null;
       }
     };
-  }, [chain, getSmartAccount, onError]);
+  }, [chain, effectiveApiKey, effectivePaymasterUrl, getAccount, onError]);
 
-  // Get the effective paymaster URL (from transactionRequest which already has priority logic applied)
-  const effectivePaymasterUrl = transactionRequest?.paymasterUrl;
-
-  // Gas estimation using core package
+  // Gas estimation using Account class
   useEffect(() => {
-    if (!smartAccount || !chain || normalizedTransactions.length === 0) return;
+    if (!account || !chain || normalizedTransactions.length === 0) return;
 
     const estimateGas = async () => {
       try {
         setGasFeeLoading(true);
 
-        // Convert normalized transactions to the format expected by estimateUserOpGas
-        const transactionCalls = normalizedTransactions.map(tx => {
-          let value = 0n;
+        // Convert normalized transactions to TransactionCall format
+        const transactionCalls: TransactionCall[] = normalizedTransactions.map(tx => ({
+          to: tx.to as Address,
+          value: tx.value ? BigInt(tx.value) : undefined, // Convert string wei to bigint
+          data: (tx.data as `0x${string}`) || '0x'
+        }));
 
-          if (tx.value && tx.value !== '0') {
-            // Check if it's a hex string
-            if (tx.value.startsWith('0x')) {
-              value = BigInt(tx.value);
-            }
-            // Check if it's a decimal string representing wei
-            else if (/^\d+$/.test(tx.value)) {
-              value = BigInt(tx.value);
-            }
-            // Otherwise assume it's ETH string like "0.001"
-            else {
-              value = parseEther(tx.value);
-            }
-          }
-
-          return {
-            to: tx.to as Address,
-            value,
-            data: tx.data as `0x${string}` || '0x'
-          };
-        });
-
-        // Estimate gas using core package - pass paymasterUrl from capabilities/config
-        const gasEstimate = await estimateUserOpGas(smartAccount, transactionCalls, chain, effectivePaymasterUrl);
-        const gasPrice = await calculateGas(chain, gasEstimate, effectivePaymasterUrl);
+        // Estimate gas using Account class
+        const gasPrice = await account.calculateGasCost(transactionCalls);
         setGasFee(gasPrice);
         setGasEstimationError('');
 
@@ -232,15 +241,15 @@ export const TransactionModal = ({
     };
 
     estimateGas();
-  }, [smartAccount, chain, normalizedTransactions, isSponsored, effectivePaymasterUrl]);
+  }, [account, chain, normalizedTransactions, isSponsored]);
 
   const handleConfirm = useCallback(async () => {
     try {
       setIsProcessing(true);
       setTransactionStatus('Preparing transaction...');
 
-      if (!smartAccount) {
-        throw new Error('Smart account not initialized. Please try again.');
+      if (!account) {
+        throw new Error('Account not initialized. Please try again.');
       }
 
       if (!chain) {
@@ -249,57 +258,34 @@ export const TransactionModal = ({
 
       setTransactionStatus('Sending transaction...');
 
-      // Convert normalized transactions to the format expected by sendTransaction
-      const transactionCalls = normalizedTransactions.map(tx => {
-        let value = 0n;
+      // Convert normalized transactions to TransactionCall format
+      const transactionCalls: TransactionCall[] = normalizedTransactions.map(tx => ({
+        to: tx.to as Address,
+        value: tx.value ? BigInt(tx.value) : undefined, // Convert string wei to bigint
+        data: (tx.data as `0x${string}`) || '0x'
+      }));
 
-        if (tx.value && tx.value !== '0') {
-          // Check if it's a hex string
-          if (tx.value.startsWith('0x')) {
-            value = BigInt(tx.value);
-          }
-          // Check if it's a decimal string representing wei
-          else if (/^\d+$/.test(tx.value)) {
-            value = BigInt(tx.value);
-          }
-          // Otherwise assume it's ETH string like "0.001"
-          else {
-            value = parseEther(tx.value);
-          }
-        }
-
-        return {
-          to: tx.to as Address,
-          value,
-          data: tx.data as `0x${string}` || '0x'
+      // Send transaction using Account class
+      // Account methods use the chain's paymasterUrl (which we set from capabilities)
+      let result: TransactionResult;
+      // Use sendCalls for wallet_sendCalls, sendTransaction for eth_sendTransaction
+      if (transactionRequest?.method === 'wallet_sendCalls') {
+        const bundledResult = await account.sendCalls(transactionCalls);
+        // Return the transaction result with proper format based on method
+        result = {
+          id: bundledResult.id,
+          chainId: bundledResult.chainId,
         };
-      });
-
-      // Send transaction using core package
-      // Pass paymasterUrl from capabilities/config to use sponsored transactions
-      let result: TransactionResult ;
-      // This handles bundler communication and returns the final transaction hash
-      if(transactionRequest?.method === 'wallet_sendCalls') {
-        const bundledResult = await sendBundledTransaction(smartAccount, transactionCalls, chain, effectivePaymasterUrl);
-           // Return the transaction result with proper format based on method
-       result = {
-        id: bundledResult.id,
-        chainId: bundledResult.chainId,
-      };
-
-
-      }else{
-       const  txHash = await sendTransaction(smartAccount, transactionCalls, chain, effectivePaymasterUrl);
-       result = {
-        hash: txHash,
-      };
+      } else {
+        const txHash = await account.sendTransaction(transactionCalls);
+        result = {
+          hash: txHash,
+        };
       }
-
 
       console.log('✅ Transaction confirmed:', result);
       setTransactionStatus('Transaction confirmed!');
 
-   
       // Log metadata for debugging
       if (transactionRequest) {
         console.log('📋 Transaction metadata:', {
@@ -323,11 +309,11 @@ export const TransactionModal = ({
       onError?.(errorObj);
       setIsProcessing(false);
     }
-  }, [smartAccount, chain, normalizedTransactions, onSuccess, onError, effectivePaymasterUrl, transactionRequest?.method]);
+  }, [account, chain, normalizedTransactions, transactionRequest, onSuccess, onError]);
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
-      setSmartAccount(null);
+      setAccount(null);
       // Create a standard user rejected error (EIP-1193 code 4001)
       const rejectionError = new Error('User rejected the request');
       (rejectionError as any).code = 4001;

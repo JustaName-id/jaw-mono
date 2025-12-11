@@ -98,7 +98,7 @@ export async function createPasskeyUtils(
   rpId: string,
   rpName: string
 ): Promise<{ credentialId: string; publicKey: `0x${string}`; webAuthnAccount: WebAuthnAccount }> {
-  
+
   if (typeof window === 'undefined' || !window.PublicKeyCredential) {
     throw new PasskeyRegistrationError('WebAuthn is not supported in this environment');
   }
@@ -135,37 +135,33 @@ export async function importPasskeyUtils(): Promise<ImportWebAuthnAuthentication
   try {
     const challenge = crypto.getRandomValues(new Uint8Array(32));
 
-  const credential = (await navigator.credentials.get({
-    publicKey: {
-      challenge: challenge,
-      userVerification: "preferred",
-      timeout: 60000,
-    },
-  })) as PublicKeyCredential;
-  if (!credential) {
-    throw new Error("No credential selected");
-  }
-
-  const credentialIdBase64 = btoa(
-    String.fromCharCode(...new Uint8Array(credential.rawId))
-  ).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
-
-  const passkeyData = await lookupPasskeyFromBackend(credentialIdBase64);
-
-  return {
-    name: passkeyData.displayName || "Passkey",
-    credential: {
-      id: credentialIdBase64,
-      publicKey: passkeyData.publicKey,
+    const credential = (await navigator.credentials.get({
+      publicKey: {
+        challenge: challenge,
+        userVerification: "preferred",
+        timeout: 60000,
+      },
+    })) as PublicKeyCredential;
+    if (!credential) {
+      throw new Error("No credential selected");
     }
-  };
+
+    // credential.id is already the base64url-encoded version of rawId
+    const passkeyData = await lookupPasskeyFromBackend(credential.id);
+
+    return {
+      name: passkeyData.displayName || "Passkey",
+      credential: {
+        id: credential.id,
+        publicKey: passkeyData.publicKey,
+      }
+    };
   } catch (error) {
     throw new PasskeyLookupError(
       `Failed to import passkey: ${error instanceof Error ? error.message : 'Unknown error'}`,
       error
     );
   }
-  
 }
 
 /**

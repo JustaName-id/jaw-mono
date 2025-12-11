@@ -1,0 +1,120 @@
+# Account.import()
+
+Import a passkey from cloud backup.
+
+**Type:** `static async`
+
+---
+
+## Signature
+
+```typescript
+static async import(config: AccountConfig): Promise<Account>
+```
+
+---
+
+## Parameters
+
+### config
+
+Type: `AccountConfig`
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `chainId` | `number` | Yes | Chain ID for the account |
+| `apiKey` | `string` | Yes | API key for JAW services |
+| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
+
+---
+
+## Returns
+
+`Promise<Account>` - The imported Account instance
+
+---
+
+## Behavior
+
+1. Triggers WebAuthn authentication with empty `allowCredentials` (lets user select any available passkey)
+2. User selects a passkey from their cloud-synced credentials (iCloud Keychain, Google Password Manager, etc.)
+3. Creates the smart account from the imported passkey
+4. Stores the passkey account marked as imported
+5. Returns the ready-to-use Account instance
+
+---
+
+## Errors
+
+| Error | Description |
+|-------|-------------|
+| WebAuthn errors | User cancelled or browser doesn't support WebAuthn |
+| `Failed to retrieve imported passkey account` | Backend lookup failed |
+
+---
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const account = await Account.import({
+  chainId: 1,
+  apiKey: 'your-api-key',
+});
+
+console.log('Imported account:', account.address);
+
+const metadata = account.getMetadata();
+console.log('Is imported:', metadata?.isImported); // true
+```
+
+## Usage in Custom UI Handler
+
+```typescript
+class MyUIHandler implements UIHandler {
+  async handleConnect(request: ConnectUIRequest) {
+    // Show import option in your UI
+    const action = await this.showConnectOptions();
+
+    if (action === 'import') {
+      const account = await Account.import({
+        chainId: request.data.chainId,
+        apiKey: this.config?.apiKey,
+      });
+
+      return {
+        id: request.id,
+        approved: true,
+        data: {
+          accounts: [{ address: account.address }],
+        },
+      };
+    }
+    // ... handle other actions
+  }
+}
+```
+
+---
+
+## Cloud Sync Providers
+
+Passkeys can be synced via:
+
+- **Apple**: iCloud Keychain (iOS, macOS, Safari)
+- **Google**: Google Password Manager (Android, Chrome)
+- **Microsoft**: Windows Hello (Windows, Edge)
+- **1Password, Dashlane, etc.**: Third-party password managers
+
+The import flow allows users to access their JAW account on any device where their passkeys are synced.
+
+---
+
+## Related
+
+- [Account.create()](/account/create) - Create a new account
+- [Account.get()](/account/get) - Login with existing account
+- [Account.getStoredAccounts()](/account/getStoredAccounts) - List local accounts

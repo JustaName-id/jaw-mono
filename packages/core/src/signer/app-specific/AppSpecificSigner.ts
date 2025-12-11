@@ -29,7 +29,7 @@ type ConstructorOptions = {
     metadata: AppMetadata;
     uiHandler: UIHandler;
     callback: ProviderEventCallback | null;
-    apiKey?: string;
+    apiKey: string;
     paymasterUrls?: Record<number, string>;
 };
 

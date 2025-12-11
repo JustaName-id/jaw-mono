@@ -82,12 +82,14 @@ export class CryptoHandler {
 
   /**
    * Create encrypted handshake response
+   * @param requestId - The request ID
+   * @param walletConnectResponse - WalletConnectResponse object with accounts and optional capabilities
    */
   async createHandshakeResponse(
     requestId: MessageID,
-    accounts: string[]
+    walletConnectResponse: { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> }
   ): Promise<RPCResponseMessage> {
-    console.log('📦 Creating handshake response for accounts:', accounts);
+    console.log('📦 Creating handshake response:', walletConnectResponse);
 
     try {
       const sharedSecret = await this.keyManager.getSharedSecret();
@@ -98,11 +100,10 @@ export class CryptoHandler {
       if (!this.ownPublicKeyHex || !this.peerPublicKeyHex) {
         throw new Error('Missing public keys');
       }
+
       const responseData = {
         result: {
-          value: {
-            accounts: accounts.map((address) => ({ address })),
-          },
+          value: walletConnectResponse,
         },
         data: {
           // TODO: Make it dynamic based on the chain

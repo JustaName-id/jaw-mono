@@ -1,6 +1,6 @@
 import { useQuery } from "@tanstack/react-query";
 import { useCallback } from "react";
-import { PasskeyAccount } from "@jaw.id/core";
+import { PasskeyAccount, Account } from "@jaw.id/core";
 import { PasskeyService } from "../../lib/passkey-service";
 import type { chain } from "../../lib/sdk-types";
 
@@ -12,29 +12,49 @@ export interface LocalStorageAccount {
 }
 
 // Function to fetch accounts using PasskeyService
-const fetchAccountsFromLocalStorage = (): PasskeyAccount[] => {
-  const service = new PasskeyService();
+const fetchAccountsFromLocalStorage = (apiKey?: string): PasskeyAccount[] => {
+  const service = new PasskeyService({ apiKey });
   return service.fetchAccounts();
 };
 
-export const usePasskeys = () => {
+interface UsePasskeysOptions {
+  apiKey?: string;
+}
+
+export const usePasskeys = (options?: UsePasskeysOptions) => {
+  const { apiKey } = options || {};
+
   const query = useQuery<PasskeyAccount[]>({
-    queryKey: ["PASSKEYS"],
-    queryFn: fetchAccountsFromLocalStorage,
+    queryKey: ["PASSKEYS", apiKey],
+    queryFn: () => fetchAccountsFromLocalStorage(apiKey),
     staleTime: 0,
     gcTime: 0,
   });
 
-  const getSmartAccount = useCallback(async (chain: chain) => {
-    const service = new PasskeyService();
-    const smartAccount = await service.recreateSmartAccount(chain);
-    return smartAccount;
-  }, []);
+  const getAccount = useCallback(async (chain: chain, overrideApiKey?: string) => {
+    const effectiveApiKey = overrideApiKey || apiKey;
+    if (!effectiveApiKey) {
+      throw new Error('API key is required. Provide it via apiKey parameter or NEXT_PUBLIC_API_KEY environment variable.');
+    }
+    const account = await Account.get({
+      chainId: chain.id,
+      apiKey: effectiveApiKey,
+      paymasterUrl: chain.paymasterUrl,
+    });
+    return account;
+  }, [apiKey]);
+
+  // Legacy method - returns underlying smart account for backwards compatibility
+  const getSmartAccount = useCallback(async (chain: chain, overrideApiKey?: string) => {
+    const account = await getAccount(chain, overrideApiKey);
+    return account.getSmartAccount();
+  }, [getAccount]);
 
   return {
     accounts: query.data || [],
     accountsLoading: query.isLoading,
     refetchAccounts: query.refetch,
+    getAccount,
     getSmartAccount,
   };
 };

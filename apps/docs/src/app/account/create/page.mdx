@@ -1,0 +1,134 @@
+# Account.create()
+
+Create a new account with a passkey.
+
+**Type:** `static async`
+
+---
+
+## Signature
+
+```typescript
+static async create(
+  config: AccountConfig,
+  options: CreateAccountOptions
+): Promise<Account>
+```
+
+---
+
+## Parameters
+
+### config
+
+Type: `AccountConfig`
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `chainId` | `number` | Yes | Chain ID for the account |
+| `apiKey` | `string` | Yes | API key for JAW services |
+| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
+
+### options
+
+Type: `CreateAccountOptions`
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `username` | `string` | Yes | Username/display name for the passkey |
+| `rpId` | `string` | No | Relying party identifier (defaults to `window.location.hostname`) |
+| `rpName` | `string` | No | Relying party name (defaults to `'JAW Wallet'`) |
+
+---
+
+## Returns
+
+`Promise<Account>` - The newly created Account instance
+
+---
+
+## Behavior
+
+1. Triggers WebAuthn credential creation (user will see browser passkey dialog)
+2. Creates the smart account from the passkey
+3. Stores the passkey account and authentication state
+4. Returns the ready-to-use Account instance
+
+---
+
+## Errors
+
+| Error | Description |
+|-------|-------------|
+| WebAuthn errors | User cancelled passkey creation or browser doesn't support WebAuthn |
+| Network errors | Failed to communicate with JAW services |
+
+---
+
+## Examples
+
+### Basic Usage
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const account = await Account.create(
+  { chainId: 1, apiKey: 'your-api-key' },
+  { username: 'alice' }
+);
+
+console.log('Created account:', account.address);
+console.log('Username:', account.getMetadata()?.username);
+```
+
+### With Custom RP Settings
+
+```typescript
+const account = await Account.create(
+  { chainId: 1, apiKey: 'your-api-key' },
+  {
+    username: 'alice',
+    rpId: 'myapp.com',
+    rpName: 'My Awesome App',
+  }
+);
+```
+
+---
+
+## Usage in Custom UI Handler
+
+```typescript
+class MyUIHandler implements UIHandler {
+  private config?: UIHandlerConfig;
+
+  async handleConnect(request: ConnectUIRequest) {
+    // Show your custom onboarding UI
+    const username = await this.showUsernameInput();
+
+    const account = await Account.create(
+      {
+        chainId: request.data.chainId,
+        apiKey: this.config?.apiKey,
+      },
+      { username }
+    );
+
+    return {
+      id: request.id,
+      approved: true,
+      data: {
+        accounts: [{ address: account.address }],
+      },
+    };
+  }
+}
+```
+
+---
+
+## Related
+
+- [Account.get()](/account/get) - Login with existing account
+- [Account.import()](/account/import) - Import from cloud backup
+- [Account.getStoredAccounts()](/account/getStoredAccounts) - List created accounts

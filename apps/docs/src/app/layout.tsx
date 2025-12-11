@@ -18,7 +18,7 @@ const navbar = (
 
 const footer = (
   <Footer>
-    MIT {new Date().getFullYear()} © JAW Accounts
+      {new Date().getFullYear()} © JAW
   </Footer>
 )
 

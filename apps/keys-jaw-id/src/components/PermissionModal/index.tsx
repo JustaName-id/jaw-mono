@@ -6,10 +6,8 @@ import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "v
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys } from "../../hooks";
 import {
-    grantPermissions,
-    revokePermission,
+    Account,
     type Chain,
-    ToJustanAccountReturnType,
     type WalletGrantPermissionsRequest,
     type WalletRevokePermissionsRequest,
     type WalletGrantPermissionsResponse,
@@ -116,10 +114,10 @@ export const PermissionModal = ({
   onSuccess,
   onError
 }: PermissionModalProps) => {
-  const { getSmartAccount } = usePasskeys();
+  const { getAccount } = usePasskeys();
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [smartAccount, setSmartAccount] = useState<ToJustanAccountReturnType | null>(null);
+  const [account, setAccount] = useState<Account | null>(null);
   const [isLoadingSmartAccount, setIsLoadingSmartAccount] = useState<boolean>(true); // Start true to prevent early clicks
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
@@ -384,7 +382,7 @@ export const PermissionModal = ({
     fetchPermissionDetails();
   }, [mode, permissionDetails, extractedApiKey]);
 
-  // Initialize smart account when modal opens or permission request changes
+  // Initialize account when modal opens or permission request changes
   useEffect(() => {
     let isMounted = true;
 
@@ -393,15 +391,22 @@ export const PermissionModal = ({
         try {
           setIsProcessing(false);
           setIsLoadingSmartAccount(true);
-          console.log('🔐 Initializing permission modal');
-          const account = await getSmartAccount(chain);
+          console.log('Initializing permission modal');
+          
+          // Merge paymasterUrl from capabilities into chain before creating account
+          const chainWithPaymaster = {
+            ...chain,
+            paymasterUrl: effectivePaymasterUrl || chain.paymasterUrl,
+          };
+          
+          const restoredAccount = await getAccount(chainWithPaymaster, extractedApiKey);
 
           if (isMounted) {
-            setSmartAccount(account);
+            setAccount(restoredAccount);
             setIsLoadingSmartAccount(false);
           }
         } catch (error) {
-          console.error("Error initializing smart account:", error);
+          console.error("Error initializing account:", error);
           if (isMounted) {
             setIsLoadingSmartAccount(false);
             setStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
@@ -409,7 +414,7 @@ export const PermissionModal = ({
           }
         }
       } else {
-        setSmartAccount(null);
+        setAccount(null);
         setIsLoadingSmartAccount(false);
         setStatus('');
         setIsProcessing(false);
@@ -421,7 +426,7 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, permissionRequest, getSmartAccount, onError]);
+  }, [chain, permissionRequest, extractedApiKey, effectivePaymasterUrl, getAccount, onError]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
@@ -499,8 +504,8 @@ export const PermissionModal = ({
       setIsProcessing(true);
       setStatus(mode === 'grant' ? 'Granting permissions...' : 'Revoking permission...');
 
-      if (!smartAccount) {
-        throw new Error('Smart account not initialized. Please try again.');
+      if (!account) {
+        throw new Error('Account not initialized. Please try again.');
       }
 
       if (!chain) {
@@ -526,20 +531,17 @@ export const PermissionModal = ({
           throw new Error('Spender is required for granting permissions.');
         }
 
-        const result = await grantPermissions(
-          smartAccount,
+        // Account.grantPermissions uses the chain's paymasterUrl (which we set from capabilities)
+        const result = await account.grantPermissions(
           permissionDetails.expiry,
           permissionDetails.spender,
           {
             spends: permissionDetails.spends,
             calls: permissionDetails.calls,
-          },
-          chain,
-          extractedApiKey,
-          effectivePaymasterUrl
+          }
         );
 
-        console.log('✅ Permissions granted:', result);
+        console.log('Permissions granted:', result);
         setStatus('Permissions granted successfully!');
         onSuccess?.(result);
       } else {
@@ -552,15 +554,10 @@ export const PermissionModal = ({
           throw new Error('Permission ID is missing.');
         }
 
-        await revokePermission(
-          smartAccount,
-          permissionDetails.permissionId,
-          chain,
-          extractedApiKey,
-          effectivePaymasterUrl
-        );
+        // Account.revokePermission uses the chain's paymasterUrl (which we set from capabilities)
+        await account.revokePermission(permissionDetails.permissionId);
 
-        console.log('✅ Permission revoked');
+        console.log('Permission revoked');
         setStatus('Permission revoked successfully!');
         onSuccess?.({ success: true });
       }
@@ -573,11 +570,11 @@ export const PermissionModal = ({
       onError?.(errorObj);
       setIsProcessing(false);
     }
-  }, [smartAccount, chain, permissionDetails, mode, extractedApiKey, onSuccess, onError, effectivePaymasterUrl]);
+  }, [account, chain, permissionDetails, mode, onSuccess, onError]);
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
-      setSmartAccount(null);
+      setAccount(null);
       const rejectionError = new Error('User rejected the request');
       (rejectionError as any).code = 4001;
       console.log('❌ User cancelled permission request');

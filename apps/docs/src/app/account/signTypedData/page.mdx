@@ -1,0 +1,116 @@
+# account.signTypedData()
+
+Sign EIP-712 typed data.
+
+**Type:** `instance async`
+
+---
+
+## Signature
+
+```typescript
+async signTypedData(
+  typedData: TypedDataDefinition<TypedData, string>
+): Promise<Hex>
+```
+
+---
+
+## Parameters
+
+### typedData
+
+Type: `TypedDataDefinition<TypedData, string>`
+
+The EIP-712 typed data to sign, including domain, types, primary type, and message.
+
+```typescript
+interface TypedDataDefinition {
+  domain: {
+    name?: string;
+    version?: string;
+    chainId?: number;
+    verifyingContract?: Address;
+    salt?: Hex;
+  };
+  types: Record<string, Array<{ name: string; type: string }>>;
+  primaryType: string;
+  message: Record<string, unknown>;
+}
+```
+
+---
+
+## Returns
+
+`Promise<Hex>` - The signature as a hex string.
+
+---
+
+## Behavior
+
+1. Encodes the typed data according to EIP-712
+2. Signs with the smart account (passkey or local account)
+3. Returns the signature wrapped for smart account validation
+
+---
+
+## Example
+
+### Getting an Account Instance
+
+Before calling instance methods, create an account using one of the factory methods:
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// Option 1: Restore existing session or login with passkey
+const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 2: Create a new account with passkey
+const account = await Account.create(
+  { chainId: 1, apiKey: 'your-api-key' },
+  { username: 'alice' }
+);
+
+// Option 3: Import from cloud backup
+const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 4: From a local account (server-side / embedded wallets)
+const account = await Account.fromLocalAccount(
+  { chainId: 1, apiKey: 'your-api-key' },
+  localAccount
+);
+```
+
+### Basic Usage
+
+```typescript
+const signature = await account.signTypedData({
+  domain: {
+    name: 'MyApp',
+    version: '1',
+    chainId: 1,
+    verifyingContract: '0x...',
+  },
+  types: {
+    Message: [
+      { name: 'content', type: 'string' },
+      { name: 'timestamp', type: 'uint256' },
+    ],
+  },
+  primaryType: 'Message',
+  message: {
+    content: 'Hello, World!',
+    timestamp: BigInt(Date.now()),
+  },
+});
+```
+
+---
+
+## Related
+
+- [account.signMessage()](/account/signMessage) - Sign personal messages
+- [account.sendTransaction()](/account/sendTransaction) - Send transactions
+- [EIP-712 Specification](https://eips.ethereum.org/EIPS/eip-712) - Typed data standard

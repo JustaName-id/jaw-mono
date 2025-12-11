@@ -1,0 +1,184 @@
+# Account
+
+The `Account` class provides a high-level API for smart account operations. It's the recommended way to interact with JAW smart accounts when building custom UI handlers or server-side applications.
+
+---
+
+## When to Use Account
+
+The `Account` class is ideal for:
+
+- **Custom UI Handlers** - When implementing your own `UIHandler` for app-specific mode
+- **Server-side Applications** - Using `fromLocalAccount()` with embedded wallets (Privy, Dynamic, Turnkey)
+- **Direct Integration** - When you need fine-grained control over account operations
+
+For standard client-side usage with the built-in UI, use the provider-based API instead.
+
+---
+
+## Installation
+
+The `Account` class is exported from `@jaw.id/core`:
+
+```typescript
+import { Account } from '@jaw.id/core';
+```
+
+---
+
+## Static Methods
+
+Factory methods for creating Account instances:
+
+| Method | Description |
+|--------|-------------|
+| [Account.get()](/account/get) | Get account - restores session or triggers login |
+| [Account.create()](/account/create) | Create new account with passkey |
+| [Account.import()](/account/import) | Import passkey from cloud backup |
+| [Account.fromLocalAccount()](/account/fromLocalAccount) | Create from viem LocalAccount (server-side) |
+
+Utility methods:
+
+| Method | Description |
+|--------|-------------|
+| [Account.getAuthenticatedAddress()](/account/getAuthenticatedAddress) | Get current authenticated address |
+| [Account.getStoredAccounts()](/account/getStoredAccounts) | Get all stored passkey accounts |
+| [Account.logout()](/account/logout) | Clear authentication state |
+
+---
+
+## Instance Properties
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `address` | `Address` | Smart account address |
+| `chainId` | `number` | Current chain ID |
+
+---
+
+## Instance Methods
+
+### Information
+
+| Method | Description |
+|--------|-------------|
+| [getMetadata()](/account/getMetadata) | Get account metadata (username, creation date) |
+| [getSmartAccount()](/account/getSmartAccount) | Get underlying viem SmartAccount |
+| [getChain()](/account/getChain) | Get chain configuration |
+| [getAddress()](/account/getAddress) | Get address (async, for counterfactual) |
+
+### Signing
+
+| Method | Description |
+|--------|-------------|
+| [signMessage()](/account/signMessage) | Sign a personal message (EIP-191) |
+| [signTypedData()](/account/signTypedData) | Sign typed data (EIP-712) |
+
+### Transactions
+
+| Method | Description |
+|--------|-------------|
+| [sendTransaction()](/account/sendTransaction) | Send transaction and wait for receipt |
+| [sendCalls()](/account/sendCalls) | Send bundled calls (returns immediately) |
+| [estimateGas()](/account/estimateGas) | Estimate gas for calls |
+
+### Permissions
+
+| Method | Description |
+|--------|-------------|
+| [grantPermissions()](/account/grantPermissions) | Grant permissions to a spender |
+| [revokePermission()](/account/revokePermission) | Revoke a permission |
+| [getPermission()](/account/getPermission) | Get permission details |
+
+---
+
+## Interfaces
+
+### AccountConfig
+
+Configuration for creating or loading an account:
+
+```typescript
+interface AccountConfig {
+  /** Chain ID for the account */
+  chainId: number;
+  /** API key for JAW services (required) */
+  apiKey: string;
+  /** Custom paymaster URL for gas sponsorship */
+  paymasterUrl?: string;
+}
+```
+
+### CreateAccountOptions
+
+Options for creating a new account:
+
+```typescript
+interface CreateAccountOptions {
+  /** Username/display name for the passkey */
+  username: string;
+  /** Relying party identifier (defaults to window.location.hostname) */
+  rpId?: string;
+  /** Relying party name (defaults to 'JAW Wallet') */
+  rpName?: string;
+}
+```
+
+### TransactionCall
+
+Transaction call structure:
+
+```typescript
+interface TransactionCall {
+  /** Target contract address */
+  to: Address;
+  /** Value to send in wei (bigint or hex string) */
+  value?: bigint | string;
+  /** Call data */
+  data?: Hex;
+}
+```
+
+### AccountMetadata
+
+Account metadata returned by `getMetadata()`:
+
+```typescript
+interface AccountMetadata {
+  /** Username/display name */
+  username: string;
+  /** ISO date string when created */
+  creationDate: string;
+  /** Whether imported from cloud */
+  isImported: boolean;
+}
+```
+
+---
+
+## Value Format
+
+The `value` field in `TransactionCall` must be in **wei** (the smallest unit of ETH):
+
+```typescript
+import { parseEther } from 'viem';
+
+// BigInt (wei)
+{ to: '0x...', value: 1000000000000000000n }  // 1 ETH in wei
+
+// Hex string (wei)
+{ to: '0x...', value: '0x0de0b6b3a7640000' }  // 1 ETH in wei
+
+// Using parseEther for convenience
+{ to: '0x...', value: parseEther('1') }    // 1 ETH
+{ to: '0x...', value: parseEther('0.1') }  // 0.1 ETH
+```
+
+Use `parseEther()` from viem to convert human-readable ETH amounts to wei.
+
+---
+
+## Related
+
+- [Custom UI Handler](/advanced/custom-ui-handler) - Build custom UI with Account class
+- [Provider - RPC Reference](/api-reference) - Provider-based RPC methods

@@ -13,7 +13,8 @@
     "@jaw/ui": "*",
     "react": "^18",
     "react-dom": "^18",
-    "next": "14.2.33"
+    "next": "14.2.33",
+    "@privy-io/react-auth": "^3.8.1"
   },
   "devDependencies": {
     "typescript": "^5",

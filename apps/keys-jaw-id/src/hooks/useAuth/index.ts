@@ -1,16 +1,26 @@
 import { useQuery } from "@tanstack/react-query";
-import { PasskeyService } from "../../lib/passkey-service";
+import { Account } from "@jaw.id/core";
 
 
-// Function to check auth using PasskeyService
+// Function to check auth using Account class
 const checkAuth = () => {
-    const service = new PasskeyService({ localOnly: true });
-    const authResult = service.checkAuth();
-    const currentAccount = service.getCurrentAccount();
-    
+    const address = Account.getAuthenticatedAddress();
+    const isAuthenticated = address !== null;
+
+    // Get account name from stored accounts if authenticated
+    let accountName: string | undefined;
+    if (isAuthenticated && address) {
+        const accounts = Account.getStoredAccounts();
+        // Find the account that matches the authenticated address
+        // Note: We don't have direct address lookup, so we get the first account
+        // In practice, the authenticated state stores the credential ID
+        accountName = accounts[0]?.username;
+    }
+
     return {
-        ...authResult,
-        accountName: currentAccount?.username,
+        isAuthenticated,
+        address,
+        accountName,
     };
 };
 
