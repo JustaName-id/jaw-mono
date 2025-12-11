@@ -986,8 +986,8 @@ Issued At: ${issuedAt}`;
           permissions: {
             spends: [
               {
-                limit: `0x${ethLimit.toString(16)}`,
-                period: 'day' as const,
+                allowance: `0x${ethLimit.toString(16)}`,
+                unit: 'day' as const,
                 token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // Native token (ETH)
                 multiplier: 2 // 2 days period
               }
@@ -1037,13 +1037,13 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant for multiple ERC-20s on Base Sepolia...');
 
       // Example spender address
-      const spenderAddress = '0xEc653d5900Ae3B56bdf066DC99F175E3a5cFB712';
+      const spenderAddress = '0x2Fa7d5d26953702f3D6D188738f58F74d4EeebD8';
 
       // USDC on Base Sepolia (6 decimals)
-      const usdcAddress = '0xDFfc9C98d62Ae7234D9218315672d6b8CFD0ce59';
+      const usdcAddress = '0x7e8D8C5826e50B5F33FD046A7B64D1B00f7972bC';
 
       // 1 USDC with 6 decimals = 1 * 10^6 = 1000000
-      const usdcLimit = BigInt(10**18);
+      const usdcLimit = parseEther('1')
 
       const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
 
@@ -1067,8 +1067,8 @@ Issued At: ${issuedAt}`;
           permissions: {
             spends: [
               {
-                limit: `0x${usdcLimit.toString(16)}`,
-                period: 'day' as const,
+                allowance: `0x${usdcLimit.toString(16)}`,
+                unit: 'day' as const,
                 token: usdcAddress,
                 multiplier: 3 // 3 days period
               },
