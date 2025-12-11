@@ -1055,7 +1055,15 @@ function TransactionDialogWrapper({
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const isSponsored = !!paymasterUrls?.[chainId];
+
+  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.url > paymasterUrls[chainId]
+  const effectivePaymasterUrl = useMemo(() => {
+    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
+    return capabilitiesPaymasterUrl || paymasterUrls?.[chainId];
+  }, [request.data.capabilities?.paymasterService?.url, paymasterUrls, chainId]);
+
+  const isSponsored = !!effectivePaymasterUrl;
 
   // Transform calls to transactions format expected by dialog
   const transactions = useMemo(() => request.data.calls.map(call => ({
@@ -1083,7 +1091,7 @@ function TransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          paymasterUrls?.[chainId]
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1102,7 +1110,7 @@ function TransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, paymasterUrls]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Gas estimation using Account class
   useEffect(() => {
@@ -1217,7 +1225,15 @@ function SendTransactionDialogWrapper({
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const isSponsored = !!paymasterUrls?.[chainId];
+
+  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.url > paymasterUrls[chainId]
+  const effectivePaymasterUrl = useMemo(() => {
+    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
+    return capabilitiesPaymasterUrl || paymasterUrls?.[chainId];
+  }, [request.data.capabilities?.paymasterService?.url, paymasterUrls, chainId]);
+
+  const isSponsored = !!effectivePaymasterUrl;
 
   // Transform eth_sendTransaction data to transactions format expected by dialog
   const transactions = useMemo(() => [{
@@ -1243,7 +1259,7 @@ function SendTransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          paymasterUrls?.[chainId]
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1262,7 +1278,7 @@ function SendTransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, paymasterUrls]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Gas estimation using Account class
   useEffect(() => {
@@ -1396,9 +1412,17 @@ function PermissionDialogWrapper({
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
   const chainIconKey = getChainIconKeyFromId(chainId);
+
+  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.url > paymasterUrls[chainId]
+  const effectivePaymasterUrl = useMemo(() => {
+    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
+    return capabilitiesPaymasterUrl || paymasterUrls?.[chainId];
+  }, [request.data.capabilities?.paymasterService?.url, paymasterUrls, chainId]);
+
   const chain = useMemo(
-    () => buildChainConfigFromApiKey(chainId, apiKey, paymasterUrls?.[chainId]),
-    [chainId, apiKey, paymasterUrls]
+    () => buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl),
+    [chainId, apiKey, effectivePaymasterUrl]
   );
 
   // Get spends array from request (now using spends plural)
@@ -1566,7 +1590,7 @@ function PermissionDialogWrapper({
       const account = await getAccountForSigning(
         apiKey,
         chainId,
-        paymasterUrls?.[chainId]
+        effectivePaymasterUrl
       );
 
       // Use the spends array directly from the request (already in correct format)
@@ -1743,7 +1767,15 @@ function RevokePermissionDialogWrapper({
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
 
   const chainId = request.data.chainId || defaultChainId || 1;
-  const chain = buildChainConfigFromApiKey(chainId, apiKey, paymasterUrls?.[chainId]);
+
+  // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.url > paymasterUrls[chainId]
+  const effectivePaymasterUrl = useMemo(() => {
+    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
+    return capabilitiesPaymasterUrl || paymasterUrls?.[chainId];
+  }, [request.data.capabilities?.paymasterService?.url, paymasterUrls, chainId]);
+
+  const chain = buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
   const chainIconKey = getChainIconKeyFromId(chainId);
@@ -1866,7 +1898,7 @@ function RevokePermissionDialogWrapper({
       const account = await getAccountForSigning(
         apiKey,
         chainId,
-        paymasterUrls?.[chainId]
+        effectivePaymasterUrl
       );
 
       // Revoke permission using Account class

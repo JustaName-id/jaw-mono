@@ -1,4 +1,5 @@
 import { Address } from '../provider/interface.js';
+import { RequestCapabilities } from '../rpc/permissions.js';
 
 /**
  * UI request types that require user interaction
@@ -76,6 +77,8 @@ export interface TransactionUIRequest extends BaseUIRequest {
     }>;
     chainId: number;
     atomicRequired?: boolean;
+    /** Optional capabilities including paymaster service for sponsored transactions */
+    capabilities?: RequestCapabilities;
   };
 }
 
@@ -96,6 +99,8 @@ export interface SendTransactionUIRequest extends BaseUIRequest {
     maxPriorityFeePerGas?: string;
     nonce?: string;
     chainId: number;
+    /** Optional capabilities including paymaster service for sponsored transactions */
+    capabilities?: RequestCapabilities;
   };
 }
 
@@ -123,6 +128,8 @@ export interface PermissionUIRequest extends BaseUIRequest {
         functionSignature?: string;
       }>;
     };
+    /** Optional capabilities including paymaster service for sponsored transactions */
+    capabilities?: RequestCapabilities;
   };
 }
 
@@ -135,6 +142,8 @@ export interface RevokePermissionUIRequest extends BaseUIRequest {
     permissionId: string;
     address: Address;
     chainId?: number;
+    /** Optional capabilities including paymaster service for sponsored transactions */
+    capabilities?: RequestCapabilities;
   };
 }
 
