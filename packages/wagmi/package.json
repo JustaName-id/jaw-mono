@@ -19,6 +19,9 @@
     "!**/*.tsbuildinfo"
   ],
   "dependencies": {
-    "tslib": "^2.3.0"
+    "@jaw.id/core": "workspace:*",
+    "@wagmi/core": "^3.0.0",
+    "tslib": "^2.3.0",
+    "viem": "^2.38.2"
   }
 }
