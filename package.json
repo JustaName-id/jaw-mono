@@ -83,7 +83,8 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/*"
+    "apps/*",
+    "playground/*"
   ],
   "resolutions": {
     "viem": "2.38.2"

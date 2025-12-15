@@ -9,9 +9,9 @@
     "lint": "next lint"
   },
   "dependencies": {
-    "@jaw.id/core": "*",
-    "@jaw/ui": "*",
-    "@jaw/wagmi": "*",
+    "@jaw.id/core": "workspace:*",
+    "@jaw/ui": "workspace:*",
+    "@jaw/wagmi": "workspace:*",
     "@tanstack/react-query": "^5.62.16",
     "react": "^19",
     "react-dom": "^19",
