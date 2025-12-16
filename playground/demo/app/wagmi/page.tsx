@@ -8,9 +8,12 @@ import {
   useChainId,
   useSwitchChain,
   useBalance,
+  useSendTransaction,
+  useSignMessage,
+  useSignTypedData,
 } from 'wagmi';
 import { useState } from 'react';
-import { formatUnits } from 'viem';
+import { formatUnits, parseEther } from 'viem';
 import { config } from './config';
 
 function WalletStatus() {
@@ -20,7 +23,13 @@ function WalletStatus() {
   const chainId = useChainId();
   const { switchChain, chains } = useSwitchChain();
   const { data: balance } = useBalance({ address });
+  const { sendTransaction, isPending: isSending, data: txHash } = useSendTransaction();
+  const { signMessage, isPending: isSigningMessage, data: signature } = useSignMessage();
+  const { signTypedData, isPending: isSigningTypedData, data: typedSignature } = useSignTypedData();
   const [logs, setLogs] = useState<string[]>([]);
+  const [toAddress, setToAddress] = useState('');
+  const [amount, setAmount] = useState('');
+  const [message, setMessage] = useState('Hello from JAW Wallet!');
 
   const addLog = (message: string) => {
     setLogs((prev) => [...prev, `[${new Date().toLocaleTimeString()}] ${message}`]);
@@ -53,6 +62,61 @@ function WalletStatus() {
   };
 
   const clearLogs = () => setLogs([]);
+
+  const handleSendTransaction = () => {
+    if (!toAddress || !amount) {
+      addLog('Please enter recipient address and amount');
+      return;
+    }
+    addLog(`Sending ${amount} ETH to ${toAddress}...`);
+    sendTransaction({
+      to: toAddress as `0x${string}`,
+      value: parseEther(amount),
+    });
+  };
+
+  const handleSignMessage = () => {
+    if (!message) {
+      addLog('Please enter a message to sign');
+      return;
+    }
+    addLog(`Signing message: "${message}"...`);
+    signMessage({ message });
+  };
+
+  const handleSignTypedData = () => {
+    addLog('Signing typed data (EIP-712)...');
+    signTypedData({
+      domain: {
+        name: 'JAW Wallet Demo',
+        version: '1',
+        chainId: chainId,
+      },
+      types: {
+        Person: [
+          { name: 'name', type: 'string' },
+          { name: 'wallet', type: 'address' },
+        ],
+        Mail: [
+          { name: 'from', type: 'Person' },
+          { name: 'to', type: 'Person' },
+          { name: 'contents', type: 'string' },
+        ],
+      },
+      primaryType: 'Mail',
+      message: {
+        from: {
+          name: 'Alice',
+          wallet: address || '0x0000000000000000000000000000000000000000',
+        },
+        to: {
+          name: 'Bob',
+          wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB',
+        },
+        contents: 'Hello, Bob!',
+      },
+    });
+  };
 
   return (
     <div className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
@@ -156,6 +220,117 @@ function WalletStatus() {
                 {chain.name} {chainId === chain.id && ''}
               </button>
             ))}
+          </div>
+        </div>
+
+        {/* Send Transaction */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Send Transaction
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Recipient Address
+              </label>
+              <input
+                type="text"
+                value={toAddress}
+                onChange={(e) => setToAddress(e.target.value)}
+                placeholder="0x..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Amount (ETH)
+              </label>
+              <input
+                type="text"
+                value={amount}
+                onChange={(e) => setAmount(e.target.value)}
+                placeholder="0.01"
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
+            </div>
+            <button
+              onClick={handleSendTransaction}
+              disabled={!isConnected || isSending}
+              className="w-full px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSending ? 'Sending...' : 'Send Transaction'}
+            </button>
+            {txHash && (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Tx Hash:{' '}
+                <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs break-all">
+                  {txHash}
+                </code>
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Sign Message */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Sign Message (personal_sign)
+          </h2>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Message
+              </label>
+              <input
+                type="text"
+                value={message}
+                onChange={(e) => setMessage(e.target.value)}
+                placeholder="Enter message to sign..."
+                className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+              />
+            </div>
+            <button
+              onClick={handleSignMessage}
+              disabled={!isConnected || isSigningMessage}
+              className="w-full px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSigningMessage ? 'Signing...' : 'Sign Message'}
+            </button>
+            {signature && (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Signature:{' '}
+                <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs break-all">
+                  {signature}
+                </code>
+              </p>
+            )}
+          </div>
+        </div>
+
+        {/* Sign Typed Data */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Sign Typed Data (EIP-712)
+          </h2>
+          <div className="space-y-4">
+            <p className="text-sm text-gray-600 dark:text-gray-400">
+              Signs a sample Mail typed data structure with your wallet.
+            </p>
+            <button
+              onClick={handleSignTypedData}
+              disabled={!isConnected || isSigningTypedData}
+              className="w-full px-4 py-2 bg-orange-600 text-white rounded hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSigningTypedData ? 'Signing...' : 'Sign Typed Data'}
+            </button>
+            {typedSignature && (
+              <p className="text-sm text-gray-600 dark:text-gray-400">
+                Signature:{' '}
+                <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-xs break-all">
+                  {typedSignature}
+                </code>
+              </p>
+            )}
           </div>
         </div>
 
