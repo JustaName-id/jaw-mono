@@ -3,6 +3,7 @@
   "version": "0.0.1",
   "private": true,
   "dependencies": {
+    "@jaw.id/core": "workspace:*",
     "@jaw/ui": "workspace:*",
     "next": "~15.2.6",
     "react": "19.0.0",
