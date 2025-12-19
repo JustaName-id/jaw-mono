@@ -7,6 +7,7 @@
     "@jaw/ui": "workspace:*",
     "next": "~15.2.6",
     "react": "19.0.0",
-    "react-dom": "19.0.0"
+    "react-dom": "19.0.0",
+    "tailwindcss-animate": "^1.0.7"
   }
 }
