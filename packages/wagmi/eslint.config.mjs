@@ -24,6 +24,16 @@ export default [
         }
     },
     {
+        // Allow namespace syntax in internal files (matches wagmi's coding style)
+        "files": [
+            "**/internal/*.ts"
+        ],
+        "rules": {
+            "@typescript-eslint/no-namespace": "off",
+            "@typescript-eslint/no-unused-vars": ["warn", { "argsIgnorePattern": "^_" }]
+        }
+    },
+    {
         ignores: [
             "**/out-tsc"
         ]
