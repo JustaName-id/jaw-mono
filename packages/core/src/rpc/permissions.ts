@@ -216,6 +216,12 @@ export type StorePermissionApiRequest = {
 export type StorePermissionApiResponse = StorePermissionApiRequest;
 
 /**
+ * Response from wallet_getPermissions
+ * Returns an array of stored permissions
+ */
+export type WalletGetPermissionsResponse = StorePermissionApiResponse[];
+
+/**
  * Response from wallet_grantPermissions (returned to dApp)
  * Contains the full Permission struct matching the JustaPermissionManager contract,
  * plus additional metadata (permissionId, chainId).

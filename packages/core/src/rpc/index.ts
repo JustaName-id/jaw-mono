@@ -28,6 +28,7 @@ export {
     type RequestCapabilities,
     type WalletGrantPermissionsRequest,
     type WalletGrantPermissionsResponse,
+    type WalletGetPermissionsResponse,
     type WalletRevokePermissionsRequest,
     type StorePermissionApiRequest,
     type StorePermissionApiResponse,

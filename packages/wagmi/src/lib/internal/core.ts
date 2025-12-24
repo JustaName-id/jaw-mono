@@ -8,6 +8,7 @@ import type { Address } from 'viem';
 import {
   type PermissionsDetail,
   type WalletGrantPermissionsResponse,
+  type WalletGetPermissionsResponse,
   type RevokePermissionApiResponse,
   type WalletConnectCapabilities,
 } from '@jaw.id/core';
@@ -138,7 +139,7 @@ export namespace getPermissions {
     connector?: Connector;
   };
 
-  export type ReturnType = WalletGrantPermissionsResponse[];
+  export type ReturnType = WalletGetPermissionsResponse;
   export type ErrorType = Error;
 }
 

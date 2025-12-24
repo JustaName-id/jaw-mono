@@ -294,26 +294,36 @@ export function usePermissions<
   );
 
   // Set up event listener for permission changes
-  const provider = useRef<EIP1193Provider | undefined>(undefined);
+  const providerRef = useRef<EIP1193Provider | undefined>(undefined);
+  const handlerRef = useRef<((event: { type: string }) => void) | undefined>(undefined);
+
   useEffect(() => {
     if (!activeConnector) return;
 
+    let mounted = true;
+
     void (async () => {
-      provider.current ??=
-        (await activeConnector.getProvider?.()) as EIP1193Provider;
+      const provider = (await activeConnector.getProvider?.()) as EIP1193Provider | undefined;
+      if (!mounted || !provider) return;
+
+      providerRef.current = provider;
 
       const handleMessage = (event: { type: string }) => {
         if (event.type !== 'permissionsChanged') return;
         queryClient.invalidateQueries({ queryKey });
       };
 
-      provider.current?.on('message', handleMessage as never);
-
-      return () => {
-        provider.current?.removeListener?.('message', handleMessage as never);
-      };
+      handlerRef.current = handleMessage;
+      provider.on('message', handleMessage as never);
     })();
-  }, [address, activeConnector, queryClient, queryKey]);
+
+    return () => {
+      mounted = false;
+      if (providerRef.current && handlerRef.current) {
+        providerRef.current.removeListener?.('message', handlerRef.current as never);
+      }
+    };
+  }, [activeConnector, queryClient, queryKey]);
 
   return useQuery({
     ...query,
