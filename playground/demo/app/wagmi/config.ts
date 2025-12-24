@@ -13,11 +13,12 @@ export const config = createConfig({
       appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
       defaultChainId: 84532, // Base Sepolia
       preference: {
-        // keysUrl: 'http://localhost:3001'
+        // keysUrl: 'http://localhost:3001',
         showTestnets: true,
         mode: Mode.AppSpecific,
         uiHandler: new ReactUIHandler(),
       },
+      ens:"justan.id"
     }),
   ],
   transports: {
