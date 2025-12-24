@@ -1,9 +1,11 @@
 export {
     type SignInWithEthereumCapabilityRequest,
     type SignInWithEthereumCapabilityResponse,
+    type SubnameTextRecordCapabilityRequest,
+    type SubnameTextRecordCapabilityResponse,
+    type WalletConnectCapabilities,
     type WalletConnectRequest,
     type WalletConnectResponse,
-    type SubnameTextRecordCapabilityRequest
 } from "./wallet_connect.js"
 
 export {

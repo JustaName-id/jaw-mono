@@ -13,7 +13,9 @@ export {
     type SignInWithEthereumCapabilityRequest,
     type SignInWithEthereumCapabilityResponse,
     type SubnameTextRecordCapabilityRequest,
+    type SubnameTextRecordCapabilityResponse,
     // Wallet connect types
+    type WalletConnectCapabilities,
     type WalletConnectRequest,
     type WalletConnectResponse,
     // Viem RPC types

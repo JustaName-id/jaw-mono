@@ -1,6 +1,8 @@
 import {
   type CreateJAWSDKOptions,
   type ProviderInterface,
+  type WalletConnectCapabilities,
+  type WalletConnectResponse,
   JAW,
 } from '@jaw.id/core';
 import {
@@ -18,6 +20,9 @@ import {
 } from 'viem';
 
 export type JawWalletParameters = CreateJAWSDKOptions;
+
+// Re-export WalletConnectCapabilities for convenience
+export type { WalletConnectCapabilities } from '@jaw.id/core';
 
 jawWallet.type = 'jawWallet' as const;
 
@@ -44,12 +49,22 @@ function parseAccounts(accountsResult: unknown): `0x${string}`[] {
 type ConnectParameters = {
   chainId?: number | undefined;
   isReconnecting?: boolean | undefined;
-  withCapabilities?: boolean | undefined;
+  /**
+   * Capabilities to request during wallet_connect.
+   * When provided, uses wallet_connect instead of eth_requestAccounts.
+   */
+  capabilities?: WalletConnectCapabilities | undefined;
+};
+
+/** Account with capabilities returned from wallet_connect */
+export type AccountWithCapabilities = {
+  address: `0x${string}`;
+  capabilities?: WalletConnectResponse['accounts'][number]['capabilities'];
 };
 
 type ConnectorProperties = {
   connect(parameters?: ConnectParameters): Promise<{
-    accounts: readonly `0x${string}`[];
+    accounts: readonly `0x${string}`[] | readonly AccountWithCapabilities[];
     chainId: number;
   }>;
   onConnect(connectInfo: ProviderConnectInfo): void;
@@ -80,11 +95,12 @@ export function jawWallet(parameters: JawWalletParameters) {
       }
     },
 
-    async connect({ chainId, isReconnecting, withCapabilities }: ConnectParameters = {}) {
+    async connect({ chainId, isReconnecting, capabilities }: ConnectParameters = {}) {
       const chains = config.chains;
       const targetChainId = chainId ?? chains[0]?.id;
 
       let accounts: `0x${string}`[] = [];
+      let accountsWithCapabilities: AccountWithCapabilities[] = [];
       let currentChainId: number | undefined;
 
       // Handle reconnection
@@ -107,10 +123,25 @@ export function jawWallet(parameters: JawWalletParameters) {
 
       try {
         if (!accounts?.length && !isReconnecting) {
-          const accountsResult = await provider.request({
-            method: 'eth_requestAccounts',
-          });
-          accounts = parseAccounts(accountsResult);
+          // Use wallet_connect if capabilities are requested, otherwise use eth_requestAccounts
+          if (capabilities && Object.keys(capabilities).length > 0) {
+            const walletConnectResponse = await provider.request({
+              method: 'wallet_connect',
+              params: [{ capabilities }],
+            }) as WalletConnectResponse;
+
+            // Extract accounts with their capabilities
+            accountsWithCapabilities = walletConnectResponse.accounts.map((acc) => ({
+              address: getAddress(acc.address),
+              capabilities: acc.capabilities,
+            }));
+            accounts = accountsWithCapabilities.map((acc) => acc.address);
+          } else {
+            const accountsResult = await provider.request({
+              method: 'eth_requestAccounts',
+            });
+            accounts = parseAccounts(accountsResult);
+          }
           currentChainId = await this.getChainId();
         }
 
@@ -143,9 +174,10 @@ export function jawWallet(parameters: JawWalletParameters) {
           currentChainId = chain?.id ?? currentChainId;
         }
 
+        // Return accounts with capabilities if wallet_connect was used, otherwise plain accounts
         return {
-          accounts: (withCapabilities
-            ? accounts.map((address) => ({ address, capabilities: {} }))
+          accounts: (accountsWithCapabilities.length > 0
+            ? accountsWithCapabilities
             : accounts) as never,
           chainId: currentChainId!,
         };
