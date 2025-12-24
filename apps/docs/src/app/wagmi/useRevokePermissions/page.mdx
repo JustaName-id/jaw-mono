@@ -1,0 +1,151 @@
+# Hooks.useRevokePermissions()
+
+Hook to revoke a permission by its ID.
+
+**Type:** `hook`
+
+---
+
+## Signature
+
+```typescript
+function useRevokePermissions(parameters?: {
+  config?: Config;
+  mutation?: UseMutationParameters;
+}): UseMutationResult
+```
+
+---
+
+## Parameters
+
+### config
+
+Type: `Config` (optional)
+
+Wagmi config. If not provided, uses the config from `WagmiProvider`.
+
+### mutation
+
+Type: `UseMutationParameters` (optional)
+
+TanStack React Query mutation options.
+
+---
+
+## Returns
+
+Returns a TanStack React Query mutation result:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `mutate` | `function` | Function to revoke permission |
+| `mutateAsync` | `function` | Async version of mutate |
+| `data` | `RevokePermissionApiResponse` | Revocation result |
+| `isPending` | `boolean` | Whether revocation is in progress |
+| `isSuccess` | `boolean` | Whether revocation succeeded |
+| `isError` | `boolean` | Whether revocation failed |
+| `error` | `Error` | Error if revocation failed |
+
+---
+
+## Mutation Variables
+
+When calling `mutate()`, pass:
+
+### id
+
+Type: `Hex` (required)
+
+The permission ID (hash) to revoke. This is the `permissionId` returned when granting a permission, or the `id` field from `usePermissions()`.
+
+### Optional Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `address` | `Address` | Specific account address |
+| `chainId` | `number` | Specific chain ID |
+| `connector` | `Connector` | Specific connector |
+
+---
+
+## Example
+
+### Basic Usage
+
+```tsx
+import { Hooks } from '@jaw/wagmi';
+
+function RevokeButton({ permissionId }: { permissionId: `0x${string}` }) {
+  const { mutate: revoke, isPending } = Hooks.useRevokePermissions();
+
+  return (
+    <button
+      onClick={() => revoke({ id: permissionId })}
+      disabled={isPending}
+    >
+      {isPending ? 'Revoking...' : 'Revoke Permission'}
+    </button>
+  );
+}
+```
+
+### With Confirmation
+
+```tsx
+function RevokeWithConfirmation({ permission }) {
+  const { mutate: revoke, isPending } = Hooks.useRevokePermissions();
+  const [showConfirm, setShowConfirm] = useState(false);
+
+  const handleRevoke = () => {
+    revoke(
+      { id: permission.id },
+      {
+        onSuccess: () => {
+          setShowConfirm(false);
+          // Permission list will auto-update via usePermissions
+        },
+      }
+    );
+  };
+
+  if (showConfirm) {
+    return (
+      <div>
+        <p>Revoke permission for {permission.spender}?</p>
+        <button onClick={handleRevoke} disabled={isPending}>
+          {isPending ? 'Revoking...' : 'Confirm'}
+        </button>
+        <button onClick={() => setShowConfirm(false)}>Cancel</button>
+      </div>
+    );
+  }
+
+  return <button onClick={() => setShowConfirm(true)}>Revoke</button>;
+}
+```
+
+### With Callbacks
+
+```tsx
+const { mutate: revoke } = Hooks.useRevokePermissions({
+  mutation: {
+    onSuccess: (data) => {
+      console.log('Permission revoked successfully');
+      // Show success toast, update UI, etc.
+    },
+    onError: (error) => {
+      console.error('Failed to revoke:', error);
+      // Show error message
+    },
+  },
+});
+```
+
+---
+
+## Related
+
+- [usePermissions()](/wagmi/usePermissions) - Get current permissions
+- [useGrantPermissions()](/wagmi/useGrantPermissions) - Grant new permissions
+- [account.revokePermission()](/account/revokePermission) - Account class method

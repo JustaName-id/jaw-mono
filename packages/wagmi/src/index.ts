@@ -1,7 +1,7 @@
 // Connector
 export {
-  jawWallet,
-  type JawWalletParameters,
+  jaw,
+  type JawParameters,
   type WalletConnectCapabilities,
   type AccountWithCapabilities,
 } from './lib/Connector.js';

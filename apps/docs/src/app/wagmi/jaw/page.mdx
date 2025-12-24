@@ -1,0 +1,141 @@
+# jaw()
+
+Create a JAW connector for Wagmi.
+
+**Type:** `function`
+
+---
+
+## Signature
+
+```typescript
+function jaw(parameters: JawParameters): Connector
+```
+
+---
+
+## Parameters
+
+### apiKey
+
+Type: `string` (required)
+
+Your JAW API key.
+
+### appName
+
+Type: `string`
+
+Display name for your application.
+
+### appLogoUrl
+
+Type: `string | null`
+
+URL to your application's logo. Used in authentication UI.
+
+### defaultChainId
+
+Type: `number`
+
+Default chain ID to use on first connection.
+
+### ens
+
+Type: `string`
+
+ENS domain for issuing subnames (e.g., `'justan.id'`).
+
+### preference
+
+Type: `JawProviderPreference`
+
+Configuration for authentication behavior.
+
+```typescript
+interface JawProviderPreference {
+  /** Authentication mode (default: Mode.CrossPlatform) */
+  mode?: 'CrossPlatform' | 'AppSpecific';
+  /** Whether to show testnet chains (default: false) */
+  showTestnets?: boolean;
+  /** UI handler for app-specific mode (required when mode is Mode.AppSpecific) */
+  uiHandler?: UIHandler;
+}
+```
+
+### paymasterUrls
+
+Type: `Record<number, string>`
+
+Custom paymaster URLs by chain ID for gas sponsorship.
+
+---
+
+## Returns
+
+`Connector` - A Wagmi-compatible connector instance.
+
+---
+
+## Example
+
+### Basic Setup
+
+### With Full Configuration
+
+```typescript
+import { jaw } from '@jaw/wagmi';
+
+const connector = jaw({
+  apiKey: 'YOUR_API_KEY',
+  appName: 'My DApp',
+  appLogoUrl: 'https://example.com/logo.png',
+  defaultChainId: 84532, // Base Sepolia
+  ens: 'justan.id',
+  preference: {
+    showTestnets: true,
+  },
+  paymasterUrls: {
+    84532: 'https://my-paymaster.com/base-sepolia',
+  },
+});
+```
+
+### App-Specific Mode
+
+Handles passkey operations within your app's origin. Requires a UI handler:
+
+```typescript
+import { Mode } from '@jaw.id/core';
+import {ReactUIHandler} from '@jaw.id/ui';
+
+const connector = jaw({
+  apiKey: 'YOUR_API_KEY',
+  appName: 'My App',
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: new ReactUIHandler(),
+  },
+});
+```
+
+---
+
+## Connector Properties
+
+The returned connector has these Wagmi-standard properties:
+
+| Property | Value |
+|----------|-------|
+| `id` | `'jaw'` |
+| `name` | `'JAW'` |
+| `type` | `'jaw'` |
+| `rdns` | `'keys.jaw.id'` |
+
+---
+
+## Related
+
+- [Wagmi Overview](/wagmi) - Getting started with Wagmi integration
+- [useConnect()](/wagmi/useConnect) - Connect with capabilities
+- [Configuration](/configuration) - Full configuration reference

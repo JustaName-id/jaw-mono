@@ -1,0 +1,193 @@
+# Hooks.useConnect()
+
+Hook to connect to the wallet with optional capabilities.
+
+**Type:** `hook`
+
+---
+
+## Signature
+
+```typescript
+function useConnect(parameters?: {
+  config?: Config;
+  mutation?: UseMutationParameters;
+}): UseMutationResult
+```
+
+---
+
+## Parameters
+
+### config
+
+Type: `Config` (optional)
+
+Wagmi config. If not provided, uses the config from `WagmiProvider`.
+
+### mutation
+
+Type: `UseMutationParameters` (optional)
+
+TanStack React Query mutation options.
+
+---
+
+## Returns
+
+Returns a TanStack React Query mutation result:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `mutate` | `function` | Function to trigger connection |
+| `mutateAsync` | `function` | Async version of mutate |
+| `data` | `{ accounts, chainId }` | Connection result |
+| `isPending` | `boolean` | Whether connection is in progress |
+| `isSuccess` | `boolean` | Whether connection succeeded |
+| `isError` | `boolean` | Whether connection failed |
+| `error` | `Error` | Error if connection failed |
+
+### data
+
+When successful, `data` contains:
+
+```typescript
+{
+  accounts: Address[] | AccountWithCapabilities[];
+  chainId: number;
+}
+```
+
+If capabilities were requested, accounts include capability information.
+
+---
+
+## Mutation Variables
+
+When calling `mutate()`, you can pass:
+
+### connector
+
+Type: `Connector` (required)
+
+The connector to use for connection.
+
+### chainId
+
+Type: `number` (optional)
+
+Chain ID to connect to.
+
+### capabilities
+
+Type: `WalletConnectCapabilities` (optional)
+
+Capabilities to request during connection. When provided, uses `wallet_connect` instead of `eth_requestAccounts`.
+
+```typescript
+interface WalletConnectCapabilities {
+  /** Text records for subname issuance */
+  subnameTextRecords?: { key: string; value: string }[];
+}
+```
+
+---
+
+## Example
+
+### Basic Connection
+
+```tsx
+import { Hooks, jaw } from '@jaw/wagmi';
+import { useAccount } from 'wagmi';
+
+function ConnectButton() {
+  const { isConnected } = useAccount();
+  const { mutate: connect, isPending } = Hooks.useConnect();
+
+  if (isConnected) return <p>Connected!</p>;
+
+  return (
+    <button
+      onClick={() => connect({ connector: jaw({ apiKey: '...' }) })}
+      disabled={isPending}
+    >
+      {isPending ? 'Connecting...' : 'Connect'}
+    </button>
+  );
+}
+```
+
+### Connection with Capabilities
+
+Request capabilities (like subname issuance) during connection:
+
+```tsx
+import { Hooks, jaw } from '@jaw/wagmi';
+
+function ConnectWithSubname() {
+  const { mutate: connect, data, isPending } = Hooks.useConnect();
+
+  const handleConnect = () => {
+    connect({
+      connector: jaw({ apiKey: '...', ens: 'justan.id' }),
+      capabilities: {
+        subnameTextRecords: [
+          { key: 'avatar', value: 'https://example.com/avatar.png' },
+          { key: 'description', value: 'My profile' },
+        ],
+      },
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={handleConnect} disabled={isPending}>
+        Connect & Issue Subname
+      </button>
+      {data && (
+        <div>
+          <p>Connected: {data.accounts[0].address}</p>
+          <p>Capabilities: {JSON.stringify(data.accounts[0].capabilities)}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### With Mutation Callbacks
+
+```tsx
+const { mutate: connect } = Hooks.useConnect({
+  mutation: {
+    onSuccess: (data) => {
+      console.log('Connected:', data.accounts);
+    },
+    onError: (error) => {
+      console.error('Connection failed:', error);
+    },
+  },
+});
+```
+
+---
+
+## Difference from wagmi useConnect
+
+| Feature | `wagmi.useConnect()` | `Hooks.useConnect()` |
+|---------|---------------------|---------------------|
+| Basic connection | Yes | Yes |
+| Capabilities parameter | No | Yes |
+| Uses `wallet_connect` | No | When capabilities provided |
+| Returns account capabilities | No | Yes (when requested) |
+
+Use `Hooks.useConnect()` when you need to request capabilities during connection. For basic connections without capabilities, either hook works.
+
+---
+
+## Related
+
+- [useDisconnect()](/wagmi/useDisconnect) - Disconnect from wallet
+- [jaw()](/wagmi/jaw) - Create the connector
+- [Wagmi Overview](/wagmi) - Getting started

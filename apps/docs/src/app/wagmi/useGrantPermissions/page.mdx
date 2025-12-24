@@ -1,0 +1,210 @@
+# Hooks.useGrantPermissions()
+
+Hook to grant permissions to a spender address.
+
+**Type:** `hook`
+
+---
+
+## Signature
+
+```typescript
+function useGrantPermissions(parameters?: {
+  config?: Config;
+  mutation?: UseMutationParameters;
+}): UseMutationResult
+```
+
+---
+
+## Parameters
+
+### config
+
+Type: `Config` (optional)
+
+Wagmi config. If not provided, uses the config from `WagmiProvider`.
+
+### mutation
+
+Type: `UseMutationParameters` (optional)
+
+TanStack React Query mutation options.
+
+---
+
+## Returns
+
+Returns a TanStack React Query mutation result:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `mutate` | `function` | Function to grant permissions |
+| `mutateAsync` | `function` | Async version of mutate |
+| `data` | `WalletGrantPermissionsResponse` | Granted permission details |
+| `isPending` | `boolean` | Whether granting is in progress |
+| `isSuccess` | `boolean` | Whether granting succeeded |
+| `isError` | `boolean` | Whether granting failed |
+| `error` | `Error` | Error if granting failed |
+
+### data
+
+When successful, `data` contains:
+
+```typescript
+interface WalletGrantPermissionsResponse {
+  /** Smart account this permission is valid for */
+  account: Address;
+  /** Entity that can use this permission */
+  spender: Address;
+  /** Timestamp when permission becomes valid */
+  start: number;
+  /** Timestamp when permission expires */
+  end: number;
+  /** Salt for uniqueness */
+  salt: Hex;
+  /** Array of call permissions */
+  calls: CallPermissionDetail[];
+  /** Array of spend permissions */
+  spends: SpendPermissionDetail[];
+  /** Permission identifier (hash) */
+  permissionId: Hex;
+  /** Chain ID in hex */
+  chainId: Hex;
+}
+```
+
+---
+
+## Mutation Variables
+
+When calling `mutate()`, pass:
+
+### expiry
+
+Type: `number` (required)
+
+Unix timestamp (in seconds) when the permission expires.
+
+### spender
+
+Type: `Address` (required)
+
+The address that can use this permission to execute calls on behalf of the account.
+
+### permissions
+
+Type: `PermissionsDetail` (required)
+
+The permissions to grant:
+
+```typescript
+interface PermissionsDetail {
+  /** Call permissions - which contracts and functions can be called */
+  calls?: CallPermissionDetail[];
+  /** Spend permissions - token spending limits */
+  spends?: SpendPermissionDetail[];
+}
+
+interface CallPermissionDetail {
+  /** Target contract address */
+  target: Address;
+  /** Function selector (4 bytes) or signature */
+  selector: Hex;
+}
+
+interface SpendPermissionDetail {
+  /** Token address (use 0xEee...EEeE for native ETH) */
+  token: Address;
+  /** Maximum amount per period */
+  limit: string;
+  /** Time period for the limit */
+  period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year';
+}
+```
+
+### Optional Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `address` | `Address` | Specific account address |
+| `chainId` | `number` | Specific chain ID |
+| `connector` | `Connector` | Specific connector |
+
+---
+
+## Example
+
+
+```tsx
+import { Hooks } from '@jaw/wagmi';
+
+function GrantCallPermission() {
+  const { mutate: grant, isPending, data } = Hooks.useGrantPermissions();
+
+  const handleGrant = () => {
+    grant({
+      expiry: Math.floor(Date.now() / 1000) + 86400 * 7, // 1 week
+      spender: '0xAutomatedBot...',
+      permissions: {
+        calls: [
+          {
+            target: ROUTER_ADDRESS,
+            selector: '0x38ed1739', // swapExactTokensForTokens
+          },
+        ],
+        spends: [
+          {
+            token: USDC_ADDRESS,
+            limit: '500000000', // 500 USDC
+            period: 'week',
+          },
+        ],
+      },
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={handleGrant} disabled={isPending}>
+        {isPending ? 'Granting...' : 'Grant Permission'}
+      </button>
+      {data && <p>Permission ID: {data.permissionId}</p>}
+    </div>
+  );
+}
+```
+
+### With Callbacks
+
+```tsx
+const { mutate: grant } = Hooks.useGrantPermissions({
+  mutation: {
+    onSuccess: (data) => {
+      console.log('Permission granted:', data.permissionId);
+      // Store permission ID for later revocation
+    },
+    onError: (error) => {
+      console.error('Failed to grant permission:', error);
+    },
+  },
+});
+```
+
+---
+
+## Use Cases
+
+- **Session Keys** - Allow a temporary key to perform specific actions
+- **Subscription Services** - Grant recurring spending permissions
+- **Automated Trading** - Allow a bot to execute specific trades
+- **Gaming** - Let a game contract execute moves without prompts
+- **DeFi Automation** - Enable auto-compounding or limit orders
+
+---
+
+## Related
+
+- [usePermissions()](/wagmi/usePermissions) - Get current permissions
+- [useRevokePermissions()](/wagmi/useRevokePermissions) - Revoke a permission
+- [account.grantPermissions()](/account/grantPermissions) - Account class method

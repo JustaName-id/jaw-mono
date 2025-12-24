@@ -51,7 +51,7 @@ function WalletStatus() {
   const [logs, setLogs] = useState<string[]>([]);
   const [toAddress, setToAddress] = useState('');
   const [amount, setAmount] = useState('');
-  const [message, setMessage] = useState('Hello from JAW Wallet!');
+  const [message, setMessage] = useState('Hello from JAW!');
   const [spenderAddress, setSpenderAddress] = useState('');
   const [manualPermissionId, setManualPermissionId] = useState('');
 
@@ -61,7 +61,7 @@ function WalletStatus() {
 
   // Standard Wagmi Connect
   const handleWagmiConnect = async () => {
-    const jawConnector = connectors.find((c) => c.id === 'jawWallet');
+    const jawConnector = connectors.find((c) => c.id === 'jaw');
     if (jawConnector) {
       addLog('Connecting via standard wagmi useConnect...');
       try {
@@ -71,15 +71,15 @@ function WalletStatus() {
         addLog(`Error: ${err instanceof Error ? err.message : String(err)}`);
       }
     } else {
-      addLog('JAW Wallet connector not found');
+      addLog('JAW connector not found');
     }
   };
 
   // JAW useConnect (with capabilities support)
   const handleJawConnect = async () => {
-    const jawConnector = connectors.find((c) => c.id === 'jawWallet');
+    const jawConnector = connectors.find((c) => c.id === 'jaw');
     if (!jawConnector) {
-      addLog('JAW Wallet connector not found');
+      addLog('JAW connector not found');
       return;
     }
     addLog('Connecting via @jaw/wagmi useConnect...');
@@ -95,9 +95,9 @@ function WalletStatus() {
 
   // JAW useConnect with capabilities
   const handleJawConnectWithCapabilities = async () => {
-    const jawConnector = connectors.find((c) => c.id === 'jawWallet');
+    const jawConnector = connectors.find((c) => c.id === 'jaw');
     if (!jawConnector) {
-      addLog('JAW Wallet connector not found');
+      addLog('JAW connector not found');
       return;
     }
     addLog('Connecting via @jaw/wagmi useConnect with capabilities...');
@@ -160,7 +160,7 @@ function WalletStatus() {
     addLog('Signing typed data (EIP-712)...');
     signTypedData({
       domain: {
-        name: 'JAW Wallet Demo',
+        name: 'JAW Demo',
         version: '1',
         chainId: chainId,
       },

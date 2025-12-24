@@ -1,0 +1,137 @@
+# Wagmi
+
+The `@jaw/wagmi` package provides a Wagmi-compatible connector and React hooks for integrating JAW smart accounts into your dApp.
+
+---
+
+## When to Use Wagmi
+
+The Wagmi integration is ideal for:
+
+- **Existing Wagmi Projects** - Drop-in replacement for standard wallet connectors
+- **React Applications** - Full React Query integration with hooks
+- **Multi-Wallet Support** - Use alongside other Wagmi connectors
+- **Standard Patterns** - Familiar API if you already use Wagmi
+
+For direct SDK usage without Wagmi, use the [Provider](/api-reference) or [Account](/account) APIs instead.
+
+---
+
+## Installation
+
+Install the package alongside its peer dependencies:
+
+```bash npm2yarn
+npm install @jaw/wagmi wagmi viem @tanstack/react-query
+```
+
+---
+
+## Quick Start
+
+### 1. Configure the Connector
+
+```typescript
+import { createConfig, http } from 'wagmi';
+import { mainnet, sepolia, baseSepolia } from 'wagmi/chains';
+import { jaw } from '@jaw/wagmi';
+
+const config = createConfig({
+  chains: [mainnet, sepolia, baseSepolia],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_API_KEY',
+      appName: 'My App',
+      appLogoUrl: 'https://example.com/logo.png',
+      defaultChainId: 1,
+      preference: {
+        showTestnets: true,
+      },
+      ens: 'justan.id',
+    }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+    [sepolia.id]: http(),
+    [baseSepolia.id]: http(),
+  },
+});
+```
+
+### 2. Set Up Providers
+
+```tsx
+import { WagmiProvider } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
+
+function App({ children }) {
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
+```
+
+### 3. Use the Hooks
+
+```tsx
+import { useAccount } from 'wagmi';
+import { Hooks } from '@jaw/wagmi';
+
+function WalletButton() {
+  const { address, isConnected } = useAccount();
+  const { mutate: connect, isPending } = Hooks.useConnect();
+  const { mutate: disconnect } = Hooks.useDisconnect();
+
+  if (isConnected) {
+    return (
+      <div>
+        <p>Connected: {address}</p>
+        <button onClick={() => disconnect({})}>Disconnect</button>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => connect({ connector: config.connectors[0] })} disabled={isPending}>
+      {isPending ? 'Connecting...' : 'Connect Wallet'}
+    </button>
+  );
+}
+```
+
+---
+
+## Connector
+
+| Function | Description |
+|----------|-------------|
+| [jaw()](/wagmi/jaw) | Create a JAW connector for Wagmi |
+
+---
+
+## Hooks
+
+JAW-specific hooks exported via the `Hooks` namespace:
+
+| Hook | Description |
+|------|-------------|
+| [Hooks.useConnect()](/wagmi/useConnect) | Connect with optional capabilities |
+| [Hooks.useDisconnect()](/wagmi/useDisconnect) | Disconnect from wallet |
+| [Hooks.useGrantPermissions()](/wagmi/useGrantPermissions) | Grant permissions to a spender |
+| [Hooks.usePermissions()](/wagmi/usePermissions) | Get current permissions |
+| [Hooks.useRevokePermissions()](/wagmi/useRevokePermissions) | Revoke a permission |
+
+
+---
+
+## Related
+
+- [Provider - RPC Reference](/api-reference) - Direct provider methods
+- [Account](/account) - High-level Account API
+- [Configuration](/configuration) - Configuration options

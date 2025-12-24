@@ -19,12 +19,12 @@ import {
   withRetry,
 } from 'viem';
 
-export type JawWalletParameters = CreateJAWSDKOptions;
+export type JawParameters = CreateJAWSDKOptions;
 
 // Re-export WalletConnectCapabilities for convenience
 export type { WalletConnectCapabilities } from '@jaw.id/core';
 
-jawWallet.type = 'jawWallet' as const;
+jaw.type = 'jaw' as const;
 
 /**
  * Helper to parse accounts from various response formats
@@ -70,7 +70,7 @@ type ConnectorProperties = {
   onConnect(connectInfo: ProviderConnectInfo): void;
 };
 
-export function jawWallet(parameters: JawWalletParameters) {
+export function jaw(parameters: JawParameters) {
   type Provider = ProviderInterface;
 
   let sdk: ReturnType<typeof JAW.create> | undefined;
@@ -81,9 +81,9 @@ export function jawWallet(parameters: JawWalletParameters) {
   let disconnect: Connector['onDisconnect'] | undefined;
 
   return createConnector<Provider, ConnectorProperties>((config) => ({
-    id: 'jawWallet',
-    name: 'JAW Wallet',
-    type: jawWallet.type,
+    id: 'jaw',
+    name: 'JAW',
+    type: jaw.type,
     rdns: 'keys.jaw.id',
 
     async setup() {

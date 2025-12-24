@@ -54,7 +54,7 @@ export interface CreateAccountOptions {
   username: string;
   /** Relying party identifier (defaults to window.location.hostname) */
   rpId?: string;
-  /** Relying party name (defaults to 'JAW Wallet') */
+  /** Relying party name (defaults to 'JAW') */
   rpName?: string;
 }
 
@@ -248,7 +248,7 @@ export class Account {
     const { username, rpId, rpName } = options;
 
     const resolvedRpId = rpId ?? (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
-    const resolvedRpName = rpName ?? 'JAW Wallet';
+    const resolvedRpName = rpName ?? 'JAW';
 
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
 
