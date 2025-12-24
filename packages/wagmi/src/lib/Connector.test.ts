@@ -1,6 +1,6 @@
 import { expect, test } from 'vitest';
 
-import { jawWallet } from './wagmi.js';
+import { jawWallet } from './Connector.js';
 
 test('setup', () => {
   const connectorFn = jawWallet({
