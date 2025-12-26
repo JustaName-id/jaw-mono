@@ -1,103 +1,228 @@
 # Getting Started
 
-The JAW SDK is a TypeScript library designed for applications to create, manage, and interact with identity smart wallets on Ethereum and EVM-compatible chains.
+The JAW SDK is a TypeScript library for integrating smart wallets with passkey authentication into your application.
 
-## Overview
-
-JAW SDK provides a comprehensive solution for integrating advanced functionalities into your application with features like:
+## Features
 
 - **Passkey Authentication** - Secure, passwordless authentication using WebAuthn
-- **Gasless Transactions** - Built-in paymaster support for sponsored transactions. Users can also pay gas with ERC-20 tokens natively.
-- **Atomic Batch Operations** - Execute multiple calls atomically via `wallet_sendCalls` (EIP-5792)
-- **Permission System** - Grant granular spend and call permissions to third parties in a permissionless and trustless way
+- **Gasless Transactions** - Built-in paymaster support for sponsored transactions
+- **Atomic Batch Operations** - Execute multiple calls atomically via `useSendCalls` (EIP-5792)
+- **Permission System** - Grant granular spend and call permissions to third parties
 - **Multi-Chain Support** - Works across Ethereum and EVM-compatible chains
 
 ## Installation
 
-Install the JAW SDK package:
-
 ```bash npm2yarn
-npm install @jaw.id/core viem
+npm install @jaw.id/wagmi wagmi viem @tanstack/react-query
 ```
 
-JAW SDK uses `viem` as a peer dependency for Ethereum utilities and type definitions.
+<Callout type="warning">
+You need an API key to use the SDK. Get one at [JAW Dashboard](https://dashboard.jaw.id/).
+</Callout>
 
-## Setup
+## Quick Start
 
-### 1. Initialize the SDK
+### 1. Configure Wagmi
 
-Create a JAW SDK instance with your configuration:
+Create your wagmi config with the JAW connector:
+
+```typescript
+// config.ts
+import { createConfig, http } from 'wagmi';
+import { mainnet, base } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+export const config = createConfig({
+  chains: [mainnet, base],
+  connectors: [
+    jaw({
+      apiKey: 'your-api-key',
+      appName: 'My DApp',
+      appLogoUrl: 'https://my-dapp.com/logo.png',
+    }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+    [base.id]: http(),
+  },
+});
+```
+
+### 2. Set Up Providers
+
+Wrap your app with the required providers:
+
+```tsx
+// App.tsx
+import { WagmiProvider } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { config } from './config';
+
+const queryClient = new QueryClient();
+
+function App({ children }: { children: React.ReactNode }) {
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
+```
+
+### 3. Connect & Interact
+
+```tsx
+import { useAccount, useSendTransaction } from 'wagmi';
+import { useConnect, useDisconnect } from '@jaw.id/wagmi';
+import { parseEther } from 'viem';
+
+function WalletButton() {
+  const { address, isConnected } = useAccount();
+  const { mutate: connect, isPending } = useConnect();
+  const { mutate: disconnect } = useDisconnect();
+  const { sendTransaction } = useSendTransaction();
+
+  if (isConnected) {
+    return (
+      <div>
+        <p>Connected: {address}</p>
+        <button onClick={() => sendTransaction({
+          to: '0x...',
+          value: parseEther('0.01')
+        })}>
+          Send ETH
+        </button>
+        <button onClick={() => disconnect({})}>
+          Disconnect
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => connect({ connector: config.connectors[0] })}
+      disabled={isPending}
+    >
+      {isPending ? 'Connecting...' : 'Connect Wallet'}
+    </button>
+  );
+}
+```
+
+---
+
+## Wagmi Compatibility
+
+With the JAW connector, standard wagmi hooks work out of the box:
+
+| Wagmi Hook | Description |
+|------------|-------------|
+| `useAccount` | Get connected account info |
+| `useSendTransaction` | Send transactions (gasless if paymaster configured) |
+| `useSignMessage` | Sign messages (EIP-191) |
+| `useSignTypedData` | Sign typed data (EIP-712) |
+| `useSwitchChain` | Switch networks |
+| `useSendCalls` | Atomic batch operations (EIP-5792) |
+| `useWriteContract` | Call contract functions |
+| `useBalance` | Get token balances |
+
+---
+
+## JAW-Specific Hooks
+
+For JAW-specific features like permissions, import directly from `@jaw.id/wagmi`:
+
+```typescript
+import {
+  useConnect,
+  useDisconnect,
+  useGrantPermissions,
+  usePermissions,
+  useRevokePermissions
+} from '@jaw.id/wagmi';
+```
+
+| Hook | Description |
+|------|-------------|
+| `useConnect` | Connect with optional capabilities (SIWE, subnames) |
+| `useDisconnect` | Disconnect and clean up session |
+| `useGrantPermissions` | Grant spend/call permissions to a spender |
+| `usePermissions` | Query current permissions |
+| `useRevokePermissions` | Revoke a permission |
+
+---
+
+## Batch Transactions Example
+
+Send multiple calls atomically using wagmi's `useSendCalls`:
+
+```tsx
+import { useSendCalls } from 'wagmi';
+import { encodeFunctionData } from 'viem';
+
+function BatchTransfer() {
+  const { sendCalls, isPending } = useSendCalls();
+
+  const handleBatchTransfer = () => {
+    sendCalls({
+      calls: [
+        {
+          to: USDC_ADDRESS,
+          data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: ['0xAlice...', 1000000n],
+          }),
+        },
+        {
+          to: USDC_ADDRESS,
+          data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: ['0xBob...', 2000000n],
+          }),
+        },
+      ],
+    });
+  };
+
+  return (
+    <button onClick={handleBatchTransfer} disabled={isPending}>
+      {isPending ? 'Sending...' : 'Send to Alice & Bob'}
+    </button>
+  );
+}
+```
+
+---
+
+## Next Steps
+
+- **[Configuration](/configuration)** - All configuration options
+- **[Wagmi Integration](/wagmi)** - Full wagmi hooks reference
+- **[Supported Networks](/supported-networks)** - Available chains
+
+---
+
+## Using the Provider Directly
+
+For non-React applications or advanced use cases, you can use the provider API directly:
 
 ```typescript
 import { JAW } from '@jaw.id/core';
 
 const jaw = JAW.create({
-  apiKey: 'your-api-key-here',
+  apiKey: 'your-api-key',
   appName: 'My DApp',
-  appLogoUrl: 'https://my-dapp.com/logo.png'
 });
-```
 
-<Callout type="warning">
-    You can get your api-key at [JAW Dashboard](https://dashboard.jaw.id/). Check the [apiKey](/configuration/apiKey) section to learn more.
-</Callout>
-
-The SDK returns an object with two properties:
-
-- **`provider`** - An EIP-1193 compatible Ethereum provider for making RPC requests
-- **`disconnect()`** - Method to disconnect the current session and clean up resources
-
-### 2. Connect a Wallet
-
-Request user authentication to connect their wallet:
-
-```typescript
+// EIP-1193 compatible provider
 const accounts = await jaw.provider.request({
-  method: 'wallet_connect'
-});
-
-console.log('Connected:', accounts[0]);
-```
-
-This opens the JAW authentication interface where users can create a new account or sign in with an existing passkey.
-
-### 3. Make Requests
-
-Use the provider to interact with the connected wallet:
-
-```typescript
-// Get current chain ID
-const chainId = await jaw.provider.request({
-  method: 'eth_chainId'
-});
-
-// Send a call bundle
-const bundleId = await jaw.provider.request({
-  method: 'wallet_sendCalls',
-  params: [{
-    chainId: '0x1',
-    from: account,
-    calls: [
-      {
-        to: '0xContractA...',
-        data: '0x...',
-      },
-      {
-        to: '0xContractB...',
-        data: '0x...',
-      },
-    ],
-  }],
-});
-
-// Sign a message
-const signature = await jaw.provider.request({
-  method: 'personal_sign',
-  params: ['Hello World', accounts[0]],
+  method: 'wallet_connect',
 });
 ```
 
-## Next Steps
-
-- **[Configuration](/configuration)** - Learn about all configuration options
-- **[Provider - RPC Reference](/api-reference)** - Complete RPC method reference with request/response formats
+See the [Provider API Reference](/api-reference) for all available methods.

@@ -11,7 +11,24 @@ Advanced configuration options to customize SDK behavior and authentication mode
 ## Usage
 
 ```typescript
-import {JAW, Mode} from '@jaw.id/core';
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+import { Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw/ui';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: new ReactUIHandler(),
+    showTestnets: true,
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW, Mode } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw/ui';
 
 const jaw = JAW.create({
@@ -20,7 +37,6 @@ const jaw = JAW.create({
     mode: Mode.AppSpecific,
     uiHandler: new ReactUIHandler(),
     showTestnets: true,
-    ens: 'myapp.eth',
   },
 });
 ```
@@ -55,7 +71,21 @@ Authentication mode that determines where passkey operations occur.
 Passkey operations redirect to `keys.jaw.id` in a popup, enabling wallet reuse across multiple applications.
 
 ```typescript
-import {JAW, Mode} from '@jaw.id/core';
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+import { Mode } from '@jaw.id/core';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.CrossPlatform,
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW, Mode } from '@jaw.id/core';
 
 const jaw = JAW.create({
   apiKey: 'your-api-key',
@@ -104,6 +134,22 @@ npm install @jaw/ui @jaw.id/core
 Then configure the SDK with `ReactUIHandler`:
 
 ```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+import { Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw/ui';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: new ReactUIHandler(),
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
 import { JAW, Mode } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw/ui';
 
@@ -131,7 +177,24 @@ URL to a passkey metadata server for managing passkey credentials (credential ID
 **Only works with:** `Mode.AppSpecific`
 
 ```typescript
-import {JAW, Mode} from '@jaw.id/core';
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+import { Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw/ui';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: new ReactUIHandler(),
+    serverUrl: 'https://custom-backend.example.com/passkeys',
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW, Mode } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw/ui';
 
 const jaw = JAW.create({
@@ -160,6 +223,21 @@ Whether to include testnet networks in the available chains list.
 **Default:** `false`
 
 ```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  preference: {
+    showTestnets: true,
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW } from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key',
   preference: {

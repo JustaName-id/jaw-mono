@@ -11,6 +11,23 @@ Custom paymaster service URLs for sponsoring gas fees on different blockchain ne
 ## Usage
 
 ```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  paymasterUrls: {
+    1: 'https://paymaster.example.com/mainnet',
+    137: 'https://paymaster.example.com/polygon',
+    8453: 'https://paymaster.example.com/base',
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW } from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key',
   paymasterUrls: {
@@ -47,8 +64,13 @@ paymasterUrls: {
 
 The key is the chain ID (decimal number), and the value is the paymaster service URL.
 
+### Multiple Networks Example
+
 ```typescript
-const jaw = JAW.create({
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
   apiKey: 'your-api-key',
   paymasterUrls: {
     1: 'https://pm.example.com/eth',      // Ethereum Mainnet
