@@ -1,8 +1,16 @@
-# Hooks.useGrantPermissions()
+# useGrantPermissions
 
 Hook to grant permissions to a spender address.
 
 **Type:** `hook`
+
+---
+
+## Import
+
+```typescript
+import { useGrantPermissions } from '@jaw.id/wagmi';
+```
 
 ---
 
@@ -133,14 +141,15 @@ interface SpendPermissionDetail {
 
 ---
 
-## Example
+## Examples
 
+### Basic Usage
 
 ```tsx
-import { Hooks } from '@jaw/wagmi';
+import { useGrantPermissions } from '@jaw.id/wagmi';
 
-function GrantCallPermission() {
-  const { mutate: grant, isPending, data } = Hooks.useGrantPermissions();
+function GrantPermissionButton() {
+  const { mutate: grant, isPending, data } = useGrantPermissions();
 
   const handleGrant = () => {
     grant({
@@ -178,17 +187,62 @@ function GrantCallPermission() {
 ### With Callbacks
 
 ```tsx
-const { mutate: grant } = Hooks.useGrantPermissions({
-  mutation: {
-    onSuccess: (data) => {
-      console.log('Permission granted:', data.permissionId);
-      // Store permission ID for later revocation
+import { useGrantPermissions } from '@jaw.id/wagmi';
+
+function GrantWithCallbacks() {
+  const { mutate: grant } = useGrantPermissions({
+    mutation: {
+      onSuccess: (data) => {
+        console.log('Permission granted:', data.permissionId);
+        // Store permission ID for later revocation
+      },
+      onError: (error) => {
+        console.error('Failed to grant permission:', error);
+      },
     },
-    onError: (error) => {
-      console.error('Failed to grant permission:', error);
-    },
-  },
-});
+  });
+
+  // ...
+}
+```
+
+### Daily Spending Limit
+
+```tsx
+import { useGrantPermissions } from '@jaw.id/wagmi';
+import { parseUnits } from 'viem';
+
+function DailySpendingLimit() {
+  const { mutate: grant, isPending } = useGrantPermissions();
+
+  const handleGrant = () => {
+    grant({
+      expiry: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
+      spender: '0xSubscriptionService...',
+      permissions: {
+        calls: [
+          {
+            target: USDC_ADDRESS,
+            selector: '0xa9059cbb', // transfer
+          },
+        ],
+        spends: [
+          {
+            token: USDC_ADDRESS,
+            limit: parseUnits('100', 6).toString(), // 100 USDC per day
+            period: 'day',
+          },
+        ],
+      },
+    });
+  };
+
+  return (
+    <button onClick={handleGrant} disabled={isPending}>
+      Allow $100/day Subscription
+    </button>
+  );
+}
 ```
 
 ---
@@ -205,6 +259,6 @@ const { mutate: grant } = Hooks.useGrantPermissions({
 
 ## Related
 
-- [usePermissions()](/wagmi/usePermissions) - Get current permissions
-- [useRevokePermissions()](/wagmi/useRevokePermissions) - Revoke a permission
-- [account.grantPermissions()](/account/grantPermissions) - Account class method
+- [usePermissions](/wagmi/usePermissions) - Get current permissions
+- [useRevokePermissions](/wagmi/useRevokePermissions) - Revoke a permission
+- [wallet_grantPermissions](/api-reference/wallet_grantPermissions) - RPC method reference

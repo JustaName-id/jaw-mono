@@ -1,8 +1,16 @@
-# Hooks.useConnect()
+# useConnect
 
 Hook to connect to the wallet with optional capabilities.
 
 **Type:** `hook`
+
+---
+
+## Import
+
+```typescript
+import { useConnect } from '@jaw.id/wagmi';
+```
 
 ---
 
@@ -86,6 +94,14 @@ Capabilities to request during connection. When provided, uses `wallet_connect` 
 
 ```typescript
 interface WalletConnectCapabilities {
+  /** SIWE parameters for authentication */
+  signInWithEthereum?: {
+    nonce: string;
+    chainId: string;
+    domain?: string;
+    uri?: string;
+    statement?: string;
+  };
   /** Text records for subname issuance */
   subnameTextRecords?: { key: string; value: string }[];
 }
@@ -93,17 +109,17 @@ interface WalletConnectCapabilities {
 
 ---
 
-## Example
+## Examples
 
 ### Basic Connection
 
 ```tsx
-import { Hooks, jaw } from '@jaw/wagmi';
 import { useAccount } from 'wagmi';
+import { useConnect, jaw } from '@jaw.id/wagmi';
 
 function ConnectButton() {
   const { isConnected } = useAccount();
-  const { mutate: connect, isPending } = Hooks.useConnect();
+  const { mutate: connect, isPending } = useConnect();
 
   if (isConnected) return <p>Connected!</p>;
 
@@ -118,19 +134,80 @@ function ConnectButton() {
 }
 ```
 
-### Connection with Capabilities
-
-Request capabilities (like subname issuance) during connection:
+### Using Config Connector
 
 ```tsx
-import { Hooks, jaw } from '@jaw/wagmi';
+import { useConnect } from '@jaw.id/wagmi';
+import { config } from './config';
 
-function ConnectWithSubname() {
-  const { mutate: connect, data, isPending } = Hooks.useConnect();
+function ConnectButton() {
+  const { mutate: connect, isPending } = useConnect();
+
+  return (
+    <button
+      onClick={() => connect({ connector: config.connectors[0] })}
+      disabled={isPending}
+    >
+      Connect
+    </button>
+  );
+}
+```
+
+### Connection with SIWE
+
+Request a Sign-In with Ethereum signature during connection:
+
+```tsx
+import { useConnect, jaw } from '@jaw.id/wagmi';
+
+function ConnectWithSIWE() {
+  const { mutate: connect, data, isPending } = useConnect();
 
   const handleConnect = () => {
     connect({
-      connector: jaw({ apiKey: '...', ens: 'justan.id' }),
+      connector: jaw({ apiKey: '...' }),
+      capabilities: {
+        signInWithEthereum: {
+          nonce: crypto.randomUUID(),
+          chainId: '0x1',
+          domain: window.location.host,
+          uri: window.location.origin,
+          statement: 'Sign in to My DApp',
+        },
+      },
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={handleConnect} disabled={isPending}>
+        Sign In with Ethereum
+      </button>
+      {data && (
+        <div>
+          <p>Connected: {data.accounts[0].address}</p>
+          <p>SIWE Signature: {data.accounts[0].capabilities?.signInWithEthereum?.signature}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### Connection with Subname
+
+Issue an ENS subname during connection (requires `ens` config option):
+
+```tsx
+import { useConnect, jaw } from '@jaw.id/wagmi';
+
+function ConnectWithSubname() {
+  const { mutate: connect, isPending } = useConnect();
+
+  const handleConnect = () => {
+    connect({
+      connector: jaw({ apiKey: '...', ens: 'myapp.eth' }),
       capabilities: {
         subnameTextRecords: [
           { key: 'avatar', value: 'https://example.com/avatar.png' },
@@ -141,17 +218,9 @@ function ConnectWithSubname() {
   };
 
   return (
-    <div>
-      <button onClick={handleConnect} disabled={isPending}>
-        Connect & Issue Subname
-      </button>
-      {data && (
-        <div>
-          <p>Connected: {data.accounts[0].address}</p>
-          <p>Capabilities: {JSON.stringify(data.accounts[0].capabilities)}</p>
-        </div>
-      )}
-    </div>
+    <button onClick={handleConnect} disabled={isPending}>
+      Connect & Get Subname
+    </button>
   );
 }
 ```
@@ -159,35 +228,41 @@ function ConnectWithSubname() {
 ### With Mutation Callbacks
 
 ```tsx
-const { mutate: connect } = Hooks.useConnect({
-  mutation: {
-    onSuccess: (data) => {
-      console.log('Connected:', data.accounts);
+import { useConnect } from '@jaw.id/wagmi';
+
+function ConnectWithCallbacks() {
+  const { mutate: connect } = useConnect({
+    mutation: {
+      onSuccess: (data) => {
+        console.log('Connected:', data.accounts);
+      },
+      onError: (error) => {
+        console.error('Connection failed:', error);
+      },
     },
-    onError: (error) => {
-      console.error('Connection failed:', error);
-    },
-  },
-});
+  });
+
+  return <button onClick={() => connect({ connector })}>Connect</button>;
+}
 ```
 
 ---
 
 ## Difference from wagmi useConnect
 
-| Feature | `wagmi.useConnect()` | `Hooks.useConnect()` |
-|---------|---------------------|---------------------|
+| Feature | `wagmi.useConnect` | `@jaw.id/wagmi.useConnect` |
+|---------|-------------------|------------------------|
 | Basic connection | Yes | Yes |
 | Capabilities parameter | No | Yes |
 | Uses `wallet_connect` | No | When capabilities provided |
 | Returns account capabilities | No | Yes (when requested) |
 
-Use `Hooks.useConnect()` when you need to request capabilities during connection. For basic connections without capabilities, either hook works.
+Use `@jaw.id/wagmi`'s `useConnect` when you need to request capabilities during connection. For basic connections without capabilities, either hook works.
 
 ---
 
 ## Related
 
-- [useDisconnect()](/wagmi/useDisconnect) - Disconnect from wallet
+- [useDisconnect](/wagmi/useDisconnect) - Disconnect from wallet
 - [jaw()](/wagmi/jaw) - Create the connector
-- [Wagmi Overview](/wagmi) - Getting started
+- [wallet_connect](/api-reference/wallet_connect) - RPC method reference

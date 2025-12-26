@@ -19,7 +19,7 @@ import {
   useGrantPermissions,
   useRevokePermissions,
   usePermissions,
-} from '@jaw/wagmi';
+} from '@jaw.id/wagmi';
 import { useState } from 'react';
 import { formatUnits, parseEther, type Address } from 'viem';
 import { AnyAaaaRecord } from 'dns';
@@ -82,7 +82,7 @@ function WalletStatus() {
       addLog('JAW connector not found');
       return;
     }
-    addLog('Connecting via @jaw/wagmi useConnect...');
+    addLog('Connecting via @jaw.id/wagmi useConnect...');
     try {
       jawConnect({
         connector: jawConnector,
@@ -100,7 +100,7 @@ function WalletStatus() {
       addLog('JAW connector not found');
       return;
     }
-    addLog('Connecting via @jaw/wagmi useConnect with capabilities...');
+    addLog('Connecting via @jaw.id/wagmi useConnect with capabilities...');
     try {
       jawConnect({
         connector: jawConnector,
@@ -123,7 +123,7 @@ function WalletStatus() {
   };
 
   const handleJawDisconnect = () => {
-    addLog('Disconnecting via @jaw/wagmi useDisconnect...');
+    addLog('Disconnecting via @jaw.id/wagmi useDisconnect...');
     jawDisconnect({connector: connector});
     addLog('JAW Disconnected');
   };
@@ -196,7 +196,7 @@ function WalletStatus() {
       addLog('Please enter a spender address');
       return;
     }
-    addLog('Granting permissions via @jaw/wagmi useGrantPermissions...');
+    addLog('Granting permissions via @jaw.id/wagmi useGrantPermissions...');
     try {
       grantPermissionsMutate({
         spender: spenderAddress as Address,
@@ -232,7 +232,7 @@ function WalletStatus() {
       addLog('No permissions to revoke');
       return;
     }
-    addLog('Revoking permissions via @jaw/wagmi useRevokePermissions...');
+    addLog('Revoking permissions via @jaw.id/wagmi useRevokePermissions...');
     try {
       // Revoke the first permission by its ID (permissionId)
       const firstPermission = permissions[0];
@@ -251,7 +251,7 @@ function WalletStatus() {
 
   // Fetch Permissions
   const handleFetchPermissions = () => {
-    addLog('Fetching permissions via @jaw/wagmi usePermissions...');
+    addLog('Fetching permissions via @jaw.id/wagmi usePermissions...');
     refetchPermissions();
     addLog('Permissions fetch triggered');
   };
@@ -379,7 +379,7 @@ function WalletStatus() {
         {/* JAW Wagmi Hooks - Connect/Disconnect */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            @jaw/wagmi useConnect / useDisconnect
+            @jaw.id/wagmi useConnect / useDisconnect
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             These hooks support wallet_connect with capabilities (ERC-7715 permissions)
@@ -412,7 +412,7 @@ function WalletStatus() {
         {/* JAW Wagmi Hooks - Permissions */}
         <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
           <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
-            @jaw/wagmi Permissions (ERC-7715)
+            @jaw.id/wagmi Permissions (ERC-7715)
           </h2>
           <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
             useGrantPermissions, useRevokePermissions, usePermissions

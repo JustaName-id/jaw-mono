@@ -1,8 +1,16 @@
-# Hooks.useDisconnect()
+# useDisconnect
 
 Hook to disconnect from the wallet.
 
 **Type:** `hook`
+
+---
+
+## Import
+
+```typescript
+import { useDisconnect } from '@jaw.id/wagmi';
+```
 
 ---
 
@@ -60,17 +68,17 @@ Specific connector to disconnect from. If omitted, disconnects the active connec
 
 ---
 
-## Example
+## Examples
 
 ### Basic Usage
 
 ```tsx
-import { Hooks } from '@jaw/wagmi';
 import { useAccount } from 'wagmi';
+import { useDisconnect } from '@jaw.id/wagmi';
 
 function DisconnectButton() {
   const { isConnected } = useAccount();
-  const { mutate: disconnect, isPending } = Hooks.useDisconnect();
+  const { mutate: disconnect, isPending } = useDisconnect();
 
   if (!isConnected) return null;
 
@@ -85,30 +93,76 @@ function DisconnectButton() {
 ### With Callback
 
 ```tsx
-const { mutate: disconnect } = Hooks.useDisconnect({
-  mutation: {
-    onSuccess: () => {
-      console.log('Disconnected successfully');
-      // Redirect to login page, clear local state, etc.
+import { useDisconnect } from '@jaw.id/wagmi';
+
+function DisconnectButton() {
+  const { mutate: disconnect } = useDisconnect({
+    mutation: {
+      onSuccess: () => {
+        console.log('Disconnected successfully');
+        // Redirect to login page, clear local state, etc.
+      },
     },
-  },
-});
+  });
+
+  return <button onClick={() => disconnect({})}>Disconnect</button>;
+}
 ```
 
 ### Disconnect Specific Connector
 
 ```tsx
-import { jaw } from '@jaw/wagmi';
+import { useDisconnect, jaw } from '@jaw.id/wagmi';
 
-const connector = jaw({ apiKey: '...' });
+function DisconnectButton() {
+  const { mutate: disconnect } = useDisconnect();
+  const connector = jaw({ apiKey: '...' });
 
-// Later, disconnect only this connector
-disconnect({ connector });
+  // Disconnect only this specific connector
+  return (
+    <button onClick={() => disconnect({ connector })}>
+      Disconnect JAW
+    </button>
+  );
+}
+```
+
+### Full Wallet Component
+
+```tsx
+import { useAccount } from 'wagmi';
+import { useConnect, useDisconnect, jaw } from '@jaw.id/wagmi';
+
+function WalletButton() {
+  const { address, isConnected } = useAccount();
+  const { mutate: connect, isPending: isConnecting } = useConnect();
+  const { mutate: disconnect, isPending: isDisconnecting } = useDisconnect();
+
+  if (isConnected) {
+    return (
+      <div>
+        <span>{address?.slice(0, 6)}...{address?.slice(-4)}</span>
+        <button onClick={() => disconnect({})} disabled={isDisconnecting}>
+          {isDisconnecting ? '...' : 'Disconnect'}
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => connect({ connector: jaw({ apiKey: '...' }) })}
+      disabled={isConnecting}
+    >
+      {isConnecting ? 'Connecting...' : 'Connect'}
+    </button>
+  );
+}
 ```
 
 ---
 
 ## Related
 
-- [useConnect()](/wagmi/useConnect) - Connect to wallet
-- [Wagmi Overview](/wagmi) - Getting started
+- [useConnect](/wagmi/useConnect) - Connect to wallet
+- [jaw()](/wagmi/jaw) - Create the connector

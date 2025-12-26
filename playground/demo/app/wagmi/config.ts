@@ -1,6 +1,6 @@
 import { http, createConfig } from 'wagmi';
 import { mainnet, sepolia, baseSepolia } from 'wagmi/chains';
-import { jaw } from '@jaw/wagmi';
+import { jaw } from '@jaw.id/wagmi';
 import { Mode } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw/ui';
 

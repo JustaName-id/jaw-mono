@@ -10,6 +10,18 @@ Your JAW API key for authentication with JAW services.
 ## Usage
 
 ```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key-here',
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW } from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key-here',
 });

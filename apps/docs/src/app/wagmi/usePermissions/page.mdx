@@ -1,8 +1,16 @@
-# Hooks.usePermissions()
+# usePermissions
 
 Hook to get the current permissions for the connected account. Automatically updates when permissions change.
 
 **Type:** `hook`
+
+---
+
+## Import
+
+```typescript
+import { usePermissions } from '@jaw.id/wagmi';
+```
 
 ---
 
@@ -104,15 +112,17 @@ interface Permission {
 
 ---
 
-## Example
+## Examples
+
+### Basic Usage
 
 ```tsx
-import { Hooks } from '@jaw/wagmi';
 import { useAccount } from 'wagmi';
+import { usePermissions } from '@jaw.id/wagmi';
 
 function PermissionsList() {
   const { isConnected } = useAccount();
-  const { data: permissions, isLoading } = Hooks.usePermissions();
+  const { data: permissions, isLoading } = usePermissions();
 
   if (!isConnected) return <p>Connect wallet to view permissions</p>;
   if (isLoading) return <p>Loading permissions...</p>;
@@ -139,29 +149,39 @@ function PermissionsList() {
 ### For Specific Address
 
 ```tsx
-// Get permissions for a specific address
-const { data } = Hooks.usePermissions({
-  address: '0x1234567890abcdef1234567890abcdef12345678',
-});
+import { usePermissions } from '@jaw.id/wagmi';
+
+function PermissionsForAddress({ address }: { address: `0x${string}` }) {
+  const { data: permissions } = usePermissions({ address });
+
+  // ...
+}
 ```
 
 ### Disable Auto-Fetch
 
 ```tsx
-const { data, refetch } = Hooks.usePermissions({
-  query: {
-    enabled: false, // Don't fetch automatically
-  },
-});
+import { usePermissions } from '@jaw.id/wagmi';
 
-// Manually fetch when needed
-<button onClick={() => refetch()}>Load Permissions</button>
+function ManualPermissions() {
+  const { data, refetch } = usePermissions({
+    query: {
+      enabled: false, // Don't fetch automatically
+    },
+  });
+
+  return (
+    <div>
+      <button onClick={() => refetch()}>Load Permissions</button>
+      {data && <p>{data.length} permissions found</p>}
+    </div>
+  );
+}
 ```
-
 ---
 
 ## Related
 
-- [useGrantPermissions()](/wagmi/useGrantPermissions) - Grant new permissions
-- [useRevokePermissions()](/wagmi/useRevokePermissions) - Revoke a permission
-- [account.getPermission()](/account/getPermission) - Account class method
+- [useGrantPermissions](/wagmi/useGrantPermissions) - Grant new permissions
+- [useRevokePermissions](/wagmi/useRevokePermissions) - Revoke a permission
+- [wallet_getPermissions](/api-reference/wallet_getPermissions) - RPC method reference

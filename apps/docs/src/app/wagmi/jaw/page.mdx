@@ -6,6 +6,14 @@ Create a JAW connector for Wagmi.
 
 ---
 
+## Import
+
+```typescript
+import { jaw } from '@jaw.id/wagmi';
+```
+
+---
+
 ## Signature
 
 ```typescript
@@ -20,13 +28,13 @@ function jaw(parameters: JawParameters): Connector
 
 Type: `string` (required)
 
-Your JAW API key.
+Your JAW API key. Get one at [JAW Dashboard](https://dashboard.jaw.id/).
 
 ### appName
 
 Type: `string`
 
-Display name for your application.
+Display name for your application. Shown in the authentication UI.
 
 ### appLogoUrl
 
@@ -44,7 +52,7 @@ Default chain ID to use on first connection.
 
 Type: `string`
 
-ENS domain for issuing subnames (e.g., `'justan.id'`).
+ENS domain for issuing subnames (e.g., `'myapp.eth'`). When configured, users can receive a subname during account creation.
 
 ### preference
 
@@ -55,10 +63,10 @@ Configuration for authentication behavior.
 ```typescript
 interface JawProviderPreference {
   /** Authentication mode (default: Mode.CrossPlatform) */
-  mode?: 'CrossPlatform' | 'AppSpecific';
+  mode?: Mode.CrossPlatform | Mode.AppSpecific;
   /** Whether to show testnet chains (default: false) */
   showTestnets?: boolean;
-  /** UI handler for app-specific mode (required when mode is Mode.AppSpecific) */
+  /** UI handler for app-specific mode */
   uiHandler?: UIHandler;
 }
 ```
@@ -77,50 +85,6 @@ Custom paymaster URLs by chain ID for gas sponsorship.
 
 ---
 
-## Example
-
-### Basic Setup
-
-### With Full Configuration
-
-```typescript
-import { jaw } from '@jaw/wagmi';
-
-const connector = jaw({
-  apiKey: 'YOUR_API_KEY',
-  appName: 'My DApp',
-  appLogoUrl: 'https://example.com/logo.png',
-  defaultChainId: 84532, // Base Sepolia
-  ens: 'justan.id',
-  preference: {
-    showTestnets: true,
-  },
-  paymasterUrls: {
-    84532: 'https://my-paymaster.com/base-sepolia',
-  },
-});
-```
-
-### App-Specific Mode
-
-Handles passkey operations within your app's origin. Requires a UI handler:
-
-```typescript
-import { Mode } from '@jaw.id/core';
-import {ReactUIHandler} from '@jaw.id/ui';
-
-const connector = jaw({
-  apiKey: 'YOUR_API_KEY',
-  appName: 'My App',
-  preference: {
-    mode: Mode.AppSpecific,
-    uiHandler: new ReactUIHandler(),
-  },
-});
-```
-
----
-
 ## Connector Properties
 
 The returned connector has these Wagmi-standard properties:
@@ -134,8 +98,118 @@ The returned connector has these Wagmi-standard properties:
 
 ---
 
+## Examples
+
+### Minimal Setup
+
+```typescript
+import { createConfig, http } from 'wagmi';
+import { mainnet } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+const config = createConfig({
+  chains: [mainnet],
+  connectors: [
+    jaw({ apiKey: 'YOUR_API_KEY' }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+  },
+});
+```
+
+### Full Configuration
+
+```typescript
+import { createConfig, http } from 'wagmi';
+import { mainnet, base, baseSepolia } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+const config = createConfig({
+  chains: [mainnet, base, baseSepolia],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_API_KEY',
+      appName: 'My DApp',
+      appLogoUrl: 'https://example.com/logo.png',
+      defaultChainId: 8453, // Base
+      ens: 'myapp.eth',
+      preference: {
+        showTestnets: true,
+      },
+      paymasterUrls: {
+        8453: 'https://my-paymaster.com/base',
+        84532: 'https://my-paymaster.com/base-sepolia',
+      },
+    }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+    [base.id]: http(),
+    [baseSepolia.id]: http(),
+  },
+});
+```
+
+### App-Specific Mode
+
+Handle passkey operations within your app's origin using the React UI handler:
+
+```typescript
+import { createConfig, http } from 'wagmi';
+import { mainnet } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+import { Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw/ui';
+
+const config = createConfig({
+  chains: [mainnet],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_API_KEY',
+      appName: 'My App',
+      preference: {
+        mode: Mode.AppSpecific,
+        uiHandler: new ReactUIHandler(),
+      },
+    }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+  },
+});
+```
+
+<Callout type="info">
+App-specific mode requires installing `@jaw/ui` for React apps: `npm install @jaw/ui`
+</Callout>
+
+### Multiple Connectors
+
+Use JAW alongside other connectors:
+
+```typescript
+import { createConfig, http } from 'wagmi';
+import { mainnet } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+import { injected } from 'wagmi/connectors';
+
+const config = createConfig({
+  chains: [mainnet],
+  connectors: [
+    jaw({ apiKey: 'YOUR_API_KEY', appName: 'My App' }),
+    injected(),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+  },
+});
+```
+
+---
+
 ## Related
 
-- [Wagmi Overview](/wagmi) - Getting started with Wagmi integration
-- [useConnect()](/wagmi/useConnect) - Connect with capabilities
 - [Configuration](/configuration) - Full configuration reference
+- [useConnect](/wagmi/useConnect) - Connect with capabilities
+- [preference](/configuration/preference) - Mode and UI handler options

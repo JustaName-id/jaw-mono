@@ -1,8 +1,16 @@
-# Hooks.useRevokePermissions()
+# useRevokePermissions
 
 Hook to revoke a permission by its ID.
 
 **Type:** `hook`
+
+---
+
+## Import
+
+```typescript
+import { useRevokePermissions } from '@jaw.id/wagmi';
+```
 
 ---
 
@@ -69,15 +77,15 @@ The permission ID (hash) to revoke. This is the `permissionId` returned when gra
 
 ---
 
-## Example
+## Examples
 
 ### Basic Usage
 
 ```tsx
-import { Hooks } from '@jaw/wagmi';
+import { useRevokePermissions } from '@jaw.id/wagmi';
 
 function RevokeButton({ permissionId }: { permissionId: `0x${string}` }) {
-  const { mutate: revoke, isPending } = Hooks.useRevokePermissions();
+  const { mutate: revoke, isPending } = useRevokePermissions();
 
   return (
     <button
@@ -90,11 +98,14 @@ function RevokeButton({ permissionId }: { permissionId: `0x${string}` }) {
 }
 ```
 
-### With Confirmation
+### With Confirmation Dialog
 
 ```tsx
+import { useState } from 'react';
+import { useRevokePermissions } from '@jaw.id/wagmi';
+
 function RevokeWithConfirmation({ permission }) {
-  const { mutate: revoke, isPending } = Hooks.useRevokePermissions();
+  const { mutate: revoke, isPending } = useRevokePermissions();
   const [showConfirm, setShowConfirm] = useState(false);
 
   const handleRevoke = () => {
@@ -128,24 +139,64 @@ function RevokeWithConfirmation({ permission }) {
 ### With Callbacks
 
 ```tsx
-const { mutate: revoke } = Hooks.useRevokePermissions({
-  mutation: {
-    onSuccess: (data) => {
-      console.log('Permission revoked successfully');
-      // Show success toast, update UI, etc.
+import { useRevokePermissions } from '@jaw.id/wagmi';
+
+function RevokeWithCallbacks() {
+  const { mutate: revoke } = useRevokePermissions({
+    mutation: {
+      onSuccess: () => {
+        console.log('Permission revoked successfully');
+        // Show success toast, update UI, etc.
+      },
+      onError: (error) => {
+        console.error('Failed to revoke:', error);
+        // Show error message
+      },
     },
-    onError: (error) => {
-      console.error('Failed to revoke:', error);
-      // Show error message
-    },
-  },
-});
+  });
+
+  // ...
+}
+```
+
+### Full Permissions Manager
+
+```tsx
+import { usePermissions, useRevokePermissions } from '@jaw.id/wagmi';
+
+function PermissionsManager() {
+  const { data: permissions, isLoading } = usePermissions();
+  const { mutate: revoke, isPending } = useRevokePermissions();
+
+  if (isLoading) return <p>Loading permissions...</p>;
+  if (!permissions?.length) return <p>No active permissions</p>;
+
+  return (
+    <div>
+      <h2>Active Permissions</h2>
+      {permissions.map((permission) => (
+        <div key={permission.id} style={{ marginBottom: '1rem' }}>
+          <p><strong>Spender:</strong> {permission.spender}</p>
+          <p><strong>Expires:</strong> {new Date(permission.expiry * 1000).toLocaleDateString()}</p>
+          <p><strong>Calls:</strong> {permission.calls.length} allowed</p>
+          <p><strong>Spends:</strong> {permission.spends.length} limits</p>
+          <button
+            onClick={() => revoke({ id: permission.id })}
+            disabled={isPending}
+          >
+            {isPending ? 'Revoking...' : 'Revoke'}
+          </button>
+        </div>
+      ))}
+    </div>
+  );
+}
 ```
 
 ---
 
 ## Related
 
-- [usePermissions()](/wagmi/usePermissions) - Get current permissions
-- [useGrantPermissions()](/wagmi/useGrantPermissions) - Grant new permissions
-- [account.revokePermission()](/account/revokePermission) - Account class method
+- [usePermissions](/wagmi/usePermissions) - Get current permissions
+- [useGrantPermissions](/wagmi/useGrantPermissions) - Grant new permissions
+- [wallet_revokePermissions](/api-reference/wallet_revokePermissions) - RPC method reference
