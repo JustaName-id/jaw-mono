@@ -1,6 +1,6 @@
 # Account
 
-The `Account` class provides a high-level API for smart account operations. It's the recommended way to interact with JAW smart accounts when building custom UI handlers or server-side applications.
+The `Account` class provides a low-level API for smart account operations. It's the recommended way to interact with JAW smart accounts when building custom UI handlers or server-side applications.
 
 ---
 
@@ -119,7 +119,7 @@ interface CreateAccountOptions {
   username: string;
   /** Relying party identifier (defaults to window.location.hostname) */
   rpId?: string;
-  /** Relying party name (defaults to 'JAW Wallet') */
+  /** Relying party name (defaults to 'JAW') */
   rpName?: string;
 }
 ```

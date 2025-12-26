@@ -1,19 +1,48 @@
 # Configuration
 
-Learn how to configure the JAW SDK to customize its behavior for your application.
+Configuration options for the JAW SDK. These options apply to both the **Wagmi connector** and the **direct provider**.
 
-## JAW.create()
+---
 
-The SDK is initialized using the `JAW.create()` factory function:
+## Usage
+
+### With Wagmi (Recommended)
+
+```typescript
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  appName: 'My DApp',
+  appLogoUrl: 'https://my-dapp.com/logo.png',
+  defaultChainId: 1,
+  ens: 'myapp.eth',
+  preference: {
+    showTestnets: true,
+  },
+  paymasterUrls: {
+    1: 'https://paymaster.example.com/mainnet',
+  },
+});
+```
+
+### With Provider Directly
 
 ```typescript
 import { JAW } from '@jaw.id/core';
 
 const jaw = JAW.create({
-  apiKey: 'your-api-key-here',
+  apiKey: 'your-api-key',
   appName: 'My DApp',
   appLogoUrl: 'https://my-dapp.com/logo.png',
-  ens: 'myapp.eth'
+  defaultChainId: 1,
+  ens: 'myapp.eth',
+  preference: {
+    showTestnets: true,
+  },
+  paymasterUrls: {
+    1: 'https://paymaster.example.com/mainnet',
+  },
 });
 ```
 
@@ -28,9 +57,9 @@ const jaw = JAW.create({
 | [apiKey](/configuration/apiKey) | `string` | Yes | API key for JAW services authentication |
 | [appName](/configuration/appName) | `string` | No | Application name displayed to users |
 | [appLogoUrl](/configuration/appLogoUrl) | `string \| null` | No | URL to application logo image |
-| [ens](/configuration/preference) | `string` | No | ENS to issue subnames from |
+| [ens](/configuration/ens) | `string` | No | ENS domain for issuing subnames |
 | [defaultChainId](/configuration/defaultChainId) | `number` | No | Default blockchain network |
-| [preference](/configuration/preference) | `object` | No | Preference options for SDK behavior |
+| [preference](/configuration/preference) | `object` | No | Advanced SDK behavior options |
 | [paymasterUrls](/configuration/paymasterUrls) | `Record<number, string>` | No | Custom paymaster URLs per chain |
 
 ---
@@ -42,7 +71,7 @@ The `preference` object contains advanced configuration:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | mode | `Mode.CrossPlatform` \| `Mode.AppSpecific` | `Mode.CrossPlatform` | Authentication mode |
-| serverUrl | `string` | JAW Server | Passkey server URL |
+| serverUrl | `string` | JAW Server | Custom passkey server URL |
 | showTestnets | `boolean` | `false` | Include testnet networks |
 | uiHandler | `UIHandler` | `undefined` | Custom UI handler for app-specific mode |
 
@@ -52,9 +81,25 @@ The `preference` object contains advanced configuration:
 
 ## Return Value
 
+### Wagmi Connector
+
+The `jaw()` function returns a Wagmi `Connector` that can be used in your wagmi config.
+
+```typescript
+import { createConfig } from 'wagmi';
+import { jaw } from '@jaw.id/wagmi';
+
+const config = createConfig({
+  connectors: [jaw({ apiKey: 'your-api-key' })],
+  // ...
+});
+```
+
+### Provider
+
 The `JAW.create()` function returns an object with:
 
-### provider
+#### provider
 
 **Type:** `ProviderInterface`
 
@@ -63,13 +108,12 @@ An EIP-1193 compatible Ethereum provider for making RPC requests.
 ```typescript
 const jaw = JAW.create({ apiKey: 'your-api-key' });
 
-// Use the provider
 const accounts = await jaw.provider.request({
   method: 'wallet_connect',
 });
 ```
 
-### disconnect()
+#### disconnect()
 
 **Type:** `() => Promise<void>`
 
@@ -78,3 +122,25 @@ Method to disconnect the current session and clean up resources.
 ```typescript
 await jaw.disconnect();
 ```
+
+---
+
+## Minimal Configuration
+
+The only required option is `apiKey`:
+
+```typescript
+// Wagmi
+const connector = jaw({ apiKey: 'your-api-key' });
+
+// Provider
+const jaw = JAW.create({ apiKey: 'your-api-key' });
+```
+
+---
+
+## Related
+
+- [Wagmi Integration](/wagmi) - Using with Wagmi
+- [Provider API](/api-reference) - Direct provider methods
+- [Supported Networks](/supported-networks) - Available chains

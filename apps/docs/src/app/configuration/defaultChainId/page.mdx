@@ -11,6 +11,19 @@ The default blockchain network to connect to when the SDK initializes.
 ## Usage
 
 ```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  defaultChainId: 137, // Polygon
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW } from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key',
   defaultChainId: 137, // Polygon
@@ -24,9 +37,25 @@ const jaw = JAW.create({
 To use a testnet as the default chain, enable `showTestnets` in preferences:
 
 ```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  defaultChainId: 84532, // Base Sepolia
+  preference: {
+    showTestnets: true,
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW } from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key',
-  defaultChainId: 11155111, // Sepolia
+  defaultChainId: 84532, // Base Sepolia
   preference: {
     showTestnets: true,
   },
