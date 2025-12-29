@@ -22,6 +22,7 @@ export {
   useGrantPermissions,
   useRevokePermissions,
   usePermissions,
+  useGetAssets,
 } from './lib/Hooks.js';
 
 // Also export individual actions for convenience
@@ -31,7 +32,8 @@ export {
   grantPermissions,
   getPermissions,
   revokePermissions,
+  getAssets,
 } from './lib/Actions.js';
 
 // Also export query keys for convenience
-export { getPermissionsQueryKey } from './lib/Query.js';
+export { getPermissionsQueryKey, getAssetsQueryKey } from './lib/Query.js';

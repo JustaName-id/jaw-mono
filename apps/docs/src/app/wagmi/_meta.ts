@@ -11,6 +11,7 @@ export default {
   },
   useConnect: 'useConnect()',
   useDisconnect: 'useDisconnect()',
+  useGetAssets: 'useGetAssets()',
   useGrantPermissions: 'useGrantPermissions()',
   usePermissions: 'usePermissions()',
   useRevokePermissions: 'useRevokePermissions()',

@@ -11,6 +11,9 @@ import {
   type WalletGetPermissionsResponse,
   type RevokePermissionApiResponse,
   type WalletConnectCapabilities,
+  type WalletGetAssetsResponse,
+  type AssetType,
+  type AssetFilter,
 } from '@jaw.id/core';
 import type { AccountWithCapabilities } from '../Connector.js';
 
@@ -240,5 +243,63 @@ export async function disconnect<config extends Config>(
 ): Promise<disconnect.ReturnType> {
   const { connector } = parameters;
   await wagmiDisconnect(config, { connector });
+}
+
+// ============================================================================
+// getAssets
+// ============================================================================
+
+export namespace getAssets {
+  export type Parameters<config extends Config = Config> = {
+    /** Address of the account to get assets for */
+    address?: Address;
+    chainId?: number;
+    connector?: Connector;
+    /** Narrows results to specified chain IDs (hex format like "0x1") */
+    chainFilter?: string[];
+    /** Restricts results by asset category */
+    assetTypeFilter?: AssetType[];
+    /** Filters by specific assets per chain */
+    assetFilter?: AssetFilter;
+  };
+
+  export type ReturnType = WalletGetAssetsResponse;
+  export type ErrorType = Error;
+}
+
+/**
+ * Gets the assets for an address.
+ * This calls wallet_getAssets on the connected wallet.
+ *
+ * @example
+ * ```ts
+ * const assets = await Actions.getAssets(config, {
+ *   chainFilter: ['0x1', '0xa'], // Mainnet and Optimism
+ * });
+ * ```
+ */
+export async function getAssets<config extends Config>(
+  config: config,
+  parameters: getAssets.Parameters<config> = {},
+): Promise<getAssets.ReturnType> {
+  const { address, chainId, connector, chainFilter, assetTypeFilter, assetFilter } = parameters;
+
+  const client = await getConnectorClient(config, {
+    account: address,
+    chainId,
+    connector,
+  });
+
+  const result = await client.request({
+    method: 'wallet_getAssets' as never,
+    params: [{
+      account: address,
+      chainFilter,
+      assetTypeFilter,
+      assetFilter,
+    }] as never,
+  });
+
+  return result as getAssets.ReturnType;
 }
 

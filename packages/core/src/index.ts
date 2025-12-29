@@ -38,7 +38,15 @@ export {
     // Permission selector constants
     ANY_TARGET,
     ANY_FN_SEL,
-    EMPTY_CALLDATA_FN_SEL
+    EMPTY_CALLDATA_FN_SEL,
+    // Asset types (EIP-7811 wallet_getAssets)
+    type AssetType,
+    type AssetMetadata,
+    type Asset,
+    type AssetFilterEntry,
+    type AssetFilter,
+    type WalletGetAssetsParams,
+    type WalletGetAssetsResponse,
 } from './rpc/index.js';
 
 /**  Account exports **/

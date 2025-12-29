@@ -15,7 +15,16 @@ export {
 
 export {storeCallStatus, getCallStatus, waitForReceiptInBackground, getCallStatusEIP5792} from './wallet_sendCalls.js';
 
-export { handleGetAssetsRequest } from './wallet_getAssets.js';
+export {
+    handleGetAssetsRequest,
+    type AssetType,
+    type AssetMetadata,
+    type Asset,
+    type AssetFilterEntry,
+    type AssetFilter,
+    type WalletGetAssetsParams,
+    type WalletGetAssetsResponse,
+} from './wallet_getAssets.js';
 
 export { getCapabilities, handleGetCapabilitiesRequest } from './capabilities.js';
 

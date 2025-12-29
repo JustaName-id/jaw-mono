@@ -27,8 +27,9 @@ import {
   grantPermissions,
   getPermissions,
   revokePermissions,
+  getAssets,
 } from './core.js';
-import { getPermissionsQueryKey } from './query.js';
+import { getPermissionsQueryKey, getAssetsQueryKey } from './query.js';
 
 // ============================================================================
 // useConnect
@@ -400,5 +401,138 @@ export function useDisconnect<
     },
     mutationKey: ['disconnect'],
   }) as useDisconnect.ReturnType<context>;
+}
+
+// ============================================================================
+// useGetAssets
+// ============================================================================
+
+export namespace useGetAssets {
+  export type Parameters<
+    config extends Config = Config,
+    selectData = getAssets.ReturnType,
+  > = getAssets.Parameters<config> & {
+    config?: config;
+    query?:
+      | Omit<
+          UseQueryParameters<
+            getAssets.ReturnType,
+            getAssets.ErrorType,
+            selectData,
+            getAssetsQueryKey.Value<config>
+          >,
+          'gcTime' | 'staleTime'
+        >
+      | undefined;
+  };
+
+  export type ReturnType<selectData = getAssets.ReturnType> =
+    UseQueryReturnType<selectData, getAssets.ErrorType>;
+}
+
+/**
+ * Hook to get the assets for the connected account.
+ * Automatically updates when assets change.
+ *
+ * @example
+ * ```tsx
+ * const { data: assets, isLoading } = useGetAssets();
+ *
+ * // With chain filter
+ * const { data } = useGetAssets({ chainFilter: ['0x1', '0xa'] });
+ *
+ * // With asset type filter
+ * const { data } = useGetAssets({ assetTypeFilter: ['erc20'] });
+ * ```
+ */
+export function useGetAssets<
+  config extends Config = ResolvedRegister['config'],
+  selectData = getAssets.ReturnType,
+>(
+  parameters: useGetAssets.Parameters<config, selectData> = {},
+): useGetAssets.ReturnType<selectData> {
+  const { query = {}, ...rest } = parameters;
+
+  const config = useConfig(rest as { config?: Config });
+  const queryClient = useQueryClient();
+  const chainId = useChainId({ config });
+  const { address, connector, status } = useAccount({ config });
+  const activeConnector = parameters.connector ?? connector;
+
+  const enabled = Boolean(
+    (status === 'connected' ||
+      (status === 'reconnecting' && activeConnector?.getProvider)) &&
+      (query.enabled ?? true),
+  );
+
+  const queryKey = useMemo(
+    () =>
+      getAssetsQueryKey({
+        address,
+        chainId: parameters.chainId ?? chainId,
+        connector: activeConnector,
+        chainFilter: parameters.chainFilter,
+        assetTypeFilter: parameters.assetTypeFilter,
+        assetFilter: parameters.assetFilter,
+      }),
+    [
+      address,
+      chainId,
+      parameters.chainId,
+      activeConnector,
+      parameters.chainFilter,
+      parameters.assetTypeFilter,
+      parameters.assetFilter,
+    ],
+  );
+
+  // Set up event listener for asset changes (e.g., after transactions)
+  const providerRef = useRef<EIP1193Provider | undefined>(undefined);
+  const handlerRef = useRef<((event: { type: string }) => void) | undefined>(undefined);
+
+  useEffect(() => {
+    if (!activeConnector) return;
+
+    let mounted = true;
+
+    void (async () => {
+      const provider = (await activeConnector.getProvider?.()) as EIP1193Provider | undefined;
+      if (!mounted || !provider) return;
+
+      providerRef.current = provider;
+
+      const handleMessage = (event: { type: string }) => {
+        if (event.type !== 'assetsChanged') return;
+        queryClient.invalidateQueries({ queryKey });
+      };
+
+      handlerRef.current = handleMessage;
+      provider.on('message', handleMessage as never);
+    })();
+
+    return () => {
+      mounted = false;
+      if (providerRef.current && handlerRef.current) {
+        providerRef.current.removeListener?.('message', handlerRef.current as never);
+      }
+    };
+  }, [activeConnector, queryClient, queryKey]);
+
+  return useQuery({
+    ...query,
+    enabled,
+    gcTime: 0,
+    queryFn: activeConnector
+      ? async () => {
+          return getAssets(config, {
+            ...rest,
+            address,
+            connector: activeConnector,
+          });
+        }
+      : skipToken,
+    queryKey,
+    staleTime: 30_000, // Cache for 30 seconds since assets change less frequently
+  }) as useGetAssets.ReturnType<selectData>;
 }
 

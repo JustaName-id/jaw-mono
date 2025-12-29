@@ -19,10 +19,10 @@ import {
   useGrantPermissions,
   useRevokePermissions,
   usePermissions,
+  useGetAssets,
 } from '@jaw.id/wagmi';
 import { useState } from 'react';
 import { formatUnits, parseEther, type Address } from 'viem';
-import { AnyAaaaRecord } from 'dns';
 
 // ERC-7528 native token address convention
 const NATIVE_TOKEN: Address = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
@@ -47,6 +47,9 @@ function WalletStatus() {
 
   // Wagmi useSendCalls for executing with permissions (EIP-5792)
   const { sendCalls, isPending: isSendingCalls, data: sendCallsId, error: sendCallsError } = useSendCalls();
+
+  // JAW useGetAssets for fetching token balances
+  const { data: assets, isLoading: isLoadingAssets, error: assetsError, refetch: refetchAssets } = useGetAssets();
 
   const [logs, setLogs] = useState<string[]>([]);
   const [toAddress, setToAddress] = useState('');
@@ -476,6 +479,65 @@ function WalletStatus() {
               </pre>
             ) : (
               <p className="text-gray-500 dark:text-gray-400">No permissions found</p>
+            )}
+          </div>
+        </div>
+
+        {/* Get Assets */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            @jaw.id/wagmi Assets (useGetAssets)
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Fetch token balances across all supported chains
+          </p>
+          <button
+            onClick={() => refetchAssets()}
+            disabled={!isConnected || isLoadingAssets}
+            className="px-4 py-2 bg-teal-600 text-white rounded hover:bg-teal-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors mb-4"
+          >
+            {isLoadingAssets ? 'Loading...' : 'Fetch Assets'}
+          </button>
+          {assetsError && (
+            <p className="text-red-600 text-sm mb-2">Assets Error: {assetsError.message}</p>
+          )}
+          <div className="bg-gray-100 dark:bg-gray-900 rounded p-4 max-h-64 overflow-y-auto">
+            <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+              Assets by Chain:
+            </p>
+            {isLoadingAssets ? (
+              <p className="text-gray-500">Loading...</p>
+            ) : assets && Object.keys(assets).length > 0 ? (
+              <div className="space-y-4">
+                {Object.entries(assets).map(([chainId, chainAssets]) => (
+                  <div key={chainId} className="border-b border-gray-200 dark:border-gray-700 pb-2">
+                    <p className="text-sm font-semibold text-gray-800 dark:text-gray-200 mb-1">
+                      Chain {parseInt(chainId, 16)} ({chainId})
+                    </p>
+                    {(chainAssets as Array<{ address: string | null; balance: string; metadata: { decimals: number; name: string; symbol: string } | null; type: string }>).length > 0 ? (
+                      <ul className="space-y-1">
+                        {(chainAssets as Array<{ address: string | null; balance: string; metadata: { decimals: number; name: string; symbol: string } | null; type: string }>).map((asset, i) => (
+                          <li key={i} className="text-xs text-gray-600 dark:text-gray-400 flex justify-between">
+                            <span>
+                              {asset.metadata?.symbol || (asset.type === 'native' ? 'ETH' : 'Unknown')}
+                              <span className="text-gray-400 ml-1">({asset.type})</span>
+                            </span>
+                            <span className="font-mono">
+                              {asset.metadata?.decimals
+                                ? formatUnits(BigInt(asset.balance), asset.metadata.decimals)
+                                : asset.balance}
+                            </span>
+                          </li>
+                        ))}
+                      </ul>
+                    ) : (
+                      <p className="text-xs text-gray-500">No assets on this chain</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="text-gray-500 dark:text-gray-400">No assets found. Click "Fetch Assets" to load.</p>
             )}
           </div>
         </div>
