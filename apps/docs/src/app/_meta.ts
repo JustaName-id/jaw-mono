@@ -5,5 +5,6 @@ export default {
   wagmi: 'Wagmi',
   'api-reference': 'Provider - RPC Reference',
   account: 'Account',
+  guides: 'Guides',
   advanced: 'Advanced',
 }
