@@ -23,11 +23,11 @@ JAW's permission system (based on ERC-7715) allows users to grant **time-limited
 
 ```mermaid
 flowchart TD
-    A["1️⃣ USER SUBSCRIBES<br/><br/>User grants permission:<br/>$10 USDC/month<br/>Only callable by Netflix.subscribe()"]
+    A["1️⃣ USER SUBSCRIBES<br/><br/>User grants permission:<br/>$10 USDC/month to Service"]
 
-    B["2️⃣ SERVICE STORES PERMISSION ID<br/><br/>Netflix stores permissionId<br/>in their database"]
+    B["2️⃣ SERVICE STORES PERMISSION ID<br/><br/>Service stores permissionId<br/>in their database"]
 
-    C["3️⃣ MONTHLY CHARGE<br/><br/>Netflix calls wallet_sendCalls + permissionId<br/>Contract verifies call matches scope<br/>✅ No user interaction needed!"]
+    C["3️⃣ MONTHLY CHARGE<br/><br/>Service transfers USDC using permissionId<br/>✅ No user interaction needed!"]
 
     D["4️⃣ USER CAN CANCEL ANYTIME<br/><br/>User revokes permission<br/>Subscription ends immediately"]
 
@@ -104,9 +104,8 @@ When a user clicks "Subscribe", request a permission that allows your service to
 import { useGrantPermissions } from '@jaw.id/wagmi';
 import { parseUnits, type Address } from 'viem';
 
-const SUBSCRIPTION_CONTRACT: Address = '0x...'; // Your contract
-const SERVICE_SPENDER: Address = '0x...';       // Your backend wallet
-const USDC_ADDRESS: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+const SERVICE_SPENDER: Address = '0x...'; // Your backend wallet
+const USDC_ADDRESS: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
 
 function SubscribeButton({ planPrice }: { planPrice: string }) {
   const { mutate: grantPermission, isPending } = useGrantPermissions();
@@ -123,8 +122,8 @@ function SubscribeButton({ planPrice }: { planPrice: string }) {
           multiplier: 1,
         }],
         calls: [{
-          target: SUBSCRIPTION_CONTRACT,
-          functionSignature: 'subscribe()',
+          target: USDC_ADDRESS,
+          functionSignature: 'transfer(address,uint256)',
         }],
       },
     }, {
@@ -147,9 +146,8 @@ function SubscribeButton({ planPrice }: { planPrice: string }) {
 ```typescript
 import { parseUnits, type Address } from 'viem';
 
-const SUBSCRIPTION_CONTRACT: Address = '0x...';
-const SERVICE_SPENDER: Address = '0x...';
-const USDC_ADDRESS: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+const SERVICE_SPENDER: Address = '0x...'; // Your backend wallet
+const USDC_ADDRESS: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
 
 async function subscribe(userAddress: Address, planPrice: string) {
   const allowance = parseUnits(planPrice, 6);
@@ -168,8 +166,8 @@ async function subscribe(userAddress: Address, planPrice: string) {
           multiplier: 1,
         }],
         calls: [{
-          target: SUBSCRIPTION_CONTRACT,
-          functionSignature: 'subscribe()',
+          target: USDC_ADDRESS,
+          functionSignature: 'transfer(address,uint256)',
         }],
       },
     }],
@@ -187,67 +185,44 @@ async function subscribe(userAddress: Address, planPrice: string) {
 **Store the Permission ID**: The `permissionId` returned is required to execute charges. Save it to your backend database.
 </Callout>
 
-### 2. Execute Charge (Spender Side)
+### 2. Execute Charge (Server Side)
 
-Your service charges the user using the permission ID. No user approval needed - the permission authorizes the charge.
+Your backend service charges users using their stored permission IDs. This typically runs as a cron job or scheduled task - no user approval needed since the permission authorizes the charge.
 
-<Tabs items={['Wagmi', 'Core SDK']}>
-<Tabs.Tab>
-```tsx
-import { useSendCalls } from 'wagmi';
-import { encodeFunctionData } from 'viem';
-
-function ChargeSubscription({ permissionId }: { permissionId: string }) {
-  const { sendCalls, isPending } = useSendCalls();
-
-  const handleCharge = () => {
-    sendCalls({
-      calls: [{
-        to: SUBSCRIPTION_CONTRACT,
-        data: encodeFunctionData({
-          abi: [{ name: 'subscribe', type: 'function', inputs: [], outputs: [] }],
-          functionName: 'subscribe',
-        }),
-      }],
-      capabilities: {
-        permissions: {
-          id: permissionId as `0x${string}`,
-        },
-      },
-    });
-  };
-
-  return (
-    <button onClick={handleCharge} disabled={isPending}>
-      {isPending ? 'Charging...' : 'Charge Monthly Fee'}
-    </button>
-  );
-}
-```
-</Tabs.Tab>
-<Tabs.Tab>
 ```typescript
 import { Account } from '@jaw.id/core';
 import { privateKeyToAccount } from 'viem/accounts';
-import { encodeFunctionData } from 'viem';
+import { encodeFunctionData, parseUnits, type Address } from 'viem';
 
-// Load the spender's private key from environment 
+const USDC_ADDRESS: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
+const SERVICE_TREASURY: Address = '0x...'; // Your treasury address
+
+// Load the spender's private key from environment
 const spenderAccount = privateKeyToAccount(process.env.SPENDER_PRIVATE_KEY as `0x${string}`);
 
-async function chargeSubscription(permissionId: string) {
+async function chargeSubscription(permissionId: string, amount: string) {
   // Create account instance from the spender's private key
   const account = await Account.fromLocalAccount(
     { chainId: 8453, apiKey: process.env.JAW_API_KEY! },
     spenderAccount
   );
 
-  // Execute the charge using the permission
+  // Transfer USDC from user to your treasury
   const { id } = await account.sendCalls(
     [{
-      to: SUBSCRIPTION_CONTRACT,
+      to: USDC_ADDRESS,
       data: encodeFunctionData({
-        abi: [{ name: 'subscribe', type: 'function', inputs: [], outputs: [] }],
-        functionName: 'subscribe',
+        abi: [{
+          name: 'transfer',
+          type: 'function',
+          inputs: [
+            { name: 'to', type: 'address' },
+            { name: 'amount', type: 'uint256' }
+          ],
+          outputs: [{ type: 'bool' }]
+        }],
+        functionName: 'transfer',
+        args: [SERVICE_TREASURY, parseUnits(amount, 6)],
       }),
     }],
     { permissionId: permissionId as `0x${string}` }
@@ -256,8 +231,6 @@ async function chargeSubscription(permissionId: string) {
   return id; // user operation ID
 }
 ```
-</Tabs.Tab>
-</Tabs>
 
 ### 3. Cancel Subscription
 
@@ -312,8 +285,8 @@ async function cancelSubscription(userAddress: Address, permissionId: string) {
 | `permissions.spends.token` | Token address to spend | USDC address |
 | `permissions.spends.allowance` | Max amount per period | $10 (10000000 for USDC) |
 | `permissions.spends.unit` | Time period | `month` |
-| `permissions.calls.target` | Contract that can be called | Your subscription contract |
-| `permissions.calls.functionSignature` | Function that can be called | `subscribe()` |
+| `permissions.calls.target` | Contract that can be called | USDC contract address |
+| `permissions.calls.functionSignature` | Function that can be called | `transfer(address,uint256)` |
 
 ### Time Units
 
@@ -325,16 +298,6 @@ async function cancelSubscription(userAddress: Address, permissionId: string) {
 | `week` | Resets every 7 days |
 | `month` | Resets every ~30 days |
 | `year` | Resets every 365 days |
-
----
-
-**For users granting permissions:**
-
-- **Check the spender address** - Is it actually Netflix's official wallet?
-- **Review the call target** - Is it Netflix's verified contract?
-- **Check the amount** - Does $15.99/month match the advertised price?
-- **Note the expiry** - How long is this permission valid?
-- **You can cancel anytime** - Revoking the permission stops all future charges
 
 ---
 
