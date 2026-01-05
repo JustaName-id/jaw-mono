@@ -13,7 +13,9 @@ export {
     type SignInWithEthereumCapabilityRequest,
     type SignInWithEthereumCapabilityResponse,
     type SubnameTextRecordCapabilityRequest,
+    type SubnameTextRecordCapabilityResponse,
     // Wallet connect types
+    type WalletConnectCapabilities,
     type WalletConnectRequest,
     type WalletConnectResponse,
     // Viem RPC types
@@ -28,6 +30,7 @@ export {
     type RequestCapabilities,
     type WalletGrantPermissionsRequest,
     type WalletGrantPermissionsResponse,
+    type WalletGetPermissionsResponse,
     type WalletRevokePermissionsRequest,
     type RevokePermissionApiResponse,
     // Permission utilities for UI (fetching permission details without Account instance)
@@ -35,7 +38,15 @@ export {
     // Permission selector constants
     ANY_TARGET,
     ANY_FN_SEL,
-    EMPTY_CALLDATA_FN_SEL
+    EMPTY_CALLDATA_FN_SEL,
+    // Asset types (EIP-7811 wallet_getAssets)
+    type AssetType,
+    type AssetMetadata,
+    type Asset,
+    type AssetFilterEntry,
+    type AssetFilter,
+    type WalletGetAssetsParams,
+    type WalletGetAssetsResponse,
 } from './rpc/index.js';
 
 /**  Account exports **/

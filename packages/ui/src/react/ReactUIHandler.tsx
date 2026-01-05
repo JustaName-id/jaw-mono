@@ -529,7 +529,7 @@ function OnboardingDialogWrapper({
 
   // Get rpId from current domain
   const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  const rpName = 'JAW Wallet';
+  const rpName = 'JAW';
   const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
 
   // Get chain info for ConnectDialog

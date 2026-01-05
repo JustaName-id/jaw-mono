@@ -1,9 +1,11 @@
 export {
     type SignInWithEthereumCapabilityRequest,
     type SignInWithEthereumCapabilityResponse,
+    type SubnameTextRecordCapabilityRequest,
+    type SubnameTextRecordCapabilityResponse,
+    type WalletConnectCapabilities,
     type WalletConnectRequest,
     type WalletConnectResponse,
-    type SubnameTextRecordCapabilityRequest
 } from "./wallet_connect.js"
 
 export {
@@ -13,7 +15,16 @@ export {
 
 export {storeCallStatus, getCallStatus, waitForReceiptInBackground, getCallStatusEIP5792} from './wallet_sendCalls.js';
 
-export { handleGetAssetsRequest } from './wallet_getAssets.js';
+export {
+    handleGetAssetsRequest,
+    type AssetType,
+    type AssetMetadata,
+    type Asset,
+    type AssetFilterEntry,
+    type AssetFilter,
+    type WalletGetAssetsParams,
+    type WalletGetAssetsResponse,
+} from './wallet_getAssets.js';
 
 export { getCapabilities, handleGetCapabilitiesRequest } from './capabilities.js';
 
@@ -26,6 +37,7 @@ export {
     type RequestCapabilities,
     type WalletGrantPermissionsRequest,
     type WalletGrantPermissionsResponse,
+    type WalletGetPermissionsResponse,
     type WalletRevokePermissionsRequest,
     type StorePermissionApiRequest,
     type StorePermissionApiResponse,

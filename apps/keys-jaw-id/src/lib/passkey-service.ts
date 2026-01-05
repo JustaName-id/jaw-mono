@@ -34,7 +34,7 @@ export class PasskeyService {
     // For local development, use localhost
     // For production, use your actual domain
     this.rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-    this.rpName = 'JAW Wallet';
+    this.rpName = 'JAW';
   }
 
   private getDefaultChainId(): number {
