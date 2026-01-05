@@ -227,30 +227,33 @@ function ChargeSubscription({ permissionId }: { permissionId: string }) {
 </Tabs.Tab>
 <Tabs.Tab>
 ```typescript
+import { Account } from '@jaw.id/core';
+import { privateKeyToAccount } from 'viem/accounts';
 import { encodeFunctionData } from 'viem';
 
-async function chargeSubscription(userAddress: Address, permissionId: string) {
-  const result = await jaw.provider.request({
-    method: 'wallet_sendCalls',
-    params: [{
-      version: '1.0',
-      from: userAddress,
-      calls: [{
-        to: SUBSCRIPTION_CONTRACT,
-        data: encodeFunctionData({
-          abi: [{ name: 'subscribe', type: 'function', inputs: [], outputs: [] }],
-          functionName: 'subscribe',
-        }),
-      }],
-      capabilities: {
-        permissions: {
-          id: permissionId as `0x${string}`,
-        },
-      },
-    }],
-  });
+// Load the spender's private key from environment 
+const spenderAccount = privateKeyToAccount(process.env.SPENDER_PRIVATE_KEY as `0x${string}`);
 
-  return (result as { id: string }).id; // batch ID
+async function chargeSubscription(permissionId: string) {
+  // Create account instance from the spender's private key
+  const account = await Account.fromLocalAccount(
+    { chainId: 8453, apiKey: process.env.JAW_API_KEY! },
+    spenderAccount
+  );
+
+  // Execute the charge using the permission
+  const { id } = await account.sendCalls(
+    [{
+      to: SUBSCRIPTION_CONTRACT,
+      data: encodeFunctionData({
+        abi: [{ name: 'subscribe', type: 'function', inputs: [], outputs: [] }],
+        functionName: 'subscribe',
+      }),
+    }],
+    { permissionId: permissionId as `0x${string}` }
+  );
+
+  return id; // user operation ID
 }
 ```
 </Tabs.Tab>
@@ -324,8 +327,6 @@ async function cancelSubscription(userAddress: Address, permissionId: string) {
 | `year` | Resets every 365 days |
 
 ---
-
-## User Security Best Practices
 
 **For users granting permissions:**
 
