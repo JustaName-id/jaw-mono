@@ -1,0 +1,348 @@
+# Subscriptions with Wagmi
+
+This guide shows how to implement subscription payments using `@jaw.id/wagmi` React hooks. If you're building a React application, this is the recommended approach.
+
+---
+
+## Prerequisites
+
+Before starting, make sure you have:
+- Wagmi configured with the JAW connector ([setup guide](/wagmi))
+- Your subscription contract deployed (see [Overview](/guides/subscriptions) for why this matters)
+- Understanding of React hooks
+
+---
+
+## Installation
+
+```bash npm2yarn
+npm install @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+---
+
+## Step 1: Set Up the JAW Connector
+
+First, configure wagmi with the JAW connector:
+
+```typescript
+// config.ts
+import { createConfig, http } from 'wagmi';
+import { base } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+export const config = createConfig({
+  chains: [base],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_API_KEY',
+      appName: 'StreamFlix',
+      appLogoUrl: 'https://streamflix.com/logo.png',
+    }),
+  ],
+  transports: {
+    [base.id]: http(),
+  },
+});
+```
+
+---
+
+## Step 2: Grant a Subscription Permission
+
+When a user clicks "Subscribe", use `useGrantPermissions` to request the permission. This opens a popup where the user approves the recurring charge.
+
+```tsx
+import { useGrantPermissions } from '@jaw.id/wagmi';
+import { parseUnits, type Address } from 'viem';
+
+// Your contract addresses
+const SUBSCRIPTION_CONTRACT: Address = '0x...'; // Your subscription contract
+const SERVICE_SPENDER: Address = '0x...';       // Your backend wallet
+const USDC_ADDRESS: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+
+function SubscribeButton({ planPrice }: { planPrice: string }) {
+  const { mutate: grantPermission, isPending } = useGrantPermissions();
+
+  const handleSubscribe = () => {
+    const oneYearFromNow = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
+    const allowance = parseUnits(planPrice, 6); // USDC has 6 decimals
+
+    grantPermission({
+      expiry: oneYearFromNow,
+      spender: SERVICE_SPENDER,
+      permissions: {
+        spends: [{
+          token: USDC_ADDRESS,
+          allowance: allowance.toString(),
+          unit: 'month',
+          multiplier: 1,
+        }],
+        // IMPORTANT: Only allow calling YOUR contract's subscribe function
+        calls: [{
+          target: SUBSCRIPTION_CONTRACT,
+          functionSignature: 'subscribe()',
+        }],
+      },
+    }, {
+      onSuccess: (data) => {
+        console.log('Subscribed! Permission ID:', data.permissionId);
+        // Store data.permissionId in your backend for charging later
+      },
+    });
+  };
+
+  return (
+    <button onClick={handleSubscribe} disabled={isPending}>
+      {isPending ? 'Confirming...' : `Subscribe for $${planPrice}/month`}
+    </button>
+  );
+}
+```
+
+### Why the `calls` Permission Matters
+
+Notice we're targeting `SUBSCRIPTION_CONTRACT` with `functionSignature: 'subscribe()'`, **not** the USDC token with `transfer()`.
+
+This is a security feature. If you allowed `transfer()` on the USDC contract, the spender could send funds anywhere. By restricting to your specific contract function, the spender can only trigger your subscription logic.
+
+<Callout type="info">
+**Store the Permission ID**: The `permissionId` returned in `onSuccess` is required to execute charges. Store it in your backend database along with the user's subscription details.
+</Callout>
+
+---
+
+## Step 3: Execute the Subscription Charge (Spender Side)
+
+Once the user has granted permission, your service can charge them using `useSendCalls` with the permission ID. This is typically done from your backend, but here's how it works:
+
+```tsx
+import { useSendCalls } from 'wagmi';
+import { encodeFunctionData, type Address } from 'viem';
+
+const SUBSCRIPTION_CONTRACT: Address = '0x...';
+
+function ChargeSubscription({
+  permissionId,
+  userAddress,
+}: {
+  permissionId: string;
+  userAddress: Address;
+}) {
+  const { sendCalls, isPending, data } = useSendCalls();
+
+  const handleCharge = () => {
+    // Encode the call to your subscription contract
+    const callData = encodeFunctionData({
+      abi: [{
+        name: 'subscribe',
+        type: 'function',
+        inputs: [],
+        outputs: [],
+      }],
+      functionName: 'subscribe',
+    });
+
+    sendCalls({
+      calls: [{
+        to: SUBSCRIPTION_CONTRACT,
+        data: callData,
+      }],
+      capabilities: {
+        permissions: {
+          id: permissionId as `0x${string}`,
+        },
+      },
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={handleCharge} disabled={isPending}>
+        {isPending ? 'Charging...' : 'Charge Monthly Fee'}
+      </button>
+      {data && <p>Batch ID: {data.id}</p>}
+    </div>
+  );
+}
+```
+
+The key part is the `capabilities.permissions.id` - this tells the wallet to execute the call using the granted permission, without requiring user approval.
+
+### How It Works
+
+1. Your backend retrieves the stored `permissionId` for the user
+2. It calls `wallet_sendCalls` with the permission capability
+3. The smart contract validates the call matches the permission scope
+4. The subscription contract's `subscribe()` function executes
+5. User is charged, no popup or approval needed
+
+---
+
+## Step 4: Cancel a Subscription
+
+Users can cancel anytime by revoking the permission. Once revoked, the spender can no longer execute charges.
+
+```tsx
+import { useRevokePermissions } from '@jaw.id/wagmi';
+
+function CancelButton({ permissionId }: { permissionId: string }) {
+  const { mutate: revokePermission, isPending } = useRevokePermissions();
+
+  const handleCancel = () => {
+    revokePermission({
+      id: permissionId as `0x${string}`,
+    }, {
+      onSuccess: () => {
+        console.log('Subscription cancelled');
+      },
+    });
+  };
+
+  return (
+    <button onClick={handleCancel} disabled={isPending}>
+      {isPending ? 'Cancelling...' : 'Cancel Subscription'}
+    </button>
+  );
+}
+```
+
+<Callout type="info">
+**Listing Permissions**: Use `usePermissions()` hook to retrieve all active permissions for the connected user. This is useful for displaying a "Manage Subscriptions" page.
+</Callout>
+
+---
+
+## Complete Example
+
+Here's a complete subscription flow:
+
+```tsx
+'use client';
+
+import { useAccount, useSendCalls } from 'wagmi';
+import {
+  useConnect,
+  useGrantPermissions,
+  useRevokePermissions,
+} from '@jaw.id/wagmi';
+import { parseUnits, encodeFunctionData, type Address } from 'viem';
+
+// Configuration
+const USDC_ADDRESS: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+const SUBSCRIPTION_CONTRACT: Address = '0xYourContract...';
+const SERVICE_SPENDER: Address = '0xYourBackendWallet...';
+
+export function SubscriptionDemo() {
+  const { address, isConnected } = useAccount();
+  const { mutate: connect, isPending: isConnecting } = useConnect();
+  const { mutate: grantPermission, isPending: isSubscribing, data: permissionData } = useGrantPermissions();
+  const { mutate: revokePermission, isPending: isCancelling } = useRevokePermissions();
+  const { sendCalls, isPending: isCharging } = useSendCalls();
+
+  // Subscribe
+  const handleSubscribe = () => {
+    grantPermission({
+      expiry: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
+      spender: SERVICE_SPENDER,
+      permissions: {
+        spends: [{
+          token: USDC_ADDRESS,
+          allowance: parseUnits('9.99', 6).toString(),
+          unit: 'month',
+          multiplier: 1,
+        }],
+        calls: [{
+          target: SUBSCRIPTION_CONTRACT,
+          functionSignature: 'subscribe()',
+        }],
+      },
+    });
+  };
+
+  // Charge (spender side)
+  const handleCharge = () => {
+    if (!permissionData?.permissionId) return;
+
+    sendCalls({
+      calls: [{
+        to: SUBSCRIPTION_CONTRACT,
+        data: encodeFunctionData({
+          abi: [{ name: 'subscribe', type: 'function', inputs: [], outputs: [] }],
+          functionName: 'subscribe',
+        }),
+      }],
+      capabilities: {
+        permissions: { id: permissionData.permissionId as `0x${string}` },
+      },
+    });
+  };
+
+  // Cancel
+  const handleCancel = () => {
+    if (!permissionData?.permissionId) return;
+    revokePermission({ id: permissionData.permissionId as `0x${string}` });
+  };
+
+  if (!isConnected) {
+    return (
+      <button onClick={() => connect({})} disabled={isConnecting}>
+        Connect Wallet
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <p>Connected: {address}</p>
+
+      <button onClick={handleSubscribe} disabled={isSubscribing}>
+        {isSubscribing ? 'Subscribing...' : 'Subscribe $9.99/month'}
+      </button>
+
+      {permissionData && (
+        <>
+          <p>Permission ID: {permissionData.permissionId}</p>
+
+          <button onClick={handleCharge} disabled={isCharging}>
+            {isCharging ? 'Charging...' : 'Execute Charge'}
+          </button>
+
+          <button onClick={handleCancel} disabled={isCancelling}>
+            {isCancelling ? 'Cancelling...' : 'Cancel Subscription'}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+## Error Handling
+
+```tsx
+grantPermission({
+  // ... params
+}, {
+  onError: (error) => {
+    if (error.message.includes('rejected')) {
+      alert('User cancelled');
+    } else if (error.message.includes('insufficient')) {
+      alert('Insufficient balance');
+    } else {
+      alert(`Error: ${error.message}`);
+    }
+  },
+});
+```
+
+---
+
+## Related
+
+- [Overview](/guides/subscriptions) - Security concepts and flow
+- [Using Core SDK](/guides/subscriptions/core-sdk) - Non-React approach
+- [useGrantPermissions](/wagmi/useGrantPermissions) - Full hook reference
+- [usePermissions](/wagmi/usePermissions) - List active permissions

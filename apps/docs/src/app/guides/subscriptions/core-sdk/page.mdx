@@ -1,0 +1,385 @@
+# Subscriptions with Core SDK
+
+This guide shows how to implement subscription payments using the `@jaw.id/core` SDK. This approach works in any JavaScript environment - React, Vue, vanilla JS, or Node.js.
+
+---
+
+## Prerequisites
+
+Before starting, make sure you have:
+- A JAW API key
+- Your subscription contract deployed (see [Overview](/guides/subscriptions) for why this matters)
+- Basic understanding of async/await
+
+---
+
+## Installation
+
+```bash npm2yarn
+npm install @jaw.id/core viem
+```
+
+---
+
+## Step 1: Initialize the SDK
+
+First, create a JAW instance with your app configuration:
+
+```typescript
+import { JAW, Mode } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  appName: 'My Streaming Service',
+  appLogoUrl: 'https://myservice.com/logo.png',
+  defaultChainId: 8453, // Base mainnet
+  apiKey: 'YOUR_API_KEY',
+  preference: {
+    mode: Mode.AppSpecific,
+  },
+});
+```
+
+The `appName` and `appLogoUrl` are shown to users when they approve permissions, so use your real branding.
+
+---
+
+## Step 2: Connect the User's Wallet
+
+Before granting permissions, the user must connect their wallet:
+
+```typescript
+async function connectWallet() {
+  const result = await jaw.provider.request({
+    method: 'eth_requestAccounts',
+    params: [],
+  });
+
+  // Handle the response format
+  const accounts = Array.isArray(result)
+    ? result
+    : result.accounts.map((a) => a.address);
+
+  const userAddress = accounts[0];
+  console.log('Connected:', userAddress);
+
+  return userAddress;
+}
+```
+
+This opens the JAW popup where the user can create or select an account.
+
+---
+
+## Step 3: Grant Subscription Permission
+
+When a user subscribes, request a permission that allows your service to charge them periodically.
+
+```typescript
+import { parseUnits, type Address } from 'viem';
+
+// Your contract addresses
+const SUBSCRIPTION_CONTRACT: Address = '0x...'; // Your subscription contract
+const SERVICE_SPENDER: Address = '0x...';       // Your backend wallet
+const USDC_ADDRESS: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+
+async function subscribe(userAddress: Address, planPrice: string) {
+  // Calculate when the permission expires (1 year from now)
+  const oneYearFromNow = Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60;
+
+  // Convert price to token's smallest unit (USDC has 6 decimals)
+  const allowance = parseUnits(planPrice, 6);
+
+  const result = await jaw.provider.request({
+    method: 'wallet_grantPermissions',
+    params: [{
+      address: userAddress,
+      expiry: oneYearFromNow,
+      spender: SERVICE_SPENDER,
+      permissions: {
+        // Spending limit: how much can be spent per period
+        spends: [{
+          token: USDC_ADDRESS,
+          allowance: `0x${allowance.toString(16)}`,
+          unit: 'month',
+          multiplier: 1,
+        }],
+        // Call restriction: ONLY your subscribe function can be called
+        calls: [{
+          target: SUBSCRIPTION_CONTRACT,
+          functionSignature: 'subscribe()',
+        }],
+      },
+    }],
+  });
+
+  const permissionId = (result as { permissionId: string }).permissionId;
+  console.log('Subscribed! Permission ID:', permissionId);
+
+  // Store permissionId in your backend for charging later
+  return permissionId;
+}
+```
+
+### Why Each Parameter Matters
+
+**`spender`**: Your backend wallet address. Only this address can use the permission to execute transactions.
+
+**`expiry`**: Unix timestamp when the permission becomes invalid. No more charges after this time.
+
+**`spends.allowance`**: Maximum amount per time period. Protects users even if your backend is compromised.
+
+**`calls.target`**: The contract that can be called. Should be YOUR subscription contract, not the token.
+
+**`calls.functionSignature`**: The specific function allowed. Prevents the spender from doing anything else.
+
+<Callout type="info">
+**Store the Permission ID**: The `permissionId` is required to execute charges. Store it in your backend database along with the user's subscription details.
+</Callout>
+
+---
+
+## Step 4: Execute the Subscription Charge (Spender Side)
+
+Once the user has granted permission, your service can charge them using `wallet_sendCalls` with the permission ID. This is typically done from your backend.
+
+```typescript
+import { encodeFunctionData, type Address } from 'viem';
+
+async function chargeSubscription(
+  userAddress: Address,
+  permissionId: string
+) {
+  // Encode the call to your subscription contract
+  const callData = encodeFunctionData({
+    abi: [{
+      name: 'subscribe',
+      type: 'function',
+      inputs: [],
+      outputs: [],
+    }],
+    functionName: 'subscribe',
+  });
+
+  const result = await jaw.provider.request({
+    method: 'wallet_sendCalls',
+    params: [{
+      version: '1.0',
+      from: userAddress,
+      calls: [{
+        to: SUBSCRIPTION_CONTRACT,
+        data: callData,
+      }],
+      capabilities: {
+        permissions: {
+          id: permissionId as `0x${string}`,
+        },
+      },
+    }],
+  });
+
+  const batchId = (result as { id: string }).id;
+  console.log('Charge executed! Batch ID:', batchId);
+
+  return batchId;
+}
+```
+
+The key part is `capabilities.permissions.id` - this tells the wallet to execute the call using the granted permission, without requiring user approval.
+
+### How It Works
+
+1. Your backend retrieves the stored `permissionId` for the user
+2. It calls `wallet_sendCalls` with the permission capability
+3. The smart contract validates the call matches the permission scope
+4. The subscription contract's `subscribe()` function executes
+5. User is charged, no popup or approval needed
+
+### Check Charge Status
+
+You can check if the charge completed:
+
+```typescript
+async function getChargeStatus(batchId: string) {
+  const result = await jaw.provider.request({
+    method: 'wallet_getCallsStatus',
+    params: [batchId],
+  });
+
+  const status = result as { status: number; receipts?: any[] };
+
+  // status: 100 = pending, 200 = completed, 400 = failed
+  if (status.status === 200) {
+    console.log('Charge completed!');
+    return 'completed';
+  } else if (status.status === 400) {
+    console.log('Charge failed');
+    return 'failed';
+  }
+  return 'pending';
+}
+```
+
+---
+
+## Step 5: Cancel a Subscription
+
+Users can cancel anytime by revoking the permission:
+
+```typescript
+async function cancelSubscription(userAddress: Address, permissionId: string) {
+  await jaw.provider.request({
+    method: 'wallet_revokePermissions',
+    params: [{
+      address: userAddress,
+      id: permissionId as `0x${string}`,
+    }],
+  });
+
+  console.log('Subscription cancelled');
+}
+```
+
+Once revoked, the permission can never be used again. The service cannot charge the user.
+
+<Callout type="info">
+**Listing Permissions**: Use `wallet_getPermissions` to retrieve all active permissions for a user. This is useful for displaying a "Manage Subscriptions" page.
+</Callout>
+
+---
+
+## Complete Example
+
+```typescript
+import { JAW, Mode } from '@jaw.id/core';
+import { parseUnits, encodeFunctionData, type Address } from 'viem';
+
+// Configuration
+const USDC_ADDRESS: Address = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
+const SUBSCRIPTION_CONTRACT: Address = '0xYourContract...';
+const SERVICE_SPENDER: Address = '0xYourBackendWallet...';
+
+// Initialize SDK
+const jaw = JAW.create({
+  appName: 'StreamFlix',
+  appLogoUrl: 'https://streamflix.com/logo.png',
+  defaultChainId: 8453,
+  apiKey: 'YOUR_API_KEY',
+  preference: { mode: Mode.AppSpecific },
+});
+
+let userAddress: Address | null = null;
+
+// Connect
+export async function connect(): Promise<Address> {
+  const result = await jaw.provider.request({
+    method: 'eth_requestAccounts',
+    params: [],
+  });
+
+  const accounts = Array.isArray(result)
+    ? result
+    : result.accounts.map((a) => a.address);
+
+  userAddress = accounts[0] as Address;
+  return userAddress;
+}
+
+// Subscribe
+export async function subscribe(planPrice: string): Promise<string> {
+  if (!userAddress) throw new Error('Connect wallet first');
+
+  const result = await jaw.provider.request({
+    method: 'wallet_grantPermissions',
+    params: [{
+      address: userAddress,
+      expiry: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
+      spender: SERVICE_SPENDER,
+      permissions: {
+        spends: [{
+          token: USDC_ADDRESS,
+          allowance: `0x${parseUnits(planPrice, 6).toString(16)}`,
+          unit: 'month',
+          multiplier: 1,
+        }],
+        calls: [{
+          target: SUBSCRIPTION_CONTRACT,
+          functionSignature: 'subscribe()',
+        }],
+      },
+    }],
+  });
+
+  return (result as { permissionId: string }).permissionId;
+}
+
+// Charge (spender side)
+export async function charge(permissionId: string): Promise<string> {
+  if (!userAddress) throw new Error('Connect wallet first');
+
+  const result = await jaw.provider.request({
+    method: 'wallet_sendCalls',
+    params: [{
+      version: '1.0',
+      from: userAddress,
+      calls: [{
+        to: SUBSCRIPTION_CONTRACT,
+        data: encodeFunctionData({
+          abi: [{ name: 'subscribe', type: 'function', inputs: [], outputs: [] }],
+          functionName: 'subscribe',
+        }),
+      }],
+      capabilities: {
+        permissions: { id: permissionId as `0x${string}` },
+      },
+    }],
+  });
+
+  return (result as { id: string }).id;
+}
+
+// Cancel
+export async function cancel(permissionId: string): Promise<void> {
+  if (!userAddress) throw new Error('Connect wallet first');
+
+  await jaw.provider.request({
+    method: 'wallet_revokePermissions',
+    params: [{
+      address: userAddress,
+      id: permissionId as `0x${string}`,
+    }],
+  });
+}
+```
+
+---
+
+## Error Handling
+
+```typescript
+try {
+  const permissionId = await subscribe('9.99');
+  console.log('Subscribed!', permissionId);
+} catch (error) {
+  const rpcError = error as { code?: number; message?: string };
+
+  switch (rpcError.code) {
+    case 4001:
+      console.log('User cancelled');
+      break;
+    case 4100:
+      console.log('Please connect wallet first');
+      break;
+    default:
+      console.error('Error:', rpcError.message);
+  }
+}
+```
+
+---
+
+## Related
+
+- [Overview](/guides/subscriptions) - Security concepts and flow
+- [Using Wagmi](/guides/subscriptions/wagmi) - React hooks approach
+- [wallet_grantPermissions](/api-reference/wallet_grantPermissions) - Full API reference
+- [wallet_getPermissions](/api-reference/wallet_getPermissions) - List active permissions

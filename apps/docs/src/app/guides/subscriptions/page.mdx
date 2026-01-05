@@ -1,0 +1,212 @@
+# Subscription Payments with Permissions
+
+Learn how to implement recurring subscription payments using JAW's permission system. This enables services like Netflix, Spotify, or any SaaS to charge users automatically without requiring approval for each payment.
+
+---
+
+## The Problem with Traditional Crypto Payments
+
+In traditional crypto payments, users must approve **every single transaction**. This creates a poor user experience for recurring payments:
+
+- User subscribes to Netflix
+- Every month, Netflix sends a payment request
+- User must open their wallet and approve
+- If user misses the approval, subscription lapses
+
+This friction makes crypto unsuitable for subscription businesses.
+
+---
+
+## How JAW Permissions Solve This
+
+JAW's permission system (based on ERC-7715) allows users to grant **time-limited, amount-capped permissions** to service providers. The key insight is that permissions are **scoped** - they can only be used for specific actions you define.
+
+### The Subscription Flow
+
+```
+1. USER SUBSCRIBES
+   User grants permission: "$10 USDC per month, only callable by Netflix's subscribe() function"
+
+2. SERVICE STORES PERMISSION ID
+   Netflix stores the permissionId in their database
+
+3. MONTHLY CHARGE (No user interaction!)
+   Netflix's backend calls wallet_sendCalls with the permissionId
+   The smart contract verifies the call matches the permission scope
+
+4. USER CAN CANCEL ANYTIME
+   User revokes the permission, subscription ends immediately
+```
+
+---
+
+## Security: Why Scoped Calls Matter
+
+This is critical to understand. When granting a permission, you define **which contract and function** can be called.
+
+### Unsafe Approach (Don't do this)
+
+```typescript
+// BAD: This allows the spender to transfer to ANY address
+calls: [{
+  target: USDC_ADDRESS,
+  functionSignature: 'transfer(address,uint256)', // Dangerous!
+}]
+```
+
+With this permission, the spender could drain funds to any address they control.
+
+### Safe Approach (Do this)
+
+```typescript
+// GOOD: Only allows calling Netflix's specific subscribe function
+calls: [{
+  target: NETFLIX_CONTRACT_ADDRESS,
+  functionSignature: 'subscribe()', // Only this specific function
+}]
+```
+
+With this permission, the spender can **only** call the `subscribe()` function on Netflix's contract. The contract itself handles where the funds go.
+
+### How the Service Contract Works
+
+The service (Netflix) deploys a contract like this:
+
+```solidity
+contract NetflixSubscription {
+    address public treasury;
+    uint256 public monthlyPrice = 10 * 10**6; // $10 USDC
+
+    function subscribe() external {
+        // Funds can ONLY go to the treasury
+        USDC.transferFrom(msg.sender, treasury, monthlyPrice);
+        emit Subscribed(msg.sender);
+    }
+}
+```
+
+The user's permission only allows calling `subscribe()`, which has hardcoded logic for where funds go. The spender cannot redirect funds elsewhere.
+
+---
+
+## Permission Parameters Explained
+
+When creating a subscription permission, you configure:
+
+| Parameter | Purpose | Example |
+|-----------|---------|---------|
+| `spender` | The address authorized to use this permission | Netflix's backend wallet |
+| `expiry` | When the permission expires (Unix timestamp) | 1 year from now |
+| `permissions.spends` | Token spending limits | $10 USDC per month |
+| `permissions.calls` | Which contract functions can be called | `NetflixContract.subscribe()` |
+
+### Spend Limits
+
+Spend limits add another layer of protection:
+
+```typescript
+spends: [{
+  token: USDC_ADDRESS,
+  allowance: parseUnits('10', 6).toString(), // $10 USDC max
+  unit: 'month',
+  multiplier: 1, // Every 1 month
+}]
+```
+
+Even if someone compromised the spender wallet, they can only spend $10/month.
+
+### Time Units
+
+| Unit | Description |
+|------|-------------|
+| `minute` | Allowance resets every minute |
+| `hour` | Allowance resets every hour |
+| `day` | Allowance resets every 24 hours |
+| `week` | Allowance resets every 7 days |
+| `month` | Allowance resets every ~30 days |
+| `year` | Allowance resets every 365 days |
+
+---
+
+## Important: Store the Permission ID
+
+When a user grants a permission, you receive a `permissionId` in the response. **You must store this ID** - it's required to execute charges later.
+
+```typescript
+const result = await grantPermissions({...});
+
+// CRITICAL: Store this in your database!
+const permissionId = result.permissionId;
+await saveToDatabase({
+  userId: userAddress,
+  permissionId: permissionId,
+  plan: 'premium',
+  createdAt: new Date(),
+});
+```
+
+Without the `permissionId`, you cannot charge the subscription.
+
+---
+
+## Real-World Example: Streaming Service
+
+Here's how a streaming service like Netflix would structure their permission:
+
+```typescript
+const NETFLIX_CONTRACT = '0x...'; // Netflix's subscription contract
+const SPENDER_WALLET = '0x...';   // Netflix's backend wallet
+
+// User grants this permission
+{
+  spender: SPENDER_WALLET,
+  expiry: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60, // 1 year
+  permissions: {
+    spends: [{
+      token: USDC_ADDRESS,
+      allowance: parseUnits('15.99', 6).toString(), // $15.99/month
+      unit: 'month',
+      multiplier: 1,
+    }],
+    calls: [{
+      target: NETFLIX_CONTRACT,
+      functionSignature: 'subscribe()', // ONLY this function
+    }],
+  },
+}
+```
+
+Each month, Netflix's backend:
+1. Retrieves the stored `permissionId` from their database
+2. Calls `wallet_sendCalls` with the permission
+3. The call executes `NetflixContract.subscribe()`
+4. User is charged, subscription continues
+
+---
+
+## Implementation Guides
+
+Choose your preferred approach:
+
+- **[Using Wagmi](/guides/subscriptions/wagmi)** - React hooks approach with `@jaw.id/wagmi`
+- **[Using Core SDK](/guides/subscriptions/core-sdk)** - Direct provider API with `@jaw.id/core`
+
+---
+
+## User Security Best Practices
+
+**For users granting permissions:**
+
+- **Check the spender address** - Is it actually Netflix's official wallet?
+- **Review the call target** - Is it Netflix's verified contract?
+- **Check the amount** - Does $15.99/month match the advertised price?
+- **Note the expiry** - How long is this permission valid?
+- **You can cancel anytime** - Revoking the permission stops all future charges
+
+---
+
+## Related
+
+- [useGrantPermissions](/wagmi/useGrantPermissions) - Wagmi hook reference
+- [useRevokePermissions](/wagmi/useRevokePermissions) - Cancel subscriptions
+- [wallet_grantPermissions](/api-reference/wallet_grantPermissions) - RPC method reference
