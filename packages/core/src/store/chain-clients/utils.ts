@@ -1,11 +1,11 @@
 import { createPublicClient, defineChain, http, PublicClient } from 'viem';
-import { getGasPrice } from 'viem/actions';
 import { BundlerClient, createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 
 import { ChainClients } from './store.js';
 import { RPCResponseNativeCurrency } from '../../messages/rpcMessage.js';
 import { JAW_RPC_URL } from '../../constants.js';
 import { getSupportedChains } from '../../account/smartAccount.js';
+import { createPaymasterFunctions } from '../../account/paymaster.js';
 import { store } from '../store.js';
 
 export type SDKChain = {
@@ -62,74 +62,11 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
     transport: http(chain.paymasterUrl)
   });
 
-  // Use custom paymaster functions to ensure gas prices are fetched first
-  // This is required because Pimlico (and ERC-7677 compliant paymasters)
-  // require maxFeePerGas and maxPriorityFeePerGas in pm_getPaymasterStubData
+  // Use shared paymaster functions that handle gas price fetching and v0.8 gas limits
   const bundlerClient = createBundlerClient({
     chain: viemchain,
     client,
-    paymaster: {
-      async getPaymasterStubData(userOperation) {
-        // Fetch gas prices if not already present
-        let maxFeePerGas = userOperation.maxFeePerGas;
-        let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
-
-        if (!maxFeePerGas || !maxPriorityFeePerGas) {
-          const gasPrice = await getGasPrice(client);
-          maxFeePerGas = maxFeePerGas || gasPrice;
-          maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
-        }
-
-        const stubData = await paymasterClient.getPaymasterStubData({
-          ...userOperation,
-          maxFeePerGas,
-          maxPriorityFeePerGas,
-          chainId: chain.id,
-          entryPointAddress: userOperation.entryPointAddress,
-        });
-
-        console.log('📦 Paymaster stub data response:', stubData);
-
-        // Ensure paymaster gas limits are set (required for EntryPoint v0.8)
-        // Default to reasonable values if not returned by paymaster
-        // Use Object.assign to avoid TypeScript spread inference issues
-        const result = Object.assign({}, stubData, {
-          paymasterVerificationGasLimit: stubData.paymasterVerificationGasLimit || 100000n,
-          paymasterPostOpGasLimit: stubData.paymasterPostOpGasLimit || 50000n,
-        });
-        return result as typeof stubData;
-      },
-      async getPaymasterData(userOperation) {
-        // Fetch gas prices if not already present
-        let maxFeePerGas = userOperation.maxFeePerGas;
-        let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
-
-        if (!maxFeePerGas || !maxPriorityFeePerGas) {
-          const gasPrice = await getGasPrice(client);
-          maxFeePerGas = maxFeePerGas || gasPrice;
-          maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
-        }
-
-        const paymasterData = await paymasterClient.getPaymasterData({
-          ...userOperation,
-          maxFeePerGas,
-          maxPriorityFeePerGas,
-          chainId: chain.id,
-          entryPointAddress: userOperation.entryPointAddress,
-        });
-
-        console.log('📦 Paymaster data response:', paymasterData);
-
-        // Ensure paymaster gas limits are set (required for EntryPoint v0.8)
-        // Use the gas limits from stub data estimation or fallback to defaults
-        // Use Object.assign to avoid TypeScript spread inference issues
-        const result = Object.assign({}, paymasterData, {
-          paymasterVerificationGasLimit: paymasterData.paymasterVerificationGasLimit || userOperation.paymasterVerificationGasLimit || 100000n,
-          paymasterPostOpGasLimit: paymasterData.paymasterPostOpGasLimit || userOperation.paymasterPostOpGasLimit || 50000n,
-        });
-        return result as typeof paymasterData;
-      }
-    },
+    paymaster: createPaymasterFunctions(client, paymasterClient, chain.id),
     transport: http(chain.rpcUrl),
   });
 
@@ -196,14 +133,12 @@ export function getClient(chainId: number): PublicClient | undefined {
 export function getBundlerClient(chainId: number): BundlerClient | undefined {
   // Check if client already exists
   const existingClient = ChainClients.getState()?.[chainId]?.bundlerClient;
-  console.log('Existing client:', existingClient);
   if (existingClient) {
     return existingClient;
   }
 
   // Lazy create: find chain in store and create client
   const chains = store.getState().chains ?? [];
-  console.log('Chains:', chains);
   const chain = chains.find(c => c.id === chainId);
   if (!chain) {
     return undefined;
