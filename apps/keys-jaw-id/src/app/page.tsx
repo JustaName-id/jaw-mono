@@ -39,6 +39,18 @@ type PopupState =
   | 'success'
   | 'error';
 
+// Helper function to generate UUID (fallback for older environments)
+function generateUUID(): string {
+  if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback implementation
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, function(c) {
+    const r = Math.random() * 16 | 0;
+    const v = c === 'x' ? r : (r & 0x3 | 0x8);
+    return v.toString(16);
+  });
+}
 
 export default function KeysJawIdApp() {
   // Use hooks for passkey operations
@@ -63,27 +75,142 @@ export default function KeysJawIdApp() {
 
   const configRef = useRef<PopupConfig | null>(null);
 
+  // === NEW: Browser mode state (for React Native Safari View Controller) ===
+  const [isBrowserMode, setIsBrowserMode] = useState(false);
+  const callbackUrlRef = useRef<string | null>(null);
+
+  // Browser action state for sign/send operations
+  interface BrowserAction {
+    type: 'connect' | 'signMessage' | 'signTypedData' | 'sendTransaction';
+    message?: string;
+    typedData?: object;
+    tx?: { to: string; value?: string; data?: string; chainId?: number };
+    credentialId?: string;
+  }
+  const [browserAction, setBrowserAction] = useState<BrowserAction | null>(null);
+
+  // === NEW: Browser mode redirect helpers ===
+  const redirectWithResult = (callbackUrl: string, result: unknown) => {
+    const resultStr = btoa(JSON.stringify(result));
+    const params = new URLSearchParams({
+      result: resultStr,
+      requestId: generateUUID(),
+    });
+    window.location.href = `${callbackUrl}?${params.toString()}`;
+  };
+
+  const redirectWithError = (callbackUrl: string, errorMsg: string) => {
+    const params = new URLSearchParams({
+      error: errorMsg,
+      requestId: generateUUID(),
+    });
+    window.location.href = `${callbackUrl}?${params.toString()}`;
+  };
+
+  // === NEW: Handle browser mode (React Native Safari View Controller) ===
+  const handleBrowserMode = async (callbackUrl: string, configParam: string, urlParams: URLSearchParams) => {
+    try {
+      // Parse config from URL
+      const parsedConfig = JSON.parse(atob(configParam));
+
+      setConfig(parsedConfig);
+      configRef.current = parsedConfig;
+      setApiKey(parsedConfig.apiKey);
+      setChainId(parsedConfig.metadata?.defaultChainId as ChainId);
+      setEnsConfig(parsedConfig.preference?.ens);
+
+      // Set browser mode flags
+      setIsBrowserMode(true);
+      setIsSDKMode(true);
+
+      // Store callback URL for later redirect
+      callbackUrlRef.current = callbackUrl;
+
+      // Parse action type and params
+      const action = urlParams.get('action') || 'connect';
+      const credentialId = urlParams.get('credentialId') || undefined;
+
+      switch (action) {
+        case 'signMessage': {
+          const messageParam = urlParams.get('message');
+          if (!messageParam || !credentialId) {
+            redirectWithError(callbackUrl, 'Missing message or credentialId');
+            return;
+          }
+          const message = atob(messageParam);
+          setBrowserAction({ type: 'signMessage', message, credentialId });
+          break;
+        }
+
+        case 'signTypedData': {
+          const typedDataParam = urlParams.get('typedData');
+          if (!typedDataParam || !credentialId) {
+            redirectWithError(callbackUrl, 'Missing typedData or credentialId');
+            return;
+          }
+          const typedData = JSON.parse(atob(typedDataParam));
+          setBrowserAction({ type: 'signTypedData', typedData, credentialId });
+          break;
+        }
+
+        case 'sendTransaction': {
+          const txParam = urlParams.get('tx');
+          if (!txParam || !credentialId) {
+            redirectWithError(callbackUrl, 'Missing tx or credentialId');
+            return;
+          }
+          const tx = JSON.parse(atob(txParam));
+          setBrowserAction({ type: 'sendTransaction', tx, credentialId });
+          break;
+        }
+
+        case 'connect':
+        default:
+          setBrowserAction({ type: 'connect' });
+          break;
+      }
+
+      // Check for passkeys and show appropriate UI
+      await checkForPasskeys();
+    } catch (err) {
+      console.error('Failed to parse browser mode config:', err);
+      redirectWithError(callbackUrl, 'Invalid configuration');
+    }
+  };
+
   // Single useEffect for all message handling
   useEffect(() => {
+    // === Browser mode check (for React Native Safari View Controller) ===
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get('mode');
+    const callbackUrl = urlParams.get('callback');
+    const configParam = urlParams.get('config');
+
+    if (mode === 'browser' && callbackUrl && configParam) {
+      handleBrowserMode(callbackUrl, configParam, urlParams);
+      return; // Early exit - don't run popup/WebView logic
+    }
+
     // Check if running in popup mode
     if (!communicator.hasOpener()) {
-      console.log('📱 Running in normal mode (no opener)');
       setIsSDKMode(false);
       return;
     }
 
-    console.log('🚀 Running in SDK popup mode');
     setIsSDKMode(true);
 
     // Initialize crypto handler
     cryptoHandler.initialize().then(() => {
-      console.log('✅ CryptoHandler initialized');
-      // Send PopupLoaded event
       communicator.sendPopupLoaded();
     }).catch(err => {
-      console.error('❌ Failed to initialize CryptoHandler:', err);
-      setError('Failed to initialize');
-      setState('error');
+      console.error('Failed to initialize CryptoHandler:', err);
+      // In WebView mode over HTTP, crypto may fail - still send PopupLoaded
+      if (communicator.isWebView()) {
+        communicator.sendPopupLoaded();
+      } else {
+        setError('Failed to initialize');
+        setState('error');
+      }
     });
 
     // Listen for messages
@@ -378,6 +505,82 @@ export default function KeysJawIdApp() {
   // SDK MODE - When opened by Coinbase SDK
   // ==========================================
   if (isSDKMode) {
+
+    // === BROWSER MODE: Sign/Send operations (React Native Safari View Controller) ===
+    if (isBrowserMode && authQuery.isAuthenticated && browserAction && callbackUrlRef.current) {
+      const callbackUrl = callbackUrlRef.current;
+
+      // Browser mode: Sign Message
+      if (browserAction.type === 'signMessage' && browserAction.message) {
+        return (
+          <SignatureModal
+            origin={config?.metadata?.appName || 'App'}
+            message={browserAction.message}
+            address={authQuery.walletAddress}
+            chain={{ id: effectiveChainId, rpcUrl: '', paymasterUrl: undefined }}
+            apiKey={apiKey}
+            onSuccess={async (signature) => {
+              redirectWithResult(callbackUrl, { signature });
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message);
+            }}
+          />
+        );
+      }
+
+      // Browser mode: Sign Typed Data (EIP-712)
+      if (browserAction.type === 'signTypedData' && browserAction.typedData) {
+        return (
+          <Eip712Modal
+            origin={config?.metadata?.appName || 'App'}
+            typedDataJson={JSON.stringify(browserAction.typedData)}
+            address={authQuery.walletAddress}
+            chain={{ id: effectiveChainId, rpcUrl: '', paymasterUrl: undefined }}
+            apiKey={apiKey}
+            onSuccess={async (signature) => {
+              redirectWithResult(callbackUrl, { signature });
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message);
+            }}
+          />
+        );
+      }
+
+      // Browser mode: Send Transaction
+      if (browserAction.type === 'sendTransaction' && browserAction.tx) {
+        const txChainId = browserAction.tx.chainId || effectiveChainId;
+        const txData: TransactionRequestData = {
+          method: 'eth_sendTransaction',
+          transactions: [{
+            to: browserAction.tx.to,
+            value: browserAction.tx.value || '0x0',
+            data: browserAction.tx.data,
+            chainId: txChainId,
+          }],
+          chainId: txChainId,
+        };
+
+        return (
+          <TransactionModal
+            transactionRequest={txData}
+            chain={{ id: browserAction.tx.chainId || effectiveChainId, rpcUrl: '', paymasterUrl: undefined }}
+            apiKey={apiKey}
+            onSuccess={async (result: TransactionResult) => {
+              redirectWithResult(callbackUrl, {
+                txHash: result.hash,
+                id: result.id,
+                chainId: result.chainId,
+              });
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message);
+            }}
+          />
+        );
+      }
+    }
 
     // Check if we have a pending transaction request and either user is authenticated OR we're in processing state
     // Don't show modal if state is 'success' or 'error' (request has been completed)
@@ -850,6 +1053,17 @@ export default function KeysJawIdApp() {
                   const newestAccount = accounts[accounts.length - 1] || null;
                   setCurrentAccount(newestAccount);
 
+                  // Browser mode redirect
+                  if (isBrowserMode && callbackUrlRef.current && authQuery.walletAddress) {
+                    redirectWithResult(callbackUrlRef.current, {
+                      address: authQuery.walletAddress,
+                      username: newestAccount?.username,
+                      credentialId: newestAccount?.credentialId,
+                      chainId: effectiveChainId,
+                    });
+                    return;
+                  }
+
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     setState('account-selection');
@@ -877,7 +1091,13 @@ export default function KeysJawIdApp() {
             />
 
             <button
-              onClick={() => window.close()}
+              onClick={() => {
+                if (isBrowserMode && callbackUrlRef.current) {
+                  redirectWithError(callbackUrlRef.current, 'User cancelled');
+                  return;
+                }
+                window.close();
+              }}
               className="w-full mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
             >
               Cancel
@@ -907,6 +1127,17 @@ export default function KeysJawIdApp() {
                   const accounts = accountsResult.data || [];
                   setCurrentAccount(accounts[0] || null);
 
+                  // Browser mode redirect
+                  if (isBrowserMode && callbackUrlRef.current && authQuery.walletAddress) {
+                    redirectWithResult(callbackUrlRef.current, {
+                      address: authQuery.walletAddress,
+                      username: accounts[0]?.username,
+                      credentialId: accounts[0]?.credentialId,
+                      chainId: effectiveChainId,
+                    });
+                    return;
+                  }
+
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     setState('account-selection');
@@ -920,18 +1151,27 @@ export default function KeysJawIdApp() {
                     // If there's a pending sign message, typed data, transaction, or permission request,
                     // the modal will be shown in the priority logic above since user is now authenticated
                     setState('processing');
-                  } else {
-                    // No pending request yet, stay on current screen and wait for it
-                    // useEffect will handle transition when handshake arrives
-                    // Don't change state - stay on passkey-auth to keep UI visible
                   }
                 } catch (err) {
-                  console.error('❌ Failed after authentication:', err);
+                  console.error('Failed after authentication:', err);
                   setError(err instanceof Error ? err.message : 'Authentication failed');
                   setState('passkey-auth');
                 }
               }}
             />
+
+            <button
+              onClick={() => {
+                if (isBrowserMode && callbackUrlRef.current) {
+                  redirectWithError(callbackUrlRef.current, 'User cancelled');
+                  return;
+                }
+                window.close();
+              }}
+              className="w-full mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       );

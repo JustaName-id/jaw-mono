@@ -3,6 +3,8 @@ export {
     Account,
     type AccountConfig,
     type CreateAccountOptions,
+    type GetAccountOptions,
+    type ImportAccountOptions,
     type TransactionCall,
     type SendCallsOptions,
     type AccountMetadata,

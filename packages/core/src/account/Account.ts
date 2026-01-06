@@ -19,7 +19,7 @@ import {
   type CallStatusResponse,
 } from '../rpc/wallet_sendCalls.js';
 import type { JustanAccountImplementation } from './toJustanAccount.js';
-import { PasskeyManager, type PasskeyAccount } from '../passkey-manager/index.js';
+import { PasskeyManager, type PasskeyAccount, type PasskeyCreateFn, type PasskeyGetFn } from '../passkey-manager/index.js';
 import {
   grantPermissions as grantSmartAccountPermissions,
   revokePermission as revokeSmartAccountPermission,
@@ -58,6 +58,24 @@ export interface CreateAccountOptions {
   rpId?: string;
   /** Relying party name (defaults to 'JAW') */
   rpName?: string;
+  /** Custom create function for React Native passkey adapters */
+  createFn?: PasskeyCreateFn;
+}
+
+/**
+ * Options for getting/authenticating an account
+ */
+export interface GetAccountOptions {
+  /** Custom get function for React Native passkey adapters */
+  getFn?: PasskeyGetFn;
+}
+
+/**
+ * Options for importing an account from cloud backup
+ */
+export interface ImportAccountOptions {
+  /** Custom get function for React Native passkey adapters */
+  getFn?: PasskeyGetFn;
 }
 
 /**
@@ -169,8 +187,9 @@ export class Account {
    * );
    * ```
    */
-  static async get(config: AccountConfig, credentialId?: string): Promise<Account> {
+  static async get(config: AccountConfig, credentialId?: string, options?: GetAccountOptions): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
+    const { getFn } = options ?? {};
 
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
     const authResult = passkeyManager.checkAuth();
@@ -185,8 +204,8 @@ export class Account {
 
       const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
 
-      // Authenticate with WebAuthn
-      await passkeyManager.authenticateWithWebAuthn(rpId, credentialId);
+      // Authenticate with WebAuthn (use custom getFn for React Native)
+      await passkeyManager.authenticateWithWebAuthn(rpId, credentialId, undefined, getFn);
 
       const webAuthnAccount = toWebAuthnAccount({
         credential: {
@@ -247,18 +266,19 @@ export class Account {
    */
   static async create(config: AccountConfig, options: CreateAccountOptions): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
-    const { username, rpId, rpName } = options;
+    const { username, rpId, rpName, createFn } = options;
 
     const resolvedRpId = rpId ?? (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
     const resolvedRpName = rpName ?? 'JAW';
 
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
 
-    // Create the passkey
+    // Create the passkey (use custom createFn for React Native)
     const { credentialId, publicKey, webAuthnAccount, passkeyAccount } = await passkeyManager.createPasskey(
       username,
       resolvedRpId,
-      resolvedRpName
+      resolvedRpName,
+      createFn
     );
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
@@ -292,13 +312,14 @@ export class Account {
    * const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
    * ```
    */
-  static async import(config: AccountConfig): Promise<Account> {
+  static async import(config: AccountConfig, options?: ImportAccountOptions): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
+    const { getFn } = options ?? {};
 
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
 
-    // Import passkey from cloud backup
-    const importResult = await passkeyManager.importPasskeyAccount();
+    // Import passkey from cloud backup (use custom getFn for React Native)
+    const importResult = await passkeyManager.importPasskeyAccount(getFn);
 
     const webAuthnAccount = toWebAuthnAccount({
       credential: {

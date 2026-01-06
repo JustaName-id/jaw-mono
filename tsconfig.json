@@ -19,6 +19,9 @@
       "path": "./apps/docs"
     },
     {
+      "path": "./packages/ui-native"
+    },
+    {
       "path": "./apps/playground"
     }
   ]
