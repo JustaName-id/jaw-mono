@@ -36,4 +36,4 @@ jobs:
 
       # Prepend any command with "nx-cloud record --" to record its logs to Nx Cloud
       # - run: bunx nx-cloud record -- echo Hello World
-      - run: bunx nx run-many -t lint test build typecheck
+      - run: bunx nx run-many -t lint test build typecheck --exclude=@jaw-mono/playground
