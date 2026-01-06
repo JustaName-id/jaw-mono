@@ -537,7 +537,7 @@ function WalletStatus() {
                 ))}
               </div>
             ) : (
-              <p className="text-gray-500 dark:text-gray-400">No assets found. Click "Fetch Assets" to load.</p>
+              <p className="text-gray-500 dark:text-gray-400">No assets found. Click &quot;Fetch Assets&quot; to load.</p>
             )}
           </div>
         </div>

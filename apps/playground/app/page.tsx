@@ -13,12 +13,6 @@ const routes = [
     description:
       'Test @jaw.id/wagmi hooks including useConnect, useDisconnect, useGrantPermissions, useRevokePermissions, and useGetAssets.',
   },
-  {
-    href: '/privy',
-    title: 'Privy Integration',
-    description:
-      'Test using Privy embedded wallets as signers for JAW Smart Accounts.',
-  },
 ];
 
 export default function Home() {
