@@ -59,8 +59,7 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/*",
-    "playground/*"
+    "apps/*"
   ],
   "nx": {
     "includedScripts": [],

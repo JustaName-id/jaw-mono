@@ -1,0 +1,7 @@
+{
+  "name": "@jaw-mono/playground",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/playground/app",
+  "projectType": "application",
+  "tags": ["npm:private"]
+}
