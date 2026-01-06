@@ -17,5 +17,7 @@ export {
   PasskeyLookupError,
   WebAuthnAuthenticationError,
   type WebAuthnAuthenticationResult,
+  type PasskeyCreateFn,
+  type PasskeyGetFn,
 } from './utils.js';
 
