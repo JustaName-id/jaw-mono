@@ -32,6 +32,12 @@
       "@jaw.id/ui": [
         "packages/ui/src/index.ts"
       ],
+      "@jaw/ui-native": [
+        "packages/ui-native/src/index.ts"
+      ],
+      "@jaw/ui-native/*": [
+        "packages/ui-native/src/*"
+      ],
       "@jaw.id/ui/*": [
         "packages/ui/src/*"
       ],
