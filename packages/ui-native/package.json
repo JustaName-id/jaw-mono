@@ -15,8 +15,8 @@
     }
   },
   "scripts": {
-    "build": "tsc --noEmit",
-    "typecheck": "tsc --noEmit"
+    "build": "tsc --build tsconfig.lib.json",
+    "typecheck": "tsc --build --emitDeclarationOnly"
   },
   "dependencies": {
     "@jaw.id/core": "file:../core",
@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@types/react": "~19.1.0",
+    "@types/react-native": "^0.73.0",
     "react-native": "^0.76.0",
     "react-native-svg": "^15.6.0",
     "react-native-webview": "^13.12.5",
