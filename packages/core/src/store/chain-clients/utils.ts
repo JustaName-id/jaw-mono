@@ -13,6 +13,8 @@ export type SDKChain = {
   rpcUrl?: string;
   nativeCurrency?: RPCResponseNativeCurrency;
   paymasterUrl?: string;
+  /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
+  paymasterContext?: Record<string, unknown>;
 };
 
 /**
@@ -66,7 +68,7 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
   const bundlerClient = createBundlerClient({
     chain: viemchain,
     client,
-    paymaster: createPaymasterFunctions(client, paymasterClient, chain.id),
+    paymaster: createPaymasterFunctions(client, paymasterClient, chain.id, chain.paymasterContext),
     transport: http(chain.rpcUrl),
   });
 
@@ -162,13 +164,24 @@ export function getBundlerClient(chainId: number): BundlerClient | undefined {
  *
  * @param apiKey - API key for authentication
  * @param paymasterUrls - Optional mapping of chain IDs to paymaster URLs
+ * @param paymasterContexts - Optional mapping of chain IDs to paymaster context (e.g., sponsorshipPolicyId)
  * @param showTestnets - Whether to include testnet chains (default: false)
  * @returns Array of SDKChain objects with constructed RPC URLs for supported chains
  *
+ * @example
+ * ```typescript
+ * const chains = createInitialChains(
+ *   'api-key',
+ *   { 84532: 'https://api.pimlico.io/v2/84532/rpc?apikey=...' },
+ *   { 84532: { sponsorshipPolicyId: 'sp_my_policy' } },
+ *   true
+ * );
+ * ```
  */
 export function createInitialChains(
   apiKey: string,
   paymasterUrls?: Record<number, string>,
+  paymasterContexts?: Record<number, Record<string, unknown>>,
   showTestnets = false
 ): SDKChain[] {
   const chains = getSupportedChains(showTestnets);
@@ -176,5 +189,6 @@ export function createInitialChains(
     id: chain.id,
     rpcUrl: `${JAW_RPC_URL}?chainId=${chain.id}&api-key=${apiKey}`,
     ...(paymasterUrls?.[chain.id] ? { paymasterUrl: paymasterUrls[chain.id] } : {}),
+    ...(paymasterContexts?.[chain.id] ? { paymasterContext: paymasterContexts[chain.id] } : {}),
   }));
 }

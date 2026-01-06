@@ -6,8 +6,11 @@ import { store, createInitialChains, ChainClients, createClients } from '../stor
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   apiKey: string;
   preference?: Partial<JawProviderPreference>;
+  /** Mapping of chain IDs to paymaster URLs */
   paymasterUrls?: Record<number, string>;
-  /** Used to issue subnames*/
+  /** Mapping of chain IDs to paymaster context */
+  paymasterContexts?: Record<number, Record<string, unknown>>;
+  /** Used to issue subnames */
   ens?: string;
 };
 
@@ -80,6 +83,7 @@ export function create(params: CreateJAWSDKOptions) {
     const initialChains = createInitialChains(
       params.apiKey,
       params.paymasterUrls,
+      params.paymasterContexts,
       options.preference.showTestnets
     );
     store.chains.set(initialChains);

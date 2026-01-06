@@ -22,12 +22,14 @@ export const DEFAULT_PAYMASTER_POST_OP_GAS_LIMIT = 50000n;
  * @param client - The client to fetch gas prices from
  * @param paymasterClient - The paymaster client to delegate calls to
  * @param chainId - The chain ID for the paymaster requests
+ * @param context - Optional context to pass to paymaster (e.g., sponsorshipPolicyId for Pimlico)
  * @returns Custom paymaster functions compatible with viem's bundler client
  */
 export function createPaymasterFunctions(
     client: Client,
     paymasterClient: PaymasterClient,
-    chainId: number
+    chainId: number,
+    context?: Record<string, unknown>
 ) {
     return {
         async getPaymasterStubData(userOperation: Parameters<PaymasterClient['getPaymasterStubData']>[0]) {
@@ -47,6 +49,7 @@ export function createPaymasterFunctions(
                 maxPriorityFeePerGas,
                 chainId,
                 entryPointAddress: userOperation.entryPointAddress,
+                ...(context ? { context } : {}),
             });
 
             // Ensure paymaster gas limits are set (required for EntryPoint v0.8)
@@ -75,6 +78,7 @@ export function createPaymasterFunctions(
                 maxPriorityFeePerGas,
                 chainId,
                 entryPointAddress: userOperation.entryPointAddress,
+                ...(context ? { context } : {}),
             });
 
             // Ensure paymaster gas limits are set (required for EntryPoint v0.8)

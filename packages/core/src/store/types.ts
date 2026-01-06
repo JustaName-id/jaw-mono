@@ -13,6 +13,8 @@ export type Chain = {
       decimal?: number;
     };
     paymasterUrl?: string;
+    /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
+    paymasterContext?: Record<string, unknown>;
   };
   
 

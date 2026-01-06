@@ -93,10 +93,16 @@ export function getSupportedChains(showTestnets = false) {
  * @param chain - The chain to get the bundler client for
  * @param paymasterUrlOverride - Optional paymaster URL that takes priority over chain.paymasterUrl.
  *                               Used when wallet_sendCalls includes a paymasterService capability.
+ * @param paymasterContextOverride - Optional paymaster context that takes priority over chain.paymasterContext.
+ *                                   Used when wallet_sendCalls includes paymaster context in capabilities.
  * @returns The bundler client for the specified chain
  * @throws Error if the chain is not supported or client creation fails
  */
-export const getBundlerClient = (chain: Chain, paymasterUrlOverride?: string): BundlerClient<Transport, ViemChain> => {
+export const getBundlerClient = (
+    chain: Chain,
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
+): BundlerClient<Transport, ViemChain> => {
     const viemChain = SUPPORTED_CHAINS.find(c => c.id === chain.id);
 
     const publicClient = createPublicClient({
@@ -104,8 +110,9 @@ export const getBundlerClient = (chain: Chain, paymasterUrlOverride?: string): B
         transport: http(chain.rpcUrl),
     });
 
-    // Priority: paymasterUrlOverride (from capabilities) > chain.paymasterUrl (from SDK config)
+    // Priority: overrides (from capabilities) > chain config (from SDK config)
     const effectivePaymasterUrl = paymasterUrlOverride || chain.paymasterUrl;
+    const effectivePaymasterContext = paymasterContextOverride || chain.paymasterContext;
 
     // If no paymaster URL, return bundler client without paymaster
     if (!effectivePaymasterUrl) {
@@ -122,7 +129,7 @@ export const getBundlerClient = (chain: Chain, paymasterUrlOverride?: string): B
     // Use shared paymaster functions that handle gas price fetching and v0.8 gas limits
     return createBundlerClient({
         client: publicClient,
-        paymaster: createPaymasterFunctions(publicClient, paymasterClient, chain.id),
+        paymaster: createPaymasterFunctions(publicClient, paymasterClient, chain.id, effectivePaymasterContext),
         transport: http(chain.rpcUrl)
     });
 }
