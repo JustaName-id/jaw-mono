@@ -1,5 +1,5 @@
 import React from 'react';
-import { ScrollView, ScrollViewProps } from 'react-native';
+import { ScrollView, ScrollViewProps, View } from 'react-native';
 import { cn } from '../../lib/utils';
 
 export interface ScrollAreaProps extends ScrollViewProps {
@@ -32,7 +32,10 @@ export interface ScrollBarProps {
 
 // Note: React Native ScrollView handles scrollbars automatically
 // This component is a placeholder for API compatibility
-const ScrollBar: React.FC<ScrollBarProps> = () => {
+const ScrollBar: React.FC<ScrollBarProps> = ({
+  orientation = 'vertical',
+  className,
+}) => {
   return null; // React Native handles scrollbars internally
 };
 

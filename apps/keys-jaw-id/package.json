@@ -12,5 +12,7 @@
     "tailwindcss-animate": "^1.0.7",
     "viem": "^2.38.2"
   },
-  "devDependencies": {}
+  "devDependencies": {
+    "tailwindcss-animate": "^1.0.7"
+  }
 }

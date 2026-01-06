@@ -516,8 +516,8 @@ export default function KeysJawIdApp() {
           <SignatureModal
             origin={config?.metadata?.appName || 'App'}
             message={browserAction.message}
-            address={authQuery.walletAddress ?? undefined}
-            chain={{ id: effectiveChainId, rpcUrl: '', paymaster: undefined }}
+            address={authQuery.walletAddress}
+            chain={{ id: effectiveChainId, rpcUrl: '', paymasterUrl: undefined }}
             apiKey={apiKey}
             onSuccess={async (signature) => {
               redirectWithResult(callbackUrl, { signature });
@@ -535,8 +535,8 @@ export default function KeysJawIdApp() {
           <Eip712Modal
             origin={config?.metadata?.appName || 'App'}
             typedDataJson={JSON.stringify(browserAction.typedData)}
-            address={authQuery.walletAddress ?? undefined}
-            chain={{ id: effectiveChainId, rpcUrl: '', paymaster: undefined }}
+            address={authQuery.walletAddress}
+            chain={{ id: effectiveChainId, rpcUrl: '', paymasterUrl: undefined }}
             apiKey={apiKey}
             onSuccess={async (signature) => {
               redirectWithResult(callbackUrl, { signature });
@@ -565,7 +565,7 @@ export default function KeysJawIdApp() {
         return (
           <TransactionModal
             transactionRequest={txData}
-            chain={{ id: browserAction.tx.chainId || effectiveChainId, rpcUrl: '', paymaster: undefined }}
+            chain={{ id: browserAction.tx.chainId || effectiveChainId, rpcUrl: '', paymasterUrl: undefined }}
             apiKey={apiKey}
             onSuccess={async (result: TransactionResult) => {
               redirectWithResult(callbackUrl, {
