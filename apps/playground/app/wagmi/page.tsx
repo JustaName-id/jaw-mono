@@ -12,6 +12,7 @@ import {
   useConnect as useWagmiConnect,
   useDisconnect as useWagmiDisconnect,
   useSendCalls,
+  useCallsStatus,
 } from 'wagmi';
 import {
   useConnect,
@@ -50,6 +51,17 @@ function WalletStatus() {
 
   // JAW useGetAssets for fetching token balances
   const { data: assets, isLoading: isLoadingAssets, error: assetsError, refetch: refetchAssets } = useGetAssets();
+
+  // State for tracking batch ID for status checks
+  const [lastBatchId, setLastBatchId] = useState<string>('');
+
+  // useCallsStatus for checking batch transaction status (EIP-5792)
+  const { data: callsStatus, isLoading: isLoadingCallsStatus, error: callsStatusError, refetch: refetchCallsStatus } = useCallsStatus({
+    id: lastBatchId as `0x${string}`,
+    query: {
+      enabled: !!lastBatchId,
+    },
+  });
 
   const [logs, setLogs] = useState<string[]>([]);
   const [toAddress, setToAddress] = useState('');
@@ -295,6 +307,46 @@ function WalletStatus() {
     } catch (err) {
       addLog(`Error: ${err instanceof Error ? err.message : String(err)}`);
     }
+  };
+
+  // Simple sendCalls (batch transactions without permissions)
+  const handleSendCalls = () => {
+    if (!toAddress || !amount) {
+      addLog('Please enter recipient address and amount');
+      return;
+    }
+
+    addLog(`Sending batch calls to ${toAddress}...`);
+    try {
+      sendCalls({
+        calls: [
+          {
+            to: toAddress as Address,
+            value: parseEther(amount),
+          },
+        ],
+      }, {
+        onSuccess: (data) => {
+          addLog(`Batch submitted! ID: ${data.id}`);
+          setLastBatchId(data.id);
+        },
+        onError: (error) => {
+          addLog(`Error: ${error.message}`);
+        },
+      });
+    } catch (err) {
+      addLog(`Error: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  };
+
+  // Get calls status
+  const handleGetCallsStatus = () => {
+    if (!lastBatchId) {
+      addLog('No batch ID to check. Send calls first or enter a batch ID.');
+      return;
+    }
+    addLog(`Checking status for batch: ${lastBatchId.slice(0, 20)}...`);
+    refetchCallsStatus();
   };
 
   return (
@@ -625,6 +677,122 @@ function WalletStatus() {
                   {sendCallsId.id}
                 </code>
               </p>
+            )}
+          </div>
+        </div>
+
+        {/* Batch Transactions (EIP-5792 wallet_sendCalls) */}
+        <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+          <h2 className="text-xl font-semibold mb-4 text-gray-900 dark:text-white">
+            Batch Transactions (EIP-5792)
+          </h2>
+          <p className="text-sm text-gray-600 dark:text-gray-400 mb-4">
+            Use wallet_sendCalls to batch multiple transactions atomically. Use getCallsStatus to check the status.
+          </p>
+          <div className="space-y-4">
+            {/* Recipient and Amount */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Recipient Address
+                </label>
+                <input
+                  type="text"
+                  value={toAddress}
+                  onChange={(e) => setToAddress(e.target.value)}
+                  placeholder="0x..."
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                  Amount (ETH)
+                </label>
+                <input
+                  type="text"
+                  value={amount}
+                  onChange={(e) => setAmount(e.target.value)}
+                  placeholder="0.01"
+                  className="w-full px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white"
+                />
+              </div>
+            </div>
+
+            <button
+              onClick={handleSendCalls}
+              disabled={!isConnected || isSendingCalls}
+              className="w-full px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+            >
+              {isSendingCalls ? 'Sending...' : 'Send Batch Calls'}
+            </button>
+
+            {/* Batch ID Input & Status Check */}
+            <div className="border-t border-gray-200 dark:border-gray-700 pt-4 mt-4">
+              <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                Batch ID (for status check)
+              </label>
+              <div className="flex gap-2">
+                <input
+                  type="text"
+                  value={lastBatchId}
+                  onChange={(e) => setLastBatchId(e.target.value)}
+                  placeholder="0x... (auto-filled after sending calls)"
+                  className="flex-1 px-3 py-2 border border-gray-300 dark:border-gray-600 rounded bg-white dark:bg-gray-700 text-gray-900 dark:text-white font-mono text-sm"
+                />
+                <button
+                  onClick={handleGetCallsStatus}
+                  disabled={!isConnected || !lastBatchId || isLoadingCallsStatus}
+                  className="px-4 py-2 bg-cyan-600 text-white rounded hover:bg-cyan-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors whitespace-nowrap"
+                >
+                  {isLoadingCallsStatus ? 'Checking...' : 'Get Status'}
+                </button>
+              </div>
+            </div>
+
+            {sendCallsError && (
+              <p className="text-red-600 text-sm">Send Calls Error: {sendCallsError.message}</p>
+            )}
+            {callsStatusError && (
+              <p className="text-red-600 text-sm">Status Error: {callsStatusError.message}</p>
+            )}
+
+            {/* Status Display */}
+            {callsStatus && (
+              <div className="bg-gray-100 dark:bg-gray-900 rounded p-4">
+                <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                  Batch Status:
+                </p>
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-600 dark:text-gray-400">
+                    <span className="font-medium">Status:</span>{' '}
+                    <span className={
+                      callsStatus.status === 'success' ? 'text-green-600' :
+                      callsStatus.status === 'pending' ? 'text-yellow-600' :
+                      callsStatus.status === 'failure' ? 'text-red-600' :
+                      'text-gray-600'
+                    }>
+                      {callsStatus.status}
+                    </span>
+                  </p>
+                  {callsStatus.receipts && callsStatus.receipts.length > 0 && (
+                    <div>
+                      <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                        Transaction Receipts:
+                      </p>
+                      {callsStatus.receipts.map((receipt, i) => (
+                        <div key={i} className="text-xs text-gray-600 dark:text-gray-400 mb-1">
+                          <span className="font-mono">
+                            {receipt.transactionHash}
+                          </span>
+                          <span className={`ml-2 ${receipt.status === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                            ({receipt.status})
+                          </span>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>

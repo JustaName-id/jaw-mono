@@ -2,16 +2,16 @@ import Link from 'next/link';
 
 const routes = [
   {
-    href: '/core',
-    title: 'Core SDK',
-    description:
-      'Test the core JAW SDK functionality including connections, signing, transactions, permissions, and wallet capabilities.',
-  },
-  {
     href: '/wagmi',
     title: 'Wagmi Integration',
     description:
-      'Test @jaw.id/wagmi hooks including useConnect, useDisconnect, useGrantPermissions, useRevokePermissions, and useGetAssets.',
+        'Test @jaw.id/wagmi hooks including connections, signing, transactions, permissions, and wallet capabilities.',
+  },
+  {
+    href: '/core',
+    title: 'Core SDK',
+    description:
+      'Test @jaw.id/core functionality via EIP-1193 provider, including connections, signing, transactions, permissions, and wallet capabilities.',
   },
 ];
 
