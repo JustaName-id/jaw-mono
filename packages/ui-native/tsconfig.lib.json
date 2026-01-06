@@ -1,0 +1,38 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    "outDir": "dist",
+    "lib": ["es2022", "DOM"],
+    "rootDir": "src",
+    "jsx": "react-jsx",
+    "module": "esnext",
+    "moduleResolution": "node",
+    "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
+    "skipLibCheck": true,
+    "noEmit": true,
+    "declaration": false,
+    "noImplicitAny": false,
+    "strict": false,
+    "allowSyntheticDefaultImports": true,
+    "esModuleInterop": true,
+    "types": ["react"]
+  },
+  "exclude": [
+    "out-tsc",
+    "dist",
+    "**/*.spec.ts",
+    "**/*.test.ts",
+    "**/*.spec.tsx",
+    "**/*.test.tsx"
+  ],
+  "include": [
+    "src/**/*.ts",
+    "src/**/*.tsx",
+    "nativewind-env.d.ts"
+  ],
+  "references": [
+    {
+      "path": "../core/tsconfig.lib.json"
+    }
+  ]
+}
