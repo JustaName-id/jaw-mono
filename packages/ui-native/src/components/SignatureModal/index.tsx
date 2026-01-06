@@ -18,6 +18,7 @@ export const SignatureModal: React.FC<SignatureModalProps> = ({
   timestamp,
   accountAddress,
   chainName,
+  chainId,
   chainIcon,
   onSign,
   onCancel,
@@ -205,6 +206,8 @@ export const SiweModal: React.FC<SiweModalProps> = ({
   isProcessing,
   signatureStatus,
   canSign = true,
+  appName,
+  appLogoUrl,
 }) => {
   // SIWE modal is similar to SignatureModal but with app branding
   return (
@@ -238,6 +241,7 @@ export const Eip712Modal: React.FC<Eip712ModalProps> = ({
   timestamp,
   accountAddress,
   chainName,
+  chainId,
   chainIcon,
   onSign,
   onCancel,
