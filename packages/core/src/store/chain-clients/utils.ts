@@ -1,4 +1,5 @@
 import { createPublicClient, defineChain, http, PublicClient } from 'viem';
+import { getGasPrice } from 'viem/actions';
 import { BundlerClient, createBundlerClient, createPaymasterClient } from 'viem/account-abstraction';
 
 import { ChainClients } from './store.js';
@@ -47,16 +48,88 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
     transport: http(chain.rpcUrl),
   });
 
-  const paymasterClient = chain.paymasterUrl
-    ? createPaymasterClient({
-        transport: http(chain.paymasterUrl)
-      })
-    : undefined;
+  // If no paymaster URL, return bundler client without paymaster
+  if (!chain.paymasterUrl) {
+    const bundlerClient = createBundlerClient({
+      chain: viemchain,
+      client,
+      transport: http(chain.rpcUrl),
+    });
+    return { client, bundlerClient };
+  }
 
+  const paymasterClient = createPaymasterClient({
+    transport: http(chain.paymasterUrl)
+  });
+
+  // Use custom paymaster functions to ensure gas prices are fetched first
+  // This is required because Pimlico (and ERC-7677 compliant paymasters)
+  // require maxFeePerGas and maxPriorityFeePerGas in pm_getPaymasterStubData
   const bundlerClient = createBundlerClient({
     chain: viemchain,
     client,
-    ...(paymasterClient && { paymaster: paymasterClient }),
+    paymaster: {
+      async getPaymasterStubData(userOperation) {
+        // Fetch gas prices if not already present
+        let maxFeePerGas = userOperation.maxFeePerGas;
+        let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
+
+        if (!maxFeePerGas || !maxPriorityFeePerGas) {
+          const gasPrice = await getGasPrice(client);
+          maxFeePerGas = maxFeePerGas || gasPrice;
+          maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
+        }
+
+        const stubData = await paymasterClient.getPaymasterStubData({
+          ...userOperation,
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+          chainId: chain.id,
+          entryPointAddress: userOperation.entryPointAddress,
+        });
+
+        console.log('📦 Paymaster stub data response:', stubData);
+
+        // Ensure paymaster gas limits are set (required for EntryPoint v0.8)
+        // Default to reasonable values if not returned by paymaster
+        // Use Object.assign to avoid TypeScript spread inference issues
+        const result = Object.assign({}, stubData, {
+          paymasterVerificationGasLimit: stubData.paymasterVerificationGasLimit || 100000n,
+          paymasterPostOpGasLimit: stubData.paymasterPostOpGasLimit || 50000n,
+        });
+        return result as typeof stubData;
+      },
+      async getPaymasterData(userOperation) {
+        // Fetch gas prices if not already present
+        let maxFeePerGas = userOperation.maxFeePerGas;
+        let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
+
+        if (!maxFeePerGas || !maxPriorityFeePerGas) {
+          const gasPrice = await getGasPrice(client);
+          maxFeePerGas = maxFeePerGas || gasPrice;
+          maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
+        }
+
+        const paymasterData = await paymasterClient.getPaymasterData({
+          ...userOperation,
+          maxFeePerGas,
+          maxPriorityFeePerGas,
+          chainId: chain.id,
+          entryPointAddress: userOperation.entryPointAddress,
+        });
+
+        console.log('📦 Paymaster data response:', paymasterData);
+
+        // Ensure paymaster gas limits are set (required for EntryPoint v0.8)
+        // Use the gas limits from stub data estimation or fallback to defaults
+        // Use Object.assign to avoid TypeScript spread inference issues
+        const result = Object.assign({}, paymasterData, {
+          paymasterVerificationGasLimit: paymasterData.paymasterVerificationGasLimit || userOperation.paymasterVerificationGasLimit || 100000n,
+          paymasterPostOpGasLimit: paymasterData.paymasterPostOpGasLimit || userOperation.paymasterPostOpGasLimit || 50000n,
+        });
+        return result as typeof paymasterData;
+      }
+    },
     transport: http(chain.rpcUrl),
   });
 

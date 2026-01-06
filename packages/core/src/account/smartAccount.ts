@@ -97,9 +97,7 @@ export function getSupportedChains(showTestnets = false) {
  */
 export const getBundlerClient = (chain: Chain, paymasterUrlOverride?: string): BundlerClient<Transport, ViemChain> => {
     console.log('🔍 Getting bundler client for chain:', chain);
-    // const bundlerClient = getBundlerClientFromStore(chain.id);
     const viemChain = SUPPORTED_CHAINS.find(c => c.id === chain.id);
-
 
     const publicClient = createPublicClient({
         chain: viemChain,
@@ -108,17 +106,86 @@ export const getBundlerClient = (chain: Chain, paymasterUrlOverride?: string): B
 
     // Priority: paymasterUrlOverride (from capabilities) > chain.paymasterUrl (from SDK config)
     const effectivePaymasterUrl = paymasterUrlOverride || chain.paymasterUrl;
-    const paymasterClient = effectivePaymasterUrl
-        ? createPaymasterClient({
-            transport: http(effectivePaymasterUrl)
-        })
-        : undefined;
 
+    // If no paymaster URL, return bundler client without paymaster
+    if (!effectivePaymasterUrl) {
         return createBundlerClient({
             client: publicClient,
-            ...(paymasterClient && { paymaster: paymasterClient }),
             transport: http(chain.rpcUrl)
         });
+    }
+
+    const paymasterClient = createPaymasterClient({
+        transport: http(effectivePaymasterUrl)
+    });
+
+    // Use custom paymaster functions to ensure gas prices are fetched first
+    // This is required because Pimlico (and ERC-7677 compliant paymasters)
+    // require maxFeePerGas and maxPriorityFeePerGas in pm_getPaymasterStubData
+    return createBundlerClient({
+        client: publicClient,
+        paymaster: {
+            async getPaymasterStubData(userOperation) {
+                // Fetch gas prices if not already present
+                let maxFeePerGas = userOperation.maxFeePerGas;
+                let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
+
+                if (!maxFeePerGas || !maxPriorityFeePerGas) {
+                    const gasPrice = await getGasPrice(publicClient);
+                    maxFeePerGas = maxFeePerGas || gasPrice;
+                    maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
+                }
+
+                const stubData = await paymasterClient.getPaymasterStubData({
+                    ...userOperation,
+                    maxFeePerGas,
+                    maxPriorityFeePerGas,
+                    chainId: chain.id,
+                    entryPointAddress: userOperation.entryPointAddress,
+                });
+
+                console.log('📦 Paymaster stub data response:', stubData);
+
+                // Ensure paymaster gas limits are set (required for EntryPoint v0.8)
+                // Default to reasonable values if not returned by paymaster
+                const result = Object.assign({}, stubData, {
+                    paymasterVerificationGasLimit: stubData.paymasterVerificationGasLimit || 100000n,
+                    paymasterPostOpGasLimit: stubData.paymasterPostOpGasLimit || 50000n,
+                });
+                return result as typeof stubData;
+            },
+            async getPaymasterData(userOperation) {
+                // Fetch gas prices if not already present
+                let maxFeePerGas = userOperation.maxFeePerGas;
+                let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
+
+                if (!maxFeePerGas || !maxPriorityFeePerGas) {
+                    const gasPrice = await getGasPrice(publicClient);
+                    maxFeePerGas = maxFeePerGas || gasPrice;
+                    maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
+                }
+
+                const paymasterData = await paymasterClient.getPaymasterData({
+                    ...userOperation,
+                    maxFeePerGas,
+                    maxPriorityFeePerGas,
+                    chainId: chain.id,
+                    entryPointAddress: userOperation.entryPointAddress,
+                });
+
+                console.log('📦 Paymaster data response:', paymasterData);
+
+                // Ensure paymaster gas limits are set (required for EntryPoint v0.8)
+                // Use the gas limits from stub data estimation or fallback to defaults
+                const result = Object.assign({}, paymasterData, {
+                    paymasterVerificationGasLimit: paymasterData.paymasterVerificationGasLimit || userOperation.paymasterVerificationGasLimit || 100000n,
+                    paymasterPostOpGasLimit: paymasterData.paymasterPostOpGasLimit || userOperation.paymasterPostOpGasLimit || 50000n,
+                });
+                return result as typeof paymasterData;
+            }
+        },
+        transport: http(chain.rpcUrl)
+    });
 }
 
 export async function sendTransaction(
