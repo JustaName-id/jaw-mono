@@ -84,6 +84,12 @@ vi.mock('../store/index.js', async (importOriginal) => {
         account: {
           capabilities: undefined,
         },
+        config: {
+          apiKey: 'test-api-key',
+          preference: {
+            showTestnets: false,
+          },
+        },
       })),
     },
   };
@@ -1796,8 +1802,54 @@ describe('JAWProvider', () => {
   });
 
   describe('wallet_getCapabilities (without authentication)', () => {
+    const mockCapabilitiesResponse = {
+      '0x1': {
+        atomicBatch: { supported: true },
+        atomic: { status: 'supported' },
+        paymasterService: { supported: true },
+        permissions: { supported: true },
+        feeToken: {
+          supported: true,
+          tokens: [{ uid: 'ethereum', symbol: 'ETH', address: '0x0000000000000000000000000000000000000000', decimals: 18 }],
+        },
+      },
+      '0x2105': {
+        atomicBatch: { supported: true },
+        atomic: { status: 'supported' },
+        paymasterService: { supported: true },
+        permissions: { supported: true },
+        feeToken: {
+          supported: true,
+          tokens: [{ uid: 'ethereum', symbol: 'ETH', address: '0x0000000000000000000000000000000000000000', decimals: 18 }],
+        },
+      },
+      '0x89': {
+        atomicBatch: { supported: true },
+        atomic: { status: 'supported' },
+        paymasterService: { supported: true },
+        permissions: { supported: true },
+        feeToken: {
+          supported: true,
+          tokens: [{ uid: 'ethereum', symbol: 'ETH', address: '0x0000000000000000000000000000000000000000', decimals: 18 }],
+        },
+      },
+      '0xa': {
+        atomicBatch: { supported: true },
+        atomic: { status: 'supported' },
+        paymasterService: { supported: true },
+        permissions: { supported: true },
+        feeToken: {
+          supported: true,
+          tokens: [{ uid: 'ethereum', symbol: 'ETH', address: '0x0000000000000000000000000000000000000000', decimals: 18 }],
+        },
+      },
+    };
+
     beforeEach(() => {
       provider = new JAWProvider(mockConstructorOptions);
+      // Mock fetchRPCRequest to return capabilities from proxy
+      (fetchRPCRequest as Mock).mockResolvedValue(mockCapabilitiesResponse);
+      (buildHandleJawRpcUrl as Mock).mockReturnValue('https://rpc.test.com');
     });
 
     it('should handle wallet_getCapabilities without authentication', async () => {
@@ -1810,16 +1862,21 @@ describe('JAWProvider', () => {
       // Act
       const result = await provider.request(request);
 
-      // Assert - Should return capabilities for all chains
+      // Assert - Should return capabilities from proxy
+      expect(fetchRPCRequest).toHaveBeenCalled();
       expect(result).toHaveProperty('0x1');
       expect((result as any)['0x1']).toHaveProperty('atomicBatch');
       expect((result as any)['0x1']).toHaveProperty('paymasterService');
       expect((result as any)['0x1']).toHaveProperty('atomic');
       expect((result as any)['0x1']).toHaveProperty('permissions');
+      expect((result as any)['0x1']).toHaveProperty('feeToken');
     });
 
     it('should filter capabilities by chainIds parameter', async () => {
       // Arrange
+      const filteredResponse = { '0x1': mockCapabilitiesResponse['0x1'] };
+      (fetchRPCRequest as Mock).mockResolvedValue(filteredResponse);
+
       const request: RequestArguments = {
         method: 'wallet_getCapabilities',
         params: ['0x1234567890123456789012345678901234567890', ['0x1']], // Only request chain 1
@@ -1835,6 +1892,12 @@ describe('JAWProvider', () => {
 
     it('should filter capabilities by multiple chainIds', async () => {
       // Arrange
+      const filteredResponse = {
+        '0x1': mockCapabilitiesResponse['0x1'],
+        '0x89': mockCapabilitiesResponse['0x89'],
+      };
+      (fetchRPCRequest as Mock).mockResolvedValue(filteredResponse);
+
       const request: RequestArguments = {
         method: 'wallet_getCapabilities',
         params: ['0x1234567890123456789012345678901234567890', ['0x1', '0x89']],
@@ -1859,14 +1922,44 @@ describe('JAWProvider', () => {
       // Act
       const result = await provider.request(request);
 
-      // Assert - Check that each chain has all standard capabilities
+      // Assert - Check that each chain has all standard capabilities including feeToken
       const chain1Caps = (result as any)['0x1'];
-      expect(chain1Caps).toEqual({
-        atomicBatch: { supported: true },
-        atomic: { status: 'supported' },
-        paymasterService: { supported: true },
-        permissions: { supported: true },
-      });
+      expect(chain1Caps).toHaveProperty('atomicBatch', { supported: true });
+      expect(chain1Caps).toHaveProperty('atomic', { status: 'supported' });
+      expect(chain1Caps).toHaveProperty('paymasterService', { supported: true });
+      expect(chain1Caps).toHaveProperty('permissions', { supported: true });
+      expect(chain1Caps).toHaveProperty('feeToken');
+      expect(chain1Caps.feeToken).toHaveProperty('supported', true);
+      expect(chain1Caps.feeToken).toHaveProperty('tokens');
+    });
+
+    it('should call fetchRPCRequest with correct URL', async () => {
+      // Arrange
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890'],
+      };
+
+      // Act
+      await provider.request(request);
+
+      // Assert
+      expect(buildHandleJawRpcUrl).toHaveBeenCalledWith(expect.any(String), 'test-api-key');
+      expect(fetchRPCRequest).toHaveBeenCalledWith(expect.any(Object), 'https://rpc.test.com');
+    });
+
+    it('should handle fetchRPCRequest errors', async () => {
+      // Arrange
+      const mockError = new Error('RPC request failed');
+      (fetchRPCRequest as Mock).mockRejectedValue(mockError);
+
+      const request: RequestArguments = {
+        method: 'wallet_getCapabilities',
+        params: ['0x1234567890123456789012345678901234567890'],
+      };
+
+      // Act & Assert
+      await expect(provider.request(request)).rejects.toThrow('RPC request failed');
     });
   });
 });

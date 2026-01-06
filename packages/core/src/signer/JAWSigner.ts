@@ -189,8 +189,14 @@ export abstract class JAWSigner implements Signer {
                 return await handleGetPermissionsRequest(request, apiKey, this.accounts[0]);
             }
 
-            case 'wallet_getCapabilities':
-                return handleGetCapabilitiesRequest(request);
+            case 'wallet_getCapabilities': {
+                const apiKey = store.getState().config.apiKey;
+                if (!apiKey) {
+                    throw standardErrors.rpc.internal('No API key configured');
+                }
+                const showTestnets = store.getState().config.preference?.showTestnets ?? false;
+                return await handleGetCapabilitiesRequest(request, apiKey, showTestnets);
+            }
 
             case 'wallet_switchEthereumChain':
                 return this.handleSwitchChainRequest(request);
