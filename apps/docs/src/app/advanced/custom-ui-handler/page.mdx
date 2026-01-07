@@ -42,7 +42,7 @@ class MyCustomUIHandler implements UIHandler {
    */
   init(config: UIHandlerConfig): void {
     this.config = config;
-    // Use config.apiKey, config.defaultChainId, config.paymasterUrls, etc.
+    // Use config.apiKey, config.defaultChainId, config.paymasters, etc.
   }
 
   /**
@@ -83,8 +83,8 @@ interface UIHandlerConfig {
   apiKey?: string;
   /** Default chain ID */
   defaultChainId?: number;
-  /** Paymaster URLs per chain for gasless transactions */
-  paymasterUrls?: Record<number, string>;
+  /** Paymaster configuration per chain for gasless transactions */
+  paymasters?: Record<number, { url: string; context?: Record<string, unknown> }>;
   /** App name shown in dialogs */
   appName?: string;
   /** App logo URL */

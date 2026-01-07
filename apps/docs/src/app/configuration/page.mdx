@@ -20,8 +20,8 @@ const connector = jaw({
   preference: {
     showTestnets: true,
   },
-  paymasterUrls: {
-    1: 'https://paymaster.example.com/mainnet',
+  paymasters: {
+    1: { url: 'https://paymaster.example.com/mainnet' },
   },
 });
 ```
@@ -40,8 +40,8 @@ const jaw = JAW.create({
   preference: {
     showTestnets: true,
   },
-  paymasterUrls: {
-    1: 'https://paymaster.example.com/mainnet',
+  paymasters: {
+    1: { url: 'https://paymaster.example.com/mainnet' },
   },
 });
 ```
@@ -60,7 +60,7 @@ const jaw = JAW.create({
 | [ens](/configuration/ens) | `string` | No | ENS domain for issuing subnames |
 | [defaultChainId](/configuration/defaultChainId) | `number` | No | Default blockchain network |
 | [preference](/configuration/preference) | `object` | No | Advanced SDK behavior options |
-| [paymasterUrls](/configuration/paymasterUrls) | `Record<number, string>` | No | Custom paymaster URLs per chain |
+| [paymasters](/configuration/paymasters) | `Record<number, { url: string; context?: Record<string, unknown> }>` | No | Custom paymaster configuration per chain |
 
 ---
 

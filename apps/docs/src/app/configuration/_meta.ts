@@ -14,5 +14,5 @@ export default {
     title: 'Advanced Options',
   },
   preference: 'preference',
-  paymasterUrls: 'paymasterUrls',
+  paymasters: 'paymasters',
 }
