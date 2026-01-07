@@ -14,7 +14,6 @@ import {
 } from "viem";
 import {getCode, getGasPrice, readContract} from "viem/actions";
 import {abi, JustanAccountImplementation, toJustanAccount} from "./toJustanAccount.js";
-import {createPaymasterFunctions} from "./paymaster.js";
 import {
     BundlerClient,
     SmartAccount,
@@ -116,22 +115,16 @@ export const getBundlerClient = (
     const effectivePaymasterUrl = paymasterUrlOverride || chain.paymasterUrl;
     const effectivePaymasterContext = paymasterContextOverride || chain.paymasterContext;
 
-    // If no paymaster URL, return bundler client without paymaster
-    if (!effectivePaymasterUrl) {
-        return createBundlerClient({
-            client: publicClient,
-            transport: http(chain.rpcUrl)
-        });
-    }
+    const paymasterClient = effectivePaymasterUrl
+        ? createPaymasterClient({
+            transport: http(effectivePaymasterUrl)
+        })
+        : undefined;
 
-    const paymasterClient = createPaymasterClient({
-        transport: http(effectivePaymasterUrl)
-    });
-
-    // Use shared paymaster functions that handle gas price fetching and v0.8 gas limits
     return createBundlerClient({
         client: publicClient,
-        paymaster: createPaymasterFunctions(publicClient, paymasterClient, chain.id, effectivePaymasterContext),
+        ...(paymasterClient && { paymaster: paymasterClient }),
+        ...(effectivePaymasterContext && { paymasterContext: effectivePaymasterContext }),
         transport: http(chain.rpcUrl)
     });
 }
