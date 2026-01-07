@@ -1138,6 +1138,12 @@ function TransactionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
+        // Skip gas estimation if sponsored - paymaster will handle fees
+        if (isSponsored) {
+          setGasFee('sponsored');
+          return;
+        }
+
         // Get permissionId from request capabilities if present
         const permissionId = request.data.capabilities?.permissions?.id;
 
@@ -1147,11 +1153,6 @@ function TransactionDialogWrapper({
           permissionId ? { permissionId } : undefined
         );
         setGasFee(gasPrice);
-
-        // Override with sponsored if paymaster is available
-        if (isSponsored) {
-          setGasFee('sponsored');
-        }
       } catch (error) {
         // Log at debug level to avoid polluting console
         console.log('[TransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
@@ -1338,14 +1339,15 @@ function SendTransactionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
+        // Skip gas estimation if sponsored - paymaster will handle fees
+        if (isSponsored) {
+          setGasFee('sponsored');
+          return;
+        }
+
         // Estimate gas using Account class
         const gasPrice = await account.calculateGasCost(transactionCalls);
         setGasFee(gasPrice);
-
-        // Override with sponsored if paymaster is available
-        if (isSponsored) {
-          setGasFee('sponsored');
-        }
       } catch (error) {
         // Log at debug level to avoid polluting console
         console.log('[SendTransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
@@ -1621,15 +1623,16 @@ function PermissionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
+        // Skip gas estimation if sponsored - paymaster will handle fees
+        if (effectivePaymasterUrl) {
+          setGasFee('sponsored');
+          return;
+        }
+
         // For permission grants, estimate gas (approximation)
         // Permission grants involve an on-chain transaction
         const gasPrice = await account.calculateGasCost([]);
         setGasFee(gasPrice);
-
-        // If paymaster is available, mark as sponsored
-        if (effectivePaymasterUrl) {
-          // Keep the original gas fee but mark as sponsored
-        }
       } catch (error) {
         console.log('[PermissionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
 
