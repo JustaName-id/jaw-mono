@@ -24,6 +24,7 @@ export const SiweDialog = ({
   isProcessing,
   siweStatus,
   canSign,
+  warningMessage,
 }: SiweDialogProps) => {
   const isMobile = useIsMobile();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
@@ -159,6 +160,37 @@ export const SiweDialog = ({
             </p>
           </div>
         </div>
+
+        {/* Origin Mismatch Warning */}
+        {warningMessage && (
+          <div className="flex items-start gap-2.5 p-3.5 border border-yellow-300 rounded-[6px] bg-yellow-50">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 16 16"
+              fill="none"
+              xmlns="http://www.w3.org/2000/svg"
+              className="flex-shrink-0 mt-0.5"
+            >
+              <path
+                d="M8 1.5L1 14.5H15L8 1.5Z"
+                stroke="#F59E0B"
+                strokeWidth="1.5"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+              <path d="M8 6V9" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
+              <circle cx="8" cy="11.5" r="0.5" fill="#F59E0B" />
+            </svg>
+            <div className="flex flex-col gap-1">
+              <p className="text-xs font-bold leading-[133%] text-yellow-800">Security Warning</p>
+              <p className="text-xs font-normal leading-[150%] text-yellow-900">
+                {warningMessage}
+              </p>
+            </div>
+          </div>
+        )}
+
         {/* Status Message */}
         {siweStatus && (
           <div className={`text-sm p-3 rounded-lg mt-3 ${siweStatus.includes('Error') ? 'bg-red-50 text-red-600' :
