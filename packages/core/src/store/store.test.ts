@@ -260,15 +260,19 @@ describe('store', () => {
 
     it('should set paymaster URLs', () => {
       config.set({
-        paymasterUrls: {
-          1: 'https://paymaster-mainnet.example.com',
-          11155111: 'https://paymaster-sepolia.example.com',
+        paymasters: {
+          1: {
+            url: 'https://paymaster-mainnet.example.com',
+          },
+          11155111: {
+            url: 'https://paymaster-sepolia.example.com',
+          },
         },
       });
 
       const state = config.get();
-      expect(state.paymasterUrls?.[1]).toBe('https://paymaster-mainnet.example.com');
-      expect(state.paymasterUrls?.[11155111]).toBe('https://paymaster-sepolia.example.com');
+      expect(state.paymasters?.[1].url).toBe('https://paymaster-mainnet.example.com');
+      expect(state.paymasters?.[11155111].url).toBe('https://paymaster-sepolia.example.com');
     });
 
     it('should preserve version when setting other config', () => {
