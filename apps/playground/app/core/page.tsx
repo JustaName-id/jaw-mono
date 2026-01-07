@@ -1,11 +1,14 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, Suspense } from 'react';
+import { useSearchParams } from 'next/navigation';
 import { JAW, Mode } from '@jaw.id/core';
 import { parseEther, encodeFunctionData, parseAbi } from 'viem';
 import {ReactUIHandler} from "@jaw/ui";
 
-export default function TestPage() {
+type ModeType = typeof Mode[keyof typeof Mode];
+
+function CorePageContent({ mode }: { mode: ModeType }) {
   const [isConnected, setIsConnected] = useState(false);
   const [accounts, setAccounts] = useState<string[]>([]);
   const [chainId, setChainId] = useState<string | null>(null);
@@ -20,8 +23,8 @@ export default function TestPage() {
         preference: {
           keysUrl: 'http://localhost:3001', // Local popup URL
           showTestnets: true,
-          mode: Mode.AppSpecific,
-          uiHandler: new ReactUIHandler()
+          mode: mode,
+          uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined
         },
         apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
       })
@@ -1298,9 +1301,52 @@ Issued At: ${issuedAt}`;
   return (
       <div className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900">
         <div className="max-w-4xl mx-auto">
-          <h1 className="text-3xl font-bold mb-8 text-gray-900 dark:text-white">
+          <h1 className="text-3xl font-bold mb-4 text-gray-900 dark:text-white">
             JAW SDK Test Page
           </h1>
+
+          {/* Mode Indicator */}
+          <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-4 mb-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-sm font-medium text-gray-700 dark:text-gray-300">Mode:</span>
+                <span className={`px-3 py-1 rounded-full text-sm font-medium ${
+                  mode === Mode.AppSpecific
+                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
+                }`}>
+                  {mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'}
+                </span>
+              </div>
+              <div className="flex gap-2">
+                <a
+                  href="/core?mode=app-specific"
+                  className={`px-3 py-1 text-sm rounded transition-colors ${
+                    mode === Mode.AppSpecific
+                      ? 'bg-purple-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  App-Specific
+                </a>
+                <a
+                  href="/core?mode=cross-platform"
+                  className={`px-3 py-1 text-sm rounded transition-colors ${
+                    mode === Mode.CrossPlatform
+                      ? 'bg-blue-600 text-white'
+                      : 'bg-gray-200 text-gray-700 hover:bg-gray-300 dark:bg-gray-700 dark:text-gray-300 dark:hover:bg-gray-600'
+                  }`}
+                >
+                  Cross-Platform
+                </a>
+              </div>
+            </div>
+            <p className="text-xs text-gray-500 dark:text-gray-400 mt-2">
+              {mode === Mode.AppSpecific
+                ? 'App-Specific mode: Direct signing with UI handled by ReactUIHandler in your app.'
+                : 'Cross-Platform mode: Uses popup authentication via keys.jaw.id.'}
+            </p>
+          </div>
 
           {/* Connection Status */}
           <div className="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
@@ -1698,5 +1744,26 @@ Issued At: ${issuedAt}`;
           </div>
         </div>
       </div>
+  );
+}
+
+function TestPageInner() {
+  const searchParams = useSearchParams();
+  const modeParam = searchParams.get('mode');
+
+  // Parse mode from query param, default to AppSpecific
+  const mode: ModeType = modeParam === 'cross-platform'
+    ? Mode.CrossPlatform
+    : Mode.AppSpecific;
+
+  // Use key to force re-mount when mode changes (SDK is created in useState)
+  return <CorePageContent key={mode} mode={mode} />;
+}
+
+export default function TestPage() {
+  return (
+    <Suspense fallback={<div className="min-h-screen p-8 bg-gray-50 dark:bg-gray-900 flex items-center justify-center"><p className="text-gray-500">Loading...</p></div>}>
+      <TestPageInner />
+    </Suspense>
   );
 }
