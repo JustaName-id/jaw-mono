@@ -13,7 +13,7 @@ import {
 } from '../../utils/index.js';
 import { fetchRPCRequest } from '../../utils/index.js';
 import { correlationIds } from '../../store/correlation-ids/store.js';
-import { getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
+import { getCallStatus, getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
 
 // Mock dependencies
 vi.mock('../../communicator/index.js', () => ({
@@ -473,6 +473,7 @@ describe('CrossPlatformSigner', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xbatchId'],
       };
+      const mockCallStatus = { status: 'pending', chainId: 1 };
       const mockEIP5792Response = {
         version: '2.0.0',
         id: '0xbatchId' as `0x${string}`,
@@ -481,6 +482,7 @@ describe('CrossPlatformSigner', () => {
         atomic: true,
         receipts: undefined,
       };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
       (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
@@ -497,6 +499,7 @@ describe('CrossPlatformSigner', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xbatchId'],
       };
+      const mockCallStatus = { status: 'completed', chainId: 1 };
       const mockEIP5792Response = {
         version: '2.0.0',
         id: '0xbatchId' as `0x${string}`,
@@ -512,6 +515,7 @@ describe('CrossPlatformSigner', () => {
           transactionHash: '0xreceipt1' as `0x${string}`,
         }],
       };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
       (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
@@ -527,6 +531,7 @@ describe('CrossPlatformSigner', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xbatchId'],
       };
+      const mockCallStatus = { status: 'failed', chainId: 1 };
       const mockEIP5792Response = {
         version: '2.0.0',
         id: '0xbatchId' as `0x${string}`,
@@ -535,6 +540,7 @@ describe('CrossPlatformSigner', () => {
         atomic: true,
         receipts: undefined,
       };
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
       (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
@@ -563,6 +569,7 @@ describe('CrossPlatformSigner', () => {
         method: 'wallet_getCallsStatus',
         params: ['0xnonexistent'],
       };
+      (getCallStatus as Mock).mockReturnValue(undefined);
       (getCallStatusEIP5792 as Mock).mockReturnValue(undefined);
 
       // Act & Assert

@@ -5,7 +5,7 @@ import type { AppMetadata, ProviderEventCallback, RequestArguments } from '../..
 import type { UIHandler, UIResponse } from '../../ui/interface.js';
 import { UIError } from '../../ui/interface.js';
 import { correlationIds } from '../../store/correlation-ids/store.js';
-import { getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
+import { getCallStatus, getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
 import { fetchRPCRequest } from '../../utils/index.js';
 import { getPermissionFromRelay } from '../../rpc/permissions.js';
 
@@ -632,6 +632,7 @@ describe('AppSpecificSigner', () => {
         params: ['0xbatchId'],
       };
 
+      const mockCallStatus = { status: 'pending', chainId: 1 };
       const mockEIP5792Response = {
         version: '2.0.0',
         id: '0xbatchId' as `0x${string}`,
@@ -641,6 +642,7 @@ describe('AppSpecificSigner', () => {
         receipts: undefined,
       };
 
+      (getCallStatus as Mock).mockReturnValue(mockCallStatus);
       (getCallStatusEIP5792 as Mock).mockReturnValue(mockEIP5792Response);
 
       // Act
