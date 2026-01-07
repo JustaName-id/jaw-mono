@@ -27,7 +27,6 @@ import {
   type PermissionsDetail,
   type WalletGrantPermissionsResponse,
   type RevokePermissionApiResponse,
-  type SpendPeriod,
   type CallPermissionDetail,
   type SpendPermissionDetail,
 } from '../rpc/permissions.js';
@@ -55,7 +54,7 @@ export interface CreateAccountOptions {
   username: string;
   /** Relying party identifier (defaults to window.location.hostname) */
   rpId?: string;
-  /** Relying party name (defaults to 'JAW Wallet') */
+  /** Relying party name (defaults to 'JAW') */
   rpName?: string;
 }
 
@@ -249,7 +248,7 @@ export class Account {
     const { username, rpId, rpName } = options;
 
     const resolvedRpId = rpId ?? (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
-    const resolvedRpName = rpName ?? 'JAW Wallet';
+    const resolvedRpName = rpName ?? 'JAW';
 
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
 
@@ -848,20 +847,20 @@ export class Account {
 
     const spends: SpendPermissionDetail[] = relayResponse.spends.map(spend => ({
       token: spend.token as Address,
-      limit: spend.allowance,
-      period: spend.unit as SpendPeriod,
+      allowance: spend.allowance,
+      unit: spend.unit,
       multiplier: spend.multiplier,
     }));
 
     return {
       account: relayResponse.account as Address,
       spender: relayResponse.spender as Address,
-      start: parseInt(relayResponse.start, 10),
-      end: parseInt(relayResponse.end, 10),
+      start: relayResponse.start,
+      end: relayResponse.end,
       salt: relayResponse.salt as Hex,
       calls,
       spends,
-      permissionId: relayResponse.hash as Hex,
+      permissionId: relayResponse.permissionId as Hex,
       chainId: relayResponse.chainId as Hex,
     };
   }

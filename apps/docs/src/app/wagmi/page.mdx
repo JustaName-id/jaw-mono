@@ -1,0 +1,192 @@
+# Wagmi Integration
+
+The `@jaw.id/wagmi` package provides a Wagmi-compatible connector and React hooks for integrating JAW smart accounts into your dApp.
+
+---
+
+## Installation
+
+```bash npm2yarn
+npm install @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+---
+
+## Quick Start
+
+### 1. Configure the Connector
+
+```typescript
+import { createConfig, http } from 'wagmi';
+import { mainnet, base, baseSepolia } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+export const config = createConfig({
+  chains: [mainnet, base, baseSepolia],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_API_KEY',
+      appName: 'My App',
+      appLogoUrl: 'https://example.com/logo.png',
+    }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+    [base.id]: http(),
+    [baseSepolia.id]: http(),
+  },
+});
+```
+
+### 2. Set Up Providers
+
+```tsx
+import { WagmiProvider } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+
+const queryClient = new QueryClient();
+
+function App({ children }) {
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
+```
+
+### 3. Use the Hooks
+
+```tsx
+import { useAccount, useSendTransaction } from 'wagmi';
+import { useConnect, useDisconnect } from '@jaw.id/wagmi';
+
+function WalletButton() {
+  const { address, isConnected } = useAccount();
+  const { mutate: connect, isPending } = useConnect();
+  const { mutate: disconnect } = useDisconnect();
+
+  if (isConnected) {
+    return (
+      <div>
+        <p>Connected: {address}</p>
+        <button onClick={() => disconnect({})}>Disconnect</button>
+      </div>
+    );
+  }
+
+  return (
+    <button onClick={() => connect({ connector: config.connectors[0] })} disabled={isPending}>
+      {isPending ? 'Connecting...' : 'Connect Wallet'}
+    </button>
+  );
+}
+```
+
+---
+
+## Standard Wagmi Hooks
+
+All standard wagmi hooks work with the JAW connector. Use them directly from `wagmi`:
+
+```typescript
+import {
+  useAccount,
+  useSendTransaction,
+  useSignMessage,
+  useSignTypedData,
+  useSwitchChain,
+  useSendCalls,
+  useWriteContract,
+  useBalance,
+} from 'wagmi';
+```
+
+| Hook | Description |
+|------|-------------|
+| `useAccount` | Get connected account address and status |
+| `useSendTransaction` | Send a single transaction |
+| `useSignMessage` | Sign a personal message (EIP-191) |
+| `useSignTypedData` | Sign typed data (EIP-712) |
+| `useSwitchChain` | Switch to a different chain |
+| `useSendCalls` | Send atomic batch transactions (EIP-5792) |
+| `useWriteContract` | Call a contract write function |
+| `useBalance` | Get ETH or token balance |
+
+<Callout type="info">
+When a paymaster is configured, transactions sent via `useSendTransaction`, `useSendCalls`, and `useWriteContract` are automatically sponsored (gasless).
+</Callout>
+
+---
+
+## JAW Hooks
+
+For JAW-specific features, import hooks directly from `@jaw.id/wagmi`:
+
+```typescript
+// Direct import (recommended)
+import { useConnect, useDisconnect, useGrantPermissions } from '@jaw.id/wagmi';
+
+// Alternative: namespace import
+import { Hooks } from '@jaw.id/wagmi';
+const { mutate } = Hooks.useConnect();
+```
+
+| Hook | Description |
+|------|-------------|
+| [useConnect](/wagmi/useConnect) | Connect with optional capabilities (SIWE, subnames) |
+| [useDisconnect](/wagmi/useDisconnect) | Disconnect and clean up session |
+| [useGrantPermissions](/wagmi/useGrantPermissions) | Grant permissions to a spender |
+| [usePermissions](/wagmi/usePermissions) | Query current permissions |
+| [useRevokePermissions](/wagmi/useRevokePermissions) | Revoke a permission |
+| [useGetAssets](/wagmi/useGetAssets) | Query token balances across chains |
+
+---
+
+## Connector
+
+| Function | Description |
+|----------|-------------|
+| [jaw()](/wagmi/jaw) | Create a JAW connector for Wagmi |
+
+---
+
+## Why Use JAW Hooks?
+
+### useConnect vs wagmi's useConnect
+
+| Feature | `wagmi.useConnect` | `@jaw.id/wagmi.useConnect` |
+|---------|-------------------|------------------------|
+| Basic connection | Yes | Yes |
+| Request SIWE signature | No | Yes |
+| Request subname issuance | No | Yes |
+| Uses `wallet_connect` RPC | No | When capabilities provided |
+
+Use `@jaw.id/wagmi`'s `useConnect` when you need capabilities like Sign-In with Ethereum or ENS subnames during connection.
+
+### useDisconnect vs wagmi's useDisconnect
+
+Both work the same way. `@jaw.id/wagmi`'s version is provided for consistency.
+
+---
+
+## Actions (Non-React)
+
+For vanilla JavaScript or other frameworks, use actions directly:
+
+```typescript
+import { connect, disconnect, grantPermissions } from '@jaw.id/wagmi';
+
+// Use with your wagmi config
+await connect(config, { connector: jawConnector });
+```
+
+---
+
+## Related
+
+- [Configuration](/configuration) - Full configuration options
+- [Provider API](/api-reference) - Direct provider methods
+- [Account API](/account) - Low-level Account class

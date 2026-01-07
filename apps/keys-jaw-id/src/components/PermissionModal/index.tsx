@@ -249,11 +249,11 @@ export const PermissionModal = ({
         limit = `${amount} ${tokenInfo.symbol}`;
         duration = formatDurationFromRelay(spend.unit, spend.multiplier ?? 1);
       } else {
-        // From grant request - limit is string, period is SpendPeriod, multiplier is optional
-        const allowance = BigInt(spend.limit);
-        amount = formatUnits(allowance, tokenInfo.decimals);
+        // From grant request - allowance is string, unit is SpendPeriod, multiplier is optional
+        const allowanceValue = BigInt(spend.allowance);
+        amount = formatUnits(allowanceValue, tokenInfo.decimals);
         limit = `${amount} ${tokenInfo.symbol}`;
-        duration = formatDuration(spend.period as SpendPeriod, spend.multiplier ?? 1);
+        duration = formatDuration(spend.unit as SpendPeriod, spend.multiplier ?? 1);
       }
 
       return {

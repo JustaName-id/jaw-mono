@@ -1,5 +1,5 @@
 {
-  "name": "@jaw/wagmi",
+  "name": "@jaw.id/wagmi",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",
@@ -19,6 +19,17 @@
     "!**/*.tsbuildinfo"
   ],
   "dependencies": {
-    "tslib": "^2.3.0"
+    "@jaw.id/core": "workspace:*",
+    "@wagmi/core": "^3.0.0",
+    "tslib": "^2.3.0",
+    "viem": "^2.38.2"
+  },
+  "peerDependencies": {
+    "@tanstack/react-query": ">=5.0.0",
+    "react": ">=18.0.0",
+    "wagmi": ">=3.0.0"
+  },
+  "devDependencies": {
+    "@types/react": "^19.0.0"
   }
 }

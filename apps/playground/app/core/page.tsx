@@ -578,23 +578,6 @@ Issued At: ${issuedAt}`;
       // Prepare values using viem
       const ethValue = parseEther('0.0001');
 
-      // Encode ERC20 transfer function call: transfer(address recipient, uint256 amount)
-      const erc20Abi = parseAbi([
-        'function transfer(address to, uint256 amount) returns (bool)'
-      ]);
-
-      const transferData = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: 'transfer',
-        args: [
-          '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0', // Recipient
-          BigInt(1000000) // 1 USDC (6 decimals)
-        ]
-      });
-
-      // Get current chain ID for optional parameter
-      const currentChainId = chainId ? parseInt(chainId, 16) : undefined;
-
       const result = await provider.request({
         method: 'wallet_sendCalls',
         params: [{
@@ -986,8 +969,8 @@ Issued At: ${issuedAt}`;
           permissions: {
             spends: [
               {
-                limit: `0x${ethLimit.toString(16)}`,
-                period: 'day' as const,
+                allowance: `0x${ethLimit.toString(16)}`,
+                unit: 'day' as const,
                 token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // Native token (ETH)
                 multiplier: 2 // 2 days period
               }
@@ -1037,13 +1020,13 @@ Issued At: ${issuedAt}`;
       addLog('🔑 Requesting permissions grant for multiple ERC-20s on Base Sepolia...');
 
       // Example spender address
-      const spenderAddress = '0xEc653d5900Ae3B56bdf066DC99F175E3a5cFB712';
+      const spenderAddress = '0x2Fa7d5d26953702f3D6D188738f58F74d4EeebD8';
 
       // USDC on Base Sepolia (6 decimals)
-      const usdcAddress = '0xDFfc9C98d62Ae7234D9218315672d6b8CFD0ce59';
+      const usdcAddress = '0x7e8D8C5826e50B5F33FD046A7B64D1B00f7972bC';
 
       // 1 USDC with 6 decimals = 1 * 10^6 = 1000000
-      const usdcLimit = BigInt(10**18);
+      const usdcLimit = parseEther('1')
 
       const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
 
@@ -1067,8 +1050,8 @@ Issued At: ${issuedAt}`;
           permissions: {
             spends: [
               {
-                limit: `0x${usdcLimit.toString(16)}`,
-                period: 'day' as const,
+                allowance: `0x${usdcLimit.toString(16)}`,
+                unit: 'day' as const,
                 token: usdcAddress,
                 multiplier: 3 // 3 days period
               },
@@ -1333,8 +1316,8 @@ Issued At: ${issuedAt}`;
               </p>
               {accounts.length > 0 && (
                   <p className="text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">Accounts:</span>{' '}
-                    <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
+                    <span className="font-medium text-red">Accounts:</span>{' '}
+                    <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm break-all">
                       {accounts.join(', ')}
                     </code>
                   </p>
@@ -1635,7 +1618,7 @@ Issued At: ${issuedAt}`;
               </p>
               {lastPermissionId && (
                   <p className="text-sm text-green-600 dark:text-green-400">
-                    <span className="font-medium">Last Permission ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{lastPermissionId}</code>
+                    <span className="font-medium">Last Permission ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded break-all">{lastPermissionId}</code>
                   </p>
               )}
               <p className="text-sm text-gray-600 dark:text-gray-400">

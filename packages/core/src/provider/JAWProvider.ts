@@ -197,7 +197,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         return result as T;
                     }
                     case 'wallet_getCapabilities': {
-                        const result = handleGetCapabilitiesRequest(args);
+                        const result = await handleGetCapabilitiesRequest(
+                            args,
+                            this.apiKey,
+                            this.preference.showTestnets ?? false
+                        );
 
                         return result as T;
                     }

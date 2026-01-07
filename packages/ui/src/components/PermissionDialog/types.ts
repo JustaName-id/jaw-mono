@@ -54,4 +54,11 @@ export interface PermissionDialogProps {
 
   // Custom warning message for grant mode
   warningMessage?: string;
+
+  // Gas estimation props
+  gasFee?: string;
+  gasFeeLoading?: boolean;
+  gasEstimationError?: string;
+  sponsored?: boolean;
+  ethPrice?: number;
 }

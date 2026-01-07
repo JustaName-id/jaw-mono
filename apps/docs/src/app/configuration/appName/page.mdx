@@ -11,6 +11,19 @@ The name of your application, displayed to users during authentication and trans
 ## Usage
 
 ```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  appName: 'My Awesome DApp',
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW } from '@jaw.id/core';
+
 const jaw = JAW.create({
   apiKey: 'your-api-key',
   appName: 'My Awesome DApp',

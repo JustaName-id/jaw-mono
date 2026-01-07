@@ -119,9 +119,9 @@ export interface PermissionUIRequest extends BaseUIRequest {
     spender: Address;
     permissions: {
       spends?: Array<{
-        limit: string;
-        period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
         token: Address;
+        allowance: string;
+        unit: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
         /** Multiplier for the period (1-255), defaults to 1 */
         multiplier?: number;
       }>;

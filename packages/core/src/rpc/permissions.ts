@@ -91,12 +91,12 @@ export type Permission = {
  * Spend permission detail for API request/response
  */
 export type SpendPermissionDetail = {
-    /** Spending limit in wei (hex format) */
-    limit: string;
-    /** Period unit of the spend limit */
-    period: SpendPeriod;
     /** Token address */
     token: Address;
+    /** Spending allowance in wei (hex format) */
+    allowance: string;
+    /** Period unit of the spend limit */
+    unit: SpendPeriod;
     /** Multiplier for the period (1-255), defaults to 1 */
     multiplier?: number;
 };
@@ -182,18 +182,18 @@ export type WalletGrantPermissionsRequest = {
  * Request to store a permission in the relay
  */
 export type StorePermissionApiRequest = {
-    /** Hash from the contract (unique identifier) */
-    hash: string;
+    /** Permission ID (hash from the contract) */
+    permissionId: string;
     /** Account address */
     account: string;
     /** Spender address */
     spender: string;
-    /** Start timestamp (unix seconds, as string) */
-    start: string;
-    /** End timestamp (unix seconds, as string) */
-    end: string;
-    /** Salt for uniqueness (as string) */
-    salt: string;
+    /** Start timestamp (unix seconds as number) */
+    start: number;
+    /** End timestamp (unix seconds as number) */
+    end: number;
+    /** Salt for uniqueness (hex format) */
+    salt: Hex;
     /** Array of call permissions */
     calls: Array<{
         target: string;
@@ -203,12 +203,10 @@ export type StorePermissionApiRequest = {
     spends: Array<{
         token: string;
         allowance: string;
-        /** Period unit (minute, hour, day, week, month, year, forever) */
-        unit: string;
-        /** Multiplier for the period unit (1-255) */
+        unit: SpendPeriod;
         multiplier: number;
     }>;
-    /** Chain ID (as hex string) */
+    /** Chain ID (hex format) */
     chainId: string;
 };
 
@@ -216,6 +214,12 @@ export type StorePermissionApiRequest = {
  * Response from the JAW RPC relay when storing a permission
  */
 export type StorePermissionApiResponse = StorePermissionApiRequest;
+
+/**
+ * Response from wallet_getPermissions
+ * Returns an array of stored permissions
+ */
+export type WalletGetPermissionsResponse = StorePermissionApiResponse[];
 
 /**
  * Response from wallet_grantPermissions (returned to dApp)
@@ -330,8 +334,8 @@ export async function grantPermissions(
 
     const responseSpends: SpendPermissionDetail[] = permission.spends.map(spend => ({
         token: spend.token,
-        limit: `0x${spend.allowance.toString(16)}`,
-        period: spend.unit,
+        allowance: `0x${spend.allowance.toString(16)}`,
+        unit: spend.unit,
         multiplier: spend.multiplier,
     }));
 
@@ -418,25 +422,23 @@ export async function getPermissionFromRelay(
 export function relayPermissionToPermission(
     relayPermission: StorePermissionApiResponse
 ): Permission {
-    // Convert call permissions
     const calls: CallPermission[] = relayPermission.calls.map(call => ({
         target: call.target as Address,
         selector: call.selector as Hex,
     }));
 
-    // Convert spend limits
     const spends: SpendLimit[] = relayPermission.spends.map(spend => ({
         token: spend.token as Address,
         allowance: BigInt(spend.allowance),
-        unit: spend.unit as SpendPeriod,
+        unit: spend.unit,
         multiplier: spend.multiplier,
     }));
 
     return {
         account: relayPermission.account as Address,
         spender: relayPermission.spender as Address,
-        start: parseInt(relayPermission.start, 10),
-        end: parseInt(relayPermission.end, 10),
+        start: relayPermission.start,
+        end: relayPermission.end,
         salt: BigInt(relayPermission.salt),
         calls,
         spends,
@@ -535,8 +537,8 @@ function apiPermissionsToPermission(
 
         return {
             token,
-            allowance: BigInt(spend.limit),
-            unit: spend.period,
+            allowance: BigInt(spend.allowance),
+            unit: spend.unit,
             multiplier: spend.multiplier ?? 1,
         };
     });
@@ -562,12 +564,12 @@ async function storePermissionInRelay(
     apiKey: string
 ): Promise<StorePermissionApiResponse> {
     const requestData: StorePermissionApiRequest = {
-        hash: permissionHash,
+        permissionId: permissionHash,
         account: permission.account,
         spender: permission.spender,
-        start: permission.start.toString(),
-        end: permission.end.toString(),
-        salt: permission.salt.toString(),
+        start: permission.start,
+        end: permission.end,
+        salt: `0x${permission.salt.toString(16)}` as Hex,
         calls: permission.calls.map(call => ({
             target: call.target,
             selector: call.selector,

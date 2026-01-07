@@ -374,7 +374,16 @@ export async function sign({
         const { signature, webauthn } = await owner.sign({
             hash,
         })
-        return toWebAuthnSignature({ signature, webauthn })
+        return toWebAuthnSignature({
+            signature,
+            webauthn: {
+                authenticatorData: webauthn.authenticatorData,
+                clientDataJSON: webauthn.clientDataJSON,
+                challengeIndex: webauthn.challengeIndex ?? 23,
+                typeIndex: webauthn.typeIndex ?? 1,
+                userVerificationRequired: webauthn.userVerificationRequired ?? true,
+            },
+        })
     }
 
     if (owner.sign) return owner.sign({ hash })
@@ -409,7 +418,16 @@ export async function signTypedData({
             typedData
         )
 
-        return toWebAuthnSignature({signature, webauthn})
+        return toWebAuthnSignature({
+            signature,
+            webauthn: {
+                authenticatorData: webauthn.authenticatorData,
+                clientDataJSON: webauthn.clientDataJSON,
+                challengeIndex: webauthn.challengeIndex ?? 23,
+                typeIndex: webauthn.typeIndex ?? 1,
+                userVerificationRequired: webauthn.userVerificationRequired ?? true,
+            },
+        })
     }
 
     if (owner.signTypedData) {

@@ -42,6 +42,7 @@ import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
 import { useChainIcon } from '../hooks/useChainIcon';
+import { useEthPrice } from '../hooks/useEthPrice';
 
 
 /**
@@ -132,21 +133,6 @@ const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 const isNativeToken = (tokenAddress?: string): boolean => {
   if (!tokenAddress) return true;
   return tokenAddress.toLowerCase() === NATIVE_TOKEN.toLowerCase();
-};
-
-// Convert period in seconds to human-readable duration
-const formatDurationFromSeconds = (seconds: number): string => {
-  if (seconds === 60) return '1 Minute';
-  if (seconds === 3600) return '1 Hour';
-  if (seconds === 86400) return '1 Day';
-  if (seconds === 604800) return '1 Week';
-  if (seconds === 2592000) return '1 Month';
-  if (seconds === 31536000) return '1 Year';
-  if (seconds % 86400 === 0) {
-    const days = seconds / 86400;
-    return `${days} Day${days > 1 ? 's' : ''}`;
-  }
-  return `${seconds} seconds`;
 };
 
 // Format timestamp to readable date
@@ -544,7 +530,7 @@ function OnboardingDialogWrapper({
 
   // Get rpId from current domain
   const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  const rpName = 'JAW Wallet';
+  const rpName = 'JAW';
   const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
 
   // Get chain info for ConnectDialog
@@ -914,12 +900,14 @@ function SignatureDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
 
   const handleSign = async () => {
     setIsProcessing(true);
+    setSignatureStatus('Signing message...');
     try {
       // Restore account for signing
       const account = await getAccountForSigning(
@@ -931,10 +919,12 @@ function SignatureDialogWrapper({
       // Sign the message
       const signature = await account.signMessage(request.data.message);
 
+      setSignatureStatus('Signature successful!');
       onApprove(signature);
     } catch (error) {
       console.error('Signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
+      setSignatureStatus(`Error: ${errorObj.message}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -963,7 +953,7 @@ function SignatureDialogWrapper({
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      signatureStatus="pending"
+      signatureStatus={signatureStatus}
       canSign={true}
     />
   );
@@ -986,12 +976,14 @@ function Eip712DialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
 
   const handleSign = async () => {
     setIsProcessing(true);
+    setSignatureStatus('Signing typed data...');
     try {
       // Restore account for signing
       const account = await getAccountForSigning(
@@ -1013,10 +1005,12 @@ function Eip712DialogWrapper({
         message: typedData.message,
       });
 
+      setSignatureStatus('Signature successful!');
       onApprove(signature);
     } catch (error) {
       console.error('EIP-712 signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
+      setSignatureStatus(`Error: ${errorObj.message}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -1045,7 +1039,7 @@ function Eip712DialogWrapper({
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      signatureStatus="pending"
+      signatureStatus={signatureStatus}
       canSign={true}
     />
   );
@@ -1072,6 +1066,8 @@ function TransactionDialogWrapper({
   const [gasFeeLoading, setGasFeeLoading] = useState(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [account, setAccount] = useState<Account | null>(null);
+  const [transactionStatus, setTransactionStatus] = useState<string>('');
+  const ethPrice = useEthPrice();
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1183,6 +1179,7 @@ function TransactionDialogWrapper({
 
   const handleConfirm = async () => {
     setIsProcessing(true);
+    setTransactionStatus('Processing transaction...');
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1194,6 +1191,7 @@ function TransactionDialogWrapper({
       // Send calls using Account class, with optional permission
       const result = await account.sendCalls(transactionCalls, permissionId ? { permissionId } : undefined);
 
+      setTransactionStatus('Transaction successful!');
       onApprove({
         id: result.id,
         chainId: result.chainId,
@@ -1202,6 +1200,7 @@ function TransactionDialogWrapper({
       console.error('Transaction failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
+      setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -1237,11 +1236,11 @@ function TransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={0}
+      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus="pending"
+      transactionStatus={transactionStatus}
       networkName={networkName}
     />
   );
@@ -1269,6 +1268,8 @@ function SendTransactionDialogWrapper({
   const [gasFeeLoading, setGasFeeLoading] = useState(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [account, setAccount] = useState<Account | null>(null);
+  const [transactionStatus, setTransactionStatus] = useState<string>('');
+  const ethPrice = useEthPrice();
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1372,6 +1373,7 @@ function SendTransactionDialogWrapper({
 
   const handleConfirm = async () => {
     setIsProcessing(true);
+    setTransactionStatus('Processing transaction...');
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1380,12 +1382,14 @@ function SendTransactionDialogWrapper({
       // Use sendTransaction which waits for receipt and returns the actual transaction hash
       const txHash = await account.sendTransaction(transactionCalls);
 
+      setTransactionStatus('Transaction successful!');
       // eth_sendTransaction returns transaction hash string
       onApprove(txHash);
     } catch (error) {
       console.error('Transaction failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
+      setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -1421,11 +1425,11 @@ function SendTransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={0}
+      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus="pending"
+      transactionStatus={transactionStatus}
       networkName={networkName}
     />
   );
@@ -1469,6 +1473,11 @@ function PermissionDialogWrapper({
   const [status, setStatus] = useState<string>('');
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState(true);
+  const [gasFee, setGasFee] = useState<string>('');
+  const [gasFeeLoading, setGasFeeLoading] = useState(true);
+  const [gasEstimationError, setGasEstimationError] = useState<string>('');
+  const [account, setAccount] = useState<Account | null>(null);
+  const ethPrice = useEthPrice();
 
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
@@ -1571,19 +1580,87 @@ function PermissionDialogWrapper({
     fetchAllTokenInfo();
   }, [chainId, spendsData, networkName, chain.rpcUrl]);
 
+  // Initialize account for gas estimation
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeAccount = async () => {
+      try {
+        const restoredAccount = await getAccountForSigning(
+          apiKey,
+          chainId,
+          effectivePaymasterUrl
+        );
+        if (isMounted) {
+          setAccount(restoredAccount);
+        }
+      } catch (error) {
+        console.error('[PermissionDialogWrapper] Error initializing account:', error);
+        if (isMounted) {
+          setGasEstimationError('Failed to initialize account');
+          setGasFeeLoading(false);
+        }
+      }
+    };
+
+    initializeAccount();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiKey, chainId, effectivePaymasterUrl]);
+
+  // Gas estimation for permission grant
+  useEffect(() => {
+    if (!account) {
+      return;
+    }
+
+    const estimateGas = async () => {
+      try {
+        setGasFeeLoading(true);
+        setGasEstimationError('');
+
+        // For permission grants, estimate gas (approximation)
+        // Permission grants involve an on-chain transaction
+        const gasPrice = await account.calculateGasCost([]);
+        setGasFee(gasPrice);
+
+        // If paymaster is available, mark as sponsored
+        if (effectivePaymasterUrl) {
+          // Keep the original gas fee but mark as sponsored
+        }
+      } catch (error) {
+        console.log('[PermissionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
+
+        if (effectivePaymasterUrl) {
+          setGasFee('sponsored');
+          setGasEstimationError('');
+        } else {
+          setGasFee('');
+          setGasEstimationError('Failed to estimate gas');
+        }
+      } finally {
+        setGasFeeLoading(false);
+      }
+    };
+
+    estimateGas();
+  }, [account, effectivePaymasterUrl]);
+
   // Convert to SpendPermission array format expected by PermissionDialog
   const spends = useMemo(() => spendsData.map(spend => {
     const tokenInfo = tokenInfoMap[spend.token] || (isNativeToken(spend.token)
       ? { decimals: 18, symbol: 'ETH' }
       : { decimals: 18, symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4) });
 
-    const allowance = BigInt(spend.limit);
+    const allowance = BigInt(spend.allowance);
     const amount = formatUnits(allowance, tokenInfo.decimals);
     const limit = `${amount} ${tokenInfo.symbol}`;
 
     // Format duration with multiplier (defaults to 1 if not provided)
     const multiplier = spend.multiplier ?? 1;
-    const duration = `${multiplier} ${spend.period}${multiplier > 1 ? 's' : ''}`;
+    const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? 's' : ''}`;
 
     return {
       amount,
@@ -1719,6 +1796,11 @@ function PermissionDialogWrapper({
       isLoadingTokenInfo={isLoadingTokenInfo}
       timestamp={new Date(request.timestamp)}
       warningMessage={warningMessage}
+      gasFee={gasFee}
+      gasFeeLoading={gasFeeLoading}
+      gasEstimationError={gasEstimationError}
+      sponsored={!!effectivePaymasterUrl}
+      ethPrice={ethPrice}
     />
   );
 }
@@ -1767,6 +1849,26 @@ function SiweDialogWrapper({
   const appName = useMemo(() => {
     const match = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/);
     return match ? match[1] : 'dApp';
+  }, [decodedMessage]);
+
+  // Generate warning if URI in SIWE message doesn't match current origin
+  const warningMessage = useMemo(() => {
+    try {
+      // Extract URI from SIWE message
+      const uriMatch = decodedMessage.match(/URI:\s*(.+)/);
+      if (!uriMatch) return undefined;
+
+      const siweUri = uriMatch[1].trim();
+      const siweOrigin = new URL(siweUri).origin;
+      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+
+      if (siweOrigin !== currentOrigin) {
+        return `The sign-in request is for "${siweUri}" but you are currently on "${currentOrigin}". This may be a phishing attempt.`;
+      }
+    } catch {
+      // If URI parsing fails, don't show warning
+    }
+    return undefined;
   }, [decodedMessage]);
 
   const handleSign = async () => {
@@ -1823,6 +1925,7 @@ function SiweDialogWrapper({
       isProcessing={isProcessing}
       siweStatus={siweStatus}
       canSign={!isProcessing}
+      warningMessage={warningMessage}
     />
   );
 }
@@ -1939,7 +2042,9 @@ function RevokePermissionDialogWrapper({
       const allowance = BigInt(spend.allowance);
       const amount = formatUnits(allowance, tokenInfo.decimals);
       const limit = `${amount} ${tokenInfo.symbol}`;
-      const duration = formatDurationFromSeconds(parseInt(spend.period, 10));
+      // Format duration with multiplier (unit is period string like 'day', 'week', etc.)
+      const multiplier = spend.multiplier ?? 1;
+      const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? 's' : ''}`;
 
       return {
         amount,
