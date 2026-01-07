@@ -885,7 +885,7 @@ export class Account {
     return {
       id: chainId,
       rpcUrl,
-      paymasterUrl,
+      ...(paymasterUrl && { paymaster: { url: paymasterUrl } }),
     };
   }
 

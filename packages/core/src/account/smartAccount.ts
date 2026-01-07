@@ -112,8 +112,8 @@ export const getBundlerClient = (
     });
 
     // Priority: overrides (from capabilities) > chain config (from SDK config)
-    const effectivePaymasterUrl = paymasterUrlOverride || chain.paymasterUrl;
-    const effectivePaymasterContext = paymasterContextOverride || chain.paymasterContext;
+    const effectivePaymasterUrl = paymasterUrlOverride || chain.paymaster?.url;
+    const effectivePaymasterContext = paymasterContextOverride || chain.paymaster?.context;
 
     const paymasterClient = effectivePaymasterUrl
         ? createPaymasterClient({

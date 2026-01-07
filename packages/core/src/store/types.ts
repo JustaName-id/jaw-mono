@@ -4,6 +4,16 @@ import type { WalletConnectResponse } from '../rpc/index.js';
 
 
 
+/**
+ * Paymaster configuration for a chain
+ */
+export type PaymasterConfig = {
+    /** The paymaster RPC URL */
+    url: string;
+    /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
+    context?: Record<string, unknown>;
+  };
+
 export type Chain = {
     id: number;
     rpcUrl?: string;
@@ -12,9 +22,8 @@ export type Chain = {
       symbol?: string;
       decimal?: number;
     };
-    paymasterUrl?: string;
-    /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
-    paymasterContext?: Record<string, unknown>;
+    /** Optional paymaster configuration for sponsored transactions */
+    paymaster?: PaymasterConfig;
   };
   
 
@@ -31,7 +40,8 @@ export type Config = {
     version: string;
     deviceId?: string;
     apiKey?: string;
-    paymasterUrls?: Record<number, string>;
+    /** Mapping of chain IDs to paymaster configuration */
+    paymasters?: Record<number, PaymasterConfig>;
   };
   
 

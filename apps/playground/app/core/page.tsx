@@ -27,6 +27,14 @@ function CorePageContent({ mode }: { mode: ModeType }) {
           uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined
         },
         apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
+        paymasters: {
+          84532: {
+            url: 'https://rpc.etherspot.io/paymaster/?api-key=etherspot_3ZKDD7canHiLfKQXuLv38gXm&useVp=true',
+            context: {
+              sponsorshipPolicyId: 'sp_my_policy'
+            }
+          }
+        }
       })
   );
 

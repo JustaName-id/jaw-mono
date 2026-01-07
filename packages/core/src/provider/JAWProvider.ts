@@ -11,6 +11,7 @@ import {
     ProviderInterface,
     RequestArguments,
     Mode,
+    PaymasterConfig,
 } from './interface.js';
 
 import {
@@ -37,16 +38,16 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     private readonly preference: JawProviderPreference;
     private readonly communicator: Communicator;
     private readonly apiKey: string;
-    private readonly paymasterUrls?: Record<number, string>;
+    private readonly paymasters?: Record<number, PaymasterConfig>;
 
     private signer: Signer | null = null;
 
-    constructor({ metadata, preference, apiKey, paymasterUrls }: Readonly<ConstructorOptions>) {
+    constructor({ metadata, preference, apiKey, paymasters }: Readonly<ConstructorOptions>) {
         super();
         this.metadata = metadata;
         this.preference = preference;
         this.apiKey = apiKey;
-        this.paymasterUrls = paymasterUrls;
+        this.paymasters = paymasters;
         this.communicator = new Communicator({
             metadata,
             preference,
@@ -248,7 +249,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             uiHandler: signerType === 'appSpecific' ? this.preference.uiHandler : undefined,
             callback: this.emit.bind(this),
             apiKey: this.apiKey,
-            paymasterUrls: signerType === 'appSpecific' ? this.paymasterUrls : undefined,
+            paymasters: signerType === 'appSpecific' ? this.paymasters : undefined,
             ens: signerType === 'appSpecific' ? this.preference.ens : undefined,
         });
     }

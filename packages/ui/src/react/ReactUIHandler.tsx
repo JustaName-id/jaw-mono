@@ -24,6 +24,7 @@ import {
   getPermissionFromRelay,
   type Chain,
   type SignInWithEthereumCapabilityRequest,
+  type PaymasterConfig,
   ensureIntNumber,
   standardErrorCodes,
 } from '@jaw.id/core';
@@ -277,7 +278,7 @@ export class ReactUIHandler implements UIHandler {
             onReject={onReject}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
-            paymasterUrls={this.config.paymasterUrls}
+            paymasters={this.config.paymasters}
             ens={this.config.ens}
           />
         );
@@ -293,7 +294,7 @@ export class ReactUIHandler implements UIHandler {
               onReject={onReject}
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
-              paymasterUrls={this.config.paymasterUrls}
+              paymasters={this.config.paymasters}
             />
           );
         }
@@ -304,7 +305,7 @@ export class ReactUIHandler implements UIHandler {
             onReject={onReject}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
-            paymasterUrls={this.config.paymasterUrls}
+            paymasters={this.config.paymasters}
           />
         );
       }
@@ -333,7 +334,7 @@ export class ReactUIHandler implements UIHandler {
                 onReject={onReject}
                 apiKey={this.config.apiKey}
                 defaultChainId={this.config.defaultChainId}
-                paymasterUrls={this.config.paymasterUrls}
+                paymasters={this.config.paymasters}
               />
             );
           }
@@ -352,7 +353,7 @@ export class ReactUIHandler implements UIHandler {
               onReject={onReject}
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
-              paymasterUrls={this.config.paymasterUrls}
+              paymasters={this.config.paymasters}
             />
           );
         } else if (signType === '0x01') {
@@ -377,7 +378,7 @@ export class ReactUIHandler implements UIHandler {
               onReject={onReject}
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
-              paymasterUrls={this.config.paymasterUrls}
+              paymasters={this.config.paymasters}
             />
           );
         } else {
@@ -399,7 +400,7 @@ export class ReactUIHandler implements UIHandler {
             onReject={onReject}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
-            paymasterUrls={this.config.paymasterUrls}
+            paymasters={this.config.paymasters}
           />
         );
 
@@ -411,7 +412,7 @@ export class ReactUIHandler implements UIHandler {
             onReject={onReject}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
-            paymasterUrls={this.config.paymasterUrls}
+            paymasters={this.config.paymasters}
           />
         );
 
@@ -423,7 +424,7 @@ export class ReactUIHandler implements UIHandler {
             onReject={onReject}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
-            paymasterUrls={this.config.paymasterUrls}
+            paymasters={this.config.paymasters}
           />
         );
 
@@ -435,7 +436,7 @@ export class ReactUIHandler implements UIHandler {
             onReject={onReject}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
-            paymasterUrls={this.config.paymasterUrls}
+            paymasters={this.config.paymasters}
           />
         );
 
@@ -447,7 +448,7 @@ export class ReactUIHandler implements UIHandler {
             onReject={onReject}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
-            paymasterUrls={this.config.paymasterUrls}
+            paymasters={this.config.paymasters}
           />
         );
 
@@ -470,7 +471,7 @@ function buildChainConfigFromApiKey(chainId: number, apiKey?: string, paymasterU
   return {
     id: chainId,
     rpcUrl: apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`,
-    paymasterUrl,
+    ...(paymasterUrl && { paymaster: { url: paymasterUrl } }),
   };
 }
 
@@ -492,13 +493,13 @@ async function getAccountForSigning(
 }
 
 // OnboardingDialogWrapper - handles passkey authentication flow with ConnectDialog confirmation
-function OnboardingDialogWrapper({  
+function OnboardingDialogWrapper({
   request,
   onApprove,
   onReject,
   apiKey,
   defaultChainId,
-  paymasterUrls,
+  paymasters,
   ens,
 }: {
   request: ConnectUIRequest;
@@ -506,7 +507,7 @@ function OnboardingDialogWrapper({
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
-  paymasterUrls?: Record<number, string>;
+  paymasters?: Record<number, PaymasterConfig>;
   ens?: string;
 }) {
   const [open, setOpen] = useState(true);
@@ -597,7 +598,7 @@ function OnboardingDialogWrapper({
         {
           chainId: targetChainId,
           apiKey,
-          paymasterUrl: paymasterUrls?.[targetChainId],
+          paymasterUrl: paymasters?.[targetChainId]?.url,
         },
         account.credentialId
       );
@@ -624,7 +625,7 @@ function OnboardingDialogWrapper({
       const accountInstance = await Account.import({
         chainId: targetChainId,
         apiKey,
-        paymasterUrl: paymasterUrls?.[targetChainId],
+        paymasterUrl: paymasters?.[targetChainId]?.url,
       });
 
       const metadata = accountInstance.getMetadata();
@@ -656,7 +657,7 @@ function OnboardingDialogWrapper({
         {
           chainId: createChainId,
           apiKey,
-          paymasterUrl: paymasterUrls?.[createChainId],
+          paymasterUrl: paymasters?.[createChainId]?.url,
         },
         {
           username,
@@ -757,7 +758,7 @@ function OnboardingDialogWrapper({
       const account = await getAccountForSigning(
         apiKey,
         targetChainId,
-        paymasterUrls?.[targetChainId]
+        paymasters?.[targetChainId]?.url
       );
 
       // Sign the SIWE message
@@ -889,14 +890,14 @@ function SignatureDialogWrapper({
   onReject,
   apiKey,
   defaultChainId,
-  paymasterUrls,
+  paymasters,
 }: {
   request: SignatureUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
-  paymasterUrls?: Record<number, string>;
+  paymasters?: Record<number, PaymasterConfig>;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -913,7 +914,7 @@ function SignatureDialogWrapper({
       const account = await getAccountForSigning(
         apiKey,
         chainId,
-        paymasterUrls?.[chainId]
+        paymasters?.[chainId]?.url
       );
 
       // Sign the message
@@ -965,14 +966,14 @@ function Eip712DialogWrapper({
   onReject,
   apiKey,
   defaultChainId,
-  paymasterUrls,
+  paymasters,
 }: {
   request: TypedDataUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
-  paymasterUrls?: Record<number, string>;
+  paymasters?: Record<number, PaymasterConfig>;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -989,7 +990,7 @@ function Eip712DialogWrapper({
       const account = await getAccountForSigning(
         apiKey,
         chainId,
-        paymasterUrls?.[chainId]
+        paymasters?.[chainId]?.url
       );
 
       // Parse typed data if it's a string
@@ -1051,14 +1052,14 @@ function TransactionDialogWrapper({
   onReject,
   apiKey,
   defaultChainId,
-  paymasterUrls,
+  paymasters,
 }: {
   request: TransactionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
-  paymasterUrls?: Record<number, string>;
+  paymasters?: Record<number, PaymasterConfig>;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1074,11 +1075,11 @@ function TransactionDialogWrapper({
   const networkName = viemChain?.name || 'Unknown Network';
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > paymasterUrls[chainId]
+  // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
     const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
-    return capabilitiesPaymasterUrl || paymasterUrls?.[chainId];
-  }, [request.data.capabilities?.paymasterService?.url, paymasterUrls, chainId]);
+    return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
+  }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
   const isSponsored = !!effectivePaymasterUrl;
 
@@ -1254,14 +1255,14 @@ function SendTransactionDialogWrapper({
   onReject,
   apiKey,
   defaultChainId,
-  paymasterUrls,
+  paymasters,
 }: {
   request: SendTransactionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
-  paymasterUrls?: Record<number, string>;
+  paymasters?: Record<number, PaymasterConfig>;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1277,11 +1278,11 @@ function SendTransactionDialogWrapper({
   const networkName = viemChain?.name || 'Unknown Network';
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > paymasterUrls[chainId]
+  // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
     const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
-    return capabilitiesPaymasterUrl || paymasterUrls?.[chainId];
-  }, [request.data.capabilities?.paymasterService?.url, paymasterUrls, chainId]);
+    return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
+  }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
   const isSponsored = !!effectivePaymasterUrl;
 
@@ -1461,14 +1462,14 @@ function PermissionDialogWrapper({
   onReject,
   apiKey,
   defaultChainId,
-  paymasterUrls,
+  paymasters,
 }: {
   request: PermissionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
-  paymasterUrls?: Record<number, string>;
+  paymasters?: Record<number, PaymasterConfig>;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1491,11 +1492,11 @@ function PermissionDialogWrapper({
   const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > paymasterUrls[chainId]
+  // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
     const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
-    return capabilitiesPaymasterUrl || paymasterUrls?.[chainId];
-  }, [request.data.capabilities?.paymasterService?.url, paymasterUrls, chainId]);
+    return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
+  }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
   const chain = useMemo(
     () => buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl),
@@ -1815,14 +1816,14 @@ function SiweDialogWrapper({
   onReject,
   apiKey,
   defaultChainId,
-  paymasterUrls,
+  paymasters,
 }: {
   request: SignatureUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
-  paymasterUrls?: Record<number, string>;
+  paymasters?: Record<number, PaymasterConfig>;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1882,7 +1883,7 @@ function SiweDialogWrapper({
       const account = await getAccountForSigning(
         apiKey,
         chainId,
-        paymasterUrls?.[chainId]
+        paymasters?.[chainId]?.url
       );
 
       // Sign the message
@@ -1940,14 +1941,14 @@ function RevokePermissionDialogWrapper({
   onReject,
   apiKey,
   defaultChainId,
-  paymasterUrls,
+  paymasters,
 }: {
   request: RevokePermissionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
-  paymasterUrls?: Record<number, string>;
+  paymasters?: Record<number, PaymasterConfig>;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1959,11 +1960,11 @@ function RevokePermissionDialogWrapper({
   const chainId = request.data.chainId || defaultChainId || 1;
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > paymasterUrls[chainId]
+  // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
     const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
-    return capabilitiesPaymasterUrl || paymasterUrls?.[chainId];
-  }, [request.data.capabilities?.paymasterService?.url, paymasterUrls, chainId]);
+    return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
+  }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
   const chain = buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);

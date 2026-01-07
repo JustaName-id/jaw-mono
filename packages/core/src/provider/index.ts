@@ -8,6 +8,7 @@ export {
     type ModeType,
     type ProviderEventCallback,
     type ConstructorOptions,
+    type PaymasterConfig,
     Mode
 } from "./interface.js"
 

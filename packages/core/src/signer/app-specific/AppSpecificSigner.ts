@@ -13,6 +13,7 @@ import {
     WalletSignUIRequest,
     PersonalSignRequestData,
     TypedDataRequestData,
+    PaymasterConfig,
 } from '../../ui/interface.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/interface.js';
 import {
@@ -31,7 +32,7 @@ type ConstructorOptions = {
     uiHandler: UIHandler;
     callback: ProviderEventCallback | null;
     apiKey: string;
-    paymasterUrls?: Record<number, string>;
+    paymasters?: Record<number, PaymasterConfig>;
     ens?: string;
 };
 
@@ -50,7 +51,7 @@ export class AppSpecificSigner extends JAWSigner {
             this.uiHandler.init({
                 apiKey: params.apiKey,
                 defaultChainId: params.metadata.defaultChainId,
-                paymasterUrls: params.paymasterUrls,
+                paymasters: params.paymasters,
                 appName: params.metadata.appName,
                 appLogoUrl: params.metadata.appLogoUrl,
                 ens: params.ens

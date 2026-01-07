@@ -1,5 +1,5 @@
 import {SignerType} from "../messages/index.js";
-import {AppMetadata, ProviderEventCallback} from "../provider/index.js";
+import {AppMetadata, ProviderEventCallback, PaymasterConfig} from "../provider/index.js";
 import {Communicator} from "../communicator/index.js";
 import {Signer} from "./interface.js";
 import {CrossPlatformSigner} from "./cross-platform/CrossPlatformSigner.js";
@@ -16,10 +16,10 @@ export function createSigner(params: {
     uiHandler?: UIHandler;
     callback: ProviderEventCallback;
     apiKey: string;
-    paymasterUrls?: Record<number, string>;
+    paymasters?: Record<number, PaymasterConfig>;
     ens?: string;
 }): Signer {
-    const { signerType, metadata, communicator, uiHandler, callback, apiKey, paymasterUrls, ens } = params;
+    const { signerType, metadata, communicator, uiHandler, callback, apiKey, paymasters, ens } = params;
 
     switch (signerType) {
         case 'crossPlatform': {
@@ -42,7 +42,7 @@ export function createSigner(params: {
                 callback,
                 uiHandler,
                 apiKey,
-                paymasterUrls,
+                paymasters,
                 ens,
             });
         }
