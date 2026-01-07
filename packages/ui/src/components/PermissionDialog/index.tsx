@@ -29,6 +29,11 @@ export const PermissionDialog = ({
   isLoadingTokenInfo = false,
   timestamp = new Date(),
   warningMessage,
+  gasFee,
+  gasFeeLoading = false,
+  gasEstimationError,
+  sponsored = false,
+  ethPrice = 0,
 }: PermissionDialogProps) => {
   const isMobile = useIsMobile();
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
@@ -108,7 +113,7 @@ export const PermissionDialog = ({
     }
   };
 
-  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses;
+  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses && !gasFeeLoading;
 
   // Count total permissions
   const totalSpends = spends.length;
@@ -143,16 +148,17 @@ export const PermissionDialog = ({
         height: '100%',
         maxWidth: 'none',
         maxHeight: 'none',
-        overflowY: 'auto',
+        overflow: 'hidden',
       } : {
         width: '500px',
         minWidth: '500px',
         maxHeight: '90vh',
-        overflowY: 'auto',
+        overflow: 'hidden',
       }}
     >
-      <div className="flex flex-col gap-6 justify-between max-md:h-full">
-        <div className="flex flex-col gap-3">
+      <div className="flex flex-col gap-6 justify-between max-md:h-full h-full overflow-hidden">
+        {/* Scrollable Content Area */}
+        <div className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0 max-md:pb-2">
           {/* Permission ID Card - Only for revoke mode */}
           {mode === 'revoke' && permissionId && (
             <div className="flex flex-col gap-2.5 p-3.5 border border-border rounded-[6px]">
@@ -377,24 +383,99 @@ export const PermissionDialog = ({
           )}
         </div>
 
-        {/* Action Buttons */}
-        <div className="flex gap-3 p-3.5 max-md:mt-auto">
-          <Button
-            variant="outline"
-            onClick={onCancel}
-            disabled={isProcessing}
-            className="flex-1"
-          >
-            Cancel
-          </Button>
-          <Button
-            variant={mode === 'revoke' ? 'destructive' : 'default'}
-            onClick={onConfirm}
-            disabled={!canConfirm}
-            className="flex-1"
-          >
-            {isProcessing ? 'Processing...' : (isLoadingTokenInfo || isResolvingAddresses) ? 'Loading...' : mode === 'grant' ? 'Accept' : 'Revoke'}
-          </Button>
+        {/* Fixed Bottom Section - Gas Estimation + Action Buttons */}
+        <div className="flex-shrink-0 space-y-3">
+          {/* Gas Estimation Section - Only for grant mode */}
+          {mode === 'grant' && (
+            <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
+              <div className="flex flex-col text-foreground flex-1 gap-0.5">
+                <p className="text-xs font-bold leading-[133%]">Network</p>
+                <div className="flex flex-row items-center gap-1">
+                  {displayChainIcon}
+                  <p className="text-base font-normal text-ellipsis leading-[150%] truncate">{networkName}</p>
+                </div>
+              </div>
+              <div className="w-[1px] rounded-full bg-border h-full min-h-[50px]" />
+              <div className="flex flex-col text-foreground flex-1 gap-0.5">
+                <p className="text-xs font-bold leading-[133%]">Network Fees</p>
+                <div className="flex flex-row items-center w-full justify-between gap-1">
+                  {gasFeeLoading ? (
+                    <p className="text-base font-normal text-muted-foreground">Estimating...</p>
+                  ) : gasEstimationError && !sponsored ? (
+                    <div className="flex flex-col">
+                      <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
+                      <p className="text-xs text-red-500">{gasEstimationError}</p>
+                    </div>
+                  ) : sponsored || gasFee === 'sponsored' ? (
+                    <div className="flex flex-col">
+                      <div className="flex items-center gap-2">
+                        {sponsored && gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
+                          <div className="flex flex-col line-through text-muted-foreground">
+                            <p className="text-base font-normal">
+                              ${(ethPrice * Number(gasFee)).toFixed(4)}
+                            </p>
+                          </div>
+                        )}
+                        <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded">
+                          Sponsored
+                        </span>
+                      </div>
+                      <p className="text-xs font-normal text-muted-foreground">
+                        {sponsored && gasFee && gasFee !== 'sponsored' ? (() => {
+                          const gasValue = Number(gasFee);
+                          if (gasValue > 0 && gasValue < 0.0001) {
+                            return '> 0.0001 ETH';
+                          }
+                          return gasValue.toFixed(4) + ' ETH';
+                        })() : 'Gas fees covered'}
+                      </p>
+                    </div>
+                  ) : gasFee && gasFee !== 'sponsored' ? (
+                    <div className="flex flex-col">
+                      {ethPrice > 0 && (
+                        <div className="flex items-center gap-2">
+                          <p className="text-base font-normal text-foreground">
+                            ${(ethPrice * Number(gasFee)).toFixed(4)}
+                          </p>
+                        </div>
+                      )}
+                      <p className="text-xs font-normal text-muted-foreground">
+                        {(() => {
+                          const gasValue = Number(gasFee);
+                          if (gasValue > 0 && gasValue < 0.0001) {
+                            return '> 0.0001 ETH';
+                          }
+                          return gasValue.toFixed(4) + ' ETH';
+                        })()}
+                      </p>
+                    </div>
+                  ) : (
+                    <p className="text-base font-normal text-muted-foreground">-</p>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* Action Buttons */}
+          <div className="flex gap-3 p-3.5 max-md:mt-auto">
+            <Button
+              variant="outline"
+              onClick={onCancel}
+              disabled={isProcessing}
+              className="flex-1"
+            >
+              Cancel
+            </Button>
+            <Button
+              variant={mode === 'revoke' ? 'destructive' : 'default'}
+              onClick={onConfirm}
+              disabled={!canConfirm}
+              className="flex-1"
+            >
+              {isProcessing ? 'Processing...' : (isLoadingTokenInfo || isResolvingAddresses || gasFeeLoading) ? 'Loading...' : mode === 'grant' ? 'Accept' : 'Revoke'}
+            </Button>
+          </div>
         </div>
       </div>
     </DefaultDialog>

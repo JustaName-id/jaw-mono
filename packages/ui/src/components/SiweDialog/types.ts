@@ -25,4 +25,7 @@ export interface SiweDialogProps {
   isProcessing: boolean;
   siweStatus: string;
   canSign: boolean;
+
+  // Security warning for origin mismatch
+  warningMessage?: string;
 }
