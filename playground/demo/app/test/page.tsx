@@ -1333,8 +1333,8 @@ Issued At: ${issuedAt}`;
               </p>
               {accounts.length > 0 && (
                   <p className="text-gray-700 dark:text-gray-300">
-                    <span className="font-medium">Accounts:</span>{' '}
-                    <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm">
+                    <span className="font-medium text-red">Accounts:</span>{' '}
+                    <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded text-sm break-all">
                       {accounts.join(', ')}
                     </code>
                   </p>
@@ -1635,7 +1635,7 @@ Issued At: ${issuedAt}`;
               </p>
               {lastPermissionId && (
                   <p className="text-sm text-green-600 dark:text-green-400">
-                    <span className="font-medium">Last Permission ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded">{lastPermissionId}</code>
+                    <span className="font-medium">Last Permission ID:</span> <code className="bg-gray-100 dark:bg-gray-700 px-2 py-1 rounded break-all">{lastPermissionId}</code>
                   </p>
               )}
               <p className="text-sm text-gray-600 dark:text-gray-400">
