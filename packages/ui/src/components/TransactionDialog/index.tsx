@@ -217,7 +217,7 @@ export const TransactionDialog = ({
                     ) : sponsored || gasFee === 'sponsored' ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          {sponsored && gasFee && gasFee !== 'sponsored' && (
+                          {sponsored && gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
                             <div className="flex flex-col line-through text-muted-foreground">
                               {/* TODO: Add gas fee in USD */}
                               <p className="text-base font-normal">
@@ -241,11 +241,13 @@ export const TransactionDialog = ({
                       </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
                       <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <p className="text-base font-normal text-foreground">
-                            ${(ethPrice * Number(gasFee)).toFixed(4)}
-                          </p>
-                        </div>
+                        {ethPrice > 0 && (
+                          <div className="flex items-center gap-2">
+                            <p className="text-base font-normal text-foreground">
+                              ${(ethPrice * Number(gasFee)).toFixed(4)}
+                            </p>
+                          </div>
+                        )}
                         <p className="text-xs font-normal text-muted-foreground">
                           {(() => {
                             const gasValue = Number(gasFee);
@@ -280,10 +282,9 @@ export const TransactionDialog = ({
                       }} className="cursor-pointer" />
                     )}
                   </div>
-                  <div className="p-2.5 bg-secondary rounded-[6px]">
-                    <p className="text-xs font-semibold leading-[150%] break-all text-foreground">
-                      {currentTransaction.data.length > 500 ? `${currentTransaction.data.slice(0, 150)}...${currentTransaction.data.slice(-150)}` :
-                        currentTransaction.data.length > 100 ? `${currentTransaction.data.slice(0, 50)}...${currentTransaction.data.slice(-50)}` : currentTransaction.data}
+                  <div className="p-2.5 bg-secondary rounded-[6px] max-h-[300px] overflow-y-auto">
+                    <p className="text-xs font-semibold leading-[150%] break-all text-foreground font-mono">
+                      {currentTransaction.data}
                     </p>
                   </div>
                 </div>
@@ -366,7 +367,7 @@ export const TransactionDialog = ({
                                 <p className="text-xs font-bold leading-[133%] text-muted-foreground">Value</p>
                                 <div className="flex items-baseline gap-2">
                                   <p className="text-base font-normal">{formatTransactionValue(transaction.value)} ETH</p>
-                                  {ethPrice && (
+                                  {ethPrice > 0 && (
                                     <p className="text-sm text-muted-foreground">
                                       ${(Number(formatTransactionValue(transaction.value)) * ethPrice).toFixed(2)}
                                     </p>
@@ -399,11 +400,9 @@ export const TransactionDialog = ({
                                   />
                                 )}
                               </div>
-                              <div className="p-2 bg-secondary rounded-[6px]">
+                              <div className="p-2 bg-secondary rounded-[6px] max-h-[300px] overflow-y-auto">
                                 <p className="text-xs font-mono leading-[150%] break-all text-foreground">
-                                  {transaction.data.length > 100
-                                    ? `${transaction.data.slice(0, 50)}...${transaction.data.slice(-50)}`
-                                    : transaction.data}
+                                  {transaction.data}
                                 </p>
                               </div>
                             </div>
@@ -451,10 +450,10 @@ export const TransactionDialog = ({
                     ) : sponsored || gasFee === 'sponsored' ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          {sponsored && gasFee && gasFee !== 'sponsored' && (
+                          {sponsored && gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
                             <div className="flex flex-col line-through text-muted-foreground">
                               <p className="text-base font-normal">
-                                ${(ethPrice * Number( gasFee)).toFixed(4)}
+                                ${(ethPrice * Number(gasFee)).toFixed(4)}
                               </p>
                             </div>
                           )}
@@ -474,11 +473,13 @@ export const TransactionDialog = ({
                       </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
                       <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <p className="text-base font-normal text-foreground">
-                            ${(ethPrice * Number(gasFee)).toFixed(4)}
-                          </p>
-                        </div>
+                        {ethPrice > 0 && (
+                          <div className="flex items-center gap-2">
+                            <p className="text-base font-normal text-foreground">
+                              ${(ethPrice * Number(gasFee)).toFixed(4)}
+                            </p>
+                          </div>
+                        )}
                         <p className="text-xs font-normal text-muted-foreground">
                           {(() => {
                             const gasValue = Number(gasFee);
