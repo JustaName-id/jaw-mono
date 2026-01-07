@@ -141,13 +141,13 @@ export const TransactionModal = ({
   }, [chain, resetModalState]);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > chain.paymasterUrl
+  // Priority: capabilities.paymasterService.url > chain.paymaster.url
   const effectivePaymasterUrl = useMemo(() => {
     if (transactionRequest?.paymasterUrl) {
       return transactionRequest.paymasterUrl;
     }
-    return chain?.paymasterUrl;
-  }, [transactionRequest?.paymasterUrl, chain?.paymasterUrl]);
+    return chain?.paymaster?.url;
+  }, [transactionRequest?.paymasterUrl, chain?.paymaster?.url]);
 
   // Initialize account when modal opens
   useEffect(() => {
@@ -162,7 +162,7 @@ export const TransactionModal = ({
           // Merge paymasterUrl from capabilities into chain before creating account
           const chainWithPaymaster = {
             ...chain,
-            paymasterUrl: effectivePaymasterUrl || chain.paymasterUrl,
+            ...(effectivePaymasterUrl && { paymaster: { url: effectivePaymasterUrl } }),
           };
           
           const restoredAccount = await getAccount(chainWithPaymaster, effectiveApiKey);

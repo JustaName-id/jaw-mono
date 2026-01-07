@@ -105,7 +105,7 @@ describe('AppSpecificSigner', () => {
       uiHandler: mockUIHandler,
       callback: mockCallback,
       apiKey: 'test-api-key',
-      paymasterUrls: { 1: 'https://paymaster.test.com' },
+      paymasters: { 1: { url: 'https://paymaster.test.com' } },
     });
   });
 
@@ -118,7 +118,7 @@ describe('AppSpecificSigner', () => {
       expect(mockUIHandler.init).toHaveBeenCalledWith({
         apiKey: 'test-api-key',
         defaultChainId: 1,
-        paymasterUrls: { 1: 'https://paymaster.test.com' },
+        paymasters: { 1: { url: 'https://paymaster.test.com' } },
         appName: 'Test App',
         appLogoUrl: 'https://test.com/logo.png',
       });

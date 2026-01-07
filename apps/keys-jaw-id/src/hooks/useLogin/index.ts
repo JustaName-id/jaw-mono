@@ -27,7 +27,7 @@ export const useLogin = () => {
               {
                 chainId: chainId.id,
                 apiKey: effectiveApiKey,
-                paymasterUrl: chainId.paymasterUrl,
+                paymasterUrl: chainId.paymaster?.url,
               },
               credentialId
             );

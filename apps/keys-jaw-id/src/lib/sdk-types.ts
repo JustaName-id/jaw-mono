@@ -73,7 +73,10 @@ export interface RPCRequest {
 export type chain = {
   id: number;
   rpcUrl?: string;
-  paymasterUrl?: string;
+  paymaster?: {
+    url: string;
+    context?: Record<string, unknown>;
+  };
 };
 
 // Decrypted content from encrypted requests

@@ -45,7 +45,7 @@ export interface NormalizedTransaction {
 export function extractTransactionData(
     method: string,
     params: unknown[],
-    chain?: { id: number; rpcUrl?: string; paymasterUrl?: string }
+    chain?: { id: number; rpcUrl?: string; paymaster?: { url: string; context?: Record<string, unknown> } }
   ): TransactionRequestData {
     if (!chain?.id) {
       throw new Error('No connected chain available');
@@ -69,9 +69,9 @@ export function extractTransactionData(
       // Extract capabilities from sendCallsParams (EIP-5792 paymasterService capability)
       const capabilities = (sendCallsParams as unknown as { capabilities?: RequestCapabilities }).capabilities;
 
-      // Priority: capabilities.paymasterService.url > chain.paymasterUrl
+      // Priority: capabilities.paymasterService.url > chain.paymaster.url
       const capabilitiesPaymasterUrl = capabilities?.paymasterService?.url;
-      const effectivePaymasterUrl = capabilitiesPaymasterUrl || chain?.paymasterUrl;
+      const effectivePaymasterUrl = capabilitiesPaymasterUrl || chain?.paymaster?.url;
 
       // Extract permissionId from capabilities if present
       const permissionId = (capabilities?.permissions as PermissionsCapability | undefined)?.id;
@@ -116,9 +116,9 @@ export function extractTransactionData(
           chainId: chain.id,
         }],
         chainId: chain.id,
-        paymasterUrl: chain?.paymasterUrl,
+        paymasterUrl: chain?.paymaster?.url,
       };
     }
-  
+
     throw new Error(`Unsupported transaction method: ${method}`);
   }

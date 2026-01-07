@@ -672,7 +672,7 @@ describe('Account', () => {
       );
 
       const chain = account.getChain();
-      expect(chain.paymasterUrl).toBe('https://paymaster.example.com');
+      expect(chain.paymaster?.url).toBe('https://paymaster.example.com');
     });
   });
 });

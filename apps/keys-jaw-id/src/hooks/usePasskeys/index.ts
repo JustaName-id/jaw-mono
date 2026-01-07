@@ -39,7 +39,7 @@ export const usePasskeys = (options?: UsePasskeysOptions) => {
     const account = await Account.get({
       chainId: chain.id,
       apiKey: effectiveApiKey,
-      paymasterUrl: chain.paymasterUrl,
+      paymasterUrl: chain.paymaster?.url,
     });
     return account;
   }, [apiKey]);
