@@ -42,6 +42,7 @@ import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
 import { useChainIcon } from '../hooks/useChainIcon';
+import { useEthPrice } from '../hooks/useEthPrice';
 
 
 /**
@@ -1065,6 +1066,8 @@ function TransactionDialogWrapper({
   const [gasFeeLoading, setGasFeeLoading] = useState(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [account, setAccount] = useState<Account | null>(null);
+  const [transactionStatus, setTransactionStatus] = useState<string>('');
+  const ethPrice = useEthPrice();
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1176,6 +1179,7 @@ function TransactionDialogWrapper({
 
   const handleConfirm = async () => {
     setIsProcessing(true);
+    setTransactionStatus('Processing transaction...');
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1187,6 +1191,7 @@ function TransactionDialogWrapper({
       // Send calls using Account class, with optional permission
       const result = await account.sendCalls(transactionCalls, permissionId ? { permissionId } : undefined);
 
+      setTransactionStatus('Transaction successful!');
       onApprove({
         id: result.id,
         chainId: result.chainId,
@@ -1195,6 +1200,7 @@ function TransactionDialogWrapper({
       console.error('Transaction failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
+      setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -1230,11 +1236,11 @@ function TransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={0}
+      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus="pending"
+      transactionStatus={transactionStatus}
       networkName={networkName}
     />
   );
@@ -1262,6 +1268,8 @@ function SendTransactionDialogWrapper({
   const [gasFeeLoading, setGasFeeLoading] = useState(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [account, setAccount] = useState<Account | null>(null);
+  const [transactionStatus, setTransactionStatus] = useState<string>('');
+  const ethPrice = useEthPrice();
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1365,6 +1373,7 @@ function SendTransactionDialogWrapper({
 
   const handleConfirm = async () => {
     setIsProcessing(true);
+    setTransactionStatus('Processing transaction...');
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1373,12 +1382,14 @@ function SendTransactionDialogWrapper({
       // Use sendTransaction which waits for receipt and returns the actual transaction hash
       const txHash = await account.sendTransaction(transactionCalls);
 
+      setTransactionStatus('Transaction successful!');
       // eth_sendTransaction returns transaction hash string
       onApprove(txHash);
     } catch (error) {
       console.error('Transaction failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
+      setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -1414,11 +1425,11 @@ function SendTransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={0}
+      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus="pending"
+      transactionStatus={transactionStatus}
       networkName={networkName}
     />
   );
@@ -1466,6 +1477,7 @@ function PermissionDialogWrapper({
   const [gasFeeLoading, setGasFeeLoading] = useState(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [account, setAccount] = useState<Account | null>(null);
+  const ethPrice = useEthPrice();
 
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
@@ -1788,7 +1800,7 @@ function PermissionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={!!effectivePaymasterUrl}
-      ethPrice={0}
+      ethPrice={ethPrice}
     />
   );
 }
