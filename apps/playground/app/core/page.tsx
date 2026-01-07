@@ -578,23 +578,6 @@ Issued At: ${issuedAt}`;
       // Prepare values using viem
       const ethValue = parseEther('0.0001');
 
-      // Encode ERC20 transfer function call: transfer(address recipient, uint256 amount)
-      const erc20Abi = parseAbi([
-        'function transfer(address to, uint256 amount) returns (bool)'
-      ]);
-
-      const transferData = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: 'transfer',
-        args: [
-          '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0', // Recipient
-          BigInt(1000000) // 1 USDC (6 decimals)
-        ]
-      });
-
-      // Get current chain ID for optional parameter
-      const currentChainId = chainId ? parseInt(chainId, 16) : undefined;
-
       const result = await provider.request({
         method: 'wallet_sendCalls',
         params: [{

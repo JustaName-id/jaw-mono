@@ -1,0 +1,17 @@
+{
+  "name": "@jaw-mono/playground",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "@jaw.id/core": "workspace:*",
+    "@jaw/ui": "workspace:*",
+    "@jaw.id/wagmi": "workspace:*",
+    "@privy-io/react-auth": "^3.8.1",
+    "@tanstack/react-query": "^5.62.16",
+    "next": "~15.2.6",
+    "react": "19.0.0",
+    "react-dom": "19.0.0",
+    "viem": "^2.38.2",
+    "wagmi": "3.0.2"
+  }
+}
