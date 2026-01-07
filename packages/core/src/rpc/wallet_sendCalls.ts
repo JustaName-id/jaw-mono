@@ -241,9 +241,19 @@ export async function waitForReceiptInBackground(userOpHash: string, chainId: nu
             });
         }
     } catch (error) {
-        console.error(`Error waiting for receipt for ${userOpHash}:`, error);
-        // Update status to failed on error
-        updateCallStatusToFailed(userOpHash, error as Error);
+        // Check if this is a timeout error
+        const isTimeoutError = error instanceof Error &&
+            error.name === 'WaitForUserOperationReceiptTimeoutError';
+
+        if (isTimeoutError) {
+            // Timeout doesn't mean failure - operation may still be pending on-chain
+            // Keep status as 'pending' so user can check again later via wallet_getCallsStatus
+            console.warn(`Receipt polling timed out for ${userOpHash}, keeping status as pending`);
+        } else {
+            // For other errors, mark as failed
+            console.error(`Error waiting for receipt for ${userOpHash}:`, error);
+            updateCallStatusToFailed(userOpHash, error as Error);
+        }
     }
 }
 
