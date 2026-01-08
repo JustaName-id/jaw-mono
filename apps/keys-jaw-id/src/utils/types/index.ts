@@ -30,6 +30,7 @@ export interface PopupConfig {
       id: number;
       rpcUrl: string;
       paymasterUrl?: string;
+      paymasterContext?: Record<string, unknown>;
     } | undefined;
     onApprove: (result: unknown) => Promise<void>;
     onReject: (error: string, errorCode?: number) => Promise<void>;

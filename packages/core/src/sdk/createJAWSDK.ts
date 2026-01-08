@@ -1,13 +1,14 @@
 import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
-import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions, Mode } from '../provider/interface.js';
+import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions, Mode, PaymasterConfig } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
 import { store, createInitialChains, ChainClients, createClients } from '../store/index.js';
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   apiKey: string;
   preference?: Partial<JawProviderPreference>;
-  paymasterUrls?: Record<number, string>;
-  /** Used to issue subnames*/
+  /** Mapping of chain IDs to paymaster configuration */
+  paymasters?: Record<number, PaymasterConfig>;
+  /** Used to issue subnames */
   ens?: string;
 };
 
@@ -56,7 +57,7 @@ export function create(params: CreateJAWSDKOptions) {
       ...params.preference,
       ...(params.ens ? { ens: params.ens } : {}),
     },
-    paymasterUrls: params.paymasterUrls,
+    paymasters: params.paymasters,
   };
 
   if (options.preference?.serverUrl != JAW_PASSKEYS_URL && options.preference.mode == Mode.CrossPlatform) {
@@ -67,7 +68,7 @@ export function create(params: CreateJAWSDKOptions) {
   const storedOptions = {
     metadata: options.metadata,
     preference: options.preference,
-    paymasterUrls: options.paymasterUrls,
+    paymasters: options.paymasters,
     apiKey: params.apiKey,
   }
   store.config.set(storedOptions);
@@ -79,7 +80,7 @@ export function create(params: CreateJAWSDKOptions) {
   if (params.apiKey) {
     const initialChains = createInitialChains(
       params.apiKey,
-      params.paymasterUrls,
+      params.paymasters,
       options.preference.showTestnets
     );
     store.chains.set(initialChains);

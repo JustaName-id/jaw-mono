@@ -1,0 +1,169 @@
+# paymasters
+
+Custom paymaster configuration for sponsoring gas fees on different blockchain networks.
+
+**Type:** `Record<number, { url: string; context?: Record<string, unknown> }>`
+**Required:** No
+**Default:** `undefined`
+
+---
+
+## Usage
+
+```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  paymasters: {
+    1: { url: 'https://paymaster.example.com/mainnet' },
+    8453: { 
+            url: 'https://paymaster.example.com/base',  
+            context: { sponsorshipPolicyId: 'sp_my_policy' } 
+          },
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  paymasters: {
+    1: { url: 'https://paymaster.example.com/mainnet' },
+    8453: { 
+            url: 'https://paymaster.example.com/base',  
+            context: { sponsorshipPolicyId: 'sp_my_policy' } 
+          },
+  },
+});
+```
+
+---
+
+## Description
+
+Paymasters are services that sponsor transaction gas fees, enabling gasless transactions for your users. The `paymasters` configuration allows you to specify custom paymaster endpoints and context for each supported network.
+
+**Benefits:**
+- **Gasless Transactions**: Users don't need native tokens to pay gas
+- **Better UX**: Remove friction from onboarding
+- **Flexible Sponsorship**: Control which transactions to sponsor via context/policies
+- **Cost Management**: Use your own paymaster infrastructure
+
+---
+
+## Important Requirements
+
+### EntryPoint Version
+
+JAW SDK **only supports EntryPoint v0.8** (ERC-4337 v0.8). Your paymaster service must be compatible with:
+- [EntryPoint v0.8](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.8.0)
+- [EIP-7677](https://eips.ethereum.org/EIPS/eip-7677) Paymaster Web Service Capability
+
+### Recommended Paymaster Provider
+
+We recommend using **[Etherspot](https://etherspot.io/)** as your paymaster provider. Etherspot offers:
+- Full EntryPoint v0.8 support
+- EIP-7677 compliant API
+- Multi-chain coverage
+- Sponsorship policies for fine-grained control
+
+---
+
+## Configuration Format
+
+```typescript
+paymasters: {
+  [chainId: number]: {
+    url: string;                        // Paymaster service URL (required)
+    context?: Record<string, unknown>;  // Additional context sent with requests (optional)
+  }
+}
+```
+
+### Properties
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `url` | `string` | Yes | The paymaster service endpoint URL |
+| `context` | `Record<string, unknown>` | No | Additional context passed to the paymaster (e.g., sponsorship policy ID) |
+
+---
+
+## Examples
+
+### Basic Configuration
+
+```typescript
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  paymasters: {
+    8453: { url: 'https://paymaster.etherspot.io/base' },
+  },
+});
+```
+
+### With Sponsorship Policy
+
+```typescript
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  paymasters: {
+    8453: {
+      url: 'https://paymaster.etherspot.io/base',
+      context: {
+        sponsorshipPolicyId: 'sp_my_policy_id'
+      }
+    },
+  },
+});
+```
+
+### Multiple Networks
+
+```typescript
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  paymasters: {
+    1: { url: 'https://pm.etherspot.io/eth' },         // Ethereum Mainnet
+    10: { url: 'https://pm.etherspot.io/op' },         // Optimism
+    8453: { url: 'https://pm.etherspot.io/base' },     // Base
+    42161: { url: 'https://pm.etherspot.io/arb' },     // Arbitrum
+    84532: {
+      url: 'https://pm.etherspot.io/base-sepolia',     // Base Sepolia (testnet)
+      context: { sponsorshipPolicyId: 'sp_test_policy' }
+    },
+  },
+});
+```
+
+---
+
+## Paymaster Services
+
+### Recommended Provider
+
+- **[Etherspot](https://etherspot.io/)** - Full v0.8 support, EIP-7677 compliant, multi-chain
+
+### Other Compatible Providers
+
+Ensure any provider you use supports:
+- EntryPoint v0.8
+- EIP-7677 Paymaster Web Service Capability
+
+---
+
+## Related
+
+- [eth_sendTransaction](/api-reference/eth_sendTransaction) - Sponsor Transactions
+- [wallet_sendCalls](/api-reference/wallet_sendCalls) - Sponsor Calls Bundle

@@ -44,7 +44,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
                 targetChain = {
                     id: chainConfig.id,
                     rpcUrl: chainConfig.rpcUrl,
-                    ...(chainConfig.paymasterUrl && { paymasterUrl: chainConfig.paymasterUrl })
+                    ...(chainConfig.paymasterUrl && { paymaster: { url: chainConfig.paymasterUrl } })
                 };
             } else {
                 const fallbackChain = SUPPORTED_CHAINS.find(chain => chain.id === (chainId ?? 1));

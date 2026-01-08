@@ -94,33 +94,39 @@ export function getSupportedChains(showTestnets = false) {
  * @param chain - The chain to get the bundler client for
  * @param paymasterUrlOverride - Optional paymaster URL that takes priority over chain.paymasterUrl.
  *                               Used when wallet_sendCalls includes a paymasterService capability.
+ * @param paymasterContextOverride - Optional paymaster context that takes priority over chain.paymasterContext.
+ *                                   Used when wallet_sendCalls includes paymaster context in capabilities.
  * @returns The bundler client for the specified chain
  * @throws Error if the chain is not supported or client creation fails
  */
-export const getBundlerClient = (chain: Chain, paymasterUrlOverride?: string): BundlerClient<Transport, ViemChain> => {
-    console.log('🔍 Getting bundler client for chain:', chain);
-    // const bundlerClient = getBundlerClientFromStore(chain.id);
+export const getBundlerClient = (
+    chain: Chain,
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
+): BundlerClient<Transport, ViemChain> => {
     const viemChain = SUPPORTED_CHAINS.find(c => c.id === chain.id);
-
 
     const publicClient = createPublicClient({
         chain: viemChain,
         transport: http(chain.rpcUrl),
     });
 
-    // Priority: paymasterUrlOverride (from capabilities) > chain.paymasterUrl (from SDK config)
-    const effectivePaymasterUrl = paymasterUrlOverride || chain.paymasterUrl;
+    // Priority: overrides (from capabilities) > chain config (from SDK config)
+    const effectivePaymasterUrl = paymasterUrlOverride || chain.paymaster?.url;
+    const effectivePaymasterContext = paymasterContextOverride || chain.paymaster?.context;
+
     const paymasterClient = effectivePaymasterUrl
         ? createPaymasterClient({
             transport: http(effectivePaymasterUrl)
         })
         : undefined;
 
-        return createBundlerClient({
-            client: publicClient,
-            ...(paymasterClient && { paymaster: paymasterClient }),
-            transport: http(chain.rpcUrl)
-        });
+    return createBundlerClient({
+        client: publicClient,
+        ...(paymasterClient && { paymaster: paymasterClient }),
+        ...(effectivePaymasterContext && { paymasterContext: effectivePaymasterContext }),
+        transport: http(chain.rpcUrl)
+    });
 }
 
 export async function sendTransaction(
@@ -131,9 +137,10 @@ export async function sendTransaction(
         data?: Hex;
     }>,
     chain: Chain,
-    paymasterUrlOverride?: string
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
 ): Promise<Hash> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride)
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
@@ -160,9 +167,10 @@ export async function sendCalls(
         data?: Hex;
     }>,
     chain: Chain,
-    paymasterUrlOverride?: string
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
 ): Promise<BundledTransactionResult> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride)
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
@@ -199,7 +207,9 @@ export async function sendCallsWithPermission(
     }>,
     chain: Chain,
     permissionId: Hex,
-    apiKey: string
+    apiKey: string,
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
 ): Promise<BundledTransactionResult> {
     // Fetch the permission from the relay
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
@@ -216,7 +226,7 @@ export async function sendCallsWithPermission(
     const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
 
     // Send a single call to the permissions manager
-    const bundlerClient = getBundlerClient(chain);
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,

@@ -70,9 +70,20 @@ export type ProviderEventCallback = ProviderInterface['emit'];
 
 export class ProviderEventEmitter extends EventEmitter<keyof ProviderEventMap> {}
 
+/**
+ * Paymaster configuration for a chain
+ */
+export type PaymasterConfig = {
+    /** The paymaster RPC URL */
+    url: string;
+    /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
+    context?: Record<string, unknown>;
+};
+
 export interface ConstructorOptions {
     metadata: AppMetadata;
     preference: JawProviderPreference;
     apiKey: string;
-    paymasterUrls?: Record<number, string>;
+    /** Mapping of chain IDs to paymaster configuration */
+    paymasters?: Record<number, PaymasterConfig>;
 }

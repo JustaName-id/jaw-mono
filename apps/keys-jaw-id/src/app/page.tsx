@@ -244,7 +244,7 @@ export default function KeysJawIdApp() {
           metadata: configRef.current?.metadata || null,
           method,
           params: Array.isArray(params) ? params : [],
-          chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', paymasterUrl: chain.paymasterUrl } : undefined,
+          chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) } : undefined,
           onApprove: async (result: unknown) => {
             const response = await cryptoHandler.createHandshakeResponse(
               request.id,
@@ -332,7 +332,7 @@ export default function KeysJawIdApp() {
         metadata: configRef.current?.metadata || null,
         method,
         params: Array.isArray(params) ? params : [],
-        chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', paymasterUrl: chain.paymasterUrl } : undefined,
+        chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) } : undefined,
         onApprove: async (result: unknown) => {
           const response = await cryptoHandler.createEncryptedResponse(
             request.id || '',

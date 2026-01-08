@@ -165,14 +165,14 @@ export const PermissionModal = ({
   }, [permissionRequest]);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
-  // Priority: capabilities.paymasterService.url > chain.paymasterUrl
+  // Priority: capabilities.paymasterService.url > chain.paymaster.url
   const effectivePaymasterUrl = useMemo(() => {
-    if (!permissionRequest) return chain?.paymasterUrl;
+    if (!permissionRequest) return chain?.paymaster?.url;
 
     const params = permissionRequest.params[0];
     const capabilitiesPaymasterUrl = params?.capabilities?.paymasterService?.url;
-    return capabilitiesPaymasterUrl || chain?.paymasterUrl;
-  }, [permissionRequest, chain?.paymasterUrl]);
+    return capabilitiesPaymasterUrl || chain?.paymaster?.url;
+  }, [permissionRequest, chain?.paymaster?.url]);
 
   // Extract permission details from request
   const permissionDetails = useMemo(() => {
@@ -413,7 +413,7 @@ export const PermissionModal = ({
           // Merge paymasterUrl from capabilities into chain before creating account
           const chainWithPaymaster = {
             ...chain,
-            paymasterUrl: effectivePaymasterUrl || chain.paymasterUrl,
+            ...(effectivePaymasterUrl && { paymaster: { url: effectivePaymasterUrl } }),
           };
           
           const restoredAccount = await getAccount(chainWithPaymaster, extractedApiKey);

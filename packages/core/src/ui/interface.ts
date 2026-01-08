@@ -249,6 +249,16 @@ export class UIError extends Error {
 }
 
 /**
+ * Paymaster configuration for a chain
+ */
+export type PaymasterConfig = {
+  /** The paymaster RPC URL */
+  url: string;
+  /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
+  context?: Record<string, unknown>;
+};
+
+/**
  * Configuration passed to UIHandler during initialization
  * Contains SDK configuration that the UI handler may need
  */
@@ -257,8 +267,8 @@ export interface UIHandlerConfig {
   apiKey: string;
   /** Default chain ID */
   defaultChainId?: number;
-  /** Paymaster URLs per chain for gasless transactions */
-  paymasterUrls?: Record<number, string>;
+  /** Paymaster configuration per chain for gasless transactions */
+  paymasters?: Record<number, PaymasterConfig>;
   /** App name shown in dialogs */
   appName?: string;
   /** App logo URL */

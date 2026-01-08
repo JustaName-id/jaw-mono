@@ -211,7 +211,7 @@ export class PasskeyService {
     return Account.get({
       chainId: chain.id,
       apiKey: this.apiKey,
-      paymasterUrl: chain.paymasterUrl,
+      paymasterUrl: chain.paymaster?.url,
     });
   }
 }

@@ -7,11 +7,22 @@ import { JAW_RPC_URL } from '../../constants.js';
 import { getSupportedChains } from '../../account/smartAccount.js';
 import { store } from '../store.js';
 
+/**
+ * Paymaster configuration for a chain
+ */
+export type PaymasterConfig = {
+  /** The paymaster RPC URL */
+  url: string;
+  /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
+  context?: Record<string, unknown>;
+};
+
 export type SDKChain = {
   id: number;
   rpcUrl?: string;
   nativeCurrency?: RPCResponseNativeCurrency;
-  paymasterUrl?: string;
+  /** Optional paymaster configuration for sponsored transactions */
+  paymaster?: PaymasterConfig;
 };
 
 /**
@@ -47,9 +58,9 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
     transport: http(chain.rpcUrl),
   });
 
-  const paymasterClient = chain.paymasterUrl
+  const paymasterClient = chain.paymaster?.url
     ? createPaymasterClient({
-        transport: http(chain.paymasterUrl)
+        transport: http(chain.paymaster.url)
       })
     : undefined;
 
@@ -57,6 +68,7 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
     chain: viemchain,
     client,
     ...(paymasterClient && { paymaster: paymasterClient }),
+    ...(chain.paymaster?.context && { paymasterContext: chain.paymaster.context }),
     transport: http(chain.rpcUrl),
   });
 
@@ -123,14 +135,12 @@ export function getClient(chainId: number): PublicClient | undefined {
 export function getBundlerClient(chainId: number): BundlerClient | undefined {
   // Check if client already exists
   const existingClient = ChainClients.getState()?.[chainId]?.bundlerClient;
-  console.log('Existing client:', existingClient);
   if (existingClient) {
     return existingClient;
   }
 
   // Lazy create: find chain in store and create client
   const chains = store.getState().chains ?? [];
-  console.log('Chains:', chains);
   const chain = chains.find(c => c.id === chainId);
   if (!chain) {
     return undefined;
@@ -153,20 +163,33 @@ export function getBundlerClient(chainId: number): BundlerClient | undefined {
  * RPC URLs are constructed as: {JAW_RPC_URL}?chainId={chainId}&api-key={apiKey}
  *
  * @param apiKey - API key for authentication
- * @param paymasterUrls - Optional mapping of chain IDs to paymaster URLs
+ * @param paymasters - Optional mapping of chain IDs to paymaster configuration
  * @param showTestnets - Whether to include testnet chains (default: false)
  * @returns Array of SDKChain objects with constructed RPC URLs for supported chains
  *
+ * @example
+ * ```typescript
+ * const chains = createInitialChains(
+ *   'api-key',
+ *   {
+ *     84532: {
+ *       url: 'https://api.pimlico.io/v2/84532/rpc?apikey=...',
+ *       context: { sponsorshipPolicyId: 'sp_my_policy' }
+ *     }
+ *   },
+ *   true
+ * );
+ * ```
  */
 export function createInitialChains(
   apiKey: string,
-  paymasterUrls?: Record<number, string>,
+  paymasters?: Record<number, PaymasterConfig>,
   showTestnets = false
 ): SDKChain[] {
   const chains = getSupportedChains(showTestnets);
   return chains.map((chain) => ({
     id: chain.id,
     rpcUrl: `${JAW_RPC_URL}?chainId=${chain.id}&api-key=${apiKey}`,
-    ...(paymasterUrls?.[chain.id] ? { paymasterUrl: paymasterUrls[chain.id] } : {}),
+    ...(paymasters?.[chain.id] ? { paymaster: paymasters[chain.id] } : {}),
   }));
 }

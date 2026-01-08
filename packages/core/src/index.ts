@@ -115,6 +115,7 @@ export type {
     UIHandlerOptions,
     BaseUIRequest,
     PermissionsCapability,
+    PaymasterConfig,
 } from './ui/interface.js';
 
 export { UIError, UIErrorCode } from './ui/interface.js';

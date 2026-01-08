@@ -71,11 +71,11 @@ interface JawProviderPreference {
 }
 ```
 
-### paymasterUrls
+### paymasters
 
-Type: `Record<number, string>`
+Type: `Record<number, { url: string; context?: Record<string, unknown> }>`
 
-Custom paymaster URLs by chain ID for gas sponsorship.
+Custom paymaster configuration by chain ID for gas sponsorship. See [paymasters](/configuration/paymasters) for details.
 
 ---
 
@@ -137,9 +137,9 @@ const config = createConfig({
       preference: {
         showTestnets: true,
       },
-      paymasterUrls: {
-        8453: 'https://my-paymaster.com/base',
-        84532: 'https://my-paymaster.com/base-sepolia',
+      paymasters: {
+        8453: { url: 'https://my-paymaster.com/base' },
+        84532: { url: 'https://my-paymaster.com/base-sepolia' },
       },
     }),
   ],

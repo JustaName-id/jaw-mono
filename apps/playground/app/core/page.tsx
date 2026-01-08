@@ -3,7 +3,7 @@
 import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { JAW, Mode } from '@jaw.id/core';
-import { parseEther, encodeFunctionData, parseAbi } from 'viem';
+import { parseEther, encodeFunctionData, parseAbi, parseUnits, erc20Abi } from 'viem';
 import {ReactUIHandler} from "@jaw/ui";
 
 type ModeType = typeof Mode[keyof typeof Mode];
@@ -19,7 +19,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
       JAW.create({
         appName: 'JAW Playground',
         appLogoUrl: "https://avatars.githubusercontent.com/u/159771991?s=200&v=4",
-        defaultChainId: 84532,
+        defaultChainId: 10,
         preference: {
           keysUrl: 'http://localhost:3001', // Local popup URL
           showTestnets: true,
@@ -544,21 +544,28 @@ Issued At: ${issuedAt}`;
 
       // Example: Send 0.001 ETH to a recipient
       // Use viem's parseEther to convert ETH to wei
-      const value = parseEther('0.0001');
+      // const value = parseEther('0.0001');
+
+      const transferData = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: 'transfer',
+        args: ["0xa78C83D5bd5E7B69561c3eA222501838505d14Cb", parseUnits('0.01', 6)]
+      });
 
       const txHash = await provider.request({
         method: 'eth_sendTransaction',
         params: [{
           from: accounts[0],
-          to: '0xe08224b2cfaf4f27e2dc7cb3f6b99acc68cf06c0', // Example recipient
-          value: `0x${value.toString(16)}`, // Convert bigint to hex
-          data: '0x', // No data for simple ETH transfer
+          to: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Example recipient
+          value: `0x0`, // Convert bigint to hex
+          data: transferData, // No data for simple ETH transfer
         }]
       });
 
       addLog(`✅ Transaction hash: ${txHash}`);
       addLog(`View on explorer: https://etherscan.io/tx/${txHash}`);
     } catch (error) {
+      console.error('Error sending transaction:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       addLog(`❌ Error sending transaction: ${errorMessage}`);
     }
@@ -634,35 +641,67 @@ Issued At: ${issuedAt}`;
 
     try {
       const provider = sdk.provider;
-      addLog('Sending contract interaction (eth_sendTransaction)...');
+      addLog('Sending contract interactions (wallet_sendCalls - EIP-5792)...');
 
       // Example: ERC20 approve function using viem
       const erc20Abi = parseAbi([
-        'function approve(address spender, uint256 amount) returns (bool)'
+        'function approve(address spender, uint256 amount) returns (bool)',
+        'function transfer(address to, uint256 amount) returns (bool)'
       ]);
 
-      const spenderAddress = '0x1111111254EEB25477B68fb85Ed929f73A960582'; // 1inch Router
-      const maxUint256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+      const spenderAddress = '0xa78C83D5bd5E7B69561c3eA222501838505d14Cb';
 
       // Encode function call using viem
       const approveData = encodeFunctionData({
         abi: erc20Abi,
         functionName: 'approve',
-        args: [spenderAddress, maxUint256]
+        // ETHERSPOT PAYMASTER Address
+        args: ["0x6Ad5796A4B5385bB3A1573C56115BF292Fb78d2F", parseUnits('0.1', 6)]
       });
 
-      const txHash = await provider.request({
-        method: 'eth_sendTransaction',
+      const transferData = encodeFunctionData({
+        abi: erc20Abi,
+        functionName: 'transfer',
+        args: [spenderAddress, parseUnits('0.01', 6)]
+      });
+
+      const result = await provider.request({
+        method: 'wallet_sendCalls',
         params: [{
+          version: '1.0',
           from: accounts[0],
-          to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC contract
-          value: '0x0',
-          data: approveData,
+          calls: [
+            {
+              to: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+              value: '0x0',
+              data: approveData,
+            },
+            {
+              to: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85',
+              value: '0x0',
+              data: transferData,
+            }
+          ],
+          atomicRequired: true,
         }]
+        
       });
 
-      addLog(`✅ Contract interaction hash: ${txHash}`);
-      addLog(`Function: approve(spender, amount)`);
+      addLog(`[Demo] Contract interaction result: ${JSON.stringify(result)}`);
+      console.log('[Demo] Contract interaction result:', result);
+
+      const batchId = typeof result === 'object' && result !== null && 'id' in result
+          ? (result as { id: string }).id
+          : null;
+
+      if (batchId) {
+        setLastBatchId(batchId);
+        addLog(`✅ Contract interactions submitted! Batch ID: ${batchId}`);
+        addLog(`Functions: approve + transfer (atomic batch)`);
+        addLog('Use "Get Calls Status" button to check transaction status');
+      } else {
+        addLog(`✅ Contract interaction result: ${JSON.stringify(result)}`);
+      }
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
       addLog(`❌ Error in contract interaction: ${errorMessage}`);
@@ -1713,6 +1752,13 @@ Issued At: ${issuedAt}`;
                   className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
               >
                 Base Sepolia (0x14a34)
+              </button>
+              <button
+                  onClick={() => handleSwitchChain('10')}
+                  disabled={!isConnected}
+                  className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors"
+              >
+                Optimism mainnet (0xa)
               </button>
             </div>
           </div>
