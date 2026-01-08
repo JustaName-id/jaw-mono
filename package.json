@@ -61,12 +61,6 @@
     "packages/*",
     "apps/*"
   ],
-  "overrides": {
-    "react": "19.0.1",
-    "react-dom": "19.0.1",
-    "@types/react": "19.0.1",
-    "@types/react-dom": "19.0.1"
-  },
   "nx": {
     "includedScripts": [],
     "targets": {
