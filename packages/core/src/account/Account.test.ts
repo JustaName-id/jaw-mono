@@ -466,7 +466,9 @@ describe('Account', () => {
         [{ to: '0x1234567890123456789012345678901234567890', value: 100000000000000000n, data: undefined }],
         expect.objectContaining({ id: 1 }),
         permissionId,
-        'test-api-key'
+        'test-api-key',
+        undefined,
+        undefined
       );
       expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1);
       expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1);

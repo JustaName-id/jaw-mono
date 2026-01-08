@@ -515,7 +515,7 @@ export class Account {
    * @example
    * ```typescript
    * const chain = account.getChain();
-   * console.log(`RPC URL: ${chain.rpcUrl}`);
+   * console.log(`Paymaster: ${chain.paymaster?.url}`);
    * ```
    */
   getChain(): Chain {

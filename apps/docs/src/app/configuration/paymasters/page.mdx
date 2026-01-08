@@ -18,11 +18,10 @@ const connector = jaw({
   apiKey: 'your-api-key',
   paymasters: {
     1: { url: 'https://paymaster.example.com/mainnet' },
-    137: {
-      url: 'https://paymaster.example.com/polygon',
-      context: { sponsorshipPolicyId: 'sp_my_policy' }
-    },
-    8453: { url: 'https://paymaster.example.com/base' },
+    8453: { 
+            url: 'https://paymaster.example.com/base',  
+            context: { sponsorshipPolicyId: 'sp_my_policy' } 
+          },
   },
 });
 ```
@@ -35,11 +34,10 @@ const jaw = JAW.create({
   apiKey: 'your-api-key',
   paymasters: {
     1: { url: 'https://paymaster.example.com/mainnet' },
-    137: {
-      url: 'https://paymaster.example.com/polygon',
-      context: { sponsorshipPolicyId: 'sp_my_policy' }
-    },
-    8453: { url: 'https://paymaster.example.com/base' },
+    8453: { 
+            url: 'https://paymaster.example.com/base',  
+            context: { sponsorshipPolicyId: 'sp_my_policy' } 
+          },
   },
 });
 ```
@@ -139,7 +137,6 @@ const connector = jaw({
   paymasters: {
     1: { url: 'https://pm.etherspot.io/eth' },         // Ethereum Mainnet
     10: { url: 'https://pm.etherspot.io/op' },         // Optimism
-    137: { url: 'https://pm.etherspot.io/polygon' },   // Polygon
     8453: { url: 'https://pm.etherspot.io/base' },     // Base
     42161: { url: 'https://pm.etherspot.io/arb' },     // Arbitrum
     84532: {

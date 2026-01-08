@@ -114,7 +114,6 @@ function getChainIconKeyFromId(chainId: number): string {
     11155111: 'ethereum', // Sepolia
     8453: 'base',
     84532: 'base', // Base Sepolia
-    137: 'polygon',
     80001: 'polygon', // Polygon Mumbai
     42161: 'arbitrum',
     421614: 'arbitrum', // Arbitrum Sepolia

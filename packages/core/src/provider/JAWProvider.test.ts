@@ -78,7 +78,6 @@ vi.mock('../store/index.js', async (importOriginal) => {
       getState: vi.fn(() => ({
         chains: [
           { id: 1, rpcUrl: 'https://eth.llamarpc.com' },
-          { id: 137, rpcUrl: 'https://polygon.llamarpc.com' },
           { id: 10, rpcUrl: 'https://optimism.llamarpc.com' },
         ],
         account: {
@@ -342,7 +341,7 @@ describe('JAWProvider', () => {
         uiHandler: undefined,
         callback: expect.any(Function),
         apiKey: 'test-api-key',
-        paymasterUrls: undefined,
+        paymasters: undefined,
       });
       expect(mockSigner.handshake).toHaveBeenCalledWith({ method: 'handshake' });
       expect(mockSigner.request).toHaveBeenCalledWith(request);
@@ -476,7 +475,7 @@ describe('JAWProvider', () => {
         params: [{ calls: [] }],
       };
       const mockUserOpHash = '0xuserOpHash123';
-      const mockChainId = 137;
+      const mockChainId = 1;
       (mockSigner.handshake as Mock).mockResolvedValue(undefined);
       (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash, chainId: mockChainId });
       (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
@@ -987,10 +986,10 @@ describe('JAWProvider', () => {
         params: [{ calls: [] }],
       };
       const mockUserOpHash = '0xuserOpHash';
-      const mockChainId = 137;
+      const mockChainId = 1;
       (mockSigner.request as Mock).mockResolvedValue({ id: mockUserOpHash, chainId: mockChainId });
       (waitForReceiptInBackground as Mock).mockResolvedValue(undefined);
-      const metadataWithChainId = { ...mockMetadata, defaultChainId: 137 };
+      const metadataWithChainId = { ...mockMetadata, defaultChainId: 1 };
 
       provider = new JAWProvider({ ...mockConstructorOptions, metadata: metadataWithChainId });
       (provider as any).signer = mockSigner;
