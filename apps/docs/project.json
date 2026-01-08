@@ -1,35 +1,29 @@
 {
   "name": "docs",
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
-  "sourceRoot": "apps/docs/src",
+  "sourceRoot": "apps/docs/docs",
   "projectType": "application",
   "tags": [],
   "targets": {
     "build": {
-      "executor": "@nx/next:build",
-      "outputs": ["{options.outputPath}"],
-      "defaultConfiguration": "production",
+      "executor": "nx:run-commands",
+      "outputs": ["{projectRoot}/dist"],
       "options": {
-        "outputPath": "apps/docs/.next"
-      },
-      "configurations": {
-        "development": {
-          "outputPath": "dist/apps/docs"
-        },
-        "production": {}
+        "command": "vocs build",
+        "cwd": "apps/docs"
       }
     },
     "dev": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "bun run next dev",
+        "command": "vocs dev",
         "cwd": "apps/docs"
       }
     },
     "serve": {
       "executor": "nx:run-commands",
       "options": {
-        "command": "bun run next start",
+        "command": "vocs preview",
         "cwd": "apps/docs"
       }
     },

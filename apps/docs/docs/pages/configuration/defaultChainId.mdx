@@ -1,0 +1,68 @@
+# defaultChainId
+
+The default blockchain network to connect to when the SDK initializes.
+
+**Type:** `number`
+**Required:** No
+**Default:** `1` (Ethereum Mainnet)
+
+
+## Usage
+
+```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  defaultChainId: 1, // Mainnet
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 1, // Mainnet
+});
+```
+
+
+## Using Testnets
+
+To use a testnet as the default chain, enable `showTestnets` in preferences:
+
+```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  defaultChainId: 84532, // Base Sepolia
+  preference: {
+    showTestnets: true,
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  defaultChainId: 84532, // Base Sepolia
+  preference: {
+    showTestnets: true,
+  },
+});
+```
+
+
+## Related
+
+- [Supported Networks](/supported-networks) - Full list of supported chains
+- [preference](/configuration/preference) - Advanced options including testnet visibility
+- [wallet_switchEthereumChain](/api-reference/wallet_switchEthereumChain) - Switch networks programmatically

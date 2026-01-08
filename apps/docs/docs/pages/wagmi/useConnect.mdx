@@ -1,0 +1,260 @@
+# useConnect
+
+Hook to connect to the wallet with optional capabilities.
+
+**Type:** `hook`
+
+
+## Import
+
+```typescript
+import { useConnect } from '@jaw.id/wagmi';
+```
+
+
+## Signature
+
+```typescript
+function useConnect(parameters?: {
+  config?: Config;
+  mutation?: UseMutationParameters;
+}): UseMutationResult
+```
+
+
+## Parameters
+
+### config
+
+Type: `Config` (optional)
+
+Wagmi config. If not provided, uses the config from `WagmiProvider`.
+
+### mutation
+
+Type: `UseMutationParameters` (optional)
+
+TanStack React Query mutation options.
+
+
+## Returns
+
+Returns a TanStack React Query mutation result:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `mutate` | `function` | Function to trigger connection |
+| `mutateAsync` | `function` | Async version of mutate |
+| `data` | `{ accounts, chainId }` | Connection result |
+| `isPending` | `boolean` | Whether connection is in progress |
+| `isSuccess` | `boolean` | Whether connection succeeded |
+| `isError` | `boolean` | Whether connection failed |
+| `error` | `Error` | Error if connection failed |
+
+### data
+
+When successful, `data` contains:
+
+```typescript
+{
+  accounts: Address[] | AccountWithCapabilities[];
+  chainId: number;
+}
+```
+
+If capabilities were requested, accounts include capability information.
+
+
+## Mutation Variables
+
+When calling `mutate()`, you can pass:
+
+### connector
+
+Type: `Connector` (required)
+
+The connector to use for connection.
+
+### chainId
+
+Type: `number` (optional)
+
+Chain ID to connect to.
+
+### capabilities
+
+Type: `WalletConnectCapabilities` (optional)
+
+Capabilities to request during connection. When provided, uses `wallet_connect` instead of `eth_requestAccounts`.
+
+```typescript
+interface WalletConnectCapabilities {
+  /** SIWE parameters for authentication */
+  signInWithEthereum?: {
+    nonce: string;
+    chainId: string;
+    domain?: string;
+    uri?: string;
+    statement?: string;
+  };
+  /** Text records for subname issuance */
+  subnameTextRecords?: { key: string; value: string }[];
+}
+```
+
+
+## Examples
+
+### Basic Connection
+
+```tsx
+import { useAccount } from 'wagmi';
+import { useConnect, jaw } from '@jaw.id/wagmi';
+
+function ConnectButton() {
+  const { isConnected } = useAccount();
+  const { mutate: connect, isPending } = useConnect();
+
+  if (isConnected) return <p>Connected!</p>;
+
+  return (
+    <button
+      onClick={() => connect({ connector: jaw({ apiKey: '...' }) })}
+      disabled={isPending}
+    >
+      {isPending ? 'Connecting...' : 'Connect'}
+    </button>
+  );
+}
+```
+
+### Using Config Connector
+
+```tsx
+import { useConnect } from '@jaw.id/wagmi';
+import { config } from './config';
+
+function ConnectButton() {
+  const { mutate: connect, isPending } = useConnect();
+
+  return (
+    <button
+      onClick={() => connect({ connector: config.connectors[0] })}
+      disabled={isPending}
+    >
+      Connect
+    </button>
+  );
+}
+```
+
+### Connection with SIWE
+
+Request a Sign-In with Ethereum signature during connection:
+
+```tsx
+import { useConnect, jaw } from '@jaw.id/wagmi';
+
+function ConnectWithSIWE() {
+  const { mutate: connect, data, isPending } = useConnect();
+
+  const handleConnect = () => {
+    connect({
+      connector: jaw({ apiKey: '...' }),
+      capabilities: {
+        signInWithEthereum: {
+          nonce: crypto.randomUUID(),
+          chainId: '0x1',
+          domain: window.location.host,
+          uri: window.location.origin,
+          statement: 'Sign in to My DApp',
+        },
+      },
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={handleConnect} disabled={isPending}>
+        Sign In with Ethereum
+      </button>
+      {data && (
+        <div>
+          <p>Connected: {data.accounts[0].address}</p>
+          <p>SIWE Signature: {data.accounts[0].capabilities?.signInWithEthereum?.signature}</p>
+        </div>
+      )}
+    </div>
+  );
+}
+```
+
+### Connection with Subname
+
+Issue an ENS subname during connection (requires `ens` config option):
+
+```tsx
+import { useConnect, jaw } from '@jaw.id/wagmi';
+
+function ConnectWithSubname() {
+  const { mutate: connect, isPending } = useConnect();
+
+  const handleConnect = () => {
+    connect({
+      connector: jaw({ apiKey: '...', ens: 'myapp.eth' }),
+      capabilities: {
+        subnameTextRecords: [
+          { key: 'avatar', value: 'https://example.com/avatar.png' },
+          { key: 'description', value: 'My profile' },
+        ],
+      },
+    });
+  };
+
+  return (
+    <button onClick={handleConnect} disabled={isPending}>
+      Connect & Get Subname
+    </button>
+  );
+}
+```
+
+### With Mutation Callbacks
+
+```tsx
+import { useConnect } from '@jaw.id/wagmi';
+
+function ConnectWithCallbacks() {
+  const { mutate: connect } = useConnect({
+    mutation: {
+      onSuccess: (data) => {
+        console.log('Connected:', data.accounts);
+      },
+      onError: (error) => {
+        console.error('Connection failed:', error);
+      },
+    },
+  });
+
+  return <button onClick={() => connect({ connector })}>Connect</button>;
+}
+```
+
+
+## Difference from wagmi useConnect
+
+| Feature | `wagmi.useConnect` | `@jaw.id/wagmi.useConnect` |
+|---------|-------------------|------------------------|
+| Basic connection | Yes | Yes |
+| Capabilities parameter | No | Yes |
+| Uses `wallet_connect` | No | When capabilities provided |
+| Returns account capabilities | No | Yes (when requested) |
+
+Use `@jaw.id/wagmi`'s `useConnect` when you need to request capabilities during connection. For basic connections without capabilities, either hook works.
+
+
+## Related
+
+- [useDisconnect](/wagmi/useDisconnect) - Disconnect from wallet
+- [jaw()](/wagmi/jaw) - Create the connector
+- [wallet_connect](/api-reference/wallet_connect) - RPC method reference

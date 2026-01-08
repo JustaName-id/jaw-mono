@@ -1,0 +1,119 @@
+# Custom Passkey Server
+
+Run your own passkey metadata server for managing passkey credentials in app-specific mode.
+
+
+## Overview
+
+The SDK needs a server to store passkey metadata (credential IDs, public keys, display names). By default, the SDK uses `https://api.justaname.id/wallet/v2/passkeys`, but you can host your own.
+
+:::warning
+**Important:** This server does NOT store passkeys themselves—passkeys are always stored by the browser/device. The server only stores metadata to enable passkey lookups and management.
+:::
+
+
+## Configuration
+
+Point the SDK to your custom server:
+
+```typescript
+import { JAW, Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw/ui';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: new ReactUIHandler(),
+    serverUrl: 'https://your-server.example.com/passkeys',
+  },
+});
+```
+
+
+## Required Endpoints
+
+Your server must implement the following endpoints:
+
+### GET / - Lookup Passkeys by Credential IDs
+
+Retrieves passkey information for one or more credential IDs.
+
+**Query Parameters:**
+- `credentialIds` (string[], repeatable): Array of credential IDs to lookup
+
+**Success Response (200):**
+```json
+{
+  "statusCode": 200,
+  "result": {
+    "data": {
+      "passkeys": [
+        {
+          "credentialId": "string",
+          "publicKey": "0x...",
+          "displayName": "string"
+        }
+      ]
+    },
+    "error": null
+  }
+}
+```
+
+**Error Response (404):**
+```json
+{
+  "statusCode": 404,
+  "result": {
+    "data": null,
+    "error": "Passkeys not found"
+  }
+}
+```
+
+
+### POST / - Register a New Passkey
+
+Registers a new passkey credential.
+
+**Headers:**
+- `Content-Type: application/json`
+
+**Request Body:**
+```json
+{
+  "credentialId": "string",
+  "publicKey": "0x...",
+  "displayName": "string"
+}
+```
+
+**Response:**
+- Status `200`/`201` for successful registration
+- Status `4xx`/`5xx` for errors
+
+
+## Data Format Requirements
+
+| Field | Format | Description |
+|-------|--------|-------------|
+| **credentialId** | Base64url string | Standard WebAuthn credential ID format |
+| **publicKey** | Hex string with `0x` prefix | The passkey's public key |
+| **displayName** | String | Human-readable name for the passkey |
+
+
+## When to Self-Host
+
+Consider running your own passkey server when:
+
+- **Data sovereignty**: You need full control over user passkey metadata
+- **Custom logic**: You want to add additional validation or processing
+- **Development/staging**: You need isolated environments for testing
+- **Compliance**: Your organization requires self-hosted infrastructure
+
+
+## Related
+
+- [preference.serverUrl](/configuration/preference#serverurl) - Server URL configuration
+- [preference.mode](/configuration/preference#mode) - Authentication mode configuration

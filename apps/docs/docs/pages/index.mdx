@@ -1,0 +1,240 @@
+# Getting Started
+
+The JAW SDK is a TypeScript library for integrating smart wallets with passkey authentication into your application.
+
+## Features
+
+- **Passkey Authentication** - Secure, passwordless authentication using WebAuthn
+- **Gasless Transactions** - Built-in paymaster support for sponsored transactions
+- **Atomic Batch Operations** - Execute multiple calls atomically via `useSendCalls` (EIP-5792)
+- **Permission System** - Grant granular spend and call permissions to third parties
+- **Multi-Chain Support** - Works across Ethereum and EVM-compatible chains
+- **Identity-Centric by Design** - Issue ENS subnames during onboarding, so your users are never exposed to hexadecimal addresses
+
+## Installation
+
+:::code-group
+
+```bash [npm]
+npm install @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+```bash [pnpm]
+pnpm add @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+```bash [yarn]
+yarn add @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+```bash [bun]
+bun add @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+:::
+
+:::warning
+You need an API key to use the SDK. Get one at [JAW Dashboard](https://dashboard.jaw.id/).
+:::
+
+## Quick Start
+
+### 1. Configure Wagmi
+
+Create your wagmi config with the JAW connector:
+
+```typescript
+// config.ts
+import { createConfig, http } from 'wagmi';
+import { mainnet, base } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+export const config = createConfig({
+  chains: [mainnet, base],
+  connectors: [
+    jaw({
+      apiKey: 'your-api-key',
+      appName: 'My DApp',
+      appLogoUrl: 'https://my-dapp.com/logo.png',
+    }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+    [base.id]: http(),
+  },
+});
+```
+
+### 2. Set Up Providers
+
+Wrap your app with the required providers:
+
+```tsx
+// App.tsx
+import { WagmiProvider } from 'wagmi';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { config } from './config';
+
+const queryClient = new QueryClient();
+
+function App({ children }: { children: React.ReactNode }) {
+  return (
+    <WagmiProvider config={config}>
+      <QueryClientProvider client={queryClient}>
+        {children}
+      </QueryClientProvider>
+    </WagmiProvider>
+  );
+}
+```
+
+### 3. Connect & Interact
+
+```tsx
+import { useAccount, useSendTransaction } from 'wagmi';
+import { useConnect, useDisconnect } from '@jaw.id/wagmi';
+import { parseEther } from 'viem';
+
+function WalletButton() {
+  const { address, isConnected } = useAccount();
+  const { mutate: connect, isPending } = useConnect();
+  const { mutate: disconnect } = useDisconnect();
+  const { sendTransaction } = useSendTransaction();
+
+  if (isConnected) {
+    return (
+      <div>
+        <p>Connected: {address}</p>
+        <button onClick={() => sendTransaction({
+          to: '0x...',
+          value: parseEther('0.01')
+        })}>
+          Send ETH
+        </button>
+        <button onClick={() => disconnect({})}>
+          Disconnect
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => connect({ connector: config.connectors[0] })}
+      disabled={isPending}
+    >
+      {isPending ? 'Connecting...' : 'Connect Wallet'}
+    </button>
+  );
+}
+```
+
+
+## Wagmi Compatibility
+
+With the JAW connector, standard wagmi hooks work out of the box:
+
+| Wagmi Hook | Description |
+|------------|-------------|
+| `useAccount` | Get connected account info |
+| `useSendTransaction` | Send transactions (gasless if paymaster configured) |
+| `useSignMessage` | Sign messages (EIP-191) |
+| `useSignTypedData` | Sign typed data (EIP-712) |
+| `useSwitchChain` | Switch networks |
+| `useSendCalls` | Atomic batch operations (EIP-5792) |
+| `useWriteContract` | Call contract functions |
+| `useBalance` | Get token balances |
+
+
+## JAW-Specific Hooks
+
+For JAW-specific features like permissions, import directly from `@jaw.id/wagmi`:
+
+```typescript
+import {
+  useConnect,
+  useDisconnect,
+  useGrantPermissions,
+  usePermissions,
+  useRevokePermissions
+} from '@jaw.id/wagmi';
+```
+
+| Hook | Description |
+|------|-------------|
+| `useConnect` | Connect with optional capabilities (SIWE, subnames) |
+| `useDisconnect` | Disconnect and clean up session |
+| `useGrantPermissions` | Grant spend/call permissions to a spender |
+| `usePermissions` | Query current permissions |
+| `useRevokePermissions` | Revoke a permission |
+
+
+## Batch Transactions Example
+
+Send multiple calls atomically using wagmi's `useSendCalls`:
+
+```tsx
+import { useSendCalls } from 'wagmi';
+import { encodeFunctionData } from 'viem';
+
+function BatchTransfer() {
+  const { sendCalls, isPending } = useSendCalls();
+
+  const handleBatchTransfer = () => {
+    sendCalls({
+      calls: [
+        {
+          to: USDC_ADDRESS,
+          data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: ['0xAlice...', 1000000n],
+          }),
+        },
+        {
+          to: USDC_ADDRESS,
+          data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'transfer',
+            args: ['0xBob...', 2000000n],
+          }),
+        },
+      ],
+    });
+  };
+
+  return (
+    <button onClick={handleBatchTransfer} disabled={isPending}>
+      {isPending ? 'Sending...' : 'Send to Alice & Bob'}
+    </button>
+  );
+}
+```
+
+
+## Next Steps
+
+- **[Configuration](/configuration)** - All configuration options
+- **[Wagmi Integration](/wagmi)** - Full wagmi hooks reference
+- **[Supported Networks](/supported-networks)** - Available chains
+
+
+## Using the Provider Directly
+
+For non-React applications or advanced use cases, you can use the provider API directly:
+
+```typescript
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'My DApp',
+});
+
+// EIP-1193 compatible provider
+const accounts = await jaw.provider.request({
+  method: 'wallet_connect',
+});
+```
+
+See the [Provider API Reference](/api-reference) for all available methods.

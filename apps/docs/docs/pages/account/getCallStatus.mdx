@@ -1,0 +1,122 @@
+# account.getCallStatus()
+
+Get the status of a previously submitted call batch.
+
+**Type:** `instance sync`
+
+
+## Signature
+
+```typescript
+getCallStatus(batchId: Hash): CallStatusResponse | undefined
+```
+
+
+## Parameters
+
+### batchId
+
+Type: `Hash`
+
+The batch ID (userOpHash) returned from `sendCalls()`.
+
+
+## Returns
+
+`CallStatusResponse | undefined` - The call status in EIP-5792 format, or `undefined` if the batch ID is not found.
+
+```typescript
+interface CallStatusResponse {
+  /** EIP-5792 version */
+  version: string;
+  /** The batch ID (userOpHash) */
+  id: `0x${string}`;
+  /** Chain ID in hex format */
+  chainId: `0x${string}`;
+  /** Status code: 100=pending, 200=completed, 400=offchain failure, 500=onchain revert */
+  status: number;
+  /** Whether the operation is atomic (always true for ERC-4337) */
+  atomic: boolean;
+  /** Transaction receipts (present when completed or reverted) */
+  receipts?: CallReceipt[];
+}
+
+interface CallReceipt {
+  logs: Array<{
+    address: `0x${string}`;
+    data: `0x${string}`;
+    topics: `0x${string}`[];
+  }>;
+  status: `0x${string}`;
+  blockHash: `0x${string}`;
+  blockNumber: `0x${string}`;
+  gasUsed: `0x${string}`;
+  transactionHash: `0x${string}`;
+}
+```
+
+
+## Status Codes
+
+| Code | Name | Description |
+|------|------|-------------|
+| 100 | Pending | Not yet completed onchain |
+| 200 | Completed | Included onchain without reverts |
+| 400 | Offchain Failure | Not included onchain, wallet won't retry |
+| 500 | Complete Revert | Reverted completely, has receipt with status 0x0 |
+
+
+## Behavior
+
+1. Looks up the batch ID in the internal call status store
+2. Returns the status in EIP-5792 format
+3. Returns `undefined` if the batch ID is not found
+4. Status is automatically updated in the background after `sendCalls()`
+
+
+## Example
+
+### Getting an Account Instance
+
+Before calling instance methods, create an account using one of the factory methods:
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// Option 1: Restore existing session or login with passkey
+const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 2: Create a new account with passkey
+const account = await Account.create(
+  { chainId: 1, apiKey: 'your-api-key' },
+  { username: 'alice' }
+);
+
+// Option 3: Import from cloud backup
+const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
+
+// Option 4: From a local account (server-side / embedded wallets)
+const account = await Account.fromLocalAccount(
+  { chainId: 1, apiKey: 'your-api-key' },
+  localAccount
+);
+```
+
+### Basic Usage
+
+```typescript
+// Send calls and get the batch ID
+const { id } = await account.sendCalls([
+  { to: '0x...', value: parseEther('0.1') }
+]);
+
+// Check status immediately
+const status = account.getCallStatus(id);
+```
+
+
+## Related
+
+- [account.sendCalls()](/account/sendCalls) - Send calls without waiting
+- [account.sendTransaction()](/account/sendTransaction) - Send and wait for receipt
+- [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) - EIP-5792 RPC method

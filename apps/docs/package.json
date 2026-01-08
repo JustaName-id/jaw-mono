@@ -6,18 +6,17 @@
   "nx": {
     "name": "docs"
   },
+  "scripts": {
+    "dev": "vocs dev",
+    "build": "vocs build",
+    "preview": "vocs preview"
+  },
   "dependencies": {
-    "next": "~15.2.6",
     "react": "19.0.1",
     "react-dom": "19.0.1",
-    "nextra": "^4.6.0",
-    "nextra-theme-docs": "^4.6.0",
-    "@mdx-js/loader": "^3.1.1",
-    "@mdx-js/react": "^3.1.1",
-    "@next/mdx": "^16.0.3"
+    "vocs": "^1.0.0-alpha.62"
   },
   "devDependencies": {
-    "@types/minimatch": "^6.0.0",
-    "docs": "^0.3.2-canary.0"
+    "@types/react": "^18.3.12"
   }
 }
