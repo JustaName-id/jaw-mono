@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "vocs build && npx pagefind --site docs/dist --output-path docs/dist/_pagefind",
+  "buildCommand": "vocs build",
   "outputDirectory": "docs/dist",
   "installCommand": "cd ../.. && bun install"
 }
