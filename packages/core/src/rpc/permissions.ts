@@ -132,6 +132,8 @@ export type PermissionsDetail = {
 export type PaymasterServiceCapability = {
     /** URL of the paymaster service (ERC-7677 compliant) */
     url: string;
+    /** Context of the paymaster service */
+    context?: Record<string, unknown>;
     /** Optional flag indicating if paymaster is optional (transaction can proceed without it) */
     optional?: boolean;
 };

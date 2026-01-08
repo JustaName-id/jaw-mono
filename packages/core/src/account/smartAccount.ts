@@ -137,9 +137,10 @@ export async function sendTransaction(
         data?: Hex;
     }>,
     chain: Chain,
-    paymasterUrlOverride?: string
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
 ): Promise<Hash> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride)
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
@@ -166,9 +167,10 @@ export async function sendCalls(
         data?: Hex;
     }>,
     chain: Chain,
-    paymasterUrlOverride?: string
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
 ): Promise<BundledTransactionResult> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride)
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
@@ -205,7 +207,9 @@ export async function sendCallsWithPermission(
     }>,
     chain: Chain,
     permissionId: Hex,
-    apiKey: string
+    apiKey: string,
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
 ): Promise<BundledTransactionResult> {
     // Fetch the permission from the relay
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
@@ -222,7 +226,7 @@ export async function sendCallsWithPermission(
     const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
 
     // Send a single call to the permissions manager
-    const bundlerClient = getBundlerClient(chain);
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,

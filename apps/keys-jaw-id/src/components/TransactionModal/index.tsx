@@ -27,6 +27,7 @@ export interface TransactionRequestData {
   }>;
   chainId: number;
   paymasterUrl?: string;
+  paymasterContext?: Record<string, unknown>;
   // wallet_sendCalls specific fields
   atomicRequired?: boolean;
   version?: string;
@@ -149,6 +150,15 @@ export const TransactionModal = ({
     return chain?.paymaster?.url;
   }, [transactionRequest?.paymasterUrl, chain?.paymaster?.url]);
 
+  // Extract paymasterContext from capabilities (EIP-5792 paymasterService.context)
+  // Priority: capabilities.paymasterService.context > chain.paymaster.context
+  const effectivePaymasterContext = useMemo(() => {
+    if (transactionRequest?.paymasterContext) {
+      return transactionRequest.paymasterContext;
+    }
+    return chain?.paymaster?.context;
+  }, [transactionRequest?.paymasterContext, chain?.paymaster?.context]);
+
   // Initialize account when modal opens
   useEffect(() => {
     let isMounted = true;
@@ -211,6 +221,15 @@ export const TransactionModal = ({
       try {
         setGasFeeLoading(true);
 
+        // Skip gas estimation if sponsored - paymaster will handle fees
+        // This is especially important for ERC-20 paymaster modes where estimation
+        // requires context that may not be available during estimation
+        if (isSponsored) {
+          setGasFee('sponsored');
+          setGasEstimationError('');
+          return;
+        }
+
         // Convert normalized transactions to TransactionCall format
         const transactionCalls: TransactionCall[] = normalizedTransactions.map(tx => ({
           to: tx.to as Address,
@@ -228,22 +247,12 @@ export const TransactionModal = ({
         );
         setGasFee(gasPrice);
         setGasEstimationError('');
-
-        // Override with sponsored if paymaster is available
-        if (isSponsored) {
-          setGasFee('sponsored');
-        }
       } catch (error) {
         console.error("Error estimating gas:", error);
 
         if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
-          if (isSponsored) {
-            setGasFee('sponsored');
-            setGasEstimationError('');
-          } else {
-            setGasFee('');
-            setGasEstimationError('Insufficient funds');
-          }
+          setGasFee('');
+          setGasEstimationError('Insufficient funds');
         } else {
           setGasFee('');
           setGasEstimationError('Failed to estimate gas');
@@ -279,36 +288,38 @@ export const TransactionModal = ({
       }));
 
       // Send transaction using Account class
-      // Account methods use the chain's paymasterUrl (which we set from capabilities)
+      // Pass paymaster URL and context overrides from capabilities
       let result: TransactionResult;
       // Use sendCalls for wallet_sendCalls, sendTransaction for eth_sendTransaction
       if (transactionRequest?.method === 'wallet_sendCalls') {
-        const bundledResult = await account.sendCalls(transactionCalls);
+        // Build options with permissionId if available
+        const options = transactionRequest?.permissionId
+          ? { permissionId: transactionRequest.permissionId }
+          : undefined;
+
+        const bundledResult = await account.sendCalls(
+          transactionCalls,
+          options,
+          effectivePaymasterUrl,
+          effectivePaymasterContext
+        );
         // Return the transaction result with proper format based on method
         result = {
           id: bundledResult.id,
           chainId: bundledResult.chainId,
         };
       } else {
-        const txHash = await account.sendTransaction(transactionCalls);
+        const txHash = await account.sendTransaction(
+          transactionCalls,
+          effectivePaymasterUrl,
+          effectivePaymasterContext
+        );
         result = {
           hash: txHash,
         };
       }
 
-      console.log('✅ Transaction confirmed:', result);
       setTransactionStatus('Transaction confirmed!');
-
-      // Log metadata for debugging
-      if (transactionRequest) {
-        console.log('📋 Transaction metadata:', {
-          method: transactionRequest.method,
-          atomicRequired: transactionRequest.atomicRequired,
-          version: transactionRequest.version,
-          callsId: transactionRequest.callsId,
-          paymasterUrl: transactionRequest.paymasterUrl,
-        });
-      }
 
       // Call onSuccess immediately - parent will handle closing
       onSuccess?.(result);
@@ -338,7 +349,7 @@ export const TransactionModal = ({
       onError?.(errorObj, errorCode);
       setIsProcessing(false);
     }
-  }, [account, chain, normalizedTransactions, transactionRequest, onSuccess, onError]);
+  }, [account, chain, normalizedTransactions, transactionRequest, effectivePaymasterUrl, effectivePaymasterContext, onSuccess, onError]);
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {

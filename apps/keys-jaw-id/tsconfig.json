@@ -28,6 +28,9 @@
       "@/*": [
         "./src/*"
       ],
+      "@jaw.id/core": [
+        "../../packages/core/src/index.ts"
+      ],
       "@jaw/ui": [
         "../../packages/ui/src/*"
       ]

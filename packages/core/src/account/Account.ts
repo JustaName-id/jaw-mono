@@ -44,6 +44,8 @@ export interface AccountConfig {
   apiKey: string;
   /** Custom paymaster URL for gas sponsorship */
   paymasterUrl?: string;
+  /** Custom paymaster context for gas sponsorship */
+  paymasterContext?: Record<string, unknown>;
 }
 
 /**
@@ -597,7 +599,7 @@ export class Account {
    * ]);
    * ```
    */
-  async sendTransaction(calls: TransactionCall[]): Promise<Hash> {
+  async sendTransaction(calls: TransactionCall[] , paymasterUrlOverride?: string, paymasterContextOverride?: Record<string, unknown>): Promise<Hash> {
     const formattedCalls = calls.map(call => ({
       to: call.to,
       value: Account.parseValue(call.value),
@@ -607,7 +609,9 @@ export class Account {
     return await sendSmartAccountTransaction(
       this._smartAccount,
       formattedCalls,
-      this._chain
+      this._chain,      
+      paymasterUrlOverride,
+      paymasterContextOverride
     );
   }
 
@@ -638,7 +642,7 @@ export class Account {
    * const status = account.getCallStatus(id);
    * ```
    */
-  async sendCalls(calls: TransactionCall[], options?: SendCallsOptions): Promise<BundledTransactionResult> {
+  async sendCalls(calls: TransactionCall[], options?: SendCallsOptions , paymasterUrlOverride?: string, paymasterContextOverride?: Record<string, unknown>): Promise<BundledTransactionResult> {
     const formattedCalls = calls.map(call => ({
       to: call.to,
       value: Account.parseValue(call.value),
@@ -654,14 +658,18 @@ export class Account {
         formattedCalls,
         this._chain,
         options.permissionId,
-        this._apiKey
+        this._apiKey,
+        paymasterUrlOverride,
+        paymasterContextOverride
       );
     } else {
       // Standard execution
       result = await sendSmartAccountCalls(
         this._smartAccount,
         formattedCalls,
-        this._chain
+        this._chain,
+        paymasterUrlOverride,
+        paymasterContextOverride
       );
     }
 

@@ -1081,6 +1081,13 @@ function TransactionDialogWrapper({
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
+  // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
+  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
+  const effectivePaymasterContext = useMemo(() => {
+    const capabilitiesPaymasterContext = (request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
+  }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
+
   const isSponsored = !!effectivePaymasterUrl;
 
   // Transform calls to transactions format expected by dialog
@@ -1190,8 +1197,12 @@ function TransactionDialogWrapper({
       // Check if permissions capability is provided
       const permissionId = request.data.capabilities?.permissions?.id;
 
-      // Send calls using Account class, with optional permission
-      const result = await account.sendCalls(transactionCalls, permissionId ? { permissionId } : undefined);
+      const result = await account.sendCalls(
+        transactionCalls,
+        permissionId ? { permissionId } : undefined,
+        effectivePaymasterUrl,
+        effectivePaymasterContext
+      );
 
       setTransactionStatus('Transaction successful!');
       onApprove({
@@ -1283,6 +1294,13 @@ function SendTransactionDialogWrapper({
     const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
+
+  // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
+  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
+  const effectivePaymasterContext = useMemo(() => {
+    const capabilitiesPaymasterContext = (request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
+  }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
 
   const isSponsored = !!effectivePaymasterUrl;
 
@@ -1382,11 +1400,9 @@ function SendTransactionDialogWrapper({
         throw new Error('Account not initialized');
       }
 
-      // Use sendTransaction which waits for receipt and returns the actual transaction hash
-      const txHash = await account.sendTransaction(transactionCalls);
+      const txHash = await account.sendTransaction(transactionCalls, effectivePaymasterUrl, effectivePaymasterContext);
 
       setTransactionStatus('Transaction successful!');
-      // eth_sendTransaction returns transaction hash string
       onApprove(txHash);
     } catch (error) {
       console.error('Transaction failed:', error);

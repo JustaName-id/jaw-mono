@@ -69,9 +69,11 @@ export function extractTransactionData(
       // Extract capabilities from sendCallsParams (EIP-5792 paymasterService capability)
       const capabilities = (sendCallsParams as unknown as { capabilities?: RequestCapabilities }).capabilities;
 
-      // Priority: capabilities.paymasterService.url > chain.paymaster.url
+      // Priority: capabilities.paymasterService > chain.paymaster
       const capabilitiesPaymasterUrl = capabilities?.paymasterService?.url;
       const effectivePaymasterUrl = capabilitiesPaymasterUrl || chain?.paymaster?.url;
+      const capabilitiesPaymasterContext = (capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+      const effectivePaymasterContext = capabilitiesPaymasterContext || chain?.paymaster?.context;
 
       // Extract permissionId from capabilities if present
       const permissionId = (capabilities?.permissions as PermissionsCapability | undefined)?.id;
@@ -94,6 +96,7 @@ export function extractTransactionData(
         })),
         chainId: paramsChainId,
         paymasterUrl: effectivePaymasterUrl,
+        paymasterContext: effectivePaymasterContext,
         atomicRequired: sendCallsParams.atomicRequired,
         callsId: sendCallsParams.id,
         permissionId,
@@ -115,8 +118,7 @@ export function extractTransactionData(
           value: txParams.value?.toString() || '0',
           chainId: chain.id,
         }],
-        chainId: chain.id,
-        paymasterUrl: chain?.paymaster?.url,
+        chainId: chain.id
       };
     }
 
