@@ -29,8 +29,8 @@
     "@swc/helpers": "~0.5.11",
     "@types/jsdom": "^27.0.0",
     "@types/node": "^20.19.9",
-    "@types/react": "19.0.0",
-    "@types/react-dom": "19.0.0",
+    "@types/react": "19.0.1",
+    "@types/react-dom": "19.0.1",
     "@vitejs/plugin-react": "^4.2.0",
     "@vitest/ui": "^3.0.0",
     "ajv": "^8.0.0",
@@ -61,6 +61,12 @@
     "packages/*",
     "apps/*"
   ],
+  "overrides": {
+    "react": "19.0.1",
+    "react-dom": "19.0.1",
+    "@types/react": "19.0.1",
+    "@types/react-dom": "19.0.1"
+  },
   "nx": {
     "includedScripts": [],
     "targets": {
