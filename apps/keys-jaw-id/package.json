@@ -7,8 +7,8 @@
     "@jaw/ui": "workspace:*",
     "@tanstack/react-query": "^5.62.16",
     "next": "~15.2.6",
-    "react": "19.0.0",
-    "react-dom": "19.0.0",
+    "react": "19.0.1",
+    "react-dom": "19.0.1",
     "tailwindcss-animate": "^1.0.7",
     "viem": "^2.38.2"
   }
