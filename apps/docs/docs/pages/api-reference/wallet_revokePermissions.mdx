@@ -1,0 +1,79 @@
+# wallet_revokePermissions
+
+Revoke previously granted permissions.
+
+**Authentication Required:** Yes
+
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_revokePermissions',
+  params: [{
+    id: '0xabc123...', // Permission ID
+  }],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `id` | `string` | Yes | Permission ID to revoke |
+
+### Example
+
+```json
+[{
+  "id": "0xabc123456def789..."
+}]
+```
+
+
+## Response
+
+Returns revocation result.
+
+### Example
+
+```json
+{
+  "success": true
+}
+```
+
+
+## Behavior
+
+- Opens popup for user approval
+- Revokes permission
+
+
+## Errors
+
+| Code | Description |
+|------|-------------|
+| 4001 | User rejected the request |
+| 4100 | Unauthorized (not authenticated) |
+| -32602 | Invalid params (permission ID not found) |
+
+
+## Example
+
+```typescript
+const permissionId = '0xabc123...';
+
+const result = await jaw.provider.request({
+  method: 'wallet_revokePermissions',
+  params: [{
+    id: permissionId,
+  }],
+});
+```
+
+
+## Related Methods
+
+- [wallet_grantPermissions](/api-reference/wallet_grantPermissions) - Grant permissions
+- [wallet_getPermissions](/api-reference/wallet_getPermissions) - List all permissions

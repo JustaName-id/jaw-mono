@@ -1,0 +1,267 @@
+# useGetAssets
+
+Hook to get the assets for the connected account. Fetches token balances across supported chains.
+
+**Type:** `hook`
+
+
+## Import
+
+```typescript
+import { useGetAssets } from '@jaw.id/wagmi';
+```
+
+
+## Signature
+
+```typescript
+function useGetAssets(parameters?: {
+  address?: Address;
+  chainId?: number;
+  connector?: Connector;
+  chainFilter?: string[];
+  assetTypeFilter?: AssetType[];
+  assetFilter?: string[];
+  config?: Config;
+  query?: UseQueryParameters;
+}): UseQueryResult
+```
+
+
+## Parameters
+
+### address
+
+Type: `Address` (optional)
+
+Specific account address to get assets for. Defaults to connected account.
+
+### chainId
+
+Type: `number` (optional)
+
+Specific chain ID. Defaults to current chain.
+
+### connector
+
+Type: `Connector` (optional)
+
+Specific connector to use. Defaults to active connector.
+
+### chainFilter
+
+Type: `string[]` (optional)
+
+Array of chain IDs in hex format (e.g., `['0x1', '0xa']`) to filter results. If not provided, returns assets from all supported chains.
+
+### assetTypeFilter
+
+Type: `AssetType[]` (optional)
+
+Filter by asset type. Options: `'native'`, `'erc20'`.
+
+```typescript
+// Only get ERC-20 tokens
+useGetAssets({ assetTypeFilter: ['erc20'] });
+
+// Only get native tokens (ETH, etc.)
+useGetAssets({ assetTypeFilter: ['native'] });
+```
+
+### assetFilter
+
+Type: `AssetFilter` (optional)
+
+Filter by specific assets per chain. Maps chain ID (hex) to an array of assets to filter by.
+
+```typescript
+type AssetFilter = Record<`0x${string}`, AssetFilterEntry[]>;
+
+type AssetFilterEntry = {
+  address: `0x${string}`;
+  type: 'native' | 'erc20';
+};
+
+// Example: Get only USDC on mainnet and Base
+useGetAssets({
+  assetFilter: {
+    '0x1': [{ address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', type: 'erc20' }],
+    '0x2105': [{ address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', type: 'erc20' }],
+  },
+});
+```
+
+### config
+
+Type: `Config` (optional)
+
+Wagmi config. If not provided, uses the config from `WagmiProvider`.
+
+### query
+
+Type: `UseQueryParameters` (optional)
+
+TanStack React Query options (excluding `gcTime` and `staleTime` which are managed internally).
+
+
+## Returns
+
+Returns a TanStack React Query result:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `data` | `WalletGetAssetsResponse` | Assets grouped by chain ID |
+| `isLoading` | `boolean` | Whether initial load is in progress |
+| `isFetching` | `boolean` | Whether any fetch is in progress |
+| `isSuccess` | `boolean` | Whether query succeeded |
+| `isError` | `boolean` | Whether query failed |
+| `error` | `Error` | Error if query failed |
+| `refetch` | `function` | Manually refetch assets |
+
+### data
+
+When successful, `data` is an object mapping chain IDs to asset arrays:
+
+```typescript
+type WalletGetAssetsResponse = {
+  [chainId: string]: Asset[];
+};
+
+interface Asset {
+  /** Token contract address, null for native tokens */
+  address: string | null;
+  /** Balance in hex format */
+  balance: string;
+  /** Asset metadata */
+  metadata: {
+    decimals: number;
+    name: string;
+    symbol: string;
+  } | null;
+  /** Asset type: 'native' or 'erc20' */
+  type: 'native' | 'erc20';
+}
+```
+
+
+## Behavior
+
+1. **Auto-enables** when wallet is connected
+2. **Listens for changes** via `assetsChanged` event
+3. **Auto-refetches** when assets change (e.g., after transactions)
+4. **Caches for 30 seconds** before becoming stale
+
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useAccount } from 'wagmi';
+import { useGetAssets } from '@jaw.id/wagmi';
+import { formatUnits } from 'viem';
+
+function Portfolio() {
+  const { isConnected } = useAccount();
+  const { data: assets, isLoading } = useGetAssets();
+
+  if (!isConnected) return <p>Connect wallet to view assets</p>;
+  if (isLoading) return <p>Loading assets...</p>;
+
+  return (
+    <div>
+      {Object.entries(assets || {}).map(([chainId, chainAssets]) => (
+        <div key={chainId}>
+          <h3>Chain {parseInt(chainId, 16)}</h3>
+          <ul>
+            {chainAssets.map((asset, i) => (
+              <li key={i}>
+                {asset.metadata?.symbol || 'Unknown'}: {' '}
+                {formatUnits(
+                  BigInt(asset.balance),
+                  asset.metadata?.decimals || 18
+                )}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Filter by Chain
+
+```tsx
+import { useGetAssets } from '@jaw.id/wagmi';
+
+function MainnetAssets() {
+  const { data: assets } = useGetAssets({
+    chainFilter: ['0x1'], // Mainnet only
+  });
+
+  // ...
+}
+```
+
+### Filter by Asset Type
+
+```tsx
+import { useGetAssets } from '@jaw.id/wagmi';
+
+function TokenBalances() {
+  // Only get ERC-20 tokens, exclude native ETH
+  const { data: assets } = useGetAssets({
+    assetTypeFilter: ['erc20'],
+  });
+
+  // ...
+}
+```
+
+### Manual Refresh
+
+```tsx
+import { useGetAssets } from '@jaw.id/wagmi';
+
+function RefreshablePortfolio() {
+  const { data, refetch, isFetching } = useGetAssets();
+
+  return (
+    <div>
+      <button onClick={() => refetch()} disabled={isFetching}>
+        {isFetching ? 'Refreshing...' : 'Refresh'}
+      </button>
+      {/* Render assets */}
+    </div>
+  );
+}
+```
+
+### Disable Auto-Fetch
+
+```tsx
+import { useGetAssets } from '@jaw.id/wagmi';
+
+function ManualAssets() {
+  const { data, refetch } = useGetAssets({
+    query: {
+      enabled: false, // Don't fetch automatically
+    },
+  });
+
+  return (
+    <div>
+      <button onClick={() => refetch()}>Load Assets</button>
+      {data && <p>{Object.keys(data).length} chains with assets</p>}
+    </div>
+  );
+}
+```
+
+
+## Related
+
+- [wallet_getAssets](/api-reference/wallet_getAssets) - RPC method reference
+- [usePermissions](/wagmi/usePermissions) - Query permissions

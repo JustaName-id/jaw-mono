@@ -1,0 +1,65 @@
+# account.getChain()
+
+Get the chain configuration.
+
+**Type:** `instance`
+
+
+## Signature
+
+```typescript
+getChain(): Chain
+```
+
+
+## Parameters
+
+None.
+
+
+## Returns
+
+`Chain` - The chain configuration object.
+
+### Chain
+
+```typescript
+interface Chain {
+  /** Chain ID */
+  id: number;
+  /** RPC URL for the chain */
+  rpcUrl: string;
+  /** Optional paymaster URL for gas sponsorship */
+  paymasterUrl?: string;
+}
+```
+
+
+## Behavior
+
+Returns a copy of the chain configuration used by this account instance. Modifying the returned object does not affect the account.
+
+
+## Example
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const account = await Account.get({
+  chainId: 1,
+  apiKey: 'your-api-key',
+});
+
+const chain = account.getChain();
+
+console.log('Chain ID:', chain.id);
+console.log('RPC URL:', chain.rpcUrl);
+console.log('Paymaster URL:', chain.paymasterUrl);
+```
+
+
+## Related
+
+- [account.chainId](/account#instance-properties) - Quick access to chain ID
+- [account.getSmartAccount()](/account/getSmartAccount) - Get underlying smart account
+- [AccountConfig](/account#accountconfig) - Configuration interface

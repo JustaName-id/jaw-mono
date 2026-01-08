@@ -1,0 +1,140 @@
+# Connector
+
+Create a JAW connector for your [Wagmi Config](https://wagmi.sh/core/api/createConfig).
+
+```typescript
+import { createConfig, http } from 'wagmi';
+import { mainnet } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+const config = createConfig({
+  chains: [mainnet],
+  connectors: [
+    jaw({ apiKey: 'YOUR_API_KEY' }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+  },
+});
+```
+
+
+## Signature
+
+```typescript
+function jaw(parameters: JawParameters): Connector
+```
+
+
+## Parameters
+
+### apiKey
+
+Type: `string` (required)
+
+Your JAW API key. Get one at [JAW Dashboard](https://dashboard.jaw.id/).
+
+### appName
+
+Type: `string`
+
+Display name for your application. Shown in the authentication UI.
+
+### appLogoUrl
+
+Type: `string | null`
+
+URL to your application's logo. Used in authentication UI.
+
+### defaultChainId
+
+Type: `number`
+
+Default chain ID to use on first connection.
+
+### ens
+
+Type: `string`
+
+ENS domain for issuing subnames (e.g., `'myapp.eth'`). When configured, users can receive a subname during account creation.
+
+### preference
+
+Type: `JawProviderPreference`
+
+Configuration for authentication behavior.
+
+```typescript
+interface JawProviderPreference {
+  /** Authentication mode (default: Mode.CrossPlatform) */
+  mode?: Mode.CrossPlatform | Mode.AppSpecific;
+  /** Whether to show testnet chains (default: false) */
+  showTestnets?: boolean;
+  /** UI handler for app-specific mode */
+  uiHandler?: UIHandler;
+}
+```
+
+### paymasters
+
+Type: `Record<number, { url: string; context?: Record<string, unknown> }>`
+
+Custom paymaster configuration by chain ID for gas sponsorship. See [paymasters](/configuration/paymasters) for details.
+
+
+## Returns
+
+`Connector` - A Wagmi-compatible connector instance.
+
+
+## Connector Properties
+
+The returned connector has these Wagmi-standard properties:
+
+| Property | Value |
+|----------|-------|
+| `id` | `'jaw'` |
+| `name` | `'JAW'` |
+| `type` | `'jaw'` |
+| `rdns` | `'keys.jaw.id'` |
+
+
+## Example
+
+```typescript
+import { createConfig, http } from 'wagmi';
+import { mainnet, base, baseSepolia } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+const config = createConfig({
+  chains: [mainnet, base, baseSepolia],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_API_KEY',
+      appName: 'My DApp',
+      appLogoUrl: 'https://example.com/logo.png',
+      defaultChainId: 8453, // Base
+      ens: 'myapp.eth',
+      preference: {
+        showTestnets: true,
+      },
+      paymasters: {
+        8453: { url: 'https://my-paymaster.com/base' },
+        84532: { url: 'https://my-paymaster.com/base-sepolia' },
+      },
+    }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+    [base.id]: http(),
+    [baseSepolia.id]: http(),
+  },
+});
+```
+
+
+## Related
+
+- [Configuration](/configuration) - Full configuration reference
+- [useConnect](/wagmi/useConnect) - Connect with capabilities
+- [preference](/configuration/preference) - Mode and UI handler options

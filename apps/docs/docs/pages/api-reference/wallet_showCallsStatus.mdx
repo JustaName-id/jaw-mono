@@ -1,0 +1,68 @@
+# wallet_showCallsStatus
+
+Show the status UI popup for a batch of calls sent via `wallet_sendCalls`.
+
+**Authentication Required:** Yes
+
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_showCallsStatus',
+  params: ['0x123abc...'],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `batchId` | `string` | Yes | Batch ID returned from wallet_sendCalls |
+
+### Example
+
+```json
+["0x123abc456def..."]
+```
+
+
+## Response
+
+Returns `void` (no return value).
+
+**Type:** `void`
+
+
+## Behavior
+
+- Opens popup showing transaction status UI
+- Displays pending, completed, or failed status
+- Shows individual call details in the batch
+- Auto-updates as status changes in real-time
+- User can close popup at any time
+
+
+## Errors
+
+| Code | Description |
+|------|-------------|
+| 4001 | User closed the popup |
+| 4100 | Unauthorized (not authenticated) |
+| -32602 | Invalid params (batch ID not found) |
+
+
+## Example
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_showCallsStatus',
+  params: [result.id],
+});
+```
+
+
+## Related Methods
+
+- [wallet_sendCalls](/api-reference/wallet_sendCalls) - Send atomic batch of calls
+- [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) - Get status programmatically

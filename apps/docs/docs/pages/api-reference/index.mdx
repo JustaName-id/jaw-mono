@@ -1,0 +1,179 @@
+# Provider - RPC Reference
+
+Complete reference for all RPC methods supported by the JAW SDK provider.
+
+## Installation
+
+:::code-group
+
+```bash [npm]
+npm install @jaw.id/core viem
+```
+
+```bash [pnpm]
+pnpm add @jaw.id/core viem
+```
+
+```bash [yarn]
+yarn add @jaw.id/core viem
+```
+
+```bash [bun]
+bun add @jaw.id/core viem
+```
+
+:::
+
+## Setup
+
+```typescript
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'YOUR_API_KEY',
+  appName: 'My App',
+});
+```
+
+## Making Requests
+
+All requests are made through the provider's `request` method:
+
+```typescript
+const result = await jaw.provider.request({
+  method: 'method_name',
+  params: [...],
+});
+```
+
+## Provider Events
+
+The provider emits events following the EIP-1193 specification:
+
+```typescript
+// Account changes
+jaw.provider.on('accountsChanged', (accounts: string[]) => {
+  console.log('Accounts changed:', accounts);
+});
+
+// Chain changes
+jaw.provider.on('chainChanged', (chainId: string) => {
+  console.log('Chain changed:', chainId);
+});
+
+// Connection
+jaw.provider.on('connect', (info: { chainId: string }) => {
+  console.log('Connected to chain:', info.chainId);
+});
+
+// Disconnection
+jaw.provider.on('disconnect', (error: ProviderRpcError) => {
+  console.log('Disconnected:', error);
+});
+```
+
+
+## Account Methods
+
+Methods for managing user accounts and authentication.
+
+| Method | Description | Auth Required |
+|--------|-------------|---------------|
+| [eth_requestAccounts](/api-reference/eth_requestAccounts) | Request user authentication and account access | No |
+| [eth_accounts](/api-reference/eth_accounts) | Get currently connected accounts | No |
+
+
+## Chain Methods
+
+Methods for querying and switching blockchain networks.
+
+| Method | Description | Auth Required |
+|--------|-------------|---------------|
+| [eth_chainId](/api-reference/eth_chainId) | Get current chain ID (hex) | No |
+| [wallet_switchEthereumChain](/api-reference/wallet_switchEthereumChain) | Switch to a different chain | Yes |
+
+
+## Transaction Methods
+
+Methods for sending transactions and batch operations.
+
+| Method | Description | Auth Required |
+|--------|-------------|---------------|
+| [eth_sendTransaction](/api-reference/eth_sendTransaction) | Broadcast a transaction to the network | Yes |
+| [wallet_sendCalls](/api-reference/wallet_sendCalls) | Broadcast bundle of calls to the network | Yes |
+| [wallet_showCallsStatus](/api-reference/wallet_showCallsStatus) | Show batch transaction status UI | Yes |
+| [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) | Get batch transaction status | No |
+
+
+## Signing Methods
+
+Methods for signing messages and typed data.
+
+| Method | Description | Auth Required |
+|--------|-------------|---------------|
+| [personal_sign](/api-reference/personal_sign) | Sign a message with EIP-191 | Yes |
+| [eth_signTypedData_v4](/api-reference/eth_signTypedData_v4) | Sign structured typed data (EIP-712) | Yes |
+| [wallet_sign](/api-reference/wallet_sign) | Unified signing method supporting multiple message formats | No* |
+
+*Can use ephemeral signer if not authenticated
+
+
+## Wallet Methods
+
+Methods for wallet connection and lifecycle management.
+
+| Method | Description | Auth Required |
+|--------|-------------|---------------|
+| [wallet_connect](/api-reference/wallet_connect) | Connect with advanced capabilities (SIWE, subnames) | No |
+| [wallet_disconnect](/api-reference/wallet_disconnect) | Disconnect current session | No |
+
+
+## Capability Methods
+
+Methods for querying wallet capabilities.
+
+| Method | Description | Auth Required |
+|--------|-------------|---------------|
+| [wallet_getCapabilities](/api-reference/wallet_getCapabilities) | Get wallet capabilities per chain (EIP-5792) | No |
+
+
+## Permission Methods
+
+Methods for managing granular permissions for delegated transactions.
+
+| Method | Description | Auth Required |
+|--------|-------------|---------------|
+| [wallet_grantPermissions](/api-reference/wallet_grantPermissions) | Grant call and spend permissions to a spender | Yes |
+| [wallet_revokePermissions](/api-reference/wallet_revokePermissions) | Revoke previously granted permissions | Yes |
+| [wallet_getPermissions](/api-reference/wallet_getPermissions) | Get all permissions for an account | No* |
+
+*Requires address parameter if not authenticated
+
+
+## Asset Methods
+
+Methods for querying token balances.
+
+| Method | Description | Auth Required |
+|--------|-------------|---------------|
+| [wallet_getAssets](/api-reference/wallet_getAssets) | Get token balances across chains (EIP-7811) | No* |
+
+*Requires address parameter
+
+
+## Error Codes
+
+JAW SDK follows EIP-1193 error codes:
+
+| Code | Message | Description |
+|------|---------|-------------|
+| 4001 | User Rejected Request | User declined in popup |
+| 4100 | Unauthorized | Not authenticated |
+| 4200 | Unsupported Method | Method not supported |
+| 4900 | Disconnected | Provider disconnected |
+| 4901 | Chain Disconnected | Chain not available |
+| -32700 | Parse Error | Invalid JSON |
+| -32600 | Invalid Request | Invalid request object |
+| -32601 | Method Not Found | Method doesn't exist |
+| -32602 | Invalid Params | Invalid parameters |
+| -32603 | Internal Error | Internal JSON-RPC error |

@@ -1,0 +1,120 @@
+# wallet_connect
+
+Requests to connect account(s) with optional capabilities.
+
+**Authentication Required:** No (triggers authentication)
+
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    capabilities: {
+      signInWithEthereum: {
+        nonce: 'abc123xyz789',
+        chainId: '0x1',
+        domain: 'my-dapp.com',
+        uri: 'https://my-dapp.com',
+        statement: 'Sign in to My DApp with your JAW account'
+      },
+      subnameTextRecords: [
+        { key: 'avatar', value: 'https://my-dapp.com/avatars/1.png' },
+        { key: 'description', value: 'Premium member' }
+      ]
+    }
+  }],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `capabilities` | `object` | No | Requested capabilities |
+
+### Capabilities
+
+#### signInWithEthereum
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `nonce` | `string` | Yes | Random nonce for SIWE |
+| `chainId` | `string` | Yes | Chain ID (hex format) |
+| `domain` | `string` | No | Domain requesting signature |
+| `uri` | `string` | No | URI of the application |
+| `statement` | `string` | No | Human-readable statement |
+| `version` | `string` | No | SIWE version (default: "1") |
+| `issuedAt` | `string` | No | ISO 8601 timestamp |
+| `expirationTime` | `string` | No | ISO 8601 expiration |
+
+#### subnameTextRecords
+
+Array of key-value pairs to attach as ENS text records to the user's subname on account creation.
+
+**Note:** This capability is only used if an ENS domain is configured in the SDK preferences (via the `ens` option). If no ENS domain is configured, these records are disregarded.
+
+| Name | Type | Description |
+|------|------|-------------|
+| `key` | `string` | Text record key (e.g., "avatar", "url") |
+| `value` | `string` | Text record value |
+
+
+## Response
+
+Returns connection result with accounts and capabilities.
+
+**Type:** `object`
+
+### Example
+
+```json
+{
+  "accounts": [{
+    "address": "0x1234567890123456789012345678901234567890",
+    "capabilities": {
+      "signInWithEthereum": {
+        "message": "my-dapp.com wants you to sign in with your Ethereum account:\n0x1234...",
+        "signature": "0xabcdef..."
+      }
+    }
+  }]
+}
+```
+
+
+## Behavior
+
+- Opens authentication popup
+- User creates account or signs in with existing account
+- If `signInWithEthereum` capability is requested:
+  - Generates and signs a SIWE message with the provided parameters
+  - Returns the signed message in the response capabilities
+- If `subnameTextRecords` capability is provided and `ens` is configured in SDK preferences:
+  - Attaches the provided text records to the subname
+- Returns accounts with capability responses
+
+
+## Errors
+
+| Code | Description |
+|------|-------------|
+| 4001 | User rejected the request |
+| 4100 | Unauthorized (authentication failed) |
+| -32602 | Invalid params |
+
+
+## Example
+
+```typescript
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{}],
+});
+```
+
+
+## Related Methods
+
+- [eth_requestAccounts](/api-reference/eth_requestAccounts) - Simple authentication without capabilities

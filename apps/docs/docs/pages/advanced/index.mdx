@@ -1,0 +1,24 @@
+# Advanced
+
+Advanced topics for customizing and extending the JAW SDK.
+
+
+## Topics
+
+### [Custom UI Handler](/advanced/custom-ui-handler)
+
+Build your own UI for app-specific mode by implementing the `UIHandler` interface. This is useful for non-React applications or when you need complete control over the user experience.
+
+### [Custom Passkey Server](/advanced/passkey-server)
+
+Run your own passkey metadata server for managing passkey credentials. This gives you full control over passkey metadata storage and management.
+
+
+## When to Use Advanced Features
+
+Most applications will work well with the default SDK configuration and the provided `ReactUIHandler` from `@jaw/ui`. Consider the advanced topics when:
+
+- **Custom UI Handler**: You're not using React, or you need pixel-perfect control over all approval dialogs
+- **Custom Passkey Server**: You want to manage passkey metadata on your own infrastructure
+
+For standard usage, see the [Configuration](/configuration) documentation.

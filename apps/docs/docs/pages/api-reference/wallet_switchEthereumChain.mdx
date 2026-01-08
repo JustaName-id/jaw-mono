@@ -1,0 +1,91 @@
+# wallet_switchEthereumChain
+
+Switch to a different chain.
+
+**Authentication Required:** Yes
+
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_switchEthereumChain',
+  params: [{ chainId: '0x89' }],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `chainId` | `0x${string}` | Yes | Target chain ID in hexadecimal format |
+
+### Example
+
+```json
+[{ "chainId": "0x89" }]
+```
+
+
+## Response
+
+Returns `null` on success.
+
+**Type:** `null`
+
+
+## Behavior
+
+- Switches to the specified chain if supported
+- Emits `chainChanged` event with the new chain ID
+- All subsequent transactions use the new chain
+- Only supported chains can be switched to
+
+
+## Errors
+
+| Code | Description |
+|------|-------------|
+| 4001 | User rejected the request |
+| 4100 | Unauthorized (not authenticated) |
+| 4902 | Chain not supported |
+
+
+## Example
+
+### Basic Chain Switch
+
+```typescript
+try {
+  await jaw.provider.request({
+    method: 'wallet_switchEthereumChain',
+    params: [{ chainId: '0x89' }], // Polygon
+  });
+
+  console.log('Switched to Polygon');
+} catch (error) {
+  if (error.code === 4902) {
+    console.error('Polygon is not supported');
+  }
+}
+```
+
+### Switch with Event Listener
+
+```typescript
+// Listen for chain changes
+jaw.provider.on('chainChanged', (chainId) => {
+  console.log('Chain changed to:', parseInt(chainId, 16));
+});
+
+// Switch chain
+await jaw.provider.request({
+  method: 'wallet_switchEthereumChain',
+  params: [{ chainId: '0x2105' }], // Base
+});
+```
+
+
+## Related Methods
+
+- [eth_chainId](/api-reference/eth_chainId) - Get current chain ID

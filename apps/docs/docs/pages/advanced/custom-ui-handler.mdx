@@ -1,0 +1,504 @@
+# Custom UI Handler
+
+Build your own UI for app-specific mode by implementing the `UIHandler` interface. This is useful for non-React applications or when you need complete control over the user experience.
+
+
+## Overview
+
+When using `Mode.AppSpecific`, the SDK needs a way to display approval dialogs for wallet operations. The `UIHandler` interface defines how your application handles these UI requests.
+
+```typescript
+import { JAW, Mode } from '@jaw.id/core';
+import { MyCustomUIHandler } from './my-ui-handler';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: new MyCustomUIHandler(),
+  },
+});
+```
+
+
+## UIHandler Interface
+
+```typescript
+import {
+  UIHandler,
+  UIRequest,
+  UIResponse,
+  UIHandlerConfig,
+} from '@jaw.id/core';
+
+class MyCustomUIHandler implements UIHandler {
+  private config?: UIHandlerConfig;
+
+  /**
+   * Initialize the handler with SDK configuration.
+   * Called by the SDK before any requests are made.
+   */
+  init(config: UIHandlerConfig): void {
+    this.config = config;
+    // Use config.apiKey, config.defaultChainId, config.paymasters, etc.
+  }
+
+  /**
+   * Request user approval for an action.
+   * This is the main method you must implement.
+   */
+  async request<T>(request: UIRequest): Promise<UIResponse<T>> {
+    // Display UI based on request.type
+    // Wait for user interaction
+    // Return the response
+  }
+
+  /**
+   * Optional: Check if this handler supports a request type.
+   */
+  canHandle(request: UIRequest): boolean {
+    return true;
+  }
+
+  /**
+   * Optional: Clean up when handler is no longer needed.
+   */
+  async cleanup(): Promise<void> {
+    // Close any open dialogs, release resources
+  }
+}
+```
+
+
+## UIHandlerConfig
+
+The SDK passes configuration to your handler via the `init()` method:
+
+```typescript
+interface UIHandlerConfig {
+  /** JAW API key for RPC URL resolution */
+  apiKey?: string;
+  /** Default chain ID */
+  defaultChainId?: number;
+  /** Paymaster configuration per chain for gasless transactions */
+  paymasters?: Record<number, { url: string; context?: Record<string, unknown> }>;
+  /** App name shown in dialogs */
+  appName?: string;
+  /** App logo URL */
+  appLogoUrl?: string | null;
+}
+```
+
+
+## Request Types
+
+Your handler will receive different request types based on the wallet operation:
+
+### wallet_connect
+
+Connection request when user wants to connect their wallet.
+
+```typescript
+interface ConnectUIRequest {
+  id: string;
+  type: 'wallet_connect';
+  timestamp: number;
+  correlationId?: string;
+  data: {
+    appName: string;
+    appLogoUrl: string | null;
+    origin: string;
+    chainId: number;
+    capabilities?: Record<string, unknown>;
+  };
+}
+```
+
+**Expected response data:** `WalletConnectResponse` with `accounts` array.
+
+### personal_sign
+
+EIP-191 personal message signing.
+
+```typescript
+interface SignatureUIRequest {
+  id: string;
+  type: 'personal_sign';
+  timestamp: number;
+  correlationId?: string;
+  data: {
+    message: string;  // Hex-encoded message
+    address: Address;
+  };
+}
+```
+
+**Expected response data:** Signature string (hex).
+
+### eth_signTypedData_v4
+
+EIP-712 typed data signing.
+
+```typescript
+interface TypedDataUIRequest {
+  id: string;
+  type: 'eth_signTypedData_v4';
+  timestamp: number;
+  correlationId?: string;
+  data: {
+    typedData: string;  // JSON string
+    address: Address;
+  };
+}
+```
+
+**Expected response data:** Signature string (hex).
+
+### wallet_sendCalls
+
+Transaction batch request (also used for `eth_sendTransaction`).
+
+```typescript
+interface TransactionUIRequest {
+  id: string;
+  type: 'wallet_sendCalls';
+  timestamp: number;
+  correlationId?: string;
+  data: {
+    version: '1.0';
+    from: Address;
+    calls: Array<{
+      to: string;
+      value?: string;
+      data?: string;
+    }>;
+    chainId: number;
+    atomicRequired?: boolean;
+  };
+}
+```
+
+**Expected response data:** `{ id: string; chainId: number }` - the transaction bundle ID.
+
+### wallet_grantPermissions
+
+Permission grant request for session keys.
+
+```typescript
+interface PermissionUIRequest {
+  id: string;
+  type: 'wallet_grantPermissions';
+  timestamp: number;
+  correlationId?: string;
+  data: {
+    address: Address;
+    chainId: number | string;
+    expiry: number;
+    spender: Address;
+    permissions: {
+      spends?: Array<{
+        limit: string;
+        period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
+        token: Address;
+      }>;
+      calls?: Array<{
+        target: Address;
+        selector: `0x${string}`;
+        functionSignature?: string;
+      }>;
+    };
+  };
+}
+```
+
+**Expected response data:** Permission grant response object.
+
+### wallet_revokePermissions
+
+Permission revocation request.
+
+```typescript
+interface RevokePermissionUIRequest {
+  id: string;
+  type: 'wallet_revokePermissions';
+  timestamp: number;
+  correlationId?: string;
+  data: {
+    permissionId: string;
+    address: Address;
+    chainId?: number;
+  };
+}
+```
+
+**Expected response data:** Revocation confirmation.
+
+### wallet_sign
+
+Unified signing request (type 0x45 for personal sign, 0x01 for EIP-712).
+
+```typescript
+interface WalletSignUIRequest {
+  id: string;
+  type: 'wallet_sign';
+  timestamp: number;
+  correlationId?: string;
+  data: {
+    address: Address;
+    chainId?: number;
+    request: {
+      type: '0x45' | '0x01';
+      data: string;
+    };
+  };
+}
+```
+
+**Expected response data:** Signature string (hex).
+
+
+## UIResponse Structure
+
+Your handler must return a `UIResponse` object:
+
+```typescript
+interface UIResponse<T> {
+  id: string;        // Must match request.id
+  approved: boolean; // true if user approved, false if rejected
+  data?: T;          // Result data when approved
+  error?: UIError;   // Error when rejected
+}
+```
+
+### Approval Response
+
+```typescript
+return {
+  id: request.id,
+  approved: true,
+  data: resultData,  // Type depends on request type
+};
+```
+
+### Rejection Response
+
+```typescript
+import { UIError } from '@jaw.id/core';
+
+return {
+  id: request.id,
+  approved: false,
+  error: UIError.userRejected('User declined the request'),
+};
+```
+
+
+## UIError Class
+
+Use `UIError` for standardized error handling:
+
+```typescript
+import { UIError, UIErrorCode } from '@jaw.id/core';
+
+// User rejected the request
+UIError.userRejected('User declined');
+
+// Request timed out
+UIError.timeout('Request timed out after 30s');
+
+// Unsupported request type
+UIError.unsupportedRequest('wallet_unknown');
+
+// Handler not available
+UIError.handlerNotAvailable();
+```
+
+Error codes:
+- `UIErrorCode.USER_REJECTED` (4001)
+- `UIErrorCode.TIMEOUT` (4002)
+- `UIErrorCode.UNSUPPORTED_REQUEST` (4003)
+- `UIErrorCode.HANDLER_NOT_AVAILABLE` (4004)
+
+
+## Complete Example
+
+Here's a complete example of a custom UI handler using vanilla JavaScript with DOM manipulation:
+
+```typescript
+import {
+  UIHandler,
+  UIRequest,
+  UIResponse,
+  UIHandlerConfig,
+  UIError,
+  ConnectUIRequest,
+  SignatureUIRequest,
+  TypedDataUIRequest,
+  TransactionUIRequest,
+} from '@jaw.id/core';
+
+export class VanillaUIHandler implements UIHandler {
+  private config?: UIHandlerConfig;
+  private modalContainer: HTMLElement | null = null;
+
+  init(config: UIHandlerConfig): void {
+    this.config = config;
+    // Create modal container
+    this.modalContainer = document.createElement('div');
+    this.modalContainer.id = 'jaw-modal-container';
+    document.body.appendChild(this.modalContainer);
+  }
+
+  async request<T>(request: UIRequest): Promise<UIResponse<T>> {
+    switch (request.type) {
+      case 'wallet_connect':
+        return this.handleConnect(request as ConnectUIRequest) as Promise<UIResponse<T>>;
+      case 'personal_sign':
+        return this.handleSign(request as SignatureUIRequest) as Promise<UIResponse<T>>;
+      case 'eth_signTypedData_v4':
+        return this.handleTypedData(request as TypedDataUIRequest) as Promise<UIResponse<T>>;
+      case 'wallet_sendCalls':
+        return this.handleTransaction(request as TransactionUIRequest) as Promise<UIResponse<T>>;
+      default:
+        throw UIError.unsupportedRequest(request.type);
+    }
+  }
+
+  private async handleConnect(request: ConnectUIRequest): Promise<UIResponse<unknown>> {
+    return new Promise((resolve) => {
+      const modal = this.createModal(`
+        <h2>Connect to ${request.data.appName}</h2>
+        <p>Origin: ${request.data.origin}</p>
+        <p>Chain ID: ${request.data.chainId}</p>
+        <div class="buttons">
+          <button id="approve">Connect</button>
+          <button id="reject">Cancel</button>
+        </div>
+      `);
+
+      modal.querySelector('#approve')?.addEventListener('click', async () => {
+        this.closeModal();
+        // Here you would trigger passkey authentication
+        // and return the account data
+        resolve({
+          id: request.id,
+          approved: true,
+          data: {
+            accounts: [{ address: '0x...' }],
+          },
+        });
+      });
+
+      modal.querySelector('#reject')?.addEventListener('click', () => {
+        this.closeModal();
+        resolve({
+          id: request.id,
+          approved: false,
+          error: UIError.userRejected(),
+        });
+      });
+    });
+  }
+
+  private async handleSign(request: SignatureUIRequest): Promise<UIResponse<string>> {
+    return new Promise((resolve) => {
+      // Decode hex message for display
+      const message = Buffer.from(request.data.message.slice(2), 'hex').toString();
+
+      const modal = this.createModal(`
+        <h2>Sign Message</h2>
+        <p>Address: ${request.data.address}</p>
+        <pre>${message}</pre>
+        <div class="buttons">
+          <button id="approve">Sign</button>
+          <button id="reject">Cancel</button>
+        </div>
+      `);
+
+      modal.querySelector('#approve')?.addEventListener('click', async () => {
+        this.closeModal();
+        // Here you would sign the message with the user's passkey
+        const signature = '0x...'; // Your signing logic
+        resolve({
+          id: request.id,
+          approved: true,
+          data: signature,
+        });
+      });
+
+      modal.querySelector('#reject')?.addEventListener('click', () => {
+        this.closeModal();
+        resolve({
+          id: request.id,
+          approved: false,
+          error: UIError.userRejected(),
+        });
+      });
+    });
+  }
+
+  private async handleTypedData(request: TypedDataUIRequest): Promise<UIResponse<string>> {
+    // Similar to handleSign but parse and display typed data
+    // ...
+  }
+
+  private async handleTransaction(request: TransactionUIRequest): Promise<UIResponse<{ id: string; chainId: number }>> {
+    // Display transaction details and get approval
+    // Execute transaction and return bundle ID
+    // ...
+  }
+
+  private createModal(content: string): HTMLElement {
+    if (!this.modalContainer) throw new Error('Handler not initialized');
+
+    const modal = document.createElement('div');
+    modal.className = 'jaw-modal';
+    modal.innerHTML = `<div class="jaw-modal-content">${content}</div>`;
+    this.modalContainer.appendChild(modal);
+    return modal;
+  }
+
+  private closeModal(): void {
+    if (this.modalContainer) {
+      this.modalContainer.innerHTML = '';
+    }
+  }
+
+  canHandle(request: UIRequest): boolean {
+    return ['wallet_connect', 'personal_sign', 'eth_signTypedData_v4', 'wallet_sendCalls'].includes(request.type);
+  }
+
+  async cleanup(): Promise<void> {
+    this.closeModal();
+    this.modalContainer?.remove();
+    this.modalContainer = null;
+  }
+}
+```
+
+
+## Best Practices
+
+1. **Always match request.id in response** - The SDK uses this to correlate requests and responses.
+
+2. **Handle all request types you support** - Use `canHandle()` to indicate which types your handler supports.
+
+3. **Provide clear user feedback** - Display relevant information about what the user is approving.
+
+4. **Implement cleanup** - Release resources and close dialogs when the handler is cleaned up.
+
+5. **Use UIError for rejections** - This ensures consistent error handling across the SDK.
+
+6. **Consider mobile responsiveness** - Your UI should work well on all device sizes.
+
+7. **Security considerations**:
+   - Show full transaction details before approval
+   - Allow users to review typed data structures
+   - Clearly indicate when gas will be sponsored vs user-paid
+
+
+## Related
+
+- [preference.mode](/configuration/preference#mode) - Authentication mode configuration
+- [preference.uiHandler](/configuration/preference#uihandler) - UIHandler option reference
+- [Provider - RPC Reference](/api-reference) - All supported RPC methods
