@@ -6,7 +6,7 @@ import {
   AuthState,
 } from './types.js';
 import type { JawProviderPreference } from '../provider/index.js';
-import { registerPasskeyInBackend, lookupPasskeyFromBackend, WebAuthnAuthenticationResult , authenticateWithWebAuthnUtils, createPasskeyUtils, ImportWebAuthnAuthenticationResult, importPasskeyUtils, type PasskeyCreateFn, type PasskeyGetFn} from './utils.js';
+import { registerPasskeyInBackend, lookupPasskeyFromBackend, WebAuthnAuthenticationResult , authenticateWithWebAuthnUtils, createPasskeyUtils, ImportWebAuthnAuthenticationResult, importPasskeyUtils, type PasskeyCreateFn, type PasskeyGetFn, type NativePasskeyCreateFn} from './utils.js';
 import {JAW_BASE_URL} from "../constants.js";
 import type { WebAuthnAccount } from "viem/account-abstraction";
 
@@ -138,6 +138,8 @@ export class PasskeyManager {
    * @param rpId - The relying party identifier (e.g., domain name)
    * @param rpName - The relying party name
    * @param createFn - Optional custom create function for React Native passkey adapters
+   * @param nativeCreateFn - Optional native create function that bypasses viem's createWebAuthnCredential (for React Native)
+   * @param getFn - Optional custom get function for React Native passkey signing
    * @returns WebAuthn passkey creation result with credential and challenge
    * @throws {PasskeyRegistrationError} If passkey creation fails
    */
@@ -145,9 +147,11 @@ export class PasskeyManager {
     username: string,
     rpId: string,
     rpName: string,
-    createFn?: PasskeyCreateFn
+    createFn?: PasskeyCreateFn,
+    nativeCreateFn?: NativePasskeyCreateFn,
+    getFn?: PasskeyGetFn
   ): Promise<{ credentialId: string; publicKey: `0x${string}`; webAuthnAccount: WebAuthnAccount; passkeyAccount: PasskeyAccount }> {
-    const { credentialId, publicKey, webAuthnAccount } = await createPasskeyUtils(username, rpId, rpName, createFn);
+    const { credentialId, publicKey, webAuthnAccount } = await createPasskeyUtils(username, rpId, rpName, createFn, nativeCreateFn, getFn);
     const passkeyAccount: PasskeyAccount = {
       username,
       credentialId,
@@ -185,11 +189,12 @@ export class PasskeyManager {
   /**
    * Import a passkey account from the backend
    * @param getFn - Optional custom get function for React Native passkey adapters
+   * @param rpId - Optional relying party ID (required for React Native to find passkeys)
    * @returns ImportWebAuthnAuthenticationResult
    * @throws {PasskeyLookupError} If backend lookup fails or passkey not found
    */
-  async importPasskeyAccount(getFn?: PasskeyGetFn): Promise<ImportWebAuthnAuthenticationResult> {
-    return importPasskeyUtils(getFn);
+  async importPasskeyAccount(getFn?: PasskeyGetFn, rpId?: string): Promise<ImportWebAuthnAuthenticationResult> {
+    return importPasskeyUtils(getFn, rpId);
   }
 
   /**
@@ -267,9 +272,10 @@ export class PasskeyManager {
     this.storeAuthState(address, credentialId);
 
     // Create account metadata (marked as imported) using backend data
+    // Use the passed credentialId (from WebAuthn) to ensure consistency with lookups
     const newAccount: PasskeyAccount = {
       username: passkeyData.displayName.trim(),
-      credentialId: passkeyData.credentialId,
+      credentialId: credentialId, // Use WebAuthn's credential ID, not backend's
       publicKey: passkeyData.publicKey as `0x${string}`,
       creationDate: new Date().toISOString(),
       isImported: true,
