@@ -15,8 +15,9 @@
     "ios": {
       "supportsTablet": true,
       "bundleIdentifier": "id.jaw.demo.native",
+      "_comment_associatedDomains": "TODO: Change to webcredentials:keys.jaw.id for production",
       "associatedDomains": [
-        "webcredentials:keys.jaw.id"
+        "webcredentials:feabbda34c5e.ngrok-free.app"
       ]
     },
     "android": {

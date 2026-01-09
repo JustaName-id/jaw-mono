@@ -9,13 +9,18 @@ import {
   CardContent,
   Input,
   Label,
-  createCredentialAdapter,
+  createNativePasskeyCredential,
   getCredentialAdapter,
   JAWNativeProvider,
   useJAWNative,
+  NativePasskeyUnavailableError,
+  SignatureModal,
+  TransactionModal,
+  type TransactionData,
 } from '@jaw/ui-native';
 import { WalletIcon } from '@jaw/ui-native';
-import { Account, type PasskeyAccount } from '@jaw.id/core';
+import { Account, type PasskeyAccount, type TransactionCall } from '@jaw.id/core';
+import type { Address } from 'viem';
 
 // Configuration from environment variables
 const CHAIN_ID = parseInt(process.env.EXPO_PUBLIC_DEFAULT_CHAIN_ID || '1', 10);
@@ -285,6 +290,22 @@ function AppSpecificContent() {
   const [connectedUsername, setConnectedUsername] = useState<string | null>(null);
   const [storedAccounts, setStoredAccounts] = useState<StoredAccount[]>([]);
 
+  // Track Account instance for operations
+  const [account, setAccount] = useState<Account | null>(null);
+
+  // Sign Message state
+  const [messageToSign, setMessageToSign] = useState('Hello from JAW Native!');
+  const [signature, setSignature] = useState<string | null>(null);
+  const [showSignModal, setShowSignModal] = useState(false);
+  const [isSigning, setIsSigning] = useState(false);
+
+  // Send Transaction state
+  const [txHash, setTxHash] = useState<string | null>(null);
+  const [showTxModal, setShowTxModal] = useState(false);
+  const [isSending, setIsSending] = useState(false);
+  const [gasFee, setGasFee] = useState<string>('0');
+  const [gasFeeLoading, setGasFeeLoading] = useState(false);
+
   useEffect(() => {
     loadStoredAccounts();
   }, []);
@@ -325,10 +346,11 @@ function AppSpecificContent() {
     try {
       const newAccount = await Account.create(
         { chainId: CHAIN_ID, apiKey: API_KEY },
-        { username, rpId: RP_ID, rpName: RP_NAME, createFn: createCredentialAdapter }
+        { username, rpId: RP_ID, rpName: RP_NAME, nativeCreateFn: createNativePasskeyCredential, getFn: getCredentialAdapter }
       );
 
       const address = await newAccount.getAddress();
+      setAccount(newAccount);
       setConnectedAddress(address);
       setConnectedUsername(username);
       loadStoredAccounts();
@@ -338,6 +360,15 @@ function AppSpecificContent() {
       console.error('Failed to create account:', error);
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
+          return;
+        }
+        // Show helpful message for Expo Go users
+        if (error.name === 'NativePasskeyUnavailableError' || error instanceof NativePasskeyUnavailableError) {
+          Alert.alert(
+            'Development Build Required',
+            'Native passkeys are not available in Expo Go.\n\nPlease use Cross-Platform mode, or create a development build:\n\nnpx expo prebuild\nnpx expo run:ios',
+            [{ text: 'OK' }]
+          );
           return;
         }
         Alert.alert('Error', error.message);
@@ -355,11 +386,12 @@ function AppSpecificContent() {
     try {
       const importedAccount = await Account.import(
         { chainId: CHAIN_ID, apiKey: API_KEY },
-        { getFn: getCredentialAdapter }
+        { getFn: getCredentialAdapter, rpId: RP_ID }
       );
 
       const address = await importedAccount.getAddress();
       const metadata = importedAccount.getMetadata();
+      setAccount(importedAccount);
       setConnectedAddress(address);
       setConnectedUsername(metadata?.username || 'Imported Account');
       loadStoredAccounts();
@@ -371,6 +403,15 @@ function AppSpecificContent() {
         if (error.name === 'NotAllowedError') {
           return;
         }
+        // Show helpful message for Expo Go users
+        if (error.name === 'NativePasskeyUnavailableError' || error instanceof NativePasskeyUnavailableError) {
+          Alert.alert(
+            'Development Build Required',
+            'Native passkeys are not available in Expo Go.\n\nPlease use Cross-Platform mode, or create a development build:\n\nnpx expo prebuild\nnpx expo run:ios',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
         Alert.alert('Error', error.message);
       } else {
         Alert.alert('Error', 'Failed to import account');
@@ -380,25 +421,35 @@ function AppSpecificContent() {
     }
   };
 
-  const handleSelectAccount = async (account: StoredAccount) => {
+  const handleSelectAccount = async (storedAccount: StoredAccount) => {
     setIsLoading(true);
 
     try {
       const loadedAccount = await Account.get(
         { chainId: CHAIN_ID, apiKey: API_KEY },
-        account.credentialId,
+        storedAccount.credentialId,
         { getFn: getCredentialAdapter }
       );
 
       const address = await loadedAccount.getAddress();
+      setAccount(loadedAccount);
       setConnectedAddress(address);
-      setConnectedUsername(account.username);
+      setConnectedUsername(storedAccount.username);
 
-      Alert.alert('Connected', `Authenticated as ${account.username}`);
+      Alert.alert('Connected', `Authenticated as ${storedAccount.username}`);
     } catch (error) {
       console.error('Failed to authenticate:', error);
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
+          return;
+        }
+        // Show helpful message for Expo Go users
+        if (error.name === 'NativePasskeyUnavailableError' || error instanceof NativePasskeyUnavailableError) {
+          Alert.alert(
+            'Development Build Required',
+            'Native passkeys are not available in Expo Go.\n\nPlease use Cross-Platform mode, or create a development build:\n\nnpx expo prebuild\nnpx expo run:ios',
+            [{ text: 'OK' }]
+          );
           return;
         }
         Alert.alert('Error', error.message);
@@ -411,44 +462,129 @@ function AppSpecificContent() {
   };
 
   const handleDisconnect = () => {
+    setAccount(null);
     setConnectedAddress(null);
     setConnectedUsername(null);
     setUsername('');
+    setSignature(null);
+    setTxHash(null);
+  };
+
+  // Sign Message handlers
+  const handleOpenSignModal = () => {
+    setShowSignModal(true);
+  };
+
+  const handleSignMessage = async () => {
+    if (!account || !messageToSign) return;
+
+    setIsSigning(true);
+    try {
+      const sig = await account.signMessage(messageToSign);
+      setSignature(sig);
+      setShowSignModal(false);
+      Alert.alert('Success', 'Message signed successfully!');
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'NotAllowedError') {
+        Alert.alert('Error', error.message);
+      }
+    } finally {
+      setIsSigning(false);
+    }
+  };
+
+  const handleCancelSign = () => {
+    setShowSignModal(false);
+  };
+
+  // Send Transaction handlers
+  const testTransaction: TransactionCall = {
+    to: (connectedAddress || '0x0000000000000000000000000000000000000000') as Address,
+    value: '0x0',
+    data: '0x',
+  };
+
+  // For modal display (TransactionData format)
+  const testTransactionForModal: TransactionData = {
+    to: connectedAddress || '0x0000000000000000000000000000000000000000',
+    value: '0',
+    data: '0x',
+  };
+
+  const handleOpenTxModal = async () => {
+    if (!account) return;
+
+    setShowTxModal(true);
+    setGasFeeLoading(true);
+
+    try {
+      const gasCost = await account.calculateGasCost([testTransaction]);
+      setGasFee(gasCost);
+    } catch (error) {
+      console.error('Failed to calculate gas:', error);
+      setGasFee('0');
+    } finally {
+      setGasFeeLoading(false);
+    }
+  };
+
+  const handleSendTransaction = async () => {
+    if (!account) return;
+
+    setIsSending(true);
+    try {
+      const hash = await account.sendTransaction([testTransaction]);
+      setTxHash(hash);
+      setShowTxModal(false);
+      Alert.alert('Success', `Transaction sent!\n\nHash: ${hash.slice(0, 20)}...`);
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'NotAllowedError') {
+        Alert.alert('Error', error.message);
+      }
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  const handleCancelTx = () => {
+    setShowTxModal(false);
   };
 
   return (
-    <Card>
-      <CardHeader>
-        <View className="flex-row items-center gap-2">
-          <WalletIcon width={24} height={24} />
-          <CardTitle>Connect Wallet</CardTitle>
-        </View>
-        <CardDescription>
-          Create or import using native passkeys
-        </CardDescription>
-      </CardHeader>
-      <CardContent className="gap-4">
-        {connectedAddress ? (
-          <View className="gap-4">
-            <View className="p-4 bg-secondary rounded-lg">
-              <Text className="text-sm text-muted-foreground mb-1">
-                Connected as
-              </Text>
-              <Text className="text-foreground font-semibold text-lg mb-2">
-                {connectedUsername}
-              </Text>
-              <Text className="text-sm text-muted-foreground mb-1">
-                Address
-              </Text>
-              <Text className="text-foreground font-mono text-sm">
-                {connectedAddress}
-              </Text>
-            </View>
-            <Button variant="outline" onPress={handleDisconnect}>
-              Disconnect
-            </Button>
+    <View className="gap-4">
+      {/* Connect Wallet Card */}
+      <Card>
+        <CardHeader>
+          <View className="flex-row items-center gap-2">
+            <WalletIcon width={24} height={24} />
+            <CardTitle>Connect Wallet</CardTitle>
           </View>
-        ) : (
+          <CardDescription>
+            Create or import using native passkeys
+          </CardDescription>
+        </CardHeader>
+        <CardContent className="gap-4">
+          {connectedAddress ? (
+            <View className="gap-4">
+              <View className="p-4 bg-secondary rounded-lg">
+                <Text className="text-sm text-muted-foreground mb-1">
+                  Connected as
+                </Text>
+                <Text className="text-foreground font-semibold text-lg mb-2">
+                  {connectedUsername}
+                </Text>
+                <Text className="text-sm text-muted-foreground mb-1">
+                  Address
+                </Text>
+                <Text className="text-foreground font-mono text-sm">
+                  {connectedAddress}
+                </Text>
+              </View>
+              <Button variant="outline" onPress={handleDisconnect}>
+                Disconnect
+              </Button>
+            </View>
+          ) : (
           <>
             {storedAccounts.length > 0 && (
               <View className="gap-2">
@@ -510,16 +646,117 @@ function AppSpecificContent() {
               Import Existing Account
             </Button>
 
-            {/* Warning about AASA requirement */}
+            {/* Warning about requirements */}
             <View className="p-3 bg-yellow-50 dark:bg-yellow-900/20 rounded-lg mt-2">
+              <Text className="text-xs text-yellow-800 dark:text-yellow-200 font-semibold mb-1">
+                Development Build Required
+              </Text>
               <Text className="text-xs text-yellow-800 dark:text-yellow-200">
-                Note: App-Specific mode requires AASA configuration and a development build. Use Cross-Platform mode for testing in Expo Go.
+                App-Specific passkeys require:{'\n'}
+                {'\u2022'} Development build (npx expo run:ios/android){'\n'}
+                {'\u2022'} iOS: AASA file with your Team ID on your domain{'\n'}
+                {'\u2022'} Android: assetlinks.json configuration{'\n\n'}
+                Use Cross-Platform mode for testing in Expo Go.
               </Text>
             </View>
           </>
         )}
-      </CardContent>
-    </Card>
+        </CardContent>
+      </Card>
+
+      {/* Sign Message Card - Only show when connected */}
+      {connectedAddress && account && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Sign Message</CardTitle>
+            <CardDescription>
+              Sign a message with your passkey
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="gap-4">
+            <View className="gap-2">
+              <Label>Message</Label>
+              <Input
+                value={messageToSign}
+                onChangeText={setMessageToSign}
+                placeholder="Enter message to sign"
+                multiline
+              />
+            </View>
+            <Button onPress={handleOpenSignModal} disabled={!messageToSign}>
+              Sign Message
+            </Button>
+            {signature && (
+              <View className="p-3 bg-secondary rounded-lg">
+                <Text className="text-xs text-muted-foreground mb-1">Signature</Text>
+                <Text className="text-foreground font-mono text-xs" numberOfLines={3}>
+                  {signature}
+                </Text>
+              </View>
+            )}
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Send Transaction Card - Only show when connected */}
+      {connectedAddress && account && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Send Transaction</CardTitle>
+            <CardDescription>
+              Send a test transaction (0 ETH to self)
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="gap-4">
+            <Button onPress={handleOpenTxModal}>
+              Send Test Transaction
+            </Button>
+            {txHash && (
+              <View className="p-3 bg-secondary rounded-lg">
+                <Text className="text-xs text-muted-foreground mb-1">Transaction Hash</Text>
+                <Text className="text-foreground font-mono text-xs" numberOfLines={2}>
+                  {txHash}
+                </Text>
+              </View>
+            )}
+            <Text className="text-xs text-muted-foreground text-center">
+              Uses native passkey for transaction signing
+            </Text>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Sign Message Modal */}
+      <SignatureModal
+        open={showSignModal}
+        onOpenChange={setShowSignModal}
+        message={messageToSign}
+        origin="JAW Demo Native"
+        timestamp={new Date()}
+        accountAddress={connectedAddress || undefined}
+        chainName="Ethereum"
+        chainId={CHAIN_ID}
+        onSign={handleSignMessage}
+        onCancel={handleCancelSign}
+        isProcessing={isSigning}
+      />
+
+      {/* Send Transaction Modal */}
+      <TransactionModal
+        open={showTxModal}
+        onOpenChange={setShowTxModal}
+        transactions={[testTransactionForModal]}
+        walletAddress={connectedAddress || ''}
+        gasFee={gasFee}
+        gasFeeLoading={gasFeeLoading}
+        sponsored={true}
+        onConfirm={handleSendTransaction}
+        onCancel={handleCancelTx}
+        isProcessing={isSending}
+        networkName="Ethereum"
+        chainId={CHAIN_ID}
+      />
+    </View>
   );
 }
 
