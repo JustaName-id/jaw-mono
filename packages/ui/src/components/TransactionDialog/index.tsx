@@ -162,7 +162,7 @@ export const TransactionDialog = ({
         {isSingleTransaction ? (
           // Single Transaction Layout
           <>
-            <div className="flex flex-col gap-3">
+            <div className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0 max-h-[60vh]">
               {/* From - To */}
               <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
                 <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
@@ -282,7 +282,7 @@ export const TransactionDialog = ({
                       }} className="cursor-pointer" />
                     )}
                   </div>
-                  <div className="p-2.5 bg-secondary rounded-[6px] max-h-[300px] overflow-y-auto">
+                  <div className="p-2.5 bg-secondary rounded-[6px] max-h-[40vh] overflow-y-auto">
                     <p className="text-xs font-semibold leading-[150%] break-all text-foreground font-mono">
                       {currentTransaction.data}
                     </p>
@@ -302,7 +302,7 @@ export const TransactionDialog = ({
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-3 p-3.5 max-md:mt-auto">
+            <div className="flex gap-3 p-3.5 max-md:mt-auto flex-shrink-0">
               <Button
                 variant="outline"
                 onClick={onCancel}
@@ -324,7 +324,7 @@ export const TransactionDialog = ({
         ) : (
           // Multiple Transactions Layout with Accordion
           <>
-            <div className="flex flex-col gap-3 flex-1 min-h-0">
+            <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto max-h-[60vh]">
               {/* From Address */}
               <div className="p-3.5 border border-border rounded-[6px] flex-shrink-0">
                 <p className="text-xs font-bold leading-[133%] text-foreground mb-1">From</p>
@@ -498,7 +498,7 @@ export const TransactionDialog = ({
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 px-3.5">
+              <div className="flex gap-3 px-3.5 flex-shrink-0">
                 <Button
                   variant="outline"
                   onClick={onCancel}

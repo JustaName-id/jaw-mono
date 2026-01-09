@@ -98,9 +98,9 @@ export const SignatureDialog = ({
         minWidth: '500px',
       }}
     >
-      <div className="flex flex-col h-full">
+      <div className="flex flex-col h-full min-h-0">
         {/* Main Content Area - Large scrollable message box */}
-        <div className="flex-1 p-4 bg-white border border-border rounded-[6px] min-h-[300px] max-h-[500px] overflow-y-auto">
+        <div className="flex-1 p-4 bg-white border border-border rounded-[6px] min-h-[300px] max-h-[50vh] overflow-y-auto">
           <p className="text-sm font-normal text-foreground whitespace-pre-wrap break-words leading-relaxed">
             {message || 'No message provided'}
           </p>
@@ -152,7 +152,7 @@ export const SignatureDialog = ({
         )}
 
         {/* Action Buttons Section */}
-        <div className="flex mt-3">
+        <div className="flex mt-3 flex-shrink-0">
           <div className="flex gap-2 w-full justify-between">
             <Button
               variant="outline"

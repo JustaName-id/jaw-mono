@@ -183,7 +183,7 @@ export function OnboardingDialog({
 
       <CardContent className="flex flex-col gap-5">
         {/* Existing Accounts */}
-        <div className="flex flex-col gap-1">
+        <div className="flex flex-col gap-1 max-h-[40vh] overflow-y-auto">
           {accounts.map((account) => (
             <Button
               key={account.credentialId || account.username || Math.random().toString()}
