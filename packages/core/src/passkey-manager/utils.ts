@@ -113,12 +113,58 @@ export type PasskeyCreateFn = (options?: any) => Promise<any>;
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export type PasskeyGetFn = (options?: any) => Promise<any>;
 
+/**
+ * Native credential result type for React Native
+ * This bypasses viem's createWebAuthnCredential which uses crypto.subtle
+ */
+export interface NativeCredentialResult {
+  id: string;
+  publicKey: `0x${string}`;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  raw: any;
+}
+
+/**
+ * Native create function type that bypasses viem's createWebAuthnCredential
+ * Use this for React Native to avoid crypto.subtle compatibility issues
+ */
+export type NativePasskeyCreateFn = (
+  username: string,
+  rpId: string,
+  rpName: string
+) => Promise<NativeCredentialResult>;
+
 export async function createPasskeyUtils(
   username: string,
   rpId: string,
   rpName: string,
-  createFn?: PasskeyCreateFn
+  createFn?: PasskeyCreateFn,
+  nativeCreateFn?: NativePasskeyCreateFn,
+  getFn?: PasskeyGetFn
 ): Promise<{ credentialId: string; publicKey: `0x${string}`; webAuthnAccount: WebAuthnAccount }> {
+
+  // If native create function is provided, use it directly (bypasses createWebAuthnCredential)
+  if (nativeCreateFn) {
+    const nativeCredential = await nativeCreateFn(username, rpId, rpName);
+
+    const webAuthnAccount = toWebAuthnAccount({
+      credential: nativeCredential,
+      getFn, // Pass through for React Native signing
+      rpId,
+    });
+
+    await registerPasskeyInBackend({
+      credentialId: nativeCredential.id,
+      publicKey: nativeCredential.publicKey,
+      displayName: username,
+    });
+
+    return {
+      credentialId: nativeCredential.id,
+      publicKey: nativeCredential.publicKey,
+      webAuthnAccount: webAuthnAccount,
+    };
+  }
 
   // Only check for WebAuthn support if no custom createFn is provided (browser environment)
   if (!createFn && (typeof window === 'undefined' || !window.PublicKeyCredential)) {
@@ -136,6 +182,8 @@ export async function createPasskeyUtils(
 
   const webAuthnAccount = toWebAuthnAccount({
     credential,
+    getFn, // Pass through for React Native signing (undefined on web = uses default)
+    rpId,
   });
 
   await registerPasskeyInBackend({
@@ -155,15 +203,20 @@ export async function createPasskeyUtils(
 
 
 export async function importPasskeyUtils(
-  getFn?: PasskeyGetFn
+  getFn?: PasskeyGetFn,
+  rpId?: string
 ): Promise<ImportWebAuthnAuthenticationResult> {
   try {
     const challenge = crypto.getRandomValues(new Uint8Array(32));
+
+    // Resolve rpId - use provided value, or default to window.location.hostname in browser
+    const resolvedRpId = rpId || (typeof window !== 'undefined' ? window.location.hostname : undefined);
 
     // Build credential request options (no allowCredentials to let user pick any passkey)
     const credentialRequestOptions: CredentialRequestOptions = {
       publicKey: {
         challenge: challenge,
+        rpId: resolvedRpId,
         userVerification: "preferred",
         timeout: 60000,
       },

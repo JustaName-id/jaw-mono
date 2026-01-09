@@ -32,6 +32,7 @@ export * from './get-adapter';
 export type {
   PublicKeyCredentialCreationOptions,
   PublicKeyCredential,
+  NativePasskeyCredentialResult,
 } from './create-adapter';
 
 export type {
