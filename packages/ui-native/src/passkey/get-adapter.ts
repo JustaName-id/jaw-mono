@@ -124,6 +124,16 @@ function convertFromRNGetResponse(
 }
 
 /**
+ * Custom error class for native passkey unavailability
+ */
+export class NativePasskeyUnavailableError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'NativePasskeyUnavailableError';
+  }
+}
+
+/**
  * Get credential adapter for react-native-passkeys (authentication/signing)
  *
  * This function adapts WebAuthn's navigator.credentials.get to work with
@@ -131,6 +141,7 @@ function convertFromRNGetResponse(
  *
  * @param options - WebAuthn credential request options
  * @returns Promise<PublicKeyCredentialAssertion> - The assertion response
+ * @throws {NativePasskeyUnavailableError} When running in Expo Go or native module unavailable
  */
 export async function getCredentialAdapter(
   options: CredentialRequestOptions
@@ -142,9 +153,40 @@ export async function getCredentialAdapter(
     // Use destructuring to get the Passkey class from the module namespace
     const module = await import('react-native-passkey');
     Passkey = module.Passkey;
+
+    // Check if the Passkey object is actually available (not just the JS wrapper)
+    if (!Passkey || typeof Passkey.get !== 'function') {
+      throw new NativePasskeyUnavailableError(
+        'Native passkeys require a development build. ' +
+        'The react-native-passkey native module is not available in Expo Go. ' +
+        'Please use Cross-Platform mode, or run: npx expo prebuild && npx expo run:ios/android'
+      );
+    }
   } catch (error) {
+    // Handle module import errors (Expo Go, missing native module)
+    if (error instanceof NativePasskeyUnavailableError) {
+      throw error;
+    }
+
+    const errorMessage = error instanceof Error ? error.message : String(error);
+
+    // Check for common Expo Go / native module errors
+    if (
+      errorMessage.includes('Cannot find module') ||
+      errorMessage.includes('native module') ||
+      errorMessage.includes('NativeModule') ||
+      errorMessage.includes('null is not an object')
+    ) {
+      throw new NativePasskeyUnavailableError(
+        'Native passkeys require a development build. ' +
+        'Please use Cross-Platform mode in Expo Go, or create a development build: ' +
+        'npx expo prebuild && npx expo run:ios/android'
+      );
+    }
+
     throw new Error(
-      'react-native-passkey is not installed. Please install it with: npm install react-native-passkey'
+      'react-native-passkey is not installed or not properly linked. ' +
+      'Please install it with: npm install react-native-passkey'
     );
   }
 
@@ -168,14 +210,27 @@ export async function getCredentialAdapter(
   } catch (error) {
     // Handle specific passkey errors
     if (error instanceof Error) {
-      if (error.message.includes('cancelled') || error.message.includes('canceled')) {
+      const errorMessage = error.message.toLowerCase();
+
+      if (errorMessage.includes('cancelled') || errorMessage.includes('canceled')) {
         throw new DOMException('User cancelled the operation', 'NotAllowedError');
       }
-      if (error.message.includes('not found')) {
+      if (errorMessage.includes('not found')) {
         throw new DOMException('No credentials found', 'NotAllowedError');
       }
-      if (error.message.includes('not supported')) {
+      if (errorMessage.includes('not supported')) {
         throw new DOMException('Passkeys not supported on this device', 'NotSupportedError');
+      }
+      // Handle Expo Go / native module errors that might occur during get()
+      if (
+        errorMessage.includes('null is not an object') ||
+        errorMessage.includes('native module') ||
+        errorMessage.includes('turbomodule')
+      ) {
+        throw new NativePasskeyUnavailableError(
+          'Native passkeys require a development build. ' +
+          'Please use Cross-Platform mode in Expo Go, or create a development build.'
+        );
       }
     }
     throw error;
