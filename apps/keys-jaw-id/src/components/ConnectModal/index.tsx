@@ -1,6 +1,6 @@
 'use client'
 
-import { ConnectDialog, useChainIcon } from "@jaw/ui";
+import { ConnectDialog, useChainIcon } from "@jaw.id/ui";
 import { useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";

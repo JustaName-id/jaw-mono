@@ -1,6 +1,6 @@
 'use client'
 
-import { LocalStorageAccount, OnboardingDialog } from '@jaw/ui';
+import { LocalStorageAccount, OnboardingDialog } from '@jaw.id/ui';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState } from 'react';
 import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest } from '@jaw.id/core';

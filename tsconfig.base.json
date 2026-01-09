@@ -29,10 +29,10 @@
       "@jaw.id/core/*": [
         "packages/core/src/*"
       ],
-      "@jaw/ui": [
+      "@jaw.id/ui": [
         "packages/ui/src/index.ts"
       ],
-      "@jaw/ui/*": [
+      "@jaw.id/ui/*": [
         "packages/ui/src/*"
       ]
     }

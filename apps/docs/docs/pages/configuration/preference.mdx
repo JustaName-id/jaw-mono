@@ -13,7 +13,7 @@ Advanced configuration options to customize SDK behavior and authentication mode
 // Wagmi
 import { jaw } from '@jaw.id/wagmi';
 import { Mode } from '@jaw.id/core';
-import { ReactUIHandler } from '@jaw/ui';
+import { ReactUIHandler } from '@jaw.id/ui';
 
 const connector = jaw({
   apiKey: 'your-api-key',
@@ -28,7 +28,7 @@ const connector = jaw({
 ```typescript
 // EIP-1193 Provider
 import { JAW, Mode } from '@jaw.id/core';
-import { ReactUIHandler } from '@jaw/ui';
+import { ReactUIHandler } from '@jaw.id/ui';
 
 const jaw = JAW.create({
   apiKey: 'your-api-key',
@@ -123,24 +123,24 @@ Passkey operations stay within your dApp (no redirect). Wallets are specific to 
 
 ##### Using ReactUIHandler (Recommended for React)
 
-For React applications, install the `@jaw/ui` package which provides pre-built UI dialogs:
+For React applications, install the `@jaw.id/ui` package which provides pre-built UI dialogs:
 
 :::code-group
 
 ```bash [npm]
-npm install @jaw/ui @jaw.id/core
+npm install @jaw.id/ui @jaw.id/core
 ```
 
 ```bash [pnpm]
-pnpm add @jaw/ui @jaw.id/core
+pnpm add @jaw.id/ui @jaw.id/core
 ```
 
 ```bash [yarn]
-yarn add @jaw/ui @jaw.id/core
+yarn add @jaw.id/ui @jaw.id/core
 ```
 
 ```bash [bun]
-bun add @jaw/ui @jaw.id/core
+bun add @jaw.id/ui @jaw.id/core
 ```
 
 :::
@@ -151,7 +151,7 @@ Then configure the SDK with `ReactUIHandler`:
 // Wagmi
 import { jaw } from '@jaw.id/wagmi';
 import { Mode } from '@jaw.id/core';
-import { ReactUIHandler } from '@jaw/ui';
+import { ReactUIHandler } from '@jaw.id/ui';
 
 const connector = jaw({
   apiKey: 'your-api-key',
@@ -165,7 +165,7 @@ const connector = jaw({
 ```typescript
 // EIP-1193 Provider
 import { JAW, Mode } from '@jaw.id/core';
-import { ReactUIHandler } from '@jaw/ui';
+import { ReactUIHandler } from '@jaw.id/ui';
 
 const jaw = JAW.create({
   apiKey: 'your-api-key',
@@ -193,7 +193,7 @@ URL to a passkey metadata server for managing passkey credentials (credential ID
 // Wagmi
 import { jaw } from '@jaw.id/wagmi';
 import { Mode } from '@jaw.id/core';
-import { ReactUIHandler } from '@jaw/ui';
+import { ReactUIHandler } from '@jaw.id/ui';
 
 const connector = jaw({
   apiKey: 'your-api-key',
@@ -208,7 +208,7 @@ const connector = jaw({
 ```typescript
 // EIP-1193 Provider
 import { JAW, Mode } from '@jaw.id/core';
-import { ReactUIHandler } from '@jaw/ui';
+import { ReactUIHandler } from '@jaw.id/ui';
 
 const jaw = JAW.create({
   apiKey: 'your-api-key',
@@ -268,7 +268,7 @@ Custom UI handler for rendering approval dialogs in app-specific mode. When prov
 **Only works with:** `Mode.AppSpecific`
 
 :::info
-For React applications, use `ReactUIHandler` from `@jaw/ui`. See the [AppSpecific Mode](#appspecific-mode) section above for setup instructions.
+For React applications, use `ReactUIHandler` from `@jaw.id/ui`. See the [AppSpecific Mode](#appspecific-mode) section above for setup instructions.
 :::
 
 For custom UI implementations (non-React or advanced use cases), see the [Custom UI Handler](/advanced/custom-ui-handler) documentation.

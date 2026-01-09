@@ -1,6 +1,6 @@
 'use client'
 
-import { SignatureDialog, useChainIcon } from "@jaw/ui";
+import { SignatureDialog, useChainIcon } from "@jaw.id/ui";
 import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
