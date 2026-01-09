@@ -1072,6 +1072,7 @@ function TransactionDialogWrapper({
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
+  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1254,6 +1255,7 @@ function TransactionDialogWrapper({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
+      chainIconKey={chainIconKey}
     />
   );
 }
@@ -1286,6 +1288,7 @@ function SendTransactionDialogWrapper({
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
+  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1449,6 +1452,7 @@ function SendTransactionDialogWrapper({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
+      chainIconKey={chainIconKey}
     />
   );
 }

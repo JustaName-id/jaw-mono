@@ -397,9 +397,9 @@ export const Eip712Dialog = ({
     >
       <div className="flex flex-col gap-6 justify-between max-md:h-full">
         {/* Main Content - Typed Data Tree View */}
-        <div className="flex flex-col gap-3 max-md:flex-1">
+        <div className="flex flex-col gap-3 max-md:flex-1 max-h-[60vh] overflow-y-auto min-h-0">
           {typedData ? (
-            <div className="max-h-[310px] flex flex-1 overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border">
+            <div className="max-h-[50vh] flex flex-1 overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border">
               {/* Combine domain and message into single tree */}
               <NestedDataView
                 data={
@@ -467,7 +467,7 @@ export const Eip712Dialog = ({
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3 p-3.5">
+        <div className="flex gap-3 p-3.5 flex-shrink-0">
           <Button
             variant="outline"
             onClick={onCancel}

@@ -148,17 +148,15 @@ export const PermissionDialog = ({
         height: '100%',
         maxWidth: 'none',
         maxHeight: 'none',
-        overflow: 'hidden',
       } : {
         width: '500px',
         minWidth: '500px',
         maxHeight: '90vh',
-        overflow: 'hidden',
       }}
     >
       <div className="flex flex-col gap-6 justify-between max-md:h-full h-full overflow-hidden">
         {/* Scrollable Content Area */}
-        <div className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0 max-md:pb-2">
+        <div className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0 max-h-[60vh] max-md:pb-2">
           {/* Permission ID Card - Only for revoke mode */}
           {mode === 'revoke' && permissionId && (
             <div className="flex flex-col gap-2.5 p-3.5 border border-border rounded-[6px]">

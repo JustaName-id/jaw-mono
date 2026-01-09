@@ -100,7 +100,7 @@ export const SiweDialog = ({
         minWidth: '500px',
       }}
     >
-      <div className="flex flex-col h-full gap-3">
+      <div className="flex flex-col h-full gap-3 max-h-[60vh] overflow-y-auto min-h-0">
         <div className="flex flex-1 flex-col p-3.5 items-center justify-center">
           {appLogoUrl && (
             <img
@@ -122,7 +122,7 @@ export const SiweDialog = ({
             <p className="text-foreground font-bold text-xs leading-[150%]">Message</p>
             <CopyIcon className="w-4 h-4 cursor-pointer" onClick={onCopyMessageHandler} />
           </div>
-          <div className="flex bg-secondary rounded-[6px] p-2.5 max-h-[170px] overflow-y-auto">
+          <div className="flex bg-secondary rounded-[6px] p-2.5 max-h-[35vh] overflow-y-auto">
             <p className="text-sm font-normal text-foreground whitespace-pre-wrap break-words leading-relaxed">
               {message || 'No message provided'}
             </p>
@@ -202,7 +202,7 @@ export const SiweDialog = ({
         )}
 
         {/* Action Buttons Section */}
-        <div className="flex mt-3">
+        <div className="flex mt-3 flex-shrink-0">
           <div className="flex gap-2 w-full justify-between">
             <Button
               variant="outline"
