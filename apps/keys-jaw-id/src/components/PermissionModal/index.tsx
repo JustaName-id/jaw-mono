@@ -1,6 +1,6 @@
 'use client'
 
-import { PermissionDialog } from "@jaw/ui";
+import { PermissionDialog } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";

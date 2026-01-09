@@ -71,7 +71,7 @@
       "version": "0.0.1",
       "dependencies": {
         "@jaw.id/core": "workspace:*",
-        "@jaw/ui": "workspace:*",
+        "@jaw.id/ui": "workspace:*",
         "@tanstack/react-query": "^5.62.16",
         "next": "~15.2.6",
         "react": "19.0.1",
@@ -85,8 +85,8 @@
       "version": "0.1.0",
       "dependencies": {
         "@jaw.id/core": "workspace:*",
+        "@jaw.id/ui": "workspace:*",
         "@jaw.id/wagmi": "workspace:*",
-        "@jaw/ui": "workspace:*",
         "@privy-io/react-auth": "^3.8.1",
         "@tanstack/react-query": "^5.62.16",
         "next": "~15.2.6",
@@ -114,7 +114,7 @@
       },
     },
     "packages/ui": {
-      "name": "@jaw/ui",
+      "name": "@jaw.id/ui",
       "version": "0.0.1",
       "dependencies": {
         "@hookform/resolvers": "^5.2.2",
@@ -599,9 +599,9 @@
 
     "@jaw.id/core": ["@jaw.id/core@workspace:packages/core"],
 
-    "@jaw.id/wagmi": ["@jaw.id/wagmi@workspace:packages/wagmi"],
+    "@jaw.id/ui": ["@jaw.id/ui@workspace:packages/ui"],
 
-    "@jaw/ui": ["@jaw/ui@workspace:packages/ui"],
+    "@jaw.id/wagmi": ["@jaw.id/wagmi@workspace:packages/wagmi"],
 
     "@jest/diff-sequences": ["@jest/diff-sequences@30.0.1", "", {}, "sha512-n5H8QLDJ47QqbCNn5SuFjCRDrOLEZ0h8vAHCK5RL9Ls7Xa8AQLa/YxAc9UjFqoEDM48muwtBGjtMY5cr0PLDCw=="],
 

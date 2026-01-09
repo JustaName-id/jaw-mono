@@ -4,7 +4,7 @@ import { useState, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { JAW, Mode } from '@jaw.id/core';
 import { parseEther, encodeFunctionData, parseAbi, parseUnits, erc20Abi } from 'viem';
-import {ReactUIHandler} from "@jaw/ui";
+import {ReactUIHandler} from "@jaw.id/ui";
 
 type ModeType = typeof Mode[keyof typeof Mode];
 

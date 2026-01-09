@@ -7,7 +7,7 @@ const { composePlugins, withNx } = require('@nx/next');
  **/
 const nextConfig = {
   nx: {},
-  transpilePackages: ['@jaw.id/core', '@jaw/ui', '@jaw.id/wagmi'],
+  transpilePackages: ['@jaw.id/core', '@jaw.id/ui', '@jaw.id/wagmi'],
 };
 
 const plugins = [

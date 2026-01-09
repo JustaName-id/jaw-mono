@@ -4,7 +4,7 @@
   "private": true,
   "dependencies": {
     "@jaw.id/core": "workspace:*",
-    "@jaw/ui": "workspace:*",
+    "@jaw.id/ui": "workspace:*",
     "@tanstack/react-query": "^5.62.16",
     "next": "~15.2.6",
     "react": "19.0.1",
