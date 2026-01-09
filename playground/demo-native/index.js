@@ -1,5 +1,12 @@
-// Crypto polyfill must be imported first (before any viem/ox code)
+// Crypto polyfills must be imported first (before any viem/ox code)
 import 'react-native-get-random-values';
+
+// Polyfill crypto.subtle for WebAuthn/passkey operations (required by ox/viem)
+// react-native-quick-crypto provides SubtleCrypto implementation
+import { install } from 'react-native-quick-crypto';
+
+// Install the quick-crypto polyfill
+install();
 
 // Polyfill crypto.randomUUID (not included in react-native-get-random-values)
 // This is required for @jaw.id/core which uses crypto.randomUUID() extensively

@@ -50,12 +50,15 @@ export const DefaultModal: React.FC<DefaultModalProps> = ({
       onRequestClose={handleCloseModal}
       statusBarTranslucent
     >
-      <View className="flex-1 bg-black/50 justify-center items-center">
+      <View className={cn(
+        "flex-1 bg-black/50",
+        !fullScreen && "justify-center items-center"
+      )}>
         <KeyboardAvoidingView
           behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
           className={cn(
-            'w-full items-center justify-center',
-            !fullScreen && 'px-4'
+            'w-full',
+            fullScreen ? 'flex-1' : 'items-center justify-center px-4'
           )}
         >
           <Pressable
@@ -66,11 +69,11 @@ export const DefaultModal: React.FC<DefaultModalProps> = ({
             )}
             onPress={(e) => e.stopPropagation()}
           >
-            <SafeAreaView className={cn('flex-1', fullScreen && 'flex-1')}>
+            <SafeAreaView className="flex-1">
               <View
                 className={cn(
                   'p-2.5 gap-5 flex-col',
-                  fullScreen ? '' : 'rounded-3xl',
+                  fullScreen ? 'flex-1' : 'rounded-3xl',
                   contentClassName
                 )}
                 style={!fullScreen ? { maxHeight: SCREEN_HEIGHT * 0.85 } : undefined}
