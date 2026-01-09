@@ -61,13 +61,12 @@ JAW SDK **only supports EntryPoint v0.8** (ERC-4337 v0.8). Your paymaster servic
 - [EntryPoint v0.8](https://github.com/eth-infinitism/account-abstraction/releases/tag/v0.8.0)
 - [EIP-7677](https://eips.ethereum.org/EIPS/eip-7677) Paymaster Web Service Capability
 
-### Recommended Paymaster Provider
+### Compatible Paymaster Providers
 
-We recommend using **[Etherspot](https://etherspot.io/)** as your paymaster provider. Etherspot offers:
-- Full EntryPoint v0.8 support
-- EIP-7677 compliant API
-- Multi-chain coverage
-- Sponsorship policies for fine-grained control
+Works with any EIP-7677 compliant paymaster that supports EntryPoint v0.8:
+
+- **[Pimlico](https://dashboard.pimlico.io/)** 
+- **[Etherspot](https://developer.etherspot.io/dashboard)**
 
 
 ## Configuration Format
@@ -135,7 +134,7 @@ const connector = jaw({
     8453: { url: 'https://pm.etherspot.io/base' },     // Base
     42161: { url: 'https://pm.etherspot.io/arb' },     // Arbitrum
     84532: {
-      url: 'https://pm.etherspot.io/base-sepolia',     // Base Sepolia (testnet)
+      url: 'https://api.pimlico.io/v2/84532/rpc?apikey=YOUR_API_KEY',        // Base Sepolia
       context: { sponsorshipPolicyId: 'sp_test_policy' }
     },
   },
@@ -147,7 +146,8 @@ const connector = jaw({
 
 ### Recommended Provider
 
-- **[Etherspot](https://etherspot.io/)** - Full v0.8 support, EIP-7677 compliant, multi-chain
+- **[Etherspot](https://developer.etherspot.io/dashboard)**
+- **[Pimlico](https://dashboard.pimlico.io/)**
 
 ### Other Compatible Providers
 

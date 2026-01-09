@@ -5,6 +5,7 @@ import { ChainClients } from './store.js';
 import { RPCResponseNativeCurrency } from '../../messages/rpcMessage.js';
 import { JAW_RPC_URL } from '../../constants.js';
 import { getSupportedChains } from '../../account/smartAccount.js';
+import { createPaymasterFunctions } from '../../account/paymaster.js';
 import { store } from '../store.js';
 
 /**
@@ -58,17 +59,25 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
     transport: http(chain.rpcUrl),
   });
 
-  const paymasterClient = chain.paymaster?.url
-    ? createPaymasterClient({
-        transport: http(chain.paymaster.url)
-      })
-    : undefined;
+  // If no paymaster URL, return bundler client without paymaster
+  if (!chain.paymaster?.url) {
+    const bundlerClient = createBundlerClient({
+      chain: viemchain,
+      client,
+      transport: http(chain.rpcUrl),
+    });
+    return { client, bundlerClient };
+  }
+
+  // Create paymaster client and wrap with custom functions that handle gas price fetching and v0.8 gas limits
+  const paymasterClient = createPaymasterClient({
+    transport: http(chain.paymaster.url)
+  });
 
   const bundlerClient = createBundlerClient({
     chain: viemchain,
     client,
-    ...(paymasterClient && { paymaster: paymasterClient }),
-    ...(chain.paymaster?.context && { paymasterContext: chain.paymaster.context }),
+    paymaster: createPaymasterFunctions(client, paymasterClient, chain.id, chain.paymaster.context),
     transport: http(chain.rpcUrl),
   });
 
