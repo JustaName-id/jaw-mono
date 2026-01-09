@@ -1,6 +1,6 @@
 'use client'
 
-import { TransactionDialog, TransactionData } from "@jaw/ui";
+import { TransactionDialog, TransactionData } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, Hash } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";

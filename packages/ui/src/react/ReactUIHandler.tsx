@@ -32,7 +32,7 @@ import { formatUnits, erc20Abi, createPublicClient, http } from 'viem';
 import type { Address, Hex } from 'viem';
 import { createSiweMessage } from 'viem/siwe';
 
-// Import UI components using relative paths (we're inside @jaw/ui)
+// Import UI components using relative paths (we're inside @jaw.id/ui)
 import { OnboardingDialog } from '../components/OnboardingDialog';
 import { DefaultDialog, type DefaultDialogProps } from '../components/DefaultDialog';
 import { SignatureDialog } from '../components/SignatureDialog';
@@ -164,7 +164,7 @@ const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> = DefaultD
  * @example
  * ```typescript
  * import { JAW, Mode } from '@jaw.id/core';
- * import { ReactUIHandler } from '@jaw/ui';
+ * import { ReactUIHandler } from '@jaw.id/ui';
  *
  * const jaw = JAW.create({
  *   apiKey: 'your-api-key',
