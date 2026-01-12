@@ -1107,7 +1107,7 @@ function TransactionDialogWrapper({
 
     // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&apiKey=${apiKey}` : ''}`;
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
     }
 
     // Native ETH - no paymaster needed
@@ -1457,7 +1457,7 @@ function SendTransactionDialogWrapper({
 
     // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&apiKey=${apiKey}` : ''}`;
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
     }
 
     // Native ETH - no paymaster needed
