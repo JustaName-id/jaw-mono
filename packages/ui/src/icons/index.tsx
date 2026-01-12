@@ -66,3 +66,49 @@ export const LockIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => {
         </svg>
     )
 }
+
+// Token Icons
+export const EthIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" {...props}>
+            <circle cx="12" cy="12" r="12" fill="#627EEA"/>
+            <path d="M12.0001 3V9.6525L17.4976 12.165L12.0001 3Z" fill="white" fillOpacity="0.602"/>
+            <path d="M12 3L6.5 12.165L12 9.6525V3Z" fill="white"/>
+            <path d="M12.0001 16.4759V20.9971L17.5001 13.2109L12.0001 16.4759Z" fill="white" fillOpacity="0.602"/>
+            <path d="M12 20.9971V16.4751L6.5 13.2109L12 20.9971Z" fill="white"/>
+            <path d="M12.0001 15.4298L17.4976 12.1648L12.0001 9.6543V15.4298Z" fill="white" fillOpacity="0.2"/>
+            <path d="M6.5 12.1648L12 15.4298V9.6543L6.5 12.1648Z" fill="white" fillOpacity="0.602"/>
+        </svg>
+    )
+}
+
+export const UsdcIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" {...props}>
+            <circle cx="12" cy="12" r="12" fill="#2775CA"/>
+            <path d="M15.2 13.9C15.2 12.3 14.2 11.7 12.2 11.5C10.7 11.3 10.4 10.9 10.4 10.2C10.4 9.5 10.9 9.1 11.9 9.1C12.8 9.1 13.3 9.4 13.5 10.1C13.5 10.2 13.6 10.2 13.7 10.2H14.5C14.6 10.2 14.7 10.1 14.7 10V10C14.5 9 13.7 8.2 12.5 8.1V7.1C12.5 7 12.4 6.9 12.3 6.9H11.6C11.5 6.9 11.4 7 11.4 7.1V8.1C10 8.3 9.1 9.2 9.1 10.4C9.1 11.9 10 12.5 12 12.7C13.4 12.9 13.9 13.2 13.9 14C13.9 14.8 13.2 15.3 12.2 15.3C10.9 15.3 10.5 14.8 10.3 14.1C10.3 14 10.2 13.9 10.1 13.9H9.2C9.1 13.9 9 14 9 14.1C9.2 15.3 9.9 16.1 11.5 16.3V17.3C11.5 17.4 11.6 17.5 11.7 17.5H12.4C12.5 17.5 12.6 17.4 12.6 17.3V16.3C14 16 15.2 15.1 15.2 13.9Z" fill="white"/>
+            <path d="M9.7 18.2C6.4 17 4.7 13.4 5.9 10.1C6.5 8.5 7.7 7.2 9.3 6.6C9.4 6.5 9.4 6.5 9.4 6.4V5.7C9.4 5.6 9.4 5.5 9.3 5.5C9.3 5.5 9.2 5.5 9.2 5.5C5.3 6.8 3.2 11 4.5 14.9C5.3 17.2 7.1 18.9 9.3 19.7C9.4 19.7 9.4 19.7 9.5 19.7C9.5 19.6 9.5 19.6 9.5 19.5V18.8C9.4 18.5 9.4 18.4 9.7 18.2Z" fill="white"/>
+            <path d="M14.7 5.5C14.6 5.5 14.6 5.5 14.5 5.5C14.5 5.6 14.5 5.6 14.5 5.7V6.4C14.5 6.5 14.6 6.6 14.7 6.6C18 7.8 19.7 11.4 18.5 14.7C17.9 16.3 16.7 17.6 15.1 18.2C15 18.3 15 18.3 15 18.4V19.1C15 19.2 15 19.3 15.1 19.3C15.1 19.3 15.2 19.3 15.2 19.3C19.1 18 21.2 13.8 19.9 9.9C19 7.6 17.2 5.9 14.7 5.5Z" fill="white"/>
+        </svg>
+    )
+}
+
+export const UsdtIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" {...props}>
+            <circle cx="12" cy="12" r="12" fill="#26A17B"/>
+            <path d="M13.4 12.6V12.6C13.3 12.6 12.7 12.7 12 12.7C11.4 12.7 10.7 12.6 10.6 12.6C8.4 12.5 6.8 12 6.8 11.4C6.8 10.8 8.4 10.3 10.6 10.2V12.1C10.7 12.1 11.4 12.2 12 12.2C12.7 12.2 13.3 12.1 13.4 12.1V10.2C15.6 10.3 17.2 10.8 17.2 11.4C17.2 12 15.6 12.5 13.4 12.6ZM13.4 10V8.3H16.8V6H7.2V8.3H10.6V10C8 10.1 6 10.8 6 11.6C6 12.4 8 13.1 10.6 13.2V18H13.4V13.2C16 13.1 18 12.4 18 11.6C18 10.8 16 10.1 13.4 10Z" fill="white"/>
+        </svg>
+    )
+}
+
+// Generic token icon for unknown tokens
+export const GenericTokenIcon: React.FC<React.SVGProps<SVGSVGElement>> = (props) => {
+    return (
+        <svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" {...props}>
+            <circle cx="12" cy="12" r="12" fill="#9CA3AF"/>
+            <circle cx="12" cy="12" r="6" stroke="white" strokeWidth="1.5" fill="none"/>
+            <circle cx="12" cy="12" r="2" fill="white"/>
+        </svg>
+    )
+}

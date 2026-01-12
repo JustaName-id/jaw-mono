@@ -2,11 +2,13 @@
 
 import { Button } from "../ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { DefaultDialog } from "../DefaultDialog";
 import { FeeTokenSelector } from "../FeeTokenSelector";
 import { CopiedIcon, CopyIcon, WalletIcon } from "../../icons";
 import { useState, useEffect } from "react";
 import { formatEther } from "viem";
+import { Info } from "lucide-react";
 import { TransactionDialogProps } from "./types";
 import { useIsMobile, useChainIcon } from "../../hooks";
 import { getJustaNameInstance, getDisplayAddress } from "../../utils";
@@ -213,25 +215,26 @@ export const TransactionDialog = ({
                 </div>
                 <div className="w-[1px] rounded-full bg-border h-full min-h-[50px]" />
                 <div className="flex flex-col text-foreground flex-1 gap-0.5">
-                  <p className="text-xs font-bold leading-[133%]">Network Fees</p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-bold leading-[133%]">Network Fees</p>
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="size-3 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px] text-xs">
+                          <p>Gas fees paid to network validators to process your transaction. You can pay with ETH or supported tokens.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <div className="flex flex-row items-center w-full justify-between gap-1">
-                    {gasFeeLoading ? (
+                    {gasFeeLoading && !isPayingWithErc20 ? (
                       <p className="text-base font-normal text-muted-foreground">Estimating...</p>
                     ) : gasEstimationError && !sponsored && !isPayingWithErc20 ? (
                       <div className="flex flex-col">
                         <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
                         <p className="text-xs text-red-500">{gasEstimationError}</p>
-                      </div>
-                    ) : isPayingWithErc20 && selectedFeeToken ? (
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                            Paying with {selectedFeeToken.symbol}
-                          </span>
-                        </div>
-                        <p className="text-xs font-normal text-muted-foreground">
-                          Gas paid via {selectedFeeToken.symbol}
-                        </p>
                       </div>
                     ) : sponsored ? (
                       <div className="flex flex-col">
@@ -257,15 +260,53 @@ export const TransactionDialog = ({
                           })() : 'Gas fees covered'}
                         </p>
                       </div>
+                    ) : isPayingWithErc20 && selectedFeeToken ? (
+                      <div className="flex flex-col gap-0.5 w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <p className="text-base font-normal text-foreground">
+                            {/* Show estimated cost in selected token (for stablecoins, USD ≈ token) */}
+                            {/* Add 20% buffer for ERC-20 payments to ensure sufficient gas coverage */}
+                            {gasFee && ethPrice > 0 ? (
+                              `~${(ethPrice * Number(gasFee) * 1.2).toFixed(4)} ${selectedFeeToken.symbol}`
+                            ) : (
+                              <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                                Paying with {selectedFeeToken.symbol}
+                              </span>
+                            )}
+                          </p>
+                          {/* Inline Fee Token Selector */}
+                          {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
+                            <FeeTokenSelector
+                              tokens={feeTokens}
+                              selectedToken={selectedFeeToken}
+                              onSelect={onFeeTokenSelect}
+                              isLoading={feeTokensLoading ?? false}
+                              disabled={isProcessing}
+                              ethPrice={ethPrice}
+                              estimatedGasEth={gasFee || '0'}
+                            />
+                          )}
+                        </div>
+                      </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
-                      <div className="flex flex-col">
-                        {ethPrice > 0 && (
-                          <div className="flex items-center gap-2">
-                            <p className="text-base font-normal text-foreground">
-                              ${(ethPrice * Number(gasFee)).toFixed(4)}
-                            </p>
-                          </div>
-                        )}
+                      <div className="flex flex-col gap-0.5 w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <p className="text-base font-normal text-foreground">
+                            {ethPrice > 0 ? `$${(ethPrice * Number(gasFee)).toFixed(4)}` : ''}
+                          </p>
+                          {/* Inline Fee Token Selector */}
+                          {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
+                            <FeeTokenSelector
+                              tokens={feeTokens}
+                              selectedToken={selectedFeeToken ?? null}
+                              onSelect={onFeeTokenSelect}
+                              isLoading={feeTokensLoading ?? false}
+                              disabled={isProcessing}
+                              ethPrice={ethPrice}
+                              estimatedGasEth={gasFee}
+                            />
+                          )}
+                        </div>
                         <p className="text-xs font-normal text-muted-foreground">
                           {(() => {
                             const gasValue = Number(gasFee);
@@ -282,19 +323,6 @@ export const TransactionDialog = ({
                   </div>
                 </div>
               </div>
-
-              {/* Fee Token Selector - shown when ERC-20 payment options are available */}
-              {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
-                <div className="p-3.5 border border-border rounded-[6px]">
-                  <FeeTokenSelector
-                    tokens={feeTokens}
-                    selectedToken={selectedFeeToken ?? null}
-                    onSelect={onFeeTokenSelect}
-                    isLoading={feeTokensLoading ?? false}
-                    disabled={isProcessing}
-                  />
-                </div>
-              )}
 
               {/* Show Data section if data is provided */}
               {currentTransaction?.data && (
@@ -469,25 +497,26 @@ export const TransactionDialog = ({
                 </div>
                 <div className="w-[1px] rounded-full bg-border h-full min-h-[50px]" />
                 <div className="flex flex-col text-foreground flex-1 gap-0.5">
-                  <p className="text-xs font-bold leading-[133%]">Network Fees</p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-bold leading-[133%]">Network Fees</p>
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="size-3 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px] text-xs">
+                          <p>Gas fees paid to network validators to process your transaction. You can pay with ETH or supported tokens.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <div className="flex flex-row items-center w-full justify-between gap-1">
-                    {gasFeeLoading ? (
+                    {gasFeeLoading && !isPayingWithErc20 ? (
                       <p className="text-base font-normal text-muted-foreground">Estimating...</p>
                     ) : gasEstimationError && !sponsored && !isPayingWithErc20 ? (
                       <div className="flex flex-col">
                         <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
                         <p className="text-xs text-red-500">{gasEstimationError}</p>
-                      </div>
-                    ) : isPayingWithErc20 && selectedFeeToken ? (
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                            Paying with {selectedFeeToken.symbol}
-                          </span>
-                        </div>
-                        <p className="text-xs font-normal text-muted-foreground">
-                          Gas paid via {selectedFeeToken.symbol}
-                        </p>
                       </div>
                     ) : sponsored ? (
                       <div className="flex flex-col">
@@ -513,15 +542,53 @@ export const TransactionDialog = ({
                           })() : 'Gas fees covered'}
                         </p>
                       </div>
+                    ) : isPayingWithErc20 && selectedFeeToken ? (
+                      <div className="flex flex-col gap-0.5 w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <p className="text-base font-normal text-foreground">
+                            {/* Show estimated cost in selected token (for stablecoins, USD ≈ token) */}
+                            {/* Add 20% buffer for ERC-20 payments to ensure sufficient gas coverage */}
+                            {gasFee && ethPrice > 0 ? (
+                              `~${(ethPrice * Number(gasFee) * 1.2).toFixed(4)} ${selectedFeeToken.symbol}`
+                            ) : (
+                              <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                                Paying with {selectedFeeToken.symbol}
+                              </span>
+                            )}
+                          </p>
+                          {/* Inline Fee Token Selector */}
+                          {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
+                            <FeeTokenSelector
+                              tokens={feeTokens}
+                              selectedToken={selectedFeeToken}
+                              onSelect={onFeeTokenSelect}
+                              isLoading={feeTokensLoading ?? false}
+                              disabled={isProcessing}
+                              ethPrice={ethPrice}
+                              estimatedGasEth={gasFee || '0'}
+                            />
+                          )}
+                        </div>
+                      </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
-                      <div className="flex flex-col">
-                        {ethPrice > 0 && (
-                          <div className="flex items-center gap-2">
-                            <p className="text-base font-normal text-foreground">
-                              ${(ethPrice * Number(gasFee)).toFixed(4)}
-                            </p>
-                          </div>
-                        )}
+                      <div className="flex flex-col gap-0.5 w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <p className="text-base font-normal text-foreground">
+                            {ethPrice > 0 ? `$${(ethPrice * Number(gasFee)).toFixed(4)}` : ''}
+                          </p>
+                          {/* Inline Fee Token Selector */}
+                          {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
+                            <FeeTokenSelector
+                              tokens={feeTokens}
+                              selectedToken={selectedFeeToken ?? null}
+                              onSelect={onFeeTokenSelect}
+                              isLoading={feeTokensLoading ?? false}
+                              disabled={isProcessing}
+                              ethPrice={ethPrice}
+                              estimatedGasEth={gasFee}
+                            />
+                          )}
+                        </div>
                         <p className="text-xs font-normal text-muted-foreground">
                           {(() => {
                             const gasValue = Number(gasFee);
@@ -538,19 +605,6 @@ export const TransactionDialog = ({
                   </div>
                 </div>
               </div>
-
-              {/* Fee Token Selector - shown when ERC-20 payment options are available */}
-              {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
-                <div className="p-3.5 border border-border rounded-[6px]">
-                  <FeeTokenSelector
-                    tokens={feeTokens}
-                    selectedToken={selectedFeeToken ?? null}
-                    onSelect={onFeeTokenSelect}
-                    isLoading={feeTokensLoading ?? false}
-                    disabled={isProcessing}
-                  />
-                </div>
-              )}
 
               {/* Action Buttons */}
               <div className="flex gap-3 px-3.5 flex-shrink-0">

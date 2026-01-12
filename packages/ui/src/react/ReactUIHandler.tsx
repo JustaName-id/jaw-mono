@@ -1285,8 +1285,10 @@ function TransactionDialogWrapper({
         }
 
         // Skip estimation for ERC-20 payment (paymaster handles it)
+        // Keep existing gasFee for display purposes (to show equivalent token cost)
         if (isPayingWithErc20) {
-          setGasFee('');
+          setGasEstimationError(''); // Clear any previous error
+          setGasFeeLoading(false);
           return;
         }
 
@@ -1308,8 +1310,7 @@ function TransactionDialogWrapper({
             setGasFee('sponsored');
             setGasEstimationError('');
           } else if (isPayingWithErc20) {
-            // ERC-20 payment - no ETH estimation needed
-            setGasFee('');
+            // ERC-20 payment - keep existing gasFee for display, just clear error
             setGasEstimationError('');
           } else {
             // Show insufficient funds in UI - user can still cancel manually
@@ -1643,8 +1644,10 @@ function SendTransactionDialogWrapper({
         }
 
         // Skip estimation for ERC-20 payment (paymaster handles it)
+        // Keep existing gasFee for display purposes (to show equivalent token cost)
         if (isPayingWithErc20) {
-          setGasFee('');
+          setGasEstimationError(''); // Clear any previous error
+          setGasFeeLoading(false);
           return;
         }
 
@@ -1660,8 +1663,7 @@ function SendTransactionDialogWrapper({
             setGasFee('sponsored');
             setGasEstimationError('');
           } else if (isPayingWithErc20) {
-            // ERC-20 payment - no ETH estimation needed
-            setGasFee('');
+            // ERC-20 payment - keep existing gasFee for display, just clear error
             setGasEstimationError('');
           } else {
             // Show insufficient funds in UI - user can still cancel manually

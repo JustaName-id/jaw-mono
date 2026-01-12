@@ -1,8 +1,12 @@
 'use client'
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
+import { useState } from 'react';
+import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
+import { Button } from '../ui/button';
 import { Spinner } from '../ui/spinner';
+import { EthIcon, UsdcIcon, UsdtIcon, GenericTokenIcon } from '../../icons';
 import { cn } from '../../lib/utils';
+import { ChevronDown, X } from 'lucide-react';
 
 export interface FeeTokenOption {
   uid: string;
@@ -13,6 +17,10 @@ export interface FeeTokenOption {
   balanceFormatted: string;
   isNative: boolean;
   isSelectable: boolean;
+  // Optional: USD values for display
+  balanceUsd?: string;
+  gasCostUsd?: string;
+  gasCostFormatted?: string;
 }
 
 interface FeeTokenSelectorProps {
@@ -21,7 +29,45 @@ interface FeeTokenSelectorProps {
   onSelect: (token: FeeTokenOption) => void;
   isLoading: boolean;
   disabled?: boolean;
+  ethPrice?: number;
+  estimatedGasEth?: string;
 }
+
+// Get token icon based on symbol
+const getTokenIcon = (symbol: string, className?: string) => {
+  const iconClass = cn('size-8 shrink-0', className);
+  switch (symbol.toUpperCase()) {
+    case 'ETH':
+      return <EthIcon className={iconClass} />;
+    case 'USDC':
+      return <UsdcIcon className={iconClass} />;
+    case 'USDT':
+      return <UsdtIcon className={iconClass} />;
+    default:
+      return <GenericTokenIcon className={iconClass} />;
+  }
+};
+
+// Format balance for display (max 6 decimal places, min 4 for small values)
+const formatBalance = (balance: string, symbol: string) => {
+  const num = parseFloat(balance);
+  if (num === 0) return '0';
+  if (num < 0.0001) return '<0.0001';
+  // For ETH, show more decimals; for stablecoins, show 2
+  const decimals = symbol.toUpperCase() === 'ETH' ? 6 : 2;
+  return num.toLocaleString('en-US', {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: decimals,
+  });
+};
+
+// Format USD value (show at least 4 decimals for small gas amounts)
+const formatUsd = (value: number) => {
+  return `$${value.toLocaleString('en-US', {
+    minimumFractionDigits: 4,
+    maximumFractionDigits: 4,
+  })}`;
+};
 
 export const FeeTokenSelector = ({
   tokens,
@@ -29,7 +75,11 @@ export const FeeTokenSelector = ({
   onSelect,
   isLoading,
   disabled,
+  ethPrice = 0,
+  estimatedGasEth,
 }: FeeTokenSelectorProps) => {
+  const [open, setOpen] = useState(false);
+
   if (isLoading) {
     return (
       <div className="flex items-center gap-2 text-sm text-muted-foreground">
@@ -45,72 +95,161 @@ export const FeeTokenSelector = ({
     return null;
   }
 
-  const handleValueChange = (address: string) => {
-    const token = tokens.find(t => t.address === address);
-    if (token && token.isSelectable) {
+  const nativeToken = tokens.find(t => t.isNative);
+  const erc20Tokens = tokens.filter(t => !t.isNative);
+
+  const handleSelect = (token: FeeTokenOption) => {
+    if (token.isSelectable) {
       onSelect(token);
+      setOpen(false);
     }
   };
 
-  // Format balance for display (max 6 decimal places)
-  const formatBalance = (balance: string) => {
-    const num = parseFloat(balance);
-    if (num === 0) return '0';
-    if (num < 0.000001) return '<0.000001';
-    return num.toFixed(Math.min(6, balance.split('.')[1]?.length || 0));
+  // Calculate USD values for tokens
+  const getBalanceUsd = (token: FeeTokenOption): string => {
+    if (token.isNative && ethPrice > 0) {
+      const usd = parseFloat(token.balanceFormatted) * ethPrice;
+      return formatUsd(usd);
+    }
+    // For stablecoins, balance ≈ USD value
+    if (['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase())) {
+      return formatUsd(parseFloat(token.balanceFormatted));
+    }
+    return '';
+  };
+
+  // Estimate gas cost in token
+  // For ERC-20 tokens, add 20% buffer to ensure sufficient gas coverage
+  const getGasCost = (token: FeeTokenOption): { formatted: string; usd: string } => {
+    if (!estimatedGasEth || !ethPrice) {
+      return { formatted: '', usd: '' };
+    }
+
+    const gasEth = parseFloat(estimatedGasEth);
+    const gasUsd = gasEth * ethPrice;
+
+    if (token.isNative) {
+      return {
+        formatted: `${formatBalance(estimatedGasEth, 'ETH')} ETH`,
+        usd: formatUsd(gasUsd),
+      };
+    }
+
+    // For stablecoins, gas cost in token ≈ gas cost in USD + 20% buffer
+    const gasUsdWithBuffer = gasUsd * 1.2;
+    if (['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase())) {
+      return {
+        formatted: `~${gasUsdWithBuffer.toFixed(3)} ${token.symbol}`,
+        usd: formatUsd(gasUsdWithBuffer),
+      };
+    }
+
+    return { formatted: '', usd: formatUsd(gasUsdWithBuffer) };
+  };
+
+  // Token row component
+  const TokenRow = ({ token, showGasCost = true }: { token: FeeTokenOption; showGasCost?: boolean }) => {
+    const balanceUsd = getBalanceUsd(token);
+    const gasCost = showGasCost ? getGasCost(token) : null;
+    const isSelected = selectedToken?.address === token.address;
+
+    return (
+      <button
+        onClick={() => handleSelect(token)}
+        disabled={!token.isSelectable || disabled}
+        className={cn(
+          'w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors',
+          'hover:bg-muted/60',
+          isSelected && 'bg-muted ring-2 ring-black',
+          !token.isSelectable && 'opacity-50 cursor-not-allowed',
+          token.isSelectable && 'cursor-pointer'
+        )}
+      >
+        {/* Token Icon */}
+        {getTokenIcon(token.symbol, 'size-6')}
+
+        {/* Token Info */}
+        <div className="flex-1 text-left min-w-0">
+          <div className="flex items-center gap-1">
+            <span className={cn("font-semibold text-xs", isSelected && "text-foreground")}>{token.symbol}</span>
+          </div>
+          <div className="text-[10px] text-muted-foreground truncate">
+            Bal: {balanceUsd || `${formatBalance(token.balanceFormatted, token.symbol)} ${token.symbol}`}
+          </div>
+        </div>
+
+        {/* Gas Cost / Amount - only show for native tokens */}
+        <div className="text-right shrink-0">
+          {gasCost?.usd && (
+            <>
+              <div className="font-semibold text-xs">{gasCost.usd}</div>
+              <div className="text-[10px] text-muted-foreground">{gasCost.formatted}</div>
+            </>
+          )}
+          {!token.isSelectable && (
+            <span className="text-[10px] text-destructive">(insufficient)</span>
+          )}
+        </div>
+      </button>
+    );
   };
 
   return (
-    <div className="flex flex-col gap-1.5">
-      <p className="text-xs font-medium text-muted-foreground">Pay with</p>
-      <Select
-        value={selectedToken?.address || ''}
-        onValueChange={handleValueChange}
-        disabled={disabled}
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger asChild>
+        <Button
+          variant="outline"
+          role="combobox"
+          aria-expanded={open}
+          disabled={disabled}
+          className="h-7 px-2 gap-1 text-xs font-medium rounded-md border-muted-foreground/30"
+        >
+          {selectedToken && getTokenIcon(selectedToken.symbol, 'size-3.5')}
+          <span>{selectedToken?.symbol || 'Select'}</span>
+          <ChevronDown className="size-3 opacity-50" />
+        </Button>
+      </PopoverTrigger>
+      <PopoverContent
+        className="w-64 p-0"
+        align="end"
+        sideOffset={4}
       >
-        <SelectTrigger className="w-full h-9 text-sm">
-          <SelectValue placeholder="Select token">
-            {selectedToken && (
-              <div className="flex items-center gap-2">
-                <span className="font-medium">{selectedToken.symbol}</span>
-                <span className="text-muted-foreground">
-                  ({formatBalance(selectedToken.balanceFormatted)})
-                </span>
-              </div>
-            )}
-          </SelectValue>
-        </SelectTrigger>
-        <SelectContent>
-          {tokens.map((token) => (
-            <SelectItem
-              key={token.address}
-              value={token.address}
-              disabled={!token.isSelectable}
-              className={cn(
-                'flex items-center justify-between',
-                !token.isSelectable && 'opacity-50'
-              )}
-            >
-              <div className="flex items-center gap-2 w-full">
-                <span className="font-medium">{token.symbol}</span>
-                <span className="text-muted-foreground text-xs ml-auto">
-                  {formatBalance(token.balanceFormatted)}
-                </span>
-                {!token.isSelectable && (
-                  <span className="text-xs text-destructive ml-1">
-                    (insufficient)
-                  </span>
-                )}
-                {token.isNative && (
-                  <span className="text-xs text-muted-foreground ml-1">
-                    (default)
-                  </span>
-                )}
-              </div>
-            </SelectItem>
-          ))}
-        </SelectContent>
-      </Select>
-    </div>
+        {/* Header */}
+        <div className="flex items-center justify-between px-3 py-2.5 border-b">
+          <h3 className="font-semibold text-sm">Select a token</h3>
+          <button
+            onClick={() => setOpen(false)}
+            className="rounded-full p-0.5 hover:bg-muted transition-colors"
+          >
+            <X className="size-4" />
+          </button>
+        </div>
+
+        {/* Token List */}
+        <div className="p-1.5 max-h-64 overflow-y-auto">
+          {/* Native Token Section */}
+          {nativeToken && (
+            <div className="mb-1">
+              <p className="text-[10px] font-medium text-muted-foreground px-2 py-1">
+                Pay with {nativeToken.symbol}
+              </p>
+              <TokenRow token={nativeToken} />
+            </div>
+          )}
+
+          {/* ERC-20 Tokens Section */}
+          {erc20Tokens.length > 0 && (
+            <div>
+              <p className="text-[10px] font-medium text-muted-foreground px-2 py-1">
+                Pay with other tokens
+              </p>
+              {erc20Tokens.map((token) => (
+                <TokenRow key={token.address} token={token} showGasCost={false} />
+              ))}
+            </div>
+          )}
+        </div>
+      </PopoverContent>
+    </Popover>
   );
 };
