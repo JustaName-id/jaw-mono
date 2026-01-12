@@ -46,4 +46,7 @@ export interface TransactionDialogProps {
   selectedFeeToken?: FeeTokenOption | null;
   onFeeTokenSelect?: (token: FeeTokenOption) => void;
   showFeeTokenSelector?: boolean;
+
+  // ERC-20 payment indicator (when user selected non-native token)
+  isPayingWithErc20?: boolean;
 }

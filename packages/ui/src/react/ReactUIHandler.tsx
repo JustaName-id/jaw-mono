@@ -1123,8 +1123,8 @@ function TransactionDialogWrapper({
     return effectivePaymasterContext;
   }, [selectedFeeToken, effectivePaymasterContext]);
 
-  // Determine if transaction is effectively sponsored (via config or ERC-20 paymaster)
-  const isEffectivelySponsored = !!computedPaymasterUrl;
+  // Track if user is paying with ERC-20 token (not native ETH, not sponsored)
+  const isPayingWithErc20 = !isSponsored && !!selectedFeeToken && !selectedFeeToken.isNative;
 
   // Transform calls to transactions format expected by dialog
   const transactions = useMemo(() => request.data.calls.map(call => ({
@@ -1265,9 +1265,15 @@ function TransactionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
-        // Skip gas estimation if using a paymaster (sponsored or ERC-20)
-        if (isEffectivelySponsored) {
+        // Skip gas estimation if truly sponsored (not ERC-20 payment)
+        if (isSponsored) {
           setGasFee('sponsored');
+          return;
+        }
+
+        // Skip estimation for ERC-20 payment (paymaster handles it)
+        if (isPayingWithErc20) {
+          setGasFee('');
           return;
         }
 
@@ -1285,8 +1291,12 @@ function TransactionDialogWrapper({
         console.log('[TransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
 
         if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund") || error.message.includes('insufficient'))) {
-          if (isEffectivelySponsored) {
+          if (isSponsored) {
             setGasFee('sponsored');
+            setGasEstimationError('');
+          } else if (isPayingWithErc20) {
+            // ERC-20 payment - no ETH estimation needed
+            setGasFee('');
             setGasEstimationError('');
           } else {
             // Show insufficient funds in UI - user can still cancel manually
@@ -1303,7 +1313,7 @@ function TransactionDialogWrapper({
     };
 
     estimateGas();
-  }, [account, transactionCalls, isEffectivelySponsored, selectedFeeToken, request.data.capabilities?.permissions?.id]);
+  }, [account, transactionCalls, isSponsored, isPayingWithErc20, selectedFeeToken, request.data.capabilities?.permissions?.id]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
@@ -1384,6 +1394,7 @@ function TransactionDialogWrapper({
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={showFeeTokenSelector}
+      isPayingWithErc20={isPayingWithErc20}
     />
   );
 }
@@ -1462,8 +1473,8 @@ function SendTransactionDialogWrapper({
     return effectivePaymasterContext;
   }, [selectedFeeToken, effectivePaymasterContext]);
 
-  // Determine if transaction is effectively sponsored (via config or ERC-20 paymaster)
-  const isEffectivelySponsored = !!computedPaymasterUrl;
+  // Track if user is paying with ERC-20 token (not native ETH, not sponsored)
+  const isPayingWithErc20 = !isSponsored && !!selectedFeeToken && !selectedFeeToken.isNative;
 
   // Transform eth_sendTransaction data to transactions format expected by dialog
   const transactions = useMemo(() => [{
@@ -1602,9 +1613,15 @@ function SendTransactionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
-        // Skip gas estimation if using a paymaster (sponsored or ERC-20)
-        if (isEffectivelySponsored) {
+        // Skip gas estimation if truly sponsored (not ERC-20 payment)
+        if (isSponsored) {
           setGasFee('sponsored');
+          return;
+        }
+
+        // Skip estimation for ERC-20 payment (paymaster handles it)
+        if (isPayingWithErc20) {
+          setGasFee('');
           return;
         }
 
@@ -1616,8 +1633,12 @@ function SendTransactionDialogWrapper({
         console.log('[SendTransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
 
         if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund") || error.message.includes('insufficient'))) {
-          if (isEffectivelySponsored) {
+          if (isSponsored) {
             setGasFee('sponsored');
+            setGasEstimationError('');
+          } else if (isPayingWithErc20) {
+            // ERC-20 payment - no ETH estimation needed
+            setGasFee('');
             setGasEstimationError('');
           } else {
             // Show insufficient funds in UI - user can still cancel manually
@@ -1634,7 +1655,7 @@ function SendTransactionDialogWrapper({
     };
 
     estimateGas();
-  }, [account, transactionCalls, isEffectivelySponsored, selectedFeeToken]);
+  }, [account, transactionCalls, isSponsored, isPayingWithErc20, selectedFeeToken]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
@@ -1704,6 +1725,7 @@ function SendTransactionDialogWrapper({
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={showFeeTokenSelector}
+      isPayingWithErc20={isPayingWithErc20}
     />
   );
 }

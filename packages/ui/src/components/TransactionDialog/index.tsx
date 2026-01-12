@@ -33,6 +33,7 @@ export const TransactionDialog = ({
   selectedFeeToken,
   onFeeTokenSelect,
   showFeeTokenSelector,
+  isPayingWithErc20,
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
@@ -216,17 +217,27 @@ export const TransactionDialog = ({
                   <div className="flex flex-row items-center w-full justify-between gap-1">
                     {gasFeeLoading ? (
                       <p className="text-base font-normal text-muted-foreground">Estimating...</p>
-                    ) : gasEstimationError && !sponsored ? (
+                    ) : gasEstimationError && !sponsored && !isPayingWithErc20 ? (
                       <div className="flex flex-col">
                         <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
                         <p className="text-xs text-red-500">{gasEstimationError}</p>
                       </div>
-                    ) : sponsored || gasFee === 'sponsored' ? (
+                    ) : isPayingWithErc20 && selectedFeeToken ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          {sponsored && gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
+                          <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                            Paying with {selectedFeeToken.symbol}
+                          </span>
+                        </div>
+                        <p className="text-xs font-normal text-muted-foreground">
+                          Gas paid via {selectedFeeToken.symbol}
+                        </p>
+                      </div>
+                    ) : sponsored ? (
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          {gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
                             <div className="flex flex-col line-through text-muted-foreground">
-                              {/* TODO: Add gas fee in USD */}
                               <p className="text-base font-normal">
                                 ${(ethPrice * Number(gasFee)).toFixed(4)}
                               </p>
@@ -237,7 +248,7 @@ export const TransactionDialog = ({
                           </span>
                         </div>
                         <p className="text-xs font-normal text-muted-foreground">
-                          {sponsored && gasFee && gasFee !== 'sponsored' ? (() => {
+                          {gasFee && gasFee !== 'sponsored' ? (() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
                               return '> 0.0001 ETH';
@@ -462,15 +473,26 @@ export const TransactionDialog = ({
                   <div className="flex flex-row items-center w-full justify-between gap-1">
                     {gasFeeLoading ? (
                       <p className="text-base font-normal text-muted-foreground">Estimating...</p>
-                    ) : gasEstimationError && !sponsored ? (
+                    ) : gasEstimationError && !sponsored && !isPayingWithErc20 ? (
                       <div className="flex flex-col">
                         <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
                         <p className="text-xs text-red-500">{gasEstimationError}</p>
                       </div>
-                    ) : sponsored || gasFee === 'sponsored' ? (
+                    ) : isPayingWithErc20 && selectedFeeToken ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          {sponsored && gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
+                          <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
+                            Paying with {selectedFeeToken.symbol}
+                          </span>
+                        </div>
+                        <p className="text-xs font-normal text-muted-foreground">
+                          Gas paid via {selectedFeeToken.symbol}
+                        </p>
+                      </div>
+                    ) : sponsored ? (
+                      <div className="flex flex-col">
+                        <div className="flex items-center gap-2">
+                          {gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
                             <div className="flex flex-col line-through text-muted-foreground">
                               <p className="text-base font-normal">
                                 ${(ethPrice * Number(gasFee)).toFixed(4)}
@@ -482,7 +504,7 @@ export const TransactionDialog = ({
                           </span>
                         </div>
                         <p className="text-xs font-normal text-muted-foreground">
-                          {sponsored && gasFee && gasFee !== 'sponsored' ? (() => {
+                          {gasFee && gasFee !== 'sponsored' ? (() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
                               return '> 0.0001 ETH';
