@@ -20,11 +20,14 @@ import {
   Account,
   SUPPORTED_CHAINS,
   JAW_RPC_URL,
+  JAW_PAYMASTER_URL,
   SubnameTextRecordCapabilityRequest,
   getPermissionFromRelay,
+  handleGetCapabilitiesRequest,
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   type PaymasterConfig,
+  type FeeTokenCapability,
   ensureIntNumber,
   standardErrorCodes,
 } from '@jaw.id/core';
@@ -41,9 +44,11 @@ import { Eip712Dialog } from '../components/Eip712Dialog';
 import { TransactionDialog } from '../components/TransactionDialog';
 import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
+import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
 import { useChainIcon } from '../hooks/useChainIcon';
 import { useEthPrice } from '../hooks/useEthPrice';
+import { fetchTokenBalance } from '../utils/tokenBalance';
 
 
 /**
@@ -1069,6 +1074,11 @@ function TransactionDialogWrapper({
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const ethPrice = useEthPrice();
 
+  // Fee token state for ERC-20 paymaster
+  const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
+  const [feeTokensLoading, setFeeTokensLoading] = useState(false);
+  const [selectedFeeToken, setSelectedFeeToken] = useState<FeeTokenOption | null>(null);
+
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
@@ -1090,6 +1100,32 @@ function TransactionDialogWrapper({
 
   const isSponsored = !!effectivePaymasterUrl;
 
+  // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
+  const computedPaymasterUrl = useMemo(() => {
+    // If already sponsored via capabilities or config, use that
+    if (effectivePaymasterUrl) return effectivePaymasterUrl;
+
+    // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&apiKey=${apiKey}` : ''}`;
+    }
+
+    // Native ETH - no paymaster needed
+    return undefined;
+  }, [effectivePaymasterUrl, selectedFeeToken, chainId, apiKey]);
+
+  // Compute paymaster context based on fee token selection
+  const computedPaymasterContext = useMemo(() => {
+    // If using ERC-20 paymaster, include token address in context
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      return { token: selectedFeeToken.address };
+    }
+    return effectivePaymasterContext;
+  }, [selectedFeeToken, effectivePaymasterContext]);
+
+  // Determine if transaction is effectively sponsored (via config or ERC-20 paymaster)
+  const isEffectivelySponsored = !!computedPaymasterUrl;
+
   // Transform calls to transactions format expected by dialog
   const transactions = useMemo(() => request.data.calls.map(call => ({
     to: call.to,
@@ -1107,6 +1143,89 @@ function TransactionDialogWrapper({
     }));
   }, [request.data.calls]);
 
+  // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
+  useEffect(() => {
+    // Skip if already sponsored via capabilities or config
+    if (effectivePaymasterUrl) return;
+
+    let isMounted = true;
+
+    const fetchFeeTokensData = async () => {
+      setFeeTokensLoading(true);
+      try {
+        // Fetch capabilities from JAW RPC
+        const capabilities = await handleGetCapabilitiesRequest(
+          { method: 'wallet_getCapabilities', params: [] },
+          apiKey || '',
+          true // showTestnets
+        );
+
+        const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+
+        if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
+          if (isMounted) setFeeTokensLoading(false);
+          return;
+        }
+
+        // Get RPC URL for balance fetching
+        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+
+        // Fetch balances in parallel
+        const tokensWithBalances = await Promise.all(
+          feeTokenCap.tokens.map(async (token) => {
+            try {
+              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balanceFormatted = formatUnits(balance, token.decimals);
+              const isNative = isNativeToken(token.address);
+              const isSelectable = parseFloat(balanceFormatted) >= 0.5;
+
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance,
+                balanceFormatted,
+                isNative,
+                isSelectable,
+              } as FeeTokenOption;
+            } catch (error) {
+              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance: 0n,
+                balanceFormatted: '0',
+                isNative: isNativeToken(token.address),
+                isSelectable: false,
+              } as FeeTokenOption;
+            }
+          })
+        );
+
+        if (isMounted) {
+          setFeeTokens(tokensWithBalances);
+          // Default to native token (ETH)
+          const nativeToken = tokensWithBalances.find(t => t.isNative);
+          setSelectedFeeToken(nativeToken || null);
+        }
+      } catch (error) {
+        console.warn('[TransactionDialogWrapper] Failed to fetch fee tokens:', error);
+      } finally {
+        if (isMounted) setFeeTokensLoading(false);
+      }
+    };
+
+    fetchFeeTokensData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chainId, apiKey, request.data.from, effectivePaymasterUrl, viemChain]);
+
   // Initialize account
   useEffect(() => {
     let isMounted = true;
@@ -1116,7 +1235,7 @@ function TransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          effectivePaymasterUrl
+          computedPaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1135,7 +1254,7 @@ function TransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, effectivePaymasterUrl]);
+  }, [apiKey, chainId, computedPaymasterUrl]);
 
   // Gas estimation using Account class
   useEffect(() => {
@@ -1146,8 +1265,8 @@ function TransactionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
-        // Skip gas estimation if sponsored - paymaster will handle fees
-        if (isSponsored) {
+        // Skip gas estimation if using a paymaster (sponsored or ERC-20)
+        if (isEffectivelySponsored) {
           setGasFee('sponsored');
           return;
         }
@@ -1166,7 +1285,7 @@ function TransactionDialogWrapper({
         console.log('[TransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
 
         if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund") || error.message.includes('insufficient'))) {
-          if (isSponsored) {
+          if (isEffectivelySponsored) {
             setGasFee('sponsored');
             setGasEstimationError('');
           } else {
@@ -1184,7 +1303,7 @@ function TransactionDialogWrapper({
     };
 
     estimateGas();
-  }, [account, transactionCalls, isSponsored, request.data.capabilities?.permissions?.id]);
+  }, [account, transactionCalls, isEffectivelySponsored, selectedFeeToken, request.data.capabilities?.permissions?.id]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
@@ -1200,8 +1319,8 @@ function TransactionDialogWrapper({
       const result = await account.sendCalls(
         transactionCalls,
         permissionId ? { permissionId } : undefined,
-        effectivePaymasterUrl,
-        effectivePaymasterContext
+        computedPaymasterUrl,
+        computedPaymasterContext
       );
 
       setTransactionStatus('Transaction successful!');
@@ -1239,6 +1358,9 @@ function TransactionDialogWrapper({
     onReject(UIError.userRejected());
   };
 
+  // Determine if fee token selector should be shown (not sponsored and has ERC-20 options)
+  const showFeeTokenSelector = !isSponsored && feeTokens.some(t => !t.isNative);
+
   return (
     <TransactionDialog
       open={open}
@@ -1256,6 +1378,12 @@ function TransactionDialogWrapper({
       transactionStatus={transactionStatus}
       networkName={networkName}
       chainIconKey={chainIconKey}
+      // Fee token props for ERC-20 paymaster
+      feeTokens={feeTokens}
+      feeTokensLoading={feeTokensLoading}
+      selectedFeeToken={selectedFeeToken}
+      onFeeTokenSelect={setSelectedFeeToken}
+      showFeeTokenSelector={showFeeTokenSelector}
     />
   );
 }
@@ -1285,6 +1413,11 @@ function SendTransactionDialogWrapper({
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const ethPrice = useEthPrice();
 
+  // Fee token state for ERC-20 paymaster
+  const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
+  const [feeTokensLoading, setFeeTokensLoading] = useState(false);
+  const [selectedFeeToken, setSelectedFeeToken] = useState<FeeTokenOption | null>(null);
+
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
@@ -1306,6 +1439,32 @@ function SendTransactionDialogWrapper({
 
   const isSponsored = !!effectivePaymasterUrl;
 
+  // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
+  const computedPaymasterUrl = useMemo(() => {
+    // If already sponsored via capabilities or config, use that
+    if (effectivePaymasterUrl) return effectivePaymasterUrl;
+
+    // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&apiKey=${apiKey}` : ''}`;
+    }
+
+    // Native ETH - no paymaster needed
+    return undefined;
+  }, [effectivePaymasterUrl, selectedFeeToken, chainId, apiKey]);
+
+  // Compute paymaster context based on fee token selection
+  const computedPaymasterContext = useMemo(() => {
+    // If using ERC-20 paymaster, include token address in context
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      return { token: selectedFeeToken.address };
+    }
+    return effectivePaymasterContext;
+  }, [selectedFeeToken, effectivePaymasterContext]);
+
+  // Determine if transaction is effectively sponsored (via config or ERC-20 paymaster)
+  const isEffectivelySponsored = !!computedPaymasterUrl;
+
   // Transform eth_sendTransaction data to transactions format expected by dialog
   const transactions = useMemo(() => [{
     to: request.data.to,
@@ -1321,6 +1480,89 @@ function SendTransactionDialogWrapper({
     data: (request.data.data || '0x') as Hex,
   }], [request.data]);
 
+  // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
+  useEffect(() => {
+    // Skip if already sponsored via capabilities or config
+    if (effectivePaymasterUrl) return;
+
+    let isMounted = true;
+
+    const fetchFeeTokensData = async () => {
+      setFeeTokensLoading(true);
+      try {
+        // Fetch capabilities from JAW RPC
+        const capabilities = await handleGetCapabilitiesRequest(
+          { method: 'wallet_getCapabilities', params: [] },
+          apiKey || '',
+          true // showTestnets
+        );
+
+        const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+
+        if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
+          if (isMounted) setFeeTokensLoading(false);
+          return;
+        }
+
+        // Get RPC URL for balance fetching
+        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+
+        // Fetch balances in parallel
+        const tokensWithBalances = await Promise.all(
+          feeTokenCap.tokens.map(async (token) => {
+            try {
+              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balanceFormatted = formatUnits(balance, token.decimals);
+              const isNative = isNativeToken(token.address);
+              const isSelectable = parseFloat(balanceFormatted) >= 0.5;
+
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance,
+                balanceFormatted,
+                isNative,
+                isSelectable,
+              } as FeeTokenOption;
+            } catch (error) {
+              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance: 0n,
+                balanceFormatted: '0',
+                isNative: isNativeToken(token.address),
+                isSelectable: false,
+              } as FeeTokenOption;
+            }
+          })
+        );
+
+        if (isMounted) {
+          setFeeTokens(tokensWithBalances);
+          // Default to native token (ETH)
+          const nativeToken = tokensWithBalances.find(t => t.isNative);
+          setSelectedFeeToken(nativeToken || null);
+        }
+      } catch (error) {
+        console.warn('[SendTransactionDialogWrapper] Failed to fetch fee tokens:', error);
+      } finally {
+        if (isMounted) setFeeTokensLoading(false);
+      }
+    };
+
+    fetchFeeTokensData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chainId, apiKey, request.data.from, effectivePaymasterUrl, viemChain]);
+
   // Initialize account
   useEffect(() => {
     let isMounted = true;
@@ -1330,7 +1572,7 @@ function SendTransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          effectivePaymasterUrl
+          computedPaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1349,7 +1591,7 @@ function SendTransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, effectivePaymasterUrl]);
+  }, [apiKey, chainId, computedPaymasterUrl]);
 
   // Gas estimation using Account class
   useEffect(() => {
@@ -1360,8 +1602,8 @@ function SendTransactionDialogWrapper({
         setGasFeeLoading(true);
         setGasEstimationError('');
 
-        // Skip gas estimation if sponsored - paymaster will handle fees
-        if (isSponsored) {
+        // Skip gas estimation if using a paymaster (sponsored or ERC-20)
+        if (isEffectivelySponsored) {
           setGasFee('sponsored');
           return;
         }
@@ -1374,7 +1616,7 @@ function SendTransactionDialogWrapper({
         console.log('[SendTransactionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
 
         if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund") || error.message.includes('insufficient'))) {
-          if (isSponsored) {
+          if (isEffectivelySponsored) {
             setGasFee('sponsored');
             setGasEstimationError('');
           } else {
@@ -1392,7 +1634,7 @@ function SendTransactionDialogWrapper({
     };
 
     estimateGas();
-  }, [account, transactionCalls, isSponsored]);
+  }, [account, transactionCalls, isEffectivelySponsored, selectedFeeToken]);
 
   const handleConfirm = async () => {
     setIsProcessing(true);
@@ -1402,7 +1644,7 @@ function SendTransactionDialogWrapper({
         throw new Error('Account not initialized');
       }
 
-      const txHash = await account.sendTransaction(transactionCalls, effectivePaymasterUrl, effectivePaymasterContext);
+      const txHash = await account.sendTransaction(transactionCalls, computedPaymasterUrl, computedPaymasterContext);
 
       setTransactionStatus('Transaction successful!');
       onApprove(txHash);
@@ -1436,6 +1678,9 @@ function SendTransactionDialogWrapper({
     onReject(UIError.userRejected());
   };
 
+  // Determine if fee token selector should be shown (not sponsored and has ERC-20 options)
+  const showFeeTokenSelector = !isSponsored && feeTokens.some(t => !t.isNative);
+
   return (
     <TransactionDialog
       open={open}
@@ -1453,6 +1698,12 @@ function SendTransactionDialogWrapper({
       transactionStatus={transactionStatus}
       networkName={networkName}
       chainIconKey={chainIconKey}
+      // Fee token props for ERC-20 paymaster
+      feeTokens={feeTokens}
+      feeTokensLoading={feeTokensLoading}
+      selectedFeeToken={selectedFeeToken}
+      onFeeTokenSelect={setSelectedFeeToken}
+      showFeeTokenSelector={showFeeTokenSelector}
     />
   );
 }

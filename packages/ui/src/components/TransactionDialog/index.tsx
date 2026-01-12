@@ -3,6 +3,7 @@
 import { Button } from "../ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
 import { DefaultDialog } from "../DefaultDialog";
+import { FeeTokenSelector } from "../FeeTokenSelector";
 import { CopiedIcon, CopyIcon, WalletIcon } from "../../icons";
 import { useState, useEffect } from "react";
 import { formatEther } from "viem";
@@ -26,6 +27,12 @@ export const TransactionDialog = ({
   transactionStatus,
   networkName,
   chainIconKey,
+  // Fee token props
+  feeTokens,
+  feeTokensLoading,
+  selectedFeeToken,
+  onFeeTokenSelect,
+  showFeeTokenSelector,
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
@@ -265,6 +272,19 @@ export const TransactionDialog = ({
                 </div>
               </div>
 
+              {/* Fee Token Selector - shown when ERC-20 payment options are available */}
+              {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
+                <div className="p-3.5 border border-border rounded-[6px]">
+                  <FeeTokenSelector
+                    tokens={feeTokens}
+                    selectedToken={selectedFeeToken ?? null}
+                    onSelect={onFeeTokenSelect}
+                    isLoading={feeTokensLoading ?? false}
+                    disabled={isProcessing}
+                  />
+                </div>
+              )}
+
               {/* Show Data section if data is provided */}
               {currentTransaction?.data && (
                 <div className="flex flex-col p-3.5 gap-2.5 border border-border rounded-[6px]">
@@ -496,6 +516,19 @@ export const TransactionDialog = ({
                   </div>
                 </div>
               </div>
+
+              {/* Fee Token Selector - shown when ERC-20 payment options are available */}
+              {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
+                <div className="p-3.5 border border-border rounded-[6px]">
+                  <FeeTokenSelector
+                    tokens={feeTokens}
+                    selectedToken={selectedFeeToken ?? null}
+                    onSelect={onFeeTokenSelect}
+                    isLoading={feeTokensLoading ?? false}
+                    disabled={isProcessing}
+                  />
+                </div>
+              )}
 
               {/* Action Buttons */}
               <div className="flex gap-3 px-3.5 flex-shrink-0">
