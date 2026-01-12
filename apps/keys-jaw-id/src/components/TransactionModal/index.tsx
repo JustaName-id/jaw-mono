@@ -228,7 +228,11 @@ export const TransactionModal = ({
               const balance = await fetchTokenBalance(token.address, walletAddress, rpcUrl);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
-              const isSelectable = parseFloat(balanceFormatted) >= 0.5;
+              // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
+              // For ERC-20 tokens: require at least 0.5 units
+              const isSelectable = isNative
+                ? balance > 0n
+                : parseFloat(balanceFormatted) >= 0.5;
 
               return {
                 uid: token.uid,
@@ -258,9 +262,15 @@ export const TransactionModal = ({
 
         if (isMounted) {
           setFeeTokens(tokensWithBalances);
-          // Default to native token (ETH)
+          // Default selection: prefer native ETH if it has balance, otherwise first selectable ERC-20
           const nativeToken = tokensWithBalances.find(t => t.isNative);
-          setSelectedFeeToken(nativeToken || null);
+          if (nativeToken && nativeToken.isSelectable) {
+            setSelectedFeeToken(nativeToken);
+          } else {
+            // Find first selectable non-native token
+            const firstSelectableErc20 = tokensWithBalances.find(t => !t.isNative && t.isSelectable);
+            setSelectedFeeToken(firstSelectableErc20 || nativeToken || null);
+          }
         }
       } catch (error) {
         console.warn('[TransactionModal] Failed to fetch fee tokens:', error);

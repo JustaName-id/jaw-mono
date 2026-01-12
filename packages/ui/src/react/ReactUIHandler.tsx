@@ -132,12 +132,15 @@ function getChainIconKeyFromId(chainId: number): string {
 // Permission Utilities
 // ============================================================================
 
-// ERC-7528 native token address
-const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+// Common native token addresses
+const NATIVE_TOKEN_ADDRESSES = [
+  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', // ERC-7528 native token address
+  '0x0000000000000000000000000000000000000000', // Zero address
+];
 
 const isNativeToken = (tokenAddress?: string): boolean => {
   if (!tokenAddress) return true;
-  return tokenAddress.toLowerCase() === NATIVE_TOKEN.toLowerCase();
+  return NATIVE_TOKEN_ADDRESSES.includes(tokenAddress.toLowerCase());
 };
 
 // Format timestamp to readable date
@@ -1178,7 +1181,11 @@ function TransactionDialogWrapper({
               const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
-              const isSelectable = parseFloat(balanceFormatted) >= 0.5;
+              // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
+              // For ERC-20 tokens: require at least 0.5 units
+              const isSelectable = isNative
+                ? balance > 0n
+                : parseFloat(balanceFormatted) >= 0.5;
 
               return {
                 uid: token.uid,
@@ -1208,9 +1215,15 @@ function TransactionDialogWrapper({
 
         if (isMounted) {
           setFeeTokens(tokensWithBalances);
-          // Default to native token (ETH)
+          // Default selection: prefer native ETH if it has balance, otherwise first selectable ERC-20
           const nativeToken = tokensWithBalances.find(t => t.isNative);
-          setSelectedFeeToken(nativeToken || null);
+          if (nativeToken && nativeToken.isSelectable) {
+            setSelectedFeeToken(nativeToken);
+          } else {
+            // Find first selectable non-native token
+            const firstSelectableErc20 = tokensWithBalances.find(t => !t.isNative && t.isSelectable);
+            setSelectedFeeToken(firstSelectableErc20 || nativeToken || null);
+          }
         }
       } catch (error) {
         console.warn('[TransactionDialogWrapper] Failed to fetch fee tokens:', error);
@@ -1526,7 +1539,11 @@ function SendTransactionDialogWrapper({
               const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
-              const isSelectable = parseFloat(balanceFormatted) >= 0.5;
+              // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
+              // For ERC-20 tokens: require at least 0.5 units
+              const isSelectable = isNative
+                ? balance > 0n
+                : parseFloat(balanceFormatted) >= 0.5;
 
               return {
                 uid: token.uid,
@@ -1556,9 +1573,15 @@ function SendTransactionDialogWrapper({
 
         if (isMounted) {
           setFeeTokens(tokensWithBalances);
-          // Default to native token (ETH)
+          // Default selection: prefer native ETH if it has balance, otherwise first selectable ERC-20
           const nativeToken = tokensWithBalances.find(t => t.isNative);
-          setSelectedFeeToken(nativeToken || null);
+          if (nativeToken && nativeToken.isSelectable) {
+            setSelectedFeeToken(nativeToken);
+          } else {
+            // Find first selectable non-native token
+            const firstSelectableErc20 = tokensWithBalances.find(t => !t.isNative && t.isSelectable);
+            setSelectedFeeToken(firstSelectableErc20 || nativeToken || null);
+          }
         }
       } catch (error) {
         console.warn('[SendTransactionDialogWrapper] Failed to fetch fee tokens:', error);
