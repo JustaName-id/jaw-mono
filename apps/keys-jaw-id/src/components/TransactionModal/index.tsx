@@ -1,6 +1,6 @@
 'use client'
 
-import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken } from "@jaw.id/ui";
+import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useEthPrice } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, Hash, formatUnits } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
@@ -57,6 +57,7 @@ export const TransactionModal = ({
 }: TransactionModalProps) => {
   const { getAccount } = usePasskeys();
   const { walletAddress } = useAuth();
+  const ethPrice = useEthPrice();
   const [gasFee, setGasFee] = useState<string>('');
   const [gasFeeLoading, setGasFeeLoading] = useState<boolean>(false);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
@@ -183,12 +184,18 @@ export const TransactionModal = ({
 
   // Compute paymaster context based on fee token selection
   const computedPaymasterContext = useMemo(() => {
-    // If using ERC-20 paymaster, include token address in context
+    // If using ERC-20 paymaster, include token address and gas amount in context
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      return { token: selectedFeeToken.address };
+      // Calculate gas amount in token's smallest unit (with 20% buffer)
+      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) * 1.2 : 0;
+      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      return {
+        token: selectedFeeToken.address,
+        gas: gasInTokenUnits.toString(),
+      };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice]);
 
   // Determine if fee token selector should be shown
   const showFeeTokenSelector = !isSponsored && feeTokens.some(t => !t.isNative);
@@ -357,10 +364,11 @@ export const TransactionModal = ({
           return;
         }
 
-        // Skip estimation for ERC-20 payment (paymaster handles it)
-        if (isPayingWithErc20) {
-          setGasFee('');
-          setGasEstimationError('');
+        // Skip estimation for ERC-20 payment ONLY if we already have a gas estimate
+        // We need at least one estimate to calculate the token equivalent
+        if (isPayingWithErc20 && gasFee && gasFee !== '') {
+          setGasEstimationError(''); // Clear any previous error
+          setGasFeeLoading(false);
           return;
         }
 
@@ -389,8 +397,10 @@ export const TransactionModal = ({
             setGasFee('sponsored');
             setGasEstimationError('');
           } else if (isPayingWithErc20) {
-            // ERC-20 payment - no ETH estimation needed
-            setGasFee('');
+            // ERC-20 payment - use fallback gas estimate if none exists
+            if (!gasFee || gasFee === '') {
+              setGasFee('0.00005'); // Fallback: ~$0.15 at $3000 ETH (typical L2 gas)
+            }
             setGasEstimationError('');
           } else {
             setGasFee('');
@@ -519,7 +529,7 @@ export const TransactionModal = ({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={0}
+      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
