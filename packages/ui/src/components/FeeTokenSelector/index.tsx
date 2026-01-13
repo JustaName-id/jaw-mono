@@ -111,9 +111,15 @@ export const FeeTokenSelector = ({
       const usd = parseFloat(token.balanceFormatted) * ethPrice;
       return formatUsd(usd);
     }
-    // For stablecoins, balance ≈ USD value
-    if (['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase())) {
-      return formatUsd(parseFloat(token.balanceFormatted));
+    // For non-native ERC-20 tokens, show balance with token decimals
+    if (!token.isNative) {
+      const balance = parseFloat(token.balanceFormatted);
+      // Show appropriate decimal places based on token decimals
+      const displayDecimals = token.decimals >= 6 ? 2 : token.decimals;
+      return `${balance.toLocaleString('en-US', {
+        minimumFractionDigits: 0,
+        maximumFractionDigits: displayDecimals,
+      })} ${token.symbol}`;
     }
     return '';
   };
@@ -148,16 +154,14 @@ export const FeeTokenSelector = ({
       };
     }
 
-    // For stablecoins, gas cost in token ≈ gas cost in USD + 20% buffer
+    // For non-native ERC-20 tokens, gas cost in token + 20% buffer
     const gasUsdWithBuffer = gasUsd * 1.2;
-    if (['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase())) {
-      return {
-        formatted: `~${gasUsdWithBuffer.toFixed(3)} ${token.symbol}`,
-        usd: formatUsd(gasUsdWithBuffer),
-      };
-    }
-
-    return { formatted: '', usd: formatUsd(gasUsdWithBuffer) };
+    // Show appropriate decimal places based on token decimals
+    const displayDecimals = token.decimals >= 6 ? 3 : token.decimals;
+    return {
+      formatted: `~${gasUsdWithBuffer.toFixed(displayDecimals)} ${token.symbol}`,
+      usd: formatUsd(gasUsdWithBuffer),
+    };
   };
 
   // Token row component
