@@ -1290,9 +1290,9 @@ function TransactionDialogWrapper({
           return;
         }
 
-        // Skip estimation for ERC-20 payment (paymaster handles it)
-        // Keep existing gasFee for display purposes (to show equivalent token cost)
-        if (isPayingWithErc20) {
+        // Skip estimation for ERC-20 payment ONLY if we already have a gas estimate
+        // We need at least one estimate to calculate the token equivalent
+        if (isPayingWithErc20 && gasFee && gasFee !== '') {
           setGasEstimationError(''); // Clear any previous error
           setGasFeeLoading(false);
           return;
@@ -1316,7 +1316,10 @@ function TransactionDialogWrapper({
             setGasFee('sponsored');
             setGasEstimationError('');
           } else if (isPayingWithErc20) {
-            // ERC-20 payment - keep existing gasFee for display, just clear error
+            // ERC-20 payment - use fallback gas estimate if none exists
+            if (!gasFee || gasFee === '') {
+              setGasFee('0.00005'); // Fallback: ~$0.15 at $3000 ETH (typical L2 gas)
+            }
             setGasEstimationError('');
           } else {
             // Show insufficient funds in UI - user can still cancel manually
@@ -1655,9 +1658,9 @@ function SendTransactionDialogWrapper({
           return;
         }
 
-        // Skip estimation for ERC-20 payment (paymaster handles it)
-        // Keep existing gasFee for display purposes (to show equivalent token cost)
-        if (isPayingWithErc20) {
+        // Skip estimation for ERC-20 payment ONLY if we already have a gas estimate
+        // We need at least one estimate to calculate the token equivalent
+        if (isPayingWithErc20 && gasFee && gasFee !== '') {
           setGasEstimationError(''); // Clear any previous error
           setGasFeeLoading(false);
           return;
@@ -1675,7 +1678,10 @@ function SendTransactionDialogWrapper({
             setGasFee('sponsored');
             setGasEstimationError('');
           } else if (isPayingWithErc20) {
-            // ERC-20 payment - keep existing gasFee for display, just clear error
+            // ERC-20 payment - use fallback gas estimate if none exists
+            if (!gasFee || gasFee === '') {
+              setGasFee('0.00005'); // Fallback: ~$0.15 at $3000 ETH (typical L2 gas)
+            }
             setGasEstimationError('');
           } else {
             // Show insufficient funds in UI - user can still cancel manually

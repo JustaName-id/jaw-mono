@@ -544,21 +544,21 @@ Issued At: ${issuedAt}`;
 
       // Example: Send 0.001 ETH to a recipient
       // Use viem's parseEther to convert ETH to wei
-      // const value = parseEther('0.0001');
+      const value = parseEther('0.0001');
 
-      const transferData = encodeFunctionData({
-        abi: erc20Abi,
-        functionName: 'transfer',
-        args: ["0xa78C83D5bd5E7B69561c3eA222501838505d14Cb", parseUnits('0.01', 6)]
-      });
+      // const transferData = encodeFunctionData({
+      //   abi: erc20Abi,
+      //   functionName: 'transfer',
+      //   args: ["0xa78C83D5bd5E7B69561c3eA222501838505d14Cb", parseUnits('0.01', 6)]
+      // });
 
       const txHash = await provider.request({
         method: 'eth_sendTransaction',
         params: [{
           from: accounts[0],
-          to: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Example recipient
-          value: `0x0`, // Convert bigint to hex
-          data: transferData, // No data for simple ETH transfer
+          to: '0xE08224B2CfaF4f27E2DC7cB3f6B99AcC68Cf06c0', // Example recipient
+          value: `0x${value.toString(16)}`, // Convert bigint to hex
+          data: `0x0`, // No data for simple ETH transfer
         }]
       });
 
