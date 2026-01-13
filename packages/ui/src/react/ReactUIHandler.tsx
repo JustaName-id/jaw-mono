@@ -1119,12 +1119,18 @@ function TransactionDialogWrapper({
 
   // Compute paymaster context based on fee token selection
   const computedPaymasterContext = useMemo(() => {
-    // If using ERC-20 paymaster, include token address in context
+    // If using ERC-20 paymaster, include token address and gas amount in context
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      return { token: selectedFeeToken.address };
+      // Calculate gas amount in token's smallest unit (with 20% buffer)
+      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) * 1.2 : 0;
+      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      return {
+        token: selectedFeeToken.address,
+        gas: gasInTokenUnits.toString(),
+      };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice]);
 
   // Track if user is paying with ERC-20 token (not native ETH, not sponsored)
   const isPayingWithErc20 = !isSponsored && !!selectedFeeToken && !selectedFeeToken.isNative;
@@ -1480,12 +1486,18 @@ function SendTransactionDialogWrapper({
 
   // Compute paymaster context based on fee token selection
   const computedPaymasterContext = useMemo(() => {
-    // If using ERC-20 paymaster, include token address in context
+    // If using ERC-20 paymaster, include token address and gas amount in context
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      return { token: selectedFeeToken.address };
+      // Calculate gas amount in token's smallest unit (with 20% buffer)
+      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) * 1.2 : 0;
+      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      return {
+        token: selectedFeeToken.address,
+        gas: gasInTokenUnits.toString(),
+      };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice]);
 
   // Track if user is paying with ERC-20 token (not native ETH, not sponsored)
   const isPayingWithErc20 = !isSponsored && !!selectedFeeToken && !selectedFeeToken.isNative;

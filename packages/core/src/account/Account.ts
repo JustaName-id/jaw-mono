@@ -1,5 +1,5 @@
 import type { Address, Hash, Hex, TypedDataDefinition, TypedData, LocalAccount } from 'viem';
-import { isHex } from 'viem';
+import { isHex, encodeFunctionData, erc20Abi } from 'viem';
 import { toWebAuthnAccount, type SmartAccount } from 'viem/account-abstraction';
 import {
   createSmartAccount,
@@ -30,7 +30,7 @@ import {
   type CallPermissionDetail,
   type SpendPermissionDetail,
 } from '../rpc/permissions.js';
-import { JAW_RPC_URL } from '../constants.js';
+import { JAW_RPC_URL, JAW_PAYMASTER_URL, ERC20_PAYMASTER_ADDRESS } from '../constants.js';
 import { type Chain, chains as chainStore } from '../store/index.js';
 import { logAccountIssuance } from '../analytics/index.js';
 
@@ -606,10 +606,14 @@ export class Account {
       data: call.data,
     }));
 
+    // If using JAW ERC-20 paymaster, prepend approval call
+    const approvalCall = Account.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
+
     return await sendSmartAccountTransaction(
       this._smartAccount,
-      formattedCalls,
-      this._chain,      
+      finalCalls,
+      this._chain,
       paymasterUrlOverride,
       paymasterContextOverride
     );
@@ -649,13 +653,17 @@ export class Account {
       data: call.data,
     }));
 
+    // If using JAW ERC-20 paymaster, prepend approval call
+    const approvalCall = Account.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
+
     let result: BundledTransactionResult;
 
     if (options?.permissionId) {
       // Execute through permission manager
       result = await sendSmartAccountCallsWithPermission(
         this._smartAccount,
-        formattedCalls,
+        finalCalls,
         this._chain,
         options.permissionId,
         this._apiKey,
@@ -666,7 +674,7 @@ export class Account {
       // Standard execution
       result = await sendSmartAccountCalls(
         this._smartAccount,
-        formattedCalls,
+        finalCalls,
         this._chain,
         paymasterUrlOverride,
         paymasterContextOverride
@@ -916,6 +924,60 @@ export class Account {
     }
 
     throw new Error(`Invalid value format: ${value}. Use bigint or hex string (wei).`);
+  }
+
+  /**
+   * Check if the paymaster URL is the JAW ERC-20 paymaster
+   * @internal
+   */
+  private static isJawErc20Paymaster(paymasterUrl?: string): boolean {
+    if (!paymasterUrl) return false;
+    // Remove query params and compare base URL
+    const baseUrl = paymasterUrl.split('?')[0];
+    return baseUrl === JAW_PAYMASTER_URL;
+  }
+
+  /**
+   * Create ERC-20 approval call for the paymaster if using JAW ERC-20 paymaster
+   * @internal
+   */
+  private static createErc20ApprovalCall(
+    paymasterUrl?: string,
+    paymasterContext?: Record<string, unknown>
+  ): { to: Address; value?: bigint; data: Hex } | null {
+    // Only add approval if using JAW ERC-20 paymaster
+    if (!Account.isJawErc20Paymaster(paymasterUrl)) {
+      return null;
+    }
+
+    // Extract token address and gas amount from context
+    const tokenAddress = paymasterContext?.token as string | undefined;
+    // const gasAmount = paymasterContext?.gas as string | bigint | undefined;
+
+    if (!tokenAddress) {
+      console.warn('[Account] ERC-20 paymaster requires token address in context');
+      return null;
+    }
+
+    // Default gas amount if not provided (1 token unit as fallback, caller should provide proper estimate)
+    // const approvalAmount = gasAmount
+    //   ? (typeof gasAmount === 'string' ? BigInt(gasAmount) : gasAmount)
+    //   : BigInt('500000'); // 0.5 USDC/USDT 
+
+    const approvalAmount = BigInt('500000'); // 0.5 USDC/USDT (6 decimals)
+
+    // Encode ERC-20 approve call
+    const approveData = encodeFunctionData({
+      abi: erc20Abi,
+      functionName: 'approve',
+      args: [ERC20_PAYMASTER_ADDRESS as Address, approvalAmount],
+    });
+
+    return {
+      to: tokenAddress as Address,
+      value: 0n,
+      data: approveData,
+    };
   }
 }
 
