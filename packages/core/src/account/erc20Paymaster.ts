@@ -41,6 +41,18 @@ export interface TokenInfo {
 }
 
 /**
+ * Gas fields from a prepared UserOperation (EntryPoint v0.7/0.8)
+ */
+export interface UserOpGasFields {
+  preVerificationGas: bigint;
+  verificationGasLimit: bigint;
+  callGasLimit: bigint;
+  paymasterVerificationGasLimit?: bigint;
+  paymasterPostOpGasLimit?: bigint;
+  maxFeePerGas: bigint;
+}
+
+/**
  * Fetches token quotes from Pimlico's ERC-20 paymaster.
  * This gets the exchange rate and postOpGas for each token.
  *
@@ -178,61 +190,100 @@ export async function estimateErc20PaymasterCosts(
     calls: callsWithApproval,
   });
 
-  // 4. Calculate max gas (sum of all gas fields)
-  // Note: paymasterVerificationGasLimit and paymasterPostOpGasLimit may not exist on all EntryPoint versions
-  const paymasterVerificationGasLimit = 'paymasterVerificationGasLimit' in userOp
-    ? (userOp as { paymasterVerificationGasLimit?: bigint }).paymasterVerificationGasLimit || 0n
-    : 0n;
-  const paymasterPostOpGasLimit = 'paymasterPostOpGasLimit' in userOp
-    ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit || 0n
-    : 0n;
-
-  const maxGas =
-    userOp.preVerificationGas +
-    userOp.callGasLimit +
-    userOp.verificationGasLimit +
-    paymasterVerificationGasLimit +
-    paymasterPostOpGasLimit;
+  // 4. Extract gas fields from userOp
+  const gas: UserOpGasFields = {
+    preVerificationGas: userOp.preVerificationGas,
+    verificationGasLimit: userOp.verificationGasLimit,
+    callGasLimit: userOp.callGasLimit,
+    paymasterVerificationGasLimit: 'paymasterVerificationGasLimit' in userOp
+      ? (userOp as { paymasterVerificationGasLimit?: bigint }).paymasterVerificationGasLimit
+      : undefined,
+    paymasterPostOpGasLimit: 'paymasterPostOpGasLimit' in userOp
+      ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit
+      : undefined,
+    maxFeePerGas: userOp.maxFeePerGas,
+  };
 
   console.log('[estimateErc20PaymasterCosts] Gas breakdown:', {
-    preVerificationGas: userOp.preVerificationGas.toString(),
-    callGasLimit: userOp.callGasLimit.toString(),
-    verificationGasLimit: userOp.verificationGasLimit.toString(),
-    paymasterVerificationGasLimit: paymasterVerificationGasLimit.toString(),
-    paymasterPostOpGasLimit: paymasterPostOpGasLimit.toString(),
-    maxGas: maxGas.toString(),
-    maxFeePerGas: userOp.maxFeePerGas.toString(),
+    preVerificationGas: gas.preVerificationGas.toString(),
+    callGasLimit: gas.callGasLimit.toString(),
+    verificationGasLimit: gas.verificationGasLimit.toString(),
+    paymasterVerificationGasLimit: (gas.paymasterVerificationGasLimit || 0n).toString(),
+    paymasterPostOpGasLimit: (gas.paymasterPostOpGasLimit || 0n).toString(),
+    maxFeePerGas: gas.maxFeePerGas.toString(),
   });
 
-  // 5. Calculate cost for each token using Pimlico's formula:
-  // maxCostInToken = ((userOperationMaxCost + postOpGas * maxFeePerGas) * exchangeRate) / 1e18
+  // 5. Calculate cost for each token using the utility function
+  return calculateTokenEstimatesFromGas(gas, quotes, tokens);
+}
+
+/**
+ * Calculates the required prefund (total gas cost in wei) from userOp gas fields.
+ * This follows Pimlico's getRequiredPrefund formula for EntryPoint v0.7/0.8.
+ */
+export function getRequiredPrefund(gas: UserOpGasFields): bigint {
+  const totalGas =
+    gas.preVerificationGas +
+    gas.verificationGasLimit +
+    gas.callGasLimit +
+    (gas.paymasterVerificationGasLimit || 0n) +
+    (gas.paymasterPostOpGasLimit || 0n);
+
+  return totalGas * gas.maxFeePerGas;
+}
+
+/**
+ * Calculates the token cost for a userOp using existing gas data and quote.
+ * Use this when you already have the userOp prepared and want to avoid redundant API calls.
+ *
+ * Formula (Pimlico's):
+ * maxCostInWei = (totalGas + postOpGas) * maxFeePerGas
+ * costInToken = (maxCostInWei * exchangeRate) / 1e18
+ *
+ * @param gas - Gas fields from a prepared userOp
+ * @param quote - Token quote from fetchTokenQuotes
+ * @returns Token cost in the token's smallest unit
+ */
+export function calculateTokenCostFromGas(
+  gas: UserOpGasFields,
+  quote: TokenQuote
+): bigint {
+  const totalGas =
+    gas.preVerificationGas +
+    gas.verificationGasLimit +
+    gas.callGasLimit +
+    (gas.paymasterVerificationGasLimit || 0n) +
+    (gas.paymasterPostOpGasLimit || 0n);
+
+  // maxCostInWei = (totalGas + postOpGas) * maxFeePerGas
+  const maxCostWei = (totalGas + quote.postOpGas) * gas.maxFeePerGas;
+
+  // Convert to token using exchange rate
+  return (maxCostWei * quote.exchangeRate) / BigInt(1e18);
+}
+
+/**
+ * Calculates token estimates from existing gas data and quotes.
+ * Use this when you already have a prepared userOp and quotes to avoid redundant API calls.
+ *
+ * @param gas - Gas fields from a prepared userOp
+ * @param quotes - Token quotes from fetchTokenQuotes
+ * @param tokens - Token info (for symbol, decimals, balance)
+ * @returns Array of token estimates
+ */
+export function calculateTokenEstimatesFromGas(
+  gas: UserOpGasFields,
+  quotes: TokenQuote[],
+  tokens: TokenInfo[]
+): TokenEstimate[] {
   return quotes.map((quote) => {
     const token = tokens.find(t => t.address.toLowerCase() === quote.tokenAddress.toLowerCase());
     const decimals = token?.decimals || 18;
     const symbol = token?.symbol || 'UNKNOWN';
     const balance = token?.balance || 0n;
 
-    // Calculate max cost in wei
-    const maxCostWei = (maxGas + quote.postOpGas) * userOp.maxFeePerGas;
-
-    // Convert to token amount using exchange rate
-    const tokenCost = (maxCostWei * quote.exchangeRate) / BigInt(1e18);
-
-    // Check if user has sufficient balance
+    const tokenCost = calculateTokenCostFromGas(gas, quote);
     const hasSufficientBalance = balance >= tokenCost;
-
-    console.log('[estimateErc20PaymasterCosts] Token cost calculation:', {
-      token: quote.tokenAddress,
-      postOpGas: quote.postOpGas.toString(),
-      exchangeRate: quote.exchangeRate.toString(),
-      maxCostWei: maxCostWei.toString(),
-      tokenCost: tokenCost.toString(),
-      tokenCostFormatted: formatTokenAmount(tokenCost, decimals),
-      balance: balance.toString(),
-      hasSufficientBalance,
-    });
-
-    // Format with proper decimals
     const tokenCostFormatted = formatTokenAmount(tokenCost, decimals);
 
     return {
