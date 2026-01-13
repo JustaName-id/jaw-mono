@@ -544,7 +544,7 @@ Issued At: ${issuedAt}`;
 
       // Example: Send 0.001 ETH to a recipient
       // Use viem's parseEther to convert ETH to wei
-      const value = parseEther('0.0001');
+      // const value = parseEther('0.0001');
 
       const transferData = encodeFunctionData({
         abi: erc20Abi,
