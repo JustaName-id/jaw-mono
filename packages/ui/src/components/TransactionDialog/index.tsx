@@ -278,9 +278,7 @@ export const TransactionDialog = ({
                             ) : gasFee && ethPrice > 0 ? (
                               `~${(ethPrice * Number(gasFee) * 1.2).toFixed(4)} ${selectedFeeToken.symbol}`
                             ) : (
-                              <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                                Paying with {selectedFeeToken.symbol}
-                              </span>
+                              <span className="text-muted-foreground">Estimating...</span>
                             )}
                           </p>
                           {/* Inline Fee Token Selector */}
@@ -560,9 +558,7 @@ export const TransactionDialog = ({
                             ) : gasFee && ethPrice > 0 ? (
                               `~${(ethPrice * Number(gasFee) * 1.2).toFixed(4)} ${selectedFeeToken.symbol}`
                             ) : (
-                              <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
-                                Paying with {selectedFeeToken.symbol}
-                              </span>
+                              <span className="text-muted-foreground">Estimating...</span>
                             )}
                           </p>
                           {/* Inline Fee Token Selector */}

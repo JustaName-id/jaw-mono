@@ -1356,6 +1356,19 @@ function TransactionDialogWrapper({
       isMounted = false;
     };
   }, [account, feeTokens.length, transactionCalls, effectivePaymasterUrl, chainId, apiKey]);
+  // Sync selectedFeeToken when feeTokens updates (e.g., when estimates come in)
+  useEffect(() => {
+    if (!selectedFeeToken || selectedFeeToken.isNative) return;
+
+    const updatedToken = feeTokens.find(
+      t => t.address.toLowerCase() === selectedFeeToken.address.toLowerCase()
+    );
+
+    // Only update if gasCostFormatted changed
+    if (updatedToken && updatedToken.gasCostFormatted !== selectedFeeToken.gasCostFormatted) {
+      setSelectedFeeToken(updatedToken);
+    }
+  }, [feeTokens, selectedFeeToken]);
 
   // Gas estimation using Account class
   useEffect(() => {
@@ -1801,6 +1814,20 @@ function SendTransactionDialogWrapper({
       isMounted = false;
     };
   }, [account, feeTokens.length, transactionCalls, effectivePaymasterUrl, chainId, apiKey]);
+
+  // Sync selectedFeeToken when feeTokens updates (e.g., when estimates come in)
+  useEffect(() => {
+    if (!selectedFeeToken || selectedFeeToken.isNative) return;
+
+    const updatedToken = feeTokens.find(
+      t => t.address.toLowerCase() === selectedFeeToken.address.toLowerCase()
+    );
+
+    // Only update if gasCostFormatted changed
+    if (updatedToken && updatedToken.gasCostFormatted !== selectedFeeToken.gasCostFormatted) {
+      setSelectedFeeToken(updatedToken);
+    }
+  }, [feeTokens, selectedFeeToken]);
 
   // Gas estimation using Account class
   useEffect(() => {

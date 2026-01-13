@@ -333,18 +333,6 @@ export async function toJustanAccount(
                 }))
             );
         },
-
-        userOperation: {
-            async estimateGas(userOperation) {
-                if (owner.type !== 'webAuthn') return
-                // Accounts with WebAuthn owner require a minimum verification gas limit of 800,000.
-                return {
-                    verificationGasLimit: BigInt(
-                        Math.max(Number(userOperation.verificationGasLimit ?? 0n), 800_000),
-                    ),
-                }
-            },
-        },
     })
 }
 

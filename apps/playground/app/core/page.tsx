@@ -556,7 +556,7 @@ Issued At: ${issuedAt}`;
         method: 'eth_sendTransaction',
         params: [{
           from: accounts[0],
-          to: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
+          to: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
           value: `0x0`, // Convert bigint to hex
           data: transferData, // No data for simple ETH transfer
         }]
