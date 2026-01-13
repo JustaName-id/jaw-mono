@@ -952,19 +952,35 @@ export class Account {
 
     // Extract token address and gas amount from context
     const tokenAddress = paymasterContext?.token as string | undefined;
-    // const gasAmount = paymasterContext?.gas as string | bigint | undefined;
+    const gasAmount = paymasterContext?.gas as string | bigint | undefined;
 
     if (!tokenAddress) {
       console.warn('[Account] ERC-20 paymaster requires token address in context');
       return null;
     }
 
-    // Default gas amount if not provided (1 token unit as fallback, caller should provide proper estimate)
-    // const approvalAmount = gasAmount
-    //   ? (typeof gasAmount === 'string' ? BigInt(gasAmount) : gasAmount)
-    //   : BigInt('500000'); // 0.5 USDC/USDT 
+    // Minimum approval amount to ensure we don't approve 0 tokens
+    // This is ~2 USDC/USDT which should cover most transactions on testnets/L2s
+    const MIN_APPROVAL_AMOUNT = BigInt('2000000'); // 2 USDC/USDT (6 decimals)
 
-    const approvalAmount = BigInt('500000'); // 0.5 USDC/USDT (6 decimals)
+    // Parse the gas amount from context
+    let parsedGasAmount = 0n;
+    if (gasAmount) {
+      parsedGasAmount = typeof gasAmount === 'string' ? BigInt(gasAmount) : gasAmount;
+    }
+
+    // Use the larger of: parsed amount, or minimum safety amount
+    // This ensures we never approve 0 or an amount too low
+    const approvalAmount = parsedGasAmount > MIN_APPROVAL_AMOUNT
+      ? parsedGasAmount
+      : MIN_APPROVAL_AMOUNT;
+
+    console.log('[Account] Creating ERC-20 approval:', {
+      token: tokenAddress,
+      requestedAmount: parsedGasAmount.toString(),
+      actualApprovalAmount: approvalAmount.toString(),
+      usingMinimum: parsedGasAmount <= MIN_APPROVAL_AMOUNT,
+    });
 
     // Encode ERC-20 approve call
     const approveData = encodeFunctionData({

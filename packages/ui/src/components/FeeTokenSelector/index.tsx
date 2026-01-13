@@ -124,9 +124,22 @@ export const FeeTokenSelector = ({
     return '';
   };
 
-  // Estimate gas cost in token
-  // For ERC-20 tokens, add 20% buffer to ensure sufficient gas coverage
+  // Get gas cost for a token
+  // For ERC-20 tokens, use pre-computed gasCostFormatted if available (from paymaster quote)
   const getGasCost = (token: FeeTokenOption): { formatted: string; usd: string } => {
+    // If token has pre-computed gas cost (from paymaster quote), use that
+    if (token.gasCostFormatted) {
+      // For stablecoins, the token cost ≈ USD cost
+      const tokenCost = parseFloat(token.gasCostFormatted.replace(/[^0-9.]/g, ''));
+      return {
+        formatted: token.gasCostFormatted,
+        usd: ['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase())
+          ? formatUsd(tokenCost)
+          : '',
+      };
+    }
+
+    // Fallback: calculate from ETH gas estimate
     if (!estimatedGasEth || !ethPrice) {
       return { formatted: '', usd: '' };
     }
@@ -248,7 +261,7 @@ export const FeeTokenSelector = ({
                 Pay with other tokens
               </p>
               {erc20Tokens.map((token) => (
-                <TokenRow key={token.address} token={token} showGasCost={false} />
+                <TokenRow key={token.address} token={token} showGasCost={true} />
               ))}
             </div>
           )}

@@ -28,3 +28,13 @@ export {
     type ToJustanAccountParameters,
     type ToJustanAccountReturnType,
 } from "./toJustanAccount.js"
+
+// ERC-20 Paymaster utilities
+export {
+    fetchTokenQuotes,
+    estimateErc20PaymasterCosts,
+    encodeApprovalCall,
+    type TokenQuote,
+    type TokenEstimate,
+    type TokenInfo,
+} from "./erc20Paymaster.js"
