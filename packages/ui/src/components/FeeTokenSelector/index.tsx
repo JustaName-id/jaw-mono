@@ -160,7 +160,7 @@ export const FeeTokenSelector = ({
         className={cn(
           'w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors',
           'hover:bg-muted/60',
-          isSelected && 'bg-muted ring-2 ring-black',
+          isSelected && 'bg-zinc-200',
           !token.isSelectable && 'opacity-50 cursor-not-allowed',
           token.isSelectable && 'cursor-pointer'
         )}
