@@ -549,14 +549,14 @@ Issued At: ${issuedAt}`;
       const transferData = encodeFunctionData({
         abi: erc20Abi,
         functionName: 'transfer',
-        args: ["0xa78C83D5bd5E7B69561c3eA222501838505d14Cb", parseUnits('0.01', 6)]
+        args: ["0x23d3957BE879aBa6ca925Ee4F072d1A8C4E8c890", parseUnits('0.01', 6)]
       });
 
       const txHash = await provider.request({
         method: 'eth_sendTransaction',
         params: [{
           from: accounts[0],
-          to: '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85', // Example recipient
+          to: '0x1c7D4B196Cb0C7B01d743Fbc6116a902379C7238',
           value: `0x0`, // Convert bigint to hex
           data: transferData, // No data for simple ETH transfer
         }]

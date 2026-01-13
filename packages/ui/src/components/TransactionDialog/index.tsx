@@ -48,6 +48,9 @@ export const TransactionDialog = ({
   // Get chain icon using the hook
   const chainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 24);
 
+  // Check if there are any selectable payment options
+  const hasSelectablePaymentOption = feeTokens?.some(t => t.isSelectable) ?? true;
+
   // Initialize JustaName and resolve addresses
   useEffect(() => {
     const justaName = getJustaNameInstance();
@@ -121,7 +124,13 @@ export const TransactionDialog = ({
     }
   };
 
-  const canConfirm = !isProcessing && !gasFeeLoading && !(gasEstimationError && !sponsored);
+  // Determine if confirmation is allowed:
+  // - Not processing
+  // - Gas estimation not loading
+  // - No gas estimation error (unless sponsored)
+  // - Must have at least one selectable payment option
+  const hasInsufficientFunds = !hasSelectablePaymentOption || (gasEstimationError && !sponsored && !isPayingWithErc20);
+  const canConfirm = !isProcessing && !gasFeeLoading && !hasInsufficientFunds;
 
   return (
     <DefaultDialog
@@ -231,10 +240,9 @@ export const TransactionDialog = ({
                   <div className="flex flex-row items-center w-full justify-between gap-1">
                     {gasFeeLoading && !isPayingWithErc20 ? (
                       <p className="text-base font-normal text-muted-foreground">Estimating...</p>
-                    ) : gasEstimationError && !sponsored && !isPayingWithErc20 ? (
+                    ) : gasEstimationError && !sponsored ? (
                       <div className="flex flex-col">
-                        <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
-                        <p className="text-xs text-red-500">{gasEstimationError}</p>
+                        <p className="text-sm text-red-600 font-medium">{gasEstimationError}</p>
                       </div>
                     ) : sponsored ? (
                       <div className="flex flex-col">
@@ -264,9 +272,10 @@ export const TransactionDialog = ({
                       <div className="flex flex-col gap-0.5 w-full">
                         <div className="flex items-center justify-between w-full">
                           <p className="text-base font-normal text-foreground">
-                            {/* Show estimated cost in selected token (for stablecoins, USD ≈ token) */}
-                            {/* Add 20% buffer for ERC-20 payments to ensure sufficient gas coverage */}
-                            {gasFee && ethPrice > 0 ? (
+                            {/* Show estimated cost from paymaster quote if available */}
+                            {selectedFeeToken.gasCostFormatted ? (
+                              selectedFeeToken.gasCostFormatted
+                            ) : gasFee && ethPrice > 0 ? (
                               `~${(ethPrice * Number(gasFee) * 1.2).toFixed(4)} ${selectedFeeToken.symbol}`
                             ) : (
                               <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">
@@ -375,7 +384,7 @@ export const TransactionDialog = ({
                 disabled={!canConfirm}
                 className="flex-1"
               >
-                {gasEstimationError && !sponsored ? 'Insufficient Funds' :
+                {hasInsufficientFunds ? 'Insufficient Funds' :
                   isProcessing ? 'Processing...' : 'Transact'}
               </Button>
             </div>
@@ -513,10 +522,9 @@ export const TransactionDialog = ({
                   <div className="flex flex-row items-center w-full justify-between gap-1">
                     {gasFeeLoading && !isPayingWithErc20 ? (
                       <p className="text-base font-normal text-muted-foreground">Estimating...</p>
-                    ) : gasEstimationError && !sponsored && !isPayingWithErc20 ? (
+                    ) : gasEstimationError && !sponsored ? (
                       <div className="flex flex-col">
-                        <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
-                        <p className="text-xs text-red-500">{gasEstimationError}</p>
+                        <p className="text-sm text-red-600 font-medium">{gasEstimationError}</p>
                       </div>
                     ) : sponsored ? (
                       <div className="flex flex-col">
@@ -546,9 +554,10 @@ export const TransactionDialog = ({
                       <div className="flex flex-col gap-0.5 w-full">
                         <div className="flex items-center justify-between w-full">
                           <p className="text-base font-normal text-foreground">
-                            {/* Show estimated cost in selected token (for stablecoins, USD ≈ token) */}
-                            {/* Add 20% buffer for ERC-20 payments to ensure sufficient gas coverage */}
-                            {gasFee && ethPrice > 0 ? (
+                            {/* Show estimated cost from paymaster quote if available */}
+                            {selectedFeeToken.gasCostFormatted ? (
+                              selectedFeeToken.gasCostFormatted
+                            ) : gasFee && ethPrice > 0 ? (
                               `~${(ethPrice * Number(gasFee) * 1.2).toFixed(4)} ${selectedFeeToken.symbol}`
                             ) : (
                               <span className="text-xs font-semibold text-blue-600 bg-blue-100 px-2 py-0.5 rounded">

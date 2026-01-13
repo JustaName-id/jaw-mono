@@ -24,10 +24,12 @@ import {
   SubnameTextRecordCapabilityRequest,
   getPermissionFromRelay,
   handleGetCapabilitiesRequest,
+  estimateErc20PaymasterCosts,
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   type PaymasterConfig,
   type FeeTokenCapability,
+  type TokenEstimate,
   ensureIntNumber,
   standardErrorCodes,
 } from '@jaw.id/core';
@@ -1081,6 +1083,8 @@ function TransactionDialogWrapper({
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
   const [selectedFeeToken, setSelectedFeeToken] = useState<FeeTokenOption | null>(null);
+  const [tokenEstimates, setTokenEstimates] = useState<TokenEstimate[]>([]);
+  const [_estimatingTokenCosts, setEstimatingTokenCosts] = useState(false);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1121,7 +1125,20 @@ function TransactionDialogWrapper({
   const computedPaymasterContext = useMemo(() => {
     // If using ERC-20 paymaster, include token address and gas amount in context
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      // Calculate gas amount in token's smallest unit (with 20% buffer)
+      // Use the actual estimate from tokenEstimates if available
+      const estimate = tokenEstimates.find(
+        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+      );
+
+      if (estimate) {
+        // Use the actual token cost from paymaster quote
+        return {
+          token: selectedFeeToken.address,
+          gas: estimate.tokenCost.toString(),
+        };
+      }
+
+      // Fallback to client-side calculation if no estimate yet
       const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) * 1.2 : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
@@ -1130,7 +1147,7 @@ function TransactionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
 
   // Track if user is paying with ERC-20 token (not native ETH, not sponsored)
   const isPayingWithErc20 = !isSponsored && !!selectedFeeToken && !selectedFeeToken.isNative;
@@ -1274,6 +1291,71 @@ function TransactionDialogWrapper({
       isMounted = false;
     };
   }, [apiKey, chainId, computedPaymasterUrl]);
+
+  // Estimate ERC-20 paymaster costs when we have account and fee tokens
+  useEffect(() => {
+    // Skip if sponsored or no account
+    if (effectivePaymasterUrl || !account) return;
+
+    // Check if we have ERC-20 tokens to estimate
+    const erc20Tokens = feeTokens.filter(t => !t.isNative);
+    if (erc20Tokens.length === 0 || transactionCalls.length === 0) return;
+
+    let isMounted = true;
+
+    const estimateTokenCosts = async () => {
+      setEstimatingTokenCosts(true);
+      try {
+        const paymasterUrl = `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
+
+        const estimates = await estimateErc20PaymasterCosts(
+          account.getSmartAccount(),
+          transactionCalls,
+          account.getChain(),
+          paymasterUrl,
+          erc20Tokens.map(t => ({
+            address: t.address as Address,
+            symbol: t.symbol,
+            decimals: t.decimals,
+            balance: t.balance,
+          }))
+        );
+
+        if (isMounted) {
+          setTokenEstimates(estimates);
+
+          // Update feeTokens with the estimated costs and selectability
+          setFeeTokens(prev => prev.map(token => {
+            if (token.isNative) return token;
+
+            const estimate = estimates.find(
+              e => e.tokenAddress.toLowerCase() === token.address.toLowerCase()
+            );
+
+            if (estimate) {
+              return {
+                ...token,
+                gasCostFormatted: `~${estimate.tokenCostFormatted} ${token.symbol}`,
+                isSelectable: estimate.hasSufficientBalance,
+              };
+            }
+            return token;
+          }));
+        }
+      } catch (error) {
+        console.warn('[TransactionDialogWrapper] Failed to estimate ERC-20 costs:', error);
+        // Non-fatal - we can still show the dialog without estimates
+      } finally {
+        if (isMounted) setEstimatingTokenCosts(false);
+      }
+    };
+
+    estimateTokenCosts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [account, feeTokens.length, transactionCalls, effectivePaymasterUrl, chainId, apiKey]);
 
   // Gas estimation using Account class
   useEffect(() => {
@@ -1448,6 +1530,8 @@ function SendTransactionDialogWrapper({
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
   const [selectedFeeToken, setSelectedFeeToken] = useState<FeeTokenOption | null>(null);
+  const [tokenEstimates, setTokenEstimates] = useState<TokenEstimate[]>([]);
+  const [_estimatingTokenCosts, setEstimatingTokenCosts] = useState(false);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1488,7 +1572,20 @@ function SendTransactionDialogWrapper({
   const computedPaymasterContext = useMemo(() => {
     // If using ERC-20 paymaster, include token address and gas amount in context
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      // Calculate gas amount in token's smallest unit (with 20% buffer)
+      // Use the actual estimate from tokenEstimates if available
+      const estimate = tokenEstimates.find(
+        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+      );
+
+      if (estimate) {
+        // Use the actual token cost from paymaster quote
+        return {
+          token: selectedFeeToken.address,
+          gas: estimate.tokenCost.toString(),
+        };
+      }
+
+      // Fallback to client-side calculation if no estimate yet
       const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) * 1.2 : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
@@ -1497,7 +1594,7 @@ function SendTransactionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
 
   // Track if user is paying with ERC-20 token (not native ETH, not sponsored)
   const isPayingWithErc20 = !isSponsored && !!selectedFeeToken && !selectedFeeToken.isNative;
@@ -1639,6 +1736,71 @@ function SendTransactionDialogWrapper({
       isMounted = false;
     };
   }, [apiKey, chainId, computedPaymasterUrl]);
+
+  // Estimate ERC-20 paymaster costs when we have account and fee tokens
+  useEffect(() => {
+    // Skip if sponsored or no account
+    if (effectivePaymasterUrl || !account) return;
+
+    // Check if we have ERC-20 tokens to estimate
+    const erc20Tokens = feeTokens.filter(t => !t.isNative);
+    if (erc20Tokens.length === 0 || transactionCalls.length === 0) return;
+
+    let isMounted = true;
+
+    const estimateTokenCosts = async () => {
+      setEstimatingTokenCosts(true);
+      try {
+        const paymasterUrl = `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
+
+        const estimates = await estimateErc20PaymasterCosts(
+          account.getSmartAccount(),
+          transactionCalls,
+          account.getChain(),
+          paymasterUrl,
+          erc20Tokens.map(t => ({
+            address: t.address as Address,
+            symbol: t.symbol,
+            decimals: t.decimals,
+            balance: t.balance,
+          }))
+        );
+
+        if (isMounted) {
+          setTokenEstimates(estimates);
+
+          // Update feeTokens with the estimated costs and selectability
+          setFeeTokens(prev => prev.map(token => {
+            if (token.isNative) return token;
+
+            const estimate = estimates.find(
+              e => e.tokenAddress.toLowerCase() === token.address.toLowerCase()
+            );
+
+            if (estimate) {
+              return {
+                ...token,
+                gasCostFormatted: `~${estimate.tokenCostFormatted} ${token.symbol}`,
+                isSelectable: estimate.hasSufficientBalance,
+              };
+            }
+            return token;
+          }));
+        }
+      } catch (error) {
+        console.warn('[TransactionDialogWrapper] Failed to estimate ERC-20 costs:', error);
+        // Non-fatal - we can still show the dialog without estimates
+      } finally {
+        if (isMounted) setEstimatingTokenCosts(false);
+      }
+    };
+
+    estimateTokenCosts();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [account, feeTokens.length, transactionCalls, effectivePaymasterUrl, chainId, apiKey]);
 
   // Gas estimation using Account class
   useEffect(() => {
