@@ -63,6 +63,9 @@
     "packages/*",
     "apps/*"
   ],
+  "resolutions": {
+    "viem": "2.38.2"
+  },
   "nx": {
     "includedScripts": [],
     "targets": {
