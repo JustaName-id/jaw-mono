@@ -516,7 +516,7 @@ export default function KeysJawIdApp() {
           <SignatureModal
             origin={config?.metadata?.appName || 'App'}
             message={browserAction.message}
-            address={authQuery.walletAddress}
+            address={authQuery.walletAddress ?? undefined}
             chain={{ id: effectiveChainId, rpcUrl: '', paymasterUrl: undefined }}
             apiKey={apiKey}
             onSuccess={async (signature) => {
