@@ -10,7 +10,7 @@ export default function HomeScreen() {
           <CardHeader>
             <CardTitle>JAW Native Demo</CardTitle>
             <CardDescription>
-              Test the JAW React Native UI components and flows
+              Test the JAW React Native UI components and wallet functionality
             </CardDescription>
           </CardHeader>
           <CardContent className="gap-3">
@@ -22,7 +22,7 @@ export default function HomeScreen() {
 
             <Link href="/connect" asChild>
               <Button variant="outline">
-                <Text className="text-foreground font-medium">Connect Wallet</Text>
+                <Text className="text-foreground font-medium">Connect & Test Wallet</Text>
               </Button>
             </Link>
           </CardContent>
@@ -35,7 +35,8 @@ export default function HomeScreen() {
           <CardContent>
             <Text className="text-muted-foreground text-sm">
               This demo app showcases the @jaw/ui-native package components
-              and integrates with @jaw.id/core for wallet functionality.
+              and integrates with @jaw.id/core for wallet functionality including
+              signing, transactions, and permissions.
             </Text>
           </CardContent>
         </Card>

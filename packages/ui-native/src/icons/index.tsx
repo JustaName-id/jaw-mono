@@ -272,3 +272,76 @@ export const CheckIcon: React.FC<IconProps> = ({
     </Svg>
   );
 };
+
+export const WarningIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  stroke = '#F59E0B',
+  fill = '#F59E0B',
+  style,
+}) => {
+  return (
+    <Svg
+      width={width}
+      height={height}
+      viewBox="0 0 16 16"
+      fill="none"
+      style={style}
+    >
+      <Path
+        d="M8 1.5L1 14.5H15L8 1.5Z"
+        stroke={stroke}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+      <Path
+        d="M8 6V9"
+        stroke={stroke}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+      />
+      <Svg x={7.5} y={11}>
+        <Rect width={1} height={1} rx={0.5} fill={fill} />
+      </Svg>
+    </Svg>
+  );
+};
+
+export const InfoIcon: React.FC<IconProps> = ({
+  width = 16,
+  height = 16,
+  stroke = '#3B82F6',
+  fill = '#3B82F6',
+  style,
+}) => {
+  return (
+    <Svg
+      width={width}
+      height={height}
+      viewBox="0 0 16 16"
+      fill="none"
+      style={style}
+    >
+      <Svg x={7.5} y={4.5}>
+        <Rect width={1} height={1} rx={0.5} fill={fill} />
+      </Svg>
+      <Path
+        d="M8 7V11"
+        stroke={stroke}
+        strokeWidth={1.5}
+        strokeLinecap="round"
+      />
+      <Svg x={1.25} y={1.25}>
+        <Rect
+          width={13.5}
+          height={13.5}
+          rx={6.75}
+          stroke={stroke}
+          strokeWidth={1.5}
+          fill="none"
+        />
+      </Svg>
+    </Svg>
+  );
+};
