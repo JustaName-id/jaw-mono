@@ -154,13 +154,12 @@ export const FeeTokenSelector = ({
       };
     }
 
-    // For non-native ERC-20 tokens, gas cost in token + 20% buffer
-    const gasUsdWithBuffer = gasUsd * 1.2;
+    // For non-native ERC-20 tokens, gas cost in token
     // Show appropriate decimal places based on token decimals
     const displayDecimals = token.decimals >= 6 ? 3 : token.decimals;
     return {
-      formatted: `~${gasUsdWithBuffer.toFixed(displayDecimals)} ${token.symbol}`,
-      usd: formatUsd(gasUsdWithBuffer),
+      formatted: `~${gasUsd.toFixed(displayDecimals)} ${token.symbol}`,
+      usd: formatUsd(gasUsd),
     };
   };
 

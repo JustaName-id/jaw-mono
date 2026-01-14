@@ -276,7 +276,7 @@ export const TransactionDialog = ({
                             {selectedFeeToken.gasCostFormatted ? (
                               selectedFeeToken.gasCostFormatted
                             ) : gasFee && ethPrice > 0 ? (
-                              `~${(ethPrice * Number(gasFee) * 1.2).toFixed(4)} ${selectedFeeToken.symbol}`
+                              `~${(ethPrice * Number(gasFee)).toFixed(4)} ${selectedFeeToken.symbol}`
                             ) : (
                               <span className="text-muted-foreground">Estimating...</span>
                             )}
@@ -556,7 +556,7 @@ export const TransactionDialog = ({
                             {selectedFeeToken.gasCostFormatted ? (
                               selectedFeeToken.gasCostFormatted
                             ) : gasFee && ethPrice > 0 ? (
-                              `~${(ethPrice * Number(gasFee) * 1.2).toFixed(4)} ${selectedFeeToken.symbol}`
+                              `~${(ethPrice * Number(gasFee)).toFixed(4)} ${selectedFeeToken.symbol}`
                             ) : (
                               <span className="text-muted-foreground">Estimating...</span>
                             )}
