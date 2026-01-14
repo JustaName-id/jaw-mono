@@ -1,10 +1,20 @@
 'use client';
 
 import { Card } from '@jaw.id/ui';
-import { type RpcMethod, CATEGORY_COLORS, CATEGORY_LABELS } from '../lib/rpc-methods';
+import { type MethodCategory, CATEGORY_COLORS, CATEGORY_LABELS } from '../lib/rpc-methods';
+
+// Generic method interface for both core and wagmi methods
+interface MethodCardMethod {
+  id: string;
+  name: string;
+  method: string;
+  category: MethodCategory;
+  description: string;
+  requiresConnection: boolean;
+}
 
 interface MethodCardProps {
-  method: RpcMethod;
+  method: MethodCardMethod;
   onClick: () => void;
   disabled?: boolean;
 }

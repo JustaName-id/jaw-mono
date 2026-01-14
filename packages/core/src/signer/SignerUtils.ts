@@ -2,11 +2,51 @@ import {standardErrors} from "../errors/index.js";
 import {store} from '../store/index.js';
 import {RequestArguments} from "../provider/index.js";
 
-import {isAddress} from "viem";
+import {isAddress, isHex, hexToString, type Address} from "viem";
 
 import { WalletConnectResponse } from '../rpc/index.js';
 
 import { get } from '../utils/index.js';
+
+/**
+ * Decodes a hex-encoded message to a readable string.
+ * Wagmi and other libraries hex-encode messages before sending to personal_sign.
+ * This function decodes them back for display and signing.
+ */
+export function decodePersonalSignMessage(message: string): string {
+    if (isHex(message)) {
+        try {
+            return hexToString(message);
+        } catch {
+            // If decoding fails, return original (might be binary data)
+            return message;
+        }
+    }
+    return message;
+}
+
+/**
+ * Transforms personal_sign request params to decode hex-encoded messages.
+ * Returns a new request with the decoded message, preserving the original structure.
+ */
+export function decodePersonalSignRequest(request: RequestArguments): RequestArguments {
+    if (request.method !== 'personal_sign') {
+        return request;
+    }
+
+    const params = request.params as [string, Address] | undefined;
+    if (!params || params.length < 2) {
+        return request;
+    }
+
+    const [message, address] = params;
+    const decodedMessage = decodePersonalSignMessage(message);
+
+    return {
+        ...request,
+        params: [decodedMessage, address],
+    };
+}
 
 export function assertGetCapabilitiesParams(
     params: unknown
