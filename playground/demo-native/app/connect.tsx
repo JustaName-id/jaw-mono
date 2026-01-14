@@ -21,6 +21,7 @@ import {
 import { WalletIcon } from '@jaw/ui-native';
 import { Account, type PasskeyAccount, type TransactionCall } from '@jaw.id/core';
 import type { Address } from 'viem';
+import { parseEther } from 'viem';
 
 // Configuration from environment variables
 const CHAIN_ID = parseInt(process.env.EXPO_PUBLIC_DEFAULT_CHAIN_ID || '1', 10);
@@ -104,7 +105,7 @@ function ModeHeader({ mode, onModeChange }: {
 
 // Cross-platform mode content
 function CrossPlatformContent() {
-  const { isConnected, address, username, connect, disconnect, signMessage, sendTransaction } = useJAWNative();
+  const { isConnected, address, username, connect, disconnect, signMessage, sendTransaction, provider, chainId: currentChainId } = useJAWNative();
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -112,12 +113,15 @@ function CrossPlatformContent() {
   const [signature, setSignature] = useState<string | null>(null);
   const [txHash, setTxHash] = useState<string | null>(null);
 
+  // Permissions state
+  const [lastPermissionId, setLastPermissionId] = useState<string>();
+  const [isGranting, setIsGranting] = useState(false);
+  const [isRevoking, setIsRevoking] = useState(false);
+
   const handleConnect = async () => {
     setIsConnecting(true);
     try {
       await connect();
-    } catch (error) {
-      console.error('Connect error:', error);
     } finally {
       setIsConnecting(false);
     }
@@ -135,7 +139,6 @@ function CrossPlatformContent() {
         Alert.alert('Error', 'Failed to sign message');
       }
     } catch (error) {
-      console.error('Sign message error:', error);
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to sign message');
     } finally {
       setIsSigning(false);
@@ -159,10 +162,85 @@ function CrossPlatformContent() {
         Alert.alert('Error', 'Failed to send transaction');
       }
     } catch (error) {
-      console.error('Send transaction error:', error);
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to send transaction');
     } finally {
       setIsSending(false);
+    }
+  };
+
+  const handleGrantPermissions = async () => {
+    if (!provider || !address) {
+      Alert.alert('Error', 'Please connect your wallet first');
+      return;
+    }
+
+    setIsGranting(true);
+    try {
+      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
+      const ethLimit = parseEther('0.0001');
+      const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
+
+      const result = await provider.request({
+        method: 'wallet_grantPermissions',
+        params: [{
+          address: address,
+          chainId: currentChainId || CHAIN_ID,
+          expiry: expiryTimestamp,
+          spender: spenderAddress,
+          permissions: {
+            spends: [{
+              allowance: `0x${ethLimit.toString(16)}`,
+              unit: 'day',
+              token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+              multiplier: 2
+            }],
+            calls: [{
+              target: spenderAddress,
+              functionSignature: 'transfer(address,uint256)'
+            }]
+          }
+        }]
+      });
+
+      setLastPermissionId(result.id);
+      Alert.alert(
+        'Success',
+        `Permission granted!\nID: ${result.id.slice(0, 10)}...`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      if (error instanceof Error) {
+        Alert.alert('Error', error.message);
+      }
+    } finally {
+      setIsGranting(false);
+    }
+  };
+
+  const handleRevokePermissions = async () => {
+    if (!provider || !address || !lastPermissionId) {
+      Alert.alert('Error', 'No permission to revoke');
+      return;
+    }
+
+    setIsRevoking(true);
+    try {
+      await provider.request({
+        method: 'wallet_revokePermissions',
+        params: [{
+          address: address,
+          id: lastPermissionId as `0x${string}`
+        }]
+      });
+
+      Alert.alert('Success', 'Permission revoked successfully');
+      setLastPermissionId(undefined);
+    } catch (error) {
+      if (error instanceof Error) {
+        Alert.alert('Error', error.message);
+      }
+    } finally {
+      setIsRevoking(false);
     }
   };
 
@@ -278,6 +356,68 @@ function CrossPlatformContent() {
           </CardContent>
         </Card>
       )}
+
+      {/* Grant Permissions Card - Only show when connected */}
+      {isConnected && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Grant Permissions</CardTitle>
+            <CardDescription>
+              Allow spending tokens and calling functions
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="gap-4">
+            <View className="p-3 bg-secondary rounded-lg">
+              <Text className="text-xs font-bold text-foreground mb-1">
+                This will grant:
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                • 0.0001 ETH spending limit per 2 days
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                • Permission to call transfer function
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                • Valid for 30 days
+              </Text>
+            </View>
+            <Button onPress={handleGrantPermissions} disabled={isGranting}>
+              {isGranting ? 'Granting...' : 'Grant Permissions'}
+            </Button>
+            {lastPermissionId && (
+              <View className="p-3 bg-secondary rounded-lg">
+                <Text className="text-xs text-muted-foreground mb-1">Last Permission ID</Text>
+                <Text className="text-foreground font-mono text-xs" numberOfLines={1}>
+                  {lastPermissionId}
+                </Text>
+              </View>
+            )}
+            <Text className="text-xs text-muted-foreground text-center">
+              Opens permission dialog in Safari for approval
+            </Text>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Revoke Permissions Card - Only show when connected and has permission */}
+      {isConnected && lastPermissionId && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Revoke Permissions</CardTitle>
+            <CardDescription>
+              Remove the granted permissions
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="gap-4">
+            <Button variant="destructive" onPress={handleRevokePermissions} disabled={isRevoking}>
+              {isRevoking ? 'Revoking...' : 'Revoke Permissions'}
+            </Button>
+            <Text className="text-xs text-muted-foreground text-center">
+              Opens revoke dialog in Safari for confirmation
+            </Text>
+          </CardContent>
+        </Card>
+      )}
     </View>
   );
 }
@@ -306,6 +446,11 @@ function AppSpecificContent() {
   const [gasFee, setGasFee] = useState<string>('0');
   const [gasFeeLoading, setGasFeeLoading] = useState(false);
 
+  // Permissions state
+  const [lastPermissionId, setLastPermissionId] = useState<string>();
+  const [isGranting, setIsGranting] = useState(false);
+  const [isRevoking, setIsRevoking] = useState(false);
+
   useEffect(() => {
     loadStoredAccounts();
   }, []);
@@ -320,7 +465,7 @@ function AppSpecificContent() {
       }));
       setStoredAccounts(mapped);
     } catch (error) {
-      console.error('Failed to load accounts:', error);
+      // Failed to load accounts
     }
   };
 
@@ -350,6 +495,7 @@ function AppSpecificContent() {
       );
 
       const address = await newAccount.getAddress();
+
       setAccount(newAccount);
       setConnectedAddress(address);
       setConnectedUsername(username);
@@ -357,7 +503,6 @@ function AppSpecificContent() {
 
       Alert.alert('Success', `Account created!\n\nAddress: ${address.slice(0, 10)}...${address.slice(-8)}`);
     } catch (error) {
-      console.error('Failed to create account:', error);
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
           return;
@@ -391,6 +536,7 @@ function AppSpecificContent() {
 
       const address = await importedAccount.getAddress();
       const metadata = importedAccount.getMetadata();
+
       setAccount(importedAccount);
       setConnectedAddress(address);
       setConnectedUsername(metadata?.username || 'Imported Account');
@@ -398,7 +544,6 @@ function AppSpecificContent() {
 
       Alert.alert('Success', `Account imported!\n\nAddress: ${address.slice(0, 10)}...${address.slice(-8)}`);
     } catch (error) {
-      console.error('Failed to import account:', error);
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
           return;
@@ -408,6 +553,15 @@ function AppSpecificContent() {
           Alert.alert(
             'Development Build Required',
             'Native passkeys are not available in Expo Go.\n\nPlease use Cross-Platform mode, or create a development build:\n\nnpx expo prebuild\nnpx expo run:ios',
+            [{ text: 'OK' }]
+          );
+          return;
+        }
+        // Handle PasskeyLookupError - no passkey found for this RP_ID
+        if (error.name === 'PasskeyLookupError' || error.message.includes('PasskeyLookupError')) {
+          Alert.alert(
+            'No Passkey Found',
+            'No passkey was found for this app. Please create a new account first, then you can import it on other devices.',
             [{ text: 'OK' }]
           );
           return;
@@ -432,13 +586,13 @@ function AppSpecificContent() {
       );
 
       const address = await loadedAccount.getAddress();
+
       setAccount(loadedAccount);
       setConnectedAddress(address);
       setConnectedUsername(storedAccount.username);
 
       Alert.alert('Connected', `Authenticated as ${storedAccount.username}`);
     } catch (error) {
-      console.error('Failed to authenticate:', error);
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
           return;
@@ -521,7 +675,6 @@ function AppSpecificContent() {
       const gasCost = await account.calculateGasCost([testTransaction]);
       setGasFee(gasCost);
     } catch (error) {
-      console.error('Failed to calculate gas:', error);
       setGasFee('0');
     } finally {
       setGasFeeLoading(false);
@@ -548,6 +701,75 @@ function AppSpecificContent() {
 
   const handleCancelTx = () => {
     setShowTxModal(false);
+  };
+
+  const handleGrantPermissions = async () => {
+    if (!account || !connectedAddress) {
+      Alert.alert('Error', 'Please connect your wallet first');
+      return;
+    }
+
+    setIsGranting(true);
+    try {
+      const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
+      const ethLimit = parseEther('0.0001');
+      const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
+
+      const permissions = [{
+        type: 'native-token-recurring-allowance' as const,
+        data: {
+          allowance: `0x${ethLimit.toString(16)}`,
+          period: 2 * 24 * 60 * 60, // 2 days in seconds
+          token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+        }
+      }, {
+        type: 'contract-call' as const,
+        data: {
+          address: spenderAddress,
+          selector: 'transfer(address,uint256)',
+        }
+      }];
+
+      const result = await account.grantPermissions(
+        expiryTimestamp,
+        spenderAddress as `0x${string}`,
+        permissions
+      );
+
+      setLastPermissionId(result.permissionId);
+      Alert.alert(
+        'Success',
+        `Permission granted!\nID: ${result.permissionId.slice(0, 10)}...`,
+        [{ text: 'OK' }]
+      );
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'NotAllowedError') {
+        Alert.alert('Error', error.message);
+      }
+    } finally {
+      setIsGranting(false);
+    }
+  };
+
+  const handleRevokePermissions = async () => {
+    if (!account || !connectedAddress || !lastPermissionId) {
+      Alert.alert('Error', 'No permission to revoke');
+      return;
+    }
+
+    setIsRevoking(true);
+    try {
+      await account.revokePermission(lastPermissionId as `0x${string}`);
+
+      Alert.alert('Success', 'Permission revoked successfully');
+      setLastPermissionId(undefined);
+    } catch (error) {
+      if (error instanceof Error && error.name !== 'NotAllowedError') {
+        Alert.alert('Error', error.message);
+      }
+    } finally {
+      setIsRevoking(false);
+    }
   };
 
   return (
@@ -726,6 +948,68 @@ function AppSpecificContent() {
         </Card>
       )}
 
+      {/* Grant Permissions Card - Only show when connected */}
+      {connectedAddress && account && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Grant Permissions</CardTitle>
+            <CardDescription>
+              Allow spending tokens and calling functions
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="gap-4">
+            <View className="p-3 bg-secondary rounded-lg">
+              <Text className="text-xs font-bold text-foreground mb-1">
+                This will grant:
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                • 0.0001 ETH spending limit per 2 days
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                • Permission to call transfer function
+              </Text>
+              <Text className="text-xs text-muted-foreground">
+                • Valid for 30 days
+              </Text>
+            </View>
+            <Button onPress={handleGrantPermissions} disabled={isGranting}>
+              {isGranting ? 'Granting...' : 'Grant Permissions'}
+            </Button>
+            {lastPermissionId && (
+              <View className="p-3 bg-secondary rounded-lg">
+                <Text className="text-xs text-muted-foreground mb-1">Last Permission ID</Text>
+                <Text className="text-foreground font-mono text-xs" numberOfLines={1}>
+                  {lastPermissionId}
+                </Text>
+              </View>
+            )}
+            <Text className="text-xs text-muted-foreground text-center">
+              Uses native passkey for permission approval
+            </Text>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Revoke Permissions Card - Only show when connected and has permission */}
+      {connectedAddress && account && lastPermissionId && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Revoke Permissions</CardTitle>
+            <CardDescription>
+              Remove the granted permissions
+            </CardDescription>
+          </CardHeader>
+          <CardContent className="gap-4">
+            <Button variant="destructive" onPress={handleRevokePermissions} disabled={isRevoking}>
+              {isRevoking ? 'Revoking...' : 'Revoke Permissions'}
+            </Button>
+            <Text className="text-xs text-muted-foreground text-center">
+              Uses native passkey for revoke confirmation
+            </Text>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Sign Message Modal */}
       <SignatureModal
         open={showSignModal}
@@ -819,7 +1103,7 @@ export default function ConnectScreen() {
               <View className="flex-1">
                 <Text className="text-foreground font-medium">Ready to Use</Text>
                 <Text className="text-muted-foreground text-sm">
-                  Your smart wallet is ready for transactions
+                  Test signing, transactions, and permission management
                 </Text>
               </View>
             </View>

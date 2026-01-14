@@ -20,7 +20,7 @@ import {
     type Client,
     type Account,
 } from "viem";
-import { readContract, getChainId, signAuthorization as signAuthorizationAction } from "viem/actions";
+import { readContract, getChainId, signAuthorization as signAuthorizationAction, getCode } from "viem/actions";
 import {
     type SmartAccount,
     type WebAuthnAccount,
@@ -194,6 +194,23 @@ export async function toJustanAccount(
                 };
             }
 
+            // Check if account is already deployed
+            try {
+                const code = await getCode(client, { address: accountAddress });
+
+                // If bytecode exists, account is deployed - no factory args needed
+                if (code && code !== '0x') {
+                    return {
+                        factory: undefined,
+                        factoryData: undefined,
+                    };
+                }
+            } catch (error) {
+                // If error checking deployment status, fall through to return factory args
+                console.warn('Error checking account deployment:', error);
+            }
+
+            // Account not deployed - include factory initialization
             return {
                 factory: factoryAddress,
                 factoryData: encodeFunctionData({
