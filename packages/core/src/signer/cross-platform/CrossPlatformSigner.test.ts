@@ -2179,10 +2179,13 @@ describe('CrossPlatformSigner', () => {
       // Act
       await signer.request(request);
 
-      // Assert
+      // Assert - message is decoded from hex '0x48656c6c6f' to 'Hello'
       expect(encryptContent).toHaveBeenCalledWith(
         {
-          action: request,
+          action: {
+            method: 'personal_sign',
+            params: ['Hello', '0x1234567890123456789012345678901234567890'],
+          },
           chain: {
             id: 1,
             rpcUrl: 'https://eth-mainnet.rpc.com',

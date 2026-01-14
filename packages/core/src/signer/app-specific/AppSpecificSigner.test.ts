@@ -292,7 +292,7 @@ describe('AppSpecificSigner', () => {
         expect.objectContaining({
           type: 'personal_sign',
           data: expect.objectContaining({
-            message: '0x48656c6c6f',
+            message: 'Hello', // Decoded from hex '0x48656c6c6f'
             address: '0x1234567890123456789012345678901234567890',
           }),
         })

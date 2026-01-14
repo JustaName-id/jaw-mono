@@ -17,6 +17,7 @@ export * from './components/ui/scroll-area';
 export * from './components/ui/sheet';
 export * from './components/ui/spinner';
 export * from './components/ui/accordion';
+export * from './components/ui/tabs';
 export * from './components/DefaultDialog';
 export * from './components/OrSeparator';
 export * from './components/OnboardingDialog';

@@ -1,5 +1,6 @@
 import { Address } from 'viem';
 import { JAWSigner } from '../JAWSigner.js';
+import { decodePersonalSignMessage } from '../SignerUtils.js';
 import {
     UIHandler,
     UIError,
@@ -160,13 +161,17 @@ export class AppSpecificSigner extends JAWSigner {
                 const params = request.params as [string, Address];
                 const [message, address] = params;
 
+                // Decode hex-encoded message for display and signing
+                // (wagmi and other libraries hex-encode messages before sending)
+                const decodedMessage = decodePersonalSignMessage(message);
+
                 const uiRequest: SignatureUIRequest = {
                     id: crypto.randomUUID(),
                     type: 'personal_sign',
                     timestamp: Date.now(),
                     correlationId,
                     data: {
-                        message,
+                        message: decodedMessage,
                         address,
                         chainId: this.chain.id,
                     },
