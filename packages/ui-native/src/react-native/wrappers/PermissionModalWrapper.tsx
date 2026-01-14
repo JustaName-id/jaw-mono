@@ -124,7 +124,11 @@ export const PermissionModalWrapper: React.FC<PermissionModalWrapperProps> = ({
   useEffect(() => {
     const loadAccountAndParsePermissions = async () => {
       try {
-        const loadedAccount = await Account.get({ chainId, apiKey });
+        const loadedAccount = await Account.get({
+          chainId,
+          apiKey,
+          paymasterUrl: config.paymasters?.[chainId]?.url
+        });
         setAccount(loadedAccount);
 
         // Parse spend permissions with token info fetching

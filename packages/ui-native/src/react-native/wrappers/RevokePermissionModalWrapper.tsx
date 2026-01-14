@@ -43,7 +43,11 @@ export const RevokePermissionModalWrapper: React.FC<RevokePermissionModalWrapper
 
   const loadAccountAndFetchPermission = async () => {
     try {
-      const loadedAccount = await Account.get({ chainId, apiKey });
+      const loadedAccount = await Account.get({
+        chainId,
+        apiKey,
+        paymasterUrl: config.paymasters?.[chainId]?.url
+      });
       setAccount(loadedAccount);
 
       // For now, just display the permission ID
