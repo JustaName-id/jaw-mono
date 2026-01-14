@@ -22,7 +22,9 @@ config.resolver.unstable_enablePackageExports = true;
 
 // Set condition names to prioritize require (CommonJS) for compatibility
 // This fixes eventemitter3 resolution issues where ESM imports from CJS
+// Include '@jaw-mono/source' to use source files from workspace packages
 config.resolver.unstable_conditionNames = [
+  '@jaw-mono/source',
   'require',
   'react-native',
   'default',

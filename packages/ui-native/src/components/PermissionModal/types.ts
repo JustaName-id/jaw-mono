@@ -38,6 +38,7 @@ export interface PermissionModalProps {
   networkName: string;
   chainId?: number;
   chainIcon?: ReactElement;
+  chainIconKey?: string;
 
   // Actions
   onConfirm: () => void;

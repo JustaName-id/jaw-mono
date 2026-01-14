@@ -1,10 +1,12 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable } from 'react-native';
 import * as ExpoClipboard from 'expo-clipboard';
 import { DefaultModal } from '../DefaultModal';
 import { Button } from '../ui/button';
-import { CopyIcon, CopiedIcon, WalletIcon } from '../../icons';
+import { CopyIcon, CopiedIcon, WalletIcon, WarningIcon, InfoIcon } from '../../icons';
 import { formatAddress } from '../../utils/formatAddress';
+import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { useDeviceType } from '../../hooks/useDeviceType';
 import type { PermissionModalProps } from './types';
 
 export const PermissionModal = ({
@@ -29,6 +31,79 @@ export const PermissionModal = ({
   warningMessage,
 }: PermissionModalProps) => {
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
+  const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
+  const [isResolvingAddresses, setIsResolvingAddresses] = useState(true);
+  const { isPhone } = useDeviceType();
+
+  // Resolve addresses to human-readable names
+  useEffect(() => {
+    if (!chainId) {
+      setIsResolvingAddresses(false);
+      return;
+    }
+
+    // Try to initialize JustaName SDK - if it fails, skip resolution
+    let justaName;
+    try {
+      justaName = getJustaNameInstance();
+    } catch (error) {
+      console.warn('Address resolution unavailable:', error);
+      setIsResolvingAddresses(false);
+      return;
+    }
+
+    const addressesToResolve: string[] = [];
+
+    if (spenderAddress) {
+      addressesToResolve.push(spenderAddress);
+    }
+
+    calls.forEach((call) => {
+      if (call.target && !addressesToResolve.includes(call.target)) {
+        addressesToResolve.push(call.target);
+      }
+    });
+
+    if (addressesToResolve.length === 0) {
+      setIsResolvingAddresses(false);
+      return;
+    }
+
+    setIsResolvingAddresses(true);
+
+    const resolvePromises = addressesToResolve.map(async (address) => {
+      try {
+        const result = await justaName.subnames.reverseResolve({
+          address: address as `0x${string}`,
+          chainId: chainId,
+        });
+        if (result) {
+          return { address, name: result };
+        }
+      } catch {
+        // Silently fail if resolution fails
+      }
+      return null;
+    });
+
+    // Add timeout to prevent infinite loading
+    const timeoutPromise = new Promise<null>((resolve) =>
+      setTimeout(() => resolve(null), 5000)
+    );
+
+    Promise.race([Promise.all(resolvePromises), timeoutPromise]).then((results) => {
+      if (results) {
+        const newResolved: Record<string, string> = {};
+        results.forEach((result) => {
+          if (result) {
+            newResolved[result.address] = result.name;
+          }
+        });
+        setResolvedAddresses((prev) => ({ ...prev, ...newResolved }));
+      }
+      setIsResolvingAddresses(false);
+    });
+  }, [spenderAddress, calls, chainId]);
 
   const copyToClipboard = async (text: string, setCopied: (value: boolean) => void) => {
     try {
@@ -40,7 +115,7 @@ export const PermissionModal = ({
     }
   };
 
-  const canConfirm = !isProcessing && !isLoadingTokenInfo;
+  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses;
 
   // Count total permissions
   const totalSpends = spends.length;
@@ -106,8 +181,8 @@ export const PermissionModal = ({
             <Text className="text-xs font-bold text-foreground">Spender Address</Text>
             <View className="flex-row items-center gap-1">
               <WalletIcon width={12} height={12} stroke="#000" />
-              <Text className="text-sm text-foreground">
-                {formatAddress(spenderAddress)}
+              <Text className="text-sm text-foreground" numberOfLines={1}>
+                {resolvedAddresses[spenderAddress] || formatAddress(spenderAddress)}
               </Text>
             </View>
           </View>
@@ -192,7 +267,7 @@ export const PermissionModal = ({
                 <View>
                   <Text className="text-xs font-bold text-muted-foreground">Contract</Text>
                   <Text className="text-sm font-mono text-foreground" numberOfLines={2}>
-                    {call.target}
+                    {resolvedAddresses[call.target] || call.target}
                   </Text>
                 </View>
               </View>
@@ -204,7 +279,7 @@ export const PermissionModal = ({
         {mode === 'grant' ? (
           <View className="flex-row items-start p-3.5 border border-yellow-300 rounded-md bg-yellow-50 mb-3">
             <View className="mr-2 mt-0.5">
-              <Text className="text-yellow-600 text-lg">⚠️</Text>
+              <WarningIcon width={16} height={16} />
             </View>
             <View className="flex-1">
               <Text className="text-xs font-bold text-yellow-800">Warning</Text>
@@ -217,7 +292,7 @@ export const PermissionModal = ({
         ) : (
           <View className="flex-row items-start p-3.5 border border-blue-300 rounded-md bg-blue-50 mb-3">
             <View className="mr-2 mt-0.5">
-              <Text className="text-blue-600 text-lg">ℹ️</Text>
+              <InfoIcon width={16} height={16} />
             </View>
             <View className="flex-1">
               <Text className="text-xs font-bold text-blue-800">Info</Text>
@@ -269,7 +344,7 @@ export const PermissionModal = ({
           <Text className="text-white">
             {isProcessing
               ? 'Processing...'
-              : isLoadingTokenInfo
+              : isLoadingTokenInfo || isResolvingAddresses
                 ? 'Loading...'
                 : mode === 'grant'
                   ? 'Accept'
