@@ -14,8 +14,7 @@
     "noImplicitAny": false,
     "strict": false,
     "allowSyntheticDefaultImports": true,
-    "esModuleInterop": true,
-    "types": ["react"]
+    "esModuleInterop": true
   },
   "exclude": [
     "out-tsc",
