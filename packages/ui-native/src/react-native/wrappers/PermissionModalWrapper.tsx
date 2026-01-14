@@ -104,17 +104,21 @@ export const PermissionModalWrapper: React.FC<PermissionModalWrapperProps> = ({
   const [spendPermissions, setSpendPermissions] = useState<SpendPermission[]>([]);
   const [callPermissions, setCallPermissions] = useState<CallPermission[]>([]);
 
-  const chainId = config.chainId || 1;
+  // chainId can be number or hex string (like '0x1')
+  const requestChainId = request.data.chainId;
+  const chainId = typeof requestChainId === 'string'
+    ? parseInt(requestChainId, requestChainId.startsWith('0x') ? 16 : 10)
+    : (requestChainId || 1);
   const apiKey = config.apiKey;
   const chainName = getChainNameFromId(chainId);
   const chainIconKey = getChainIconKeyFromId(chainId);
   const chainIcon = useChainIcon(chainIconKey, 20);
 
   // Extract permission data from request
-  const permissionData = request.data.permissions;
-  const spenderAddress = permissionData.signer?.data?.id || '';
-  const expiry = permissionData.expiry || 0;
+  const spenderAddress = request.data.spender;
+  const expiry = request.data.expiry;
   const expiryDate = formatExpiryDate(expiry);
+  const permissionsData = request.data.permissions;
 
   // Load account and parse permissions on mount
   useEffect(() => {
@@ -124,14 +128,12 @@ export const PermissionModalWrapper: React.FC<PermissionModalWrapperProps> = ({
         setAccount(loadedAccount);
 
         // Parse spend permissions with token info fetching
-        const spendPerms = (permissionData.permissions || []).filter(
-          (p: any) => p.type === 'native-token-recurring-allowance' || p.type === 'erc20-recurring-allowance'
-        );
+        const spendsData = permissionsData.spends || [];
 
         const spendsWithTokenInfo = await Promise.all(
-          spendPerms.map(async (p: any) => {
-            const tokenAddress = p.data?.token || '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
-            const allowanceHex = p.data?.allowance || '0x0';
+          spendsData.map(async (spend) => {
+            const tokenAddress = spend.token;
+            const allowanceHex = spend.allowance;
 
             // Fetch token info
             const { decimals, symbol } = await fetchTokenInfo(tokenAddress, chainId);
@@ -142,8 +144,23 @@ export const PermissionModalWrapper: React.FC<PermissionModalWrapperProps> = ({
             // Format amount with proper decimals
             const formattedAmount = formatUnits(allowanceBigInt, decimals);
 
+            // Calculate period in seconds from unit and multiplier
+            const multiplier = spend.multiplier || 1;
+            const unitInSeconds = {
+              'minute': 60,
+              'hour': 3600,
+              'day': 86400,
+              'week': 604800,
+              'month': 2592000,
+              'year': 31536000,
+              'forever': 0,
+            }[spend.unit];
+            const periodSeconds = spend.unit === 'forever' ? 0 : unitInSeconds * multiplier;
+
             // Format duration
-            const duration = formatDuration(p.data?.period || 0);
+            const duration = spend.unit === 'forever'
+              ? 'Forever'
+              : formatDuration(periodSeconds);
 
             return {
               amount: formattedAmount,
@@ -157,13 +174,12 @@ export const PermissionModalWrapper: React.FC<PermissionModalWrapperProps> = ({
         );
 
         // Parse call permissions
-        const calls: CallPermission[] = (permissionData.permissions || [])
-          .filter((p: any) => p.type === 'contract-call')
-          .map((p: any) => ({
-            target: p.data?.address || '',
-            selector: p.data?.selector || '',
-            functionSignature: p.data?.selector || 'Unknown function',
-          }));
+        const callsData = permissionsData.calls || [];
+        const calls: CallPermission[] = callsData.map((call) => ({
+          target: call.target,
+          selector: call.selector || '',
+          functionSignature: call.functionSignature || call.selector || 'Unknown function',
+        }));
 
         setSpendPermissions(spendsWithTokenInfo);
         setCallPermissions(calls);
@@ -188,8 +204,8 @@ export const PermissionModalWrapper: React.FC<PermissionModalWrapperProps> = ({
     try {
       const result = await account.grantPermissions(
         expiry,
-        spenderAddress as `0x${string}`,
-        permissionData.permissions
+        spenderAddress,
+        permissionsData
       );
       onApprove(result);
     } catch (error) {
@@ -222,7 +238,7 @@ export const PermissionModalWrapper: React.FC<PermissionModalWrapperProps> = ({
       onOpenChange={(open) => !open && handleCancel()}
       mode="grant"
       spenderAddress={spenderAddress}
-      origin={request.data.origin || 'Unknown Origin'}
+      origin="Mobile App"
       spends={spendPermissions}
       calls={callPermissions}
       expiryDate={expiryDate}
