@@ -30,5 +30,13 @@
     "../../packages/ui-native/src/**/*.ts",
     "../../packages/ui-native/src/**/*.tsx",
     "../../packages/core/src/**/*.ts"
+  ],
+  "references": [
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/ui-native"
+    }
   ]
 }

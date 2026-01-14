@@ -709,32 +709,44 @@ function AppSpecificContent() {
       return;
     }
 
+    console.log('🔐 [App-Specific] Starting grantPermissions...');
+    console.log('🔐 [App-Specific] Connected address:', connectedAddress);
+
     setIsGranting(true);
     try {
       const spenderAddress = '0x23d3957be879aba6ca925ee4f072d1a8c4e8c890';
       const ethLimit = parseEther('0.0001');
       const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
 
-      const permissions = [{
-        type: 'native-token-recurring-allowance' as const,
-        data: {
+      const permissions = {
+        spends: [{
+          token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE' as Address,
           allowance: `0x${ethLimit.toString(16)}`,
-          period: 2 * 24 * 60 * 60, // 2 days in seconds
-          token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-        }
-      }, {
-        type: 'contract-call' as const,
-        data: {
-          address: spenderAddress,
-          selector: 'transfer(address,uint256)',
-        }
-      }];
+          unit: 'day' as const,
+          multiplier: 2,  // 2 days period (2 * 1 day)
+        }],
+        calls: [{
+          target: spenderAddress as Address,
+          functionSignature: 'transfer(address,uint256)',
+        }]
+      };
 
+      console.log('🔐 [App-Specific] Permission data:', JSON.stringify({
+        expiryTimestamp,
+        spenderAddress,
+        permissions,
+      }, null, 2));
+
+      console.log('🔐 [App-Specific] Calling account.grantPermissions...');
       const result = await account.grantPermissions(
         expiryTimestamp,
         spenderAddress as `0x${string}`,
         permissions
       );
+
+      console.log('✅ [App-Specific] Permission granted successfully!');
+      console.log('✅ [App-Specific] Permission ID:', result.permissionId);
+      console.log('✅ [App-Specific] Full result:', JSON.stringify(result, null, 2));
 
       setLastPermissionId(result.permissionId);
       Alert.alert(
@@ -743,11 +755,18 @@ function AppSpecificContent() {
         [{ text: 'OK' }]
       );
     } catch (error) {
+      console.error('❌ [App-Specific] Permission grant failed!');
+      console.error('❌ [App-Specific] Error name:', error instanceof Error ? error.name : 'Unknown');
+      console.error('❌ [App-Specific] Error message:', error instanceof Error ? error.message : String(error));
+      console.error('❌ [App-Specific] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('❌ [App-Specific] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+
       if (error instanceof Error && error.name !== 'NotAllowedError') {
         Alert.alert('Error', error.message);
       }
     } finally {
       setIsGranting(false);
+      console.log('🔐 [App-Specific] grantPermissions completed (isGranting set to false)');
     }
   };
 
@@ -757,18 +776,31 @@ function AppSpecificContent() {
       return;
     }
 
+    console.log('🚫 [App-Specific] Starting revokePermission...');
+    console.log('🚫 [App-Specific] Connected address:', connectedAddress);
+    console.log('🚫 [App-Specific] Permission ID to revoke:', lastPermissionId);
+
     setIsRevoking(true);
     try {
+      console.log('🚫 [App-Specific] Calling account.revokePermission...');
       await account.revokePermission(lastPermissionId as `0x${string}`);
 
+      console.log('✅ [App-Specific] Permission revoked successfully!');
       Alert.alert('Success', 'Permission revoked successfully');
       setLastPermissionId(undefined);
     } catch (error) {
+      console.error('❌ [App-Specific] Permission revoke failed!');
+      console.error('❌ [App-Specific] Error name:', error instanceof Error ? error.name : 'Unknown');
+      console.error('❌ [App-Specific] Error message:', error instanceof Error ? error.message : String(error));
+      console.error('❌ [App-Specific] Error stack:', error instanceof Error ? error.stack : 'No stack trace');
+      console.error('❌ [App-Specific] Full error object:', JSON.stringify(error, Object.getOwnPropertyNames(error), 2));
+
       if (error instanceof Error && error.name !== 'NotAllowedError') {
         Alert.alert('Error', error.message);
       }
     } finally {
       setIsRevoking(false);
+      console.log('🚫 [App-Specific] revokePermission completed (isRevoking set to false)');
     }
   };
 
