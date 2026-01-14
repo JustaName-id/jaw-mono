@@ -30,6 +30,22 @@ export class WebAuthnAuthenticationError extends Error {
 }
 
 /**
+ * Convert a base64url encoded credential ID to Uint8Array
+ * @param credentialId - The base64url encoded credential ID
+ * @returns Uint8Array representation of the credential ID
+ */
+function credentialIdToArrayBuffer(credentialId: string): Uint8Array<ArrayBuffer> {
+  const base64 = credentialId.replace(/-/g, "+").replace(/_/g, "/");
+  const paddedBase64 = base64 + "==".substring(0, (4 - (base64.length % 4)) % 4);
+  const binaryString = atob(paddedBase64);
+  const bytes = new Uint8Array(binaryString.length);
+  for (let i = 0; i < binaryString.length; i++) {
+    bytes[i] = binaryString.charCodeAt(i);
+  }
+  return bytes as Uint8Array<ArrayBuffer>;
+}
+
+/**
  * Authenticate with a WebAuthn passkey
  * @param credentialId - The base64url encoded credential ID
  * @param rpId - The relying party identifier (e.g., domain name)
@@ -53,9 +69,7 @@ export async function authenticateWithWebAuthnUtils(
   }
   try {
     // Convert credentialId from base64url to binary format
-    const base64 = credentialId.replace(/-/g, "+").replace(/_/g, "/");
-    const paddedBase64 = base64 + "==".substring(0, (4 - (base64.length % 4)) % 4);
-    const credentialIdArray = Uint8Array.from(atob(paddedBase64), (c) => c.charCodeAt(0));
+    const credentialIdArray = credentialIdToArrayBuffer(credentialId);
 
     // Generate challenge
     const challenge = crypto.getRandomValues(new Uint8Array(32));
@@ -212,7 +226,9 @@ export async function importPasskeyUtils(
     // Resolve rpId - use provided value, or default to window.location.hostname in browser
     const resolvedRpId = rpId || (typeof window !== 'undefined' ? window.location.hostname : undefined);
 
-    // Build credential request options (no allowCredentials to let user pick any passkey)
+    // Build credential request options (omit allowCredentials to enable discoverable mode)
+    // When allowCredentials is undefined, iOS/Android show ALL passkeys for this rpId in a picker
+    // When allowCredentials is provided, the OS filters and may auto-select if only one matches
     const credentialRequestOptions: CredentialRequestOptions = {
       publicKey: {
         challenge: challenge,
