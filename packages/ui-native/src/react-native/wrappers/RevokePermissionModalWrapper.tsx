@@ -101,6 +101,7 @@ export const RevokePermissionModalWrapper: React.FC<RevokePermissionModalWrapper
       networkName={chainName}
       chainId={chainId}
       chainIcon={chainIcon}
+      chainIconKey={chainIconKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
