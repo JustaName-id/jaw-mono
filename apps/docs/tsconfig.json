@@ -15,5 +15,14 @@
     "skipLibCheck": true
   },
   "include": ["vocs.config.ts", "docs/**/*"],
-  "exclude": ["node_modules", "dist", ".vocs"]
+  "exclude": [
+    "node_modules",
+    "dist",
+    ".vocs"
+  ],
+  "references": [
+    {
+      "path": "../../packages/core"
+    }
+  ]
 }
