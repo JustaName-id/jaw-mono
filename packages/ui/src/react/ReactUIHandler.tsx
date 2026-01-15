@@ -651,6 +651,9 @@ function OnboardingDialogWrapper({
       // Get chainId from request or default
       const createChainId = request.data.chainId || defaultChainId || 1;
 
+      // Construct full subname when ENS is enabled (e.g., "john.example.eth")
+      const fullUsername = ensDomain ? `${username.trim()}.${ensDomain}` : username.trim();
+
       // Use Account.create which handles everything
       const accountInstance = await Account.create(
         {
@@ -659,7 +662,7 @@ function OnboardingDialogWrapper({
           paymasterUrl: paymasters?.[createChainId]?.url,
         },
         {
-          username,
+          username: fullUsername,
           rpId,
           rpName,
         }
