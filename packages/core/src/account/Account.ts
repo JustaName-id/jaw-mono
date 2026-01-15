@@ -610,12 +610,15 @@ export class Account {
     const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
     const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
+    // Remove gas field from context (only used for approval logic)
+    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+
     return await sendSmartAccountTransaction(
       this._smartAccount,
       finalCalls,
       this._chain,
       paymasterUrlOverride,
-      paymasterContextOverride
+      Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined
     );
   }
 
@@ -657,6 +660,10 @@ export class Account {
     const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
     const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
+    // Remove gas field from context (only used for approval logic)
+    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+
     let result: BundledTransactionResult;
 
     if (options?.permissionId) {
@@ -668,7 +675,7 @@ export class Account {
         options.permissionId,
         this._apiKey,
         paymasterUrlOverride,
-        paymasterContextOverride
+        cleanedContext
       );
     } else {
       // Standard execution
@@ -677,7 +684,7 @@ export class Account {
         finalCalls,
         this._chain,
         paymasterUrlOverride,
-        paymasterContextOverride
+        cleanedContext
       );
     }
 
