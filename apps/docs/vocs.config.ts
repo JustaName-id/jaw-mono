@@ -1,6 +1,18 @@
 import { defineConfig } from 'vocs'
+import { fileURLToPath } from 'url'
+import { dirname, resolve } from 'path'
+
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
 
 export default defineConfig({
+  vite: {
+    resolve: {
+      alias: {
+        '@jaw.id/core': resolve(__dirname, '../../packages/core/dist/index.js'),
+      },
+    },
+  },
   // Set to 'warn' to allow build to succeed with dead links (they'll be logged as warnings)
   checkDeadlinks: 'warn',
   title: 'JAW Core Documentation',
@@ -61,6 +73,7 @@ export default defineConfig({
           text: 'Hooks',
           collapsed: true,
           items: [
+            { text: 'useCapabilities()', link: '/wagmi/useCapabilities' },
             { text: 'useConnect()', link: '/wagmi/useConnect' },
             { text: 'useDisconnect()', link: '/wagmi/useDisconnect' },
             { text: 'useGetAssets()', link: '/wagmi/useGetAssets' },

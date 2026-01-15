@@ -7,6 +7,7 @@ import {
   useAccount,
   useChainId,
   useConfig,
+  useConnectors,
 } from 'wagmi';
 import {
   type UseMutationParameters,
@@ -28,8 +29,9 @@ import {
   getPermissions,
   revokePermissions,
   getAssets,
+  getCapabilities,
 } from './core.js';
-import { getPermissionsQueryKey, getAssetsQueryKey } from './query.js';
+import { getPermissionsQueryKey, getAssetsQueryKey, getCapabilitiesQueryKey } from './query.js';
 
 // ============================================================================
 // useConnect
@@ -253,14 +255,14 @@ export namespace usePermissions {
 }
 
 /**
- * Hook to get the current permissions for the connected account.
+ * Hook to get the current permissions for an account.
  * Automatically updates when permissions change.
  *
  * @example
  * ```tsx
  * const { data: permissions, isLoading } = usePermissions();
  *
- * // With specific address
+ * // With specific address (works even when not connected)
  * const { data } = usePermissions({ address: '0x...' });
  * ```
  */
@@ -275,23 +277,33 @@ export function usePermissions<
   const config = useConfig(rest as { config?: Config });
   const queryClient = useQueryClient();
   const chainId = useChainId({ config });
-  const { address, connector, status } = useAccount({ config });
-  const activeConnector = parameters.connector ?? connector;
+  const { address: connectedAddress, connector, status } = useAccount({ config });
+  const connectors = useConnectors({ config });
+  // Use account connector if connected, otherwise find JAW connector from available connectors
+  const jawConnector = connectors.find((c) => c.id === 'jaw');
+  const activeConnector = parameters.connector ?? connector ?? jawConnector;
+
+  // Use explicit address if provided, otherwise fall back to connected address
+  const targetAddress = parameters.address ?? connectedAddress;
+
+  // Enable query if:
+  // 1. Connected (existing behavior), OR
+  // 2. Explicit address provided AND connector available (disconnected query)
+  const isConnected = status === 'connected' || (status === 'reconnecting' && activeConnector?.getProvider);
+  const canQueryDisconnected = Boolean(targetAddress && activeConnector?.getProvider);
 
   const enabled = Boolean(
-    (status === 'connected' ||
-      (status === 'reconnecting' && activeConnector?.getProvider)) &&
-      (query.enabled ?? true),
+    (isConnected || canQueryDisconnected) && (query.enabled ?? true),
   );
 
   const queryKey = useMemo(
     () =>
       getPermissionsQueryKey({
-        address,
+        address: targetAddress,
         chainId: parameters.chainId ?? chainId,
         connector: activeConnector,
       }),
-    [address, chainId, parameters.chainId, activeConnector],
+    [targetAddress, chainId, parameters.chainId, activeConnector],
   );
 
   // Set up event listener for permission changes
@@ -332,10 +344,22 @@ export function usePermissions<
     gcTime: 0,
     queryFn: activeConnector
       ? async () => {
-          return getPermissions(config, {
-            ...rest,
-            connector: activeConnector,
-          });
+          // When connected, use the standard flow
+          if (isConnected) {
+            return getPermissions(config, {
+              ...rest,
+              connector: activeConnector,
+            });
+          }
+          // When disconnected but have address, make direct provider call
+          const provider = (await activeConnector.getProvider?.()) as EIP1193Provider | undefined;
+          if (!provider) throw new Error('Provider not available');
+          if (!targetAddress) throw new Error('Address is required when not connected');
+
+          return provider.request({
+            method: 'wallet_getPermissions' as never,
+            params: [{ address: targetAddress }] as never,
+          }) as Promise<getPermissions.ReturnType>;
         }
       : skipToken,
     queryKey,
@@ -431,12 +455,15 @@ export namespace useGetAssets {
 }
 
 /**
- * Hook to get the assets for the connected account.
+ * Hook to get the assets for an account.
  * Automatically updates when assets change.
  *
  * @example
  * ```tsx
  * const { data: assets, isLoading } = useGetAssets();
+ *
+ * // With specific address (works even when not connected)
+ * const { data } = useGetAssets({ address: '0x...' });
  *
  * // With chain filter
  * const { data } = useGetAssets({ chainFilter: ['0x1', '0xa'] });
@@ -456,19 +483,29 @@ export function useGetAssets<
   const config = useConfig(rest as { config?: Config });
   const queryClient = useQueryClient();
   const chainId = useChainId({ config });
-  const { address, connector, status } = useAccount({ config });
-  const activeConnector = parameters.connector ?? connector;
+  const { address: connectedAddress, connector, status } = useAccount({ config });
+  const connectors = useConnectors({ config });
+  // Use account connector if connected, otherwise find JAW connector from available connectors
+  const jawConnector = connectors.find((c) => c.id === 'jaw');
+  const activeConnector = parameters.connector ?? connector ?? jawConnector;
+
+  // Use explicit address if provided, otherwise fall back to connected address
+  const targetAddress = parameters.address ?? connectedAddress;
+
+  // Enable query if:
+  // 1. Connected (existing behavior), OR
+  // 2. Explicit address provided AND connector available (disconnected query)
+  const isConnected = status === 'connected' || (status === 'reconnecting' && activeConnector?.getProvider);
+  const canQueryDisconnected = Boolean(targetAddress && activeConnector?.getProvider);
 
   const enabled = Boolean(
-    (status === 'connected' ||
-      (status === 'reconnecting' && activeConnector?.getProvider)) &&
-      (query.enabled ?? true),
+    (isConnected || canQueryDisconnected) && (query.enabled ?? true),
   );
 
   const queryKey = useMemo(
     () =>
       getAssetsQueryKey({
-        address,
+        address: targetAddress,
         chainId: parameters.chainId ?? chainId,
         connector: activeConnector,
         chainFilter: parameters.chainFilter,
@@ -476,7 +513,7 @@ export function useGetAssets<
         assetFilter: parameters.assetFilter,
       }),
     [
-      address,
+      targetAddress,
       chainId,
       parameters.chainId,
       activeConnector,
@@ -524,15 +561,144 @@ export function useGetAssets<
     gcTime: 0,
     queryFn: activeConnector
       ? async () => {
-          return getAssets(config, {
-            ...rest,
-            address,
-            connector: activeConnector,
-          });
+          // When connected, use the standard flow
+          if (isConnected) {
+            return getAssets(config, {
+              ...rest,
+              address: targetAddress,
+              connector: activeConnector,
+            });
+          }
+          // When disconnected but have address, make direct provider call
+          const provider = (await activeConnector.getProvider?.()) as EIP1193Provider | undefined;
+          if (!provider) throw new Error('Provider not available');
+          if (!targetAddress) throw new Error('Address is required when not connected');
+
+          return provider.request({
+            method: 'wallet_getAssets' as never,
+            params: [{
+              account: targetAddress,
+              chainFilter: parameters.chainFilter,
+              assetTypeFilter: parameters.assetTypeFilter,
+              assetFilter: parameters.assetFilter,
+            }] as never,
+          }) as Promise<getAssets.ReturnType>;
         }
       : skipToken,
     queryKey,
     staleTime: 30_000, // Cache for 30 seconds since assets change less frequently
   }) as useGetAssets.ReturnType<selectData>;
+}
+
+// ============================================================================
+// useCapabilities
+// ============================================================================
+
+export namespace useCapabilities {
+  export type Parameters<
+    config extends Config = Config,
+    selectData = getCapabilities.ReturnType,
+  > = getCapabilities.Parameters<config> & {
+    config?: config;
+    query?:
+      | Omit<
+          UseQueryParameters<
+            getCapabilities.ReturnType,
+            getCapabilities.ErrorType,
+            selectData,
+            getCapabilitiesQueryKey.Value<config>
+          >,
+          'gcTime' | 'staleTime'
+        >
+      | undefined;
+  };
+
+  export type ReturnType<selectData = getCapabilities.ReturnType> =
+    UseQueryReturnType<selectData, getCapabilities.ErrorType>;
+}
+
+/**
+ * Hook to get the wallet capabilities (EIP-5792).
+ * Can be called without a connected account.
+ *
+ * @example
+ * ```tsx
+ * // Get capabilities (uses connected account if available)
+ * const { data: capabilities, isLoading } = useCapabilities();
+ *
+ * // With specific address (works even when not connected)
+ * const { data } = useCapabilities({ address: '0x...' });
+ *
+ * // With chain filter
+ * const { data } = useCapabilities({ chainFilter: ['0x1', '0xa'] });
+ * ```
+ */
+export function useCapabilities<
+  config extends Config = ResolvedRegister['config'],
+  selectData = getCapabilities.ReturnType,
+>(
+  parameters: useCapabilities.Parameters<config, selectData> = {},
+): useCapabilities.ReturnType<selectData> {
+  const { query = {}, ...rest } = parameters;
+
+  const config = useConfig(rest as { config?: Config });
+  const chainId = useChainId({ config });
+  const { address: connectedAddress, connector, status } = useAccount({ config });
+  const connectors = useConnectors({ config });
+  // Use account connector if connected, otherwise find JAW connector from available connectors
+  const jawConnector = connectors.find((c) => c.id === 'jaw');
+  const activeConnector = parameters.connector ?? connector ?? jawConnector;
+
+  // Use explicit address if provided, otherwise fall back to connected address
+  const targetAddress = parameters.address ?? connectedAddress;
+
+  // Enable query if:
+  // 1. Connected (existing behavior), OR
+  // 2. Connector available (can query capabilities without connection)
+  const isConnected = status === 'connected' || (status === 'reconnecting' && activeConnector?.getProvider);
+  const canQueryDisconnected = Boolean(activeConnector?.getProvider);
+
+  const enabled = Boolean(
+    (isConnected || canQueryDisconnected) && (query.enabled ?? true),
+  );
+
+  const queryKey = useMemo(
+    () =>
+      getCapabilitiesQueryKey({
+        address: targetAddress,
+        chainId: parameters.chainId ?? chainId,
+        connector: activeConnector,
+        chainFilter: parameters.chainFilter,
+      }),
+    [targetAddress, chainId, parameters.chainId, activeConnector, parameters.chainFilter],
+  );
+
+  return useQuery({
+    ...query,
+    enabled,
+    gcTime: 0,
+    queryFn: activeConnector
+      ? async () => {
+          // When connected, use the standard flow
+          if (isConnected) {
+            return getCapabilities(config, {
+              ...rest,
+              address: targetAddress,
+              connector: activeConnector,
+            });
+          }
+          // When disconnected, make direct provider call
+          const provider = (await activeConnector.getProvider?.()) as EIP1193Provider | undefined;
+          if (!provider) throw new Error('Provider not available');
+
+          return provider.request({
+            method: 'wallet_getCapabilities' as never,
+            params: [targetAddress, parameters.chainFilter] as never,
+          }) as Promise<getCapabilities.ReturnType>;
+        }
+      : skipToken,
+    queryKey,
+    staleTime: 60_000, // Cache for 60 seconds since capabilities don't change often
+  }) as useCapabilities.ReturnType<selectData>;
 }
 

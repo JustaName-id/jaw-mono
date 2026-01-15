@@ -581,15 +581,24 @@ console.log('Disconnected');`,
     method: 'wallet_getCapabilities',
     category: 'capability',
     description: 'Get wallet capabilities per chain (EIP-5792)',
-    requiresConnection: true,
-    parameters: [],
-    getCodeSnippet: () => `const capabilities = await jaw.provider.request({
+    requiresConnection: false,
+    parameters: [
+      {
+        name: 'address',
+        type: 'address',
+        label: 'Address',
+        description: 'Account address (optional)',
+        required: false,
+        autoFill: 'address',
+      },
+    ],
+    getCodeSnippet: (params) => `const capabilities = await jaw.provider.request({
   method: 'wallet_getCapabilities',
-  params: [account],
+  params: [${params.address ? `'${params.address}'` : 'undefined'}],
 });
 
 console.log('Capabilities:', capabilities);`,
-    buildParams: (_, context) => [context.address],
+    buildParams: (params, context) => [params.address || context.address],
   },
 
   // ===== Permission Methods =====

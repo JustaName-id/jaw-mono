@@ -1,6 +1,48 @@
 import type { Config, Connector } from '@wagmi/core';
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
 import type { AssetType, AssetFilter } from '@jaw.id/core';
+
+// ============================================================================
+// getCapabilitiesQueryKey
+// ============================================================================
+
+export namespace getCapabilitiesQueryKey {
+  export type Parameters<config extends Config = Config> = {
+    address?: Address;
+    chainId?: number;
+    connector?: Connector;
+    chainFilter?: Hex[];
+  };
+
+  export type Value<config extends Config = Config> = readonly [
+    'capabilities',
+    {
+      address: Address | undefined;
+      chainId: number | undefined;
+      connectorUid: string | undefined;
+      chainFilter: Hex[] | undefined;
+    },
+  ];
+}
+
+/**
+ * Creates a query key for getCapabilities.
+ * Used by useCapabilities hook and for cache invalidation.
+ */
+export function getCapabilitiesQueryKey<config extends Config>(
+  parameters: getCapabilitiesQueryKey.Parameters<config>,
+): getCapabilitiesQueryKey.Value<config> {
+  const { address, chainId, connector, chainFilter } = parameters;
+  return [
+    'capabilities',
+    {
+      address,
+      chainId,
+      connectorUid: connector?.uid,
+      chainFilter,
+    },
+  ] as const;
+}
 
 // ============================================================================
 // getPermissionsQueryKey

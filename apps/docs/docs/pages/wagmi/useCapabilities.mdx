@@ -1,0 +1,217 @@
+# useCapabilities
+
+Hook to get wallet capabilities for supported chains. Implements EIP-5792 for capability discovery.
+
+**Type:** `hook`
+
+
+## Import
+
+```typescript
+import { useCapabilities } from '@jaw.id/wagmi';
+```
+
+
+## Signature
+
+```typescript
+function useCapabilities(parameters?: {
+  address?: Address;
+  chainId?: number;
+  connector?: Connector;
+  chainFilter?: Hex[];
+  config?: Config;
+  query?: UseQueryParameters;
+}): UseQueryResult
+```
+
+
+## Parameters
+
+### address
+
+Type: `Address` (optional)
+
+Specific account address to get capabilities for. When provided, allows querying capabilities without a connected wallet.
+
+### chainId
+
+Type: `number` (optional)
+
+Specific chain ID. Defaults to current chain.
+
+### connector
+
+Type: `Connector` (optional)
+
+Specific connector to use. Defaults to active connector.
+
+### chainFilter
+
+Type: `Hex[]` (optional)
+
+Array of chain IDs (hex format) to filter capabilities. If not provided, returns capabilities for all supported chains.
+
+### config
+
+Type: `Config` (optional)
+
+Wagmi config. If not provided, uses the config from `WagmiProvider`.
+
+### query
+
+Type: `UseQueryParameters` (optional)
+
+TanStack React Query options (excluding `gcTime` and `staleTime` which are managed internally).
+
+
+## Returns
+
+Returns a TanStack React Query result:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `data` | `Record<Hex, Record<string, unknown>>` | Capabilities keyed by chain ID (hex) |
+| `isLoading` | `boolean` | Whether initial load is in progress |
+| `isFetching` | `boolean` | Whether any fetch is in progress |
+| `isSuccess` | `boolean` | Whether query succeeded |
+| `isError` | `boolean` | Whether query failed |
+| `error` | `Error` | Error if query failed |
+| `refetch` | `function` | Manually refetch capabilities |
+
+### data
+
+When successful, `data` is an object of capabilities keyed by chain ID (hex):
+
+```typescript
+type WalletGetCapabilitiesResponse = Record<Hex, Record<string, unknown>>;
+
+// Example structure:
+{
+  "0x1": {
+    "atomicBatch": { "supported": true },
+    "atomic": { "status": "supported" },
+    "paymasterService": { "supported": true },
+    "permissions": { "supported": true },
+    "feeToken": {
+      "supported": true,
+      "tokens": [...]
+    }
+  },
+  "0x2105": {
+    // Base chain capabilities
+  }
+}
+```
+
+
+## Behavior
+
+1. **Works without connection** when `address` parameter is provided
+2. **Auto-enables** when wallet is connected or address is provided
+3. **Caches results** for optimal performance
+4. **Returns all chains** by default, use `chainFilter` to limit
+
+
+## Examples
+
+### Basic Usage
+
+```tsx
+import { useAccount } from 'wagmi';
+import { useCapabilities } from '@jaw.id/wagmi';
+
+function CapabilitiesDisplay() {
+  const { isConnected } = useAccount();
+  const { data: capabilities, isLoading } = useCapabilities();
+
+  if (!isConnected) return <p>Connect wallet to view capabilities</p>;
+  if (isLoading) return <p>Loading capabilities...</p>;
+
+  return (
+    <div>
+      {Object.entries(capabilities || {}).map(([chainId, caps]) => (
+        <div key={chainId}>
+          <h3>Chain {chainId}</h3>
+          <ul>
+            {Object.entries(caps).map(([name, value]) => (
+              <li key={name}>
+                {name}: {JSON.stringify(value)}
+              </li>
+            ))}
+          </ul>
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Without Wallet Connection
+
+```tsx
+import { useCapabilities } from '@jaw.id/wagmi';
+
+function CapabilitiesForAddress({ address }: { address: `0x${string}` }) {
+  // Works without wallet connection when address is provided
+  const { data: capabilities, isLoading } = useCapabilities({ address });
+
+  if (isLoading) return <p>Loading...</p>;
+
+  return <pre>{JSON.stringify(capabilities, null, 2)}</pre>;
+}
+```
+
+### Filter by Chain
+
+```tsx
+import { useCapabilities } from '@jaw.id/wagmi';
+
+function BaseCapabilities() {
+  const { data: capabilities } = useCapabilities({
+    chainFilter: ['0x2105'], // Base mainnet only
+  });
+
+  // ...
+}
+```
+
+### Check Specific Capability
+
+```tsx
+import { useCapabilities } from '@jaw.id/wagmi';
+
+function PaymasterSupport() {
+  const { data: capabilities } = useCapabilities();
+
+  const supportsPaymaster = (chainId: string) => {
+    const chainCaps = capabilities?.[chainId as `0x${string}`];
+    return (chainCaps?.paymasterService as { supported?: boolean })?.supported === true;
+  };
+
+  return (
+    <div>
+      <p>Ethereum paymaster: {supportsPaymaster('0x1') ? 'Yes' : 'No'}</p>
+      <p>Base paymaster: {supportsPaymaster('0x2105') ? 'Yes' : 'No'}</p>
+    </div>
+  );
+}
+```
+
+
+## Available Capabilities
+
+| Capability | Description |
+|------------|-------------|
+| `atomicBatch` | Support for `wallet_sendCalls` (EIP-5792) |
+| `atomic` | Atomic transaction execution |
+| `paymasterService` | Gasless transactions via ERC-7677 |
+| `permissions` | Permission system support |
+| `feeToken` | Supported fee tokens for gas |
+
+
+## Related
+
+- [useGetAssets](/wagmi/useGetAssets) - Query token balances
+- [usePermissions](/wagmi/usePermissions) - Query permissions
+- [wallet_getCapabilities](/api-reference/wallet_getCapabilities) - RPC method reference

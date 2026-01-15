@@ -4,7 +4,12 @@
   "private": true,
   "type": "module",
   "nx": {
-    "name": "docs"
+    "name": "docs",
+    "targets": {
+      "build": {
+        "dependsOn": ["^build"]
+      }
+    }
   },
   "scripts": {
     "dev": "vocs dev",
@@ -12,6 +17,7 @@
     "preview": "vocs preview"
   },
   "dependencies": {
+    "@jaw.id/core": "workspace:*",
     "react": "19.0.1",
     "react-dom": "19.0.1",
     "vocs": "^1.0.0-alpha.62"

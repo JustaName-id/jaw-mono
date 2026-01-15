@@ -5,4 +5,5 @@ export {
   useRevokePermissions,
   usePermissions,
   useGetAssets,
+  useCapabilities,
 } from './internal/react.js';

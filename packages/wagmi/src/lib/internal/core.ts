@@ -4,7 +4,7 @@ import {
   getConnectorClient,
   disconnect as wagmiDisconnect,
 } from '@wagmi/core';
-import type { Address } from 'viem';
+import type { Address, Hex } from 'viem';
 import {
   type PermissionsDetail,
   type WalletGrantPermissionsResponse,
@@ -301,5 +301,67 @@ export async function getAssets<config extends Config>(
   });
 
   return result as getAssets.ReturnType;
+}
+
+// ============================================================================
+// getCapabilities
+// ============================================================================
+
+/** Response type for wallet_getCapabilities (EIP-5792) */
+export type WalletGetCapabilitiesResponse = Record<Hex, Record<string, unknown>>;
+
+export namespace getCapabilities {
+  export type Parameters<config extends Config = Config> = {
+    /** Address of the account to get capabilities for (optional) */
+    address?: Address;
+    chainId?: number;
+    connector?: Connector;
+    /** Filter by specific chain IDs (hex format like "0x1") */
+    chainFilter?: Hex[];
+  };
+
+  export type ReturnType = WalletGetCapabilitiesResponse;
+  export type ErrorType = Error;
+}
+
+/**
+ * Gets the wallet capabilities for an address.
+ * This calls wallet_getCapabilities on the wallet (EIP-5792).
+ * Can be called without a connected account.
+ *
+ * @example
+ * ```ts
+ * // Get capabilities for all chains
+ * const capabilities = await Actions.getCapabilities(config, {});
+ *
+ * // Get capabilities for specific address
+ * const capabilities = await Actions.getCapabilities(config, {
+ *   address: '0x...',
+ * });
+ *
+ * // Get capabilities filtered by chains
+ * const capabilities = await Actions.getCapabilities(config, {
+ *   chainFilter: ['0x1', '0xa'], // Mainnet and Optimism
+ * });
+ * ```
+ */
+export async function getCapabilities<config extends Config>(
+  config: config,
+  parameters: getCapabilities.Parameters<config> = {},
+): Promise<getCapabilities.ReturnType> {
+  const { address, chainId, connector, chainFilter } = parameters;
+
+  const client = await getConnectorClient(config, {
+    account: address,
+    chainId,
+    connector,
+  });
+
+  const result = await client.request({
+    method: 'wallet_getCapabilities' as never,
+    params: [address, chainFilter] as never,
+  });
+
+  return result as getCapabilities.ReturnType;
 }
 
