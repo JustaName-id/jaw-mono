@@ -66,8 +66,6 @@ export async function fetchTokenQuotes(
   chainId: number,
   tokens: Address[]
 ): Promise<TokenQuote[]> {
-  console.log('[fetchTokenQuotes] Fetching quotes for tokens:', tokens, 'chainId:', chainId);
-
   // Pimlico expects:
   // - id as a number (not UUID string)
   // - params as [{tokens: [...]}, entryPointAddress, chainIdHex]
@@ -82,8 +80,6 @@ export async function fetchTokenQuotes(
     ]
   };
 
-  console.log('[fetchTokenQuotes] Request:', JSON.stringify(requestBody, null, 2));
-
   const response = await fetch(paymasterUrl, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -91,7 +87,6 @@ export async function fetchTokenQuotes(
   });
 
   const data = await response.json();
-  console.log('[fetchTokenQuotes] Response:', JSON.stringify(data, null, 2));
 
   if (data.error) {
     throw new Error(`pimlico_getTokenQuotes error: ${data.error.message || JSON.stringify(data.error)}`);
@@ -113,12 +108,6 @@ export async function fetchTokenQuotes(
     exchangeRate: BigInt(q.exchangeRate),
     paymasterAddress: q.paymaster as Address,
   }));
-
-  console.log('[fetchTokenQuotes] Parsed quotes:', quotes.map((q: TokenQuote) => ({
-    token: q.tokenAddress,
-    postOpGas: q.postOpGas.toString(),
-    exchangeRate: q.exchangeRate.toString(),
-  })));
 
   return quotes;
 }
@@ -203,15 +192,6 @@ export async function estimateErc20PaymasterCosts(
       : undefined,
     maxFeePerGas: userOp.maxFeePerGas,
   };
-
-  console.log('[estimateErc20PaymasterCosts] Gas breakdown:', {
-    preVerificationGas: gas.preVerificationGas.toString(),
-    callGasLimit: gas.callGasLimit.toString(),
-    verificationGasLimit: gas.verificationGasLimit.toString(),
-    paymasterVerificationGasLimit: (gas.paymasterVerificationGasLimit || 0n).toString(),
-    paymasterPostOpGasLimit: (gas.paymasterPostOpGasLimit || 0n).toString(),
-    maxFeePerGas: gas.maxFeePerGas.toString(),
-  });
 
   // 5. Calculate cost for each token using the utility function
   return calculateTokenEstimatesFromGas(gas, quotes, tokens);
