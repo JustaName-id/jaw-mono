@@ -1,6 +1,7 @@
 import { UUID } from 'crypto';
 
 import { JAWSigner } from '../JAWSigner.js';
+import { decodePersonalSignRequest } from '../SignerUtils.js';
 
 import { Communicator } from '../../communicator/index.js';
 import { getPermissionFromRelay } from '../../rpc/index.js';
@@ -100,10 +101,14 @@ export class CrossPlatformSigner extends JAWSigner {
     protected override async handleSigningRequest(request: RequestArguments): Promise<unknown> {
         let resolvedChain: SDKChain | undefined;
 
+        // Decode hex-encoded messages for personal_sign before sending to popup
+        // (wagmi and other libraries hex-encode messages before sending)
+        const processedRequest = decodePersonalSignRequest(request);
+
         // wallet_revokePermissions needs chainId from relay (not in request params)
         // because the permission may have been granted on a different chain
-        if (request.method === 'wallet_revokePermissions') {
-            const params = request.params as [{ id: `0x${string}` }];
+        if (processedRequest.method === 'wallet_revokePermissions') {
+            const params = processedRequest.params as [{ id: `0x${string}` }];
             const permissionId = params[0]?.id;
             if (permissionId) {
                 const apiKey = store.config.get().apiKey;
@@ -121,10 +126,10 @@ export class CrossPlatformSigner extends JAWSigner {
             }
         } else {
             // For other methods, resolve chain from request params if present
-            resolvedChain = this.resolveChainFromRequest(request);
+            resolvedChain = this.resolveChainFromRequest(processedRequest);
         }
 
-        return this.sendRequestToPopup(request, resolvedChain);
+        return this.sendRequestToPopup(processedRequest, resolvedChain);
     }
 
     /**

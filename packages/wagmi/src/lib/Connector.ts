@@ -96,8 +96,7 @@ export function jaw(parameters: JawParameters) {
     },
 
     async connect({ chainId, isReconnecting, capabilities }: ConnectParameters = {}) {
-      const chains = config.chains;
-      const targetChainId = chainId ?? chains[0]?.id;
+      const targetChainId = chainId;
 
       let accounts: `0x${string}`[] = [];
       let accountsWithCapabilities: AccountWithCapabilities[] = [];
