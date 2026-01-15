@@ -21,6 +21,8 @@ export interface FeeTokenOption {
   balanceUsd?: string;
   gasCostUsd?: string;
   gasCostFormatted?: string;
+  // Optional: Token logo URI from API
+  logoURI?: string;
 }
 
 interface FeeTokenSelectorProps {
@@ -33,9 +35,27 @@ interface FeeTokenSelectorProps {
   estimatedGasEth?: string;
 }
 
-// Get token icon based on symbol
-const getTokenIcon = (symbol: string, className?: string) => {
+// Get token icon - use logoURI if available, otherwise fall back to symbol-based icons
+const getTokenIcon = (symbol: string, className?: string, logoURI?: string) => {
   const iconClass = cn('size-8 shrink-0', className);
+
+  // Use logoURI if available
+  if (logoURI) {
+    return (
+      <img
+        src={logoURI}
+        alt={symbol}
+        className={cn(iconClass, 'rounded-full object-cover')}
+        onError={(e) => {
+          // Fallback to generic icon if image fails to load
+          e.currentTarget.style.display = 'none';
+          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+        }}
+      />
+    );
+  }
+
+  // Fallback to symbol-based icons
   switch (symbol.toUpperCase()) {
     case 'ETH':
       return <EthIcon className={iconClass} />;
@@ -182,7 +202,7 @@ export const FeeTokenSelector = ({
         )}
       >
         {/* Token Icon */}
-        {getTokenIcon(token.symbol, 'size-6')}
+        {getTokenIcon(token.symbol, 'size-6', token.logoURI)}
 
         {/* Token Info */}
         <div className="flex-1 text-left min-w-0">
@@ -220,7 +240,7 @@ export const FeeTokenSelector = ({
           disabled={disabled}
           className="h-7 px-2 gap-1 text-xs font-medium rounded-md border-muted-foreground/30"
         >
-          {selectedToken && getTokenIcon(selectedToken.symbol, 'size-3.5')}
+          {selectedToken && getTokenIcon(selectedToken.symbol, 'size-3.5', selectedToken.logoURI)}
           <span>{selectedToken?.symbol || 'Select'}</span>
           <ChevronDown className="size-3 opacity-50" />
         </Button>

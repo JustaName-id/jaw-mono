@@ -1232,6 +1232,7 @@ function TransactionDialogWrapper({
                 balanceFormatted,
                 isNative,
                 isSelectable,
+                logoURI: token.logoURI,
               } as FeeTokenOption;
             } catch (error) {
               console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
@@ -1244,6 +1245,7 @@ function TransactionDialogWrapper({
                 balanceFormatted: '0',
                 isNative: isNativeToken(token.address),
                 isSelectable: false,
+                logoURI: token.logoURI,
               } as FeeTokenOption;
             }
           })
@@ -1552,6 +1554,7 @@ function SendTransactionDialogWrapper({
                 balanceFormatted,
                 isNative,
                 isSelectable,
+                logoURI: token.logoURI,
               } as FeeTokenOption;
             } catch (error) {
               console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
@@ -1564,6 +1567,7 @@ function SendTransactionDialogWrapper({
                 balanceFormatted: '0',
                 isNative: isNativeToken(token.address),
                 isSelectable: false,
+                logoURI: token.logoURI,
               } as FeeTokenOption;
             }
           })

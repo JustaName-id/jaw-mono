@@ -285,6 +285,7 @@ export const TransactionModal = ({
                 balanceFormatted,
                 isNative,
                 isSelectable,
+                logoURI: token.logoURI,
               } as FeeTokenOption;
             } catch (error) {
               console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
@@ -297,6 +298,7 @@ export const TransactionModal = ({
                 balanceFormatted: '0',
                 isNative: isNativeToken(token.address),
                 isSelectable: false,
+                logoURI: token.logoURI,
               } as FeeTokenOption;
             }
           })

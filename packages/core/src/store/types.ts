@@ -36,6 +36,7 @@ export type FeeToken = {
   interop: boolean;
   decimals: number;
   feeToken: boolean;
+  logoURI?: string;
 };
 
 /**
