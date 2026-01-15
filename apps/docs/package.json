@@ -4,7 +4,12 @@
   "private": true,
   "type": "module",
   "nx": {
-    "name": "docs"
+    "name": "docs",
+    "targets": {
+      "build": {
+        "dependsOn": ["^build"]
+      }
+    }
   },
   "scripts": {
     "dev": "vocs dev",

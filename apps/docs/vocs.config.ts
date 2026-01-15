@@ -9,7 +9,7 @@ export default defineConfig({
   vite: {
     resolve: {
       alias: {
-        '@jaw.id/core': resolve(__dirname, '../../packages/core/src/index.ts'),
+        '@jaw.id/core': resolve(__dirname, '../../packages/core/dist/index.js'),
       },
     },
   },
