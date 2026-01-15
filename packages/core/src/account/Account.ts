@@ -1,5 +1,5 @@
 import type { Address, Hash, Hex, TypedDataDefinition, TypedData, LocalAccount } from 'viem';
-import { isHex, encodeFunctionData, erc20Abi } from 'viem';
+import { isHex, encodeFunctionData, erc20Abi, createPublicClient, http } from 'viem';
 import { toWebAuthnAccount, type SmartAccount } from 'viem/account-abstraction';
 import {
   createSmartAccount,
@@ -606,8 +606,8 @@ export class Account {
       data: call.data,
     }));
 
-    // If using JAW ERC-20 paymaster, prepend approval call
-    const approvalCall = Account.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    // If using JAW ERC-20 paymaster, prepend approval call if needed
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
     const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
     return await sendSmartAccountTransaction(
@@ -653,8 +653,8 @@ export class Account {
       data: call.data,
     }));
 
-    // If using JAW ERC-20 paymaster, prepend approval call
-    const approvalCall = Account.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    // If using JAW ERC-20 paymaster, prepend approval call if needed
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
     const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
     let result: BundledTransactionResult;
@@ -938,13 +938,14 @@ export class Account {
   }
 
   /**
-   * Create ERC-20 approval call for the paymaster if using JAW ERC-20 paymaster
+   * Create ERC-20 approval call for the paymaster if using JAW ERC-20 paymaster,
+   * only if the current allowance is insufficient.
    * @internal
    */
-  private static createErc20ApprovalCall(
+  private async createErc20ApprovalCall(
     paymasterUrl?: string,
     paymasterContext?: Record<string, unknown>
-  ): { to: Address; value?: bigint; data: Hex } | null {
+  ): Promise<{ to: Address; value?: bigint; data: Hex } | null> {
     // Only add approval if using JAW ERC-20 paymaster
     if (!Account.isJawErc20Paymaster(paymasterUrl)) {
       return null;
@@ -954,39 +955,36 @@ export class Account {
     const tokenAddress = paymasterContext?.token as string | undefined;
     const gasAmount = paymasterContext?.gas as string | bigint | undefined;
 
-    if (!tokenAddress) {
-      console.warn('[Account] ERC-20 paymaster requires token address in context');
+    if (!tokenAddress || gasAmount === undefined) {
       return null;
     }
 
-    // Minimum approval amount to ensure we don't approve 0 tokens
-    // This is ~2 USDC/USDT which should cover most transactions on testnets/L2s
-    const MIN_APPROVAL_AMOUNT = BigInt('2000000'); // 2 USDC/USDT (6 decimals)
-
     // Parse the gas amount from context
-    let parsedGasAmount = 0n;
-    if (gasAmount) {
-      parsedGasAmount = typeof gasAmount === 'string' ? BigInt(gasAmount) : gasAmount;
-    }
+    const requiredAmount = typeof gasAmount === 'string' ? BigInt(gasAmount) : gasAmount;
 
-    // Use the larger of: parsed amount, or minimum safety amount
-    // This ensures we never approve 0 or an amount too low
-    const approvalAmount = parsedGasAmount > MIN_APPROVAL_AMOUNT
-      ? parsedGasAmount
-      : MIN_APPROVAL_AMOUNT;
-
-    console.log('[Account] Creating ERC-20 approval:', {
-      token: tokenAddress,
-      requestedAmount: parsedGasAmount.toString(),
-      actualApprovalAmount: approvalAmount.toString(),
-      usingMinimum: parsedGasAmount <= MIN_APPROVAL_AMOUNT,
+    // Check current allowance
+    const publicClient = createPublicClient({
+      chain: { id: this._chain.id } as Parameters<typeof createPublicClient>[0]['chain'],
+      transport: http(this._chain.rpcUrl),
     });
 
-    // Encode ERC-20 approve call
+    const currentAllowance = await publicClient.readContract({
+      address: tokenAddress as Address,
+      abi: erc20Abi,
+      functionName: 'allowance',
+      args: [this._smartAccount.address, ERC20_PAYMASTER_ADDRESS as Address],
+    });
+
+    // If current allowance is sufficient, no approval needed
+    if (currentAllowance >= requiredAmount) {
+      return null;
+    }
+
+    // Encode ERC-20 approve call for the required amount
     const approveData = encodeFunctionData({
       abi: erc20Abi,
       functionName: 'approve',
-      args: [ERC20_PAYMASTER_ADDRESS as Address, approvalAmount],
+      args: [ERC20_PAYMASTER_ADDRESS as Address, requiredAmount],
     });
 
     return {
