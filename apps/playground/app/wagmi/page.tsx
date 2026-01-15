@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useCallback, Suspense } from 'react';
+import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { Mode } from '@jaw.id/core';
 import { Card, Button } from '@jaw.id/ui';
@@ -16,7 +17,6 @@ import {
   useConnect as useWagmiConnect,
   useSendCalls,
   useCallsStatus,
-  useCapabilities,
 } from 'wagmi';
 import {
   useConnect,
@@ -25,6 +25,7 @@ import {
   useRevokePermissions,
   usePermissions,
   useGetAssets,
+  useCapabilities,
 } from '@jaw.id/wagmi';
 
 import { WagmiProviders } from './providers';
@@ -50,15 +51,27 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
   const { signMessageAsync } = useSignMessage();
   const { signTypedDataAsync } = useSignTypedData();
   const { sendCallsAsync } = useSendCalls();
-  const { data: capabilities } = useCapabilities();
 
   // JAW Wagmi Hooks
   const { mutateAsync: jawConnect } = useConnect();
   const { mutateAsync: jawDisconnect } = useDisconnect();
   const { mutateAsync: grantPermissions, isPending: isGrantingPermissions } = useGrantPermissions();
   const { mutateAsync: revokePermissions, isPending: isRevokingPermissions } = useRevokePermissions();
-  const { data: permissions, refetch: refetchPermissions, isLoading: isLoadingPermissions } = usePermissions();
-  const { data: assets, refetch: refetchAssets, isLoading: isLoadingAssets } = useGetAssets();
+
+  // State for query addresses (allows querying for arbitrary addresses)
+  const [permissionsAddress, setPermissionsAddress] = useState<string | undefined>();
+  const [assetsAddress, setAssetsAddress] = useState<string | undefined>();
+  const [capabilitiesAddress, setCapabilitiesAddress] = useState<string | undefined>();
+
+  const { data: permissions, refetch: refetchPermissions, isLoading: isLoadingPermissions } = usePermissions({
+    address: (permissionsAddress || address) as Address | undefined,
+  });
+  const { data: assets, refetch: refetchAssets, isLoading: isLoadingAssets } = useGetAssets({
+    address: (assetsAddress || address) as Address | undefined,
+  });
+  const { data: capabilities, refetch: refetchCapabilities, isLoading: isLoadingCapabilities } = useCapabilities({
+    address: (capabilitiesAddress || address) as Address | undefined,
+  });
 
   // Calls status state
   const [lastBatchId, setLastBatchId] = useState<string>('');
@@ -138,9 +151,15 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
             result = callsStatus || { status: 'pending' };
             break;
 
-          case 'useCapabilities':
-            result = capabilities;
+          case 'useCapabilities': {
+            const targetAddress = params.address as string | undefined;
+            if (targetAddress) {
+              flushSync(() => setCapabilitiesAddress(targetAddress));
+            }
+            const { data } = await refetchCapabilities();
+            result = data;
             break;
+          }
 
           case 'useGrantPermissions':
             result = await grantPermissions({
@@ -156,15 +175,25 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
             });
             break;
 
-          case 'usePermissions':
-            await refetchPermissions();
-            result = permissions;
+          case 'usePermissions': {
+            const targetAddress = (params.address as string) || address;
+            if (targetAddress) {
+              flushSync(() => setPermissionsAddress(targetAddress));
+            }
+            const { data } = await refetchPermissions();
+            result = data;
             break;
+          }
 
-          case 'useGetAssets':
-            await refetchAssets();
-            result = assets;
+          case 'useGetAssets': {
+            const targetAddress = (params.address as string) || address;
+            if (targetAddress) {
+              flushSync(() => setAssetsAddress(targetAddress));
+            }
+            const { data } = await refetchAssets();
+            result = data;
             break;
+          }
 
           default:
             throw new Error(`Unknown hook type: ${method.hookType}`);
@@ -186,6 +215,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
       }
     },
     [
+      address,
       connectors,
       jawConnect,
       jawDisconnect,
@@ -198,10 +228,14 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
       capabilities,
       grantPermissions,
       revokePermissions,
+      setPermissionsAddress,
       refetchPermissions,
       permissions,
+      setAssetsAddress,
       refetchAssets,
       assets,
+      setCapabilitiesAddress,
+      refetchCapabilities,
       refetchCallsStatus,
       callsStatus,
       addLog,
@@ -230,6 +264,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
     isRevokingPermissions ||
     isLoadingPermissions ||
     isLoadingAssets ||
+    isLoadingCapabilities ||
     isLoadingCallsStatus ||
     isExecuting;
 

@@ -61,6 +61,7 @@ export default defineConfig({
           text: 'Hooks',
           collapsed: true,
           items: [
+            { text: 'useCapabilities()', link: '/wagmi/useCapabilities' },
             { text: 'useConnect()', link: '/wagmi/useConnect' },
             { text: 'useDisconnect()', link: '/wagmi/useDisconnect' },
             { text: 'useGetAssets()', link: '/wagmi/useGetAssets' },

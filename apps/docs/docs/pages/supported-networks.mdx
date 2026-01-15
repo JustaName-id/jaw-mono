@@ -1,15 +1,13 @@
 # Supported Networks
 
+import { CapabilitiesTable } from '../components/CapabilitiesTable';
+
+JAW smart accounts are supported across multiple EVM networks. The table below shows real-time capabilities fetched from the JAW API.
+
 
 ## Mainnets
 
-| Network | Chain ID | Chain ID (Hex)
-|---------|----------|---------------
-| Ethereum | `1` | `0x1`
-| Optimism | `10` | `0xa`
-| Base | `8453` | `0x2105`
-| Arbitrum One | `42161` | `0xa4b1`
-| Linea | `59144` | `0xe708`
+<CapabilitiesTable type="mainnet" />
 
 
 ## Testnets
@@ -25,16 +23,21 @@ const jaw = JAW.create({
 });
 ```
 
-| Network | Chain ID | Chain ID (Hex)
-|---------|----------|---------------
-| Ethereum Sepolia | `11155111` | `0xaa36a7`
-| Optimism Sepolia | `11155420` | `0xaa37dc`
-| Base Sepolia | `84532` | `0x14a34`
-| Arbitrum Sepolia | `421614` | `0x66eee`
-| Linea Sepolia | `59141` | `0xe705`
+<CapabilitiesTable type="testnet" />
+
+
+## Capabilities Explained
+
+| Capability | Description |
+|------------|-------------|
+| **Batch** | Atomic batch transactions via `wallet_sendCalls` (EIP-5792) - all calls succeed or fail together |
+| **Gasless** | Sponsored transactions via paymaster service (ERC-7677) - users don't pay gas |
+| **Permissions** | Permission system for delegating spend and call rights to third parties |
+| **Fee Tokens** | Tokens that can be used to pay for gas fees on each network |
 
 
 ## Related
 
 - [defaultChainId](/configuration/defaultChainId) - Set the default network
 - [wallet_switchEthereumChain](/api-reference/wallet_switchEthereumChain) - Switch networks programmatically
+- [wallet_getCapabilities](/api-reference/wallet_getCapabilities) - Query capabilities programmatically

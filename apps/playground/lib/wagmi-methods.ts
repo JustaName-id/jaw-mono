@@ -251,7 +251,7 @@ sendCalls({
     hookType: 'useCallsStatus',
     category: 'transaction',
     description: 'Get status of batch transaction (EIP-5792)',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
       {
         name: 'id',
@@ -376,14 +376,30 @@ console.log('Signature:', signature);`;
     hookType: 'useCapabilities',
     category: 'capability',
     description: 'Get wallet capabilities per chain (EIP-5792)',
-    requiresConnection: true,
-    parameters: [],
-    getCodeSnippet: () => `import { useCapabilities } from 'wagmi/experimental';
+    requiresConnection: false,
+    parameters: [
+      {
+        name: 'address',
+        type: 'address',
+        label: 'Address',
+        description: 'Account address (optional)',
+        required: false,
+        autoFill: 'address',
+      },
+    ],
+    getCodeSnippet: (params) => `import { useCapabilities } from '@jaw.id/wagmi';
 
-const { data: capabilities } = useCapabilities();
+// Works without wallet connection when address is provided
+const { data: capabilities, isLoading, refetch } = useCapabilities(${params.address ? `{
+  address: '${params.address}',
+}` : ''});
 
+// Capabilities are keyed by chain ID (hex)
+// e.g., { '0x14a34': { atomicBatch: { supported: true }, ... } }
 console.log('Capabilities:', capabilities);`,
-    buildParams: () => ({}),
+    buildParams: (params) => ({
+      address: params.address || undefined,
+    }),
   },
 
   // ===== Permission Methods =====
@@ -494,18 +510,29 @@ revokePermissions({
     method: 'wallet_getPermissions',
     hookType: 'usePermissions',
     category: 'permission',
-    description: 'Get all permissions for connected account',
-    requiresConnection: true,
-    parameters: [],
-    getCodeSnippet: () => `import { usePermissions } from '@jaw.id/wagmi';
+    description: 'Get all permissions for an account',
+    requiresConnection: false,
+    parameters: [
+      {
+        name: 'address',
+        type: 'address',
+        label: 'Address',
+        description: 'Account address (optional if connected)',
+        required: false,
+        autoFill: 'address',
+      },
+    ],
+    getCodeSnippet: (params) => `import { usePermissions } from '@jaw.id/wagmi';
 
-const { data: permissions, refetch } = usePermissions();
-
-// Trigger refetch
-refetch();
+// Works without wallet connection when address is provided
+const { data: permissions, isLoading, refetch } = usePermissions(${params.address ? `{
+  address: '${params.address}',
+}` : ''});
 
 console.log('Permissions:', permissions);`,
-    buildParams: () => ({}),
+    buildParams: (params) => ({
+      address: params.address || undefined,
+    }),
   },
 
   // ===== Asset Methods =====
@@ -516,19 +543,29 @@ console.log('Permissions:', permissions);`,
     hookType: 'useGetAssets',
     category: 'asset',
     description: 'Get token balances across chains (EIP-7811)',
-    requiresConnection: true,
-    parameters: [],
-    getCodeSnippet: () => `import { useGetAssets } from '@jaw.id/wagmi';
+    requiresConnection: false,
+    parameters: [
+      {
+        name: 'address',
+        type: 'address',
+        label: 'Address',
+        description: 'Account address (optional if connected)',
+        required: false,
+        autoFill: 'address',
+      },
+    ],
+    getCodeSnippet: (params) => `import { useGetAssets } from '@jaw.id/wagmi';
 
-const { data: assets, refetch } = useGetAssets();
+// Works without wallet connection when address is provided
+const { data: assets, isLoading, refetch } = useGetAssets(${params.address ? `{
+  address: '${params.address}',
+}` : ''});
 
-// Trigger refetch
-refetch();
-
-// Assets are grouped by chain ID
-Object.entries(assets || {}).forEach(([chainId, tokens]) => {
-  console.log(\`Chain \${chainId}:\`, tokens);
-});`,
-    buildParams: () => ({}),
+// Assets are grouped by chain ID (hex)
+// e.g., { '0x14a34': [{ address: '0x...', symbol: 'ETH', ... }] }
+console.log('Assets:', assets);`,
+    buildParams: (params) => ({
+      address: params.address || undefined,
+    }),
   },
 ];

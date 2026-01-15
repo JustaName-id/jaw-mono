@@ -16,7 +16,7 @@ const routes = [
     href: '/wagmi',
     title: 'Wagmi Integration',
     description:
-      'Test @jaw.id/wagmi hooks alongside standard wagmi hooks. Includes useConnect, useDisconnect, useGrantPermissions, useRevokePermissions, usePermissions, and useGetAssets.',
+      'Test @jaw.id/wagmi hooks alongside standard wagmi hooks. Includes useConnect, useDisconnect, useGrantPermissions, useRevokePermissions, usePermissions, useGetAssets, and useCapabilities.',
     badge: '@jaw.id/wagmi',
     badgeColor: 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200',
   },
