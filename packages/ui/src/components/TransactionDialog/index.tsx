@@ -49,7 +49,10 @@ export const TransactionDialog = ({
   const chainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 24);
 
   // Check if there are any selectable payment options
-  const hasSelectablePaymentOption = feeTokens?.some(t => t.isSelectable) ?? true;
+  // If feeTokens is not loaded yet (null/undefined/empty), assume there are selectable options
+  const hasSelectablePaymentOption = !feeTokens || feeTokens.length === 0
+    ? true
+    : feeTokens.some(t => t.isSelectable);
 
   // Initialize JustaName and resolve addresses
   useEffect(() => {

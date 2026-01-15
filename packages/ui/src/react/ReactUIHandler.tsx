@@ -24,12 +24,10 @@ import {
   SubnameTextRecordCapabilityRequest,
   getPermissionFromRelay,
   handleGetCapabilitiesRequest,
-  estimateErc20PaymasterCosts,
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   type PaymasterConfig,
   type FeeTokenCapability,
-  type TokenEstimate,
   ensureIntNumber,
   standardErrorCodes,
 } from '@jaw.id/core';
@@ -50,6 +48,7 @@ import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
 import { useChainIcon } from '../hooks/useChainIcon';
 import { useEthPrice } from '../hooks/useEthPrice';
+import { useGasEstimation } from '../hooks/useGasEstimation';
 import { fetchTokenBalance } from '../utils/tokenBalance';
 
 
@@ -1072,9 +1071,6 @@ function TransactionDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [gasFee, setGasFee] = useState<string>('');
-  const [gasFeeLoading, setGasFeeLoading] = useState(true);
-  const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [account, setAccount] = useState<Account | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const ethPrice = useEthPrice();
@@ -1082,9 +1078,6 @@ function TransactionDialogWrapper({
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
-  const [selectedFeeToken, setSelectedFeeToken] = useState<FeeTokenOption | null>(null);
-  const [tokenEstimates, setTokenEstimates] = useState<TokenEstimate[]>([]);
-  const [_estimatingTokenCosts, setEstimatingTokenCosts] = useState(false);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1106,6 +1099,46 @@ function TransactionDialogWrapper({
   }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
 
   const isSponsored = !!effectivePaymasterUrl;
+
+  // Transform calls to transactions format expected by dialog
+  const transactions = useMemo(() => request.data.calls.map(call => ({
+    to: call.to,
+    data: call.data,
+    value: call.value,
+    chainId: request.data.chainId,
+  })), [request.data.calls, request.data.chainId]);
+
+  // Convert transactions to call format for Account operations
+  const transactionCalls = useMemo(() => {
+    return request.data.calls.map(call => ({
+      to: call.to as Address,
+      value: call.value ? BigInt(call.value) : undefined, // Convert string wei to bigint
+      data: (call.data || '0x') as Hex,
+    }));
+  }, [request.data.calls]);
+
+  // Permission ID for permission-based execution
+  const permissionId = request.data.capabilities?.permissions?.id as Hex | undefined;
+
+  // Use gas estimation hook for parallel ETH and ERC-20 estimation
+  const {
+    gasFee,
+    gasFeeLoading,
+    gasEstimationError,
+    tokenEstimates,
+    selectedFeeToken,
+    setSelectedFeeToken,
+    isPayingWithErc20,
+  } = useGasEstimation({
+    account,
+    transactionCalls,
+    chainId,
+    apiKey,
+    feeTokens,
+    isSponsored,
+    permissionId,
+    onFeeTokensUpdate: setFeeTokens,
+  });
 
   // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
   const computedPaymasterUrl = useMemo(() => {
@@ -1148,26 +1181,6 @@ function TransactionDialogWrapper({
     }
     return effectivePaymasterContext;
   }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
-
-  // Track if user is paying with ERC-20 token (not native ETH, not sponsored)
-  const isPayingWithErc20 = !isSponsored && !!selectedFeeToken && !selectedFeeToken.isNative;
-
-  // Transform calls to transactions format expected by dialog
-  const transactions = useMemo(() => request.data.calls.map(call => ({
-    to: call.to,
-    data: call.data,
-    value: call.value,
-    chainId: request.data.chainId,
-  })), [request.data.calls, request.data.chainId]);
-
-  // Convert transactions to call format for Account operations
-  const transactionCalls = useMemo(() => {
-    return request.data.calls.map(call => ({
-      to: call.to as Address,
-      value: call.value ? BigInt(call.value) : undefined, // Convert string wei to bigint
-      data: (call.data || '0x') as Hex,
-    }));
-  }, [request.data.calls]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1238,15 +1251,7 @@ function TransactionDialogWrapper({
 
         if (isMounted) {
           setFeeTokens(tokensWithBalances);
-          // Default selection: prefer native ETH if it has balance, otherwise first selectable ERC-20
-          const nativeToken = tokensWithBalances.find(t => t.isNative);
-          if (nativeToken && nativeToken.isSelectable) {
-            setSelectedFeeToken(nativeToken);
-          } else {
-            // Find first selectable non-native token
-            const firstSelectableErc20 = tokensWithBalances.find(t => !t.isNative && t.isSelectable);
-            setSelectedFeeToken(firstSelectableErc20 || nativeToken || null);
-          }
+          // Note: Initial token selection is handled by useGasEstimation hook
         }
       } catch (error) {
         console.warn('[TransactionDialogWrapper] Failed to fetch fee tokens:', error);
@@ -1278,10 +1283,6 @@ function TransactionDialogWrapper({
         }
       } catch (error) {
         console.error('Error initializing account:', error);
-        if (isMounted) {
-          setGasEstimationError('Failed to initialize account');
-          setGasFeeLoading(false);
-        }
       }
     };
 
@@ -1292,156 +1293,7 @@ function TransactionDialogWrapper({
     };
   }, [apiKey, chainId, computedPaymasterUrl]);
 
-  // Sync selectedFeeToken when feeTokens updates (e.g., when estimates come in)
-  useEffect(() => {
-    if (!selectedFeeToken || selectedFeeToken.isNative) return;
-
-    const updatedToken = feeTokens.find(
-      t => t.address.toLowerCase() === selectedFeeToken.address.toLowerCase()
-    );
-
-    // Only update if gasCostFormatted changed
-    if (updatedToken && updatedToken.gasCostFormatted !== selectedFeeToken.gasCostFormatted) {
-      setSelectedFeeToken(updatedToken);
-    }
-  }, [feeTokens, selectedFeeToken]);
-
-  // Combined gas estimation: ETH and ERC-20 in parallel
-  useEffect(() => {
-    if (!account || transactionCalls.length === 0) return;
-
-    // Skip if sponsored
-    if (effectivePaymasterUrl) {
-      setGasFee('sponsored');
-      setGasFeeLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    const estimateAllGasCosts = async () => {
-      setGasFeeLoading(true);
-      setEstimatingTokenCosts(true);
-      setGasEstimationError('');
-
-      const permissionId = request.data.capabilities?.permissions?.id;
-      const erc20Tokens = feeTokens.filter(t => !t.isNative);
-      const paymasterUrl = `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
-
-      // Run ETH and ERC-20 estimation in parallel
-      const [ethResult, erc20Result] = await Promise.allSettled([
-        // ETH gas estimation
-        account.calculateGasCost(
-          transactionCalls,
-          permissionId ? { permissionId } : undefined
-        ),
-        // ERC-20 gas estimation (only if tokens available)
-        erc20Tokens.length > 0
-          ? estimateErc20PaymasterCosts(
-              account.getSmartAccount(),
-              transactionCalls,
-              account.getChain(),
-              paymasterUrl,
-              erc20Tokens.map(t => ({
-                address: t.address as Address,
-                symbol: t.symbol,
-                decimals: t.decimals,
-                balance: t.balance,
-              }))
-            )
-          : Promise.resolve([])
-      ]);
-
-      if (!isMounted) return;
-
-      // Process ERC-20 results first (so we have updated feeTokens for decision making)
-      let updatedFeeTokens = [...feeTokens];
-      let erc20Estimates: TokenEstimate[] = [];
-
-      if (erc20Result.status === 'fulfilled' && erc20Result.value.length > 0) {
-        erc20Estimates = erc20Result.value;
-        setTokenEstimates(erc20Estimates);
-
-        // Update feeTokens with the estimated costs and selectability
-        updatedFeeTokens = feeTokens.map(token => {
-          if (token.isNative) return token;
-
-          const estimate = erc20Estimates.find(
-            e => e.tokenAddress.toLowerCase() === token.address.toLowerCase()
-          );
-
-          if (estimate) {
-            return {
-              ...token,
-              gasCostFormatted: `~${estimate.tokenCostFormatted} ${token.symbol}`,
-              isSelectable: estimate.hasSufficientBalance,
-            };
-          }
-          return token;
-        });
-        setFeeTokens(updatedFeeTokens);
-      }
-
-      // Process ETH result
-      const ethSuccess = ethResult.status === 'fulfilled';
-      const ethInsufficientFunds = ethResult.status === 'rejected' &&
-        ethResult.reason instanceof Error &&
-        (ethResult.reason.message.includes('AA21') ||
-         ethResult.reason.message.includes("didn't pay prefund") ||
-         ethResult.reason.message.includes('insufficient'));
-
-      if (ethSuccess) {
-        // ETH estimation succeeded - use ETH
-        setGasFee(ethResult.value);
-        setGasEstimationError('');
-
-        // Make sure native token is selected if it's selectable
-        const nativeToken = updatedFeeTokens.find(t => t.isNative);
-        if (nativeToken && nativeToken.isSelectable && (!selectedFeeToken || !selectedFeeToken.isNative)) {
-          // Only auto-select ETH if user hasn't explicitly chosen something else
-          if (!selectedFeeToken) {
-            setSelectedFeeToken(nativeToken);
-          }
-        }
-      } else if (ethInsufficientFunds) {
-        // ETH insufficient - try to use ERC-20
-        const selectableErc20 = updatedFeeTokens.find(t => !t.isNative && t.isSelectable);
-
-        if (selectableErc20) {
-          // Auto-select first selectable ERC-20 token
-          setSelectedFeeToken(selectableErc20);
-          // Use the ERC-20 estimate for gas display
-          const estimate = erc20Estimates.find(
-            e => e.tokenAddress.toLowerCase() === selectableErc20.address.toLowerCase()
-          );
-          setGasFee(estimate ? '0.00005' : '0.00005'); // Fallback ETH equivalent for calculations
-          setGasEstimationError('');
-        } else if (erc20Estimates.length > 0) {
-          // ERC-20 tokens exist but none have sufficient balance
-          setGasFee('');
-          setGasEstimationError('Insufficient funds');
-        } else {
-          // No ERC-20 options at all
-          setGasFee('');
-          setGasEstimationError('Insufficient funds');
-        }
-      } else {
-        // Other error (not insufficient funds)
-        console.log('[TransactionDialogWrapper] Gas estimation error:', ethResult.status === 'rejected' ? ethResult.reason : 'unknown');
-        setGasFee('');
-        setGasEstimationError('Failed to estimate gas');
-      }
-
-      setGasFeeLoading(false);
-      setEstimatingTokenCosts(false);
-    };
-
-    estimateAllGasCosts();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [account, transactionCalls, effectivePaymasterUrl, feeTokens.length, chainId, apiKey, request.data.capabilities?.permissions?.id]);
+  // Note: Gas estimation is now handled by useGasEstimation hook
 
   const handleConfirm = async () => {
     setIsProcessing(true);
@@ -1545,9 +1397,6 @@ function SendTransactionDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [gasFee, setGasFee] = useState<string>('');
-  const [gasFeeLoading, setGasFeeLoading] = useState(true);
-  const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [account, setAccount] = useState<Account | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const ethPrice = useEthPrice();
@@ -1555,9 +1404,6 @@ function SendTransactionDialogWrapper({
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
-  const [selectedFeeToken, setSelectedFeeToken] = useState<FeeTokenOption | null>(null);
-  const [tokenEstimates, setTokenEstimates] = useState<TokenEstimate[]>([]);
-  const [_estimatingTokenCosts, setEstimatingTokenCosts] = useState(false);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1579,6 +1425,40 @@ function SendTransactionDialogWrapper({
   }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
 
   const isSponsored = !!effectivePaymasterUrl;
+
+  // Transform eth_sendTransaction data to transactions format expected by dialog
+  const transactions = useMemo(() => [{
+    to: request.data.to,
+    data: request.data.data,
+    value: request.data.value,
+    chainId: request.data.chainId,
+  }], [request.data]);
+
+  // Convert to call format for Account operations
+  const transactionCalls = useMemo(() => [{
+    to: request.data.to as Address,
+    value: request.data.value ? BigInt(request.data.value) : undefined, // Convert string wei to bigint
+    data: (request.data.data || '0x') as Hex,
+  }], [request.data]);
+
+  // Use gas estimation hook for parallel ETH and ERC-20 estimation
+  const {
+    gasFee,
+    gasFeeLoading,
+    gasEstimationError,
+    tokenEstimates,
+    selectedFeeToken,
+    setSelectedFeeToken,
+    isPayingWithErc20,
+  } = useGasEstimation({
+    account,
+    transactionCalls,
+    chainId,
+    apiKey,
+    feeTokens,
+    isSponsored,
+    onFeeTokensUpdate: setFeeTokens,
+  });
 
   // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
   const computedPaymasterUrl = useMemo(() => {
@@ -1621,24 +1501,6 @@ function SendTransactionDialogWrapper({
     }
     return effectivePaymasterContext;
   }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
-
-  // Track if user is paying with ERC-20 token (not native ETH, not sponsored)
-  const isPayingWithErc20 = !isSponsored && !!selectedFeeToken && !selectedFeeToken.isNative;
-
-  // Transform eth_sendTransaction data to transactions format expected by dialog
-  const transactions = useMemo(() => [{
-    to: request.data.to,
-    data: request.data.data,
-    value: request.data.value,
-    chainId: request.data.chainId,
-  }], [request.data]);
-
-  // Convert to call format for Account operations
-  const transactionCalls = useMemo(() => [{
-    to: request.data.to as Address,
-    value: request.data.value ? BigInt(request.data.value) : undefined, // Convert string wei to bigint
-    data: (request.data.data || '0x') as Hex,
-  }], [request.data]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1709,15 +1571,7 @@ function SendTransactionDialogWrapper({
 
         if (isMounted) {
           setFeeTokens(tokensWithBalances);
-          // Default selection: prefer native ETH if it has balance, otherwise first selectable ERC-20
-          const nativeToken = tokensWithBalances.find(t => t.isNative);
-          if (nativeToken && nativeToken.isSelectable) {
-            setSelectedFeeToken(nativeToken);
-          } else {
-            // Find first selectable non-native token
-            const firstSelectableErc20 = tokensWithBalances.find(t => !t.isNative && t.isSelectable);
-            setSelectedFeeToken(firstSelectableErc20 || nativeToken || null);
-          }
+          // Note: Initial token selection is handled by useGasEstimation hook
         }
       } catch (error) {
         console.warn('[SendTransactionDialogWrapper] Failed to fetch fee tokens:', error);
@@ -1749,10 +1603,6 @@ function SendTransactionDialogWrapper({
         }
       } catch (error) {
         console.error('Error initializing account:', error);
-        if (isMounted) {
-          setGasEstimationError('Failed to initialize account');
-          setGasFeeLoading(false);
-        }
       }
     };
 
@@ -1763,149 +1613,7 @@ function SendTransactionDialogWrapper({
     };
   }, [apiKey, chainId, computedPaymasterUrl]);
 
-  // Sync selectedFeeToken when feeTokens updates (e.g., when estimates come in)
-  useEffect(() => {
-    if (!selectedFeeToken || selectedFeeToken.isNative) return;
-
-    const updatedToken = feeTokens.find(
-      t => t.address.toLowerCase() === selectedFeeToken.address.toLowerCase()
-    );
-
-    // Only update if gasCostFormatted changed
-    if (updatedToken && updatedToken.gasCostFormatted !== selectedFeeToken.gasCostFormatted) {
-      setSelectedFeeToken(updatedToken);
-    }
-  }, [feeTokens, selectedFeeToken]);
-
-  // Combined gas estimation: ETH and ERC-20 in parallel
-  useEffect(() => {
-    if (!account || transactionCalls.length === 0) return;
-
-    // Skip if sponsored
-    if (effectivePaymasterUrl) {
-      setGasFee('sponsored');
-      setGasFeeLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    const estimateAllGasCosts = async () => {
-      setGasFeeLoading(true);
-      setEstimatingTokenCosts(true);
-      setGasEstimationError('');
-
-      const erc20Tokens = feeTokens.filter(t => !t.isNative);
-      const paymasterUrl = `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
-
-      // Run ETH and ERC-20 estimation in parallel
-      const [ethResult, erc20Result] = await Promise.allSettled([
-        // ETH gas estimation
-        account.calculateGasCost(transactionCalls),
-        // ERC-20 gas estimation (only if tokens available)
-        erc20Tokens.length > 0
-          ? estimateErc20PaymasterCosts(
-              account.getSmartAccount(),
-              transactionCalls,
-              account.getChain(),
-              paymasterUrl,
-              erc20Tokens.map(t => ({
-                address: t.address as Address,
-                symbol: t.symbol,
-                decimals: t.decimals,
-                balance: t.balance,
-              }))
-            )
-          : Promise.resolve([])
-      ]);
-
-      if (!isMounted) return;
-
-      // Process ERC-20 results first (so we have updated feeTokens for decision making)
-      let updatedFeeTokens = [...feeTokens];
-      let erc20Estimates: TokenEstimate[] = [];
-
-      if (erc20Result.status === 'fulfilled' && erc20Result.value.length > 0) {
-        erc20Estimates = erc20Result.value;
-        setTokenEstimates(erc20Estimates);
-
-        // Update feeTokens with the estimated costs and selectability
-        updatedFeeTokens = feeTokens.map(token => {
-          if (token.isNative) return token;
-
-          const estimate = erc20Estimates.find(
-            e => e.tokenAddress.toLowerCase() === token.address.toLowerCase()
-          );
-
-          if (estimate) {
-            return {
-              ...token,
-              gasCostFormatted: `~${estimate.tokenCostFormatted} ${token.symbol}`,
-              isSelectable: estimate.hasSufficientBalance,
-            };
-          }
-          return token;
-        });
-        setFeeTokens(updatedFeeTokens);
-      }
-
-      // Process ETH result
-      const ethSuccess = ethResult.status === 'fulfilled';
-      const ethInsufficientFunds = ethResult.status === 'rejected' &&
-        ethResult.reason instanceof Error &&
-        (ethResult.reason.message.includes('AA21') ||
-         ethResult.reason.message.includes("didn't pay prefund") ||
-         ethResult.reason.message.includes('insufficient'));
-
-      if (ethSuccess) {
-        // ETH estimation succeeded - use ETH
-        setGasFee(ethResult.value);
-        setGasEstimationError('');
-
-        // Make sure native token is selected if it's selectable
-        const nativeToken = updatedFeeTokens.find(t => t.isNative);
-        if (nativeToken && nativeToken.isSelectable && (!selectedFeeToken || !selectedFeeToken.isNative)) {
-          // Only auto-select ETH if user hasn't explicitly chosen something else
-          if (!selectedFeeToken) {
-            setSelectedFeeToken(nativeToken);
-          }
-        }
-      } else if (ethInsufficientFunds) {
-        // ETH insufficient - try to use ERC-20
-        const selectableErc20 = updatedFeeTokens.find(t => !t.isNative && t.isSelectable);
-
-        if (selectableErc20) {
-          // Auto-select first selectable ERC-20 token
-          setSelectedFeeToken(selectableErc20);
-          // Use fallback ETH equivalent for calculations
-          setGasFee('0.00005');
-          setGasEstimationError('');
-        } else if (erc20Estimates.length > 0) {
-          // ERC-20 tokens exist but none have sufficient balance
-          setGasFee('');
-          setGasEstimationError('Insufficient funds');
-        } else {
-          // No ERC-20 options at all
-          setGasFee('');
-          setGasEstimationError('Insufficient funds');
-        }
-      } else {
-        // Other error (not insufficient funds)
-        console.log('[SendTransactionDialogWrapper] Gas estimation error:', ethResult.status === 'rejected' ? ethResult.reason : 'unknown');
-        setGasFee('');
-        setGasEstimationError('Failed to estimate gas');
-      }
-
-      setGasFeeLoading(false);
-      setEstimatingTokenCosts(false);
-    };
-
-    estimateAllGasCosts();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [account, transactionCalls, effectivePaymasterUrl, feeTokens.length, chainId, apiKey]);
+  // Note: Gas estimation is now handled by useGasEstimation hook
 
   const handleConfirm = async () => {
     setIsProcessing(true);
