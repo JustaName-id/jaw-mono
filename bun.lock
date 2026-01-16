@@ -61,6 +61,7 @@
       "name": "@jaw-mono/docs",
       "version": "0.0.1",
       "dependencies": {
+        "@jaw.id/core": "workspace:*",
         "react": "19.0.1",
         "react-dom": "19.0.1",
         "vocs": "^1.0.0-alpha.62",
