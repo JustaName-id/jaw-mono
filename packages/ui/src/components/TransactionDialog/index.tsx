@@ -277,7 +277,8 @@ export const TransactionDialog = ({
                           <p className="text-base font-normal text-foreground">
                             {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
                             {selectedFeeToken.gasCostFormatted ? (
-                              selectedFeeToken.gasCostFormatted
+                              // For stablecoins like USDC/USDT, the value is approximately USD
+                              `$${selectedFeeToken.gasCostFormatted}`
                             ) : (
                               <span className="text-muted-foreground">Estimating...</span>
                             )}
@@ -295,6 +296,11 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
+                        {selectedFeeToken.gasCostFormatted && (
+                          <p className="text-xs font-normal text-muted-foreground">
+                            Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                          </p>
+                        )}
                       </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
                       <div className="flex flex-col gap-0.5 w-full">
@@ -555,7 +561,8 @@ export const TransactionDialog = ({
                           <p className="text-base font-normal text-foreground">
                             {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
                             {selectedFeeToken.gasCostFormatted ? (
-                              selectedFeeToken.gasCostFormatted
+                              // For stablecoins like USDC/USDT, the value is approximately USD
+                              `$${selectedFeeToken.gasCostFormatted}`
                             ) : (
                               <span className="text-muted-foreground">Estimating...</span>
                             )}
@@ -573,6 +580,11 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
+                        {selectedFeeToken.gasCostFormatted && (
+                          <p className="text-xs font-normal text-muted-foreground">
+                            Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                          </p>
+                        )}
                       </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
                       <div className="flex flex-col gap-0.5 w-full">

@@ -305,14 +305,13 @@ export function encodeApprovalCall(
 
 /**
  * Formats a token amount for display.
- * Shows 2-6 decimal places depending on the amount.
+ * Shows up to 4 decimal places for amounts < 1, 2 decimal places otherwise.
  */
 function formatTokenAmount(amount: bigint, decimals: number): string {
   const formatted = formatUnits(amount, decimals);
   const num = parseFloat(formatted);
 
   if (num === 0) return '0';
-  if (num < 0.01) return num.toFixed(6);
   if (num < 1) return num.toFixed(4);
   return num.toFixed(2);
 }
