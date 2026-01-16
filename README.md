@@ -1,4 +1,4 @@
-# JAW (JustaName Account Wallet)
+# [JAW.id](https://jaw.id/)
 
 Smart account wallet infrastructure with passkey authentication.
 
