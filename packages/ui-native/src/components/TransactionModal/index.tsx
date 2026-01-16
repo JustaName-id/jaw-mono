@@ -24,7 +24,6 @@ export const TransactionModal: React.FC<TransactionModalProps> = ({
   isProcessing,
   transactionStatus,
   networkName,
-  chainId,
   chainIcon,
 }) => {
   const { isTablet } = useDeviceType();

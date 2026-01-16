@@ -10,6 +10,7 @@
     "lib": ["es2022", "DOM"],
     "types": ["node"]
   },
+  "files": ["src/sdk-info.ts"],
   "include": ["src/**/*.ts"],
   "exclude": [
     "src/**/*.test.ts",

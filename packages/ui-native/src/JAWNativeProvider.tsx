@@ -31,7 +31,7 @@
  * ```
  */
 
-import React, {
+import {
   createContext,
   useContext,
   useState,
@@ -110,11 +110,10 @@ export function JAWNativeProvider({
 }: JAWNativeProviderProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
-  const [isConnecting, setIsConnecting] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [credentialId, setCredentialId] = useState<string | null>(null);
-  const [chainId, setChainId] = useState<number | null>(defaultChainId);
+  const [chainId] = useState<number | null>(defaultChainId);
 
   // Create browser authenticator
   const authenticator = useMemo(() => new BrowserAuthenticator({
