@@ -35,6 +35,7 @@
     },
     {
       "plugin": "@nx/eslint/plugin",
+      "exclude": ["contracts/**/*"],
       "options": {
         "targetName": "lint"
       }
