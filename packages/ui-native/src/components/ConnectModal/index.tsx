@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React from 'react';
 import { View, Text, Image } from 'react-native';
 import { DefaultModal } from '../DefaultModal';
 import { Button } from '../ui/button';
@@ -17,17 +17,15 @@ export const ConnectModal: React.FC<ConnectModalProps> = ({
   accountName,
   walletAddress,
   chainName,
-  chainId,
   chainIcon,
   onConnect,
   onCancel,
   isProcessing,
 }) => {
   const { isTablet } = useDeviceType();
-  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
 
-  // Use resolved address, then accountName prop, then truncated address
-  const displayName = resolvedAddress || accountName;
+  // Use accountName prop, then truncated address
+  const displayName = accountName;
 
   // Format origin to display only domain
   const formatOrigin = (url: string) => {
