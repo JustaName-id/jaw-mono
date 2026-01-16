@@ -11,6 +11,9 @@ const nextConfig = {
   // See: https://nx.dev/recipes/next/next-config-setup
   nx: {},
   transpilePackages: ['@jaw.id/ui'],
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
 };
 
 const plugins = [
