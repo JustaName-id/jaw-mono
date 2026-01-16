@@ -236,7 +236,7 @@ export function calculateTokenCostFromGas(
     (gas.paymasterPostOpGasLimit || 0n);
 
   // maxCostInWei = (totalGas + postOpGas) * maxFeePerGas
-  const maxCostWei = (totalGas + quote.postOpGas) * gas.maxFeePerGas;
+  const maxCostWei = ((totalGas + quote.postOpGas) * gas.maxFeePerGas * 80n) / 100n;
 
   // Convert to token using exchange rate
   return (maxCostWei * quote.exchangeRate) / BigInt(1e18);

@@ -279,7 +279,7 @@ export function useGasEstimation({
           if (estimate) {
             return {
               ...token,
-              gasCostFormatted: `~${estimate.tokenCostFormatted} ${token.symbol}`,
+              gasCostFormatted: `${estimate.tokenCostFormatted} ${token.symbol}`,
               isSelectable: estimate.hasSufficientBalance,
             };
           }

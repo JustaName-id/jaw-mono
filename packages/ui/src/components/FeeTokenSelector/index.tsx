@@ -178,7 +178,7 @@ export const FeeTokenSelector = ({
     // Show appropriate decimal places based on token decimals
     const displayDecimals = token.decimals >= 6 ? 3 : token.decimals;
     return {
-      formatted: `~${gasUsd.toFixed(displayDecimals)} ${token.symbol}`,
+      formatted: `${gasUsd.toFixed(displayDecimals)} ${token.symbol}`,
       usd: formatUsd(gasUsd),
     };
   };
@@ -219,7 +219,7 @@ export const FeeTokenSelector = ({
           {gasCost?.usd && (
             <>
               <div className="font-semibold text-xs">{gasCost.usd}</div>
-              <div className="text-[10px] text-muted-foreground">{gasCost.formatted}</div>
+              <div className="text-[10px] text-muted-foreground">Up to {gasCost.formatted}</div>
             </>
           )}
           {!token.isSelectable && (
