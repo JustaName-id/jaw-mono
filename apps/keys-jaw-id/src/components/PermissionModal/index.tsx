@@ -1,6 +1,6 @@
 'use client'
 
-import { PermissionDialog, useGasEstimation, useEthPrice, type FeeTokenOption, fetchTokenBalance } from "@jaw.id/ui";
+import { PermissionDialog, useGasEstimation, useEthPrice, type FeeTokenOption, fetchTokenBalance, isNativeToken } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
@@ -21,9 +21,6 @@ import {
     type FeeTokenCapability,
 } from "@jaw.id/core";
 
-// ERC-7528 native token address
-const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
-
 // Known function selectors mapping
 const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
   '0x32323232': 'Any Function',
@@ -40,12 +37,6 @@ const resolveFunctionSelector = (selector: string): string => {
   const normalizedSelector = selector.toLowerCase();
   const knownName = KNOWN_FUNCTION_SELECTORS[normalizedSelector];
   return knownName || selector;
-};
-
-// Check if token is native
-const isNativeToken = (tokenAddress?: string): boolean => {
-  if (!tokenAddress) return true;
-  return tokenAddress.toLowerCase() === NATIVE_TOKEN.toLowerCase();
 };
 
 // Permission request data
