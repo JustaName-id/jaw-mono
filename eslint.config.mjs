@@ -1,5 +1,4 @@
 import nx from "@nx/eslint-plugin";
-import reactHooks from "eslint-plugin-react-hooks";
 
 export default [
     ...nx.configs["flat/base"],
@@ -54,14 +53,5 @@ export default [
         ],
         // Override or add rules here
         rules: {}
-    },
-    {
-        files: ["**/*.ts", "**/*.tsx", "**/*.js", "**/*.jsx"],
-        plugins: {
-            "react-hooks": reactHooks
-        },
-        rules: {
-            ...reactHooks.configs.recommended.rules
-        }
     }
 ];
