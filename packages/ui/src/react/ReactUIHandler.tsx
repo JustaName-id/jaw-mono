@@ -50,7 +50,7 @@ import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
 import { useChainIcon } from '../hooks/useChainIcon';
 import { useEthPrice } from '../hooks/useEthPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
-import { fetchTokenBalance } from '../utils/tokenBalance';
+import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 
 
 /**
@@ -133,17 +133,6 @@ function getChainIconKeyFromId(chainId: number): string {
 // ============================================================================
 // Permission Utilities
 // ============================================================================
-
-// Common native token addresses
-const NATIVE_TOKEN_ADDRESSES = [
-  '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee', // ERC-7528 native token address
-  '0x0000000000000000000000000000000000000000', // Zero address
-];
-
-const isNativeToken = (tokenAddress?: string): boolean => {
-  if (!tokenAddress) return true;
-  return NATIVE_TOKEN_ADDRESSES.includes(tokenAddress.toLowerCase());
-};
 
 // Format timestamp to readable date
 const formatExpiryDate = (timestamp: number): string => {
