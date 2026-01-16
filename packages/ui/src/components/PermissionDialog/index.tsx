@@ -2,6 +2,7 @@
 
 import { Button } from "../ui/button";
 import { DefaultDialog } from "../DefaultDialog";
+import { FeeTokenSelector } from "../FeeTokenSelector";
 import { PermissionDialogProps } from "./types";
 import { useIsMobile, useChainIcon } from "../../hooks";
 import {CopiedIcon, CopyIcon, WalletIcon} from "../../icons";
@@ -34,6 +35,13 @@ export const PermissionDialog = ({
   gasEstimationError,
   sponsored = false,
   ethPrice = 0,
+  // Fee token props
+  feeTokens,
+  feeTokensLoading,
+  selectedFeeToken,
+  onFeeTokenSelect,
+  showFeeTokenSelector,
+  isPayingWithErc20,
 }: PermissionDialogProps) => {
   const isMobile = useIsMobile();
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
@@ -397,7 +405,7 @@ export const PermissionDialog = ({
               <div className="flex flex-col text-foreground flex-1 gap-0.5">
                 <p className="text-xs font-bold leading-[133%]">Network Fees</p>
                 <div className="flex flex-row items-center w-full justify-between gap-1">
-                  {gasFeeLoading ? (
+                  {gasFeeLoading && !isPayingWithErc20 ? (
                     <p className="text-base font-normal text-muted-foreground">Estimating...</p>
                   ) : gasEstimationError && !sponsored ? (
                     <div className="flex flex-col">
@@ -428,15 +436,58 @@ export const PermissionDialog = ({
                         })() : 'Gas fees covered'}
                       </p>
                     </div>
+                  ) : isPayingWithErc20 && selectedFeeToken ? (
+                    <div className="flex flex-col gap-0.5 w-full">
+                      <div className="flex items-center justify-between w-full">
+                        <p className="text-base font-normal text-foreground">
+                          {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
+                          {selectedFeeToken.gasCostFormatted ? (
+                            // For stablecoins like USDC/USDT, the value is approximately USD
+                            `$${selectedFeeToken.gasCostFormatted}`
+                          ) : (
+                            <span className="text-muted-foreground">Estimating...</span>
+                          )}
+                        </p>
+                        {/* Inline Fee Token Selector */}
+                        {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
+                          <FeeTokenSelector
+                            tokens={feeTokens}
+                            selectedToken={selectedFeeToken}
+                            onSelect={onFeeTokenSelect}
+                            isLoading={feeTokensLoading ?? false}
+                            disabled={isProcessing}
+                            ethPrice={ethPrice}
+                            estimatedGasEth={gasFee || '0'}
+                          />
+                        )}
+                      </div>
+                      {selectedFeeToken.gasCostFormatted && (
+                        <p className="text-xs font-normal text-muted-foreground">
+                          Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                        </p>
+                      )}
+                    </div>
                   ) : gasFee && gasFee !== 'sponsored' ? (
-                    <div className="flex flex-col">
-                      {ethPrice > 0 && (
-                        <div className="flex items-center gap-2">
+                    <div className="flex flex-col gap-0.5 w-full">
+                      <div className="flex items-center justify-between w-full">
+                        {ethPrice > 0 && (
                           <p className="text-base font-normal text-foreground">
                             ${(ethPrice * Number(gasFee)).toFixed(4)}
                           </p>
-                        </div>
-                      )}
+                        )}
+                        {/* Inline Fee Token Selector (when paying with ETH but selector is available) */}
+                        {showFeeTokenSelector && feeTokens && onFeeTokenSelect && selectedFeeToken && (
+                          <FeeTokenSelector
+                            tokens={feeTokens}
+                            selectedToken={selectedFeeToken}
+                            onSelect={onFeeTokenSelect}
+                            isLoading={feeTokensLoading ?? false}
+                            disabled={isProcessing}
+                            ethPrice={ethPrice}
+                            estimatedGasEth={gasFee || '0'}
+                          />
+                        )}
+                      </div>
                       <p className="text-xs font-normal text-muted-foreground">
                         {(() => {
                           const gasValue = Number(gasFee);

@@ -793,6 +793,8 @@ export class Account {
    * @param expiry - Timestamp when the permission expires (unix seconds)
    * @param spender - Address that can use the permission
    * @param permissions - Permissions to grant (calls and/or spends)
+   * @param paymasterUrlOverride - Optional paymaster URL for ERC-20 payment
+   * @param paymasterContextOverride - Optional paymaster context (e.g., token address for ERC-20 payment)
    * @returns Promise resolving to the grant permissions response
    *
    * @example
@@ -811,15 +813,27 @@ export class Account {
   async grantPermissions(
     expiry: number,
     spender: Address,
-    permissions: PermissionsDetail
+    permissions: PermissionsDetail,
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
   ): Promise<WalletGrantPermissionsResponse> {
+    // Check if we need an ERC-20 approval for the paymaster
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+
+    // Remove gas field from context (only used for approval logic)
+    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+
     return await grantSmartAccountPermissions(
       this._smartAccount,
       expiry,
       spender,
       permissions,
       this._chain,
-      this._apiKey
+      this._apiKey,
+      paymasterUrlOverride,
+      cleanedContext,
+      approvalCall || undefined
     );
   }
 

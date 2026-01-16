@@ -195,7 +195,7 @@ export function useGasEstimation({
 
   const estimateGas = useCallback(async () => {
     // Validation - keep loading state true while waiting for account
-    if (!account || transactionCalls.length === 0) {
+    if (!account) {
       // Don't set loading to false here - we're still waiting for prerequisites
       return;
     }
@@ -207,6 +207,14 @@ export function useGasEstimation({
       setGasEstimationError('');
       return;
     }
+
+    // Handle empty transactionCalls (e.g., for permission grants)
+    // Use a fallback gas estimate and still run ERC-20 estimation with a dummy call
+    // Using zero address as dummy target for estimation purposes
+    const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
+    const effectiveCalls = transactionCalls.length > 0
+      ? transactionCalls
+      : [{ to: ZERO_ADDRESS, value: 0n }]; // Dummy call for estimation
 
     // Increment version to track this estimation
     const currentVersion = ++estimationVersionRef.current;
@@ -222,8 +230,8 @@ export function useGasEstimation({
       const erc20Tokens = currentFeeTokens.filter(t => !t.isNative);
       const paymasterUrl = buildPaymasterUrl(chainId, apiKey);
 
-      // Convert transactionCalls to ensure value is bigint for estimateErc20PaymasterCosts
-      const callsWithBigIntValue = transactionCalls.map(call => ({
+      // Convert effectiveCalls to ensure value is bigint for estimateErc20PaymasterCosts
+      const callsWithBigIntValue = effectiveCalls.map(call => ({
         to: call.to as Address,
         value: call.value !== undefined
           ? (typeof call.value === 'string' ? BigInt(call.value) : call.value)
@@ -235,7 +243,7 @@ export function useGasEstimation({
       const [ethResult, erc20Result] = await Promise.allSettled([
         // ETH gas estimation
         account.calculateGasCost(
-          transactionCalls,
+          effectiveCalls,
           permissionId ? { permissionId } : undefined
         ),
         // ERC-20 gas estimation (only if tokens available)

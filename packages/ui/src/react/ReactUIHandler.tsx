@@ -24,6 +24,7 @@ import {
   SubnameTextRecordCapabilityRequest,
   getPermissionFromRelay,
   handleGetCapabilitiesRequest,
+  buildGrantPermissionCall,
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   type PaymasterConfig,
@@ -1730,10 +1731,9 @@ function PermissionDialogWrapper({
   const [status, setStatus] = useState<string>('');
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState(true);
-  const [gasFee, setGasFee] = useState<string>('');
-  const [gasFeeLoading, setGasFeeLoading] = useState(true);
-  const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [account, setAccount] = useState<Account | null>(null);
+  const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
+  const [feeTokensLoading, setFeeTokensLoading] = useState(true);
   const ethPrice = useEthPrice();
 
   // chainId can be number or hex string (like '0x1')
@@ -1752,9 +1752,93 @@ function PermissionDialogWrapper({
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
+  // Check if this is a sponsored transaction (paymaster provided)
+  const isSponsored = !!effectivePaymasterUrl;
+
+  // Build the actual permission grant call for gas estimation
+  // This uses the real approve() call data to PERMISSIONS_MANAGER_ADDRESS
+  const transactionCalls = useMemo(() => {
+    // Need account address to build the call - will be empty until account is initialized
+    if (!request.data.address) return [];
+
+    try {
+      const permissionCall = buildGrantPermissionCall(
+        request.data.address as Address,
+        request.data.spender as Address,
+        request.data.expiry,
+        request.data.permissions
+      );
+      return [permissionCall];
+    } catch (error) {
+      console.warn('[PermissionDialogWrapper] Failed to build permission grant call:', error);
+      return [];
+    }
+  }, [request.data.address, request.data.spender, request.data.expiry, request.data.permissions]);
+
+  // Use the gas estimation hook for both ETH and ERC-20 cost estimation
+  const {
+    gasFee,
+    gasFeeLoading,
+    gasEstimationError,
+    tokenEstimates,
+    selectedFeeToken,
+    setSelectedFeeToken,
+    isPayingWithErc20,
+  } = useGasEstimation({
+    account,
+    transactionCalls,
+    chainId,
+    apiKey,
+    feeTokens,
+    isSponsored,
+    onFeeTokensUpdate: setFeeTokens,
+  });
+
+  // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
+  const computedPaymasterUrl = useMemo(() => {
+    // If already sponsored via capabilities or config, use that
+    if (effectivePaymasterUrl) return effectivePaymasterUrl;
+
+    // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
+    }
+
+    // Native ETH - no paymaster needed
+    return undefined;
+  }, [effectivePaymasterUrl, selectedFeeToken, chainId, apiKey]);
+
+  // Compute paymaster context based on fee token selection
+  const computedPaymasterContext = useMemo(() => {
+    // If using ERC-20 paymaster, include token address and gas amount in context
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      // Use the actual estimate from tokenEstimates if available
+      const estimate = tokenEstimates.find(
+        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+      );
+
+      if (estimate) {
+        // Use the actual token cost from paymaster quote
+        return {
+          token: selectedFeeToken.address,
+          gas: estimate.tokenCost.toString(),
+        };
+      }
+
+      // Fallback to client-side calculation if no estimate yet
+      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      return {
+        token: selectedFeeToken.address,
+        gas: gasInTokenUnits.toString(),
+      };
+    }
+    return undefined;
+  }, [selectedFeeToken, tokenEstimates, gasFee, ethPrice]);
+
   const chain = useMemo(
-    () => buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl),
-    [chainId, apiKey, effectivePaymasterUrl]
+    () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
+    [chainId, apiKey, computedPaymasterUrl]
   );
 
   // Get spends array from request (now using spends plural)
@@ -1837,7 +1921,103 @@ function PermissionDialogWrapper({
     fetchAllTokenInfo();
   }, [chainId, spendsData, networkName, chain.rpcUrl]);
 
-  // Initialize account for gas estimation
+  // Fetch fee tokens from capabilities (same pattern as TransactionDialogWrapper)
+  useEffect(() => {
+    let isMounted = true;
+
+    const fetchFeeTokensData = async () => {
+      if (!viemChain || !apiKey) {
+        setFeeTokensLoading(false);
+        return;
+      }
+
+      // If sponsored, no need to fetch fee tokens
+      if (effectivePaymasterUrl) {
+        setFeeTokensLoading(false);
+        return;
+      }
+
+      try {
+        setFeeTokensLoading(true);
+
+        // Fetch capabilities from JAW RPC
+        const capabilities = await handleGetCapabilitiesRequest(
+          { method: 'wallet_getCapabilities', params: [] },
+          apiKey || '',
+          true // showTestnets
+        );
+
+        const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+
+        if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
+          if (isMounted) setFeeTokensLoading(false);
+          return;
+        }
+
+        // Get RPC URL for balance fetching
+        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+
+        // Fetch balances in parallel
+        const tokensWithBalances = await Promise.all(
+          feeTokenCap.tokens.map(async (token) => {
+            try {
+              const balance = await fetchTokenBalance(token.address, request.data.address, rpcUrl);
+              const balanceFormatted = formatUnits(balance, token.decimals);
+              const tokenIsNative = isNativeToken(token.address);
+              // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
+              // For ERC-20 tokens: require at least 0.5 units
+              const isSelectable = tokenIsNative
+                ? balance > 0n
+                : parseFloat(balanceFormatted) >= 0.5;
+
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance,
+                balanceFormatted,
+                isNative: tokenIsNative,
+                isSelectable,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            } catch (error) {
+              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance: 0n,
+                balanceFormatted: '0',
+                isNative: isNativeToken(token.address),
+                isSelectable: false,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            }
+          })
+        );
+
+        if (isMounted) {
+          setFeeTokens(tokensWithBalances);
+          // Note: Initial token selection is handled by useGasEstimation hook
+        }
+      } catch (error) {
+        console.warn('[PermissionDialogWrapper] Failed to fetch fee tokens:', error);
+      } finally {
+        if (isMounted) setFeeTokensLoading(false);
+      }
+    };
+
+    fetchFeeTokensData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chainId, apiKey, request.data.address, effectivePaymasterUrl, viemChain]);
+
+  // Initialize account
   useEffect(() => {
     let isMounted = true;
 
@@ -1846,17 +2026,13 @@ function PermissionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          effectivePaymasterUrl
+          computedPaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
         }
       } catch (error) {
         console.error('[PermissionDialogWrapper] Error initializing account:', error);
-        if (isMounted) {
-          setGasEstimationError('Failed to initialize account');
-          setGasFeeLoading(false);
-        }
       }
     };
 
@@ -1865,46 +2041,9 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, effectivePaymasterUrl]);
+  }, [apiKey, chainId, computedPaymasterUrl]);
 
-  // Gas estimation for permission grant
-  useEffect(() => {
-    if (!account) {
-      return;
-    }
-
-    const estimateGas = async () => {
-      try {
-        setGasFeeLoading(true);
-        setGasEstimationError('');
-
-        // Skip gas estimation if sponsored - paymaster will handle fees
-        if (effectivePaymasterUrl) {
-          setGasFee('sponsored');
-          return;
-        }
-
-        // For permission grants, estimate gas (approximation)
-        // Permission grants involve an on-chain transaction
-        const gasPrice = await account.calculateGasCost([]);
-        setGasFee(gasPrice);
-      } catch (error) {
-        console.log('[PermissionDialogWrapper] Gas estimation error:', error instanceof Error ? error.message : error);
-
-        if (effectivePaymasterUrl) {
-          setGasFee('sponsored');
-          setGasEstimationError('');
-        } else {
-          setGasFee('');
-          setGasEstimationError('Failed to estimate gas');
-        }
-      } finally {
-        setGasFeeLoading(false);
-      }
-    };
-
-    estimateGas();
-  }, [account, effectivePaymasterUrl]);
+  // Note: Gas estimation is now handled by useGasEstimation hook
 
   // Convert to SpendPermission array format expected by PermissionDialog
   const spends = useMemo(() => spendsData.map(spend => {
@@ -1991,11 +2130,11 @@ function PermissionDialogWrapper({
     setIsProcessing(true);
     setStatus('Granting permissions...');
     try {
-      // Restore account for permission granting
-      const account = await getAccountForSigning(
+      // Restore account for permission granting with computed paymaster URL
+      const grantAccount = await getAccountForSigning(
         apiKey,
         chainId,
-        effectivePaymasterUrl
+        computedPaymasterUrl
       );
 
       // Use the spends array directly from the request (already in correct format)
@@ -2004,11 +2143,13 @@ function PermissionDialogWrapper({
         calls: request.data.permissions.calls,
       };
 
-      // Grant permissions using Account class
-      const result = await account.grantPermissions(
+      // Grant permissions using Account class with paymaster context
+      const result = await grantAccount.grantPermissions(
         request.data.expiry,
         request.data.spender as Address,
-        permissionsDetail
+        permissionsDetail,
+        computedPaymasterUrl,
+        computedPaymasterContext
       );
 
       setStatus('Permissions granted successfully!');
@@ -2057,8 +2198,15 @@ function PermissionDialogWrapper({
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
-      sponsored={!!effectivePaymasterUrl}
+      sponsored={isSponsored}
       ethPrice={ethPrice}
+      // Fee token props for ERC-20 paymaster
+      feeTokens={feeTokens}
+      feeTokensLoading={feeTokensLoading}
+      selectedFeeToken={selectedFeeToken}
+      onFeeTokenSelect={setSelectedFeeToken}
+      showFeeTokenSelector={!isSponsored && feeTokens.length > 1}
+      isPayingWithErc20={isPayingWithErc20}
     />
   );
 }

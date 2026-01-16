@@ -1,10 +1,10 @@
 'use client'
 
-import { PermissionDialog } from "@jaw.id/ui";
+import { PermissionDialog, useGasEstimation, useEthPrice, type FeeTokenOption, fetchTokenBalance } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
+import { formatUnits, erc20Abi, createPublicClient, http, type Address, type Hex } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { usePasskeys } from "../../hooks";
+import { usePasskeys, useAuth } from "../../hooks";
 import {
     Account,
     type Chain,
@@ -14,6 +14,10 @@ import {
     type SpendPeriod,
     getPermissionFromRelay,
     standardErrorCodes,
+    JAW_PAYMASTER_URL,
+    SUPPORTED_CHAINS,
+    handleGetCapabilitiesRequest,
+    type FeeTokenCapability,
 } from "@jaw.id/core";
 
 // ERC-7528 native token address
@@ -132,6 +136,7 @@ export const PermissionModal = ({
   onError
 }: PermissionModalProps) => {
   const { getAccount } = usePasskeys();
+  const { walletAddress } = useAuth();
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [account, setAccount] = useState<Account | null>(null);
@@ -140,6 +145,9 @@ export const PermissionModal = ({
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
+  const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
+  const [feeTokensLoading, setFeeTokensLoading] = useState<boolean>(true);
+  const ethPrice = useEthPrice();
 
   // Extract API key from rpcUrl if not provided as prop
   const extractedApiKey = useMemo(() => {
@@ -173,6 +181,79 @@ export const PermissionModal = ({
     const capabilitiesPaymasterUrl = params?.capabilities?.paymasterService?.url;
     return capabilitiesPaymasterUrl || chain?.paymaster?.url;
   }, [permissionRequest, chain?.paymaster?.url]);
+
+  // Get viem chain for fee token fetching
+  const viemChain = useMemo(() => {
+    if (!chain?.id) return null;
+    return SUPPORTED_CHAINS.find(c => c.id === chain.id);
+  }, [chain?.id]);
+
+  // Check if this is a sponsored transaction (paymaster provided)
+  const isSponsored = !!effectivePaymasterUrl;
+
+  // Empty transaction calls for permission grant gas estimation
+  const transactionCalls: Array<{ to: Address; value?: bigint; data?: Hex }> = [];
+
+  // Use the gas estimation hook for both ETH and ERC-20 cost estimation
+  const {
+    gasFee,
+    gasFeeLoading,
+    gasEstimationError,
+    tokenEstimates,
+    selectedFeeToken,
+    setSelectedFeeToken,
+    isPayingWithErc20,
+  } = useGasEstimation({
+    account,
+    transactionCalls,
+    chainId: chain?.id || 1,
+    apiKey: extractedApiKey,
+    feeTokens,
+    isSponsored,
+    onFeeTokensUpdate: setFeeTokens,
+  });
+
+  // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
+  const computedPaymasterUrl = useMemo(() => {
+    // If already sponsored via capabilities or config, use that
+    if (effectivePaymasterUrl) return effectivePaymasterUrl;
+
+    // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      return `${JAW_PAYMASTER_URL}?chainId=${chain?.id || 1}${extractedApiKey ? `&api-key=${extractedApiKey}` : ''}`;
+    }
+
+    // Native ETH - no paymaster needed
+    return undefined;
+  }, [effectivePaymasterUrl, selectedFeeToken, chain?.id, extractedApiKey]);
+
+  // Compute paymaster context based on fee token selection
+  const computedPaymasterContext = useMemo(() => {
+    // If using ERC-20 paymaster, include token address and gas amount in context
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      // Use the actual estimate from tokenEstimates if available
+      const estimate = tokenEstimates.find(
+        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+      );
+
+      if (estimate) {
+        // Use the actual token cost from paymaster quote
+        return {
+          token: selectedFeeToken.address,
+          gas: estimate.tokenCost.toString(),
+        };
+      }
+
+      // Fallback to client-side calculation if no estimate yet
+      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      return {
+        token: selectedFeeToken.address,
+        gas: gasInTokenUnits.toString(),
+      };
+    }
+    return undefined;
+  }, [selectedFeeToken, tokenEstimates, gasFee, ethPrice]);
 
   // Extract permission details from request
   const permissionDetails = useMemo(() => {
@@ -399,6 +480,101 @@ export const PermissionModal = ({
     fetchPermissionDetails();
   }, [mode, permissionDetails, extractedApiKey]);
 
+  // Fetch fee tokens (ETH + available ERC-20 tokens from chain config)
+  useEffect(() => {
+    // Skip if already sponsored via capabilities or config, or missing required data
+    if (effectivePaymasterUrl || !chain || !walletAddress) {
+      setFeeTokensLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchFeeTokensData = async () => {
+      if (!viemChain || !extractedApiKey) {
+        setFeeTokensLoading(false);
+        return;
+      }
+
+      try {
+        setFeeTokensLoading(true);
+
+        // Fetch capabilities from JAW RPC
+        const capabilities = await handleGetCapabilitiesRequest(
+          { method: 'wallet_getCapabilities', params: [] },
+          extractedApiKey || '',
+          true // showTestnets
+        );
+
+        const chainIdHex = `0x${(chain?.id || 1).toString(16)}` as `0x${string}`;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+
+        if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
+          if (isMounted) setFeeTokensLoading(false);
+          return;
+        }
+
+        // Get RPC URL for balance fetching
+        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || chain?.rpcUrl || `https://eth.llamarpc.com`;
+
+        // Fetch balances in parallel
+        const tokensWithBalances = await Promise.all(
+          feeTokenCap.tokens.map(async (token) => {
+            try {
+              const balance = await fetchTokenBalance(token.address, walletAddress, rpcUrl);
+              const balanceFormatted = formatUnits(balance, token.decimals);
+              const tokenIsNative = isNativeToken(token.address);
+              // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
+              // For ERC-20 tokens: require at least 0.5 units
+              const isSelectable = tokenIsNative
+                ? balance > 0n
+                : parseFloat(balanceFormatted) >= 0.5;
+
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance,
+                balanceFormatted,
+                isNative: tokenIsNative,
+                isSelectable,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            } catch (error) {
+              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance: 0n,
+                balanceFormatted: '0',
+                isNative: isNativeToken(token.address),
+                isSelectable: false,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            }
+          })
+        );
+
+        if (isMounted) {
+          setFeeTokens(tokensWithBalances);
+        }
+      } catch (error) {
+        console.warn('[PermissionModal] Failed to fetch fee tokens:', error);
+      } finally {
+        if (isMounted) setFeeTokensLoading(false);
+      }
+    };
+
+    fetchFeeTokensData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chain, extractedApiKey, viemChain, walletAddress, effectivePaymasterUrl]);
+
   // Initialize account when modal opens or permission request changes
   useEffect(() => {
     let isMounted = true;
@@ -409,13 +585,13 @@ export const PermissionModal = ({
           setIsProcessing(false);
           setIsLoadingSmartAccount(true);
           console.log('Initializing permission modal');
-          
+
           // Merge paymasterUrl from capabilities into chain before creating account
           const chainWithPaymaster = {
             ...chain,
-            ...(effectivePaymasterUrl && { paymaster: { url: effectivePaymasterUrl } }),
+            ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
           };
-          
+
           const restoredAccount = await getAccount(chainWithPaymaster, extractedApiKey);
 
           if (isMounted) {
@@ -448,7 +624,7 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, permissionRequest, extractedApiKey, effectivePaymasterUrl, getAccount, onError]);
+  }, [chain, permissionRequest, extractedApiKey, computedPaymasterUrl, getAccount, onError]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
@@ -553,14 +729,16 @@ export const PermissionModal = ({
           throw new Error('Spender is required for granting permissions.');
         }
 
-        // Account.grantPermissions uses the chain's paymasterUrl (which we set from capabilities)
+        // Account.grantPermissions with paymaster URL and context for ERC-20 payment
         const result = await account.grantPermissions(
           permissionDetails.expiry,
           permissionDetails.spender,
           {
             spends: permissionDetails.spends,
             calls: permissionDetails.calls,
-          }
+          },
+          computedPaymasterUrl,
+          computedPaymasterContext
         );
 
         console.log('Permissions granted:', result);
@@ -596,7 +774,7 @@ export const PermissionModal = ({
       onError?.(errorObj, errorCode);
       setIsProcessing(false);
     }
-  }, [account, chain, permissionDetails, mode, onSuccess, onError]);
+  }, [account, chain, permissionDetails, mode, onSuccess, onError, computedPaymasterUrl, computedPaymasterContext]);
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
@@ -605,8 +783,11 @@ export const PermissionModal = ({
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setStatus('');
+      // Reset fee token state
+      setFeeTokens([]);
+      setSelectedFeeToken(null);
     }
-  }, [isProcessing, onError]);
+  }, [isProcessing, onError, setSelectedFeeToken]);
 
   // Don't render if no permission details
   if (!permissionDetails) {
@@ -633,6 +814,18 @@ export const PermissionModal = ({
       status={status}
       isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isLoadingSmartAccount}
       warningMessage={warningMessage}
+      gasFee={gasFee}
+      gasFeeLoading={gasFeeLoading}
+      gasEstimationError={gasEstimationError}
+      sponsored={isSponsored}
+      ethPrice={ethPrice}
+      // Fee token props for ERC-20 paymaster
+      feeTokens={feeTokens}
+      feeTokensLoading={feeTokensLoading}
+      selectedFeeToken={selectedFeeToken}
+      onFeeTokenSelect={setSelectedFeeToken}
+      showFeeTokenSelector={!isSponsored && feeTokens.length > 1}
+      isPayingWithErc20={isPayingWithErc20}
     />
   );
 };

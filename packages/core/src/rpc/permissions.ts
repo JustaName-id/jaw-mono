@@ -300,7 +300,9 @@ export async function grantPermissions(
     permissions: PermissionsDetail,
     chain: Chain,
     apiKey: string,
-    paymasterUrlOverride?: string
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>,
+    erc20ApprovalCall?: { to: Address; value?: bigint; data: Hex }
 ): Promise<WalletGrantPermissionsResponse> {
     // Derive address and chainId from smart account and chain
     const account = smartAccount.address;
@@ -310,16 +312,18 @@ export async function grantPermissions(
 
     const approveCallData = encodeApprovePermission(permission);
 
+    // Build calls array - prepend ERC-20 approval if provided
+    const permissionCall = { to: PERMISSIONS_MANAGER_ADDRESS as Address, data: approveCallData };
+    const calls: Array<{ to: Address; value?: bigint; data?: Hex }> = erc20ApprovalCall
+        ? [erc20ApprovalCall, permissionCall]
+        : [permissionCall];
+
     const txHash = await sendTransaction(
         smartAccount,
-        [
-            {
-                to: PERMISSIONS_MANAGER_ADDRESS as Address,
-                data: approveCallData,
-            },
-        ],
+        calls,
         chain,
-        paymasterUrlOverride
+        paymasterUrlOverride,
+        paymasterContextOverride
     );
 
     // Extract the permission hash from the PermissionApproved event
@@ -697,6 +701,35 @@ function encodeRevokePermission(permission: Permission): Hex {
         functionName: 'revoke',
         args: [permissionForEncoding],
     });
+}
+
+/**
+ * Build a transaction call for granting permissions (for gas estimation)
+ *
+ * This function creates a transaction call that can be used for gas estimation
+ * before actually granting the permission. It uses placeholder values for
+ * fields that are generated at grant time (salt, start time).
+ *
+ * @param account - The smart account address
+ * @param spender - The spender address to grant permissions to
+ * @param expiry - Timestamp when the permission expires
+ * @param permissions - Permissions detail (calls and spends)
+ * @returns Transaction call object with to and data fields
+ */
+export function buildGrantPermissionCall(
+    account: Address,
+    spender: Address,
+    expiry: number,
+    permissions: PermissionsDetail
+): { to: Address; data: Hex } {
+    // Create a permission with placeholder salt (gas cost is the same regardless of salt value)
+    const permission = apiPermissionsToPermission(account, spender, expiry, permissions);
+    const approveCallData = encodeApprovePermission(permission);
+
+    return {
+        to: PERMISSIONS_MANAGER_ADDRESS as Address,
+        data: approveCallData,
+    };
 }
 
 /**

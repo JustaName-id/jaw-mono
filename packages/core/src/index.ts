@@ -35,6 +35,8 @@ export {
     type RevokePermissionApiResponse,
     // Permission utilities for UI (fetching permission details without Account instance)
     getPermissionFromRelay,
+    // Permission call builder (for gas estimation)
+    buildGrantPermissionCall,
     // Capability utilities
     handleGetCapabilitiesRequest,
     // Permission selector constants
