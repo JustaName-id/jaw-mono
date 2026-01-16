@@ -183,6 +183,16 @@ export const PermissionModal = ({
     return capabilitiesPaymasterUrl || chain?.paymaster?.url;
   }, [permissionRequest, chain?.paymaster?.url]);
 
+  // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
+  // Priority: capabilities.paymasterService.context > chain.paymaster.context
+  const effectivePaymasterContext = useMemo(() => {
+    if (!permissionRequest) return chain?.paymaster?.context;
+
+    const params = permissionRequest.params[0];
+    const capabilitiesPaymasterContext = (params?.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    return capabilitiesPaymasterContext || chain?.paymaster?.context;
+  }, [permissionRequest, chain?.paymaster?.context]);
+
   // Get viem chain for fee token fetching
   const viemChain = useMemo(() => {
     if (!chain?.id) return null;
@@ -272,8 +282,8 @@ export const PermissionModal = ({
         gas: gasInTokenUnits.toString(),
       };
     }
-    return undefined;
-  }, [selectedFeeToken, tokenEstimates, gasFee, ethPrice]);
+    return effectivePaymasterContext;
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, ethPrice]);
 
   // Extract permission details from request
   const permissionDetails = useMemo(() => {

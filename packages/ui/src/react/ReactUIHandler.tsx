@@ -1752,6 +1752,13 @@ function PermissionDialogWrapper({
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
+  // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
+  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
+  const effectivePaymasterContext = useMemo(() => {
+    const capabilitiesPaymasterContext = (request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
+  }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
+
   // Check if this is a sponsored transaction (paymaster provided)
   const isSponsored = !!effectivePaymasterUrl;
 
@@ -1833,8 +1840,8 @@ function PermissionDialogWrapper({
         gas: gasInTokenUnits.toString(),
       };
     }
-    return undefined;
-  }, [selectedFeeToken, tokenEstimates, gasFee, ethPrice]);
+    return effectivePaymasterContext;
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, ethPrice]);
 
   const chain = useMemo(
     () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
