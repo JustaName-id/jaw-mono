@@ -17,7 +17,6 @@ import { Platform } from 'react-native';
 export function isExpoGo(): boolean {
   try {
     // expo-constants provides appOwnership which tells us the runtime
-    // eslint-disable-next-line @typescript-eslint/no-require-imports
     const Constants = require('expo-constants').default;
     return Constants?.appOwnership === 'expo';
   } catch {

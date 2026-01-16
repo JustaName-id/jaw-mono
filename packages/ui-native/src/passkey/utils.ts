@@ -96,7 +96,7 @@ export function hexToArrayBuffer(hex: string): ArrayBuffer {
  * @param length - Length in bytes (default: 32)
  * @returns ArrayBuffer containing random bytes
  */
-export function generateChallenge(length: number = 32): ArrayBuffer {
+export function generateChallenge(length = 32): ArrayBuffer {
   const array = new Uint8Array(length);
   crypto.getRandomValues(array);
   return array.buffer;
@@ -117,7 +117,7 @@ export function isValidBase64URL(str: string): boolean {
  */
 class CborDecoder {
   private data: Uint8Array;
-  private offset: number = 0;
+  private offset = 0;
 
   constructor(data: ArrayBuffer) {
     this.data = new Uint8Array(data);
@@ -375,7 +375,7 @@ export function rawP256ToSpki(rawPublicKey: Uint8Array): Uint8Array | null {
  */
 export function extractPublicKeyFromAttestation(
   attestationObject: string | ArrayBuffer,
-  asSpki: boolean = false
+  asSpki = false
 ): ArrayBuffer | null {
   try {
     const attestationBuffer =
