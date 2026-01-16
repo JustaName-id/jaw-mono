@@ -25,14 +25,12 @@ export const OnboardingModal: React.FC<OnboardingModalProps> = ({
   onAccountCreationComplete,
   isCreating,
   ensDomain = 'jaw.eth',
-  chainId,
-  apiKey,
 }) => {
   const { isTablet } = useDeviceType();
   const [viewState, setViewState] = useState<ViewState>(accounts.length > 0 ? 'select' : 'create');
   const [username, setUsername] = useState('');
   const [usernameError, setUsernameError] = useState<string | null>(null);
-  const [isCheckingAvailability, setIsCheckingAvailability] = useState(false);
+  const [isCheckingAvailability] = useState(false);
 
   const hasAccounts = accounts.length > 0;
 
