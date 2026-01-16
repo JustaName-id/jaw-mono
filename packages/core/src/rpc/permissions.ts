@@ -1,4 +1,4 @@
-import { encodeFunctionData, type Address, type Hex, decodeEventLog, toFunctionSelector } from 'viem';
+import { encodeFunctionData, type Address, type Hex, decodeEventLog, toFunctionSelector, zeroAddress as ZERO_ADDRESS } from 'viem';
 import { getTransactionReceipt } from 'viem/actions';
 import {PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL, JAW_PROXY_URL} from '../constants.js';
 import { sendTransaction, getBundlerClient } from '../account/smartAccount.js';
@@ -14,11 +14,6 @@ import type { RequestArguments } from '../provider/index.js';
  * @see https://eips.ethereum.org/EIPS/eip-7528
  */
 export const NATIVE_TOKEN: Address = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
-
-/**
- * Zero address - used as default for checker when not specified
- */
-export const ZERO_ADDRESS: Address = '0x0000000000000000000000000000000000000000';
 
 /**
  * Wildcard constants for call permissions (from JustaPermissionManager contract)
