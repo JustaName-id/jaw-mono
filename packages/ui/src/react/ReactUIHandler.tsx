@@ -1854,6 +1854,7 @@ function PermissionDialogWrapper({
       return;
     }
 
+    let isMounted = true;
     setIsLoadingTokenInfo(true);
 
     const fetchAllTokenInfo = async () => {
@@ -1914,11 +1915,17 @@ function PermissionDialogWrapper({
         }
       }
 
-      setTokenInfoMap(prev => ({ ...prev, ...newTokenInfoMap }));
-      setIsLoadingTokenInfo(false);
+      if (isMounted) {
+        setTokenInfoMap(prev => ({ ...prev, ...newTokenInfoMap }));
+        setIsLoadingTokenInfo(false);
+      }
     };
 
     fetchAllTokenInfo();
+
+    return () => {
+      isMounted = false;
+    };
   }, [chainId, spendsData, networkName, chain.rpcUrl]);
 
   // Fetch fee tokens from capabilities (same pattern as TransactionDialogWrapper)
@@ -2127,16 +2134,14 @@ function PermissionDialogWrapper({
   }, [spends, calls, expiryDate]);
 
   const handleConfirm = async () => {
+    if (!account) {
+      console.error('[PermissionDialogWrapper] Account not initialized');
+      return;
+    }
+
     setIsProcessing(true);
     setStatus('Granting permissions...');
     try {
-      // Restore account for permission granting with computed paymaster URL
-      const grantAccount = await getAccountForSigning(
-        apiKey,
-        chainId,
-        computedPaymasterUrl
-      );
-
       // Use the spends array directly from the request (already in correct format)
       const permissionsDetail = {
         spends: request.data.permissions.spends || [],
@@ -2144,7 +2149,7 @@ function PermissionDialogWrapper({
       };
 
       // Grant permissions using Account class with paymaster context
-      const result = await grantAccount.grantPermissions(
+      const result = await account.grantPermissions(
         request.data.expiry,
         request.data.spender as Address,
         permissionsDetail,
@@ -2205,7 +2210,7 @@ function PermissionDialogWrapper({
       feeTokensLoading={feeTokensLoading}
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
-      showFeeTokenSelector={!isSponsored && feeTokens.length > 1}
+      showFeeTokenSelector={!isSponsored && feeTokens.some(t => !t.isNative)}
       isPayingWithErc20={isPayingWithErc20}
     />
   );

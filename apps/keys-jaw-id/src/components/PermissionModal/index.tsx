@@ -2,7 +2,7 @@
 
 import { PermissionDialog, useGasEstimation, useEthPrice, type FeeTokenOption, fetchTokenBalance } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatUnits, erc20Abi, createPublicClient, http, type Address, type Hex } from "viem";
+import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
 import {
@@ -13,6 +13,7 @@ import {
     type WalletGrantPermissionsResponse,
     type SpendPeriod,
     getPermissionFromRelay,
+    buildGrantPermissionCall,
     standardErrorCodes,
     JAW_PAYMASTER_URL,
     SUPPORTED_CHAINS,
@@ -191,8 +192,27 @@ export const PermissionModal = ({
   // Check if this is a sponsored transaction (paymaster provided)
   const isSponsored = !!effectivePaymasterUrl;
 
-  // Empty transaction calls for permission grant gas estimation
-  const transactionCalls: Array<{ to: Address; value?: bigint; data?: Hex }> = [];
+  // Build the actual permission grant call for gas estimation
+  const transactionCalls = useMemo(() => {
+    // Only build for grant mode with valid data
+    if (mode !== 'grant' || !walletAddress || !permissionRequest) return [];
+
+    try {
+      const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
+      const [grantParams] = params;
+
+      const permissionCall = buildGrantPermissionCall(
+        walletAddress as Address,
+        grantParams.spender as Address,
+        grantParams.expiry,
+        grantParams.permissions
+      );
+      return [permissionCall];
+    } catch (error) {
+      console.warn('[PermissionModal] Failed to build permission grant call:', error);
+      return [];
+    }
+  }, [mode, walletAddress, permissionRequest]);
 
   // Use the gas estimation hook for both ETH and ERC-20 cost estimation
   const {
@@ -633,6 +653,7 @@ export const PermissionModal = ({
       return;
     }
 
+    let isMounted = true;
     setIsLoadingTokenInfo(true);
 
     const fetchAllTokenInfo = async () => {
@@ -690,11 +711,17 @@ export const PermissionModal = ({
         }
       }
 
-      setTokenInfoMap(prev => ({ ...prev, ...newTokenInfoMap }));
-      setIsLoadingTokenInfo(false);
+      if (isMounted) {
+        setTokenInfoMap(prev => ({ ...prev, ...newTokenInfoMap }));
+        setIsLoadingTokenInfo(false);
+      }
     };
 
     fetchAllTokenInfo();
+
+    return () => {
+      isMounted = false;
+    };
   }, [chain, spendsData, networkName]);
 
   const handleConfirm = useCallback(async () => {
@@ -824,7 +851,7 @@ export const PermissionModal = ({
       feeTokensLoading={feeTokensLoading}
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
-      showFeeTokenSelector={!isSponsored && feeTokens.length > 1}
+      showFeeTokenSelector={!isSponsored && feeTokens.some(t => !t.isNative)}
       isPayingWithErc20={isPayingWithErc20}
     />
   );
