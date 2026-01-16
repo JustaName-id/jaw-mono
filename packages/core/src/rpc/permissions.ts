@@ -1,4 +1,4 @@
-import { encodeFunctionData, type Address, type Hex, decodeEventLog, toFunctionSelector } from 'viem';
+import { encodeFunctionData, type Address, type Hex, decodeEventLog, toFunctionSelector, zeroAddress as ZERO_ADDRESS } from 'viem';
 import { getTransactionReceipt } from 'viem/actions';
 import {PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL, JAW_PROXY_URL} from '../constants.js';
 import { sendTransaction, getBundlerClient } from '../account/smartAccount.js';
@@ -51,6 +51,8 @@ export type CallPermission = {
     target: Address;
     /** Function selector (4 bytes) */
     selector: Hex;
+    /** External validation contract address (internal only - defaults to zero address) */
+    checker: Address;
 };
 
 /**
@@ -200,6 +202,7 @@ export type StorePermissionApiRequest = {
     calls: Array<{
         target: string;
         selector: string;
+        checker?: string;
     }>;
     /** Array of spend limits */
     spends: Array<{
@@ -427,6 +430,7 @@ export function relayPermissionToPermission(
     const calls: CallPermission[] = relayPermission.calls.map(call => ({
         target: call.target as Address,
         selector: call.selector as Hex,
+        checker: (call.checker as Address) || ZERO_ADDRESS,
     }));
 
     const spends: SpendLimit[] = relayPermission.spends.map(spend => ({
@@ -527,6 +531,7 @@ function apiPermissionsToPermission(
         return {
             target: call.target,
             selector,
+            checker: ZERO_ADDRESS,
         };
     });
 
@@ -575,6 +580,7 @@ async function storePermissionInRelay(
         calls: permission.calls.map(call => ({
             target: call.target,
             selector: call.selector,
+            checker: call.checker,
         })),
         spends: permission.spends.map(spend => ({
             token: spend.token,
@@ -763,6 +769,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                         components: [
                             { name: 'target', type: 'address' },
                             { name: 'selector', type: 'bytes4' },
+                            { name: 'checker', type: 'address' },
                         ],
                     },
                     {
@@ -799,6 +806,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                         components: [
                             { name: 'target', type: 'address' },
                             { name: 'selector', type: 'bytes4' },
+                            { name: 'checker', type: 'address' },
                         ],
                     },
                     {
@@ -836,6 +844,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                         components: [
                             { name: 'target', type: 'address' },
                             { name: 'selector', type: 'bytes4' },
+                            { name: 'checker', type: 'address' },
                         ],
                     },
                     {
@@ -873,6 +882,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                         components: [
                             { name: 'target', type: 'address' },
                             { name: 'selector', type: 'bytes4' },
+                            { name: 'checker', type: 'address' },
                         ],
                     },
                     {
@@ -919,6 +929,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                         components: [
                             { name: 'target', type: 'address' },
                             { name: 'selector', type: 'bytes4' },
+                            { name: 'checker', type: 'address' },
                         ],
                     },
                     {
