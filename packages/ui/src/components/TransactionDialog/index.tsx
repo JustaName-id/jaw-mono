@@ -275,11 +275,9 @@ export const TransactionDialog = ({
                       <div className="flex flex-col gap-0.5 w-full">
                         <div className="flex items-center justify-between w-full">
                           <p className="text-base font-normal text-foreground">
-                            {/* Show estimated cost from paymaster quote if available */}
+                            {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
                             {selectedFeeToken.gasCostFormatted ? (
                               selectedFeeToken.gasCostFormatted
-                            ) : gasFee && ethPrice > 0 ? (
-                              `~${(ethPrice * Number(gasFee)).toFixed(4)} ${selectedFeeToken.symbol}`
                             ) : (
                               <span className="text-muted-foreground">Estimating...</span>
                             )}
@@ -555,11 +553,9 @@ export const TransactionDialog = ({
                       <div className="flex flex-col gap-0.5 w-full">
                         <div className="flex items-center justify-between w-full">
                           <p className="text-base font-normal text-foreground">
-                            {/* Show estimated cost from paymaster quote if available */}
+                            {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
                             {selectedFeeToken.gasCostFormatted ? (
                               selectedFeeToken.gasCostFormatted
-                            ) : gasFee && ethPrice > 0 ? (
-                              `~${(ethPrice * Number(gasFee)).toFixed(4)} ${selectedFeeToken.symbol}`
                             ) : (
                               <span className="text-muted-foreground">Estimating...</span>
                             )}
