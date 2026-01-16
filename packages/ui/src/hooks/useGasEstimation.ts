@@ -288,6 +288,19 @@ export function useGasEstimation({
 
         // Notify parent of updated tokens (use ref to avoid infinite loop)
         onFeeTokensUpdateRef.current?.(updatedFeeTokens);
+      } else if (erc20Result.status === 'rejected') {
+        // ERC-20 estimation failed - log error but continue with ETH-only
+        console.error('[useGasEstimation] ERC-20 estimation failed:', erc20Result.reason);
+        // Mark ERC-20 tokens as having estimation failed (show error in UI instead of "Estimating...")
+        updatedFeeTokens = currentFeeTokens.map(token => {
+          if (token.isNative) return token;
+          return {
+            ...token,
+            gasCostFormatted: 'Estimation failed',
+            isSelectable: false,
+          };
+        });
+        onFeeTokensUpdateRef.current?.(updatedFeeTokens);
       }
 
       // Process ETH result
