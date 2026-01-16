@@ -4,12 +4,14 @@
     "outDir": "dist",
     "lib": ["es2022", "DOM"],
     "rootDir": "src",
+    "baseUrl": ".",
     "jsx": "react-jsx",
     "module": "esnext",
     "moduleResolution": "bundler",
     "tsBuildInfoFile": "dist/tsconfig.lib.tsbuildinfo",
     "skipLibCheck": true,
     "noEmit": false,
+    "emitDeclarationOnly": false,
     "declaration": true,
     "noImplicitAny": false,
     "strict": false,
@@ -28,10 +30,5 @@
     "src/**/*.ts",
     "src/**/*.tsx",
     "nativewind-env.d.ts"
-  ],
-  "references": [
-    {
-      "path": "../core/tsconfig.lib.json"
-    }
   ]
 }

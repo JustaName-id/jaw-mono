@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Pressable } from 'react-native';
 import * as ExpoClipboard from 'expo-clipboard';
 import { DefaultModal } from '../DefaultModal';
@@ -6,7 +6,6 @@ import { Button } from '../ui/button';
 import { CopyIcon, CopiedIcon, WalletIcon, WarningIcon, InfoIcon } from '../../icons';
 import { formatAddress } from '../../utils/formatAddress';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
-import { useDeviceType } from '../../hooks/useDeviceType';
 import type { PermissionModalProps } from './types';
 
 export const PermissionModal = ({
@@ -33,7 +32,6 @@ export const PermissionModal = ({
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
   const [isResolvingAddresses, setIsResolvingAddresses] = useState(true);
-  const { isPhone } = useDeviceType();
 
   // Resolve addresses to human-readable names
   useEffect(() => {

@@ -3,7 +3,7 @@ import { Account, type PasskeyAccount } from '@jaw.id/core';
 import { OnboardingModal } from '../../components/OnboardingModal';
 import { ConnectModal } from '../../components/ConnectModal';
 import type { LocalStorageAccount } from '../../components/OnboardingModal/types';
-import type { ConnectUIRequest, UIHandlerConfig, UIResponse } from '@jaw.id/core';
+import type { ConnectUIRequest, UIHandlerConfig } from '@jaw.id/core';
 import { createCredentialAdapter, getCredentialAdapter } from '../../passkey';
 import { getChainNameFromId, getChainIconKeyFromId } from '../utils';
 import { useChainIcon } from '../../hooks';
