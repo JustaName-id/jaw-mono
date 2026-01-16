@@ -12,7 +12,7 @@ Smart account wallet infrastructure with passkey authentication.
 
 ## Documentation
 
-For installation guides, SDK reference, and examples, visit **[docs.jaw.id](https://docs.jaw.id)**.
+For installation guides, API reference, and examples, visit **[docs.jaw.id](https://docs.jaw.id)**.
 
 ## Development
 
