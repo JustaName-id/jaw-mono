@@ -106,9 +106,10 @@ export class AppSpecificSigner extends JAWSigner {
         const chains = store.getState().chains;
         const chain = chains?.find((c: SDKChain) => c.id === this.chain.id) ?? this.chain;
 
-        // Extract capabilities from request params
+        // Extract capabilities and silent flag from request params
         const walletConnectParams = modifiedRequest.params as WalletConnectRequest['params'] | undefined;
         const capabilities = walletConnectParams?.[0]?.capabilities;
+        const silent = walletConnectParams?.[0]?.silent;
 
         const uiRequest: ConnectUIRequest = {
             id: crypto.randomUUID(),
@@ -121,6 +122,7 @@ export class AppSpecificSigner extends JAWSigner {
                 origin: typeof window !== 'undefined' ? window.location.origin : 'unknown',
                 chainId: chain.id,
                 capabilities,
+                silent,
             },
         };
 

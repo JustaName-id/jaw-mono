@@ -47,6 +47,24 @@ export const CATEGORY_LABELS: Record<MethodCategory, string> = {
   asset: 'Asset',
 };
 
+// Supported chains for methods that accept a chainId parameter
+// Based on packages/core/src/account/smartAccount.ts SUPPORTED_CHAINS
+export const CHAIN_OPTIONS = [
+  { label: 'Default (current chain)', value: 'default' },
+  // Mainnets
+  { label: 'Ethereum Mainnet (1)', value: '0x1' },
+  { label: 'Optimism (10)', value: '0xa' },
+  { label: 'Base (8453)', value: '0x2105' },
+  { label: 'Arbitrum One (42161)', value: '0xa4b1' },
+  { label: 'Linea (59144)', value: '0xe708' },
+  // Testnets
+  { label: 'Sepolia (11155111)', value: '0xaa36a7' },
+  { label: 'Base Sepolia (84532)', value: '0x14a34' },
+  { label: 'Optimism Sepolia (11155420)', value: '0xaa37dc' },
+  { label: 'Arbitrum Sepolia (421614)', value: '0x66eee' },
+  { label: 'Linea Sepolia (59141)', value: '0xe705' },
+];
+
 export const RPC_METHODS: RpcMethod[] = [
   // ===== Account Methods =====
   {
@@ -195,8 +213,17 @@ console.log('Transaction hash:', txHash);`;
     method: 'wallet_sendCalls',
     category: 'transaction',
     description: 'Broadcast bundle of calls to the network (EIP-5792)',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
+      {
+        name: 'chainId',
+        type: 'select',
+        label: 'Chain',
+        description: 'Target chain for the transaction (optional)',
+        required: false,
+        options: CHAIN_OPTIONS,
+        defaultValue: 'default',
+      },
       {
         name: 'calls',
         type: 'json',
@@ -214,10 +241,11 @@ console.log('Transaction hash:', txHash);`;
     ],
     getCodeSnippet: (params) => {
       const callsStr = params.calls || '[{ to: "0x...", value: "0x2386F26FC10000", data: "0x" }]';
+      const chainIdLine = params.chainId && params.chainId !== 'default' ? `\n    chainId: '${params.chainId}',` : '';
       return `// Send 0.01 ETH
 const result = await jaw.provider.request({
   method: 'wallet_sendCalls',
-  params: [{
+  params: [{${chainIdLine}
     calls: ${callsStr},
   }],
 });
@@ -226,7 +254,11 @@ console.log('Batch ID:', result.id);`;
     },
     buildParams: (params) => {
       const calls = JSON.parse(params.calls || '[]');
-      return [{ calls }];
+      const result: { calls: unknown[]; chainId?: string } = { calls };
+      if (params.chainId && params.chainId !== 'default') {
+        result.chainId = params.chainId;
+      }
+      return [result];
     },
   },
   {
@@ -373,7 +405,7 @@ console.log('Signature:', signature);`,
     method: 'wallet_sign',
     category: 'signing',
     description: 'Unified signing method supporting multiple formats (ERC-7871)',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
       {
         name: 'type',
@@ -649,8 +681,17 @@ console.log('Capabilities:', capabilities);`,
     method: 'wallet_grantPermissions',
     category: 'permission',
     description: 'Grant call and spend permissions to a spender',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
+      {
+        name: 'chainId',
+        type: 'select',
+        label: 'Chain',
+        description: 'Target chain for the permission (optional)',
+        required: false,
+        options: CHAIN_OPTIONS,
+        defaultValue: 'default',
+      },
       {
         name: 'spender',
         type: 'address',
@@ -689,28 +730,35 @@ console.log('Capabilities:', capabilities);`,
         }, null, 2),
       },
     ],
-    getCodeSnippet: (params) => `const expiryDays = ${params.expiryDays || 30};
+    getCodeSnippet: (params) => {
+      const chainIdLine = params.chainId && params.chainId !== 'default' ? `\n    chainId: '${params.chainId}',` : '';
+      return `const expiryDays = ${params.expiryDays || 30};
 const expiry = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
 
 const result = await jaw.provider.request({
   method: 'wallet_grantPermissions',
-  params: [{
+  params: [{${chainIdLine}
     expiry,
     spender: '${params.spender || '0x...'}',
     permissions: ${params.permissions || '{}'},
   }],
 });
 
-console.log('Permission ID:', result.permissionId);`,
+console.log('Permission ID:', result.permissionId);`;
+    },
     buildParams: (params) => {
       const expiryDays = parseInt(params.expiryDays || '30');
       const expiry = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
       const permissions = JSON.parse(params.permissions || '{}');
-      return [{
+      const result: { expiry: number; spender: string; permissions: unknown; chainId?: string } = {
         expiry,
         spender: params.spender,
         permissions,
-      }];
+      };
+      if (params.chainId && params.chainId !== 'default') {
+        result.chainId = params.chainId;
+      }
+      return [result];
     },
   },
   {
@@ -719,7 +767,7 @@ console.log('Permission ID:', result.permissionId);`,
     method: 'wallet_revokePermissions',
     category: 'permission',
     description: 'Revoke previously granted permissions',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
       {
         name: 'permissionId',

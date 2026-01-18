@@ -43,7 +43,7 @@ export function MethodCard({ method, onClick, disabled }: MethodCardProps) {
         <p className="text-xs text-muted-foreground line-clamp-2">
           {method.description}
         </p>
-        {method.requiresConnection && (
+        {method.requiresConnection ? (
           <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
             <svg
               className="w-3 h-3"
@@ -59,6 +59,23 @@ export function MethodCard({ method, onClick, disabled }: MethodCardProps) {
               />
             </svg>
             <span>Requires connection</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
+            <svg
+              className="w-3 h-3"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M8 11V7a4 4 0 118 0m-4 8v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2z"
+              />
+            </svg>
+            <span>Works without connection</span>
           </div>
         )}
       </div>

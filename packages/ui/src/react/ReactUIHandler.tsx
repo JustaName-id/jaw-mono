@@ -601,6 +601,15 @@ function OnboardingDialogWrapper({
         account.credentialId
       );
 
+      // If silent mode, skip ConnectDialog and approve immediately
+      if (request.data.silent) {
+        console.log('🔇 Silent mode: skipping connect confirmation');
+        onApprove({
+          accounts: [{ address: accountInstance.address }],
+        });
+        return;
+      }
+
       // Show ConnectDialog for confirmation instead of immediately approving
       setAuthenticatedAccountName(account.username);
       setAuthenticatedWalletAddress(accountInstance.address);
@@ -627,6 +636,16 @@ function OnboardingDialogWrapper({
       });
 
       const metadata = accountInstance.getMetadata();
+
+      // If silent mode, skip ConnectDialog and approve immediately
+      if (request.data.silent) {
+        console.log('🔇 Silent mode: skipping connect confirmation');
+        setIsImporting(false);
+        onApprove({
+          accounts: [{ address: accountInstance.address }],
+        });
+        return;
+      }
 
       // Show ConnectDialog for confirmation instead of immediately approving
       setAuthenticatedAccountName(metadata?.username || 'Imported Account');
@@ -684,6 +703,16 @@ function OnboardingDialogWrapper({
     const username = pendingUsernameRef.current;
 
     if (address) {
+      // If silent mode, skip ConnectDialog and approve immediately
+      if (request.data.silent) {
+        console.log('🔇 Silent mode: skipping connect confirmation');
+        setIsCreating(false);
+        onApprove({
+          accounts: [{ address }],
+        });
+        return;
+      }
+
       // Show ConnectDialog for confirmation instead of immediately approving
       setAuthenticatedAccountName(username || 'New Account');
       setAuthenticatedWalletAddress(address);

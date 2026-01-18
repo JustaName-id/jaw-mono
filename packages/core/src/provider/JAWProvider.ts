@@ -99,28 +99,17 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     }
 
     private async _request<T>(args: RequestArguments): Promise<T> {
-        console.log('[JAWProvider] _request called with method:', args.method);
-        console.log('[JAWProvider] preference.mode:', this.preference.mode);
-        console.log('[JAWProvider] Mode.AppSpecific:', Mode.AppSpecific);
-        console.log('[JAWProvider] mode === AppSpecific:', this.preference.mode === Mode.AppSpecific);
-
         const signerType = this.preference.mode === Mode.AppSpecific
             ? 'appSpecific'
             : 'crossPlatform';
 
-        console.log('[JAWProvider] signerType:', signerType);
-
         try {
             checkErrorForInvalidRequestArgs(args);
             if (!this.signer) {
-                console.log('[JAWProvider] No signer, creating new signer for method:', args.method);
                 switch (args.method) {
                     case 'eth_requestAccounts': {
-                        console.log('[JAWProvider] Initializing signer for eth_requestAccounts');
                         const signer = this.initSigner(signerType);
-                        console.log('[JAWProvider] Signer created, calling handshake');
                         await signer.handshake(args);
-                        console.log('[JAWProvider] Handshake complete');
 
                         this.signer = signer;
                         storeSignerType(signerType);
@@ -144,12 +133,18 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         return null as T;
                     }
                     case 'wallet_sendCalls':
-                    case 'wallet_sign': {
+                    case 'wallet_sign':
+                    case 'wallet_grantPermissions':
+                    case 'wallet_revokePermissions': {
                         const ephemeralSigner = this.initSigner(signerType);
 
                         if (signerType === 'appSpecific') {
-                            // AppSpecific needs wallet_connect handshake to establish account
-                            await ephemeralSigner.handshake({ method: 'wallet_connect' });
+                            // Silent handshake: authenticate/create account without showing connect dialog.
+                            // The signing UI will be shown immediately after.
+                            await ephemeralSigner.handshake({
+                                method: 'wallet_connect',
+                                params: [{ silent: true }]
+                            });
                             const result = await ephemeralSigner.request(args);
                             try {
                                 await ephemeralSigner.cleanup();
