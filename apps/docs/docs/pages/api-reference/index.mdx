@@ -100,8 +100,7 @@ Methods for sending transactions and batch operations.
 | Method | Description | Auth Required |
 |--------|-------------|---------------|
 | [eth_sendTransaction](/api-reference/eth_sendTransaction) | Broadcast a transaction to the network | Yes |
-| [wallet_sendCalls](/api-reference/wallet_sendCalls) | Broadcast bundle of calls to the network | Yes |
-| [wallet_showCallsStatus](/api-reference/wallet_showCallsStatus) | Show batch transaction status UI | Yes |
+| [wallet_sendCalls](/api-reference/wallet_sendCalls) | Broadcast bundle of calls to the network | No* |
 | [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) | Get batch transaction status | No |
 
 
@@ -143,11 +142,13 @@ Methods for managing granular permissions for delegated transactions.
 
 | Method | Description | Auth Required |
 |--------|-------------|---------------|
-| [wallet_grantPermissions](/api-reference/wallet_grantPermissions) | Grant call and spend permissions to a spender | Yes |
-| [wallet_revokePermissions](/api-reference/wallet_revokePermissions) | Revoke previously granted permissions | Yes |
-| [wallet_getPermissions](/api-reference/wallet_getPermissions) | Get all permissions for an account | No* |
+| [wallet_grantPermissions](/api-reference/wallet_grantPermissions) | Grant call and spend permissions to a spender | No* |
+| [wallet_revokePermissions](/api-reference/wallet_revokePermissions) | Revoke previously granted permissions | No* |
+| [wallet_getPermissions](/api-reference/wallet_getPermissions) | Get all permissions for an account | No** |
 
-*Requires address parameter if not authenticated
+*Can use ephemeral signer if not authenticated
+
+**Requires address parameter if not authenticated
 
 
 ## Asset Methods
@@ -156,9 +157,9 @@ Methods for querying token balances.
 
 | Method | Description | Auth Required |
 |--------|-------------|---------------|
-| [wallet_getAssets](/api-reference/wallet_getAssets) | Get token balances across chains (EIP-7811) | No* |
+| [wallet_getAssets](/api-reference/wallet_getAssets) | Get token balances across chains (EIP-7811) | No** |
 
-*Requires address parameter
+**Requires address parameter
 
 
 ## Error Codes

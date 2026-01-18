@@ -134,7 +134,9 @@ export abstract class JAWSigner implements Signer {
             }
 
             case 'wallet_sendCalls':
-            case 'wallet_sign': {
+            case 'wallet_sign':
+            case 'wallet_grantPermissions':
+            case 'wallet_revokePermissions': {
                 return this.handleSigningRequest(request);
             }
 
