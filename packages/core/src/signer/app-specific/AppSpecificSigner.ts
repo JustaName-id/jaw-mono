@@ -266,6 +266,7 @@ export class AppSpecificSigner extends JAWSigner {
                     correlationId,
                     data: {
                         ...callsData,
+                        from: callsData.from ?? this.accounts[0],
                         chainId: resolvedChain.id,
                         capabilities: callsData.capabilities,
                     },

@@ -552,6 +552,30 @@ function OnboardingDialogWrapper({
     loadAccounts();
   }, [apiKey]);
 
+  // Silent mode: check for existing auth state and use it directly
+  // This mirrors the cross-platform behavior where jaw:passkey:authState is checked
+  useEffect(() => {
+    if (!request.data.silent) {
+      return;
+    }
+
+    // Check if there's an existing authenticated session
+    const authenticatedAddress = Account.getAuthenticatedAddress(apiKey);
+
+    if (authenticatedAddress) {
+      // User is already authenticated - approve immediately without showing any UI
+      // Use setTimeout to defer the call and avoid unmounting during render
+      console.log('🔇 Silent mode: using existing auth state, address:', authenticatedAddress);
+      setTimeout(() => {
+        onApprove({
+          accounts: [{ address: authenticatedAddress }],
+        });
+      }, 0);
+    }
+    // If not authenticated, fall back to showing OnboardingDialog
+    // (the normal UI flow will handle account creation/login)
+  }, [request.data.silent, apiKey, onApprove]);
+
   const handleCancel = () => {
     setOpen(false);
     setShowConnectDialog(false);
