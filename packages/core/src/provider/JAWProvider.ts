@@ -128,23 +128,16 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     }
                     case 'wallet_connect': {
                         const signer = this.initSigner(signerType);
-                        // For AppSpecific mode, pass full args to handshake so capabilities are available
-                        // For CrossPlatform mode, handshake only exchanges session keys
-                        if (signerType === 'appSpecific') {
-                            await signer.handshake(args); // pass full args with capabilities
-                            this.signer = signer;
-                            storeSignerType(signerType);
-                            // For AppSpecific, handshake already handles the full wallet_connect flow
-                            // and returns the result, so we get it from the cached response
-                            const result = await signer.request(args);
-                            return result as T;
-                        } else {
-                            await signer.handshake({ method: 'handshake' }); // exchange session keys
-                            const result = await signer.request(args); // send diffie-hellman encrypted request
-                            this.signer = signer;
-                            storeSignerType(signerType);
-                            return result as T;
-                        }
+                        // For both modes, pass full args to handshake so the complete
+                        // wallet_connect flow happens in a single roundtrip.
+                        // This avoids race conditions with popup closure in cross-platform mode.
+                        await signer.handshake(args);
+                        this.signer = signer;
+                        storeSignerType(signerType);
+                        // Handshake sets accounts/capabilities in store via handleResponse.
+                        // The subsequent request will return the cached response.
+                        const result = await signer.request(args);
+                        return result as T;
                     }
                     case 'wallet_disconnect': {
                         await this.disconnect();

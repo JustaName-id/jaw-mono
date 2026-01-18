@@ -343,7 +343,7 @@ describe('JAWProvider', () => {
         apiKey: 'test-api-key',
         paymasters: undefined,
       });
-      expect(mockSigner.handshake).toHaveBeenCalledWith({ method: 'handshake' });
+      expect(mockSigner.handshake).toHaveBeenCalledWith(request);
       expect(mockSigner.request).toHaveBeenCalledWith(request);
       expect(result).toEqual(mockResponse);
       expect((provider as any).signer).toBe(mockSigner);

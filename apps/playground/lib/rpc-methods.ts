@@ -511,28 +511,65 @@ console.log('Signature:', signature);`;
         required: false,
         defaultValue: 'Sign in with your JAW account',
       },
+      {
+        name: 'enableSubnameTextRecords',
+        type: 'select',
+        label: 'Enable Subname Text Records',
+        description: 'Request subname with text records (requires ENS configured)',
+        required: false,
+        options: [
+          { label: 'No', value: 'false' },
+          { label: 'Yes', value: 'true' },
+        ],
+        defaultValue: 'false',
+      },
+      {
+        name: 'subnameTextRecords',
+        type: 'json',
+        label: 'Text Records (JSON)',
+        description: 'Array of { key, value } records to set on the subname',
+        required: false,
+        defaultValue: JSON.stringify([
+          { key: 'com.twitter', value: '@myhandle' },
+          { key: 'com.github', value: 'myusername' },
+        ], null, 2),
+      },
     ],
     getCodeSnippet: (params) => {
       const enableSiwe = params.enableSiwe === 'true';
-      if (enableSiwe) {
-        return `const nonce = crypto.randomUUID();
+      const enableSubnameTextRecords = params.enableSubnameTextRecords === 'true';
 
-const result = await jaw.provider.request({
-  method: 'wallet_connect',
-  params: [{
-    capabilities: {
-      signInWithEthereum: {
+      const capabilities: string[] = [];
+
+      if (enableSiwe) {
+        capabilities.push(`      signInWithEthereum: {
         nonce,
         chainId: '0x1',
         statement: '${params.siweStatement || 'Sign in with your JAW account'}',
-      },
+      }`);
+      }
+
+      if (enableSubnameTextRecords) {
+        const records = params.subnameTextRecords || '[{ "key": "com.twitter", "value": "@myhandle" }]';
+        capabilities.push(`      subnameTextRecords: ${records}`);
+      }
+
+      if (capabilities.length > 0) {
+        const nonceDecl = enableSiwe ? 'const nonce = crypto.randomUUID();\n\n' : '';
+        return `${nonceDecl}const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    capabilities: {
+${capabilities.join(',\n')}
     },
   }],
 });
 
-console.log('Connected:', result.accounts);
-console.log('SIWE signature:', result.accounts[0]?.capabilities?.signInWithEthereum);`;
+console.log('Connected:', result.accounts);${enableSiwe ? `
+console.log('SIWE:', result.accounts[0]?.capabilities?.signInWithEthereum);` : ''}${enableSubnameTextRecords ? `
+console.log('Subname:', result.accounts[0]?.capabilities?.subnameTextRecords);` : ''}`;
       }
+
       return `const result = await jaw.provider.request({
   method: 'wallet_connect',
   params: [{}],
@@ -542,19 +579,32 @@ console.log('Connected accounts:', result.accounts);`;
     },
     buildParams: (params) => {
       const enableSiwe = params.enableSiwe === 'true';
+      const enableSubnameTextRecords = params.enableSubnameTextRecords === 'true';
+
+      if (!enableSiwe && !enableSubnameTextRecords) {
+        return [{}];
+      }
+
+      const capabilities: Record<string, unknown> = {};
+
       if (enableSiwe) {
         const nonce = Math.random().toString(36).substring(2, 15);
-        return [{
-          capabilities: {
-            signInWithEthereum: {
-              nonce,
-              chainId: '0x1',
-              statement: params.siweStatement || 'Sign in with your JAW account',
-            },
-          },
-        }];
+        capabilities.signInWithEthereum = {
+          nonce,
+          chainId: '0x1',
+          statement: params.siweStatement || 'Sign in with your JAW account',
+        };
       }
-      return [{}];
+
+      if (enableSubnameTextRecords) {
+        try {
+          capabilities.subnameTextRecords = JSON.parse(params.subnameTextRecords || '[]');
+        } catch {
+          capabilities.subnameTextRecords = [];
+        }
+      }
+
+      return [{ capabilities }];
     },
   },
   {
