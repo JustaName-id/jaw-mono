@@ -2,6 +2,7 @@ import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
 import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions, Mode, PaymasterConfig } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
 import { store, createInitialChains, ChainClients, createClients } from '../store/index.js';
+import { announceProvider as announceProviderFn, type AnnounceProviderCleanup } from '../provider/eip6963.js';
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   apiKey: string;
@@ -88,6 +89,10 @@ export function create(params: CreateJAWSDKOptions) {
   }
 
   let provider: ProviderInterface | null = null;
+  let stopAnnouncing: AnnounceProviderCleanup | null = null;
+
+  // Helper to check if EIP-6963 announcement should be enabled
+  const isCrossPlatformMode = options.preference?.mode === Mode.CrossPlatform;
 
   return {
     /**
@@ -98,6 +103,11 @@ export function create(params: CreateJAWSDKOptions) {
     get provider(): ProviderInterface {
       if (!provider) {
         provider = createJAWProvider(options);
+
+        // Auto-announce via EIP-6963 for CrossPlatform mode
+        if (isCrossPlatformMode && typeof window !== 'undefined') {
+          stopAnnouncing = announceProviderFn(provider);
+        }
       }
       return provider;
     },
@@ -107,6 +117,12 @@ export function create(params: CreateJAWSDKOptions) {
      * @returns A promise that resolves when disconnection is complete.
      */
     async disconnect(): Promise<void> {
+      // Stop announcing when disconnecting
+      if (stopAnnouncing) {
+        stopAnnouncing();
+        stopAnnouncing = null;
+      }
+
       if (provider) {
         await provider.disconnect();
         provider = null;
