@@ -1,4 +1,5 @@
 import { ReactElement } from 'react';
+import { FeeTokenOption } from '../FeeTokenSelector';
 
 export interface SpendPermission {
   amount: string;
@@ -61,4 +62,14 @@ export interface PermissionDialogProps {
   gasEstimationError?: string;
   sponsored?: boolean;
   ethPrice?: number;
+
+  // Fee token selection (for ERC-20 paymaster)
+  feeTokens?: FeeTokenOption[];
+  feeTokensLoading?: boolean;
+  selectedFeeToken?: FeeTokenOption | null;
+  onFeeTokenSelect?: (token: FeeTokenOption) => void;
+  showFeeTokenSelector?: boolean;
+
+  // ERC-20 payment indicator (when user selected non-native token)
+  isPayingWithErc20?: boolean;
 }

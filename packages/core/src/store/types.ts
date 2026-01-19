@@ -25,7 +25,28 @@ export type Chain = {
     /** Optional paymaster configuration for sponsored transactions */
     paymaster?: PaymasterConfig;
   };
-  
+
+/**
+ * Fee token configuration from wallet capabilities
+ */
+export type FeeToken = {
+  uid: string;
+  symbol: string;
+  address: string;
+  interop: boolean;
+  decimals: number;
+  feeToken: boolean;
+  logoURI?: string;
+};
+
+/**
+ * Fee token capability from wallet_getCapabilities response
+ */
+export type FeeTokenCapability = {
+  supported: boolean;
+  tokens: FeeToken[];
+};
+
 
 export type Account = {
     accounts?: Address[];

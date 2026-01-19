@@ -2,10 +2,13 @@
 
 import { Button } from "../ui/button";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
 import { DefaultDialog } from "../DefaultDialog";
+import { FeeTokenSelector } from "../FeeTokenSelector";
 import { CopiedIcon, CopyIcon, WalletIcon } from "../../icons";
 import { useState, useEffect } from "react";
 import { formatEther } from "viem";
+import { Info } from "lucide-react";
 import { TransactionDialogProps } from "./types";
 import { useIsMobile, useChainIcon } from "../../hooks";
 import { getJustaNameInstance, getDisplayAddress } from "../../utils";
@@ -26,6 +29,13 @@ export const TransactionDialog = ({
   transactionStatus,
   networkName,
   chainIconKey,
+  // Fee token props
+  feeTokens,
+  feeTokensLoading,
+  selectedFeeToken,
+  onFeeTokenSelect,
+  showFeeTokenSelector,
+  isPayingWithErc20,
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
@@ -37,6 +47,12 @@ export const TransactionDialog = ({
 
   // Get chain icon using the hook
   const chainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 24);
+
+  // Check if there are any selectable payment options
+  // If feeTokens is not loaded yet (null/undefined/empty), assume there are selectable options
+  const hasSelectablePaymentOption = !feeTokens || feeTokens.length === 0
+    ? true
+    : feeTokens.some(t => t.isSelectable);
 
   // Initialize JustaName and resolve addresses
   useEffect(() => {
@@ -111,7 +127,13 @@ export const TransactionDialog = ({
     }
   };
 
-  const canConfirm = !isProcessing && !gasFeeLoading && !(gasEstimationError && !sponsored);
+  // Determine if confirmation is allowed:
+  // - Not processing
+  // - Gas estimation not loading
+  // - No gas estimation error (unless sponsored)
+  // - Must have at least one selectable payment option
+  const hasInsufficientFunds = !hasSelectablePaymentOption || (gasEstimationError && !sponsored && !isPayingWithErc20);
+  const canConfirm = !isProcessing && !gasFeeLoading && !hasInsufficientFunds;
 
   return (
     <DefaultDialog
@@ -205,21 +227,31 @@ export const TransactionDialog = ({
                 </div>
                 <div className="w-[1px] rounded-full bg-border h-full min-h-[50px]" />
                 <div className="flex flex-col text-foreground flex-1 gap-0.5">
-                  <p className="text-xs font-bold leading-[133%]">Network Fees</p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-bold leading-[133%]">Network Fees</p>
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="size-3 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px] text-xs">
+                          <p>Gas fees paid to network validators to process your transaction. You can pay with ETH or supported tokens.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <div className="flex flex-row items-center w-full justify-between gap-1">
-                    {gasFeeLoading ? (
+                    {gasFeeLoading && !isPayingWithErc20 ? (
                       <p className="text-base font-normal text-muted-foreground">Estimating...</p>
                     ) : gasEstimationError && !sponsored ? (
                       <div className="flex flex-col">
-                        <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
-                        <p className="text-xs text-red-500">{gasEstimationError}</p>
+                        <p className="text-sm text-red-600 font-medium">{gasEstimationError}</p>
                       </div>
-                    ) : sponsored || gasFee === 'sponsored' ? (
+                    ) : sponsored ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          {sponsored && gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
+                          {gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
                             <div className="flex flex-col line-through text-muted-foreground">
-                              {/* TODO: Add gas fee in USD */}
                               <p className="text-base font-normal">
                                 ${(ethPrice * Number(gasFee)).toFixed(4)}
                               </p>
@@ -230,7 +262,7 @@ export const TransactionDialog = ({
                           </span>
                         </div>
                         <p className="text-xs font-normal text-muted-foreground">
-                          {sponsored && gasFee && gasFee !== 'sponsored' ? (() => {
+                          {gasFee && gasFee !== 'sponsored' ? (() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
                               return '> 0.0001 ETH';
@@ -239,15 +271,56 @@ export const TransactionDialog = ({
                           })() : 'Gas fees covered'}
                         </p>
                       </div>
-                    ) : gasFee && gasFee !== 'sponsored' ? (
-                      <div className="flex flex-col">
-                        {ethPrice > 0 && (
-                          <div className="flex items-center gap-2">
-                            <p className="text-base font-normal text-foreground">
-                              ${(ethPrice * Number(gasFee)).toFixed(4)}
-                            </p>
-                          </div>
+                    ) : isPayingWithErc20 && selectedFeeToken ? (
+                      <div className="flex flex-col gap-0.5 w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <p className="text-base font-normal text-foreground">
+                            {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
+                            {selectedFeeToken.gasCostFormatted ? (
+                              // For stablecoins like USDC/USDT, the value is approximately USD
+                              `$${selectedFeeToken.gasCostFormatted}`
+                            ) : (
+                              <span className="text-muted-foreground">Estimating...</span>
+                            )}
+                          </p>
+                          {/* Inline Fee Token Selector */}
+                          {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
+                            <FeeTokenSelector
+                              tokens={feeTokens}
+                              selectedToken={selectedFeeToken}
+                              onSelect={onFeeTokenSelect}
+                              isLoading={feeTokensLoading ?? false}
+                              disabled={isProcessing}
+                              ethPrice={ethPrice}
+                              estimatedGasEth={gasFee || '0'}
+                            />
+                          )}
+                        </div>
+                        {selectedFeeToken.gasCostFormatted && (
+                          <p className="text-xs font-normal text-muted-foreground">
+                            Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                          </p>
                         )}
+                      </div>
+                    ) : gasFee && gasFee !== 'sponsored' ? (
+                      <div className="flex flex-col gap-0.5 w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <p className="text-base font-normal text-foreground">
+                            {ethPrice > 0 ? `$${(ethPrice * Number(gasFee)).toFixed(4)}` : ''}
+                          </p>
+                          {/* Inline Fee Token Selector */}
+                          {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
+                            <FeeTokenSelector
+                              tokens={feeTokens}
+                              selectedToken={selectedFeeToken ?? null}
+                              onSelect={onFeeTokenSelect}
+                              isLoading={feeTokensLoading ?? false}
+                              disabled={isProcessing}
+                              ethPrice={ethPrice}
+                              estimatedGasEth={gasFee}
+                            />
+                          )}
+                        </div>
                         <p className="text-xs font-normal text-muted-foreground">
                           {(() => {
                             const gasValue = Number(gasFee);
@@ -316,7 +389,7 @@ export const TransactionDialog = ({
                 disabled={!canConfirm}
                 className="flex-1"
               >
-                {gasEstimationError && !sponsored ? 'Insufficient Funds' :
+                {hasInsufficientFunds ? 'Insufficient Funds' :
                   isProcessing ? 'Processing...' : 'Transact'}
               </Button>
             </div>
@@ -438,19 +511,30 @@ export const TransactionDialog = ({
                 </div>
                 <div className="w-[1px] rounded-full bg-border h-full min-h-[50px]" />
                 <div className="flex flex-col text-foreground flex-1 gap-0.5">
-                  <p className="text-xs font-bold leading-[133%]">Network Fees</p>
+                  <div className="flex items-center gap-1">
+                    <p className="text-xs font-bold leading-[133%]">Network Fees</p>
+                    <TooltipProvider delayDuration={0}>
+                      <Tooltip>
+                        <TooltipTrigger asChild>
+                          <Info className="size-3 text-muted-foreground cursor-help" />
+                        </TooltipTrigger>
+                        <TooltipContent side="top" className="max-w-[200px] text-xs">
+                          <p>Gas fees paid to network validators to process your transaction. You can pay with ETH or supported tokens.</p>
+                        </TooltipContent>
+                      </Tooltip>
+                    </TooltipProvider>
+                  </div>
                   <div className="flex flex-row items-center w-full justify-between gap-1">
-                    {gasFeeLoading ? (
+                    {gasFeeLoading && !isPayingWithErc20 ? (
                       <p className="text-base font-normal text-muted-foreground">Estimating...</p>
                     ) : gasEstimationError && !sponsored ? (
                       <div className="flex flex-col">
-                        <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
-                        <p className="text-xs text-red-500">{gasEstimationError}</p>
+                        <p className="text-sm text-red-600 font-medium">{gasEstimationError}</p>
                       </div>
-                    ) : sponsored || gasFee === 'sponsored' ? (
+                    ) : sponsored ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          {sponsored && gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
+                          {gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
                             <div className="flex flex-col line-through text-muted-foreground">
                               <p className="text-base font-normal">
                                 ${(ethPrice * Number(gasFee)).toFixed(4)}
@@ -462,7 +546,7 @@ export const TransactionDialog = ({
                           </span>
                         </div>
                         <p className="text-xs font-normal text-muted-foreground">
-                          {sponsored && gasFee && gasFee !== 'sponsored' ? (() => {
+                          {gasFee && gasFee !== 'sponsored' ? (() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
                               return '> 0.0001 ETH';
@@ -471,15 +555,56 @@ export const TransactionDialog = ({
                           })() : 'Gas fees covered'}
                         </p>
                       </div>
-                    ) : gasFee && gasFee !== 'sponsored' ? (
-                      <div className="flex flex-col">
-                        {ethPrice > 0 && (
-                          <div className="flex items-center gap-2">
-                            <p className="text-base font-normal text-foreground">
-                              ${(ethPrice * Number(gasFee)).toFixed(4)}
-                            </p>
-                          </div>
+                    ) : isPayingWithErc20 && selectedFeeToken ? (
+                      <div className="flex flex-col gap-0.5 w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <p className="text-base font-normal text-foreground">
+                            {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
+                            {selectedFeeToken.gasCostFormatted ? (
+                              // For stablecoins like USDC/USDT, the value is approximately USD
+                              `$${selectedFeeToken.gasCostFormatted}`
+                            ) : (
+                              <span className="text-muted-foreground">Estimating...</span>
+                            )}
+                          </p>
+                          {/* Inline Fee Token Selector */}
+                          {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
+                            <FeeTokenSelector
+                              tokens={feeTokens}
+                              selectedToken={selectedFeeToken}
+                              onSelect={onFeeTokenSelect}
+                              isLoading={feeTokensLoading ?? false}
+                              disabled={isProcessing}
+                              ethPrice={ethPrice}
+                              estimatedGasEth={gasFee || '0'}
+                            />
+                          )}
+                        </div>
+                        {selectedFeeToken.gasCostFormatted && (
+                          <p className="text-xs font-normal text-muted-foreground">
+                            Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                          </p>
                         )}
+                      </div>
+                    ) : gasFee && gasFee !== 'sponsored' ? (
+                      <div className="flex flex-col gap-0.5 w-full">
+                        <div className="flex items-center justify-between w-full">
+                          <p className="text-base font-normal text-foreground">
+                            {ethPrice > 0 ? `$${(ethPrice * Number(gasFee)).toFixed(4)}` : ''}
+                          </p>
+                          {/* Inline Fee Token Selector */}
+                          {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
+                            <FeeTokenSelector
+                              tokens={feeTokens}
+                              selectedToken={selectedFeeToken ?? null}
+                              onSelect={onFeeTokenSelect}
+                              isLoading={feeTokensLoading ?? false}
+                              disabled={isProcessing}
+                              ethPrice={ethPrice}
+                              estimatedGasEth={gasFee}
+                            />
+                          )}
+                        </div>
                         <p className="text-xs font-normal text-muted-foreground">
                           {(() => {
                             const gasValue = Number(gasFee);

@@ -1,5 +1,5 @@
 import type { Address, Hash, Hex, TypedDataDefinition, TypedData, LocalAccount } from 'viem';
-import { isHex } from 'viem';
+import { isHex, encodeFunctionData, erc20Abi, createPublicClient, http } from 'viem';
 import { toWebAuthnAccount, type SmartAccount } from 'viem/account-abstraction';
 import {
   createSmartAccount,
@@ -30,7 +30,7 @@ import {
   type CallPermissionDetail,
   type SpendPermissionDetail,
 } from '../rpc/permissions.js';
-import { JAW_RPC_URL } from '../constants.js';
+import { JAW_RPC_URL, JAW_PAYMASTER_URL, ERC20_PAYMASTER_ADDRESS } from '../constants.js';
 import { type Chain, chains as chainStore } from '../store/index.js';
 import { logAccountIssuance } from '../analytics/index.js';
 
@@ -606,12 +606,19 @@ export class Account {
       data: call.data,
     }));
 
+    // If using JAW ERC-20 paymaster, prepend approval call if needed
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
+
+    // Remove gas field from context (only used for approval logic)
+    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+
     return await sendSmartAccountTransaction(
       this._smartAccount,
-      formattedCalls,
-      this._chain,      
+      finalCalls,
+      this._chain,
       paymasterUrlOverride,
-      paymasterContextOverride
+      Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined
     );
   }
 
@@ -649,27 +656,35 @@ export class Account {
       data: call.data,
     }));
 
+    // If using JAW ERC-20 paymaster, prepend approval call if needed
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
+
+    // Remove gas field from context (only used for approval logic)
+    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+
     let result: BundledTransactionResult;
 
     if (options?.permissionId) {
       // Execute through permission manager
       result = await sendSmartAccountCallsWithPermission(
         this._smartAccount,
-        formattedCalls,
+        finalCalls,
         this._chain,
         options.permissionId,
         this._apiKey,
         paymasterUrlOverride,
-        paymasterContextOverride
+        cleanedContext
       );
     } else {
       // Standard execution
       result = await sendSmartAccountCalls(
         this._smartAccount,
-        formattedCalls,
+        finalCalls,
         this._chain,
         paymasterUrlOverride,
-        paymasterContextOverride
+        cleanedContext
       );
     }
 
@@ -778,6 +793,8 @@ export class Account {
    * @param expiry - Timestamp when the permission expires (unix seconds)
    * @param spender - Address that can use the permission
    * @param permissions - Permissions to grant (calls and/or spends)
+   * @param paymasterUrlOverride - Optional paymaster URL for ERC-20 payment
+   * @param paymasterContextOverride - Optional paymaster context (e.g., token address for ERC-20 payment)
    * @returns Promise resolving to the grant permissions response
    *
    * @example
@@ -796,15 +813,27 @@ export class Account {
   async grantPermissions(
     expiry: number,
     spender: Address,
-    permissions: PermissionsDetail
+    permissions: PermissionsDetail,
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
   ): Promise<WalletGrantPermissionsResponse> {
+    // Check if we need an ERC-20 approval for the paymaster
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+
+    // Remove gas field from context (only used for approval logic)
+    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+
     return await grantSmartAccountPermissions(
       this._smartAccount,
       expiry,
       spender,
       permissions,
       this._chain,
-      this._apiKey
+      this._apiKey,
+      paymasterUrlOverride,
+      cleanedContext,
+      approvalCall || undefined
     );
   }
 
@@ -916,6 +945,74 @@ export class Account {
     }
 
     throw new Error(`Invalid value format: ${value}. Use bigint or hex string (wei).`);
+  }
+
+  /**
+   * Check if the paymaster URL is the JAW ERC-20 paymaster
+   * @internal
+   */
+  private static isJawErc20Paymaster(paymasterUrl?: string): boolean {
+    if (!paymasterUrl) return false;
+    // Remove query params and compare base URL
+    const baseUrl = paymasterUrl.split('?')[0];
+    return baseUrl === JAW_PAYMASTER_URL;
+  }
+
+  /**
+   * Create ERC-20 approval call for the paymaster if using JAW ERC-20 paymaster,
+   * only if the current allowance is insufficient.
+   * @internal
+   */
+  private async createErc20ApprovalCall(
+    paymasterUrl?: string,
+    paymasterContext?: Record<string, unknown>
+  ): Promise<{ to: Address; value?: bigint; data: Hex } | null> {
+    // Only add approval if using JAW ERC-20 paymaster
+    if (!Account.isJawErc20Paymaster(paymasterUrl)) {
+      return null;
+    }
+
+    // Extract token address and gas amount from context
+    const tokenAddress = paymasterContext?.token as string | undefined;
+    const gasAmount = paymasterContext?.gas as string | bigint | undefined;
+
+    if (!tokenAddress || gasAmount === undefined) {
+      return null;
+    }
+
+    // Parse the gas amount from context
+    const requiredAmount = typeof gasAmount === 'string' ? BigInt(gasAmount) : gasAmount;
+
+    // Check current allowance
+    const publicClient = createPublicClient({
+      chain: { id: this._chain.id } as Parameters<typeof createPublicClient>[0]['chain'],
+      transport: http(this._chain.rpcUrl),
+    });
+
+    const currentAllowance = await publicClient.readContract({
+      address: tokenAddress as Address,
+      abi: erc20Abi,
+      functionName: 'allowance',
+      args: [this._smartAccount.address, ERC20_PAYMASTER_ADDRESS as Address],
+    });
+
+    // If current allowance is sufficient, no approval needed
+    if (currentAllowance >= requiredAmount) {
+      return null;
+    }
+
+    // Encode ERC-20 approve call for the required amount
+    const approveData = encodeFunctionData({
+      abi: erc20Abi,
+      functionName: 'approve',
+      args: [ERC20_PAYMASTER_ADDRESS as Address, requiredAmount],
+    });
+
+    return {
+      to: tokenAddress as Address,
+      value: 0n,
+      data: approveData,
+    };
   }
 }
 

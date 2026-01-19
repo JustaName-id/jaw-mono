@@ -52,6 +52,12 @@ export type WalletConnectRequest = {
         {
             // Optional capabilities to request (e.g. Sign In With Ethereum, subname text records).
             capabilities?: WalletConnectCapabilities;
+            /**
+             * When true, skip the connect confirmation dialog after authentication.
+             * Used internally for wallet_sendCalls/wallet_sign flows where the signing UI
+             * will be shown immediately after account authentication/creation.
+             */
+            silent?: boolean;
         },
     ];
 };

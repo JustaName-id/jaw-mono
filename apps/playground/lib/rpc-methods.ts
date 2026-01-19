@@ -47,6 +47,24 @@ export const CATEGORY_LABELS: Record<MethodCategory, string> = {
   asset: 'Asset',
 };
 
+// Supported chains for methods that accept a chainId parameter
+// Based on packages/core/src/account/smartAccount.ts SUPPORTED_CHAINS
+export const CHAIN_OPTIONS = [
+  { label: 'Default (current chain)', value: 'default' },
+  // Mainnets
+  { label: 'Ethereum Mainnet (1)', value: '0x1' },
+  { label: 'Optimism (10)', value: '0xa' },
+  { label: 'Base (8453)', value: '0x2105' },
+  { label: 'Arbitrum One (42161)', value: '0xa4b1' },
+  { label: 'Linea (59144)', value: '0xe708' },
+  // Testnets
+  { label: 'Sepolia (11155111)', value: '0xaa36a7' },
+  { label: 'Base Sepolia (84532)', value: '0x14a34' },
+  { label: 'Optimism Sepolia (11155420)', value: '0xaa37dc' },
+  { label: 'Arbitrum Sepolia (421614)', value: '0x66eee' },
+  { label: 'Linea Sepolia (59141)', value: '0xe705' },
+];
+
 export const RPC_METHODS: RpcMethod[] = [
   // ===== Account Methods =====
   {
@@ -113,13 +131,7 @@ console.log('Chain ID:', chainId);`,
         label: 'Chain',
         description: 'The chain to switch to',
         required: true,
-        options: [
-          { label: 'Ethereum Mainnet (0x1)', value: '0x1' },
-          { label: 'Optimism (0xa)', value: '0xa' },
-          { label: 'Base (0x2105)', value: '0x2105' },
-          { label: 'Sepolia (0xaa36a7)', value: '0xaa36a7' },
-          { label: 'Base Sepolia (0x14a34)', value: '0x14a34' },
-        ],
+        options: CHAIN_OPTIONS.filter(opt => opt.value !== 'default'),
       },
     ],
     getCodeSnippet: (params) => `await jaw.provider.request({
@@ -138,6 +150,15 @@ console.log('Chain ID:', chainId);`,
     description: 'Broadcast a transaction to the network',
     requiresConnection: true,
     parameters: [
+      {
+        name: 'chainId',
+        type: 'select',
+        label: 'Chain',
+        description: 'Target chain for the transaction (optional)',
+        required: false,
+        options: CHAIN_OPTIONS,
+        defaultValue: 'default',
+      },
       {
         name: 'to',
         type: 'address',
@@ -165,6 +186,7 @@ console.log('Chain ID:', chainId);`,
     ],
     getCodeSnippet: (params) => {
       const value = params.value ? `parseEther('${params.value}')` : '0n';
+      const chainIdLine = params.chainId && params.chainId !== 'default' ? `\n    chainId: '${params.chainId}',` : '';
       return `import { parseEther } from 'viem';
 
 const txHash = await jaw.provider.request({
@@ -173,7 +195,7 @@ const txHash = await jaw.provider.request({
     from: account,
     to: '${params.to || '0x...'}',
     value: \`0x\${${value}.toString(16)}\`,
-    data: '${params.data || '0x'}',
+    data: '${params.data || '0x'}',${chainIdLine}
   }],
 });
 
@@ -181,12 +203,16 @@ console.log('Transaction hash:', txHash);`;
     },
     buildParams: (params, context) => {
       const valueWei = params.value ? BigInt(Math.floor(parseFloat(params.value) * 1e18)) : 0n;
-      return [{
+      const result: { from?: string; to: string; value: string; data: string; chainId?: string } = {
         from: context.address,
         to: params.to,
         value: `0x${valueWei.toString(16)}`,
         data: params.data || '0x',
-      }];
+      };
+      if (params.chainId && params.chainId !== 'default') {
+        result.chainId = params.chainId;
+      }
+      return [result];
     },
   },
   {
@@ -195,8 +221,17 @@ console.log('Transaction hash:', txHash);`;
     method: 'wallet_sendCalls',
     category: 'transaction',
     description: 'Broadcast bundle of calls to the network (EIP-5792)',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
+      {
+        name: 'chainId',
+        type: 'select',
+        label: 'Chain',
+        description: 'Target chain for the transaction (optional)',
+        required: false,
+        options: CHAIN_OPTIONS,
+        defaultValue: 'default',
+      },
       {
         name: 'calls',
         type: 'json',
@@ -214,10 +249,11 @@ console.log('Transaction hash:', txHash);`;
     ],
     getCodeSnippet: (params) => {
       const callsStr = params.calls || '[{ to: "0x...", value: "0x2386F26FC10000", data: "0x" }]';
+      const chainIdLine = params.chainId && params.chainId !== 'default' ? `\n    chainId: '${params.chainId}',` : '';
       return `// Send 0.01 ETH
 const result = await jaw.provider.request({
   method: 'wallet_sendCalls',
-  params: [{
+  params: [{${chainIdLine}
     calls: ${callsStr},
   }],
 });
@@ -226,7 +262,11 @@ console.log('Batch ID:', result.id);`;
     },
     buildParams: (params) => {
       const calls = JSON.parse(params.calls || '[]');
-      return [{ calls }];
+      const result: { calls: unknown[]; chainId?: string } = { calls };
+      if (params.chainId && params.chainId !== 'default') {
+        result.chainId = params.chainId;
+      }
+      return [result];
     },
   },
   {
@@ -373,7 +413,7 @@ console.log('Signature:', signature);`,
     method: 'wallet_sign',
     category: 'signing',
     description: 'Unified signing method supporting multiple formats (ERC-7871)',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
       {
         name: 'type',
@@ -460,25 +500,14 @@ console.log('Signature:', signature);`;
     },
     buildParams: (params) => {
       const type = params.type || '0x45';
-      if (type === '0x45') {
-        return [{
-          request: {
-            type: '0x45',
-            data: {
-              message: params.message || 'Hello, World!',
-            },
-          },
-        }];
-      } else {
-        // For 0x01 (typed data), parse the JSON and pass the object directly
-        const typedData = JSON.parse(params.typedData || '{}');
-        return [{
-          request: {
-            type: '0x01',
-            data: typedData,
-          },
-        }];
-      }
+      return [{
+        request: {
+          type,
+          data: type === '0x45'
+            ? { message: params.message || 'Hello, World!' }
+            : JSON.parse(params.typedData || '{}'),
+        },
+      }];
     },
   },
 
@@ -511,28 +540,65 @@ console.log('Signature:', signature);`;
         required: false,
         defaultValue: 'Sign in with your JAW account',
       },
+      {
+        name: 'enableSubnameTextRecords',
+        type: 'select',
+        label: 'Enable Subname Text Records',
+        description: 'Request subname with text records (requires ENS configured)',
+        required: false,
+        options: [
+          { label: 'No', value: 'false' },
+          { label: 'Yes', value: 'true' },
+        ],
+        defaultValue: 'false',
+      },
+      {
+        name: 'subnameTextRecords',
+        type: 'json',
+        label: 'Text Records (JSON)',
+        description: 'Array of { key, value } records to set on the subname',
+        required: false,
+        defaultValue: JSON.stringify([
+          { key: 'com.twitter', value: '@myhandle' },
+          { key: 'com.github', value: 'myusername' },
+        ], null, 2),
+      },
     ],
     getCodeSnippet: (params) => {
       const enableSiwe = params.enableSiwe === 'true';
-      if (enableSiwe) {
-        return `const nonce = crypto.randomUUID();
+      const enableSubnameTextRecords = params.enableSubnameTextRecords === 'true';
 
-const result = await jaw.provider.request({
-  method: 'wallet_connect',
-  params: [{
-    capabilities: {
-      signInWithEthereum: {
+      const capabilities: string[] = [];
+
+      if (enableSiwe) {
+        capabilities.push(`      signInWithEthereum: {
         nonce,
         chainId: '0x1',
         statement: '${params.siweStatement || 'Sign in with your JAW account'}',
-      },
+      }`);
+      }
+
+      if (enableSubnameTextRecords) {
+        const records = params.subnameTextRecords || '[{ "key": "com.twitter", "value": "@myhandle" }]';
+        capabilities.push(`      subnameTextRecords: ${records}`);
+      }
+
+      if (capabilities.length > 0) {
+        const nonceDecl = enableSiwe ? 'const nonce = crypto.randomUUID();\n\n' : '';
+        return `${nonceDecl}const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    capabilities: {
+${capabilities.join(',\n')}
     },
   }],
 });
 
-console.log('Connected:', result.accounts);
-console.log('SIWE signature:', result.accounts[0]?.capabilities?.signInWithEthereum);`;
+console.log('Connected:', result.accounts);${enableSiwe ? `
+console.log('SIWE:', result.accounts[0]?.capabilities?.signInWithEthereum);` : ''}${enableSubnameTextRecords ? `
+console.log('Subname:', result.accounts[0]?.capabilities?.subnameTextRecords);` : ''}`;
       }
+
       return `const result = await jaw.provider.request({
   method: 'wallet_connect',
   params: [{}],
@@ -542,19 +608,32 @@ console.log('Connected accounts:', result.accounts);`;
     },
     buildParams: (params) => {
       const enableSiwe = params.enableSiwe === 'true';
+      const enableSubnameTextRecords = params.enableSubnameTextRecords === 'true';
+
+      if (!enableSiwe && !enableSubnameTextRecords) {
+        return [{}];
+      }
+
+      const capabilities: Record<string, unknown> = {};
+
       if (enableSiwe) {
         const nonce = Math.random().toString(36).substring(2, 15);
-        return [{
-          capabilities: {
-            signInWithEthereum: {
-              nonce,
-              chainId: '0x1',
-              statement: params.siweStatement || 'Sign in with your JAW account',
-            },
-          },
-        }];
+        capabilities.signInWithEthereum = {
+          nonce,
+          chainId: '0x1',
+          statement: params.siweStatement || 'Sign in with your JAW account',
+        };
       }
-      return [{}];
+
+      if (enableSubnameTextRecords) {
+        try {
+          capabilities.subnameTextRecords = JSON.parse(params.subnameTextRecords || '[]');
+        } catch {
+          capabilities.subnameTextRecords = [];
+        }
+      }
+
+      return [{ capabilities }];
     },
   },
   {
@@ -608,8 +687,17 @@ console.log('Capabilities:', capabilities);`,
     method: 'wallet_grantPermissions',
     category: 'permission',
     description: 'Grant call and spend permissions to a spender',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
+      {
+        name: 'chainId',
+        type: 'select',
+        label: 'Chain',
+        description: 'Target chain for the permission (optional)',
+        required: false,
+        options: CHAIN_OPTIONS,
+        defaultValue: 'default',
+      },
       {
         name: 'spender',
         type: 'address',
@@ -648,28 +736,35 @@ console.log('Capabilities:', capabilities);`,
         }, null, 2),
       },
     ],
-    getCodeSnippet: (params) => `const expiryDays = ${params.expiryDays || 30};
+    getCodeSnippet: (params) => {
+      const chainIdLine = params.chainId && params.chainId !== 'default' ? `\n    chainId: '${params.chainId}',` : '';
+      return `const expiryDays = ${params.expiryDays || 30};
 const expiry = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
 
 const result = await jaw.provider.request({
   method: 'wallet_grantPermissions',
-  params: [{
+  params: [{${chainIdLine}
     expiry,
     spender: '${params.spender || '0x...'}',
     permissions: ${params.permissions || '{}'},
   }],
 });
 
-console.log('Permission ID:', result.permissionId);`,
+console.log('Permission ID:', result.permissionId);`;
+    },
     buildParams: (params) => {
       const expiryDays = parseInt(params.expiryDays || '30');
       const expiry = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
       const permissions = JSON.parse(params.permissions || '{}');
-      return [{
+      const result: { expiry: number; spender: string; permissions: unknown; chainId?: string } = {
         expiry,
         spender: params.spender,
         permissions,
-      }];
+      };
+      if (params.chainId && params.chainId !== 'default') {
+        result.chainId = params.chainId;
+      }
+      return [result];
     },
   },
   {
@@ -678,7 +773,7 @@ console.log('Permission ID:', result.permissionId);`,
     method: 'wallet_revokePermissions',
     category: 'permission',
     description: 'Revoke previously granted permissions',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
       {
         name: 'permissionId',

@@ -1,5 +1,5 @@
 /**  Constants **/
-export { JAW_RPC_URL } from './constants.js';
+export { JAW_RPC_URL, JAW_PAYMASTER_URL } from './constants.js';
 
 /**  SDK Info **/
 export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
@@ -35,6 +35,10 @@ export {
     type RevokePermissionApiResponse,
     // Permission utilities for UI (fetching permission details without Account instance)
     getPermissionFromRelay,
+    // Permission call builder (for gas estimation)
+    buildGrantPermissionCall,
+    // Capability utilities
+    handleGetCapabilitiesRequest,
     // Permission selector constants
     ANY_TARGET,
     ANY_FN_SEL,
@@ -88,7 +92,7 @@ export * from "./messages/index.js"
 export * from "./utils/index.js"
 
 /** Store exports **/
-export {type Chain} from "./store/index.js"
+export {type Chain, type FeeToken, type FeeTokenCapability} from "./store/index.js"
 
 /** Analytics exports **/
 export {

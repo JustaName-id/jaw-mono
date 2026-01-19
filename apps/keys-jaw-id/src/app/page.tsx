@@ -853,9 +853,15 @@ export default function KeysJawIdApp() {
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     setState('account-selection');
-                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
-                    // If there's a pending sign message, typed data, or transaction request, the modal will be shown
-                    // in the priority logic above since user is now authenticated
+                  } else if (
+                    pendingRequest?.type === SDKRequestType.SIGN_MESSAGE ||
+                    pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
+                    pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
+                    pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
+                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
+                  ) {
+                    // If there's a pending sign message, typed data, transaction, or permission request,
+                    // the modal will be shown in the priority logic above since user is now authenticated
                     setState('processing');
                   } else {
                     // No pending request yet, stay on current screen and wait for it
@@ -913,9 +919,15 @@ export default function KeysJawIdApp() {
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     setState('account-selection');
-                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
-                    // If there's a pending sign message, typed data, or transaction request, the modal will be shown
-                    // in the priority logic above since user is now authenticated
+                  } else if (
+                    pendingRequest?.type === SDKRequestType.SIGN_MESSAGE ||
+                    pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
+                    pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
+                    pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
+                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
+                  ) {
+                    // If there's a pending sign message, typed data, transaction, or permission request,
+                    // the modal will be shown in the priority logic above since user is now authenticated
                     setState('processing');
                   } else {
                     // No pending request yet, stay on current screen and wait for it

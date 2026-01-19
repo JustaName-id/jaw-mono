@@ -1,11 +1,11 @@
 'use client'
 
-import { TransactionDialog, TransactionData } from "@jaw.id/ui";
+import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useEthPrice, useGasEstimation } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Address, Hash } from "viem";
+import { Address, Hash, Hex, formatUnits } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
-import { Account, type Chain, type TransactionCall, standardErrorCodes } from "@jaw.id/core";
+import { Account, type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, type FeeTokenCapability } from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -57,13 +57,15 @@ export const TransactionModal = ({
 }: TransactionModalProps) => {
   const { getAccount } = usePasskeys();
   const { walletAddress } = useAuth();
-  const [gasFee, setGasFee] = useState<string>('');
-  const [gasFeeLoading, setGasFeeLoading] = useState<boolean>(false);
-  const [gasEstimationError, setGasEstimationError] = useState<string>('');
+  const ethPrice = useEthPrice();
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [account, setAccount] = useState<Account | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+
+  // Fee token state for ERC-20 paymaster
+  const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
+  const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -128,9 +130,6 @@ export const TransactionModal = ({
   }, [normalizedTransactions, chain]);
 
   const resetModalState = useCallback(() => {
-    setGasFee('');
-    setGasFeeLoading(false);
-    setGasEstimationError('');
     setTransactionStatus('');
     setIsProcessing(false);
   }, []);
@@ -159,6 +158,170 @@ export const TransactionModal = ({
     return chain?.paymaster?.context;
   }, [transactionRequest?.paymasterContext, chain?.paymaster?.context]);
 
+  // Convert normalized transactions to TransactionCall format for gas estimation
+  const transactionCalls = useMemo((): TransactionCall[] => {
+    return normalizedTransactions.map(tx => ({
+      to: tx.to as Address,
+      value: tx.value ? BigInt(tx.value) : undefined,
+      data: (tx.data as `0x${string}`) || '0x'
+    }));
+  }, [normalizedTransactions]);
+
+  // Permission ID for permission-based execution
+  const permissionId = transactionRequest?.permissionId as Hex | undefined;
+
+  // Use gas estimation hook for parallel ETH and ERC-20 estimation
+  const {
+    gasFee,
+    gasFeeLoading,
+    gasEstimationError,
+    tokenEstimates,
+    selectedFeeToken,
+    setSelectedFeeToken,
+    isPayingWithErc20,
+  } = useGasEstimation({
+    account,
+    transactionCalls,
+    chainId: chain?.id ?? 1,
+    apiKey: effectiveApiKey,
+    feeTokens,
+    isSponsored,
+    permissionId,
+    onFeeTokensUpdate: setFeeTokens,
+  });
+
+  // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
+  const computedPaymasterUrl = useMemo(() => {
+    // If already sponsored via capabilities or config, use that
+    if (effectivePaymasterUrl) return effectivePaymasterUrl;
+
+    // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      return `${JAW_PAYMASTER_URL}?chainId=${chain?.id}${effectiveApiKey ? `&api-key=${effectiveApiKey}` : ''}`;
+    }
+
+    // Native ETH - no paymaster needed
+    return undefined;
+  }, [effectivePaymasterUrl, selectedFeeToken, chain?.id, effectiveApiKey]);
+
+  // Compute paymaster context based on fee token selection
+  const computedPaymasterContext = useMemo(() => {
+    // If using ERC-20 paymaster, include token address and gas amount in context
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      // Use the actual estimate from tokenEstimates if available
+      const estimate = tokenEstimates.find(
+        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+      );
+
+      if (estimate) {
+        // Use the actual token cost from paymaster quote
+        return {
+          token: selectedFeeToken.address,
+          gas: estimate.tokenCost.toString(),
+        };
+      }
+
+      // Fallback to client-side calculation if no estimate yet
+      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      return {
+        token: selectedFeeToken.address,
+        gas: gasInTokenUnits.toString(),
+      };
+    }
+    return effectivePaymasterContext;
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
+
+  // Determine if fee token selector should be shown
+  const showFeeTokenSelector = !isSponsored && feeTokens.some(t => !t.isNative);
+
+  // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
+  useEffect(() => {
+    // Skip if already sponsored via capabilities or config
+    if (effectivePaymasterUrl || !chain || !walletAddress) return;
+
+    let isMounted = true;
+
+    const fetchFeeTokensData = async () => {
+      setFeeTokensLoading(true);
+      try {
+        // Fetch capabilities from JAW RPC
+        const capabilities = await handleGetCapabilitiesRequest(
+          { method: 'wallet_getCapabilities', params: [] },
+          effectiveApiKey || '',
+          true // showTestnets
+        );
+
+        const chainIdHex = `0x${chain.id.toString(16)}` as `0x${string}`;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+
+        if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
+          if (isMounted) setFeeTokensLoading(false);
+          return;
+        }
+
+        // Get RPC URL for balance fetching
+        const rpcUrl = chain.rpcUrl || `https://eth.llamarpc.com`;
+
+        // Fetch balances in parallel
+        const tokensWithBalances = await Promise.all(
+          feeTokenCap.tokens.map(async (token) => {
+            try {
+              const balance = await fetchTokenBalance(token.address, walletAddress, rpcUrl);
+              const balanceFormatted = formatUnits(balance, token.decimals);
+              const isNative = isNativeToken(token.address);
+              // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
+              // For ERC-20 tokens: require at least 0.5 units
+              const isSelectable = isNative
+                ? balance > 0n
+                : parseFloat(balanceFormatted) >= 0.5;
+
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance,
+                balanceFormatted,
+                isNative,
+                isSelectable,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            } catch (error) {
+              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance: 0n,
+                balanceFormatted: '0',
+                isNative: isNativeToken(token.address),
+                isSelectable: false,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            }
+          })
+        );
+
+        if (isMounted) {
+          setFeeTokens(tokensWithBalances);
+          // Note: Initial token selection is handled by useGasEstimation hook
+        }
+      } catch (error) {
+        console.warn('[TransactionModal] Failed to fetch fee tokens:', error);
+      } finally {
+        if (isMounted) setFeeTokensLoading(false);
+      }
+    };
+
+    fetchFeeTokensData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chain, effectiveApiKey, walletAddress, effectivePaymasterUrl]);
+
   // Initialize account when modal opens
   useEffect(() => {
     let isMounted = true;
@@ -168,13 +331,13 @@ export const TransactionModal = ({
         try {
           setIsProcessing(false);
           console.log('🔐 Initializing transaction modal');
-          
-          // Merge paymasterUrl from capabilities into chain before creating account
+
+          // Merge paymasterUrl from capabilities or ERC-20 selection into chain before creating account
           const chainWithPaymaster = {
             ...chain,
-            ...(effectivePaymasterUrl && { paymaster: { url: effectivePaymasterUrl } }),
+            ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
           };
-          
+
           const restoredAccount = await getAccount(chainWithPaymaster, effectiveApiKey);
 
           if (isMounted) {
@@ -197,8 +360,7 @@ export const TransactionModal = ({
         setAccount(null);
         setTransactionStatus('');
         setIsProcessing(false);
-        setGasFee('');
-        setGasEstimationError('');
+        setFeeTokens([]);
       }
     };
 
@@ -211,59 +373,9 @@ export const TransactionModal = ({
         timeoutRef.current = null;
       }
     };
-  }, [chain, effectiveApiKey, effectivePaymasterUrl, getAccount, onError]);
+  }, [chain, effectiveApiKey, computedPaymasterUrl, getAccount, onError]);
 
-  // Gas estimation using Account class
-  useEffect(() => {
-    if (!account || !chain || normalizedTransactions.length === 0) return;
-
-    const estimateGas = async () => {
-      try {
-        setGasFeeLoading(true);
-
-        // Skip gas estimation if sponsored - paymaster will handle fees
-        // This is especially important for ERC-20 paymaster modes where estimation
-        // requires context that may not be available during estimation
-        if (isSponsored) {
-          setGasFee('sponsored');
-          setGasEstimationError('');
-          return;
-        }
-
-        // Convert normalized transactions to TransactionCall format
-        const transactionCalls: TransactionCall[] = normalizedTransactions.map(tx => ({
-          to: tx.to as Address,
-          value: tx.value ? BigInt(tx.value) : undefined, // Convert string wei to bigint
-          data: (tx.data as `0x${string}`) || '0x'
-        }));
-
-        // Get permissionId from transactionRequest if available
-        const permissionId = transactionRequest?.permissionId;
-
-        // Estimate gas using Account class (with permission if provided)
-        const gasPrice = await account.calculateGasCost(
-          transactionCalls,
-          permissionId ? { permissionId } : undefined
-        );
-        setGasFee(gasPrice);
-        setGasEstimationError('');
-      } catch (error) {
-        console.error("Error estimating gas:", error);
-
-        if (error instanceof Error && (error.message.includes('AA21') || error.message.includes("didn't pay prefund"))) {
-          setGasFee('');
-          setGasEstimationError('Insufficient funds');
-        } else {
-          setGasFee('');
-          setGasEstimationError('Failed to estimate gas');
-        }
-      } finally {
-        setGasFeeLoading(false);
-      }
-    };
-
-    estimateGas();
-  }, [account, chain, normalizedTransactions, isSponsored, transactionRequest?.permissionId]);
+  // Note: Gas estimation is now handled by useGasEstimation hook
 
   const handleConfirm = useCallback(async () => {
     try {
@@ -288,7 +400,7 @@ export const TransactionModal = ({
       }));
 
       // Send transaction using Account class
-      // Pass paymaster URL and context overrides from capabilities
+      // Pass computed paymaster URL and context (includes ERC-20 paymaster if selected)
       let result: TransactionResult;
       // Use sendCalls for wallet_sendCalls, sendTransaction for eth_sendTransaction
       if (transactionRequest?.method === 'wallet_sendCalls') {
@@ -300,8 +412,8 @@ export const TransactionModal = ({
         const bundledResult = await account.sendCalls(
           transactionCalls,
           options,
-          effectivePaymasterUrl,
-          effectivePaymasterContext
+          computedPaymasterUrl,
+          computedPaymasterContext
         );
         // Return the transaction result with proper format based on method
         result = {
@@ -311,8 +423,8 @@ export const TransactionModal = ({
       } else {
         const txHash = await account.sendTransaction(
           transactionCalls,
-          effectivePaymasterUrl,
-          effectivePaymasterContext
+          computedPaymasterUrl,
+          computedPaymasterContext
         );
         result = {
           hash: txHash,
@@ -349,7 +461,7 @@ export const TransactionModal = ({
       onError?.(errorObj, errorCode);
       setIsProcessing(false);
     }
-  }, [account, chain, normalizedTransactions, transactionRequest, effectivePaymasterUrl, effectivePaymasterContext, onSuccess, onError]);
+  }, [account, chain, normalizedTransactions, transactionRequest, computedPaymasterUrl, computedPaymasterContext, onSuccess, onError]);
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
@@ -358,6 +470,9 @@ export const TransactionModal = ({
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setTransactionStatus('');
+      // Reset fee token state
+      setFeeTokens([]);
+      setSelectedFeeToken(null);
     }
   }, [isProcessing, onError]);
 
@@ -373,13 +488,20 @@ export const TransactionModal = ({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={0}
+      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
       chainIconKey={chainIconKey}
+      // Fee token props for ERC-20 paymaster
+      feeTokens={feeTokens}
+      feeTokensLoading={feeTokensLoading}
+      selectedFeeToken={selectedFeeToken}
+      onFeeTokenSelect={setSelectedFeeToken}
+      showFeeTokenSelector={showFeeTokenSelector}
+      isPayingWithErc20={isPayingWithErc20}
     />
   );
 }

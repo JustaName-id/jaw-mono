@@ -134,7 +134,9 @@ export abstract class JAWSigner implements Signer {
             }
 
             case 'wallet_sendCalls':
-            case 'wallet_sign': {
+            case 'wallet_sign':
+            case 'wallet_grantPermissions':
+            case 'wallet_revokePermissions': {
                 return this.handleSigningRequest(request);
             }
 
@@ -311,6 +313,9 @@ export abstract class JAWSigner implements Signer {
     /**
      * Cleans up signer state. Subclasses should call super.cleanup()
      * after their own cleanup logic.
+     *
+     * Note: This does NOT clear PasskeyManager auth state - that's handled
+     * by JAWProvider.disconnect() for explicit logout scenarios.
      */
     async cleanup(): Promise<void> {
         store.account.clear();

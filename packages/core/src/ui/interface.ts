@@ -38,6 +38,12 @@ export interface ConnectUIRequest extends BaseUIRequest {
     origin: string;
     chainId: number;
     capabilities?: Record<string, unknown>;
+    /**
+     * When true, skip the connect confirmation dialog after authentication.
+     * Used for wallet_sendCalls/wallet_sign flows where the signing UI
+     * will be shown immediately after account authentication/creation.
+     */
+    silent?: boolean;
   };
 }
 

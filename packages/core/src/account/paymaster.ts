@@ -52,8 +52,6 @@ export function createPaymasterFunctions(
                 ...(context && { context }),
             });
 
-            console.log('stubData', stubData);
-
             // Ensure paymaster gas limits are set (required for EntryPoint v0.8)
             // Default to reasonable values if not returned by paymaster or if invalid (e.g., "0x1")
             const paymasterVerificationGasLimit = stubData.paymasterVerificationGasLimit && BigInt(stubData.paymasterVerificationGasLimit) > 1n
@@ -80,8 +78,6 @@ export function createPaymasterFunctions(
                 maxFeePerGas = maxFeePerGas || gasPrice;
                 maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
             }
-
-            console.log('userOperation', userOperation);
 
             const paymasterData = await paymasterClient.getPaymasterData({
                 ...userOperation,

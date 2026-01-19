@@ -32,6 +32,7 @@ import {
     storeSignerType,
     clearSignerType,
 } from '../signer/index.js';
+import { PasskeyManager } from '../passkey-manager/index.js';
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
     private readonly metadata: AppMetadata;
@@ -92,6 +93,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             // Log cleanup error but continue with disconnection
             console.warn('Signer cleanup failed during disconnect:', cleanupError);
         }
+
+        // Clear PasskeyManager auth state (explicit logout)
+        const passkeyManager = new PasskeyManager(undefined, undefined, this.apiKey);
+        passkeyManager.logout();
+
         this.signer = null;
         correlationIds.clear();
         this.emit('accountsChanged', []);
@@ -99,28 +105,17 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     }
 
     private async _request<T>(args: RequestArguments): Promise<T> {
-        console.log('[JAWProvider] _request called with method:', args.method);
-        console.log('[JAWProvider] preference.mode:', this.preference.mode);
-        console.log('[JAWProvider] Mode.AppSpecific:', Mode.AppSpecific);
-        console.log('[JAWProvider] mode === AppSpecific:', this.preference.mode === Mode.AppSpecific);
-
         const signerType = this.preference.mode === Mode.AppSpecific
             ? 'appSpecific'
             : 'crossPlatform';
 
-        console.log('[JAWProvider] signerType:', signerType);
-
         try {
             checkErrorForInvalidRequestArgs(args);
             if (!this.signer) {
-                console.log('[JAWProvider] No signer, creating new signer for method:', args.method);
                 switch (args.method) {
                     case 'eth_requestAccounts': {
-                        console.log('[JAWProvider] Initializing signer for eth_requestAccounts');
                         const signer = this.initSigner(signerType);
-                        console.log('[JAWProvider] Signer created, calling handshake');
                         await signer.handshake(args);
-                        console.log('[JAWProvider] Handshake complete');
 
                         this.signer = signer;
                         storeSignerType(signerType);
@@ -128,35 +123,34 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     }
                     case 'wallet_connect': {
                         const signer = this.initSigner(signerType);
-                        // For AppSpecific mode, pass full args to handshake so capabilities are available
-                        // For CrossPlatform mode, handshake only exchanges session keys
-                        if (signerType === 'appSpecific') {
-                            await signer.handshake(args); // pass full args with capabilities
-                            this.signer = signer;
-                            storeSignerType(signerType);
-                            // For AppSpecific, handshake already handles the full wallet_connect flow
-                            // and returns the result, so we get it from the cached response
-                            const result = await signer.request(args);
-                            return result as T;
-                        } else {
-                            await signer.handshake({ method: 'handshake' }); // exchange session keys
-                            const result = await signer.request(args); // send diffie-hellman encrypted request
-                            this.signer = signer;
-                            storeSignerType(signerType);
-                            return result as T;
-                        }
+                        // For both modes, pass full args to handshake so the complete
+                        // wallet_connect flow happens in a single roundtrip.
+                        // This avoids race conditions with popup closure in cross-platform mode.
+                        await signer.handshake(args);
+                        this.signer = signer;
+                        storeSignerType(signerType);
+                        // Handshake sets accounts/capabilities in store via handleResponse.
+                        // The subsequent request will return the cached response.
+                        const result = await signer.request(args);
+                        return result as T;
                     }
                     case 'wallet_disconnect': {
                         await this.disconnect();
                         return null as T;
                     }
                     case 'wallet_sendCalls':
-                    case 'wallet_sign': {
+                    case 'wallet_sign':
+                    case 'wallet_grantPermissions':
+                    case 'wallet_revokePermissions': {
                         const ephemeralSigner = this.initSigner(signerType);
 
                         if (signerType === 'appSpecific') {
-                            // AppSpecific needs wallet_connect handshake to establish account
-                            await ephemeralSigner.handshake({ method: 'wallet_connect' });
+                            // Silent handshake: authenticate/create account without showing connect dialog.
+                            // The signing UI will be shown immediately after.
+                            await ephemeralSigner.handshake({
+                                method: 'wallet_connect',
+                                params: [{ silent: true }]
+                            });
                             const result = await ephemeralSigner.request(args);
                             try {
                                 await ephemeralSigner.cleanup();

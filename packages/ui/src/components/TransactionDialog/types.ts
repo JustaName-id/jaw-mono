@@ -1,3 +1,5 @@
+import { FeeTokenOption } from '../FeeTokenSelector';
+
 export interface TransactionData {
   to: string;
   data?: string;
@@ -37,4 +39,14 @@ export interface TransactionDialogProps {
   // Display utilities
   networkName: string;
   chainIconKey?: string;
+
+  // Fee token selection (for ERC-20 paymaster)
+  feeTokens?: FeeTokenOption[];
+  feeTokensLoading?: boolean;
+  selectedFeeToken?: FeeTokenOption | null;
+  onFeeTokenSelect?: (token: FeeTokenOption) => void;
+  showFeeTokenSelector?: boolean;
+
+  // ERC-20 payment indicator (when user selected non-native token)
+  isPayingWithErc20?: boolean;
 }
