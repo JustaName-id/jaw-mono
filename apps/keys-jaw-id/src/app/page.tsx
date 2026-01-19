@@ -1067,15 +1067,9 @@ export default function KeysJawIdApp() {
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     setState('account-selection');
-                  } else if (
-                    pendingRequest?.type === SDKRequestType.SIGN_MESSAGE ||
-                    pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
-                    pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
-                    pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
-                  ) {
-                    // If there's a pending sign message, typed data, transaction, or permission request,
-                    // the modal will be shown in the priority logic above since user is now authenticated
+                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
+                    // If there's a pending sign message, typed data, or transaction request, the modal will be shown
+                    // in the priority logic above since user is now authenticated
                     setState('processing');
                   } else {
                     // No pending request yet, stay on current screen and wait for it
@@ -1112,6 +1106,15 @@ export default function KeysJawIdApp() {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
           <div className="w-full max-w-md">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Welcome Back
+              </h2>
+              <p className="text-gray-600">
+                Use your passkey to access your wallet
+              </p>
+            </div>
+
             <SignInScreen
               ensConfig={ensConfig}
               chainId={effectiveChainId}
@@ -1141,15 +1144,7 @@ export default function KeysJawIdApp() {
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
                     setState('account-selection');
-                  } else if (
-                    pendingRequest?.type === SDKRequestType.SIGN_MESSAGE ||
-                    pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
-                    pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
-                    pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
-                  ) {
-                    // If there's a pending sign message, typed data, transaction, or permission request,
-                    // the modal will be shown in the priority logic above since user is now authenticated
+                  } else if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE || pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA || pendingRequest?.type === SDKRequestType.SEND_TRANSACTION) {
                     setState('processing');
                   }
                 } catch (err) {
