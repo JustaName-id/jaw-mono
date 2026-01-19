@@ -69,6 +69,7 @@ const INSUFFICIENT_FUNDS_ERRORS = [
   'AA21',
   "didn't pay prefund",
   'insufficient',
+  'AA50', // PostOp reverted (e.g., paymaster insufficient balance)
 ];
 
 // ============================================================================
@@ -297,17 +298,42 @@ export function useGasEstimation({
         // Notify parent of updated tokens (use ref to avoid infinite loop)
         onFeeTokensUpdateRef.current?.(updatedFeeTokens);
       } else if (erc20Result.status === 'rejected') {
-        // ERC-20 estimation failed - log error but continue with ETH-only
-        console.error('[useGasEstimation] ERC-20 estimation failed:', erc20Result.reason);
-        // Mark ERC-20 tokens as having estimation failed (show error in UI instead of "Estimating...")
-        updatedFeeTokens = currentFeeTokens.map(token => {
-          if (token.isNative) return token;
-          return {
-            ...token,
-            gasCostFormatted: 'Estimation failed',
-            isSelectable: false,
-          };
-        });
+        // Check if this is an insufficient balance error (expected case, not a real error)
+        const isInsufficientBalance = isInsufficientFundsError(erc20Result.reason);
+
+        if (isInsufficientBalance) {
+          // This is an expected case - user doesn't have enough ERC-20 tokens
+          // Don't log as error, just mark tokens as insufficient
+          updatedFeeTokens = currentFeeTokens.map(token => {
+            if (token.isNative) return token;
+
+            // Try to extract the required amount from the error message
+            // Format: "X.XXX USDC required but sender has Y USDC"
+            let gasCostFormatted = 'Insufficient';
+            const errorMsg = erc20Result.reason instanceof Error ? erc20Result.reason.message : '';
+            const match = errorMsg.match(/([\d.]+)\s*(\w+)\s*required/i);
+            if (match) {
+              gasCostFormatted = match[1]; // Just the amount, symbol is already shown
+            }
+
+            return {
+              ...token,
+              gasCostFormatted,
+              isSelectable: false,
+            };
+          });
+        } else {
+          // Unexpected error - log it and show estimation failed
+          console.error('[useGasEstimation] ERC-20 estimation failed:', erc20Result.reason);
+          updatedFeeTokens = currentFeeTokens.map(token => {
+            if (token.isNative) return token;
+            return {
+              ...token,
+              gasCostFormatted: 'Estimation failed',
+              isSelectable: false,
+            };
+          });
+        }
         onFeeTokensUpdateRef.current?.(updatedFeeTokens);
       }
 
@@ -319,7 +345,7 @@ export function useGasEstimation({
       if (ethSuccess) {
         handleEthSuccess(ethResult.value, updatedFeeTokens);
       } else if (ethInsufficientFunds) {
-        handleEthInsufficientFunds(updatedFeeTokens, erc20Estimates);
+        handleEthInsufficientFunds(updatedFeeTokens);
       } else {
         handleEstimationError(ethResult.status === 'rejected' ? ethResult.reason : null);
       }
@@ -365,7 +391,6 @@ export function useGasEstimation({
    */
   const handleEthInsufficientFunds = useCallback((
     updatedFeeTokens: FeeTokenOption[],
-    erc20Estimates: TokenEstimate[]
   ) => {
     const selectableErc20 = updatedFeeTokens.find(t => !t.isNative && t.isSelectable);
 
@@ -374,12 +399,8 @@ export function useGasEstimation({
       setSelectedFeeToken(selectableErc20);
       setGasFee(FALLBACK_GAS_ESTIMATE_ETH);
       setGasEstimationError('');
-    } else if (erc20Estimates.length > 0) {
-      // ERC-20 tokens exist but none have sufficient balance
-      setGasFee('');
-      setGasEstimationError('Insufficient funds');
     } else {
-      // No ERC-20 options at all
+      // No selectable payment options (neither ETH nor ERC-20 have sufficient balance)
       setGasFee('');
       setGasEstimationError('Insufficient funds');
     }
