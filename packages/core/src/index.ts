@@ -25,6 +25,7 @@ export {
     type Permission,
     type SpendPeriod,
     type SpendPermissionDetail,
+    type CallPermissionDetail,
     type PermissionsDetail,
     type PaymasterServiceCapability,
     type RequestCapabilities,

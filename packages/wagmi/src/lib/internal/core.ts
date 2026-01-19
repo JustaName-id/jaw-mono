@@ -374,7 +374,6 @@ export async function getCapabilities<config extends Config>(
 export namespace sign {
   export type Parameters<config extends Config = Config> = {
     address?: Address;
-    /** Target chain ID for signing. Defaults to connected chain. */
     chainId?: number;
     connector?: Connector;
     /** The signing request - supports personal sign (0x45) and typed data (0x01) */
@@ -411,15 +410,6 @@ export namespace sign {
  *     },
  *   },
  * });
- *
- * // Sign on a specific chain
- * const signature = await Actions.sign(config, {
- *   chainId: 8453, // Base
- *   request: {
- *     type: '0x45',
- *     data: { message: 'Hello from Base' },
- *   },
- * });
  * ```
  */
 export async function sign<config extends Config>(
@@ -436,10 +426,7 @@ export async function sign<config extends Config>(
 
   const result = await client.request({
     method: 'wallet_sign' as never,
-    params: [{
-      chainId: chainId ? `0x${chainId.toString(16)}` : undefined,
-      request,
-    }] as never,
+    params: [{ request }] as never,
   });
 
   return result as sign.ReturnType;
