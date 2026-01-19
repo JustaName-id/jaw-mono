@@ -24,6 +24,7 @@ export {
   usePermissions,
   useGetAssets,
   useCapabilities,
+  useSign,
 } from './lib/Hooks.js';
 
 // Also export individual actions for convenience
@@ -35,6 +36,7 @@ export {
   revokePermissions,
   getAssets,
   getCapabilities,
+  sign,
 } from './lib/Actions.js';
 
 // Also export query keys for convenience

@@ -1,0 +1,297 @@
+# useSign
+
+Hook to sign messages using the unified `wallet_sign` method (ERC-7871). This combines the functionality of `useSignMessage` and `useSignTypedData` into a single hook, with support for specifying a target chain.
+
+**Type:** `hook`
+
+
+## Import
+
+```typescript
+import { useSign } from '@jaw.id/wagmi';
+```
+
+
+## Signature
+
+```typescript
+function useSign(parameters?: {
+  config?: Config;
+  mutation?: UseMutationParameters;
+}): UseMutationResult
+```
+
+
+## Parameters
+
+### config
+
+Type: `Config` (optional)
+
+Wagmi config. If not provided, uses the config from `WagmiProvider`.
+
+### mutation
+
+Type: `UseMutationParameters` (optional)
+
+TanStack React Query mutation options.
+
+
+## Returns
+
+Returns a TanStack React Query mutation result:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `mutate` | `function` | Function to sign a message |
+| `mutateAsync` | `function` | Async version of mutate |
+| `data` | `Hex` | The signature |
+| `isPending` | `boolean` | Whether signing is in progress |
+| `isSuccess` | `boolean` | Whether signing succeeded |
+| `isError` | `boolean` | Whether signing failed |
+| `error` | `Error` | Error if signing failed |
+
+
+## Mutation Variables
+
+When calling `mutate()`, pass:
+
+### request
+
+Type: `PersonalSignRequestData | TypedDataRequestData` (required)
+
+The signing request, which can be one of two types:
+
+#### Personal Sign (EIP-191)
+
+```typescript
+{
+  type: '0x45',
+  data: {
+    message: string;
+  }
+}
+```
+
+#### Typed Data (EIP-712)
+
+```typescript
+{
+  type: '0x01',
+  data: {
+    types: Record<string, TypedDataParameter[]>;
+    primaryType: string;
+    domain: TypedDataDomain;
+    message: Record<string, unknown>;
+  }
+}
+```
+
+### Optional Parameters
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `address` | `Address` | Specific account address |
+| `chainId` | `number` | Target chain ID for signing |
+| `connector` | `Connector` | Specific connector |
+
+
+## Why Use useSign?
+
+### Unified API
+
+Instead of choosing between `useSignMessage` and `useSignTypedData`, use a single hook that handles both:
+
+| Signature Type | Type Code | Standard |
+|---------------|-----------|----------|
+| Personal Sign | `0x45` | EIP-191 |
+| Typed Data | `0x01` | EIP-712 |
+
+### Chain-Specific Signing
+
+Smart accounts can produce different signatures depending on which chain they're deployed on. The `chainId` parameter lets you sign for a specific chain without calling `wallet_switchEthereumChain` first:
+
+```typescript
+// Sign for Base without switching chains
+signMessage({
+  chainId: 8453,
+  request: {
+    type: '0x45',
+    data: { message: 'Hello from Base' },
+  },
+});
+```
+
+:::info
+The `chainId` parameter specifies which chain's smart account to use for signing. This is separate from any chain ID that might be included in the message content itself (like in EIP-712's domain).
+:::
+
+
+## Examples
+
+### Personal Sign
+
+```tsx
+import { useSign } from '@jaw.id/wagmi';
+
+function SignMessageButton() {
+  const { mutate: signMessage, data: signature, isPending } = useSign();
+
+  const handleSign = () => {
+    signMessage({
+      request: {
+        type: '0x45',
+        data: { message: 'Hello, World!' },
+      },
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={handleSign} disabled={isPending}>
+        {isPending ? 'Signing...' : 'Sign Message'}
+      </button>
+      {signature && <p>Signature: {signature}</p>}
+    </div>
+  );
+}
+```
+
+### Typed Data (EIP-712)
+
+```tsx
+import { useSign } from '@jaw.id/wagmi';
+
+function SignTypedDataButton() {
+  const { mutate: signMessage, data: signature, isPending } = useSign();
+
+  const handleSign = () => {
+    signMessage({
+      request: {
+        type: '0x01',
+        data: {
+          types: {
+            EIP712Domain: [
+              { name: 'name', type: 'string' },
+              { name: 'version', type: 'string' },
+              { name: 'chainId', type: 'uint256' },
+            ],
+            Mail: [
+              { name: 'from', type: 'string' },
+              { name: 'to', type: 'string' },
+              { name: 'contents', type: 'string' },
+            ],
+          },
+          primaryType: 'Mail',
+          domain: {
+            name: 'My dApp',
+            version: '1',
+            chainId: 1,
+          },
+          message: {
+            from: 'Alice',
+            to: 'Bob',
+            contents: 'Hello!',
+          },
+        },
+      },
+    });
+  };
+
+  return (
+    <button onClick={handleSign} disabled={isPending}>
+      {isPending ? 'Signing...' : 'Sign Typed Data'}
+    </button>
+  );
+}
+```
+
+### Cross-Chain Signing
+
+```tsx
+import { useSign } from '@jaw.id/wagmi';
+import { base, mainnet } from 'wagmi/chains';
+
+function CrossChainSign() {
+  const { mutate: signMessage, isPending } = useSign();
+
+  const signForBase = () => {
+    signMessage({
+      chainId: base.id,
+      request: {
+        type: '0x45',
+        data: { message: 'Signed using Base smart account' },
+      },
+    });
+  };
+
+  const signForMainnet = () => {
+    signMessage({
+      chainId: mainnet.id,
+      request: {
+        type: '0x45',
+        data: { message: 'Signed using Mainnet smart account' },
+      },
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={signForBase} disabled={isPending}>
+        Sign for Base
+      </button>
+      <button onClick={signForMainnet} disabled={isPending}>
+        Sign for Mainnet
+      </button>
+    </div>
+  );
+}
+```
+
+### With Callbacks
+
+```tsx
+import { useSign } from '@jaw.id/wagmi';
+
+function SignWithCallbacks() {
+  const { mutate: signMessage } = useSign({
+    mutation: {
+      onSuccess: (signature) => {
+        console.log('Signature:', signature);
+        // Send signature to your backend
+      },
+      onError: (error) => {
+        console.error('Signing failed:', error);
+      },
+    },
+  });
+
+  // ...
+}
+```
+
+
+## Comparison with Wagmi Hooks
+
+| Feature | `useSignMessage` | `useSignTypedData` | `useSign` |
+|---------|------------------|-------------------|-----------|
+| Personal sign (EIP-191) | Yes | No | Yes |
+| Typed data (EIP-712) | No | Yes | Yes |
+| Target chain parameter | No | No | Yes |
+| Smart account aware | No | No | Yes |
+
+
+## Use Cases
+
+- **Authentication** - Sign messages to prove account ownership
+- **Gasless Signatures** - Sign data without sending a transaction
+- **Multi-chain dApps** - Sign for different chains without switching
+- **Permit Signatures** - Sign EIP-2612 permit messages
+- **Off-chain Orders** - Sign trading orders for DEX aggregators
+
+
+## Related
+
+- [wallet_sign](/api-reference/wallet_sign) - RPC method reference
+- [personal_sign](/api-reference/personal_sign) - Standard personal sign
+- [eth_signTypedData_v4](/api-reference/eth_signTypedData_v4) - Standard typed data signing

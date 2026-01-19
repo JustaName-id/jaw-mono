@@ -30,6 +30,7 @@ import {
   revokePermissions,
   getAssets,
   getCapabilities,
+  sign,
 } from './core.js';
 import { getPermissionsQueryKey, getAssetsQueryKey, getCapabilitiesQueryKey } from './query.js';
 
@@ -700,5 +701,93 @@ export function useCapabilities<
     queryKey,
     staleTime: 60_000, // Cache for 60 seconds since capabilities don't change often
   }) as useCapabilities.ReturnType<selectData>;
+}
+
+// ============================================================================
+// useSign
+// ============================================================================
+
+export namespace useSign {
+  export type Parameters<
+    config extends Config = Config,
+    context = unknown,
+  > = {
+    config?: config;
+    mutation?:
+      | UseMutationParameters<
+          sign.ReturnType,
+          sign.ErrorType,
+          sign.Parameters<config>,
+          context
+        >
+      | undefined;
+  };
+
+  export type ReturnType<
+    config extends Config = Config,
+    context = unknown,
+  > = UseMutationResult<
+    sign.ReturnType,
+    sign.ErrorType,
+    sign.Parameters<config>,
+    context
+  >;
+}
+
+/**
+ * Hook to sign messages using the unified wallet_sign method (ERC-7871).
+ * This combines the functionality of useSignMessage and useSignTypedData.
+ *
+ * @example
+ * ```tsx
+ * const { mutate: signMessage, data: signature, isPending } = useSign();
+ *
+ * // Personal sign (EIP-191)
+ * signMessage({
+ *   request: {
+ *     type: '0x45',
+ *     data: { message: 'Hello World' },
+ *   },
+ * });
+ *
+ * // Typed data sign (EIP-712)
+ * signMessage({
+ *   request: {
+ *     type: '0x01',
+ *     data: {
+ *       types: { ... },
+ *       primaryType: 'Mail',
+ *       domain: { ... },
+ *       message: { ... },
+ *     },
+ *   },
+ * });
+ *
+ * // Sign on a specific chain (useful for smart accounts)
+ * signMessage({
+ *   chainId: 8453, // Base
+ *   request: {
+ *     type: '0x45',
+ *     data: { message: 'Hello from Base' },
+ *   },
+ * });
+ * ```
+ */
+export function useSign<
+  config extends Config = ResolvedRegister['config'],
+  context = unknown,
+>(
+  parameters: useSign.Parameters<config, context> = {},
+): useSign.ReturnType<config, context> {
+  const { mutation } = parameters;
+  const config = useConfig(parameters as { config?: Config });
+
+  return useMutation({
+    ...mutation,
+    mutationFn: async (variables) => {
+      return sign(config, variables);
+    },
+    mutationKey: ['sign'],
+  }) as useSign.ReturnType<config, context>;
 }
 

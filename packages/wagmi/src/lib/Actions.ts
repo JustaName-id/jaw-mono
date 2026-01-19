@@ -6,4 +6,5 @@ export {
   revokePermissions,
   getAssets,
   getCapabilities,
+  sign,
 } from './internal/core.js';

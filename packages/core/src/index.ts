@@ -120,6 +120,8 @@ export type {
     BaseUIRequest,
     PermissionsCapability,
     PaymasterConfig,
+    PersonalSignRequestData,
+    TypedDataRequestData,
 } from './ui/interface.js';
 
 export { UIError, UIErrorCode } from './ui/interface.js';
