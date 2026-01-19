@@ -32,6 +32,7 @@ import {
     storeSignerType,
     clearSignerType,
 } from '../signer/index.js';
+import { PasskeyManager } from '../passkey-manager/index.js';
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
     private readonly metadata: AppMetadata;
@@ -92,6 +93,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             // Log cleanup error but continue with disconnection
             console.warn('Signer cleanup failed during disconnect:', cleanupError);
         }
+
+        // Clear PasskeyManager auth state (explicit logout)
+        const passkeyManager = new PasskeyManager(undefined, undefined, this.apiKey);
+        passkeyManager.logout();
+
         this.signer = null;
         correlationIds.clear();
         this.emit('accountsChanged', []);

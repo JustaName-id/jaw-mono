@@ -29,7 +29,6 @@ import {
     hexStringFromNumber
 } from '../utils/index.js';
 import { clearSignerType } from './signerStorage.js';
-import { PasskeyManager } from '../passkey-manager/index.js';
 
 type ConstructorOptions = {
     metadata: AppMetadata;
@@ -314,14 +313,13 @@ export abstract class JAWSigner implements Signer {
     /**
      * Cleans up signer state. Subclasses should call super.cleanup()
      * after their own cleanup logic.
+     *
+     * Note: This does NOT clear PasskeyManager auth state - that's handled
+     * by JAWProvider.disconnect() for explicit logout scenarios.
      */
     async cleanup(): Promise<void> {
         store.account.clear();
         clearSignerType();
-        // Clear PasskeyManager auth state (removes jaw:passkey:authState from localStorage)
-        const apiKey = store.config.get().apiKey;
-        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-        passkeyManager.logout();
 
         this.accounts = [];
         this.chain = {
