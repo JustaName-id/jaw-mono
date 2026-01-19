@@ -65,6 +65,7 @@ export type WagmiHookType =
   | 'useSendTransaction'
   | 'useSignMessage'
   | 'useSignTypedData'
+  | 'useSign'
   | 'useSendCalls'
   | 'useCallsStatus'
   | 'useGrantPermissions'
@@ -364,6 +365,128 @@ console.log('Signature:', signature);`;
         return JSON.parse(params.typedData || '{}');
       } catch {
         return {};
+      }
+    },
+  },
+  {
+    id: 'wallet_sign',
+    name: 'useSign',
+    method: 'wallet_sign',
+    hookType: 'useSign',
+    category: 'signing',
+    description: 'Unified signing (ERC-7871) with chain support',
+    requiresConnection: true,
+    parameters: [
+      {
+        name: 'signType',
+        type: 'select',
+        label: 'Signature Type',
+        required: true,
+        defaultValue: '0x45',
+        options: [
+          { label: 'Personal Sign (0x45)', value: '0x45' },
+          { label: 'Typed Data (0x01)', value: '0x01' },
+        ],
+      },
+      {
+        name: 'message',
+        type: 'string',
+        label: 'Message (for Personal Sign)',
+        description: 'Message to sign (only used when type is 0x45)',
+        required: false,
+        defaultValue: 'Hello, World!',
+      },
+      {
+        name: 'typedData',
+        type: 'json',
+        label: 'Typed Data (for EIP-712)',
+        description: 'Typed data object (only used when type is 0x01)',
+        required: false,
+        defaultValue: JSON.stringify({
+          domain: {
+            name: 'JAW Demo',
+            version: '1',
+          },
+          types: {
+            Person: [
+              { name: 'name', type: 'string' },
+              { name: 'wallet', type: 'address' },
+            ],
+            Mail: [
+              { name: 'from', type: 'Person' },
+              { name: 'to', type: 'Person' },
+              { name: 'contents', type: 'string' },
+            ],
+          },
+          primaryType: 'Mail',
+          message: {
+            from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000000' },
+            to: { name: 'Bob', wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB' },
+            contents: 'Hello, Bob!',
+          },
+        }, null, 2),
+      },
+    ],
+    getCodeSnippet: (params) => {
+      const isPersonalSign = params.signType === '0x45';
+
+      if (isPersonalSign) {
+        return `import { useSign } from '@jaw.id/wagmi';
+
+const { mutate: sign, data: signature } = useSign();
+
+sign({
+  request: {
+    type: '0x45',
+    data: { message: '${params.message || 'Hello, World!'}' },
+  },
+});
+
+console.log('Signature:', signature);`;
+      } else {
+        return `import { useSign } from '@jaw.id/wagmi';
+
+const { mutate: sign, data: signature } = useSign();
+
+const typedData = ${params.typedData || '{}'};
+
+sign({
+  request: {
+    type: '0x01',
+    data: typedData,
+  },
+});
+
+console.log('Signature:', signature);`;
+      }
+    },
+    buildParams: (params) => {
+      const isPersonalSign = params.signType === '0x45';
+
+      if (isPersonalSign) {
+        return {
+          request: {
+            type: '0x45' as const,
+            data: { message: params.message || 'Hello, World!' },
+          },
+        };
+      } else {
+        try {
+          const typedData = JSON.parse(params.typedData || '{}');
+          return {
+            request: {
+              type: '0x01' as const,
+              data: typedData,
+            },
+          };
+        } catch {
+          return {
+            request: {
+              type: '0x01' as const,
+              data: {},
+            },
+          };
+        }
       }
     },
   },

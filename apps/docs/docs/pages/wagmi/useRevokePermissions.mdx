@@ -1,6 +1,6 @@
 # useRevokePermissions
 
-Hook to revoke a permission by its ID.
+Hook to revoke an active permission by its ID. This permanently disables the permission, preventing the spender from executing any further calls.
 
 **Type:** `hook`
 
@@ -51,24 +51,105 @@ Returns a TanStack React Query mutation result:
 | `isError` | `boolean` | Whether revocation failed |
 | `error` | `Error` | Error if revocation failed |
 
+### data
+
+When successful, `data` contains:
+
+```typescript
+interface RevokePermissionApiResponse {
+  /** Indicates if the permission was revoked successfully */
+  success: boolean;
+}
+```
+
 
 ## Mutation Variables
 
-When calling `mutate()`, pass:
+When calling `mutate()`, pass an object with the following properties:
 
-### id
+### id (required)
 
-Type: `Hex` (required)
+Type: `Hex` (e.g., `` `0x${string}` ``)
 
-The permission ID (hash) to revoke. This is the `permissionId` returned when granting a permission, or the `id` field from `usePermissions()`.
+The permission ID (hash) to revoke. You can obtain this from:
+- The `permissionId` field returned when granting a permission
+- The `id` field from permissions returned by `usePermissions()`
 
-### Optional Parameters
+```typescript
+// From grant response
+const { data } = useGrantPermissions();
+const permissionId = data.permissionId; // '0x1234...'
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `address` | `Address` | Specific account address |
-| `chainId` | `number` | Specific chain ID |
-| `connector` | `Connector` | Specific connector |
+// From permissions list
+const { data: permissions } = usePermissions();
+const permissionId = permissions[0].permissionId; // '0x1234...'
+```
+
+### address (optional)
+
+Type: `Address`
+
+Specific account address to revoke the permission for. Defaults to the connected account.
+
+```typescript
+revoke({
+  id: '0x1234...',
+  address: '0xSpecificAccount...', // Optional: specify which account
+});
+```
+
+### chainId (optional)
+
+Type: `number`
+
+Target chain ID where the permission exists. Defaults to the connected chain.
+
+:::warning
+**Chain-Specific**: Permissions are chain-specific. Make sure you're revoking on the correct chain where the permission was granted.
+:::
+
+```typescript
+revoke({
+  id: '0x1234...',
+  chainId: 8453, // Revoke on Base
+});
+```
+
+### connector (optional)
+
+Type: `Connector`
+
+Specific connector to use. Defaults to the active connector.
+
+### capabilities (optional)
+
+Type: `RequestCapabilities`
+
+Optional capabilities for the revocation transaction, such as paymaster service for sponsored (gasless) revocation.
+
+```typescript
+interface RequestCapabilities {
+  /** Paymaster service for sponsored transactions */
+  paymasterService?: {
+    /** URL of the paymaster service (ERC-7677 compliant) */
+    url: string;
+    /** Optional context for the paymaster */
+    context?: Record<string, unknown>;
+  };
+}
+```
+
+```typescript
+// Sponsored revocation (gasless)
+revoke({
+  id: '0x1234...',
+  capabilities: {
+    paymasterService: {
+      url: 'https://paymaster.example.com',
+    },
+  },
+});
+```
 
 
 ## Examples
@@ -104,7 +185,7 @@ function RevokeWithConfirmation({ permission }) {
 
   const handleRevoke = () => {
     revoke(
-      { id: permission.id },
+      { id: permission.permissionId },
       {
         onSuccess: () => {
           setShowConfirm(false);
@@ -116,10 +197,11 @@ function RevokeWithConfirmation({ permission }) {
 
   if (showConfirm) {
     return (
-      <div>
+      <div className="confirm-dialog">
         <p>Revoke permission for {permission.spender}?</p>
+        <p className="warning">This action cannot be undone.</p>
         <button onClick={handleRevoke} disabled={isPending}>
-          {isPending ? 'Revoking...' : 'Confirm'}
+          {isPending ? 'Revoking...' : 'Confirm Revoke'}
         </button>
         <button onClick={() => setShowConfirm(false)}>Cancel</button>
       </div>
@@ -134,17 +216,16 @@ function RevokeWithConfirmation({ permission }) {
 
 ```tsx
 import { useRevokePermissions } from '@jaw.id/wagmi';
+import { toast } from 'sonner';
 
 function RevokeWithCallbacks() {
   const { mutate: revoke } = useRevokePermissions({
     mutation: {
       onSuccess: () => {
-        console.log('Permission revoked successfully');
-        // Show success toast, update UI, etc.
+        toast.success('Permission revoked successfully');
       },
       onError: (error) => {
-        console.error('Failed to revoke:', error);
-        // Show error message
+        toast.error(`Failed to revoke: ${error.message}`);
       },
     },
   });
@@ -160,7 +241,7 @@ import { usePermissions, useRevokePermissions } from '@jaw.id/wagmi';
 
 function PermissionsManager() {
   const { data: permissions, isLoading } = usePermissions();
-  const { mutate: revoke, isPending } = useRevokePermissions();
+  const { mutate: revoke, isPending, variables } = useRevokePermissions();
 
   if (isLoading) return <p>Loading permissions...</p>;
   if (!permissions?.length) return <p>No active permissions</p>;
@@ -168,24 +249,92 @@ function PermissionsManager() {
   return (
     <div>
       <h2>Active Permissions</h2>
-      {permissions.map((permission) => (
-        <div key={permission.id} style={{ marginBottom: '1rem' }}>
-          <p><strong>Spender:</strong> {permission.spender}</p>
-          <p><strong>Expires:</strong> {new Date(permission.expiry * 1000).toLocaleDateString()}</p>
-          <p><strong>Calls:</strong> {permission.calls.length} allowed</p>
-          <p><strong>Spends:</strong> {permission.spends.length} limits</p>
-          <button
-            onClick={() => revoke({ id: permission.id })}
-            disabled={isPending}
-          >
-            {isPending ? 'Revoking...' : 'Revoke'}
-          </button>
-        </div>
-      ))}
+      {permissions.map((permission) => {
+        const isRevoking = isPending && variables?.id === permission.permissionId;
+
+        return (
+          <div key={permission.permissionId} className="permission-card">
+            <div className="permission-info">
+              <p><strong>Spender:</strong> {permission.spender}</p>
+              <p><strong>Expires:</strong> {new Date(permission.end * 1000).toLocaleDateString()}</p>
+              <p><strong>Call Permissions:</strong> {permission.calls.length}</p>
+              <p><strong>Spend Limits:</strong> {permission.spends.length}</p>
+            </div>
+            <button
+              onClick={() => revoke({ id: permission.permissionId })}
+              disabled={isPending}
+            >
+              {isRevoking ? 'Revoking...' : 'Revoke'}
+            </button>
+          </div>
+        );
+      })}
     </div>
   );
 }
 ```
+
+### Revoke on Specific Chain
+
+```tsx
+import { useRevokePermissions } from '@jaw.id/wagmi';
+import { base } from 'wagmi/chains';
+
+function RevokeOnBase({ permissionId }) {
+  const { mutate: revoke, isPending } = useRevokePermissions();
+
+  const handleRevoke = () => {
+    revoke({
+      id: permissionId,
+      chainId: base.id, // Revoke on Base chain
+    });
+  };
+
+  return (
+    <button onClick={handleRevoke} disabled={isPending}>
+      Revoke Permission on Base
+    </button>
+  );
+}
+```
+
+### Sponsored Revocation (Gasless)
+
+```tsx
+import { useRevokePermissions } from '@jaw.id/wagmi';
+
+function SponsoredRevoke({ permissionId }) {
+  const { mutate: revoke, isPending } = useRevokePermissions();
+
+  const handleRevoke = () => {
+    revoke({
+      id: permissionId,
+      capabilities: {
+        paymasterService: {
+          url: 'https://your-paymaster.com/api',
+        },
+      },
+    });
+  };
+
+  return (
+    <button onClick={handleRevoke} disabled={isPending}>
+      Revoke (Gasless)
+    </button>
+  );
+}
+```
+
+
+## Important Notes
+
+:::warning
+**Revocation is Permanent**: Once a permission is revoked, it cannot be restored. The spender will immediately lose the ability to execute calls using that permission. To re-enable access, you must grant a new permission.
+:::
+
+:::info
+**Transaction Required**: Revoking a permission requires an on-chain transaction. The user will need to pay gas for the transaction (unless using a paymaster for gasless revocation).
+:::
 
 
 ## Related

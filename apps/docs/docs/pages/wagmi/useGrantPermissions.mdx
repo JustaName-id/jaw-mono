@@ -1,6 +1,6 @@
 # useGrantPermissions
 
-Hook to grant permissions to a spender address.
+Hook to grant permissions to a spender address, enabling session keys, subscriptions, and automated transactions.
 
 **Type:** `hook`
 
@@ -81,25 +81,37 @@ interface WalletGrantPermissionsResponse {
 
 ## Mutation Variables
 
-When calling `mutate()`, pass:
+When calling `mutate()`, pass an object with the following properties:
 
-### expiry
+### expiry (required)
 
-Type: `number` (required)
+Type: `number`
 
-Unix timestamp (in seconds) when the permission expires.
+Unix timestamp (in seconds) when the permission expires. The permission becomes invalid after this time.
 
-### spender
+```typescript
+// Permission valid for 1 week
+const expiry = Math.floor(Date.now() / 1000) + 86400 * 7;
+```
 
-Type: `Address` (required)
+### spender (required)
 
-The address that can use this permission to execute calls on behalf of the account.
+Type: `Address`
 
-### permissions
+The address that will be granted permission to execute calls on behalf of the account. This is typically:
+- A session key address
+- A backend service address
+- An automation bot address
 
-Type: `PermissionsDetail` (required)
+```typescript
+const spender = '0x1234...'; // The address that can use this permission
+```
 
-The permissions to grant:
+### permissions (required)
+
+Type: `PermissionsDetail`
+
+The permissions to grant. Contains two optional arrays: `calls` (what functions can be called) and `spends` (token spending limits).
 
 ```typescript
 interface PermissionsDetail {
@@ -108,39 +120,103 @@ interface PermissionsDetail {
   /** Spend permissions - token spending limits */
   spends?: SpendPermissionDetail[];
 }
+```
 
+#### permissions.calls
+
+Type: `CallPermissionDetail[]` (optional)
+
+Array of call permissions specifying which contract functions the spender can call.
+
+```typescript
 interface CallPermissionDetail {
   /** Target contract address */
   target: Address;
-  /** Function selector (4 bytes) or signature */
-  selector: Hex;
-}
-
-interface SpendPermissionDetail {
-  /** Token address (use 0xEee...EEeE for native ETH) */
-  token: Address;
-  /** Maximum amount per period */
-  limit: string;
-  /** Time period for the limit */
-  period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year';
+  /** Function selector (4 bytes hex). Optional if functionSignature is provided. */
+  selector?: Hex;
+  /** Human-readable function signature. Selector is computed from this if not provided. */
+  functionSignature?: string;
 }
 ```
 
-### Optional Parameters
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `target` | `Address` | Yes | Contract address the spender can call |
+| `selector` | `Hex` | No* | 4-byte function selector (e.g., `'0xa9059cbb'`) |
+| `functionSignature` | `string` | No* | Human-readable signature (e.g., `'transfer(address,uint256)'`) |
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `address` | `Address` | Specific account address |
-| `chainId` | `number` | Specific chain ID |
-| `connector` | `Connector` | Specific connector |
+*Either `selector` or `functionSignature` must be provided.
+
+:::tip
+Use `functionSignature` for readability - the SDK computes the selector automatically:
+```typescript
+// These are equivalent:
+{ target: USDC, selector: '0xa9059cbb' }
+{ target: USDC, functionSignature: 'transfer(address,uint256)' }
+```
+:::
+
+#### permissions.spends
+
+Type: `SpendPermissionDetail[]` (optional)
+
+Array of spend permissions specifying token spending limits per time period.
+
+```typescript
+interface SpendPermissionDetail {
+  /** Token address. Use NATIVE_TOKEN constant for ETH. */
+  token: Address;
+  /** Maximum amount per period (in wei, as string) */
+  allowance: string;
+  /** Time period unit for the limit */
+  unit: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
+  /** Multiplier for the period (1-255). Defaults to 1. */
+  multiplier?: number;
+}
+```
+
+| Field | Type | Required | Description |
+|-------|------|----------|-------------|
+| `token` | `Address` | Yes | Token contract address. Use `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` for native ETH. |
+| `allowance` | `string` | Yes | Maximum spend amount per period in wei (as string, supports large numbers) |
+| `unit` | `SpendPeriod` | Yes | Time period: `'minute'`, `'hour'`, `'day'`, `'week'`, `'month'`, `'year'`, or `'forever'` |
+| `multiplier` | `number` | No | Period multiplier (1-255). E.g., `unit: 'day', multiplier: 3` = every 3 days. Defaults to 1. |
+
+:::info
+For native ETH spending limits, use the ERC-7528 native token address:
+```typescript
+const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+```
+:::
+
+### address (optional)
+
+Type: `Address`
+
+Specific account address to grant permissions for. Defaults to the connected account.
+
+### chainId (optional)
+
+Type: `number`
+
+Target chain ID. Defaults to the connected chain.
+
+### connector (optional)
+
+Type: `Connector`
+
+Specific connector to use. Defaults to the active connector.
 
 
 ## Examples
 
-### Basic Usage
+### Basic Usage - Allow Token Transfers
 
 ```tsx
 import { useGrantPermissions } from '@jaw.id/wagmi';
+import { parseUnits } from 'viem';
+
+const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
 
 function GrantPermissionButton() {
   const { mutate: grant, isPending, data } = useGrantPermissions();
@@ -148,19 +224,19 @@ function GrantPermissionButton() {
   const handleGrant = () => {
     grant({
       expiry: Math.floor(Date.now() / 1000) + 86400 * 7, // 1 week
-      spender: '0xAutomatedBot...',
+      spender: '0xYourBackendService...',
       permissions: {
         calls: [
           {
-            target: ROUTER_ADDRESS,
-            selector: '0x38ed1739', // swapExactTokensForTokens
+            target: USDC,
+            functionSignature: 'transfer(address,uint256)',
           },
         ],
         spends: [
           {
-            token: USDC_ADDRESS,
-            limit: '500000000', // 500 USDC
-            period: 'week',
+            token: USDC,
+            allowance: parseUnits('100', 6).toString(), // 100 USDC
+            unit: 'day',
           },
         ],
       },
@@ -178,6 +254,149 @@ function GrantPermissionButton() {
 }
 ```
 
+### Subscription Service - Monthly Limit
+
+```tsx
+import { useGrantPermissions } from '@jaw.id/wagmi';
+import { parseUnits } from 'viem';
+
+function SubscriptionButton() {
+  const { mutate: grant, isPending } = useGrantPermissions();
+
+  const handleSubscribe = () => {
+    grant({
+      expiry: Math.floor(Date.now() / 1000) + 86400 * 365, // 1 year
+      spender: '0xSubscriptionService...',
+      permissions: {
+        calls: [
+          {
+            target: USDC_ADDRESS,
+            functionSignature: 'transfer(address,uint256)',
+          },
+        ],
+        spends: [
+          {
+            token: USDC_ADDRESS,
+            allowance: parseUnits('9.99', 6).toString(), // $9.99/month
+            unit: 'month',
+          },
+        ],
+      },
+    });
+  };
+
+  return (
+    <button onClick={handleSubscribe} disabled={isPending}>
+      Subscribe for $9.99/month
+    </button>
+  );
+}
+```
+
+### DeFi Automation - Swap Permission
+
+```tsx
+import { useGrantPermissions } from '@jaw.id/wagmi';
+
+const UNISWAP_ROUTER = '0x...';
+
+function AutomatedTradingSetup() {
+  const { mutate: grant, isPending } = useGrantPermissions();
+
+  const handleSetup = () => {
+    grant({
+      expiry: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
+      spender: '0xTradingBot...',
+      permissions: {
+        calls: [
+          {
+            target: UNISWAP_ROUTER,
+            functionSignature: 'swapExactTokensForTokens(uint256,uint256,address[],address,uint256)',
+          },
+          {
+            target: UNISWAP_ROUTER,
+            functionSignature: 'swapTokensForExactTokens(uint256,uint256,address[],address,uint256)',
+          },
+        ],
+        spends: [
+          {
+            token: USDC_ADDRESS,
+            allowance: parseUnits('1000', 6).toString(), // 1000 USDC per week
+            unit: 'week',
+          },
+          {
+            token: WETH_ADDRESS,
+            allowance: parseUnits('0.5', 18).toString(), // 0.5 WETH per week
+            unit: 'week',
+          },
+        ],
+      },
+    });
+  };
+
+  return (
+    <button onClick={handleSetup} disabled={isPending}>
+      Enable Automated Trading
+    </button>
+  );
+}
+```
+
+### Native ETH Spending Limit
+
+```tsx
+import { useGrantPermissions } from '@jaw.id/wagmi';
+import { parseEther } from 'viem';
+
+const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
+
+function NativeSpendingLimit() {
+  const { mutate: grant, isPending } = useGrantPermissions();
+
+  const handleGrant = () => {
+    grant({
+      expiry: Math.floor(Date.now() / 1000) + 86400 * 7,
+      spender: '0xGamingContract...',
+      permissions: {
+        spends: [
+          {
+            token: NATIVE_TOKEN,
+            allowance: parseEther('0.1').toString(), // 0.1 ETH per day
+            unit: 'day',
+          },
+        ],
+      },
+    });
+  };
+
+  return (
+    <button onClick={handleGrant} disabled={isPending}>
+      Allow 0.1 ETH/day for Gaming
+    </button>
+  );
+}
+```
+
+### With Period Multiplier
+
+```tsx
+// Allow 500 USDC every 2 weeks
+grant({
+  expiry: Math.floor(Date.now() / 1000) + 86400 * 90, // 90 days
+  spender: '0xPayrollService...',
+  permissions: {
+    spends: [
+      {
+        token: USDC_ADDRESS,
+        allowance: parseUnits('500', 6).toString(),
+        unit: 'week',
+        multiplier: 2, // Every 2 weeks
+      },
+    ],
+  },
+});
+```
+
 ### With Callbacks
 
 ```tsx
@@ -189,6 +408,7 @@ function GrantWithCallbacks() {
       onSuccess: (data) => {
         console.log('Permission granted:', data.permissionId);
         // Store permission ID for later revocation
+        savePermissionId(data.permissionId);
       },
       onError: (error) => {
         console.error('Failed to grant permission:', error);
@@ -200,53 +420,15 @@ function GrantWithCallbacks() {
 }
 ```
 
-### Daily Spending Limit
-
-```tsx
-import { useGrantPermissions } from '@jaw.id/wagmi';
-import { parseUnits } from 'viem';
-
-function DailySpendingLimit() {
-  const { mutate: grant, isPending } = useGrantPermissions();
-
-  const handleGrant = () => {
-    grant({
-      expiry: Math.floor(Date.now() / 1000) + 86400 * 30, // 30 days
-      spender: '0xSubscriptionService...',
-      permissions: {
-        calls: [
-          {
-            target: USDC_ADDRESS,
-            selector: '0xa9059cbb', // transfer
-          },
-        ],
-        spends: [
-          {
-            token: USDC_ADDRESS,
-            limit: parseUnits('100', 6).toString(), // 100 USDC per day
-            period: 'day',
-          },
-        ],
-      },
-    });
-  };
-
-  return (
-    <button onClick={handleGrant} disabled={isPending}>
-      Allow $100/day Subscription
-    </button>
-  );
-}
-```
-
 
 ## Use Cases
 
-- **Session Keys** - Allow a temporary key to perform specific actions
-- **Subscription Services** - Grant recurring spending permissions
-- **Automated Trading** - Allow a bot to execute specific trades
-- **Gaming** - Let a game contract execute moves without prompts
-- **DeFi Automation** - Enable auto-compounding or limit orders
+- **Session Keys** - Allow a temporary key to perform specific actions without full wallet access
+- **Subscription Services** - Grant recurring spending permissions for SaaS, content, or services
+- **Automated Trading** - Allow a bot to execute specific trades within spending limits
+- **Gaming** - Let a game contract execute moves without transaction prompts
+- **DeFi Automation** - Enable auto-compounding, limit orders, or rebalancing
+- **Payroll** - Allow scheduled payments to employees
 
 
 ## Related

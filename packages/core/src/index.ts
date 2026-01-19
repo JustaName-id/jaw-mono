@@ -25,6 +25,7 @@ export {
     type Permission,
     type SpendPeriod,
     type SpendPermissionDetail,
+    type CallPermissionDetail,
     type PermissionsDetail,
     type PaymasterServiceCapability,
     type RequestCapabilities,
@@ -120,6 +121,8 @@ export type {
     BaseUIRequest,
     PermissionsCapability,
     PaymasterConfig,
+    PersonalSignRequestData,
+    TypedDataRequestData,
 } from './ui/interface.js';
 
 export { UIError, UIErrorCode } from './ui/interface.js';

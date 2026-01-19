@@ -26,6 +26,9 @@ import {
   usePermissions,
   useGetAssets,
   useCapabilities,
+  useSign,
+  type PersonalSignRequestData,
+  type TypedDataRequestData,
 } from '@jaw.id/wagmi';
 
 import { WagmiProviders } from './providers';
@@ -57,6 +60,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
   const { mutateAsync: jawDisconnect } = useDisconnect();
   const { mutateAsync: grantPermissions, isPending: isGrantingPermissions } = useGrantPermissions();
   const { mutateAsync: revokePermissions, isPending: isRevokingPermissions } = useRevokePermissions();
+  const { mutateAsync: sign, isPending: isSigning } = useSign();
 
   // State for query addresses (allows querying for arbitrary addresses)
   const [permissionsAddress, setPermissionsAddress] = useState<string | undefined>();
@@ -133,6 +137,13 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
               types: (params as { types?: Record<string, unknown> }).types || {},
               primaryType: (params as { primaryType?: string }).primaryType || '',
               message: (params as { message?: Record<string, unknown> }).message || {},
+            });
+            break;
+
+          case 'useSign':
+            result = await sign({
+              chainId: params.chainId as number | undefined,
+              request: params.request as PersonalSignRequestData | TypedDataRequestData,
             });
             break;
 
@@ -224,6 +235,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
       sendTransactionAsync,
       signMessageAsync,
       signTypedDataAsync,
+      sign,
       sendCallsAsync,
       capabilities,
       grantPermissions,
@@ -262,6 +274,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
   const isPending =
     isGrantingPermissions ||
     isRevokingPermissions ||
+    isSigning ||
     isLoadingPermissions ||
     isLoadingAssets ||
     isLoadingCapabilities ||

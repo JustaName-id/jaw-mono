@@ -6,4 +6,5 @@ export {
   usePermissions,
   useGetAssets,
   useCapabilities,
+  useSign,
 } from './internal/react.js';

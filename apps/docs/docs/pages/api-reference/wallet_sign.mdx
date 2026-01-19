@@ -11,6 +11,7 @@ Unified signing method supporting multiple message formats (ERC-7871). Delegates
 await jaw.provider.request({
   method: 'wallet_sign',
   params: [{
+    // chainId: '0x1', // Optional - defaults to connected chain
     request: {
       type: '0x45', // or '0x01'
       data: { message: 'Hello World' } // or TypedData object for 0x01
@@ -23,6 +24,7 @@ await jaw.provider.request({
 
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
+| `chainId` | `0x${string}` | No | Target chain ID (defaults to connected chain) |
 | `request.type` | `string` | Yes | Signature type: `"0x45"` (personal_sign) or `"0x01"` (signTypedData_v4) |
 | `request.data` | `object` | Yes | For 0x45: `{ message: string }`. For 0x01: TypedData object (EIP-712) |
 
@@ -51,6 +53,7 @@ Returns the signature as a hexadecimal string.
 
 - **Type 0x45**: Delegates to `personal_sign` - adds EIP-191 prefix and signs the UTF-8 message
 - **Type 0x01**: Delegates to `eth_signTypedData_v4` - signs structured EIP-712 data
+- Uses currently connected chain if `chainId` not specified
 - Opens popup for user approval
 - Returns signature in same format as the underlying method
 

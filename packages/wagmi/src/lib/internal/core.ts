@@ -14,6 +14,8 @@ import {
   type WalletGetAssetsResponse,
   type AssetType,
   type AssetFilter,
+  type PersonalSignRequestData,
+  type TypedDataRequestData,
 } from '@jaw.id/core';
 import type { AccountWithCapabilities } from '../Connector.js';
 
@@ -363,5 +365,70 @@ export async function getCapabilities<config extends Config>(
   });
 
   return result as getCapabilities.ReturnType;
+}
+
+// ============================================================================
+// sign
+// ============================================================================
+
+export namespace sign {
+  export type Parameters<config extends Config = Config> = {
+    address?: Address;
+    chainId?: number;
+    connector?: Connector;
+    /** The signing request - supports personal sign (0x45) and typed data (0x01) */
+    request: PersonalSignRequestData | TypedDataRequestData;
+  };
+
+  export type ReturnType = Hex;
+  export type ErrorType = Error;
+}
+
+/**
+ * Signs a message using the wallet_sign method (ERC-7871).
+ * This is a unified signing method that combines personal_sign and eth_signTypedData_v4.
+ *
+ * @example
+ * ```ts
+ * // Personal sign (EIP-191)
+ * const signature = await Actions.sign(config, {
+ *   request: {
+ *     type: '0x45',
+ *     data: { message: 'Hello World' },
+ *   },
+ * });
+ *
+ * // Typed data sign (EIP-712)
+ * const signature = await Actions.sign(config, {
+ *   request: {
+ *     type: '0x01',
+ *     data: {
+ *       types: { ... },
+ *       primaryType: 'Mail',
+ *       domain: { ... },
+ *       message: { ... },
+ *     },
+ *   },
+ * });
+ * ```
+ */
+export async function sign<config extends Config>(
+  config: config,
+  parameters: sign.Parameters<config>,
+): Promise<sign.ReturnType> {
+  const { address, chainId, connector, request } = parameters;
+
+  const client = await getConnectorClient(config, {
+    account: address,
+    chainId,
+    connector,
+  });
+
+  const result = await client.request({
+    method: 'wallet_sign' as never,
+    params: [{ request }] as never,
+  });
+
+  return result as sign.ReturnType;
 }
 

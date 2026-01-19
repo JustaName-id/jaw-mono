@@ -80,6 +80,7 @@ export default defineConfig({
             { text: 'useGrantPermissions()', link: '/wagmi/useGrantPermissions' },
             { text: 'usePermissions()', link: '/wagmi/usePermissions' },
             { text: 'useRevokePermissions()', link: '/wagmi/useRevokePermissions' },
+            { text: 'useSign()', link: '/wagmi/useSign' },
           ],
         },
       ],

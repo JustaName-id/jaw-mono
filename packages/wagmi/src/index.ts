@@ -6,6 +6,15 @@ export {
   type AccountWithCapabilities,
 } from './lib/Connector.js';
 
+// Re-export types from core that are used in hook parameters
+export type {
+  PersonalSignRequestData,
+  TypedDataRequestData,
+  PermissionsDetail,
+  CallPermissionDetail,
+  SpendPermissionDetail,
+} from '@jaw.id/core';
+
 // Actions namespace
 export * as Actions from './lib/Actions.js';
 
@@ -24,6 +33,7 @@ export {
   usePermissions,
   useGetAssets,
   useCapabilities,
+  useSign,
 } from './lib/Hooks.js';
 
 // Also export individual actions for convenience
@@ -35,6 +45,7 @@ export {
   revokePermissions,
   getAssets,
   getCapabilities,
+  sign,
 } from './lib/Actions.js';
 
 // Also export query keys for convenience
