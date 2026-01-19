@@ -131,13 +131,7 @@ console.log('Chain ID:', chainId);`,
         label: 'Chain',
         description: 'The chain to switch to',
         required: true,
-        options: [
-          { label: 'Ethereum Mainnet (0x1)', value: '0x1' },
-          { label: 'Optimism (0xa)', value: '0xa' },
-          { label: 'Base (0x2105)', value: '0x2105' },
-          { label: 'Sepolia (0xaa36a7)', value: '0xaa36a7' },
-          { label: 'Base Sepolia (0x14a34)', value: '0x14a34' },
-        ],
+        options: CHAIN_OPTIONS.filter(opt => opt.value !== 'default'),
       },
     ],
     getCodeSnippet: (params) => `await jaw.provider.request({
@@ -156,6 +150,15 @@ console.log('Chain ID:', chainId);`,
     description: 'Broadcast a transaction to the network',
     requiresConnection: true,
     parameters: [
+      {
+        name: 'chainId',
+        type: 'select',
+        label: 'Chain',
+        description: 'Target chain for the transaction (optional)',
+        required: false,
+        options: CHAIN_OPTIONS,
+        defaultValue: 'default',
+      },
       {
         name: 'to',
         type: 'address',
@@ -183,6 +186,7 @@ console.log('Chain ID:', chainId);`,
     ],
     getCodeSnippet: (params) => {
       const value = params.value ? `parseEther('${params.value}')` : '0n';
+      const chainIdLine = params.chainId && params.chainId !== 'default' ? `\n    chainId: '${params.chainId}',` : '';
       return `import { parseEther } from 'viem';
 
 const txHash = await jaw.provider.request({
@@ -191,7 +195,7 @@ const txHash = await jaw.provider.request({
     from: account,
     to: '${params.to || '0x...'}',
     value: \`0x\${${value}.toString(16)}\`,
-    data: '${params.data || '0x'}',
+    data: '${params.data || '0x'}',${chainIdLine}
   }],
 });
 
@@ -199,12 +203,16 @@ console.log('Transaction hash:', txHash);`;
     },
     buildParams: (params, context) => {
       const valueWei = params.value ? BigInt(Math.floor(parseFloat(params.value) * 1e18)) : 0n;
-      return [{
+      const result: { from?: string; to: string; value: string; data: string; chainId?: string } = {
         from: context.address,
         to: params.to,
         value: `0x${valueWei.toString(16)}`,
         data: params.data || '0x',
-      }];
+      };
+      if (params.chainId && params.chainId !== 'default') {
+        result.chainId = params.chainId;
+      }
+      return [result];
     },
   },
   {
@@ -492,25 +500,14 @@ console.log('Signature:', signature);`;
     },
     buildParams: (params) => {
       const type = params.type || '0x45';
-      if (type === '0x45') {
-        return [{
-          request: {
-            type: '0x45',
-            data: {
-              message: params.message || 'Hello, World!',
-            },
-          },
-        }];
-      } else {
-        // For 0x01 (typed data), parse the JSON and pass the object directly
-        const typedData = JSON.parse(params.typedData || '{}');
-        return [{
-          request: {
-            type: '0x01',
-            data: typedData,
-          },
-        }];
-      }
+      return [{
+        request: {
+          type,
+          data: type === '0x45'
+            ? { message: params.message || 'Hello, World!' }
+            : JSON.parse(params.typedData || '{}'),
+        },
+      }];
     },
   },
 
