@@ -892,15 +892,6 @@ export default function KeysJawIdApp() {
       return (
         <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
           <div className="w-full max-w-md">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Welcome Back
-              </h2>
-              <p className="text-gray-600">
-                Use your passkey to access your wallet
-              </p>
-            </div>
-
             <SignInScreen
               ensConfig={ensConfig}
               chainId={effectiveChainId}
@@ -941,13 +932,6 @@ export default function KeysJawIdApp() {
                 }
               }}
             />
-
-            <button
-              onClick={() => window.close()}
-              className="w-full mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       );

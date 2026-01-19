@@ -8,6 +8,9 @@ const { composePlugins, withNx } = require('@nx/next');
 const nextConfig = {
   nx: {},
   transpilePackages: ['@jaw.id/core', '@jaw.id/ui', '@jaw.id/wagmi'],
+  experimental: {
+    optimizePackageImports: ['lucide-react'],
+  },
 };
 
 const plugins = [

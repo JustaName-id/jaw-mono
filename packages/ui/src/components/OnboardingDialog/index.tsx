@@ -240,7 +240,7 @@ export function OnboardingDialog({
               right={ensDomain ? <span className="text-sm font-bold text-foreground">{`.${ensDomain}`}</span> : undefined}
             />
             {isCreating ? (
-              <Spinner className="w-10 h-10 animate-spin" />
+              <Spinner className="w-10 h-10" />
             ) : (
               <Button
                 onClick={async () => {
