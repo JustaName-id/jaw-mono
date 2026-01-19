@@ -105,7 +105,7 @@ function ModeHeader({ mode, onModeChange }: {
 
 // Cross-platform mode content
 function CrossPlatformContent() {
-  const { isConnected, address, username, connect, disconnect, signMessage, sendTransaction, provider, chainId: currentChainId } = useJAWNative();
+  const { isConnected, address, username, connect, disconnect, signMessage, sendTransaction, grantPermissions, chainId: currentChainId } = useJAWNative();
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -169,7 +169,7 @@ function CrossPlatformContent() {
   };
 
   const handleGrantPermissions = async () => {
-    if (!provider || !address) {
+    if (!address) {
       Alert.alert('Error', 'Please connect your wallet first');
       return;
     }
@@ -180,34 +180,37 @@ function CrossPlatformContent() {
       const ethLimit = parseEther('0.0001');
       const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
 
-      const result = await provider.request({
-        method: 'wallet_grantPermissions',
-        params: [{
-          address: address,
-          chainId: currentChainId || CHAIN_ID,
-          expiry: expiryTimestamp,
-          spender: spenderAddress,
-          permissions: {
-            spends: [{
-              allowance: `0x${ethLimit.toString(16)}`,
-              unit: 'day',
-              token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-              multiplier: 2
-            }],
-            calls: [{
-              target: spenderAddress,
-              functionSignature: 'transfer(address,uint256)'
-            }]
-          }
-        }]
-      });
+      const permissionsData = {
+        address: address,
+        chainId: currentChainId || CHAIN_ID,
+        expiry: expiryTimestamp,
+        spender: spenderAddress,
+        permissions: {
+          spends: [{
+            allowance: `0x${ethLimit.toString(16)}`,
+            unit: 'day',
+            token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+            multiplier: 2
+          }],
+          calls: [{
+            target: spenderAddress,
+            functionSignature: 'transfer(address,uint256)'
+          }]
+        }
+      };
 
-      setLastPermissionId(result.id);
-      Alert.alert(
-        'Success',
-        `Permission granted!\nID: ${result.id.slice(0, 10)}...`,
-        [{ text: 'OK' }]
-      );
+      const permissionId = await grantPermissions(permissionsData);
+
+      if (permissionId) {
+        setLastPermissionId(permissionId);
+        Alert.alert(
+          'Success',
+          `Permission granted!\nID: ${permissionId.slice(0, 10)}...`,
+          [{ text: 'OK' }]
+        );
+      } else {
+        Alert.alert('Error', 'Failed to grant permissions');
+      }
     } catch (error) {
       if (error instanceof Error) {
         Alert.alert('Error', error.message);
@@ -218,23 +221,18 @@ function CrossPlatformContent() {
   };
 
   const handleRevokePermissions = async () => {
-    if (!provider || !address || !lastPermissionId) {
+    if (!address || !lastPermissionId) {
       Alert.alert('Error', 'No permission to revoke');
       return;
     }
 
     setIsRevoking(true);
     try {
-      await provider.request({
-        method: 'wallet_revokePermissions',
-        params: [{
-          address: address,
-          id: lastPermissionId as `0x${string}`
-        }]
-      });
-
-      Alert.alert('Success', 'Permission revoked successfully');
-      setLastPermissionId(undefined);
+      // TODO: Implement revokePermissions in BrowserAuthenticator and JAWNativeProvider
+      Alert.alert('Not Implemented', 'Revoke permissions is not yet implemented for cross-platform mode');
+      // Once implemented, the call would be:
+      // await revokePermissions({ id: lastPermissionId });
+      // setLastPermissionId(undefined);
     } catch (error) {
       if (error instanceof Error) {
         Alert.alert('Error', error.message);
@@ -489,6 +487,16 @@ function AppSpecificContent() {
     setIsLoading(true);
 
     try {
+      // 🔍 Debug logging - Check configuration
+      console.log('🔧 Creating passkey with config:', {
+        username,
+        rpId: RP_ID,
+        rpName: RP_NAME,
+        chainId: CHAIN_ID,
+        apiKey: API_KEY ? `${API_KEY.slice(0, 8)}...` : 'MISSING',
+        keysUrl: KEYS_URL,
+      });
+
       const newAccount = await Account.create(
         { chainId: CHAIN_ID, apiKey: API_KEY },
         { username, rpId: RP_ID, rpName: RP_NAME, nativeCreateFn: createNativePasskeyCredential, getFn: getCredentialAdapter }
@@ -501,14 +509,31 @@ function AppSpecificContent() {
       setConnectedUsername(username);
       loadStoredAccounts();
 
+      console.log('✅ Account created successfully:', address);
       Alert.alert('Success', `Account created!\n\nAddress: ${address.slice(0, 10)}...${address.slice(-8)}`);
     } catch (error) {
+      // 🔍 Enhanced error logging - Show full error object
+      console.error('❌ Account creation failed:', error);
+      console.error('Error details (full):', JSON.stringify(error, null, 2));
+      console.error('Error type:', typeof error);
+      console.error('Error keys:', error ? Object.keys(error as object) : 'none');
+
+      if (error instanceof Error) {
+        console.error('Error is instance of Error:', {
+          name: error.name,
+          message: error.message,
+          stack: error.stack,
+        });
+      }
+
       if (error instanceof Error) {
         if (error.name === 'NotAllowedError') {
+          console.log('⚠️ User cancelled passkey creation');
           return;
         }
         // Show helpful message for Expo Go users
         if (error.name === 'NativePasskeyUnavailableError' || error instanceof NativePasskeyUnavailableError) {
+          console.error('⚠️ Native passkey unavailable - development build required');
           Alert.alert(
             'Development Build Required',
             'Native passkeys are not available in Expo Go.\n\nPlease use Cross-Platform mode, or create a development build:\n\nnpx expo prebuild\nnpx expo run:ios',
@@ -516,7 +541,7 @@ function AppSpecificContent() {
           );
           return;
         }
-        Alert.alert('Error', error.message);
+        Alert.alert('Error', `Failed to create account:\n\n${error.message}`);
       } else {
         Alert.alert('Error', 'Failed to create account');
       }

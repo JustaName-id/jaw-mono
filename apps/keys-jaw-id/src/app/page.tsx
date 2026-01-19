@@ -81,10 +81,12 @@ export default function KeysJawIdApp() {
 
   // Browser action state for sign/send operations
   interface BrowserAction {
-    type: 'connect' | 'signMessage' | 'signTypedData' | 'sendTransaction';
+    type: 'connect' | 'signMessage' | 'signTypedData' | 'sendTransaction' | 'grantPermissions';
     message?: string;
     typedData?: object;
     tx?: { to: string; value?: string; data?: string; chainId?: number };
+    permissions?: unknown;
+    chainId?: number;
     credentialId?: string;
   }
   const [browserAction, setBrowserAction] = useState<BrowserAction | null>(null);
@@ -161,6 +163,22 @@ export default function KeysJawIdApp() {
           }
           const tx = JSON.parse(atob(txParam));
           setBrowserAction({ type: 'sendTransaction', tx, credentialId });
+          break;
+        }
+
+        case 'grantPermissions': {
+          const permissionsParam = urlParams.get('permissions');
+          if (!permissionsParam || !credentialId) {
+            redirectWithError(callbackUrl, 'Missing permissions or credentialId');
+            return;
+          }
+          const permissionsData = JSON.parse(atob(permissionsParam));
+          setBrowserAction({
+            type: 'grantPermissions',
+            permissions: permissionsData.permissions,
+            chainId: permissionsData.chainId,
+            credentialId
+          });
           break;
         }
 
@@ -572,6 +590,32 @@ export default function KeysJawIdApp() {
                 txHash: result.hash,
                 id: result.id,
                 chainId: result.chainId,
+              });
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message);
+            }}
+          />
+        );
+      }
+
+      // Browser mode: Grant Permissions
+      if (browserAction.type === 'grantPermissions' && browserAction.permissions) {
+        const permissionRequestData: PermissionRequestData = {
+          method: 'wallet_grantPermissions',
+          params: [browserAction.permissions],
+        };
+
+        return (
+          <PermissionModal
+            permissionRequest={permissionRequestData}
+            chain={{ id: browserAction.chainId || effectiveChainId, rpcUrl: '', paymaster: undefined }}
+            apiKey={apiKey || ''}
+            origin={config?.metadata?.appName || 'App'}
+            onSuccess={async (result: { id: string; expiry: number }) => {
+              redirectWithResult(callbackUrl, {
+                permissionId: result.id,
+                expiry: result.expiry,
               });
             }}
             onError={async (error) => {

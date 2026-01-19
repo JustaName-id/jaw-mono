@@ -63,6 +63,8 @@ export interface JAWNativeConfig {
 export interface JAWNativeContextType {
   /** Whether a wallet is connected */
   isConnected: boolean;
+  /** Whether connection is in progress */
+  isConnecting: boolean;
   /** Connected wallet address */
   address: string | null;
   /** Connected username */
@@ -79,6 +81,8 @@ export interface JAWNativeContextType {
   signTypedData: (typedData: object) => Promise<string | null>;
   /** Send transaction */
   sendTransaction: (tx: { to: string; value?: string; data?: string }) => Promise<string | null>;
+  /** Grant permissions (not supported in cross-platform mode) */
+  grantPermissions: (permissions: unknown) => Promise<string | null>;
   /** Whether modal is open */
   isModalOpen: boolean;
   /** Open modal */
@@ -110,6 +114,7 @@ export function JAWNativeProvider({
 }: JAWNativeProviderProps) {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isConnected, setIsConnected] = useState(false);
+  const [isConnecting, setIsConnecting] = useState(false);
   const [address, setAddress] = useState<string | null>(null);
   const [username, setUsername] = useState<string | null>(null);
   const [credentialId, setCredentialId] = useState<string | null>(null);
@@ -254,9 +259,34 @@ export function JAWNativeProvider({
     }
   }, [authenticator, credentialId, chainId]);
 
+  // Grant permissions using browser flow
+  const grantPermissions = useCallback(async (permissions: unknown): Promise<string | null> => {
+    if (!credentialId) {
+      console.error('[JAWNativeProvider] No credentialId - must connect first');
+      return null;
+    }
+
+    try {
+      const result = await authenticator.grantPermissions({
+        permissions,
+        credentialId,
+        chainId: chainId || undefined,
+      });
+
+      if (result.success && result.permissionId) {
+        return result.permissionId;
+      }
+      return null;
+    } catch (error) {
+      console.error('[JAWNativeProvider] Grant permissions error:', error);
+      return null;
+    }
+  }, [authenticator, credentialId, chainId]);
+
   // Context value
   const contextValue = useMemo<JAWNativeContextType>(() => ({
     isConnected,
+    isConnecting,
     address,
     username,
     chainId,
@@ -265,11 +295,13 @@ export function JAWNativeProvider({
     signMessage,
     signTypedData,
     sendTransaction,
+    grantPermissions,
     isModalOpen,
     openModal,
     closeModal,
   }), [
     isConnected,
+    isConnecting,
     address,
     username,
     chainId,
@@ -278,6 +310,7 @@ export function JAWNativeProvider({
     signMessage,
     signTypedData,
     sendTransaction,
+    grantPermissions,
     isModalOpen,
     openModal,
     closeModal,

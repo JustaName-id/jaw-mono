@@ -212,13 +212,23 @@ export class ReactNativeUIHandler implements UIHandler {
         return isSiweMessage(signRequest.data.message) ? 'siwe' : 'signature';
       }
       case 'wallet_sign': {
+        // ERC-7871 wallet_sign support
         const walletSignRequest = request as WalletSignUIRequest;
         const signType = walletSignRequest.data.request.type;
+
         if (signType === '0x45') {
+          // ERC-7871 PersonalSign - data is { message: string }
           const requestData = walletSignRequest.data.request.data as { message: string };
-          return isSiweMessage(requestData.message) ? 'siwe' : 'signature';
+          const message = requestData.message;
+          return isSiweMessage(message) ? 'siwe' : 'signature';
+        } else if (signType === '0x01') {
+          // ERC-7871 TypedData
+          return 'eip712';
+        } else {
+          // Unsupported sign type
+          console.warn(`[ReactNativeUIHandler] Unsupported wallet_sign type: ${signType}`);
+          return 'unsupported';
         }
-        return signType === '0x01' ? 'eip712' : 'unsupported';
       }
       case 'eth_signTypedData_v4':
         return 'eip712';
