@@ -171,16 +171,15 @@ export function createProviderInfo(options?: EIP6963AnnouncerOptions): EIP6963Pr
 export function announceProvider(
   provider: ProviderInterface,
   options?: EIP6963AnnouncerOptions
-): AnnounceProviderCleanup {
+): AnnounceProviderCleanup | null {
   // Guard: only run in browser environments
   if (typeof window === 'undefined') {
-    return () => {}; // No-op cleanup function
+    return null;
   }
 
   // Singleton guard: prevent duplicate announcements from React StrictMode, HMR, etc.
   if (isAnnounced) {
-    // Return the existing cleanup function or a no-op
-    return activeCleanup ?? (() => {});
+    return activeCleanup;
   }
 
   const info = createProviderInfo(options);
