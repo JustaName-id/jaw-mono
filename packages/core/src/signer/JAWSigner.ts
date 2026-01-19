@@ -29,6 +29,7 @@ import {
     hexStringFromNumber
 } from '../utils/index.js';
 import { clearSignerType } from './signerStorage.js';
+import { PasskeyManager } from '../passkey-manager/index.js';
 
 type ConstructorOptions = {
     metadata: AppMetadata;
@@ -317,6 +318,10 @@ export abstract class JAWSigner implements Signer {
     async cleanup(): Promise<void> {
         store.account.clear();
         clearSignerType();
+        // Clear PasskeyManager auth state (removes jaw:passkey:authState from localStorage)
+        const apiKey = store.config.get().apiKey;
+        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+        passkeyManager.logout();
 
         this.accounts = [];
         this.chain = {
