@@ -241,23 +241,18 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_sendCalls': {
-                // EIP-5792 wallet_sendCalls params - chainId can be hex string or number
+                // EIP-5792 wallet_sendCalls params - chainId must be hex string
                 type WalletSendCallsParams = Omit<TransactionUIRequest['data'], 'chainId'> & {
-                    /** Target chain ID. Defaults to the connected chain. */
-                    chainId?: string | number;
+                    /** Target chain ID in hex format. Defaults to the connected chain. */
+                    chainId?: `0x${string}`;
                     /** Optional capabilities including paymaster service */
                     capabilities?: RequestCapabilities;
                 };
                 const params = request.params as [WalletSendCallsParams];
                 const callsData = params[0];
 
-                // Convert chainId to hex string if it's a number for resolveChain
-                const chainIdParam = typeof callsData.chainId === 'number'
-                    ? `0x${callsData.chainId.toString(16)}`
-                    : callsData.chainId;
-
                 // Resolve chain: param chainId -> current chain -> defaultChainId
-                const resolvedChain = this.resolveChain(chainIdParam);
+                const resolvedChain = this.resolveChain(callsData.chainId);
 
                 const uiRequest: TransactionUIRequest = {
                     id: crypto.randomUUID(),
@@ -289,8 +284,8 @@ export class AppSpecificSigner extends JAWSigner {
             case 'eth_sendTransaction': {
                 type EthSendTransactionParams = Omit<SendTransactionUIRequest['data'], 'chainId' | 'from'> & {
                     from?: Address;
-                    /** Target chain ID. Defaults to the connected chain. */
-                    chainId?: string;
+                    /** Target chain ID in hex format. Defaults to the connected chain. */
+                    chainId?: `0x${string}`;
                     /** Optional capabilities including paymaster service */
                     capabilities?: RequestCapabilities;
                 };
