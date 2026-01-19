@@ -1,1 +1,2 @@
-# Empty - no directories to ignore
+# Directories to ignore from Nx processing
+playground/demo-native
