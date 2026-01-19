@@ -44,6 +44,30 @@ export const OnboardingModalWrapper: React.FC<OnboardingModalWrapperProps> = ({
     loadAccounts();
   }, [apiKey]);
 
+  // Silent mode: check for existing auth state and use it directly
+  // This mirrors the cross-platform behavior where jaw:passkey:authState is checked
+  useEffect(() => {
+    if (!request.data.silent) {
+      return;
+    }
+
+    // Check if there's an existing authenticated session
+    const authenticatedAddress = Account.getAuthenticatedAddress(apiKey);
+
+    if (authenticatedAddress) {
+      // User is already authenticated - approve immediately without showing any UI
+      console.log('🔇 Silent mode: using existing auth state, address:', authenticatedAddress);
+      // Use setTimeout to defer the call and avoid unmounting during render
+      setTimeout(() => {
+        onApprove({
+          accounts: [{ address: authenticatedAddress }],
+        });
+      }, 0);
+    }
+    // If not authenticated, fall back to showing OnboardingModal
+    // (the normal UI flow will handle account creation/login)
+  }, [request.data.silent, apiKey, onApprove]);
+
   const loadAccounts = () => {
     try {
       const storedAccounts = Account.getStoredAccounts(apiKey);
@@ -68,6 +92,17 @@ export const OnboardingModalWrapper: React.FC<OnboardingModalWrapperProps> = ({
         account.credentialId,
         { getFn: getCredentialAdapter }
       );
+
+      // If silent mode, skip ConnectModal and approve immediately
+      if (request.data.silent) {
+        console.log('🔇 Silent mode: skipping connect confirmation');
+        const address = await loadedAccount.getAddress();
+        onApprove({
+          accounts: [{ address }],
+        });
+        return;
+      }
+
       setConnectedAccount(loadedAccount);
       setConnectedAccountName(account.username);
       setShowConfirmation(true);
@@ -91,6 +126,18 @@ export const OnboardingModalWrapper: React.FC<OnboardingModalWrapperProps> = ({
         { getFn: getCredentialAdapter }
       );
       const metadata = importedAccount.getMetadata();
+
+      // If silent mode, skip ConnectModal and approve immediately
+      if (request.data.silent) {
+        console.log('🔇 Silent mode: skipping connect confirmation');
+        const address = await importedAccount.getAddress();
+        setIsImporting(false);
+        onApprove({
+          accounts: [{ address }],
+        });
+        return;
+      }
+
       setConnectedAccount(importedAccount);
       setConnectedAccountName(metadata?.username || 'Imported Account');
       setShowConfirmation(true);
@@ -110,13 +157,17 @@ export const OnboardingModalWrapper: React.FC<OnboardingModalWrapperProps> = ({
   const handleCreateAccount = async (username: string): Promise<string> => {
     setIsCreating(true);
     try {
+      // Construct full subname when ENS is enabled (e.g., "john.example.eth")
+      const ensDomain = config.ens as string | undefined;
+      const fullUsername = ensDomain ? `${username.trim()}.${ensDomain}` : username.trim();
+
       const newAccount = await Account.create(
         { chainId, apiKey },
-        { username, rpId, rpName, createFn: createCredentialAdapter }
+        { username: fullUsername, rpId, rpName, createFn: createCredentialAdapter }
       );
       const address = await newAccount.getAddress();
       setConnectedAccount(newAccount);
-      setConnectedAccountName(username);
+      setConnectedAccountName(username); // Store original username for display
       return address;
     } catch (error) {
       console.error('Failed to create account:', error);
@@ -125,6 +176,17 @@ export const OnboardingModalWrapper: React.FC<OnboardingModalWrapperProps> = ({
   };
 
   const handleAccountCreationComplete = async () => {
+    // If silent mode, skip ConnectModal and approve immediately
+    if (request.data.silent && connectedAccount) {
+      console.log('🔇 Silent mode: skipping connect confirmation');
+      const address = await connectedAccount.getAddress();
+      setIsCreating(false);
+      onApprove({
+        accounts: [{ address }],
+      });
+      return;
+    }
+
     setIsCreating(false);
     setShowConfirmation(true);
     loadAccounts();

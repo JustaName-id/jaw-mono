@@ -37,6 +37,7 @@ export interface BrowserAuthResult {
   credentialId?: string;
   signature?: string;
   txHash?: string;
+  permissionId?: string;
   error?: string;
   data?: unknown;
 }
@@ -55,6 +56,12 @@ export interface TransactionParams {
   to: string;
   value?: string;
   data?: string;
+  credentialId: string;
+  chainId?: number;
+}
+
+export interface GrantPermissionsParams {
+  permissions: unknown; // EIP-7715 permissions object
   credentialId: string;
   chainId?: number;
 }
@@ -246,6 +253,51 @@ export class BrowserAuthenticator {
   }
 
   /**
+   * Grant permissions using passkey authentication
+   *
+   * Opens browser with the permissions request. User confirms with passkey,
+   * and the permission result is returned via deep link redirect.
+   */
+  async grantPermissions(params: GrantPermissionsParams): Promise<BrowserAuthResult> {
+    try {
+      const permissionsData = {
+        permissions: params.permissions,
+        chainId: params.chainId || this.config.defaultChainId,
+      };
+
+      const authUrl = this.buildAuthUrl('grantPermissions', {
+        permissions: this.base64Encode(JSON.stringify(permissionsData)),
+        credentialId: params.credentialId,
+      });
+
+      const result = await WebBrowser.openAuthSessionAsync(
+        authUrl,
+        this.callbackUrl,
+        {
+          showInRecents: true,
+          preferEphemeralSession: false,
+        }
+      );
+
+      if (result.type === 'success' && result.url) {
+        return this.parseCallbackUrl(result.url);
+      } else if (result.type === 'cancel') {
+        return { success: false, error: 'User cancelled' };
+      } else if (result.type === 'dismiss') {
+        return { success: false, error: 'Browser dismissed' };
+      } else {
+        return { success: false, error: 'Grant permissions failed' };
+      }
+    } catch (error) {
+      console.error('[BrowserAuthenticator] Grant permissions error:', error);
+      return {
+        success: false,
+        error: error instanceof Error ? error.message : 'Unknown error',
+      };
+    }
+  }
+
+  /**
    * Build the auth URL with all config encoded in params
    */
   private buildAuthUrl(action: string, extraParams?: Record<string, string>): string {
@@ -317,6 +369,11 @@ export class BrowserAuthenticator {
         // Transaction result
         if (decoded.txHash) {
           result.txHash = decoded.txHash;
+        }
+
+        // Grant permissions result
+        if (decoded.permissionId) {
+          result.permissionId = decoded.permissionId;
         }
 
         return result;
