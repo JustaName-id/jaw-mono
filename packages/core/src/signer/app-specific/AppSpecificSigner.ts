@@ -214,10 +214,17 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_sign': {
-                // ERC-7871 wallet_sign params structure
-                type WalletSignParams = { request: PersonalSignRequestData | TypedDataRequestData };
+                // ERC-7871 wallet_sign params structure with optional chainId
+                type WalletSignParams = {
+                    /** Target chain ID in hex format. Defaults to the connected chain. */
+                    chainId?: `0x${string}`;
+                    request: PersonalSignRequestData | TypedDataRequestData;
+                };
                 const params = request.params as [WalletSignParams];
                 const signParams = params[0];
+
+                // Resolve chain: param chainId -> current chain -> defaultChainId
+                const resolvedChain = this.resolveChain(signParams.chainId);
 
                 const uiRequest: WalletSignUIRequest = {
                     id: crypto.randomUUID(),
@@ -226,7 +233,7 @@ export class AppSpecificSigner extends JAWSigner {
                     correlationId,
                     data: {
                         address: this.accounts[0],
-                        chainId: this.chain.id,
+                        chainId: resolvedChain.id,
                         request: signParams.request,
                     },
                 };

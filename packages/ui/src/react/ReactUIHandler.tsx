@@ -959,6 +959,9 @@ function SignatureDialogWrapper({
 
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
+  const chainName = getChainNameFromId(chainId);
+  const chainIconKey = getChainIconKeyFromId(chainId);
+  const chainIcon = useChainIcon(chainIconKey, 24);
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -1005,6 +1008,9 @@ function SignatureDialogWrapper({
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
       accountAddress={request.data.address}
+      chainName={chainName}
+      chainId={chainId}
+      chainIcon={chainIcon}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}

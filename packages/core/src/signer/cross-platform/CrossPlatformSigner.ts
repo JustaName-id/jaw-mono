@@ -134,7 +134,7 @@ export class CrossPlatformSigner extends JAWSigner {
 
     /**
      * Extracts chainId from request params and resolves the chain.
-     * Supports eth_sendTransaction, wallet_grantPermissions, and wallet_sendCalls.
+     * Supports eth_sendTransaction, wallet_grantPermissions, wallet_sendCalls, and wallet_sign.
      * All methods accept chainId as hex string only (e.g., '0x1').
      */
     private resolveChainFromRequest(request: RequestArguments): SDKChain | undefined {
@@ -153,7 +153,8 @@ export class CrossPlatformSigner extends JAWSigner {
         switch (request.method) {
             case 'eth_sendTransaction':
             case 'wallet_grantPermissions':
-            case 'wallet_sendCalls': {
+            case 'wallet_sendCalls':
+            case 'wallet_sign': {
                 // All methods accept chainId as hex string only
                 const chainId = firstParam.chainId;
                 if (typeof chainId === 'string') {

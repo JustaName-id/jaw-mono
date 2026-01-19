@@ -416,6 +416,15 @@ console.log('Signature:', signature);`,
     requiresConnection: false,
     parameters: [
       {
+        name: 'chainId',
+        type: 'select',
+        label: 'Chain',
+        description: 'Target chain for signing (optional)',
+        required: false,
+        options: CHAIN_OPTIONS,
+        defaultValue: 'default',
+      },
+      {
         name: 'type',
         type: 'select',
         label: 'Signature Type',
@@ -468,10 +477,11 @@ console.log('Signature:', signature);`,
     ],
     getCodeSnippet: (params) => {
       const type = params.type || '0x45';
+      const chainIdLine = params.chainId && params.chainId !== 'default' ? `\n    chainId: '${params.chainId}',` : '';
       if (type === '0x45') {
         return `const signature = await jaw.provider.request({
   method: 'wallet_sign',
-  params: [{
+  params: [{${chainIdLine}
     request: {
       type: '0x45',
       data: {
@@ -487,7 +497,7 @@ console.log('Signature:', signature);`;
 
 const signature = await jaw.provider.request({
   method: 'wallet_sign',
-  params: [{
+  params: [{${chainIdLine}
     request: {
       type: '0x01',
       data: typedData,
@@ -500,14 +510,18 @@ console.log('Signature:', signature);`;
     },
     buildParams: (params) => {
       const type = params.type || '0x45';
-      return [{
+      const result: { chainId?: string; request: { type: string; data: unknown } } = {
         request: {
           type,
           data: type === '0x45'
             ? { message: params.message || 'Hello, World!' }
             : JSON.parse(params.typedData || '{}'),
         },
-      }];
+      };
+      if (params.chainId && params.chainId !== 'default') {
+        result.chainId = params.chainId;
+      }
+      return [result];
     },
   },
 
