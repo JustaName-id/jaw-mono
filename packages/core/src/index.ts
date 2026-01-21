@@ -1,5 +1,5 @@
 /**  Constants **/
-export { JAW_RPC_URL, JAW_PAYMASTER_URL } from './constants.js';
+export { JAW_RPC_URL, JAW_PAYMASTER_URL, JAW_WALLET_ICON, JAW_WALLET_NAME, JAW_WALLET_ID, JAW_WALLET_RDNS } from './constants.js';
 
 /**  SDK Info **/
 export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
@@ -73,7 +73,6 @@ export {
     JAWProvider,
     createJAWProvider,
     type CreateProviderOptions,
-    JAW_WALLET_ICON,
 } from './provider/index.js';
 
 /** Passkey types (used with Account class) **/

@@ -20,7 +20,3 @@ export {
     createJAWProvider,
     type CreateProviderOptions
 } from "./createJAWProvider.js"
-
-export {
-    JAW_WALLET_ICON,
-} from "./eip6963.js"

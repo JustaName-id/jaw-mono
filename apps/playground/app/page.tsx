@@ -29,7 +29,7 @@ export default function Home() {
         {/* Header */}
         <div className="mb-12 space-y-4">
           <h1 className="text-3xl md:text-4xl font-bold text-foreground">
-            JAW SDK Playground
+            JAW.id Playground
           </h1>
           <p className="text-lg text-muted-foreground">
             Interactive examples for testing and exploring the JAW SDK integrations.
