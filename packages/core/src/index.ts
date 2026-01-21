@@ -72,7 +72,8 @@ export {
     Mode,
     JAWProvider,
     createJAWProvider,
-    type CreateProviderOptions
+    type CreateProviderOptions,
+    JAW_WALLET_ICON,
 } from './provider/index.js';
 
 /** Passkey types (used with Account class) **/

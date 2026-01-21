@@ -4,6 +4,7 @@ import {
   type WalletConnectCapabilities,
   type WalletConnectResponse,
   JAW,
+  JAW_WALLET_ICON,
 } from '@jaw.id/core';
 import {
   ChainNotConfiguredError,
@@ -85,6 +86,7 @@ export function jaw(parameters: JawParameters) {
     name: 'JAW',
     type: jaw.type,
     rdns: 'keys.jaw.id',
+    icon: JAW_WALLET_ICON,
 
     async setup() {
       // Setup connect listener for auto-reconnection
