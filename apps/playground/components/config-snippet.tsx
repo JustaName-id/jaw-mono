@@ -31,12 +31,8 @@ export const config = createConfig({
       appName: 'My App',
       appLogoUrl: 'https://example.com/logo.png',
       // Optional: Issue subnames under your ENS domain
-      // Needs to be configured on JAW Dashboard
+      // Needs to be configured on the JAW Dashboard
       ens: 'myapp.eth',
-      preference: {
-        // Set to true to enable testnet networks
-        showTestnets: false,
-      },
     }),
   ],
   transports: {
@@ -59,13 +55,11 @@ export const config = createConfig({
       appName: 'My App',
       appLogoUrl: 'https://example.com/logo.png',
       // Optional: Issue subnames under your ENS domain
-      // Needs to be configured on JAW Dashboard
+      // Needs to be configured on the JAW Dashboard
       ens: 'myapp.eth',
       preference: {
         mode: Mode.AppSpecific,
         uiHandler: new ReactUIHandler(),
-        // Set to true to enable testnet networks
-        showTestnets: false,
       },
     }),
   ],
@@ -82,12 +76,8 @@ const jaw = JAW.create({
   appName: 'My App',
   appLogoUrl: 'https://example.com/logo.png',
   // Optional: Issue subnames under your ENS domain
-  // Needs to be configured on JAW Dashboard
+  // Needs to be configured on the JAW Dashboard
   ens: 'myapp.eth',
-  preference: {
-    // Set to true to enable testnet networks
-    showTestnets: false,
-  },
 });
 
 // Use the EIP-1193 provider
@@ -101,13 +91,11 @@ const jaw = JAW.create({
   appName: 'My App',
   appLogoUrl: 'https://example.com/logo.png',
   // Optional: Issue subnames under your ENS domain
-  // Needs to be configured on JAW Dashboard
+  // Needs to be configured on the JAW Dashboard
   ens: 'myapp.eth',
   preference: {
     mode: Mode.AppSpecific,
     uiHandler: new ReactUIHandler(),
-    // Set to true to enable testnet networks
-    showTestnets: false,
   },
 });
 
