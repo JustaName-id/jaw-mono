@@ -227,7 +227,7 @@ export default function KeysJawIdApp() {
       // For pure key exchange handshake (method: 'handshake'), send immediate response
       if (method === 'handshake') {
         // Send empty accounts response for key exchange handshake
-        const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
+        const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] }, apiKeyFromProvider);
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         communicator.sendMessage(response as unknown as Message);
         return;
@@ -248,7 +248,8 @@ export default function KeysJawIdApp() {
           onApprove: async (result: unknown) => {
             const response = await cryptoHandler.createHandshakeResponse(
               request.id,
-              result as { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> }
+              result as { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> },
+              apiKeyFromProvider
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(response as any);

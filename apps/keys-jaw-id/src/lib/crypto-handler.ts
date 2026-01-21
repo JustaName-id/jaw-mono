@@ -5,6 +5,7 @@ import {
   decryptContent,
   exportKeyToHexString,
   importKeyFromHexString,
+  handleGetCapabilitiesRequest,
 } from '@jaw.id/core';
 import type { RPCResponseMessage , RPCRequestMessage ,RPCRequest, MessageID} from '@jaw.id/core';
 
@@ -84,10 +85,12 @@ export class CryptoHandler {
    * Create encrypted handshake response
    * @param requestId - The request ID
    * @param walletConnectResponse - WalletConnectResponse object with accounts and optional capabilities
+   * @param apiKey - Optional API key for fetching capabilities from RPC
    */
   async createHandshakeResponse(
     requestId: MessageID,
-    walletConnectResponse: { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> }
+    walletConnectResponse: { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> },
+    apiKey?: string
   ): Promise<RPCResponseMessage> {
     console.log('📦 Creating handshake response:', walletConnectResponse);
 
@@ -101,26 +104,27 @@ export class CryptoHandler {
         throw new Error('Missing public keys');
       }
 
+      // Fetch capabilities dynamically from RPC
+      let capabilities: Record<string, Record<string, unknown>> = {};
+      if (apiKey) {
+        try {
+          console.log('🔄 Fetching capabilities from RPC...');
+          capabilities = await handleGetCapabilitiesRequest(
+            { method: 'wallet_getCapabilities', params: [] },
+            apiKey,
+            true // showTestnets - include all chains
+          );
+        } catch (err) {
+          console.warn('⚠️ Failed to fetch capabilities, using empty:', err);
+        }
+      }
+
       const responseData = {
         result: {
           value: walletConnectResponse,
         },
         data: {
-          // TODO: Make it dynamic based on the chain
-          capabilities: {
-            '0x1': {
-              paymasterService: { supported: false },
-              atomicBatch: { supported: false },
-            },
-            '0x2105': {
-              paymasterService: { supported: true },
-              atomicBatch: { supported: true },
-            },
-            '0x14a34': {
-              paymasterService: { supported: true },
-              atomicBatch: { supported: true },
-            },
-          },
+          capabilities,
         },
       };
 
