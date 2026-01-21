@@ -83,11 +83,11 @@ export class CryptoHandler {
   /**
    * Create encrypted handshake response
    * @param requestId - The request ID
-   * @param walletConnectResponse - WalletConnectResponse object with accounts and optional capabilities
+   * @param walletConnectResponse - WalletConnectResponse object with accounts
    */
   async createHandshakeResponse(
     requestId: MessageID,
-    walletConnectResponse: { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> }
+    walletConnectResponse: { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> },
   ): Promise<RPCResponseMessage> {
     console.log('📦 Creating handshake response:', walletConnectResponse);
 
@@ -104,23 +104,6 @@ export class CryptoHandler {
       const responseData = {
         result: {
           value: walletConnectResponse,
-        },
-        data: {
-          // TODO: Make it dynamic based on the chain
-          capabilities: {
-            '0x1': {
-              paymasterService: { supported: false },
-              atomicBatch: { supported: false },
-            },
-            '0x2105': {
-              paymasterService: { supported: true },
-              atomicBatch: { supported: true },
-            },
-            '0x14a34': {
-              paymasterService: { supported: true },
-              atomicBatch: { supported: true },
-            },
-          },
         },
       };
 
