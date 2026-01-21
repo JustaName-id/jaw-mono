@@ -83,8 +83,7 @@ export class CryptoHandler {
   /**
    * Create encrypted handshake response
    * @param requestId - The request ID
-   * @param walletConnectResponse - WalletConnectResponse object with accounts and optional capabilities
-   * @param apiKey - Optional API key for fetching capabilities from RPC
+   * @param walletConnectResponse - WalletConnectResponse object with accounts
    */
   async createHandshakeResponse(
     requestId: MessageID,
