@@ -5,7 +5,6 @@ import {
   decryptContent,
   exportKeyToHexString,
   importKeyFromHexString,
-  handleGetCapabilitiesRequest,
 } from '@jaw.id/core';
 import type { RPCResponseMessage , RPCRequestMessage ,RPCRequest, MessageID} from '@jaw.id/core';
 
@@ -90,7 +89,6 @@ export class CryptoHandler {
   async createHandshakeResponse(
     requestId: MessageID,
     walletConnectResponse: { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> },
-    apiKey?: string
   ): Promise<RPCResponseMessage> {
     console.log('📦 Creating handshake response:', walletConnectResponse);
 
@@ -104,27 +102,9 @@ export class CryptoHandler {
         throw new Error('Missing public keys');
       }
 
-      // Fetch capabilities dynamically from RPC
-      let capabilities: Record<string, Record<string, unknown>> = {};
-      if (apiKey) {
-        try {
-          console.log('🔄 Fetching capabilities from RPC...');
-          capabilities = await handleGetCapabilitiesRequest(
-            { method: 'wallet_getCapabilities', params: [] },
-            apiKey,
-            true // showTestnets - include all chains
-          );
-        } catch (err) {
-          console.warn('⚠️ Failed to fetch capabilities, using empty:', err);
-        }
-      }
-
       const responseData = {
         result: {
           value: walletConnectResponse,
-        },
-        data: {
-          capabilities,
         },
       };
 
