@@ -36,6 +36,7 @@ import { type ModeType } from './config';
 import { MethodCard } from '../../components/method-card';
 import { WagmiMethodModal } from '../../components/wagmi-method-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
+import { ConfigSnippet } from '../../components/config-snippet';
 import {
   WAGMI_METHODS,
   CATEGORIES,
@@ -287,11 +288,8 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
         {/* Header */}
         <div className="space-y-2">
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            JAW SDK Playground - Wagmi
+            JAW.id Playground - Wagmi
           </h1>
-          <p className="text-muted-foreground">
-            Test wagmi hooks with the @jaw.id/wagmi integration
-          </p>
         </div>
 
         {/* Mode Toggle */}
@@ -309,7 +307,18 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
                 {mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'}
               </span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <ConfigSnippet type="wagmi" mode={mode} />
+              <a
+                href="/wagmi"
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  mode === Mode.CrossPlatform
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                Cross-Platform
+              </a>
               <a
                 href="/wagmi?mode=app-specific"
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
@@ -320,22 +329,12 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
               >
                 App-Specific
               </a>
-              <a
-                href="/wagmi?mode=cross-platform"
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  mode === Mode.CrossPlatform
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                Cross-Platform
-              </a>
             </div>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
             {mode === Mode.AppSpecific
-              ? 'App-Specific mode: Direct signing with UI handled by ReactUIHandler in your app.'
-              : 'Cross-Platform mode: Uses popup authentication via keys.jaw.id.'}
+              ? 'Direct signing with UI handled by UIHandler in your app'
+              : 'Passkey operations handled via keys.jaw.id'}
           </p>
         </Card>
 
@@ -487,7 +486,7 @@ function WagmiPageInner() {
   const modeParam = searchParams.get('mode');
 
   const mode: ModeType =
-    modeParam === 'cross-platform' ? Mode.CrossPlatform : Mode.AppSpecific;
+    modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
 
   return (
     <WagmiProviders mode={mode}>

@@ -9,6 +9,7 @@ import { Card, Button } from '@jaw.id/ui';
 import { MethodCard } from '../../components/method-card';
 import { MethodModal } from '../../components/method-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
+import { ConfigSnippet } from '../../components/config-snippet';
 import {
   RPC_METHODS,
   CATEGORIES,
@@ -39,6 +40,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         mode: mode,
         uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
       },
+      ens: "justan.id",
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
     })
   );
@@ -127,11 +129,8 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         {/* Header */}
         <div className="space-y-2">
           <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            JAW SDK Playground - Core
+            JAW.id Playground - Core
           </h1>
-          <p className="text-muted-foreground">
-            Test RPC methods using the @jaw.id/core provider
-          </p>
         </div>
 
         {/* Mode Toggle */}
@@ -149,7 +148,18 @@ function CorePageContent({ mode }: { mode: ModeType }) {
                 {mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'}
               </span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <ConfigSnippet type="core" mode={mode} />
+              <a
+                href="/core"
+                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                  mode === Mode.CrossPlatform
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                }`}
+              >
+                Cross-Platform
+              </a>
               <a
                 href="/core?mode=app-specific"
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
@@ -160,22 +170,12 @@ function CorePageContent({ mode }: { mode: ModeType }) {
               >
                 App-Specific
               </a>
-              <a
-                href="/core?mode=cross-platform"
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
-                  mode === Mode.CrossPlatform
-                    ? 'bg-blue-600 text-white'
-                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                }`}
-              >
-                Cross-Platform
-              </a>
             </div>
           </div>
           <p className="text-xs text-muted-foreground mt-2">
             {mode === Mode.AppSpecific
-              ? 'App-Specific mode: Direct signing with UI handled by ReactUIHandler in your app.'
-              : 'Cross-Platform mode: Uses popup authentication via keys.jaw.id.'}
+              ? 'Direct signing with UI handled by UIHandler in your app'
+              : 'Passkey operations handled via keys.jaw.id'}
           </p>
         </Card>
 
@@ -314,7 +314,7 @@ function CorePageInner() {
   const modeParam = searchParams.get('mode');
 
   const mode: ModeType =
-    modeParam === 'cross-platform' ? Mode.CrossPlatform : Mode.AppSpecific;
+    modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
 
   return <CorePageContent key={mode} mode={mode} />;
 }
