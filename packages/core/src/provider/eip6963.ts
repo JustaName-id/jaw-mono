@@ -1,3 +1,5 @@
+import { announceProvider as mipdAnnounceProvider } from 'mipd';
+import type { EIP1193Provider } from 'mipd';
 import type { ProviderInterface } from './interface.js';
 
 // ============================================================================
@@ -70,7 +72,8 @@ export type AnnounceProviderCleanup = () => void;
  *
  * @see https://eips.ethereum.org/EIPS/eip-6963
  */
-export const JAW_WALLET_ICON: `data:image/${string}` = `data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzgiIGhlaWdodD0iMzgiIHZpZXdCb3g9IjAgMCAzOCAzOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDIxLjk5NDYgMjkuMzAxNCkiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDIxLjk5NDYgMjAuODYwMykiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDM0Ljc5MDMgMjkuMzAxNCkiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDM0Ljc5MDMgMjAuODYwMykiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDM0Ljc5MDMgMTIuMzk3KSIgZmlsbD0iIzAyMDYxNyIvPgo8cmVjdCB3aWR0aD0iNy4zOTcwNCIgaGVpZ2h0PSI3LjM5NzA0IiB0cmFuc2Zvcm09Im1hdHJpeCgtMC44NjYwMjUgLTAuNSAwIDEgMTUuNjA2IDI1LjYwMjkpIiBmaWxsPSIjMDIwNjE3Ii8+CjxyZWN0IHdpZHRoPSI3LjM5NzA0IiBoZWlnaHQ9IjcuMzk3MDQiIHRyYW5zZm9ybT0ibWF0cml4KC0wLjg2NjAyNSAtMC41IDAgMSAyOC40MDE0IDI1LjYwMjkpIiBmaWxsPSIjMDIwNjE3Ii8+CjxyZWN0IHdpZHRoPSI3LjM5NzA0IiBoZWlnaHQ9IjcuMzk3MDQiIHRyYW5zZm9ybT0ibWF0cml4KC0wLjg2NjAyNSAtMC41IDAgMSAyOC40MDE0IDE3LjE2MTgpIiBmaWxsPSIjMDIwNjE3Ii8+Cjwvc3ZnPgo=`
+export const JAW_WALLET_ICON: `data:image/${string}` = `data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzgiIGhlaWdodD0iMzgiIHZpZXdCb3g9IjAgMCAzOCAzOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDIxLjk5NDYgMjkuMzAxNCkiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDIxLjk5NDYgMjAuODYwMykiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDM0Ljc5MDMgMjkuMzAxNCkiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDM0Ljc5MDMgMjAuODYwMykiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDM0Ljc5MDMgMTIuMzk3KSIgZmlsbD0iIzAyMDYxNyIvPgo8cmVjdCB3aWR0aD0iNy4zOTcwNCIgaGVpZ2h0PSI3LjM5NzA0IiB0cmFuc2Zvcm09Im1hdHJpeCgtMC44NjYwMjUgLTAuNSAwIDEgMTUuNjA2IDI1LjYwMjkpIiBmaWxsPSIjMDIwNjE3Ii8+CjxyZWN0IHdpZHRoPSI3LjM5NzA0IiBoZWlnaHQ9IjcuMzk3MDQiIHRyYW5zZm9ybT0ibWF0cml4KC0wLjg2NjAyNSAtMC41IDAgMSAyOC40MDE0IDI1LjYwMjkpIiBmaWxsPSIjMDIwNjE3Ii8+CjxyZWN0IHdpZHRoPSI3LjM5NzA0IiBoZWlnaHQ9IjcuMzk3MDQiIHRyYW5zZm9ybT0ibWF0cml4KC0wLjg2NjAyNSAtMC41IDAgMSAyOC40MDE0IDE3LjE2MTgpIiBmaWxsPSIjMDIwNjE3Ii8+Cjwvc3ZnPgo=`;
+
 // ============================================================================
 // Announcer
 // ============================================================================
@@ -102,26 +105,17 @@ function getSessionUuid(): string {
  *
  * This hides all internal implementation details from devtools.
  */
-function createEIP1193Wrapper(provider: ProviderInterface): ProviderInterface {
+function createEIP1193Wrapper(provider: ProviderInterface): EIP1193Provider {
+  // Cast to EIP1193Provider - mipd's types are stricter but our provider is compatible
   return {
-    // EIP-1193: The sole mandatory method
-    request: (args) => provider.request(args),
-
-    // Provider disconnect
-    disconnect: () => provider.disconnect(),
-
-    // EIP-1193: Event methods per Node.js EventEmitter API
-    on: (event, listener) => provider.on(event, listener),
-    once: (event, listener) => provider.once(event, listener),
-    off: (event, listener) => provider.off(event, listener),
-    emit: (event, ...args) => provider.emit(event, ...args),
-    addListener: (event, listener) => provider.addListener(event, listener),
-    removeListener: (event, listener) => provider.removeListener(event, listener),
-    removeAllListeners: (event) => provider.removeAllListeners(event),
-    listeners: (event) => provider.listeners(event),
-    listenerCount: (event) => provider.listenerCount(event),
-    eventNames: () => provider.eventNames(),
-  } as ProviderInterface;
+    request: provider.request.bind(provider),
+    on: provider.on.bind(provider),
+    removeListener: provider.removeListener.bind(provider),
+    // Optional methods
+    off: provider.off?.bind(provider) ?? undefined,
+    once: provider.once?.bind(provider) ?? undefined,
+    addListener: provider.addListener?.bind(provider) ?? undefined,
+  } as unknown as EIP1193Provider;
 }
 
 /**
@@ -146,7 +140,7 @@ export function createProviderInfo(options?: EIP6963AnnouncerOptions): EIP6963Pr
 }
 
 /**
- * Announces a JAW Provider via EIP-6963.
+ * Announces a JAW Provider via EIP-6963 using mipd.
  *
  * This function:
  * 1. Dispatches the initial `eip6963:announceProvider` event
@@ -185,37 +179,18 @@ export function announceProvider(
   // Wrap provider in minimal EIP-1193 wrapper to hide internal details
   const wrappedProvider = createEIP1193Wrapper(provider);
 
-  // Create frozen provider detail per EIP-6963 spec
-  const detail: EIP6963ProviderDetail = Object.freeze({
-    info: Object.freeze(info),
+  // Use mipd's announceProvider for standard-compliant announcement
+  const unsubscribe = mipdAnnounceProvider({
+    info,
     provider: wrappedProvider,
   });
-
-  // Function to dispatch the announcement event
-  const announce = () => {
-    const announceEvent = new CustomEvent('eip6963:announceProvider', {
-      detail,
-    });
-    window.dispatchEvent(announceEvent);
-  };
-
-  // Dispatch initial announcement
-  announce();
-
-  // Handler for request events - re-announces the provider
-  const handleRequest = () => {
-    announce();
-  };
-
-  // Listen for request events
-  window.addEventListener('eip6963:requestProvider', handleRequest);
 
   // Mark as announced
   isAnnounced = true;
 
   // Create and store cleanup function
   activeCleanup = () => {
-    window.removeEventListener('eip6963:requestProvider', handleRequest);
+    unsubscribe();
     isAnnounced = false;
     activeCleanup = null;
   };
@@ -229,4 +204,16 @@ export function announceProvider(
  */
 export function _resetSessionUuid(): void {
   sessionUuid = null;
+}
+
+/**
+ * Resets the announcement state (primarily for testing)
+ * @internal
+ */
+export function _resetAnnouncementState(): void {
+  if (activeCleanup) {
+    activeCleanup();
+  }
+  isAnnounced = false;
+  activeCleanup = null;
 }
