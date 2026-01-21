@@ -36,6 +36,7 @@ import { type ModeType } from './config';
 import { MethodCard } from '../../components/method-card';
 import { WagmiMethodModal } from '../../components/wagmi-method-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
+import { ConfigSnippet } from '../../components/config-snippet';
 import {
   WAGMI_METHODS,
   CATEGORIES,
@@ -309,7 +310,8 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
                 {mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'}
               </span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <ConfigSnippet type="wagmi" mode={mode} />
               <a
                 href="/wagmi?mode=app-specific"
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${

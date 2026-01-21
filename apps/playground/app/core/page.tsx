@@ -9,6 +9,7 @@ import { Card, Button } from '@jaw.id/ui';
 import { MethodCard } from '../../components/method-card';
 import { MethodModal } from '../../components/method-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
+import { ConfigSnippet } from '../../components/config-snippet';
 import {
   RPC_METHODS,
   CATEGORIES,
@@ -39,6 +40,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         mode: mode,
         uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
       },
+      ens: "justan.id",
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
     })
   );
@@ -149,7 +151,8 @@ function CorePageContent({ mode }: { mode: ModeType }) {
                 {mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'}
               </span>
             </div>
-            <div className="flex gap-2">
+            <div className="flex items-center gap-2">
+              <ConfigSnippet type="core" mode={mode} />
               <a
                 href="/core?mode=app-specific"
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
