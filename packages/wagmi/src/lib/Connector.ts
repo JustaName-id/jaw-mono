@@ -4,6 +4,7 @@ import {
   type WalletConnectCapabilities,
   type WalletConnectResponse,
   JAW,
+  JAW_WALLET_ICON,
 } from '@jaw.id/core';
 import {
   ChainNotConfiguredError,
@@ -18,6 +19,7 @@ import {
   UserRejectedRequestError,
   withRetry,
 } from 'viem';
+import {JAW_WALLET_ID, JAW_WALLET_NAME, JAW_WALLET_RDNS} from "@jaw.id/core";
 
 export type JawParameters = CreateJAWSDKOptions;
 
@@ -81,10 +83,11 @@ export function jaw(parameters: JawParameters) {
   let disconnect: Connector['onDisconnect'] | undefined;
 
   return createConnector<Provider, ConnectorProperties>((config) => ({
-    id: 'jaw',
-    name: 'JAW',
+    id: JAW_WALLET_ID,
+    name: JAW_WALLET_NAME,
     type: jaw.type,
-    rdns: 'keys.jaw.id',
+    rdns: JAW_WALLET_RDNS,
+    icon: JAW_WALLET_ICON,
 
     async setup() {
       // Setup connect listener for auto-reconnection
