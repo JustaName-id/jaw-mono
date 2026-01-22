@@ -4,7 +4,8 @@ import { useState, useCallback, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { JAW, Mode } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
-import { Card, Button } from '@jaw.id/ui';
+import { Card } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
 
 import { MethodCard } from '../../components/method-card';
 import { MethodModal } from '../../components/method-modal';

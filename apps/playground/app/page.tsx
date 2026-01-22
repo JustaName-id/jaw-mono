@@ -1,7 +1,7 @@
 'use client';
 
 import Link from 'next/link';
-import { Card } from '@jaw.id/ui';
+import { Card } from '../components/ui/card';
 
 const routes = [
   {

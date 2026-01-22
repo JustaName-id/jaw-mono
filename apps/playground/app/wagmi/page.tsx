@@ -4,7 +4,8 @@ import { useState, useCallback, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { Mode } from '@jaw.id/core';
-import { Card, Button } from '@jaw.id/ui';
+import { Card } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
 import { parseEther, formatUnits, type Address } from 'viem';
 import {
   useAccount,
