@@ -59,3 +59,12 @@ test/
 
 .claude
 .cursor
+
+# React Native (ignore android/ios folders anywhere in the repo)
+android/
+ios/
+*.xcodeproj
+*.xcworkspace
+.expo/
+.expo-shared/
+expo-env.d.ts

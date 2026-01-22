@@ -2,6 +2,11 @@
   "name": "@jaw.id/ui",
   "version": "0.0.1",
   "type": "module",
+  "sideEffects": [
+    "**/*.css",
+    "./src/styles.css",
+    "./dist/index.css"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -12,8 +17,7 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "default": "./dist/index.js"
-    },
-    "./style.css": "./dist/index.css"
+    }
   },
   "peerDependencies": {
     "react": ">=18.0.0",
@@ -48,6 +52,7 @@
   "devDependencies": {
     "autoprefixer": "^10.4.21",
     "postcss": "^8.5.6",
-    "tailwindcss": "3"
+    "tailwindcss": "3",
+    "vite-plugin-lib-inject-css": "^2.2.2"
   }
 }
