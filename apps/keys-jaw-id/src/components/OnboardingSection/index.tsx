@@ -2,8 +2,8 @@
 
 import { LocalStorageAccount, OnboardingDialog } from '@jaw.id/ui';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
-import { useState } from 'react';
-import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest } from '@jaw.id/core';
+import { useState, useMemo } from 'react';
+import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest, JAW_RPC_URL } from '@jaw.id/core';
 import { ChainId } from '../../utils/types';
 
 
@@ -23,6 +23,10 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
     const { refetch: refetchAuth } = useAuth();
     const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
 
+    // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
+    const mainnetRpcUrl = useMemo(() => {
+        return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
+    }, [apiKey]);
 
     console.log('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED')
     console.log('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED')
@@ -122,6 +126,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
             isCreating={isCreatingPasskey}
             ensDomain={ensConfig}
             chainId={chainId}
+            mainnetRpcUrl={mainnetRpcUrl}
             apiKey={apiKey}
             supportedChains={SUPPORTED_CHAINS.map(chain => ({ id: chain.id }))}
             subnameTextRecords={subnameTextRecords}

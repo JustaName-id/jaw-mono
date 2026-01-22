@@ -5,7 +5,7 @@ import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { Account, standardErrorCodes } from "@jaw.id/core";
+import { Account, standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
 
 
 
@@ -48,6 +48,11 @@ export const SignatureModal = ({
     }
     return '';
   }, [apiKey, chain?.rpcUrl]);
+
+  // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
+  const mainnetRpcUrl = useMemo(() => {
+    return effectiveApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}` : `${JAW_RPC_URL}?chainId=1`;
+  }, [effectiveApiKey]);
 
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
@@ -160,6 +165,7 @@ export const SignatureModal = ({
       chainName={chainName}
       chainIcon={chainIcon}
       chainId={chain.id}
+      mainnetRpcUrl={mainnetRpcUrl}
       onSign={signMessage}
       onCancel={handleCancel}
       isProcessing={isProcessing}

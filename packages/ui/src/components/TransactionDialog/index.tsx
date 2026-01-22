@@ -36,6 +36,8 @@ export const TransactionDialog = ({
   onFeeTokenSelect,
   showFeeTokenSelector,
   isPayingWithErc20,
+  // RPC configuration
+  mainnetRpcUrl,
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
@@ -56,7 +58,7 @@ export const TransactionDialog = ({
 
   // Initialize JustaName and resolve addresses
   useEffect(() => {
-    const justaName = getJustaNameInstance();
+    const justaName = getJustaNameInstance(mainnetRpcUrl);
 
     // Resolve wallet address
     if (walletAddress && currentTransaction?.chainId) {

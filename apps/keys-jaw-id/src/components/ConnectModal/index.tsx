@@ -4,7 +4,7 @@ import { ConnectDialog, useChainIcon } from "@jaw.id/ui";
 import { useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { standardErrorCodes } from "@jaw.id/core";
+import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
 
 
 
@@ -36,6 +36,20 @@ export const ConnectModal = ({
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
   const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
+
+  // Extract API key from chain.rpcUrl for mainnet RPC URL
+  const mainnetRpcUrl = useMemo(() => {
+    if (chain?.rpcUrl) {
+      try {
+        const url = new URL(chain.rpcUrl);
+        const apiKey = url.searchParams.get('api-key');
+        return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
+      } catch {
+        return `${JAW_RPC_URL}?chainId=1`;
+      }
+    }
+    return `${JAW_RPC_URL}?chainId=1`;
+  }, [chain?.rpcUrl]);
 
   const handleConnect = async () => {
     try {
@@ -72,6 +86,7 @@ export const ConnectModal = ({
       chainName={chainName}
       chainId={chain?.id}
       chainIcon={chainIcon}
+      mainnetRpcUrl={mainnetRpcUrl}
       onConnect={handleConnect}
       onCancel={handleCancel}
       isProcessing={isProcessing}

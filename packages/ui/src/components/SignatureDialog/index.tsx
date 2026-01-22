@@ -18,6 +18,7 @@ export const SignatureDialog = ({
   chainName,
   chainId,
   chainIcon,
+  mainnetRpcUrl,
   onSign,
   onCancel,
   isProcessing,
@@ -30,7 +31,7 @@ export const SignatureDialog = ({
   // Resolve account address to human-readable name
   useEffect(() => {
     if (accountAddress && chainId) {
-      const justaName = getJustaNameInstance();
+      const justaName = getJustaNameInstance(mainnetRpcUrl);
       justaName.subnames.reverseResolve({
         address: accountAddress as `0x${string}`,
         chainId: chainId,

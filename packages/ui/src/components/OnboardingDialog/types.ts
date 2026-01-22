@@ -25,7 +25,8 @@ export interface OnboardingDialogProps {
   // Configuration
   ensDomain?: string;
   chainId?: number;
-  apiKey?: string;
+  mainnetRpcUrl: string;
+  apiKey?: string; // API key for JustaName API authentication (xApiKey header)
   supportedChains?: Array<{ id: number }>;
   subnameTextRecords?: SubnameTextRecordCapabilityRequest;
 }
