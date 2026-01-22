@@ -7,13 +7,15 @@ import {
   DialogHeader,
   DialogTitle,
   DialogDescription,
-  Button,
+} from './ui/dialog';
+import { Button } from './ui/button';
+import {
   Tabs,
   TabsList,
   TabsTrigger,
   TabsContent,
-  ScrollArea,
-} from '@jaw.id/ui';
+} from './ui/tabs';
+import { ScrollArea } from './ui/scroll-area';
 import { type RpcMethod, CATEGORY_COLORS, CATEGORY_LABELS } from '../lib/rpc-methods';
 import { ParameterField } from './parameter-field';
 

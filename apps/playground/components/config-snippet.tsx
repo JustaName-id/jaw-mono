@@ -2,14 +2,14 @@
 
 import { useState } from 'react';
 import { Mode } from '@jaw.id/core';
+import { Button } from './ui/button';
 import {
-  Button,
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from '@jaw.id/ui';
+} from './ui/dialog';
 
 type ModeType = (typeof Mode)[keyof typeof Mode];
 type ConfigType = 'wagmi' | 'core';

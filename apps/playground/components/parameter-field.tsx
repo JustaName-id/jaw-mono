@@ -1,14 +1,14 @@
 'use client';
 
+import { Input } from './ui/input';
+import { Label } from './ui/label';
 import {
-  Input,
-  Label,
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
   SelectValue,
-} from '@jaw.id/ui';
+} from './ui/select';
 import { type ParameterDefinition } from '../lib/rpc-methods';
 
 interface ParameterFieldProps {

@@ -1,6 +1,6 @@
 'use client';
 
-import { Card } from '@jaw.id/ui';
+import { Card } from './ui/card';
 import { type MethodCategory, CATEGORY_COLORS, CATEGORY_LABELS } from '../lib/rpc-methods';
 
 // Generic method interface for both core and wagmi methods

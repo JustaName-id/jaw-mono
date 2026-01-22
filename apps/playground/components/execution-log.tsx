@@ -1,6 +1,8 @@
 'use client';
 
-import { Button, Card, ScrollArea } from '@jaw.id/ui';
+import { Button } from './ui/button';
+import { Card } from './ui/card';
+import { ScrollArea } from './ui/scroll-area';
 
 export type LogEntry = {
   timestamp: Date;

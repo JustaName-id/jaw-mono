@@ -199,6 +199,8 @@ export class ReactUIHandler implements UIHandler {
 
         const cleanup = () => {
           try {
+            document.body.style.removeProperty('pointer-events');
+
             root.unmount();
             if (container.parentNode) {
               container.parentNode.removeChild(container);
