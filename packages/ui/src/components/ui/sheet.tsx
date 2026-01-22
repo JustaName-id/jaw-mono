@@ -6,8 +6,38 @@ import { XIcon } from "lucide-react"
 
 import { cn } from "../../lib/utils"
 
-function Sheet({ ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
-  return <SheetPrimitive.Root data-slot="sheet" {...props} />
+function Sheet({
+  open,
+  ...props
+}: React.ComponentProps<typeof SheetPrimitive.Root>) {
+  const prevOpenRef = React.useRef(open);
+
+  // Cleanup pointer-events when sheet closes OR unmounts
+  React.useEffect(() => {
+    // Track when sheet transitions from open to closed
+    if (prevOpenRef.current === true && open === false) {
+      // Wait for close animation to complete (300ms duration-300) plus buffer
+      const cleanup = setTimeout(() => {
+        document.body.style.removeProperty('pointer-events');
+      }, 350);
+
+      prevOpenRef.current = open;
+      return () => clearTimeout(cleanup);
+    }
+
+    prevOpenRef.current = open;
+
+    // Cleanup on unmount - remove pointer-events if sheet was open
+    return () => {
+      if (open === true) {
+        setTimeout(() => {
+          document.body.style.removeProperty('pointer-events');
+        }, 350);
+      }
+    };
+  }, [open]);
+
+  return <SheetPrimitive.Root data-slot="sheet" open={open} {...props} />
 }
 
 function SheetTrigger({
@@ -72,7 +102,7 @@ function SheetContent({
         {...props}
       >
         {children}
-        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-xs opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
+        <SheetPrimitive.Close className="ring-offset-background focus:ring-ring data-[state=open]:bg-secondary absolute top-4 right-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 focus:outline-hidden disabled:pointer-events-none">
           <XIcon className="size-4" />
           <span className="sr-only">Close</span>
         </SheetPrimitive.Close>

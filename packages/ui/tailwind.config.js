@@ -31,6 +31,7 @@ module.exports = {
     // Flexbox and Grid
     {
       pattern: /^(flex|grid|items|justify|content)-.*/,
+      variants: ['sm', 'md', 'lg', 'xl', '2xl'],
     },
     // Animation classes from tailwindcss-animate
     'animate-in',
