@@ -32,7 +32,7 @@
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
 import type { CommunicationAdapter } from '@jaw.id/core';
-import { Message, MessageID } from '@jaw.id/core';
+import { Message, MessageID, RPCResponseMessage, RPCResponse } from '@jaw.id/core';
 
 // SDK version - should match core package
 const SDK_VERSION = '1.0.0';
@@ -66,6 +66,13 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
 
   constructor() {
     // Empty - config set via init()
+  }
+
+  /**
+   * Generate a unique message ID (UUID).
+   */
+  private generateMessageId(): MessageID {
+    return crypto.randomUUID() as MessageID;
   }
 
   /**
@@ -265,7 +272,7 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
 
           // Transform browser mode response to expected RPC message format
           // Different methods return different response formats
-          let rpcResponse: any;
+          let rpcResponse: RPCResponse;
 
           if (rawResponse.address) {
             // Connect response: { address, username, credentialId, chainId }
@@ -318,13 +325,25 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
 
           console.log('[MobileCommunicationAdapter] Created RPC response:', rpcResponse);
 
+          // Wrap in RPCResponseMessage format with unencrypted content
+          // This matches the format used by WebCommunicationAdapter (which uses encrypted content)
+          const responseMessage: RPCResponseMessage = {
+            id: this.generateMessageId(),
+            requestId: firstRequestId,
+            sender: '', // Not used in browser mode (no encryption)
+            content: {
+              unencrypted: rpcResponse,
+            },
+            timestamp: new Date(),
+          };
+
           // Notify message listeners
           this.messageListeners.forEach((listener) => {
-            listener(rpcResponse);
+            listener(responseMessage);
           });
 
-          // Resolve with the RPC response
-          firstRequest.resolve(rpcResponse);
+          // Resolve with the RPCResponseMessage (matches WebCommunicationAdapter return type)
+          firstRequest.resolve(responseMessage);
           this.pendingRequests.delete(firstRequestId);
         } else {
           console.warn('[MobileCommunicationAdapter] No pending requests to resolve');

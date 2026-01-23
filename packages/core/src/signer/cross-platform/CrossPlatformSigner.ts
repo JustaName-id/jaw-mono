@@ -72,28 +72,32 @@ export class CrossPlatformSigner extends JAWSigner {
             },
             correlationId
         );
-        const response: any =
+        const response: RPCResponseMessage =
             await this.adapter.postRequestAndWaitForResponse(handshakeMessage);
 
-       if (response && 'result' in response && !response.sender && !response.content) {
+        // Check for browser mode (unencrypted response from mobile adapter)
+        if ('unencrypted' in response.content) {
             console.log('[CrossPlatformSigner] Browser mode detected, bypassing encryption for all future requests');
             this.isBrowserMode = true; // Store flag for future requests
-            await this.handleResponse(args, response as RPCResponse);
+            await this.handleResponse(args, response.content.unencrypted);
             return;
         }
 
         // Normal encrypted flow for popup/web mode
-        // store peer's public key
+        // throw protocol level error
         if ('failure' in response.content) {
             throw response.content.failure;
         }
 
-        const peerPublicKey = await importKeyFromHexString('public', response.sender);
-        await this.keyManager.setPeerPublicKey(peerPublicKey);
+        // Store peer's public key for encryption (encrypted mode only)
+        if ('encrypted' in response.content) {
+            const peerPublicKey = await importKeyFromHexString('public', response.sender);
+            await this.keyManager.setPeerPublicKey(peerPublicKey);
 
-        const decrypted = await this.decryptResponseMessage(response);
+            const decrypted = await this.decryptResponseMessage(response);
 
-        await this.handleResponse(args, decrypted);
+            await this.handleResponse(args, decrypted);
+        }
     }
 
     protected override async handleWalletConnect(request: RequestArguments): Promise<unknown> {
@@ -226,14 +230,14 @@ export class CrossPlatformSigner extends JAWSigner {
                 this.getCorrelationId(request)
             );
 
-            const response: any = await this.adapter.postRequestAndWaitForResponse(requestMessage);
+            const response: RPCResponseMessage = await this.adapter.postRequestAndWaitForResponse(requestMessage);
 
-            // Browser mode response is already in RPCResponse format
-            if (response && 'result' in response) {
-                return this.handleResponse(request, response as RPCResponse);
+            // Browser mode response has unencrypted content
+            if ('unencrypted' in response.content) {
+                return this.handleResponse(request, response.content.unencrypted);
             }
 
-            throw new Error('Invalid browser mode response');
+            throw new Error('Invalid browser mode response: expected unencrypted content');
         }
 
         // Normal encrypted flow for popup/web mode
@@ -295,6 +299,14 @@ export class CrossPlatformSigner extends JAWSigner {
         // throw protocol level error
         if ('failure' in content) {
             throw content.failure;
+        }
+
+        if ('unencrypted' in content) {
+            throw standardErrors.rpc.internal('Unexpected unencrypted response in decryptResponseMessage');
+        }
+
+        if (!('encrypted' in content)) {
+            throw standardErrors.rpc.internal('Invalid response format: expected encrypted content');
         }
 
         const sharedSecret = await this.keyManager.getSharedSecret();

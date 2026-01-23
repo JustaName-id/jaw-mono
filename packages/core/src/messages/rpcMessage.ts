@@ -35,6 +35,9 @@ export interface RPCResponseMessage extends RPCMessage {
     }
         | {
         failure: SerializedEthereumRpcError;
+    }
+        | {
+        unencrypted: RPCResponse;
     };
 }
 
