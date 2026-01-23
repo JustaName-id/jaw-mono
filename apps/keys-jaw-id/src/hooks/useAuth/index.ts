@@ -33,6 +33,7 @@ export interface UseAuthReturn {
   session: AppSession | null;
   walletAddress: string | null;
   credentialId: string | null;
+  publicKey: `0x${string}` | null;
   accountName: string | null;
 
   // Global state (all accounts)
@@ -85,6 +86,7 @@ export function useAuth(options: UseAuthOptions = {}): UseAuthReturn {
     session: query.data?.session ?? null,
     walletAddress: query.data?.walletAddress ?? null,
     credentialId: query.data?.credentialId ?? null,
+    publicKey: query.data?.authState?.publicKey ?? null,
     accountName: query.data?.accountName ?? null,
 
     allAccounts: query.data?.allAccounts ?? [],

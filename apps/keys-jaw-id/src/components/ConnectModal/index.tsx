@@ -40,7 +40,6 @@ export const ConnectModal = ({
   const handleConnect = async () => {
     try {
       setIsProcessing(true);
-      console.log('🔗 User approved connection to', appName);
       onSuccess();
     } catch (error) {
       console.error("Error connecting:", error);
@@ -53,7 +52,6 @@ export const ConnectModal = ({
 
   const handleCancel = () => {
     if (!isProcessing) {
-      console.log('❌ User cancelled connection request');
       // User rejected request (EIP-1193 code 4001)
       onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
     }
@@ -62,7 +60,7 @@ export const ConnectModal = ({
   return (
     <ConnectDialog
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {}}
       appName={appName}
       appLogoUrl={appLogoUrl}
       origin={origin}

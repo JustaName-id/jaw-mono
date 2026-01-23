@@ -57,13 +57,15 @@ export const TransactionModal = ({
   onSuccess,
   onError
 }: TransactionModalProps) => {
-  const { getAccount } = usePasskeys();
-  const { walletAddress, credentialId } = useAuth({ origin });
+  const { restoreAccount } = usePasskeys();
+  const { walletAddress, credentialId, publicKey } = useAuth({ origin });
   const ethPrice = useEthPrice();
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [account, setAccount] = useState<Account | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitializingRef = useRef(false);
+  const isMountedRef = useRef(true);
 
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -324,61 +326,72 @@ export const TransactionModal = ({
     };
   }, [chain, effectiveApiKey, walletAddress, effectivePaymasterUrl]);
 
+  // Set mounted ref on mount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Initialize account when modal opens
   useEffect(() => {
-    let isMounted = true;
-
     const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false);
-          console.log('🔐 Initializing transaction modal');
+      // Wait for chain, credentialId, and publicKey to be available
+      if (!chain || !credentialId || !publicKey) {
+        return;
+      }
 
-          // Merge paymasterUrl from capabilities or ERC-20 selection into chain before creating account
-          const chainWithPaymaster = {
-            ...chain,
-            ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
-          };
+      // Skip if already initializing or initialized
+      if (isInitializingRef.current || account) {
+        return;
+      }
 
-          if (!credentialId) {
-            throw new Error('No authenticated session found. Please reconnect.');
-          }
-          const restoredAccount = await getAccount(chainWithPaymaster, credentialId, effectiveApiKey);
+      isInitializingRef.current = true;
 
-          if (isMounted) {
-            setAccount(restoredAccount);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          if (isMounted) {
-            setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError?.(errorObj, errorCode);
-          }
-        }
-      } else {
-        // Reset when chain is not provided
-        setAccount(null);
-        setTransactionStatus('');
+      try {
         setIsProcessing(false);
-        setFeeTokens([]);
+
+        // Merge paymasterUrl from capabilities or ERC-20 selection into chain before creating account
+        const chainWithPaymaster = {
+          ...chain,
+          ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
+        };
+
+        // Use restoreAccount to create Account WITHOUT triggering WebAuthn prompt
+        // WebAuthn will only be triggered when user clicks Confirm
+        const restoredAccount = await restoreAccount(chainWithPaymaster, credentialId, publicKey, effectiveApiKey);
+
+        // Only update state if component is still mounted (using ref to persist across re-renders)
+        if (isMountedRef.current) {
+          setAccount(restoredAccount);
+        }
+      } catch (error) {
+        console.error("Error initializing account:", error);
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
+          const errorObj = error instanceof Error ? error : new Error(String(error));
+          const errorCode = standardErrorCodes.rpc.internal;
+          onError?.(errorObj, errorCode);
+        }
+      } finally {
+        isInitializingRef.current = false;
       }
     };
 
     initializeModal();
 
+    // Cleanup function - clear any pending timeouts
     return () => {
-      isMounted = false;
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
     };
-  }, [chain, effectiveApiKey, credentialId, computedPaymasterUrl, getAccount, onError]);
+    // Note: account is checked via ref pattern to avoid re-running when it changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain, effectiveApiKey, credentialId, publicKey, computedPaymasterUrl, restoreAccount, onError]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -471,7 +484,6 @@ export const TransactionModal = ({
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
       setAccount(null);
-      console.log('❌ User cancelled transaction request');
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setTransactionStatus('');
@@ -486,7 +498,7 @@ export const TransactionModal = ({
       // open={open}
       // onOpenChange={handleCancel}
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {}}
       transactions={normalizedTransactions}
       walletAddress={walletAddress ?? ''}
       gasFee={gasFee}

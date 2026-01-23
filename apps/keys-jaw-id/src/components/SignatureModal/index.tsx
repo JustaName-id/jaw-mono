@@ -33,8 +33,10 @@ export const SignatureModal = ({
   const [account, setAccount] = useState<Account | null>(null);
   const [timestamp] = useState(() => new Date());
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { getAccount } = usePasskeys();
-  const { credentialId } = useAuth({ origin });
+  const isInitializingRef = useRef(false);
+  const isMountedRef = useRef(true);
+  const { restoreAccount } = usePasskeys();
+  const { credentialId, publicKey } = useAuth({ origin });
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -66,7 +68,6 @@ export const SignatureModal = ({
       }
 
       const signature = await account.signMessage(messageToSign);
-      console.log('Signature:', signature);
 
       setSignatureStatus('Signature created successfully!');
 
@@ -90,64 +91,70 @@ export const SignatureModal = ({
   const handleCancel = () => {
     if (!isProcessing) {
       setAccount(null);
-      console.log('User cancelled signature request');
       // User rejected request (EIP-1193 code 4001)
       onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setSignatureStatus('');
     }
   };
 
+  // Set mounted ref on mount
   useEffect(() => {
-    let isMounted = true;
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
+  useEffect(() => {
     const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false); // Reset processing state when opening
-          console.log('Initializing signature modal with message:', messageToSign);
-          console.log('Address:', address);
-          if (!credentialId) {
-            throw new Error('No authenticated session found. Please reconnect.');
-          }
-          const restoredAccount = await getAccount(chain, credentialId, effectiveApiKey);
+      // Wait for chain, credentialId, and publicKey to be available
+      if (!chain || !credentialId || !publicKey) {
+        return;
+      }
 
-          // Only update state if component is still mounted
-          if (isMounted) {
-            setAccount(restoredAccount);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          // Only update state if component is still mounted
-          if (isMounted) {
-            setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError(errorObj, errorCode);
-          }
+      // Skip if already initializing or initialized
+      if (isInitializingRef.current || account) {
+        return;
+      }
+
+      isInitializingRef.current = true;
+
+      try {
+        setIsProcessing(false); // Reset processing state when opening
+        // Use restoreAccount to create Account WITHOUT triggering WebAuthn prompt
+        // WebAuthn will only be triggered when user clicks Sign
+        const restoredAccount = await restoreAccount(chain, credentialId, publicKey, effectiveApiKey);
+
+        // Only update state if component is still mounted (using ref to persist across re-renders)
+        if (isMountedRef.current) {
+          setAccount(restoredAccount);
         }
-      } else {
-        // Reset everything when modal closes
-        setAccount(null);
-        setSignatureStatus('');
-        setIsProcessing(false);
+      } catch (error) {
+        console.error("Error initializing account:", error);
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
+          const errorObj = error instanceof Error ? error : new Error(String(error));
+          const errorCode = standardErrorCodes.rpc.internal;
+          onError(errorObj, errorCode);
+        }
+      } finally {
+        isInitializingRef.current = false;
       }
     };
 
     initializeModal();
 
-    // Cleanup function
+    // Cleanup function - clear any pending timeouts
     return () => {
-      isMounted = false;
-      // Clear any pending timeouts
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
     };
-  }, [chain, messageToSign, address, effectiveApiKey, credentialId, onError, getAccount]);
+    // Note: account is checked via ref pattern to avoid re-running when it changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain, messageToSign, address, effectiveApiKey, credentialId, publicKey, onError, restoreAccount]);
 
   const canSign = !isProcessing && !!messageToSign && !!account;
 
@@ -156,7 +163,7 @@ export const SignatureModal = ({
       // open={open}
       // onOpenChange={onOpenChange}
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {}}
       message={messageToSign}
       origin={origin}
       timestamp={timestamp}

@@ -7,8 +7,15 @@ import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest } from '@ja
 import { ChainId } from '../../utils/types';
 
 
+export interface AuthenticatedAccount {
+    username: string;
+    credentialId: string;
+    publicKey: `0x${string}`;
+    isImported: boolean;
+}
+
 interface SignInScreenProps {
-    onComplete: () => void
+    onComplete: (authenticatedAccount?: AuthenticatedAccount) => void
     ensConfig?: string
     chainId?: ChainId
     apiKey?: string
@@ -23,11 +30,6 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
     const { refetch: refetchAuth } = useAuth();
     const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
 
-
-    console.log('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED')
-    console.log('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED')
-    console.log('✅ OnboardingSection: ApiKey =', apiKey ? 'PROVIDED' : 'NOT PROVIDED')
-    console.log('✅ OnboardingSection: SubnameTextRecords =', subnameTextRecords)
 
     const { mutateAsync: register, isPending: isCreatingPasskey } = useCreatePasskey();
 
@@ -60,9 +62,19 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
                 isImported: account.isImported,
                 apiKey,
             })
-            onComplete()
+
+            // Find the full account info from the accounts array (which has publicKey)
+            const fullAccount = accounts.find(a => a.credentialId === account.credentialId);
+
+            // Pass the authenticated account to onComplete
+            onComplete(fullAccount ? {
+                username: fullAccount.username,
+                credentialId: fullAccount.credentialId,
+                publicKey: fullAccount.publicKey as `0x${string}`,
+                isImported: fullAccount.isImported,
+            } : undefined)
         } catch (error) {
-            console.error("❌ Login failed:", error)
+            console.error("Login failed:", error)
             setLoggingInAccount(null);
         }
     }
@@ -85,23 +97,41 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
 
             return result.address;
         } catch (error) {
-            console.error('❌ Error details:', error instanceof Error ? error.message : String(error));
+            console.error('Account creation error:', error instanceof Error ? error.message : String(error));
             throw error;
         }
     }
 
     const handleAccountCreationComplete = async () => {
-        await refetchAccounts();
+        const result = await refetchAccounts();
         await refetchAuth();
-        onComplete();
+        // The newest account is the one just created
+        const newAccounts = result.data || [];
+        const newestAccount = newAccounts[newAccounts.length - 1];
+        onComplete(newestAccount ? {
+            username: newestAccount.username,
+            credentialId: newestAccount.credentialId,
+            publicKey: newestAccount.publicKey as `0x${string}`,
+            isImported: newestAccount.isImported,
+        } : undefined);
     }
 
     const handleImportAccount = async () => {
         try {
             await passkeyLogin({ apiKey, defaultChainId: chainId });
-            onComplete();
+            // Refetch to get the imported account
+            const result = await refetchAccounts();
+            const importedAccounts = result.data || [];
+            // The imported account should be the newest one
+            const importedAccount = importedAccounts[importedAccounts.length - 1];
+            onComplete(importedAccount ? {
+                username: importedAccount.username,
+                credentialId: importedAccount.credentialId,
+                publicKey: importedAccount.publicKey as `0x${string}`,
+                isImported: importedAccount.isImported,
+            } : undefined);
         } catch (error) {
-            console.error('❌ Import failed:', error);
+            console.error('Import failed:', error);
         }
     };
 

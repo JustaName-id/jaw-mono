@@ -1,7 +1,7 @@
 'use client'
 
 import { PermissionDialog, useGasEstimation, useEthPrice, type FeeTokenOption, fetchTokenBalance, isNativeToken } from "@jaw.id/ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
@@ -127,12 +127,14 @@ export const PermissionModal = ({
   onSuccess,
   onError
 }: PermissionModalProps) => {
-  const { getAccount } = usePasskeys();
-  const { walletAddress, credentialId } = useAuth({ origin });
+  const { restoreAccount } = usePasskeys();
+  const { walletAddress, credentialId, publicKey } = useAuth({ origin });
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [account, setAccount] = useState<Account | null>(null);
   const [isLoadingSmartAccount, setIsLoadingSmartAccount] = useState<boolean>(true); // Start true to prevent early clicks
+  const isInitializingRef = useRef(false);
+  const isMountedRef = useRef(true);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
@@ -489,11 +491,10 @@ export const PermissionModal = ({
     const fetchPermissionDetails = async () => {
       try {
         const permData = await getPermissionFromRelay(permissionId, extractedApiKey);
-        console.log('✅ Fetched permission details from relay:', permData);
         setFetchedPermissionData(permData);
         setIsLoadingPermissionDetails(false);
       } catch (error) {
-        console.error('❌ Failed to fetch permission details:', error);
+        console.error('Failed to fetch permission details:', error);
         setIsLoadingPermissionDetails(false);
       }
     };
@@ -596,59 +597,67 @@ export const PermissionModal = ({
     };
   }, [chain, extractedApiKey, viemChain, walletAddress, effectivePaymasterUrl]);
 
+  // Set mounted ref on mount
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
   // Initialize account when modal opens or permission request changes
   useEffect(() => {
-    let isMounted = true;
-
     const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false);
-          setIsLoadingSmartAccount(true);
-          console.log('Initializing permission modal');
+      // Wait for chain, credentialId, and publicKey to be available
+      if (!chain || !credentialId || !publicKey) {
+        return;
+      }
 
-          // Merge paymasterUrl from capabilities into chain before creating account
-          const chainWithPaymaster = {
-            ...chain,
-            ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
-          };
+      // Skip if already initializing or initialized
+      if (isInitializingRef.current || account) {
+        return;
+      }
 
-          if (!credentialId) {
-            throw new Error('No authenticated session found. Please reconnect.');
-          }
-          const restoredAccount = await getAccount(chainWithPaymaster, credentialId, extractedApiKey);
+      isInitializingRef.current = true;
 
-          if (isMounted) {
-            setAccount(restoredAccount);
-            setIsLoadingSmartAccount(false);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          if (isMounted) {
-            setIsLoadingSmartAccount(false);
-            setStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError?.(errorObj, errorCode);
-          }
-        }
-      } else {
-        setAccount(null);
-        setIsLoadingSmartAccount(false);
-        setStatus('');
+      try {
         setIsProcessing(false);
+        setIsLoadingSmartAccount(true);
+
+        // Merge paymasterUrl from capabilities into chain before creating account
+        const chainWithPaymaster = {
+          ...chain,
+          ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
+        };
+
+        // Use restoreAccount to create Account WITHOUT triggering WebAuthn prompt
+        // WebAuthn will only be triggered when user clicks Confirm
+        const restoredAccount = await restoreAccount(chainWithPaymaster, credentialId, publicKey, extractedApiKey);
+
+        // Only update state if component is still mounted (using ref to persist across re-renders)
+        if (isMountedRef.current) {
+          setAccount(restoredAccount);
+          setIsLoadingSmartAccount(false);
+        }
+      } catch (error) {
+        console.error("Error initializing account:", error);
+        // Only update state if component is still mounted
+        if (isMountedRef.current) {
+          setIsLoadingSmartAccount(false);
+          setStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
+          const errorObj = error instanceof Error ? error : new Error(String(error));
+          const errorCode = standardErrorCodes.rpc.internal;
+          onError?.(errorObj, errorCode);
+        }
+      } finally {
+        isInitializingRef.current = false;
       }
     };
 
     initializeModal();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [chain, permissionRequest, extractedApiKey, credentialId, computedPaymasterUrl, getAccount, onError]);
+    // Note: account is checked via ref pattern to avoid re-running when it changes
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [chain, permissionRequest, extractedApiKey, credentialId, publicKey, computedPaymasterUrl, restoreAccount, onError]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
@@ -772,7 +781,6 @@ export const PermissionModal = ({
           computedPaymasterContext
         );
 
-        console.log('Permissions granted:', result);
         setStatus('Permissions granted successfully!');
         onSuccess?.(result);
       } else {
@@ -788,7 +796,6 @@ export const PermissionModal = ({
         // Account.revokePermission uses the chain's paymasterUrl (which we set from capabilities)
         await account.revokePermission(permissionDetails.permissionId);
 
-        console.log('Permission revoked');
         setStatus('Permission revoked successfully!');
         onSuccess?.({ success: true });
       }
@@ -810,7 +817,6 @@ export const PermissionModal = ({
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
       setAccount(null);
-      console.log('❌ User cancelled permission request');
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setStatus('');
@@ -828,7 +834,7 @@ export const PermissionModal = ({
   return (
     <PermissionDialog
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {}}
       mode={mode}
       permissionId={mode === 'revoke' && 'permissionId' in permissionDetails ? permissionDetails.permissionId : undefined}
       spenderAddress={spenderAddress}

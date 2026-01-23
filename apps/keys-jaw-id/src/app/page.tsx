@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useAuth, usePasskeys } from '../hooks';
-import { SignInScreen } from '../components/OnboardingSection';
+import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
@@ -59,6 +59,7 @@ export default function KeysJawIdApp() {
   const [config, setConfig] = useState<PopupConfig | null>(null);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
   const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(null);
+  const [authenticatedWalletAddress, setAuthenticatedWalletAddress] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [ensConfig, setEnsConfig] = useState<string | undefined>(undefined);
   const [chainId, setChainId] = useState<ChainId | undefined>(undefined);
@@ -886,17 +887,33 @@ export default function KeysJawIdApp() {
               apiKey={apiKey}
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
-              onComplete={async () => {
+              onComplete={async (authenticatedAccount?: AuthenticatedAccount) => {
                 try {
+                  // Use the authenticated account passed from SignInScreen
+                  if (authenticatedAccount) {
+                    setCurrentAccount({
+                      username: authenticatedAccount.username,
+                      credentialId: authenticatedAccount.credentialId,
+                      publicKey: authenticatedAccount.publicKey,
+                      creationDate: new Date().toISOString(),
+                      isImported: authenticatedAccount.isImported,
+                    });
 
-                  // SignInScreen already created the passkey, just refetch and proceed
-                  const accountsResult = await passkeyQuery.refetchAccounts();
-
-                  await authQuery.refetch();
-
-                  const accounts = accountsResult.data || [];
-                  const newestAccount = accounts[accounts.length - 1] || null;
-                  setCurrentAccount(newestAccount);
+                    // Compute wallet address from the authenticated account
+                    if (pendingRequest?.chain) {
+                      try {
+                        const tempAccount = await Account.restore({
+                          chainId: pendingRequest.chain.id,
+                          apiKey: apiKey || '',
+                          paymasterUrl: pendingRequest.chain.paymaster?.url,
+                        }, authenticatedAccount.credentialId, authenticatedAccount.publicKey);
+                        const address = await tempAccount.getAddress();
+                        setAuthenticatedWalletAddress(address);
+                      } catch (addrErr) {
+                        console.error('Failed to compute wallet address:', addrErr);
+                      }
+                    }
+                  }
 
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
@@ -946,14 +963,33 @@ export default function KeysJawIdApp() {
               apiKey={apiKey}
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
-              onComplete={async () => {
+              onComplete={async (authenticatedAccount?: AuthenticatedAccount) => {
                 try {
-                  const accountsResult = await passkeyQuery.refetchAccounts();
+                  // Use the authenticated account passed from SignInScreen
+                  if (authenticatedAccount) {
+                    setCurrentAccount({
+                      username: authenticatedAccount.username,
+                      credentialId: authenticatedAccount.credentialId,
+                      publicKey: authenticatedAccount.publicKey,
+                      creationDate: new Date().toISOString(),
+                      isImported: authenticatedAccount.isImported,
+                    });
 
-                  await authQuery.refetch();
-
-                  const accounts = accountsResult.data || [];
-                  setCurrentAccount(accounts[0] || null);
+                    // Compute wallet address from the authenticated account
+                    if (pendingRequest?.chain) {
+                      try {
+                        const tempAccount = await Account.restore({
+                          chainId: pendingRequest.chain.id,
+                          apiKey: apiKey || '',
+                          paymasterUrl: pendingRequest.chain.paymaster?.url,
+                        }, authenticatedAccount.credentialId, authenticatedAccount.publicKey);
+                        const address = await tempAccount.getAddress();
+                        setAuthenticatedWalletAddress(address);
+                      } catch (addrErr) {
+                        console.error('Failed to compute wallet address:', addrErr);
+                      }
+                    }
+                  }
 
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
@@ -992,14 +1028,19 @@ export default function KeysJawIdApp() {
       const walletConnectParams = pendingRequest.params as [{ capabilities?: { signInWithEthereum?: SignInWithEthereumCapabilityRequest } }] | undefined;
       const signInWithEthereumCapability = walletConnectParams?.[0]?.capabilities?.signInWithEthereum;
 
-      // Get wallet address from session or compute from current account
-      // During connection, session.authState isn't set yet, so we fallback to global authState
-      // (which is safe since popup handles one connection at a time)
-      const walletAddress = authQuery.walletAddress || Account.getAuthenticatedAddress(apiKey);
+      // Get wallet address computed during authentication (not from session which isn't set yet)
+      const walletAddress = authenticatedWalletAddress;
+
+      // If walletAddress is not available yet, show loading
       if (!walletAddress) {
-        // Reject with internal error (JSON-RPC code -32603)
-        pendingRequest.onReject('Internal error: wallet address not available', standardErrorCodes.rpc.internal);
-        return null;
+        return (
+          <div className="min-h-screen flex items-center justify-center bg-gray-50">
+            <div className="text-center">
+              <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+              <p className="text-gray-600">Loading account...</p>
+            </div>
+          </div>
+        );
       }
 
       // If SIWE capability is requested, show SiweModal instead of ConnectModal
@@ -1053,11 +1094,12 @@ export default function KeysJawIdApp() {
               try {
                 console.log('✅ User signed SIWE message');
 
-                // Update session with authState (session was created during handshake)
+                // Update session with authState from the authenticated account
+                // Use currentAccount which was set during passkey authentication
                 const sessionAuthState: SessionAuthState = {
                   address: walletAddress as `0x${string}`,
-                  credentialId: currentAccount?.credentialId || authQuery.credentialId || '',
-                  username: currentAccount?.username || authQuery.accountName || '',
+                  credentialId: currentAccount?.credentialId || '',
+                  username: currentAccount?.username || '',
                   publicKey: currentAccount?.publicKey || '0x',
                 };
 
@@ -1107,7 +1149,7 @@ export default function KeysJawIdApp() {
           origin={pendingRequest.origin}
           appName={pendingRequest.metadata?.appName || 'dApp'}
           appLogoUrl={pendingRequest.metadata?.appLogoUrl}
-          accountName={authQuery.accountName || currentAccount?.username}
+          accountName={currentAccount?.username}
           walletAddress={walletAddress}
           chain={pendingRequest.chain}
           onSuccess={async () => {
@@ -1115,11 +1157,12 @@ export default function KeysJawIdApp() {
             try {
               console.log('✅ User approved connection');
 
-              // Update session with authState (session was created during handshake)
+              // Update session with authState from the authenticated account
+              // Use currentAccount which was set during passkey authentication
               const sessionAuthState: SessionAuthState = {
                 address: walletAddress as `0x${string}`,
-                credentialId: currentAccount?.credentialId || authQuery.credentialId || '',
-                username: currentAccount?.username || authQuery.accountName || '',
+                credentialId: currentAccount?.credentialId || '',
+                username: currentAccount?.username || '',
                 publicKey: currentAccount?.publicKey || '0x',
               };
 
