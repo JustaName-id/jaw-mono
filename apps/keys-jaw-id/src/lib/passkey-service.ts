@@ -53,17 +53,6 @@ export class PasskeyService {
   }
 
   /**
-   * Check if user is already authenticated
-   */
-  checkAuth() {
-    const address = Account.getAuthenticatedAddress(this.apiKey);
-    return {
-      isAuthenticated: address !== null,
-      address,
-    };
-  }
-
-  /**
    * Get all stored passkey accounts
    */
   fetchAccounts(): PasskeyAccount[] {

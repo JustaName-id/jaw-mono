@@ -15,7 +15,7 @@ import { SDKRequestType } from '../lib/sdk-types';
 import { Account, type PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
-import type { SessionAccount } from '../lib/session-manager';
+import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
@@ -304,7 +304,7 @@ export default function KeysJawIdApp() {
       // Load the session for this origin
       const session = cryptoHandler.loadSession(origin);
 
-      if (!session || !session.account) {
+      if (!session || !session.authState) {
         console.error('❌ No authenticated session found for origin:', origin);
         setError('No authenticated session found. Please reconnect.');
         setState('error');
@@ -322,9 +322,9 @@ export default function KeysJawIdApp() {
 
       // Set current account from session
       setCurrentAccount({
-        username: session.account.username,
-        credentialId: session.account.credentialId,
-        publicKey: session.account.publicKey,
+        username: session.authState.username,
+        credentialId: session.authState.credentialId,
+        publicKey: session.authState.publicKey,
         creationDate: new Date().toISOString(),
         isImported: false,
       });
@@ -991,7 +991,9 @@ export default function KeysJawIdApp() {
       const walletConnectParams = pendingRequest.params as [{ capabilities?: { signInWithEthereum?: SignInWithEthereumCapabilityRequest } }] | undefined;
       const signInWithEthereumCapability = walletConnectParams?.[0]?.capabilities?.signInWithEthereum;
 
-      // Get wallet address from session or fallback to authState
+      // Get wallet address from session or compute from current account
+      // During connection, session.authState isn't set yet, so we fallback to global authState
+      // (which is safe since popup handles one connection at a time)
       const walletAddress = authQuery.walletAddress || Account.getAuthenticatedAddress(apiKey);
       if (!walletAddress) {
         // Reject with internal error (JSON-RPC code -32603)
@@ -1050,16 +1052,16 @@ export default function KeysJawIdApp() {
               try {
                 console.log('✅ User signed SIWE message');
 
-                // Update session with account (session was created during handshake)
-                const sessionAccount: SessionAccount = {
+                // Update session with authState (session was created during handshake)
+                const sessionAuthState: SessionAuthState = {
                   address: walletAddress as `0x${string}`,
                   credentialId: currentAccount?.credentialId || authQuery.credentialId || '',
                   username: currentAccount?.username || authQuery.accountName || '',
                   publicKey: currentAccount?.publicKey || '0x',
                 };
 
-                cryptoHandler.updateAccount(sessionAccount);
-                console.log('✅ Session account updated for:', pendingRequest.origin);
+                cryptoHandler.updateAuthState(sessionAuthState);
+                console.log('✅ Session authState updated for:', pendingRequest.origin);
 
                 // Build response per ERC-7846 format with SIWE capability
                 const response = {
@@ -1112,16 +1114,16 @@ export default function KeysJawIdApp() {
             try {
               console.log('✅ User approved connection');
 
-              // Update session with account (session was created during handshake)
-              const sessionAccount: SessionAccount = {
+              // Update session with authState (session was created during handshake)
+              const sessionAuthState: SessionAuthState = {
                 address: walletAddress as `0x${string}`,
                 credentialId: currentAccount?.credentialId || authQuery.credentialId || '',
                 username: currentAccount?.username || authQuery.accountName || '',
                 publicKey: currentAccount?.publicKey || '0x',
               };
 
-              cryptoHandler.updateAccount(sessionAccount);
-              console.log('✅ Session account updated for:', pendingRequest.origin);
+              cryptoHandler.updateAuthState(sessionAuthState);
+              console.log('✅ Session authState updated for:', pendingRequest.origin);
 
               // Build response per ERC-7846 format (no capabilities)
               const response = {

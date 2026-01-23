@@ -23,10 +23,10 @@ import {
 // ============================================================================
 
 /**
- * Account information stored in a session.
- * This is the account that the app is connected with.
+ * Authentication state stored in a session.
+ * This represents the authenticated account for a specific app connection.
  */
-export interface SessionAccount {
+export interface SessionAuthState {
   /** Wallet address (checksummed) */
   address: `0x${string}`;
   /** Passkey credential ID used for authentication */
@@ -51,8 +51,8 @@ export interface AppSession {
   /** App's public key (hex encoded) */
   peerPublicKey: string;
 
-  /** Account linked to this session (null until user approves connection) */
-  account: SessionAccount | null;
+  /** Auth state for this session (null until user approves connection) */
+  authState: SessionAuthState | null;
 
   /** Timestamp when session was created */
   createdAt: number;
@@ -73,7 +73,7 @@ export interface CreateSessionOptions {
   origin: string;
   peerPublicKey: string;
   /** Account is optional - can be set later when user approves */
-  account?: SessionAccount;
+  account?: SessionAuthState;
 }
 
 /**
@@ -185,9 +185,9 @@ function isValidAddress(address: string): address is `0x${string}` {
 }
 
 /**
- * Validates a SessionAccount object.
+ * Validates a SessionAuthState object.
  */
-function isValidSessionAccount(account: unknown): account is SessionAccount {
+function isValidSessionAuthState(account: unknown): account is SessionAuthState {
   if (!account || typeof account !== 'object') return false;
 
   const acc = account as Record<string, unknown>;
@@ -215,7 +215,7 @@ function isValidSession(session: unknown): session is AppSession {
     typeof s.popupPrivateKey === 'string' &&
     typeof s.popupPublicKey === 'string' &&
     typeof s.peerPublicKey === 'string' &&
-    (s.account === null || isValidSessionAccount(s.account)) &&
+    (s.authState === null || isValidSessionAuthState(s.authState)) &&
     typeof s.createdAt === 'number' &&
     typeof s.lastUsedAt === 'number'
   );
@@ -367,7 +367,7 @@ export class SessionManager {
     }
 
     // Account is optional - validate only if provided
-    if (account && !isValidSessionAccount(account)) {
+    if (account && !isValidSessionAuthState(account)) {
       throw new Error('Invalid account data');
     }
 
@@ -384,7 +384,7 @@ export class SessionManager {
       popupPrivateKey,
       popupPublicKey,
       peerPublicKey,
-      account: account || null,
+      authState: account || null,
       createdAt: now,
       lastUsedAt: now,
     };
@@ -521,14 +521,14 @@ export class SessionManager {
    * @param account - The new account data
    * @returns The updated session, or null if session doesn't exist
    */
-  updateSessionAccount(origin: string, account: SessionAccount): AppSession | null {
-    if (!isValidSessionAccount(account)) {
-      console.error(`${LOG_PREFIX} Invalid account data`);
+  updateSessionAuthState(origin: string, authState: SessionAuthState): AppSession | null {
+    if (!isValidSessionAuthState(authState)) {
+      console.error(`${LOG_PREFIX} Invalid authState data`);
       return null;
     }
 
-    console.log(`${LOG_PREFIX} Updating account for:`, origin, '→', account.address);
-    return this.updateSession(origin, { account });
+    console.log(`${LOG_PREFIX} Updating authState for:`, origin, '→', authState.address);
+    return this.updateSession(origin, { authState });
   }
 
   /**
@@ -550,25 +550,25 @@ export class SessionManager {
   // ==========================================================================
 
   /**
-   * Checks if an origin has an active session with an account.
+   * Checks if an origin has an active session with authState.
    *
    * @param origin - The app origin
-   * @returns true if the origin has a valid session with an account
+   * @returns true if the origin has a valid session with authState
    */
   isAuthenticated(origin: string): boolean {
     const session = this.getSession(origin);
-    return session !== null && isValidSessionAccount(session.account);
+    return session !== null && isValidSessionAuthState(session.authState);
   }
 
   /**
-   * Gets the account associated with an origin.
+   * Gets the authState associated with an origin.
    *
    * @param origin - The app origin
-   * @returns The account if session exists, null otherwise
+   * @returns The authState if session exists, null otherwise
    */
-  getAccountForOrigin(origin: string): SessionAccount | null {
+  getAuthStateForOrigin(origin: string): SessionAuthState | null {
     const session = this.getSession(origin);
-    return session?.account || null;
+    return session?.authState || null;
   }
 
   /**

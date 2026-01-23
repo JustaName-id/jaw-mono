@@ -7,7 +7,7 @@
 
 import { useQuery } from '@tanstack/react-query';
 import { Account, type PasskeyAccount } from '@jaw.id/core';
-import { sessionManager, type SessionAccount, type AppSession } from '../../lib/session-manager';
+import { sessionManager, type SessionAuthState, type AppSession } from '../../lib/session-manager';
 
 // ============================================================================
 // Types
@@ -29,7 +29,7 @@ export interface UseAuthReturn {
 
   // Session state (for specific app)
   isAuthenticated: boolean;
-  account: SessionAccount | null;
+  authState: SessionAuthState | null;
   session: AppSession | null;
   walletAddress: string | null;
   credentialId: string | null;
@@ -55,16 +55,16 @@ export function useAuth(options: UseAuthOptions = {}): UseAuthReturn {
 
       // Get session state if origin provided
       const session = origin ? sessionManager.getSession(origin) : null;
-      const sessionAccount = session?.account ?? null;
+      const authState = session?.authState ?? null;
 
       return {
         // Session
-        isAuthenticated: sessionAccount !== null,
-        account: sessionAccount,
+        isAuthenticated: authState !== null,
+        authState,
         session,
-        walletAddress: sessionAccount?.address ?? null,
-        credentialId: sessionAccount?.credentialId ?? null,
-        accountName: sessionAccount?.username ?? null,
+        walletAddress: authState?.address ?? null,
+        credentialId: authState?.credentialId ?? null,
+        accountName: authState?.username ?? null,
         // Global
         allAccounts,
         hasAccounts: allAccounts.length > 0,
@@ -81,7 +81,7 @@ export function useAuth(options: UseAuthOptions = {}): UseAuthReturn {
     refetch: query.refetch,
 
     isAuthenticated: query.data?.isAuthenticated ?? false,
-    account: query.data?.account ?? null,
+    authState: query.data?.authState ?? null,
     session: query.data?.session ?? null,
     walletAddress: query.data?.walletAddress ?? null,
     credentialId: query.data?.credentialId ?? null,

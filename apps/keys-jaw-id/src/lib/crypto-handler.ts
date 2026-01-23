@@ -25,7 +25,7 @@ import {
   SessionManager,
   sessionManager as defaultSessionManager,
   type AppSession,
-  type SessionAccount,
+  type SessionAuthState,
   type CreateSessionOptions,
 } from './session-manager';
 
@@ -175,13 +175,13 @@ export class CryptoHandler {
   }
 
   /**
-   * Gets the account for the current origin.
+   * Gets the authState for the current origin.
    *
-   * @returns The account, or null if no session
+   * @returns The authState, or null if no session
    */
-  getAccount(): SessionAccount | null {
+  getAuthState(): SessionAuthState | null {
     if (!this.currentOrigin) return null;
-    return this.sessionManager.getAccountForOrigin(this.currentOrigin);
+    return this.sessionManager.getAuthStateForOrigin(this.currentOrigin);
   }
 
   /**
@@ -203,17 +203,17 @@ export class CryptoHandler {
    * This handles:
    * - Creating new sessions for new apps
    * - Updating peer keys if app reconnects with new keys
-   * - Updating account if it changed
+   * - Updating authState if it changed
    *
    * @param origin - The app origin
    * @param peerPublicKey - The app's public key
-   * @param account - The account to associate with the session
+   * @param authState - The authState to associate with the session
    * @returns The session (existing or newly created)
    */
   async ensureSession(
     origin: string,
     peerPublicKey: string,
-    account?: SessionAccount
+    authState?: SessionAuthState
   ): Promise<AppSession> {
     this.currentOrigin = origin;
 
@@ -233,12 +233,12 @@ export class CryptoHandler {
         needsUpdate = true;
       }
 
-      // Check if account changed (only if account provided)
-      if (account && session.account?.address !== account.address) {
-        console.log(`${LOG_PREFIX} Account changed for:`, origin);
-        session = this.sessionManager.updateSessionAccount(origin, account);
+      // Check if authState changed (only if authState provided)
+      if (authState && session.authState?.address !== authState.address) {
+        console.log(`${LOG_PREFIX} AuthState changed for:`, origin);
+        session = this.sessionManager.updateSessionAuthState(origin, authState);
         if (!session) {
-          throw new Error('Failed to update account');
+          throw new Error('Failed to update authState');
         }
         needsUpdate = true;
       }
@@ -257,25 +257,24 @@ export class CryptoHandler {
     const options: CreateSessionOptions = {
       origin,
       peerPublicKey,
-      account,
     };
 
     return this.sessionManager.createSession(options);
   }
 
   /**
-   * Updates the account for the current session.
+   * Updates the authState for the current session.
    *
-   * @param account - The new account data
+   * @param authState - The new authState data
    * @returns The updated session, or null if no current session
    */
-  updateAccount(account: SessionAccount): AppSession | null {
+  updateAuthState(authState: SessionAuthState): AppSession | null {
     if (!this.currentOrigin) {
-      console.error(`${LOG_PREFIX} Cannot update account: no origin set`);
+      console.error(`${LOG_PREFIX} Cannot update authState: no origin set`);
       return null;
     }
 
-    return this.sessionManager.updateSessionAccount(this.currentOrigin, account);
+    return this.sessionManager.updateSessionAuthState(this.currentOrigin, authState);
   }
 
   /**
