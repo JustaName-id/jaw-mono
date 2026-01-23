@@ -498,7 +498,7 @@ export const TransactionModal = ({
       // open={open}
       // onOpenChange={handleCancel}
       open={true}
-      onOpenChange={() => {}}
+      onOpenChange={() => { /* Dialog always open in popup mode */ }}
       transactions={normalizedTransactions}
       walletAddress={walletAddress ?? ''}
       gasFee={gasFee}

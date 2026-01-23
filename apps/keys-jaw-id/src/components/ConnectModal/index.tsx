@@ -60,7 +60,7 @@ export const ConnectModal = ({
   return (
     <ConnectDialog
       open={true}
-      onOpenChange={() => {}}
+      onOpenChange={() => { /* Dialog always open in popup mode */ }}
       appName={appName}
       appLogoUrl={appLogoUrl}
       origin={origin}

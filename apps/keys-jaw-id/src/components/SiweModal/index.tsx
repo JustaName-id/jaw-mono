@@ -161,7 +161,7 @@ export const SiweModal = ({
   return (
     <SiweDialog
       open={true}
-      onOpenChange={() => {}}
+      onOpenChange={() => { /* Dialog always open in popup mode */ }}
       message={messageToSign}
       origin={origin}
       timestamp={timestamp}

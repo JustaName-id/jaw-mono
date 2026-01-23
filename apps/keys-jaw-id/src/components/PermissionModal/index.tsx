@@ -834,7 +834,7 @@ export const PermissionModal = ({
   return (
     <PermissionDialog
       open={true}
-      onOpenChange={() => {}}
+      onOpenChange={() => { /* Dialog always open in popup mode */ }}
       mode={mode}
       permissionId={mode === 'revoke' && 'permissionId' in permissionDetails ? permissionDetails.permissionId : undefined}
       spenderAddress={spenderAddress}

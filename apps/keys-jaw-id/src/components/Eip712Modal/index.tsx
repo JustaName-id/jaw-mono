@@ -184,7 +184,7 @@ export const Eip712Modal = ({
   return (
     <Eip712Dialog
       open={true}
-      onOpenChange={() => {}}
+      onOpenChange={() => { /* Dialog always open in popup mode */ }}
       typedDataJson={typedDataJson}
       origin={origin}
       timestamp={timestamp}

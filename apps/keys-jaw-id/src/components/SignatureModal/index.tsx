@@ -163,7 +163,7 @@ export const SignatureModal = ({
       // open={open}
       // onOpenChange={onOpenChange}
       open={true}
-      onOpenChange={() => {}}
+      onOpenChange={() => { /* Dialog always open in popup mode */ }}
       message={messageToSign}
       origin={origin}
       timestamp={timestamp}
