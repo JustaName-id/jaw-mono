@@ -12,9 +12,10 @@ import { TransactionModal, type TransactionResult, type TransactionRequestData }
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
-import type { PasskeyAccount } from '@jaw.id/core';
+import { Account, type PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
+import type { SessionAccount } from '../lib/session-manager';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
@@ -41,8 +42,11 @@ type PopupState =
 
 
 export default function KeysJawIdApp() {
-  // Use hooks for passkey operations
-  const authQuery = useAuth();
+  // Current origin for session-based auth
+  const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
+
+  // Use hooks for passkey operations (pass origin for session-based auth)
+  const authQuery = useAuth({ origin: currentOrigin || undefined });
   const passkeyQuery = usePasskeys();
 
   // Service instances (created once)
@@ -197,45 +201,68 @@ export default function KeysJawIdApp() {
   // Handle handshake request (unencrypted)
   const handleHandshakeRequest = async (request: RPCRequestMessage) => {
     try {
-
-      // Clear old keys and process new handshake
-      await cryptoHandler.clear();
-      await cryptoHandler.processHandshakeRequest(request);
-
-
       if (!('handshake' in request.content) || !request.content.handshake) {
         console.error('❌ Invalid handshake request');
         return;
       }
 
-      console.log('🔍 =========================');
-      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
-      console.log('🔍 =========================');
-      console.log(JSON.stringify(request, null, 2));
-      console.log('🔍 =========================');
+      // Get origin and set it as current context
+      const origin = communicator.getOrigin() || '';
+      setCurrentOrigin(origin);
+      cryptoHandler.setOrigin(origin);
 
-      // Determine request type
+      const peerPublicKey = request.sender;
       const method = request.content.handshake.method;
       const params = request.content.handshake.params;
       const chain = request.content.chain;
-      const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
 
+      console.log('🔍 =========================');
+      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
+      console.log('🔍 Origin:', origin);
+      console.log('🔍 Method:', method);
+      console.log('🔍 =========================');
+
+      const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
       if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
         setApiKey(apiKeyFromProvider);
       }
 
-      // For pure key exchange handshake (method: 'handshake'), send immediate response
+      // Check for existing session
+      const existingSession = cryptoHandler.getSession(origin);
+
+      // For pure key exchange handshake (method: 'handshake')
       if (method === 'handshake') {
-        // Send empty accounts response for key exchange handshake
+        if (existingSession && existingSession.peerPublicKey !== peerPublicKey) {
+          // Update peer key if changed
+          await cryptoHandler.getSessionManager().updatePeerKey(origin, peerPublicKey);
+        }
+        // For key exchange without session, we can't create one yet (no account)
+        // Just acknowledge the handshake
         const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         communicator.sendMessage(response as unknown as Message);
         return;
       }
 
-      // For eth_requestAccounts and wallet_connect, we need to show approval UI
+      // For eth_requestAccounts and wallet_connect
       if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
-        const origin = communicator.getOrigin() || "";
+        // Always create a fresh session with new keys for each connection request
+        if (existingSession) {
+          console.log('🗑️ Deleting old session for:', origin);
+          cryptoHandler.getSessionManager().deleteSession(origin);
+        }
+
+        // Create new session with fresh keys (account will be set when user approves)
+        console.log('🔐 Creating fresh session for:', origin);
+        await cryptoHandler.getSessionManager().createSession({
+          origin,
+          peerPublicKey,
+        });
+
+        // Reload session after creation
+        cryptoHandler.loadSession(origin);
+
+        // Set up pending request (for both new connections and SIWE)
         setPendingRequest({
           origin,
           type: SDKRequestType.CONNECT,
@@ -253,22 +280,12 @@ export default function KeysJawIdApp() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(response as any);
           },
-          onReject: async (error: string, errorCode?: number) => {
-            // Send error response for handshake rejection
-            try {
-              const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
-                request.id,
-                request.correlationId || '',
-                errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
-                error || 'User rejected the request'
-              );
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              communicator.sendMessage(errorResponse as any);
-            } catch (err) {
-              console.error('❌ Failed to send rejection response:', err);
-            }
+          onReject: async () => {
+            window.close();
           },
         });
+
+        // Fresh session has no account - checkForPasskeys flow will handle passkey creation/selection
       }
     } catch (err) {
       console.error('❌ Failed to handle handshake:', err);
@@ -280,8 +297,37 @@ export default function KeysJawIdApp() {
   // Handle encrypted request
   const handleEncryptedRequest = async (request: RPCRequestMessage) => {
     try {
-      // Restore shared secret from message
-      await cryptoHandler.restoreSharedSecretFromMessage(request);
+      // Get origin and load session
+      const origin = communicator.getOrigin() || '';
+      setCurrentOrigin(origin);
+
+      // Load the session for this origin
+      const session = cryptoHandler.loadSession(origin);
+
+      if (!session || !session.account) {
+        console.error('❌ No authenticated session found for origin:', origin);
+        setError('No authenticated session found. Please reconnect.');
+        setState('error');
+        return;
+      }
+
+      // Verify and update peer key if needed
+      const isValid = await cryptoHandler.verifyAndUpdatePeerKey(request);
+      if (!isValid) {
+        console.error('❌ Failed to verify peer key');
+        setError('Session verification failed. Please reconnect.');
+        setState('error');
+        return;
+      }
+
+      // Set current account from session
+      setCurrentAccount({
+        username: session.account.username,
+        credentialId: session.account.credentialId,
+        publicKey: session.account.publicKey,
+        creationDate: new Date().toISOString(),
+        isImported: false,
+      });
 
       // Decrypt the request
       const decrypted = await cryptoHandler.decryptRequest(request);
@@ -323,7 +369,6 @@ export default function KeysJawIdApp() {
         requestType = SDKRequestType.UNSUPPORTED_METHOD;
       }
 
-      const origin = communicator.getOrigin() ?? '';
       setPendingRequest({
         origin,
         type: requestType,
@@ -343,17 +388,15 @@ export default function KeysJawIdApp() {
           communicator.sendMessage(response as any);
         },
         onReject: async (error: string, errorCode?: number) => {
-          // Send standard error response (default: EIP-1193 code 4001)
           try {
             const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
               request.id || '',
               request.correlationId || '',
-              errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
+              errorCode ?? standardErrorCodes.provider.userRejectedRequest,
               error || 'User rejected the request'
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(errorResponse as any);
-            // Close window after sending error
             setTimeout(() => window.close(), 100);
           } catch (err) {
             console.error('❌ Failed to send rejection response:', err);
@@ -362,8 +405,12 @@ export default function KeysJawIdApp() {
         },
       });
 
-      // For sign message, typed data, transaction, and permission requests, if user is authenticated, show modal directly
-      if ((requestType === SDKRequestType.SIGN_MESSAGE || requestType === SDKRequestType.SIGN_TYPED_DATA || requestType === SDKRequestType.SEND_TRANSACTION || requestType === SDKRequestType.GRANT_PERMISSIONS || requestType === SDKRequestType.REVOKE_PERMISSIONS) && authQuery.isAuthenticated && currentAccount) {
+      // For sign message, typed data, transaction, and permission requests, if we have a session, show modal directly
+      if ((requestType === SDKRequestType.SIGN_MESSAGE ||
+           requestType === SDKRequestType.SIGN_TYPED_DATA ||
+           requestType === SDKRequestType.SEND_TRANSACTION ||
+           requestType === SDKRequestType.GRANT_PERMISSIONS ||
+           requestType === SDKRequestType.REVOKE_PERMISSIONS) && session) {
         // The modal will be shown in the render logic below
         return;
       }
@@ -944,12 +991,13 @@ export default function KeysJawIdApp() {
       const walletConnectParams = pendingRequest.params as [{ capabilities?: { signInWithEthereum?: SignInWithEthereumCapabilityRequest } }] | undefined;
       const signInWithEthereumCapability = walletConnectParams?.[0]?.capabilities?.signInWithEthereum;
 
-      if (!authQuery.walletAddress) {
+      // Get wallet address from session or fallback to authState
+      const walletAddress = authQuery.walletAddress || Account.getAuthenticatedAddress(apiKey);
+      if (!walletAddress) {
         // Reject with internal error (JSON-RPC code -32603)
         pendingRequest.onReject('Internal error: wallet address not available', standardErrorCodes.rpc.internal);
         return null;
       }
-      const walletAddress = authQuery.walletAddress;
 
       // If SIWE capability is requested, show SiweModal instead of ConnectModal
       if (signInWithEthereumCapability && pendingRequest.chain) {
@@ -1002,6 +1050,17 @@ export default function KeysJawIdApp() {
               try {
                 console.log('✅ User signed SIWE message');
 
+                // Update session with account (session was created during handshake)
+                const sessionAccount: SessionAccount = {
+                  address: walletAddress as `0x${string}`,
+                  credentialId: currentAccount?.credentialId || authQuery.credentialId || '',
+                  username: currentAccount?.username || authQuery.accountName || '',
+                  publicKey: currentAccount?.publicKey || '0x',
+                };
+
+                cryptoHandler.updateAccount(sessionAccount);
+                console.log('✅ Session account updated for:', pendingRequest.origin);
+
                 // Build response per ERC-7846 format with SIWE capability
                 const response = {
                   accounts: [{
@@ -1052,6 +1111,17 @@ export default function KeysJawIdApp() {
             setState('processing');
             try {
               console.log('✅ User approved connection');
+
+              // Update session with account (session was created during handshake)
+              const sessionAccount: SessionAccount = {
+                address: walletAddress as `0x${string}`,
+                credentialId: currentAccount?.credentialId || authQuery.credentialId || '',
+                username: currentAccount?.username || authQuery.accountName || '',
+                publicKey: currentAccount?.publicKey || '0x',
+              };
+
+              cryptoHandler.updateAccount(sessionAccount);
+              console.log('✅ Session account updated for:', pendingRequest.origin);
 
               // Build response per ERC-7846 format (no capabilities)
               const response = {
