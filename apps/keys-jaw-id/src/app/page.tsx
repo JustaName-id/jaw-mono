@@ -905,7 +905,7 @@ export default function KeysJawIdApp() {
                         const tempAccount = await Account.restore({
                           chainId: pendingRequest.chain.id,
                           apiKey: apiKey || '',
-                          paymasterUrl: pendingRequest.chain.paymaster?.url,
+                          paymasterUrl: pendingRequest.chain.paymasterUrl,
                         }, authenticatedAccount.credentialId, authenticatedAccount.publicKey);
                         const address = await tempAccount.getAddress();
                         setAuthenticatedWalletAddress(address);
@@ -981,7 +981,7 @@ export default function KeysJawIdApp() {
                         const tempAccount = await Account.restore({
                           chainId: pendingRequest.chain.id,
                           apiKey: apiKey || '',
-                          paymasterUrl: pendingRequest.chain.paymaster?.url,
+                          paymasterUrl: pendingRequest.chain.paymasterUrl,
                         }, authenticatedAccount.credentialId, authenticatedAccount.publicKey);
                         const address = await tempAccount.getAddress();
                         setAuthenticatedWalletAddress(address);
