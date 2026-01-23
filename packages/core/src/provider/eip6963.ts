@@ -60,7 +60,7 @@ function isBrowserEnvironment(): boolean {
   }
 
   // Additional React Native detection
-  // @ts-ignore - navigator.product may exist
+  // @ts-expect-error - navigator.product may exist
   if (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') {
     return false;
   }

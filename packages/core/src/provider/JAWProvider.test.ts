@@ -2,7 +2,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { JAWProvider } from './JAWProvider.js';
 import { createJAWProvider } from './createJAWProvider.js';
-import { Communicator } from '../communicator/index.js';
 import { standardErrorCodes } from '../errors/index.js';
 import { correlationIds } from '../store/index.js';
 import { fetchRPCRequest, checkErrorForInvalidRequestArgs, buildHandleJawRpcUrl } from '../utils/index.js';
