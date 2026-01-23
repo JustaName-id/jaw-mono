@@ -31,22 +31,25 @@ export const usePasskeys = (options?: UsePasskeysOptions) => {
     gcTime: 0,
   });
 
-  const getAccount = useCallback(async (chain: chain, overrideApiKey?: string) => {
+  const getAccount = useCallback(async (chain: chain, credentialId: string, overrideApiKey?: string) => {
     const effectiveApiKey = overrideApiKey || apiKey;
     if (!effectiveApiKey) {
       throw new Error('API key is required. Provide it via apiKey parameter or NEXT_PUBLIC_API_KEY environment variable.');
+    }
+    if (!credentialId) {
+      throw new Error('credentialId is required to get an account');
     }
     const account = await Account.get({
       chainId: chain.id,
       apiKey: effectiveApiKey,
       paymasterUrl: chain.paymaster?.url,
-    });
+    }, credentialId);
     return account;
   }, [apiKey]);
 
   // Legacy method - returns underlying smart account for backwards compatibility
-  const getSmartAccount = useCallback(async (chain: chain, overrideApiKey?: string) => {
-    const account = await getAccount(chain, overrideApiKey);
+  const getSmartAccount = useCallback(async (chain: chain, credentialId: string, overrideApiKey?: string) => {
+    const account = await getAccount(chain, credentialId, overrideApiKey);
     return account.getSmartAccount();
   }, [getAccount]);
 

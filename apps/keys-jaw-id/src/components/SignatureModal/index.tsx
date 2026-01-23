@@ -1,7 +1,7 @@
 'use client'
 
 import { SignatureDialog, useChainIcon } from "@jaw.id/ui";
-import { usePasskeys } from "../../hooks";
+import { usePasskeys, useAuth } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
@@ -34,6 +34,7 @@ export const SignatureModal = ({
   const [timestamp] = useState(() => new Date());
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { getAccount } = usePasskeys();
+  const { credentialId } = useAuth({ origin });
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -105,7 +106,10 @@ export const SignatureModal = ({
           setIsProcessing(false); // Reset processing state when opening
           console.log('Initializing signature modal with message:', messageToSign);
           console.log('Address:', address);
-          const restoredAccount = await getAccount(chain, effectiveApiKey);
+          if (!credentialId) {
+            throw new Error('No authenticated session found. Please reconnect.');
+          }
+          const restoredAccount = await getAccount(chain, credentialId, effectiveApiKey);
 
           // Only update state if component is still mounted
           if (isMounted) {
@@ -143,7 +147,7 @@ export const SignatureModal = ({
         timeoutRef.current = null;
       }
     };
-  }, [chain, messageToSign, address, effectiveApiKey, onError, getAccount]);
+  }, [chain, messageToSign, address, effectiveApiKey, credentialId, onError, getAccount]);
 
   const canSign = !isProcessing && !!messageToSign && !!account;
 

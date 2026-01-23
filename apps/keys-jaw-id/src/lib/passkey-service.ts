@@ -194,13 +194,17 @@ export class PasskeyService {
   /**
    * Get an Account instance for signing operations
    * @param chain - Chain configuration
+   * @param credentialId - The credential ID for the passkey to use
    * @returns Account instance
    */
-  async getAccount(chain: Chain): Promise<Account> {
+  async getAccount(chain: Chain, credentialId: string): Promise<Account> {
+    if (!credentialId) {
+      throw new Error('credentialId is required to get an account');
+    }
     return Account.get({
       chainId: chain.id,
       apiKey: this.apiKey,
       paymasterUrl: chain.paymaster?.url,
-    });
+    }, credentialId);
   }
 }

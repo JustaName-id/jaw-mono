@@ -128,7 +128,7 @@ export const PermissionModal = ({
   onError
 }: PermissionModalProps) => {
   const { getAccount } = usePasskeys();
-  const { walletAddress } = useAuth();
+  const { walletAddress, credentialId } = useAuth({ origin });
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [account, setAccount] = useState<Account | null>(null);
@@ -613,7 +613,10 @@ export const PermissionModal = ({
             ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
           };
 
-          const restoredAccount = await getAccount(chainWithPaymaster, extractedApiKey);
+          if (!credentialId) {
+            throw new Error('No authenticated session found. Please reconnect.');
+          }
+          const restoredAccount = await getAccount(chainWithPaymaster, credentialId, extractedApiKey);
 
           if (isMounted) {
             setAccount(restoredAccount);
@@ -645,7 +648,7 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, permissionRequest, extractedApiKey, computedPaymasterUrl, getAccount, onError]);
+  }, [chain, permissionRequest, extractedApiKey, credentialId, computedPaymasterUrl, getAccount, onError]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {

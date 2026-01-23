@@ -1,7 +1,7 @@
 'use client'
 
 import { Eip712Dialog, useChainIcon } from "@jaw.id/ui";
-import { usePasskeys } from "../../hooks";
+import { usePasskeys, useAuth } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
@@ -40,6 +40,7 @@ export const Eip712Modal = ({
   const [timestamp] = useState(() => new Date());
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
   const { getAccount } = usePasskeys();
+  const { credentialId } = useAuth({ origin });
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -129,7 +130,10 @@ export const Eip712Modal = ({
           console.log('Initializing EIP-712 signature modal');
           console.log('Address:', address);
           console.log('Typed Data:', typedData);
-          const restoredAccount = await getAccount(chain, effectiveApiKey);
+          if (!credentialId) {
+            throw new Error('No authenticated session found. Please reconnect.');
+          }
+          const restoredAccount = await getAccount(chain, credentialId, effectiveApiKey);
 
           // Only update state if component is still mounted
           if (isMounted) {
@@ -167,7 +171,7 @@ export const Eip712Modal = ({
         timeoutRef.current = null;
       }
     };
-  }, [typedDataJson, address, effectiveApiKey, onError, getAccount, chain, typedData]);
+  }, [typedDataJson, address, effectiveApiKey, credentialId, onError, getAccount, chain, typedData]);
 
   const canSign = !isProcessing && !!typedDataJson && !!account && !!typedData;
 

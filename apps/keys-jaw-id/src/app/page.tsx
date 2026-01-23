@@ -450,6 +450,7 @@ export default function KeysJawIdApp() {
 
       return (
         <TransactionModal
+          origin={pendingRequest.origin}
           transactionRequest={txData}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}

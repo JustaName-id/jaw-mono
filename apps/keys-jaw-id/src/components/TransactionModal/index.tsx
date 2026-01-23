@@ -37,6 +37,7 @@ export interface TransactionRequestData {
 }
 
 export interface TransactionModalProps {
+  origin?: string;
   transactionRequest?: TransactionRequestData;
   transactions?: TransactionData[];
   sponsored?: boolean;
@@ -47,6 +48,7 @@ export interface TransactionModalProps {
 }
 
 export const TransactionModal = ({
+  origin,
   transactionRequest,
   transactions,
   sponsored = false,
@@ -56,7 +58,7 @@ export const TransactionModal = ({
   onError
 }: TransactionModalProps) => {
   const { getAccount } = usePasskeys();
-  const { walletAddress } = useAuth();
+  const { walletAddress, credentialId } = useAuth({ origin });
   const ethPrice = useEthPrice();
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
@@ -338,7 +340,10 @@ export const TransactionModal = ({
             ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
           };
 
-          const restoredAccount = await getAccount(chainWithPaymaster, effectiveApiKey);
+          if (!credentialId) {
+            throw new Error('No authenticated session found. Please reconnect.');
+          }
+          const restoredAccount = await getAccount(chainWithPaymaster, credentialId, effectiveApiKey);
 
           if (isMounted) {
             setAccount(restoredAccount);
@@ -373,7 +378,7 @@ export const TransactionModal = ({
         timeoutRef.current = null;
       }
     };
-  }, [chain, effectiveApiKey, computedPaymasterUrl, getAccount, onError]);
+  }, [chain, effectiveApiKey, credentialId, computedPaymasterUrl, getAccount, onError]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
