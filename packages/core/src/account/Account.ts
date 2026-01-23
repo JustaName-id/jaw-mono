@@ -329,6 +329,52 @@ export class Account {
 
 
   /**
+   * Create an account from a stored PasskeyAccount without triggering WebAuthn
+   *
+   * This method is useful for restoring an account from a known stored account
+   * (e.g., from a per-origin session) without requiring user interaction.
+   * Unlike `Account.get()` with a credentialId, this does NOT trigger WebAuthn authentication.
+   *
+   * @param config - Account configuration
+   * @param storedAccount - A PasskeyAccount from storage (e.g., from getStoredAccounts())
+   * @returns Promise resolving to the Account instance
+   *
+   * @example
+   * ```typescript
+   * // Get stored accounts and restore a specific one
+   * const accounts = Account.getStoredAccounts('your-api-key');
+   * const targetAccount = accounts.find(a => a.credentialId === savedCredentialId);
+   *
+   * if (targetAccount) {
+   *   const account = await Account.fromStoredAccount(
+   *     { chainId: 1, apiKey: 'your-api-key' },
+   *     targetAccount
+   *   );
+   *   // Ready to use - no WebAuthn prompt
+   * }
+   * ```
+   */
+  static async fromStoredAccount(
+    config: AccountConfig,
+    storedAccount: PasskeyAccount
+  ): Promise<Account> {
+    const { chainId, apiKey, paymasterUrl } = config;
+
+    const webAuthnAccount = toWebAuthnAccount({
+      credential: {
+        id: storedAccount.credentialId,
+        publicKey: storedAccount.publicKey,
+      },
+    });
+
+    const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+    const bundlerClient = getBundlerClient(chain);
+    const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
+
+    return new Account(smartAccount, chain, apiKey, storedAccount);
+  }
+
+  /**
    * Create an account from a LocalAccount (e.g., from Privy, Dynamic, or private key)
    *
    * This method is ideal for server-side usage or when integrating with

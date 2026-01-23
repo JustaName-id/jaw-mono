@@ -14,13 +14,14 @@ interface SignInScreenProps {
     apiKey?: string
     chainConfig?: { id: number; rpcUrl?: string; paymasterUrl?: string }
     subnameTextRecords?: SubnameTextRecordCapabilityRequest
+    origin?: string  // Origin for per-origin auth session
 }
 
-export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConfig, subnameTextRecords }: SignInScreenProps) {
+export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConfig, subnameTextRecords, origin }: SignInScreenProps) {
     const { accounts, refetchAccounts } = usePasskeys({ apiKey });
     const { mutateAsync: login } = useLogin();
     const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
-    const { refetch: refetchAuth } = useAuth();
+    const { refetch: refetchAuth } = useAuth(origin);
     const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
 
 

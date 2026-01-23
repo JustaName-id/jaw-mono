@@ -1,11 +1,14 @@
 'use client'
 
 import { Eip712Dialog, useChainIcon } from "@jaw.id/ui";
-import { usePasskeys } from "../../hooks";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useOriginAccount } from "../../hooks";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { Account, standardErrorCodes } from "@jaw.id/core";
+import { standardErrorCodes } from "@jaw.id/core";
+
+// Error code for session errors (used by dApps to trigger re-authentication)
+const SESSION_ERROR_CODE = 4901;
 
 export interface Eip712ModalProps {
   origin: string;
@@ -36,10 +39,7 @@ export const Eip712Modal = ({
 }: Eip712ModalProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [account, setAccount] = useState<Account | null>(null);
   const [timestamp] = useState(() => new Date());
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { getAccount } = usePasskeys();
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -54,6 +54,13 @@ export const Eip712Modal = ({
     }
     return '';
   }, [apiKey, chain?.rpcUrl]);
+
+  // Get account for this origin - ensures correct account is used for multi-session
+  const { account, isLoading: isAccountLoading, error: accountError } = useOriginAccount(
+    origin,
+    chain?.id ?? 1,
+    effectiveApiKey
+  );
 
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
@@ -111,7 +118,6 @@ export const Eip712Modal = ({
 
   const handleCancel = () => {
     if (!isProcessing) {
-      setAccount(null);
       console.log('User cancelled typed data signature request');
       // User rejected request (EIP-1193 code 4001)
       onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
@@ -119,57 +125,15 @@ export const Eip712Modal = ({
     }
   };
 
+  // Handle session errors - reject the request so dApp can trigger re-authentication
   useEffect(() => {
-    let isMounted = true;
+    if (accountError) {
+      console.error('Session error:', accountError);
+      onError(new Error(`Session error: ${accountError}`), SESSION_ERROR_CODE);
+    }
+  }, [accountError, onError]);
 
-    const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false); // Reset processing state when opening
-          console.log('Initializing EIP-712 signature modal');
-          console.log('Address:', address);
-          console.log('Typed Data:', typedData);
-          const restoredAccount = await getAccount(chain, effectiveApiKey);
-
-          // Only update state if component is still mounted
-          if (isMounted) {
-            setAccount(restoredAccount);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          // Only update state if component is still mounted
-          if (isMounted) {
-            setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError(errorObj, errorCode);
-          }
-        }
-      } else {
-        // Reset everything when modal closes
-        setAccount(null);
-        setSignatureStatus('');
-        setIsProcessing(false);
-      }
-    };
-
-    initializeModal();
-
-    // Cleanup function
-    return () => {
-      isMounted = false;
-      // Clear any pending timeouts
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, [typedDataJson, address, effectiveApiKey, onError, getAccount, chain, typedData]);
-
-  const canSign = !isProcessing && !!typedDataJson && !!account && !!typedData;
+  const canSign = !isProcessing && !isAccountLoading && !!typedDataJson && !!account && !!typedData && !accountError;
 
   return (
     <Eip712Dialog

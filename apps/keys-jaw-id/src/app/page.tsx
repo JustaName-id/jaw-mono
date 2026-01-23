@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen } from '../components/OnboardingSection';
+import { Account } from '@jaw.id/core';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
@@ -15,6 +16,7 @@ import { SDKRequestType } from '../lib/sdk-types';
 import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
+import { SessionManager } from '../lib/session-manager';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
@@ -41,8 +43,11 @@ type PopupState =
 
 
 export default function KeysJawIdApp() {
-  // Use hooks for passkey operations
-  const authQuery = useAuth();
+  // Track the current origin for per-origin isolation
+  const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
+
+  // Use hooks for passkey operations (origin-aware auth)
+  const authQuery = useAuth(currentOrigin || undefined);
   const passkeyQuery = usePasskeys();
 
   // Service instances (created once)
@@ -62,6 +67,8 @@ export default function KeysJawIdApp() {
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
+  const originSetRef = useRef<boolean>(false);
+  const currentOriginRef = useRef<string | null>(null);
 
   // Single useEffect for all message handling
   useEffect(() => {
@@ -88,8 +95,18 @@ export default function KeysJawIdApp() {
 
     // Listen for messages
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cleanup = communicator.onMessage<PopupConfig>((message: any) => {
+    const cleanup = communicator.onMessage<PopupConfig>(async (message: any) => {
       console.log('📥 Received message:', message);
+
+      // Capture origin early from communicator and set on CryptoHandler
+      const origin = communicator.getOrigin();
+      if (origin && !originSetRef.current) {
+        console.log('🔒 Setting origin for per-origin isolation:', origin);
+        originSetRef.current = true;
+        currentOriginRef.current = origin;
+        setCurrentOrigin(origin);
+        await cryptoHandler.setOrigin(origin);
+      }
 
       // Handle config message
       if (message.data?.version) {
@@ -197,6 +214,16 @@ export default function KeysJawIdApp() {
   // Handle handshake request (unencrypted)
   const handleHandshakeRequest = async (request: RPCRequestMessage) => {
     try {
+      // Ensure origin is set on CryptoHandler before processing
+      const origin = communicator.getOrigin();
+      if (origin && cryptoHandler.getOrigin() !== origin) {
+        await cryptoHandler.setOrigin(origin);
+        if (!originSetRef.current) {
+          originSetRef.current = true;
+          currentOriginRef.current = origin;
+          setCurrentOrigin(origin);
+        }
+      }
 
       // Clear old keys and process new handshake
       await cryptoHandler.clear();
@@ -406,6 +433,7 @@ export default function KeysJawIdApp() {
           transactionRequest={txData}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
+          origin={currentOrigin || undefined}
           onSuccess={async (result: TransactionResult) => {
             setState('processing');
             try {
@@ -838,17 +866,28 @@ export default function KeysJawIdApp() {
               apiKey={apiKey}
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
+              origin={currentOrigin || undefined}
               onComplete={async () => {
                 try {
 
                   // SignInScreen already created the passkey, just refetch and proceed
                   const accountsResult = await passkeyQuery.refetchAccounts();
 
-                  await authQuery.refetch();
-
                   const accounts = accountsResult.data || [];
                   const newestAccount = accounts[accounts.length - 1] || null;
                   setCurrentAccount(newestAccount);
+
+                  // Store session using SessionManager for per-origin isolation
+                  // Get the address from global auth state (SignInScreen just set it)
+                  const originForSession = currentOriginRef.current;
+                  const authenticatedAddress = Account.getAuthenticatedAddress(apiKey);
+                  if (originForSession && newestAccount && authenticatedAddress) {
+                    const sessionManager = new SessionManager(originForSession);
+                    sessionManager.storeSession(authenticatedAddress, newestAccount.credentialId);
+                    console.log('✅ Session stored for origin:', originForSession);
+                  }
+
+                  await authQuery.refetch();
 
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
@@ -898,14 +937,41 @@ export default function KeysJawIdApp() {
               apiKey={apiKey}
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
+              origin={currentOrigin || undefined}
               onComplete={async () => {
                 try {
                   const accountsResult = await passkeyQuery.refetchAccounts();
 
-                  await authQuery.refetch();
-
                   const accounts = accountsResult.data || [];
-                  setCurrentAccount(accounts[0] || null);
+
+                  // Get the address from global auth state (SignInScreen just set it)
+                  // Then find the account that matches this address
+                  const authenticatedAddress = Account.getAuthenticatedAddress(apiKey);
+
+                  // Find the account that was actually authenticated by matching the credentialId
+                  // from the global auth state. The authenticated credentialId is stored when user logs in.
+                  const globalAuthState = (() => {
+                    try {
+                      const stored = localStorage.getItem('jaw:passkey:authState');
+                      return stored ? JSON.parse(stored) : null;
+                    } catch { return null; }
+                  })();
+
+                  const authenticatedAccount = globalAuthState?.credentialId
+                    ? accounts.find((acc: PasskeyAccount) => acc.credentialId === globalAuthState.credentialId) || accounts[0] || null
+                    : accounts[0] || null;
+
+                  setCurrentAccount(authenticatedAccount);
+
+                  // Store session using SessionManager for per-origin isolation
+                  const originForSession = currentOriginRef.current;
+                  if (originForSession && authenticatedAccount && authenticatedAddress) {
+                    const sessionManager = new SessionManager(originForSession);
+                    sessionManager.storeSession(authenticatedAddress, authenticatedAccount.credentialId);
+                    console.log('✅ Session stored for origin:', originForSession, 'with credentialId:', authenticatedAccount.credentialId);
+                  }
+
+                  await authQuery.refetch();
 
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {

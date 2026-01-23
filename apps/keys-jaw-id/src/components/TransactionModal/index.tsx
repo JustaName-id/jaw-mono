@@ -4,8 +4,11 @@ import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, Hash, Hex, formatUnits } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { usePasskeys, useAuth } from "../../hooks";
-import { Account, type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, type FeeTokenCapability } from "@jaw.id/core";
+import { useOriginAccount, useAuth } from "../../hooks";
+import { type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, type FeeTokenCapability } from "@jaw.id/core";
+
+// Error code for session errors (used by dApps to trigger re-authentication)
+const SESSION_ERROR_CODE = 4901;
 
 // Transaction execution result
 export interface TransactionResult {
@@ -42,6 +45,7 @@ export interface TransactionModalProps {
   sponsored?: boolean;
   chain?: Chain;  // Chain info with RPC and paymaster URLs
   apiKey?: string;
+  origin?: string;  // Origin for per-origin auth session
   onSuccess?: (result: TransactionResult) => void;
   onError?: (error: Error, errorCode?: number) => void;
 }
@@ -52,15 +56,14 @@ export const TransactionModal = ({
   sponsored = false,
   chain,
   apiKey,
+  origin,
   onSuccess,
   onError
 }: TransactionModalProps) => {
-  const { getAccount } = usePasskeys();
-  const { walletAddress } = useAuth();
+  const { walletAddress } = useAuth(origin);
   const ethPrice = useEthPrice();
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [account, setAccount] = useState<Account | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fee token state for ERC-20 paymaster
@@ -80,6 +83,13 @@ export const TransactionModal = ({
     }
     return '';
   }, [apiKey, chain?.rpcUrl]);
+
+  // Get account for this origin - ensures correct account is used for multi-session
+  const { account, isLoading: isAccountLoading, error: accountError } = useOriginAccount(
+    origin ?? null,
+    chain?.id ?? 1,
+    effectiveApiKey
+  );
 
   // Determine if sponsored based on transactionRequest or prop
   const isSponsored = useMemo(() => {
@@ -322,58 +332,23 @@ export const TransactionModal = ({
     };
   }, [chain, effectiveApiKey, walletAddress, effectivePaymasterUrl]);
 
-  // Initialize account when modal opens
+  // Handle session errors - reject the request so dApp can trigger re-authentication
   useEffect(() => {
-    let isMounted = true;
+    if (accountError) {
+      console.error('Session error:', accountError);
+      onError?.(new Error(`Session error: ${accountError}`), SESSION_ERROR_CODE);
+    }
+  }, [accountError, onError]);
 
-    const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false);
-          console.log('🔐 Initializing transaction modal');
-
-          // Merge paymasterUrl from capabilities or ERC-20 selection into chain before creating account
-          const chainWithPaymaster = {
-            ...chain,
-            ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
-          };
-
-          const restoredAccount = await getAccount(chainWithPaymaster, effectiveApiKey);
-
-          if (isMounted) {
-            setAccount(restoredAccount);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          if (isMounted) {
-            setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError?.(errorObj, errorCode);
-          }
-        }
-      } else {
-        // Reset when chain is not provided
-        setAccount(null);
-        setTransactionStatus('');
-        setIsProcessing(false);
-        setFeeTokens([]);
-      }
-    };
-
-    initializeModal();
-
+  // Cleanup timeout on unmount
+  useEffect(() => {
     return () => {
-      isMounted = false;
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
         timeoutRef.current = null;
       }
     };
-  }, [chain, effectiveApiKey, computedPaymasterUrl, getAccount, onError]);
+  }, []);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -465,7 +440,6 @@ export const TransactionModal = ({
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
-      setAccount(null);
       console.log('❌ User cancelled transaction request');
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
@@ -474,7 +448,7 @@ export const TransactionModal = ({
       setFeeTokens([]);
       setSelectedFeeToken(null);
     }
-  }, [isProcessing, onError]);
+  }, [isProcessing, onError, setSelectedFeeToken]);
 
   return (
     <TransactionDialog
@@ -485,7 +459,7 @@ export const TransactionModal = ({
       transactions={normalizedTransactions}
       walletAddress={walletAddress ?? ''}
       gasFee={gasFee}
-      gasFeeLoading={gasFeeLoading}
+      gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
       ethPrice={ethPrice}

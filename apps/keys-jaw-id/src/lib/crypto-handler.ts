@@ -7,16 +7,51 @@ import {
   importKeyFromHexString,
 } from '@jaw.id/core';
 import type { RPCResponseMessage , RPCRequestMessage ,RPCRequest, MessageID} from '@jaw.id/core';
+import { createOriginKeyStorage } from './origin-storage';
 
 
 export class CryptoHandler {
-  private keyManager: KeyManager; 
+  private keyManager: KeyManager;
   private peerPublicKeyHex: string | null = null;
   private ownPublicKeyHex: string | null = null;
+  private origin: string | null = null;
 
-  constructor() {
-    // KeyManager automatically handles localStorage persistence
-    this.keyManager = new KeyManager();
+  constructor(origin?: string) {
+    // If origin is provided, use origin-namespaced storage
+    // Otherwise use default storage (temporary, will be replaced via setOrigin)
+    if (origin) {
+      this.origin = origin;
+      const storage = createOriginKeyStorage(origin);
+      this.keyManager = new KeyManager(storage);
+    } else {
+      this.keyManager = new KeyManager();
+    }
+  }
+
+  /**
+   * Set the origin and reinitialize KeyManager with origin-namespaced storage
+   * This allows late binding of the origin after receiving the first message
+   */
+  async setOrigin(origin: string): Promise<void> {
+    if (this.origin === origin) {
+      return; // Already set to this origin
+    }
+    console.log('🔒 Setting origin on CryptoHandler:', origin);
+    this.origin = origin;
+    const storage = createOriginKeyStorage(origin);
+    this.keyManager = new KeyManager(storage);
+    // Reset public key hex values since we have a new KeyManager
+    this.ownPublicKeyHex = null;
+    this.peerPublicKeyHex = null;
+    // Reinitialize to load/generate keys for the new origin
+    await this.initialize();
+  }
+
+  /**
+   * Get the current origin
+   */
+  getOrigin(): string | null {
+    return this.origin;
   }
 
   /**

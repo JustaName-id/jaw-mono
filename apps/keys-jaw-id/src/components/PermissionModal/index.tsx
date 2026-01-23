@@ -4,9 +4,8 @@ import { PermissionDialog, useGasEstimation, useEthPrice, type FeeTokenOption, f
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
 import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { usePasskeys, useAuth } from "../../hooks";
+import { useOriginAccount, useAuth } from "../../hooks";
 import {
-    Account,
     type Chain,
     type WalletGrantPermissionsRequest,
     type WalletRevokePermissionsRequest,
@@ -20,6 +19,9 @@ import {
     handleGetCapabilitiesRequest,
     type FeeTokenCapability,
 } from "@jaw.id/core";
+
+// Error code for session errors (used by dApps to trigger re-authentication)
+const SESSION_ERROR_CODE = 4901;
 
 // Known function selectors mapping
 const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
@@ -123,16 +125,13 @@ export const PermissionModal = ({
   permissionRequest,
   chain,
   apiKey,
-  origin = 'http://localhost:3000',
+  origin,
   onSuccess,
   onError
 }: PermissionModalProps) => {
-  const { getAccount } = usePasskeys();
-  const { walletAddress } = useAuth();
+  const { walletAddress } = useAuth(origin);
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [account, setAccount] = useState<Account | null>(null);
-  const [isLoadingSmartAccount, setIsLoadingSmartAccount] = useState<boolean>(true); // Start true to prevent early clicks
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
@@ -157,6 +156,13 @@ export const PermissionModal = ({
 
     return '';
   }, [apiKey, chain?.rpcUrl]);
+
+  // Get account for this origin - ensures correct account is used for multi-session
+  const { account, isLoading: isAccountLoading, error: accountError } = useOriginAccount(
+    origin ?? null,
+    chain?.id ?? 1,
+    extractedApiKey
+  );
 
   // Determine mode from request method
   const mode = useMemo(() => {
@@ -596,56 +602,13 @@ export const PermissionModal = ({
     };
   }, [chain, extractedApiKey, viemChain, walletAddress, effectivePaymasterUrl]);
 
-  // Initialize account when modal opens or permission request changes
+  // Handle session errors - reject the request so dApp can trigger re-authentication
   useEffect(() => {
-    let isMounted = true;
-
-    const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false);
-          setIsLoadingSmartAccount(true);
-          console.log('Initializing permission modal');
-
-          // Merge paymasterUrl from capabilities into chain before creating account
-          const chainWithPaymaster = {
-            ...chain,
-            ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
-          };
-
-          const restoredAccount = await getAccount(chainWithPaymaster, extractedApiKey);
-
-          if (isMounted) {
-            setAccount(restoredAccount);
-            setIsLoadingSmartAccount(false);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          if (isMounted) {
-            setIsLoadingSmartAccount(false);
-            setStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError?.(errorObj, errorCode);
-          }
-        }
-      } else {
-        setAccount(null);
-        setIsLoadingSmartAccount(false);
-        setStatus('');
-        setIsProcessing(false);
-      }
-    };
-
-    initializeModal();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [chain, permissionRequest, extractedApiKey, computedPaymasterUrl, getAccount, onError]);
+    if (accountError) {
+      console.error('Session error:', accountError);
+      onError?.(new Error(`Session error: ${accountError}`), SESSION_ERROR_CODE);
+    }
+  }, [accountError, onError]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
@@ -806,7 +769,6 @@ export const PermissionModal = ({
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
-      setAccount(null);
       console.log('❌ User cancelled permission request');
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
@@ -829,7 +791,7 @@ export const PermissionModal = ({
       mode={mode}
       permissionId={mode === 'revoke' && 'permissionId' in permissionDetails ? permissionDetails.permissionId : undefined}
       spenderAddress={spenderAddress}
-      origin={origin}
+      origin={origin || ''}
       spends={formattedSpends}
       calls={formattedCalls}
       expiryDate={expiryDate}
@@ -840,7 +802,7 @@ export const PermissionModal = ({
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
-      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isLoadingSmartAccount}
+      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isAccountLoading}
       warningMessage={warningMessage}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
