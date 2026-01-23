@@ -47,6 +47,28 @@ function createProviderInfo(): EIP6963ProviderInfo {
 }
 
 /**
+ * Check if we're in a browser environment (not React Native)
+ */
+function isBrowserEnvironment(): boolean {
+  if (typeof window === 'undefined') {
+    return false;
+  }
+
+  // React Native has window but not CustomEvent
+  if (typeof CustomEvent === 'undefined') {
+    return false;
+  }
+
+  // Additional React Native detection
+  // @ts-ignore - navigator.product may exist
+  if (typeof navigator !== 'undefined' && navigator.product === 'ReactNative') {
+    return false;
+  }
+
+  return true;
+}
+
+/**
  * Announces the JAW Provider via EIP-6963 using mipd.
  *
  * @param provider - The JAW provider to announce
@@ -55,7 +77,7 @@ function createProviderInfo(): EIP6963ProviderInfo {
 export function announceProvider(
   provider: ProviderInterface
 ): AnnounceProviderCleanup | null {
-  if (typeof window === 'undefined') {
+  if (!isBrowserEnvironment()) {
     return null;
   }
 

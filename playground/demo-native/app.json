@@ -16,9 +16,22 @@
       "supportsTablet": true,
       "bundleIdentifier": "id.jaw.demo.native",
       "developmentTeam": "9234ZPYS2R",
-      "_comment_associatedDomains": "TODO: Change to webcredentials:keys.jaw.id for production",
+      "_comment_associatedDomains": [
+        "Associated Domains enable passkey authentication with your domain.",
+        "",
+        "DEVELOPMENT (ngrok): Use your ngrok URL",
+        "  Example: webcredentials:abc123.ngrok-free.app",
+        "",
+        "PRODUCTION: Use your deployed keys.jaw.id domain",
+        "  Example: webcredentials:keys.jaw.id",
+        "",
+        "Requirements:",
+        "  - Must match EXPO_PUBLIC_RP_ID in .env",
+        "  - Requires AASA file at https://[domain]/.well-known/apple-app-site-association",
+        "  - AASA must include: TEAM_ID.bundleIdentifier (e.g., 9234ZPYS2R.id.jaw.demo.native)"
+      ],
       "associatedDomains": [
-        "webcredentials:7d6e58d21602.ngrok-free.app"
+        "webcredentials:keys.jaw.id"
       ]
     },
     "android": {
@@ -32,6 +45,17 @@
       "favicon": "./assets/favicon.png",
       "bundler": "metro"
     },
+    "_comment_scheme": [
+      "Custom URL scheme for deep linking from browser back to app.",
+      "Used as callback URL pattern: {scheme}://auth",
+      "Example: jaw-demo://auth",
+      "",
+      "This enables the cross-platform authentication flow:",
+      "  1. App opens Safari/Chrome for passkey authentication",
+      "  2. User completes authentication in browser",
+      "  3. Browser redirects to {scheme}://auth with credentials",
+      "  4. App receives credentials and completes connection"
+    ],
     "scheme": "jaw-demo",
     "experiments": {
       "typedRoutes": true

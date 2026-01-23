@@ -1,5 +1,6 @@
 import { EventEmitter } from 'eventemitter3';
 import { UIHandler } from '../ui/interface.js';
+import { CommunicationAdapter } from '../communicator/interface.js';
 
 export interface RequestArguments {
     readonly method: string;
@@ -64,6 +65,12 @@ export interface JawProviderPreference {
     showTestnets?: boolean;
     /** UI handler for app-specific mode (required when mode is Mode.AppSpecific) */
     uiHandler?: UIHandler;
+    /**
+     * Communication adapter for cross-platform mode.
+     * Allows custom implementations for different platforms (web, mobile, etc.)
+     * If not provided, defaults to WebCommunicationAdapter on web platforms.
+     */
+    communicationAdapter?: CommunicationAdapter;
 }
 
 export type ProviderEventCallback = ProviderInterface['emit'];

@@ -25,9 +25,8 @@ export * from './passkey';
 // React Native UI Handler (App-Specific Mode)
 export * from './react-native';
 
-// Cross-Platform Mode (WebView-based)
+// Cross-Platform Mode
 export * from './cross-platform';
-export { JAWNativeProvider, useJAWNative, type JAWNativeConfig, type JAWNativeContextType, type JAWNativeProviderProps } from './JAWNativeProvider';
 
 // Base UI Types
 export type { ButtonProps } from './components/ui/button';

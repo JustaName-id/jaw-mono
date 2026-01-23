@@ -6,7 +6,7 @@ import { SignInScreen } from '../components/OnboardingSection';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
-import { ensureIntNumber, type SignInWithEthereumCapabilityRequest } from '@jaw.id/core';
+import { Account, ensureIntNumber, type SignInWithEthereumCapabilityRequest, type WalletGrantPermissionsRequest } from '@jaw.id/core';
 import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
@@ -16,7 +16,7 @@ import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
 import type { RPCRequestMessage } from '@jaw.id/core';
-import type { Chain as chain } from '@jaw.id/core';
+import type { Chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
 import { isSiweMessage } from '../lib/siwe-handler';
 import { createSiweMessage } from 'viem/siwe';
@@ -85,8 +85,9 @@ export default function KeysJawIdApp() {
     message?: string;
     typedData?: object;
     tx?: { to: string; value?: string; data?: string; chainId?: number };
-    permissions?: unknown;
+    permissions?: WalletGrantPermissionsRequest['params'][0];
     chainId?: number;
+    chain?: Chain;
     credentialId?: string;
   }
   const [browserAction, setBrowserAction] = useState<BrowserAction | null>(null);
@@ -98,7 +99,8 @@ export default function KeysJawIdApp() {
       result: resultStr,
       requestId: generateUUID(),
     });
-    window.location.href = `${callbackUrl}?${params.toString()}`;
+    const redirectUrl = `${callbackUrl}?${params.toString()}`;
+    window.location.replace(redirectUrl);
   };
 
   const redirectWithError = (callbackUrl: string, errorMsg: string) => {
@@ -106,7 +108,8 @@ export default function KeysJawIdApp() {
       error: errorMsg,
       requestId: generateUUID(),
     });
-    window.location.href = `${callbackUrl}?${params.toString()}`;
+    const redirectUrl = `${callbackUrl}?${params.toString()}`;
+    window.location.replace(redirectUrl);
   };
 
   // === NEW: Handle browser mode (React Native Safari View Controller) ===
@@ -168,15 +171,27 @@ export default function KeysJawIdApp() {
 
         case 'grantPermissions': {
           const permissionsParam = urlParams.get('permissions');
+          const chainParam = urlParams.get('chain');
           if (!permissionsParam || !credentialId) {
             redirectWithError(callbackUrl, 'Missing permissions or credentialId');
             return;
           }
           const permissionsData = JSON.parse(atob(permissionsParam));
+
+          let chain = undefined;
+          if (chainParam) {
+            try {
+              chain = JSON.parse(atob(chainParam));
+            } catch (e) {
+              console.warn('Failed to parse chain parameter:', e);
+            }
+          }
+
           setBrowserAction({
             type: 'grantPermissions',
-            permissions: permissionsData.permissions,
+            permissions: permissionsData,
             chainId: permissionsData.chainId,
+            chain,
             credentialId
           });
           break;
@@ -606,17 +621,31 @@ export default function KeysJawIdApp() {
           params: [browserAction.permissions],
         };
 
+        // Use full chain object from browserAction if available, otherwise construct minimal chain
+        const chainForModal = browserAction.chain || {
+          id: browserAction.chainId || effectiveChainId,
+          rpcUrl: '',
+          paymaster: undefined
+        };
+
         return (
           <PermissionModal
             permissionRequest={permissionRequestData}
-            chain={{ id: browserAction.chainId || effectiveChainId, rpcUrl: '', paymaster: undefined }}
+            chain={chainForModal}
             apiKey={apiKey || ''}
             origin={config?.metadata?.appName || 'App'}
-            onSuccess={async (result: { id: string; expiry: number }) => {
-              redirectWithResult(callbackUrl, {
-                permissionId: result.id,
-                expiry: result.expiry,
-              });
+            onSuccess={async (result) => {
+              if ('success' in result) {
+                redirectWithResult(callbackUrl, { success: result.success });
+              } else {
+                redirectWithResult(callbackUrl, {
+                  permissionId: result.permissionId,
+                  expiry: result.end,
+                  account: result.account,
+                  spender: result.spender,
+                  chainId: result.chainId,
+                });
+              }
             }}
             onError={async (error) => {
               redirectWithError(callbackUrl, error.message);
@@ -651,7 +680,7 @@ export default function KeysJawIdApp() {
       return (
         <TransactionModal
           transactionRequest={txData}
-          chain={pendingRequest.chain as chain}
+          chain={pendingRequest.chain as Chain}
           apiKey={apiKey}
           onSuccess={async (result: TransactionResult) => {
             setState('processing');
@@ -728,7 +757,7 @@ export default function KeysJawIdApp() {
             origin={pendingRequest.origin}
             message={messageToSign}
             address={address}
-            chain={pendingRequest.chain as chain}
+            chain={pendingRequest.chain as Chain}
             apiKey={apiKey}
             appName={pendingRequest.metadata?.appName || 'dApp'}
             appLogoUrl={pendingRequest.metadata?.appLogoUrl}
@@ -766,7 +795,7 @@ export default function KeysJawIdApp() {
           // onOpenChange={() => { }}
           message={messageToSign}
           address={address}
-          chain={pendingRequest.chain as chain}
+          chain={pendingRequest.chain as Chain}
           apiKey={apiKey}
           onSuccess={async (signature, message) => {
             setState('processing');
@@ -829,7 +858,7 @@ export default function KeysJawIdApp() {
           origin={pendingRequest.origin}
           typedDataJson={typedDataJson}
           address={address}
-          chain={pendingRequest.chain as chain}
+          chain={pendingRequest.chain as Chain}
           apiKey={apiKey}
           onSuccess={async (signature) => {
             setState('processing');
@@ -872,7 +901,7 @@ export default function KeysJawIdApp() {
       return (
         <PermissionModal
           permissionRequest={permissionRequestData}
-          chain={pendingRequest.chain as chain}
+          chain={pendingRequest.chain as Chain}
           apiKey={apiKey || ''}
           origin={pendingRequest.origin}
           onSuccess={async (result) => {
@@ -916,7 +945,7 @@ export default function KeysJawIdApp() {
       return (
         <PermissionModal
           permissionRequest={permissionRequestData}
-          chain={pendingRequest.chain as chain}
+          chain={pendingRequest.chain as Chain}
           apiKey={apiKey || ''}
           origin={pendingRequest.origin}
           onSuccess={async (result) => {
@@ -1098,9 +1127,18 @@ export default function KeysJawIdApp() {
                   setCurrentAccount(newestAccount);
 
                   // Browser mode redirect
-                  if (isBrowserMode && callbackUrlRef.current && authQuery.walletAddress) {
+                  if (isBrowserMode && callbackUrlRef.current) {
+                    // Get fresh address directly from Account class (reads from localStorage)
+                    // This avoids race condition with React Query state updates
+                    const freshAddress = Account.getAuthenticatedAddress(apiKey);
+
+                    if (!freshAddress) {
+                      redirectWithError(callbackUrlRef.current, 'Failed to get wallet address');
+                      return;
+                    }
+
                     redirectWithResult(callbackUrlRef.current, {
-                      address: authQuery.walletAddress,
+                      address: freshAddress,
                       username: newestAccount?.username,
                       credentialId: newestAccount?.credentialId,
                       chainId: effectiveChainId,
@@ -1175,9 +1213,18 @@ export default function KeysJawIdApp() {
                   setCurrentAccount(accounts[0] || null);
 
                   // Browser mode redirect
-                  if (isBrowserMode && callbackUrlRef.current && authQuery.walletAddress) {
+                  if (isBrowserMode && callbackUrlRef.current) {
+                    // Get fresh address directly from Account class (reads from localStorage)
+                    // This avoids race condition with React Query state updates
+                    const freshAddress = Account.getAuthenticatedAddress(apiKey);
+
+                    if (!freshAddress) {
+                      redirectWithError(callbackUrlRef.current, 'Failed to get wallet address');
+                      return;
+                    }
+
                     redirectWithResult(callbackUrlRef.current, {
-                      address: authQuery.walletAddress,
+                      address: freshAddress,
                       username: accounts[0]?.username,
                       credentialId: accounts[0]?.credentialId,
                       chainId: effectiveChainId,

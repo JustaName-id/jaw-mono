@@ -3,7 +3,7 @@ import { UUID } from 'crypto';
 import { JAWSigner } from '../JAWSigner.js';
 import { decodePersonalSignRequest } from '../SignerUtils.js';
 
-import { Communicator } from '../../communicator/index.js';
+import { CommunicationAdapter } from '../../communicator/index.js';
 import { getPermissionFromRelay } from '../../rpc/index.js';
 import { standardErrors } from '../../errors/index.js';
 import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../../messages/index.js';
@@ -17,23 +17,39 @@ import {
     importKeyFromHexString,
 } from '../../utils/index.js';
 
-type ConstructorOptions = {
+export type ConstructorOptions = {
     metadata: AppMetadata;
-    communicator: Communicator;
+    adapter: CommunicationAdapter;
     callback: ProviderEventCallback | null;
+    apiKey: string;
+    keysUrl?: string;
+    showTestnets?: boolean;
 };
 
 export class CrossPlatformSigner extends JAWSigner {
-    private readonly communicator: Communicator;
+    private readonly adapter: CommunicationAdapter;
     private readonly keyManager: KeyManager;
+    private isBrowserMode = false;
 
     constructor(params: ConstructorOptions) {
         super({
             metadata: params.metadata,
             callback: params.callback,
         });
-        this.communicator = params.communicator;
+        this.adapter = params.adapter;
         this.keyManager = new KeyManager();
+
+        // Initialize adapter if it supports init()
+        if (this.adapter.init) {
+            this.adapter.init({
+                apiKey: params.apiKey,
+                appName: params.metadata.appName,
+                appLogoUrl: params.metadata.appLogoUrl ?? undefined,
+                defaultChainId: params.metadata.defaultChainId,
+                keysUrl: params.keysUrl,
+                showTestnets: params.showTestnets,
+            });
+        }
     }
 
     override async handshake(args: RequestArguments): Promise<void> {
@@ -41,7 +57,7 @@ export class CrossPlatformSigner extends JAWSigner {
 
         // Open the popup before constructing the request message.
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
-        await this.communicator.waitForPopupLoaded?.();
+        await this.adapter.waitForReady();
 
         const chains = store.getState().chains;
         const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
@@ -56,9 +72,17 @@ export class CrossPlatformSigner extends JAWSigner {
             },
             correlationId
         );
-        const response: RPCResponseMessage =
-            await this.communicator.postRequestAndWaitForResponse(handshakeMessage);
+        const response: any =
+            await this.adapter.postRequestAndWaitForResponse(handshakeMessage);
 
+       if (response && 'result' in response && !response.sender && !response.content) {
+            console.log('[CrossPlatformSigner] Browser mode detected, bypassing encryption for all future requests');
+            this.isBrowserMode = true; // Store flag for future requests
+            await this.handleResponse(args, response as RPCResponse);
+            return;
+        }
+
+        // Normal encrypted flow for popup/web mode
         // store peer's public key
         if ('failure' in response.content) {
             throw response.content.failure;
@@ -80,7 +104,7 @@ export class CrossPlatformSigner extends JAWSigner {
         }
 
         // Wait for the popup to be loaded before making async calls
-        await this.communicator.waitForPopupLoaded?.();
+        await this.adapter.waitForReady();
 
         // Validate and inject capabilities using base class method
         const modifiedRequest = this.validateAndInjectCapabilities(request);
@@ -91,7 +115,7 @@ export class CrossPlatformSigner extends JAWSigner {
 
     protected override async handleWalletConnectUnauthenticated(request: RequestArguments): Promise<unknown> {
         // Wait for the popup to be loaded before making async calls
-        await this.communicator.waitForPopupLoaded?.();
+        await this.adapter.waitForReady();
 
         // Validate and inject capabilities using base class method
         const modifiedRequest = this.validateAndInjectCapabilities(request);
@@ -184,8 +208,35 @@ export class CrossPlatformSigner extends JAWSigner {
     ): Promise<unknown> {
         // Open the popup before constructing the request message.
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
-        await this.communicator.waitForPopupLoaded?.();
+        await this.adapter.waitForReady();
 
+        // Browser mode: Send request without encryption
+        if (this.isBrowserMode) {
+            const chains = store.getState().chains;
+            const chain = overrideChain ?? chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+
+            const requestMessage = await this.createRequestMessage(
+                {
+                    handshake: {
+                        method: request.method,
+                        params: request.params ?? [],
+                    },
+                    chain
+                },
+                this.getCorrelationId(request)
+            );
+
+            const response: any = await this.adapter.postRequestAndWaitForResponse(requestMessage);
+
+            // Browser mode response is already in RPCResponse format
+            if (response && 'result' in response) {
+                return this.handleResponse(request, response as RPCResponse);
+            }
+
+            throw new Error('Invalid browser mode response');
+        }
+
+        // Normal encrypted flow for popup/web mode
         const response = await this.sendEncryptedRequest(request, overrideChain);
         const decrypted = await this.decryptResponseMessage(response);
 
@@ -220,7 +271,7 @@ export class CrossPlatformSigner extends JAWSigner {
         const correlationId = this.getCorrelationId(request);
         const message = await this.createRequestMessage({ encrypted }, correlationId);
 
-        return this.communicator.postRequestAndWaitForResponse(message);
+        return this.adapter.postRequestAndWaitForResponse(message);
     }
 
     private async createRequestMessage(

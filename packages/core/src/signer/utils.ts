@@ -1,6 +1,6 @@
 import {SignerType} from "../messages/index.js";
 import {AppMetadata, ProviderEventCallback, PaymasterConfig} from "../provider/index.js";
-import {Communicator} from "../communicator/index.js";
+import {CommunicationAdapter} from "../communicator/index.js";
 import {Signer} from "./interface.js";
 import {CrossPlatformSigner} from "./cross-platform/CrossPlatformSigner.js";
 import {AppSpecificSigner} from "./app-specific/AppSpecificSigner.js";
@@ -12,24 +12,29 @@ export { loadSignerType, storeSignerType, clearSignerType } from "./signerStorag
 export function createSigner(params: {
     signerType: SignerType;
     metadata: AppMetadata;
-    communicator?: Communicator;
+    adapter?: CommunicationAdapter;
     uiHandler?: UIHandler;
     callback: ProviderEventCallback;
     apiKey: string;
     paymasters?: Record<number, PaymasterConfig>;
     ens?: string;
+    keysUrl?: string;
+    showTestnets?: boolean;
 }): Signer {
-    const { signerType, metadata, communicator, uiHandler, callback, apiKey, paymasters, ens } = params;
+    const { signerType, metadata, adapter, uiHandler, callback, apiKey, paymasters, ens, keysUrl, showTestnets } = params;
 
     switch (signerType) {
         case 'crossPlatform': {
-            if (!communicator) {
-                throw new Error('Communicator is required for crossPlatform signer');
+            if (!adapter) {
+                throw new Error('CommunicationAdapter is required for crossPlatform signer');
             }
             return new CrossPlatformSigner({
                 metadata,
                 callback,
-                communicator,
+                adapter,
+                apiKey,
+                keysUrl,
+                showTestnets,
             });
         }
 

@@ -61,6 +61,7 @@ export default defineConfig({
         { text: 'defaultChainId', link: '/configuration/defaultChainId' },
         { text: 'preference', link: '/configuration/preference' },
         { text: 'paymasters', link: '/configuration/paymasters' },
+        { text: 'React Native', link: '/configuration/react-native' },
       ],
     },
     {
