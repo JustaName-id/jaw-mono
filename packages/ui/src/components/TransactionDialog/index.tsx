@@ -48,6 +48,10 @@ export const TransactionDialog = ({
   // Get chain icon using the hook
   const chainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 24);
 
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
   // Check if there are any selectable payment options
   // If feeTokens is not loaded yet (null/undefined/empty), assume there are selectable options
   const hasSelectablePaymentOption = !feeTokens || feeTokens.length === 0
@@ -211,7 +215,7 @@ export const TransactionDialog = ({
                 <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
                   <div className="flex flex-col text-foreground gap-0.5">
                     <p className="text-xs font-bold leading-[133%]">Value</p>
-                    <p className="text-base font-normal leading-[150%]">{formatTransactionValue(currentTransaction?.value)} ETH</p>
+                    <p className="text-base font-normal leading-[150%]">{formatTransactionValue(currentTransaction?.value)} {nativeSymbol}</p>
                   </div>
                 </div>
               )}
@@ -235,7 +239,7 @@ export const TransactionDialog = ({
                           <Info className="size-3 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[200px] text-xs">
-                          <p>Gas fees paid to network validators to process your transaction. You can pay with ETH or supported tokens.</p>
+                          <p>Gas fees paid to network validators to process your transaction. You can pay with {nativeSymbol} or supported tokens.</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -265,9 +269,9 @@ export const TransactionDialog = ({
                           {gasFee && gasFee !== 'sponsored' ? (() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
-                              return '> 0.0001 ETH';
+                              return `< 0.0001 ${nativeSymbol}`;
                             }
-                            return gasValue.toFixed(4) + ' ETH';
+                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
                           })() : 'Gas fees covered'}
                         </p>
                       </div>
@@ -325,9 +329,9 @@ export const TransactionDialog = ({
                           {(() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
-                              return '> 0.0001 ETH';
+                              return `< 0.0001 ${nativeSymbol}`;
                             }
-                            return gasValue.toFixed(4) + ' ETH';
+                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
                           })()}
                         </p>
                       </div>
@@ -439,7 +443,7 @@ export const TransactionDialog = ({
                               <div className="flex-1">
                                 <p className="text-xs font-bold leading-[133%] text-muted-foreground">Value</p>
                                 <div className="flex items-baseline gap-2">
-                                  <p className="text-base font-normal">{formatTransactionValue(transaction.value)} ETH</p>
+                                  <p className="text-base font-normal">{formatTransactionValue(transaction.value)} {nativeSymbol}</p>
                                   {ethPrice > 0 && (
                                     <p className="text-sm text-muted-foreground">
                                       ${(Number(formatTransactionValue(transaction.value)) * ethPrice).toFixed(2)}
@@ -519,7 +523,7 @@ export const TransactionDialog = ({
                           <Info className="size-3 text-muted-foreground cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[200px] text-xs">
-                          <p>Gas fees paid to network validators to process your transaction. You can pay with ETH or supported tokens.</p>
+                          <p>Gas fees paid to network validators to process your transaction. You can pay with {nativeSymbol} or supported tokens.</p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
@@ -549,9 +553,9 @@ export const TransactionDialog = ({
                           {gasFee && gasFee !== 'sponsored' ? (() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
-                              return '> 0.0001 ETH';
+                              return `< 0.0001 ${nativeSymbol}`;
                             }
-                            return gasValue.toFixed(4) + ' ETH';
+                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
                           })() : 'Gas fees covered'}
                         </p>
                       </div>
@@ -609,9 +613,9 @@ export const TransactionDialog = ({
                           {(() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
-                              return '> 0.0001 ETH';
+                              return `< 0.0001 ${nativeSymbol}`;
                             }
-                            return gasValue.toFixed(4) + ' ETH';
+                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
                           })()}
                         </p>
                       </div>

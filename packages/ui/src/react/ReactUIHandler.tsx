@@ -1930,9 +1930,12 @@ function PermissionDialogWrapper({
           continue;
         }
 
-        // If native token, use ETH defaults
+        // If native token, use chain's native currency
         if (isNativeToken(tokenAddress)) {
-          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+          newTokenInfoMap[tokenAddress] = {
+            decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+            symbol: viemChain?.nativeCurrency?.symbol || 'ETH'
+          };
           continue;
         }
 
@@ -1942,7 +1945,7 @@ function PermissionDialogWrapper({
             chain: {
               id: chainId,
               name: networkName,
-              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              nativeCurrency: viemChain?.nativeCurrency || { name: 'Ether', symbol: 'ETH', decimals: 18 },
               rpcUrls: {
                 default: { http: [chain.rpcUrl || ''] },
                 public: { http: [chain.rpcUrl || ''] },
@@ -1986,7 +1989,7 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [chainId, spendsData, networkName, chain.rpcUrl]);
+  }, [chainId, spendsData, networkName, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens from capabilities (same pattern as TransactionDialogWrapper)
   useEffect(() => {
@@ -2112,10 +2115,13 @@ function PermissionDialogWrapper({
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
+  // Get native currency symbol for display
+  const nativeSymbol = viemChain?.nativeCurrency?.symbol || 'ETH';
+
   // Convert to SpendPermission array format expected by PermissionDialog
   const spends = useMemo(() => spendsData.map(spend => {
     const tokenInfo = tokenInfoMap[spend.token] || (isNativeToken(spend.token)
-      ? { decimals: 18, symbol: 'ETH' }
+      ? { decimals: viemChain?.nativeCurrency?.decimals ?? 18, symbol: nativeSymbol }
       : { decimals: 18, symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4) });
 
     const allowance = BigInt(spend.allowance);
@@ -2128,12 +2134,12 @@ function PermissionDialogWrapper({
 
     return {
       amount,
-      token: isNativeToken(spend.token) ? 'Native (ETH)' : tokenInfo.symbol,
+      token: isNativeToken(spend.token) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
       tokenAddress: spend.token,
       duration,
       limit,
     };
-  }), [spendsData, tokenInfoMap]);
+  }), [spendsData, tokenInfoMap, viemChain, nativeSymbol]);
 
   // Format call permissions
   const calls = useMemo(() => callsData.map(call => ({
@@ -2437,6 +2443,7 @@ function RevokePermissionDialogWrapper({
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
   const chainIconKey = getChainIconKeyFromId(chainId);
+  const nativeSymbol = viemChain?.nativeCurrency?.symbol || 'ETH';
 
   // Fetch permission details from relay
   useEffect(() => {
@@ -2457,14 +2464,17 @@ function RevokePermissionDialogWrapper({
           for (const spend of permData.spends) {
             const tokenAddress = spend.token;
             if (isNativeToken(tokenAddress)) {
-              newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+              newTokenInfoMap[tokenAddress] = {
+                decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+                symbol: viemChain?.nativeCurrency?.symbol || 'ETH'
+              };
             } else {
               try {
                 const publicClient = createPublicClient({
                   chain: {
                     id: chainId,
                     name: networkName,
-                    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                    nativeCurrency: viemChain?.nativeCurrency || { name: 'Ether', symbol: 'ETH', decimals: 18 },
                     rpcUrls: {
                       default: { http: [chain.rpcUrl || ''] },
                       public: { http: [chain.rpcUrl || ''] },
@@ -2509,7 +2519,10 @@ function RevokePermissionDialogWrapper({
 
     return fetchedPermissionData.spends.map((spend: any) => {
       const tokenAddress = spend.token;
-      const tokenInfo = tokenInfoMap[tokenAddress] || { decimals: 18, symbol: 'ETH' };
+      const tokenInfo = tokenInfoMap[tokenAddress] || {
+        decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+        symbol: nativeSymbol
+      };
       const allowance = BigInt(spend.allowance);
       const amount = formatUnits(allowance, tokenInfo.decimals);
       const limit = `${amount} ${tokenInfo.symbol}`;
@@ -2520,14 +2533,14 @@ function RevokePermissionDialogWrapper({
       return {
         amount,
         token: isNativeToken(tokenAddress)
-          ? 'Native (ETH)'
+          ? `Native (${nativeSymbol})`
           : tokenInfo.symbol,
         tokenAddress,
         duration,
         limit,
       };
     });
-  }, [fetchedPermissionData, tokenInfoMap]);
+  }, [fetchedPermissionData, tokenInfoMap, viemChain, nativeSymbol]);
 
   // Format call permissions from fetched data
   const formattedCalls = useMemo(() => {

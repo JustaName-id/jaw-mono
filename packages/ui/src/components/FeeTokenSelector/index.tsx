@@ -169,7 +169,7 @@ export const FeeTokenSelector = ({
 
     if (token.isNative) {
       return {
-        formatted: `${formatBalance(estimatedGasEth, 'ETH')} ETH`,
+        formatted: `${formatBalance(estimatedGasEth, token.symbol)} ${token.symbol}`,
         usd: formatUsd(gasUsd),
       };
     }
