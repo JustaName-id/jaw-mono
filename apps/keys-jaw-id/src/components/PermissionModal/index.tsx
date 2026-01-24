@@ -3,7 +3,7 @@
 import { PermissionDialog, useGasEstimation, useEthPrice, type FeeTokenOption, fetchTokenBalance, isNativeToken } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
-import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
+import { getChainNameFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
 import {
     Account,
@@ -306,12 +306,6 @@ export const PermissionModal = ({
     const chainId = chain?.id;
     if (!chainId) return 'Ethereum Mainnet';
     return getChainNameFromId(chainId);
-  }, [chain]);
-
-  const chainIconKey = useMemo(() => {
-    const chainId = chain?.id;
-    if (!chainId) return 'ethereum';
-    return getChainIconKeyFromId(chainId);
   }, [chain]);
 
   // Get spends array based on mode
@@ -835,7 +829,7 @@ export const PermissionModal = ({
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chain?.id}
-      chainIconKey={chainIconKey}
+      apiKey={extractedApiKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}

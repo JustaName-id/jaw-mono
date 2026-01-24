@@ -1,3 +1,5 @@
+import { SUPPORTED_CHAINS } from '@jaw.id/core';
+
 export type ParameterType = 'address' | 'hex' | 'number' | 'string' | 'json' | 'select';
 
 export type ParameterDefinition = {
@@ -47,22 +49,13 @@ export const CATEGORY_LABELS: Record<MethodCategory, string> = {
   asset: 'Asset',
 };
 
-// Supported chains for methods that accept a chainId parameter
-// Based on packages/core/src/account/smartAccount.ts SUPPORTED_CHAINS
+// Generate chain options dynamically from SUPPORTED_CHAINS
 export const CHAIN_OPTIONS = [
   { label: 'Default (current chain)', value: 'default' },
-  // Mainnets
-  { label: 'Ethereum Mainnet (1)', value: '0x1' },
-  { label: 'Optimism (10)', value: '0xa' },
-  { label: 'Base (8453)', value: '0x2105' },
-  { label: 'Arbitrum One (42161)', value: '0xa4b1' },
-  { label: 'Linea (59144)', value: '0xe708' },
-  // Testnets
-  { label: 'Sepolia (11155111)', value: '0xaa36a7' },
-  { label: 'Base Sepolia (84532)', value: '0x14a34' },
-  { label: 'Optimism Sepolia (11155420)', value: '0xaa37dc' },
-  { label: 'Arbitrum Sepolia (421614)', value: '0x66eee' },
-  { label: 'Linea Sepolia (59141)', value: '0xe705' },
+  ...SUPPORTED_CHAINS.map(chain => ({
+    label: `${chain.name} (${chain.id})`,
+    value: `0x${chain.id.toString(16)}`,
+  })),
 ];
 
 export const RPC_METHODS: RpcMethod[] = [

@@ -39,7 +39,7 @@ export interface PermissionDialogProps {
   networkName: string;
   chainId?: number;
   chainIcon?: ReactElement;
-  chainIconKey?: string;
+  apiKey?: string;
 
   // Actions
   onConfirm: () => void;

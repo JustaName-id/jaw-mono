@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { DefaultDialog } from "../DefaultDialog";
 import { FeeTokenSelector } from "../FeeTokenSelector";
 import { PermissionDialogProps } from "./types";
-import { useIsMobile, useChainIcon } from "../../hooks";
+import { useIsMobile, useChainIconURI } from "../../hooks";
 import {CopiedIcon, CopyIcon, WalletIcon} from "../../icons";
 import { useState, useEffect } from "react";
 import { getJustaNameInstance } from "../../utils/justaNameInstance";
@@ -22,7 +22,7 @@ export const PermissionDialog = ({
   networkName,
   chainId,
   chainIcon,
-  chainIconKey,
+  apiKey,
   onConfirm,
   onCancel,
   isProcessing,
@@ -102,8 +102,8 @@ export const PermissionDialog = ({
     });
   }, [spenderAddress, calls, chainId]);
 
-  // Get chain icon using the hook
-  const defaultChainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 24);
+  // Get chain icon using the hook - fetch from capabilities chainMetadata
+  const defaultChainIcon = useChainIconURI(chainId || 1, apiKey, 24);
   const displayChainIcon = chainIcon || defaultChainIcon;
 
   // Truncate address for display (e.g., 0x43e...ead3)

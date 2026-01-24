@@ -10,7 +10,7 @@ import { useState, useEffect } from "react";
 import { formatEther } from "viem";
 import { Info } from "lucide-react";
 import { TransactionDialogProps } from "./types";
-import { useIsMobile, useChainIcon } from "../../hooks";
+import { useIsMobile, useChainIconURI } from "../../hooks";
 import { getJustaNameInstance, getDisplayAddress } from "../../utils";
 
 export const TransactionDialog = ({
@@ -28,7 +28,7 @@ export const TransactionDialog = ({
   isProcessing,
   transactionStatus,
   networkName,
-  chainIconKey,
+  apiKey,
   // Fee token props
   feeTokens,
   feeTokensLoading,
@@ -45,8 +45,8 @@ export const TransactionDialog = ({
   const isSingleTransaction = totalTransactions === 1;
   const currentTransaction = transactions[0];
 
-  // Get chain icon using the hook
-  const chainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 24);
+  // Get chain icon using the hook - fetch from capabilities chainMetadata
+  const chainIcon = useChainIconURI(currentTransaction?.chainId || 1, apiKey, 24);
 
   // Get native token symbol from feeTokens (defaults to ETH if not found)
   const nativeToken = feeTokens?.find(t => t.isNative);

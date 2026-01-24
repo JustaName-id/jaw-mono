@@ -38,7 +38,7 @@ export interface TransactionDialogProps {
 
   // Display utilities
   networkName: string;
-  chainIconKey?: string;
+  apiKey?: string;
 
   // Fee token selection (for ERC-20 paymaster)
   feeTokens?: FeeTokenOption[];

@@ -47,7 +47,7 @@ import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
-import { useChainIcon } from '../hooks/useChainIcon';
+import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useEthPrice } from '../hooks/useEthPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
@@ -110,24 +110,6 @@ function isSiweMessage(message: string): boolean {
 function getChainNameFromId(chainId: number): string {
   const chain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   return chain?.name || 'Unknown Network';
-}
-
-/**
- * Get chain icon key from chain ID (for useChainIcon hook)
- */
-function getChainIconKeyFromId(chainId: number): string {
-  const chainIconMap: Record<number, string> = {
-    1: 'ethereum',
-    11155111: 'ethereum', // Sepolia
-    8453: 'base',
-    84532: 'base', // Base Sepolia
-    80001: 'polygon', // Polygon Mumbai
-    42161: 'arbitrum',
-    421614: 'arbitrum', // Arbitrum Sepolia
-    10: 'optimism',
-    11155420: 'optimism', // Optimism Sepolia
-  };
-  return chainIconMap[chainId] || 'ethereum';
 }
 
 // ============================================================================
@@ -537,8 +519,7 @@ function OnboardingDialogWrapper({
   // Get chain info for ConnectDialog
   const targetChainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(targetChainId);
-  const chainIconKey = getChainIconKeyFromId(targetChainId);
-  const chainIcon = useChainIcon(chainIconKey, 24);
+  const chainIcon = useChainIconURI(targetChainId, apiKey, 24);
 
   // Load accounts on mount using Account class
   useEffect(() => {
@@ -962,8 +943,7 @@ function SignatureDialogWrapper({
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(chainId);
-  const chainIconKey = getChainIconKeyFromId(chainId);
-  const chainIcon = useChainIcon(chainIconKey, 24);
+  const chainIcon = useChainIconURI(chainId, apiKey, 24);
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -1136,7 +1116,6 @@ function TransactionDialogWrapper({
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1423,7 +1402,7 @@ function TransactionDialogWrapper({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
-      chainIconKey={chainIconKey}
+      apiKey={apiKey}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -1464,7 +1443,6 @@ function SendTransactionDialogWrapper({
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1734,7 +1712,7 @@ function SendTransactionDialogWrapper({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
-      chainIconKey={chainIconKey}
+      apiKey={apiKey}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -1796,7 +1774,6 @@ function PermissionDialogWrapper({
     : (requestChainId || defaultChainId || 1);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -2258,7 +2235,7 @@ function PermissionDialogWrapper({
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
-      chainIconKey={chainIconKey}
+      apiKey={apiKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -2305,8 +2282,7 @@ function SiweDialogWrapper({
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(chainId);
-  const chainIconKey = getChainIconKeyFromId(chainId);
-  const chainIcon = useChainIcon(chainIconKey, 24);
+  const chainIcon = useChainIconURI(chainId, apiKey, 24);
   const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
 
   // Decode message if it's hex encoded
@@ -2442,7 +2418,6 @@ function RevokePermissionDialogWrapper({
   const chain = buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
   const nativeSymbol = viemChain?.nativeCurrency?.symbol || 'ETH';
 
   // Fetch permission details from relay
@@ -2614,7 +2589,7 @@ function RevokePermissionDialogWrapper({
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
-      chainIconKey={chainIconKey}
+      apiKey={apiKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}

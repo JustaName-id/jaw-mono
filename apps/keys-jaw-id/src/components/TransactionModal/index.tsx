@@ -3,7 +3,7 @@
 import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useEthPrice, useGasEstimation } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, Hash, Hex, formatUnits } from "viem";
-import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
+import { getChainNameFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
 import { Account, type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, type FeeTokenCapability } from "@jaw.id/core";
 
@@ -117,16 +117,6 @@ export const TransactionModal = ({
 
     // Use the getChainNameFromId utility which has comprehensive chain mapping
     return getChainNameFromId(chainId);
-  }, [normalizedTransactions, chain]);
-
-  const chainIconKey = useMemo(() => {
-    // Use chain prop if available, otherwise fall back to transaction chainId
-    const chainId = chain?.id ?? normalizedTransactions[0]?.chainId;
-
-    if (!chainId) return 'ethereum';
-
-    // Use getChainIconKeyFromId to get the correct icon key format
-    return getChainIconKeyFromId(chainId);
   }, [normalizedTransactions, chain]);
 
   const resetModalState = useCallback(() => {
@@ -494,7 +484,7 @@ export const TransactionModal = ({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
-      chainIconKey={chainIconKey}
+      apiKey={effectiveApiKey}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
