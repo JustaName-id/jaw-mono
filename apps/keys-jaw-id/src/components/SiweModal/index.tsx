@@ -1,10 +1,10 @@
 'use client'
 
-import { SiweDialog, useChainIcon } from "@jaw.id/ui";
+import { SiweDialog, useChainIconURI } from "@jaw.id/ui";
 import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
-import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
+import { getChainNameFromId } from "../../lib/chain-handlers";
 import { Account, standardErrorCodes } from "@jaw.id/core";
 
 export interface SiweModalProps {
@@ -53,8 +53,7 @@ export const SiweModal = ({
 
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
-  const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
+  const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
 
   const signMessage = useCallback(async () => {
     try {

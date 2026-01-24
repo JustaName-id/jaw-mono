@@ -39,7 +39,7 @@ export interface PermissionDialogProps {
   networkName: string;
   chainId?: number;
   chainIcon?: ReactElement;
-  chainIconKey?: string;
+  apiKey?: string;
 
   // Actions
   onConfirm: () => void;
@@ -61,7 +61,6 @@ export interface PermissionDialogProps {
   gasFeeLoading?: boolean;
   gasEstimationError?: string;
   sponsored?: boolean;
-  ethPrice?: number;
 
   // Fee token selection (for ERC-20 paymaster)
   feeTokens?: FeeTokenOption[];

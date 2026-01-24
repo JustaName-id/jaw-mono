@@ -1,9 +1,9 @@
 'use client'
 
-import { PermissionDialog, useGasEstimation, useEthPrice, type FeeTokenOption, fetchTokenBalance, isNativeToken } from "@jaw.id/ui";
+import { PermissionDialog, useGasEstimation, useFeeTokenPrice, type FeeTokenOption, fetchTokenBalance, isNativeToken } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
-import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
+import { getChainNameFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
 import {
     Account,
@@ -139,7 +139,13 @@ export const PermissionModal = ({
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState<boolean>(true);
-  const ethPrice = useEthPrice();
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract API key from rpcUrl if not provided as prop
   const extractedApiKey = useMemo(() => {
@@ -266,7 +272,7 @@ export const PermissionModal = ({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -274,7 +280,7 @@ export const PermissionModal = ({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, ethPrice]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
 
   // Extract permission details from request
   const permissionDetails = useMemo(() => {
@@ -306,12 +312,6 @@ export const PermissionModal = ({
     const chainId = chain?.id;
     if (!chainId) return 'Ethereum Mainnet';
     return getChainNameFromId(chainId);
-  }, [chain]);
-
-  const chainIconKey = useMemo(() => {
-    const chainId = chain?.id;
-    if (!chainId) return 'ethereum';
-    return getChainIconKeyFromId(chainId);
   }, [chain]);
 
   // Get spends array based on mode
@@ -835,7 +835,7 @@ export const PermissionModal = ({
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chain?.id}
-      chainIconKey={chainIconKey}
+      apiKey={extractedApiKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -846,7 +846,6 @@ export const PermissionModal = ({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
