@@ -1,4 +1,4 @@
-import { Address } from 'viem';
+import { Address, Hex } from 'viem';
 import { JAWSigner } from '../JAWSigner.js';
 import { decodePersonalSignMessage } from '../SignerUtils.js';
 import {
@@ -27,10 +27,11 @@ import {
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
 import { standardErrors } from '../../errors/index.js';
+import { Account } from '../../account/Account.js';
 
 type ConstructorOptions = {
     metadata: AppMetadata;
-    uiHandler: UIHandler;
+    uiHandler?: UIHandler;
     callback: ProviderEventCallback | null;
     apiKey: string;
     paymasters?: Record<number, PaymasterConfig>;
@@ -38,7 +39,10 @@ type ConstructorOptions = {
 };
 
 export class AppSpecificSigner extends JAWSigner {
-    private readonly uiHandler: UIHandler;
+    private readonly uiHandler?: UIHandler;
+    private readonly apiKey: string;
+    private readonly paymasters?: Record<number, PaymasterConfig>;
+    private account?: Account;
 
     constructor(params: ConstructorOptions) {
         super({
@@ -46,9 +50,11 @@ export class AppSpecificSigner extends JAWSigner {
             callback: params.callback,
         });
         this.uiHandler = params.uiHandler;
+        this.apiKey = params.apiKey;
+        this.paymasters = params.paymasters;
 
-        // Initialize the UI handler with SDK configuration
-        if (this.uiHandler.init) {
+        // Initialize the UI handler with SDK configuration (if provided)
+        if (this.uiHandler?.init) {
             this.uiHandler.init({
                 apiKey: params.apiKey,
                 defaultChainId: params.metadata.defaultChainId,
@@ -96,6 +102,11 @@ export class AppSpecificSigner extends JAWSigner {
         request: RequestArguments,
         options?: { skipCapabilitiesValidation?: boolean }
     ): Promise<WalletConnectResponse> {
+        // Headless mode: no UIHandler, use Account class directly
+        if (!this.uiHandler) {
+            return this.performHeadlessConnect();
+        }
+
         // Validate and inject capabilities using base class method (same as CrossPlatformSigner)
         const modifiedRequest = options?.skipCapabilitiesValidation
             ? request
@@ -155,17 +166,72 @@ export class AppSpecificSigner extends JAWSigner {
         return response.data;
     }
 
+    /**
+     * Headless connect flow - used when no UIHandler is provided.
+     * Connects using Account class directly with browser-native passkey prompts.
+     */
+    private async performHeadlessConnect(): Promise<WalletConnectResponse> {
+        const config = {
+            chainId: this.chain.id,
+            apiKey: this.apiKey,
+            paymasterUrl: this.paymasters?.[this.chain.id]?.url,
+        };
+
+        // 1. Check if already authenticated
+        const authenticatedAddress = Account.getAuthenticatedAddress(this.apiKey);
+        if (authenticatedAddress) {
+            this.account = await Account.get(config);
+            return this.buildConnectResponse(this.account.address);
+        }
+
+        // 2. Check for stored accounts - login with first one if available
+        const storedAccounts = Account.getStoredAccounts(this.apiKey);
+        if (storedAccounts.length > 0) {
+            this.account = await Account.get(config, storedAccounts[0].credentialId);
+            return this.buildConnectResponse(this.account.address);
+        }
+
+        // 3. No accounts - create new one with auto-generated username
+        const username = `jaw-${crypto.randomUUID().slice(0, 8)}`;
+        this.account = await Account.create(config, { username });
+        return this.buildConnectResponse(this.account.address);
+    }
+
+    /**
+     * Build a WalletConnectResponse from an address
+     */
+    private buildConnectResponse(address: Address): WalletConnectResponse {
+        this.accounts = [address];
+
+        store.account.set({
+            accounts: [address],
+            chain: this.chain,
+        });
+
+        this.callback?.('accountsChanged', [address]);
+
+        return {
+            accounts: [{ address }],
+        };
+    }
+
     protected async handleSigningRequest(request: RequestArguments): Promise<unknown> {
         const correlationId = this.getCorrelationId(request);
 
         switch (request.method) {
             case 'personal_sign': {
                 const params = request.params as [string, Address];
-                const [message, address] = params;
+                const [message] = params;
 
                 // Decode hex-encoded message for display and signing
                 // (wagmi and other libraries hex-encode messages before sending)
                 const decodedMessage = decodePersonalSignMessage(message);
+
+                // Headless mode: sign directly with Account
+                if (!this.uiHandler) {
+                    await this.ensureAccount();
+                    return await this.account!.signMessage(decodedMessage);
+                }
 
                 const uiRequest: SignatureUIRequest = {
                     id: crypto.randomUUID(),
@@ -174,7 +240,7 @@ export class AppSpecificSigner extends JAWSigner {
                     correlationId,
                     data: {
                         message: decodedMessage,
-                        address,
+                        address: params[1],
                         chainId: this.chain.id,
                     },
                 };
@@ -191,6 +257,13 @@ export class AppSpecificSigner extends JAWSigner {
             case 'eth_signTypedData_v4': {
                 const params = request.params as [Address, string];
                 const [address, typedData] = params;
+
+                // Headless mode: sign typed data directly with Account
+                if (!this.uiHandler) {
+                    await this.ensureAccount();
+                    const parsedTypedData = typeof typedData === 'string' ? JSON.parse(typedData) : typedData;
+                    return await this.account!.signTypedData(parsedTypedData);
+                }
 
                 const uiRequest: TypedDataUIRequest = {
                     id: crypto.randomUUID(),
@@ -226,6 +299,20 @@ export class AppSpecificSigner extends JAWSigner {
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(signParams.chainId);
 
+                // Headless mode: sign directly with Account
+                if (!this.uiHandler) {
+                    await this.ensureAccount(resolvedChain.id);
+                    // Type 0x45 = personal sign, Type 0x01 = EIP-712 typed data (ERC-7871)
+                    if (signParams.request.type === '0x45') {
+                        return await this.account!.signMessage(signParams.request.data.message);
+                    } else if (signParams.request.type === '0x01') {
+                        const typedData = signParams.request.data;
+                        return await this.account!.signTypedData(typedData as Parameters<Account['signTypedData']>[0]);
+                    } else {
+                        throw standardErrors.rpc.invalidParams(`Unsupported wallet_sign type: ${(signParams.request as { type: string }).type}`);
+                    }
+                }
+
                 const uiRequest: WalletSignUIRequest = {
                     id: crypto.randomUUID(),
                     type: 'wallet_sign',
@@ -260,6 +347,29 @@ export class AppSpecificSigner extends JAWSigner {
 
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(callsData.chainId);
+
+                // Headless mode: send calls directly with Account
+                if (!this.uiHandler) {
+                    await this.ensureAccount(resolvedChain.id);
+                    // Priority: capabilities.paymasterService > pre-configured paymasters
+                    const capabilitiesPaymaster = callsData.capabilities?.paymasterService;
+                    const paymasterConfig = this.paymasters?.[resolvedChain.id];
+                    const paymasterUrl = capabilitiesPaymaster?.url ?? paymasterConfig?.url;
+                    const paymasterContext = (capabilitiesPaymaster as { context?: Record<string, unknown> } | undefined)?.context ?? paymasterConfig?.context;
+
+                    const result = await this.account!.sendCalls(
+                        callsData.calls.map(call => ({
+                            to: call.to as Address,
+                            value: call.value ? BigInt(call.value) : undefined,
+                            data: call.data as Hex | undefined,
+                        })),
+                        undefined,
+                        paymasterUrl,
+                        paymasterContext
+                    );
+                    this.trackSendCallsResult({ id: result.id, chainId: result.chainId });
+                    return { id: result.id, chainId: result.chainId };
+                }
 
                 const uiRequest: TransactionUIRequest = {
                     id: crypto.randomUUID(),
@@ -302,6 +412,27 @@ export class AppSpecificSigner extends JAWSigner {
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(txData.chainId);
 
+                // Headless mode: send transaction directly with Account
+                // Note: No tracking needed - sendTransaction returns a tx hash directly (not a userOpHash)
+                if (!this.uiHandler) {
+                    await this.ensureAccount(resolvedChain.id);
+                    // Priority: capabilities.paymasterService > pre-configured paymasters
+                    const capabilitiesPaymaster = txData.capabilities?.paymasterService;
+                    const paymasterConfig = this.paymasters?.[resolvedChain.id];
+                    const paymasterUrl = capabilitiesPaymaster?.url ?? paymasterConfig?.url;
+                    const paymasterContext = (capabilitiesPaymaster as { context?: Record<string, unknown> } | undefined)?.context ?? paymasterConfig?.context;
+
+                    return await this.account!.sendTransaction(
+                        [{
+                            to: txData.to as Address,
+                            value: txData.value ? BigInt(txData.value) : undefined,
+                            data: txData.data as Hex | undefined,
+                        }],
+                        paymasterUrl,
+                        paymasterContext
+                    );
+                }
+
                 const uiRequest: SendTransactionUIRequest = {
                     id: crypto.randomUUID(),
                     type: 'eth_sendTransaction',
@@ -343,6 +474,24 @@ export class AppSpecificSigner extends JAWSigner {
 
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(permissionData.chainId);
+
+                // Headless mode: grant permissions directly with Account
+                if (!this.uiHandler) {
+                    await this.ensureAccount(resolvedChain.id);
+                    // Priority: capabilities.paymasterService > pre-configured paymasters
+                    const capabilitiesPaymaster = permissionData.capabilities?.paymasterService;
+                    const paymasterConfig = this.paymasters?.[resolvedChain.id];
+                    const paymasterUrl = capabilitiesPaymaster?.url ?? paymasterConfig?.url;
+                    const paymasterContext = (capabilitiesPaymaster as { context?: Record<string, unknown> } | undefined)?.context ?? paymasterConfig?.context;
+
+                    return await this.account!.grantPermissions(
+                        permissionData.expiry,
+                        permissionData.spender as Address,
+                        permissionData.permissions,
+                        paymasterUrl,
+                        paymasterContext
+                    );
+                }
 
                 const uiRequest: PermissionUIRequest = {
                     id: crypto.randomUUID(),
@@ -389,6 +538,12 @@ export class AppSpecificSigner extends JAWSigner {
                 }
                 const permissionChainId = parseInt(relayPermission.chainId, 16);
 
+                // Headless mode: revoke permission directly with Account
+                if (!this.uiHandler) {
+                    await this.ensureAccount(permissionChainId);
+                    return await this.account!.revokePermission(revokeData.id as Hex);
+                }
+
                 const uiRequest: RevokePermissionUIRequest = {
                     id: crypto.randomUUID(),
                     type: 'wallet_revokePermissions',
@@ -418,8 +573,37 @@ export class AppSpecificSigner extends JAWSigner {
         }
     }
 
+    /**
+     * Ensure we have an Account instance for headless operations.
+     * If chainId differs from current account, recreate with new chain.
+     */
+    private async ensureAccount(chainId?: number): Promise<void> {
+        const targetChainId = chainId ?? this.chain.id;
+
+        // If we already have an account on the correct chain, we're good
+        if (this.account && this.account.chainId === targetChainId) {
+            return;
+        }
+
+        const config = {
+            chainId: targetChainId,
+            apiKey: this.apiKey,
+            paymasterUrl: this.paymasters?.[targetChainId]?.url,
+        };
+
+        // Try to restore from auth state
+        const authenticatedAddress = Account.getAuthenticatedAddress(this.apiKey);
+        if (authenticatedAddress) {
+            this.account = await Account.get(config);
+            return;
+        }
+
+        // Not authenticated - this shouldn't happen if connect was called first
+        throw standardErrors.provider.unauthorized('Not connected. Call wallet_connect first.');
+    }
+
     override async cleanup(): Promise<void> {
-        await this.uiHandler.cleanup?.();
+        await this.uiHandler?.cleanup?.();
         await super.cleanup();
     }
 }

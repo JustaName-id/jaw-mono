@@ -34,9 +34,6 @@ export function createSigner(params: {
         }
 
         case 'appSpecific': {
-            if (!uiHandler) {
-                throw new Error('UIHandler is required for appSpecific signer');
-            }
             return new AppSpecificSigner({
                 metadata,
                 callback,
