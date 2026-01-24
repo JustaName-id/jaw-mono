@@ -31,7 +31,7 @@ interface FeeTokenSelectorProps {
   onSelect: (token: FeeTokenOption) => void;
   isLoading: boolean;
   disabled?: boolean;
-  ethPrice?: number;
+  nativeTokenPrice?: number;
   estimatedGasEth?: string;
 }
 
@@ -95,7 +95,7 @@ export const FeeTokenSelector = ({
   onSelect,
   isLoading,
   disabled,
-  ethPrice = 0,
+  nativeTokenPrice = 0,
   estimatedGasEth,
 }: FeeTokenSelectorProps) => {
   const [open, setOpen] = useState(false);
@@ -127,8 +127,8 @@ export const FeeTokenSelector = ({
 
   // Calculate USD values for tokens
   const getBalanceUsd = (token: FeeTokenOption): string => {
-    if (token.isNative && ethPrice > 0) {
-      const usd = parseFloat(token.balanceFormatted) * ethPrice;
+    if (token.isNative && nativeTokenPrice > 0) {
+      const usd = parseFloat(token.balanceFormatted) * nativeTokenPrice;
       return formatUsd(usd);
     }
     // For non-native ERC-20 tokens, show balance with token decimals
@@ -160,12 +160,12 @@ export const FeeTokenSelector = ({
     }
 
     // Fallback: calculate from ETH gas estimate
-    if (!estimatedGasEth || !ethPrice) {
+    if (!estimatedGasEth || !nativeTokenPrice) {
       return { formatted: '', usd: '' };
     }
 
     const gasEth = parseFloat(estimatedGasEth);
-    const gasUsd = gasEth * ethPrice;
+    const gasUsd = gasEth * nativeTokenPrice;
 
     if (token.isNative) {
       return {

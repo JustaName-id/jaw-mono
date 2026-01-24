@@ -1,6 +1,6 @@
 'use client'
 
-import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useEthPrice, useGasEstimation } from "@jaw.id/ui";
+import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useFeeTokenPrice, useGasEstimation } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, Hash, Hex, formatUnits } from "viem";
 import { getChainNameFromId } from "../../lib/chain-handlers";
@@ -57,7 +57,6 @@ export const TransactionModal = ({
 }: TransactionModalProps) => {
   const { getAccount } = usePasskeys();
   const { walletAddress } = useAuth();
-  const ethPrice = useEthPrice();
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [account, setAccount] = useState<Account | null>(null);
@@ -66,6 +65,13 @@ export const TransactionModal = ({
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -212,7 +218,7 @@ export const TransactionModal = ({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -220,7 +226,7 @@ export const TransactionModal = ({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
 
   // Determine if fee token selector should be shown
   const showFeeTokenSelector = !isSponsored && feeTokens.some(t => !t.isNative);
@@ -478,7 +484,6 @@ export const TransactionModal = ({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}

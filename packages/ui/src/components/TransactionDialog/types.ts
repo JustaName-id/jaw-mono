@@ -26,7 +26,6 @@ export interface TransactionDialogProps {
   gasFeeLoading: boolean;
   gasEstimationError: string;
   sponsored: boolean;
-  ethPrice: number;
 
   // Actions
   onConfirm: () => Promise<void>;

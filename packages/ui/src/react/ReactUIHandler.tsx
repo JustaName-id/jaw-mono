@@ -48,7 +48,7 @@ import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
 import { useChainIconURI } from '../hooks/useChainIconURI';
-import { useEthPrice } from '../hooks/useEthPrice';
+import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 
@@ -1107,11 +1107,16 @@ function TransactionDialogWrapper({
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<string>('');
-  const ethPrice = useEthPrice();
-
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1205,7 +1210,7 @@ function TransactionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -1213,7 +1218,7 @@ function TransactionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1396,7 +1401,6 @@ function TransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1434,11 +1438,16 @@ function SendTransactionDialogWrapper({
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<string>('');
-  const ethPrice = useEthPrice();
-
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
@@ -1526,7 +1535,7 @@ function SendTransactionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -1534,7 +1543,7 @@ function SendTransactionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1706,7 +1715,6 @@ function SendTransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1765,7 +1773,13 @@ function PermissionDialogWrapper({
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
-  const ethPrice = useEthPrice();
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
@@ -1863,7 +1877,7 @@ function PermissionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -1871,7 +1885,7 @@ function PermissionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, ethPrice]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
 
   const chain = useMemo(
     () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
@@ -2092,9 +2106,6 @@ function PermissionDialogWrapper({
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
-  // Get native currency symbol for display
-  const nativeSymbol = viemChain?.nativeCurrency?.symbol || 'ETH';
-
   // Convert to SpendPermission array format expected by PermissionDialog
   const spends = useMemo(() => spendsData.map(spend => {
     const tokenInfo = tokenInfoMap[spend.token] || (isNativeToken(spend.token)
@@ -2247,7 +2258,6 @@ function PermissionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}

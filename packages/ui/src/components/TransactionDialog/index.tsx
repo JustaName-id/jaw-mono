@@ -10,7 +10,7 @@ import { useState, useEffect } from "react";
 import { formatEther } from "viem";
 import { Info } from "lucide-react";
 import { TransactionDialogProps } from "./types";
-import { useIsMobile, useChainIconURI } from "../../hooks";
+import { useIsMobile, useChainIconURI, useFeeTokenPrice } from "../../hooks";
 import { getJustaNameInstance, getDisplayAddress } from "../../utils";
 
 export const TransactionDialog = ({
@@ -22,7 +22,6 @@ export const TransactionDialog = ({
   gasFeeLoading,
   gasEstimationError,
   sponsored,
-  ethPrice,
   onConfirm,
   onCancel,
   isProcessing,
@@ -51,6 +50,9 @@ export const TransactionDialog = ({
   // Get native token symbol from feeTokens (defaults to ETH if not found)
   const nativeToken = feeTokens?.find(t => t.isNative);
   const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Check if there are any selectable payment options
   // If feeTokens is not loaded yet (null/undefined/empty), assume there are selectable options
@@ -254,10 +256,10 @@ export const TransactionDialog = ({
                     ) : sponsored ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          {gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
+                          {gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
                             <div className="flex flex-col line-through text-muted-foreground">
                               <p className="text-base font-normal">
-                                ${(ethPrice * Number(gasFee)).toFixed(4)}
+                                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
                               </p>
                             </div>
                           )}
@@ -295,7 +297,7 @@ export const TransactionDialog = ({
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
                               disabled={isProcessing}
-                              ethPrice={ethPrice}
+                              nativeTokenPrice={nativeTokenPrice}
                               estimatedGasEth={gasFee || '0'}
                             />
                           )}
@@ -310,7 +312,7 @@ export const TransactionDialog = ({
                       <div className="flex flex-col gap-0.5 w-full">
                         <div className="flex items-center justify-between w-full">
                           <p className="text-base font-normal text-foreground">
-                            {ethPrice > 0 ? `$${(ethPrice * Number(gasFee)).toFixed(4)}` : ''}
+                            {nativeTokenPrice > 0 ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}` : ''}
                           </p>
                           {/* Inline Fee Token Selector */}
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
@@ -320,7 +322,7 @@ export const TransactionDialog = ({
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
                               disabled={isProcessing}
-                              ethPrice={ethPrice}
+                              nativeTokenPrice={nativeTokenPrice}
                               estimatedGasEth={gasFee}
                             />
                           )}
@@ -444,9 +446,9 @@ export const TransactionDialog = ({
                                 <p className="text-xs font-bold leading-[133%] text-muted-foreground">Value</p>
                                 <div className="flex items-baseline gap-2">
                                   <p className="text-base font-normal">{formatTransactionValue(transaction.value)} {nativeSymbol}</p>
-                                  {ethPrice > 0 && (
+                                  {nativeTokenPrice > 0 && (
                                     <p className="text-sm text-muted-foreground">
-                                      ${(Number(formatTransactionValue(transaction.value)) * ethPrice).toFixed(2)}
+                                      ${(Number(formatTransactionValue(transaction.value)) * nativeTokenPrice).toFixed(2)}
                                     </p>
                                   )}
                                 </div>
@@ -538,10 +540,10 @@ export const TransactionDialog = ({
                     ) : sponsored ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
-                          {gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
+                          {gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
                             <div className="flex flex-col line-through text-muted-foreground">
                               <p className="text-base font-normal">
-                                ${(ethPrice * Number(gasFee)).toFixed(4)}
+                                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
                               </p>
                             </div>
                           )}
@@ -579,7 +581,7 @@ export const TransactionDialog = ({
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
                               disabled={isProcessing}
-                              ethPrice={ethPrice}
+                              nativeTokenPrice={nativeTokenPrice}
                               estimatedGasEth={gasFee || '0'}
                             />
                           )}
@@ -594,7 +596,7 @@ export const TransactionDialog = ({
                       <div className="flex flex-col gap-0.5 w-full">
                         <div className="flex items-center justify-between w-full">
                           <p className="text-base font-normal text-foreground">
-                            {ethPrice > 0 ? `$${(ethPrice * Number(gasFee)).toFixed(4)}` : ''}
+                            {nativeTokenPrice > 0 ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}` : ''}
                           </p>
                           {/* Inline Fee Token Selector */}
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
@@ -604,7 +606,7 @@ export const TransactionDialog = ({
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
                               disabled={isProcessing}
-                              ethPrice={ethPrice}
+                              nativeTokenPrice={nativeTokenPrice}
                               estimatedGasEth={gasFee}
                             />
                           )}
