@@ -446,6 +446,7 @@ export const TransactionModal = ({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
+      apiKey={effectiveApiKey}
       mainnetRpcUrl={mainnetRpcUrl}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
