@@ -1,0 +1,41 @@
+# mode
+
+Authentication mode that determines where passkey operations occur.
+
+**Type:** `Mode.CrossPlatform` | `Mode.AppSpecific`
+**Default:** `Mode.CrossPlatform`
+
+
+## Mode Comparison
+
+| Feature | CrossPlatform | AppSpecific |
+|---------|---------------|-------------|
+| **Passkey operations** | On `keys.jaw.id` (popup) | Within your dApp |
+| **User experience** | Redirects to popup | Stays in your app |
+| **Wallet reuse** | Universal | App-specific only |
+| **Origin binding** | `keys.jaw.id` | Your domain |
+| **Branding** | JAW interface | Custom UI supported |
+
+:::warning
+**Important:** Passkeys are always stored by the browser/device (not on any server). The mode determines where passkey operations happen and whether wallets can be reused across applications.
+:::
+
+
+## Choosing a Mode
+
+### Use CrossPlatform (Default) when:
+- You want users to reuse their wallet across multiple dApps
+- You prefer a consistent, maintained authentication UI
+- Quick integration is a priority
+
+### Use AppSpecific when:
+- You want users to stay entirely within your application
+- You need full control over the UI/UX
+- You're building a white-label experience
+- Wallet portability across apps is not needed
+
+
+## Related
+
+- [CrossPlatform Mode](/configuration/mode/cross-platform) - Detailed setup and usage
+- [AppSpecific Mode](/configuration/mode/app-specific) - Detailed setup and usage

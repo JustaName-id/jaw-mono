@@ -1,0 +1,153 @@
+# AppSpecific Mode
+
+Passkey operations stay within your dApp with no external redirects. Wallets are specific to your application's origin.
+
+
+## Usage
+
+AppSpecific mode requires a `uiHandler` to render authentication dialogs within your app.
+
+### Using ReactUIHandler (Recommended for React)
+
+For React applications, install the `@jaw.id/ui` package which provides pre-built UI dialogs:
+
+:::code-group
+
+```bash [npm]
+npm install @jaw.id/ui @jaw.id/core
+```
+
+```bash [pnpm]
+pnpm add @jaw.id/ui @jaw.id/core
+```
+
+```bash [yarn]
+yarn add @jaw.id/ui @jaw.id/core
+```
+
+```bash [bun]
+bun add @jaw.id/ui @jaw.id/core
+```
+
+:::
+
+Then configure the SDK with `ReactUIHandler`:
+
+```typescript
+// Wagmi
+import { jaw } from '@jaw.id/wagmi';
+import { Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw.id/ui';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: new ReactUIHandler(),
+  },
+});
+```
+
+```typescript
+// EIP-1193 Provider
+import { JAW, Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw.id/ui';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.AppSpecific,
+    uiHandler: new ReactUIHandler(),
+  },
+});
+```
+
+### Custom UI Implementation
+
+For non-React apps or fully custom UI, see the [Custom UI Handler](/advanced/custom-ui-handler) documentation.
+
+
+## How It Works
+
+1. User clicks "Connect" in your dApp
+2. A modal opens within your application (no popup/redirect)
+3. User authenticates with their passkey on your domain's origin
+4. Modal closes and user is connected
+5. The wallet is tied to your application's origin
+
+
+## Benefits
+
+- **Users never leave your dApp** - No popups or redirects
+- **Full control over UI/UX** - Customize the authentication experience
+- **White-label experience** - Your branding throughout
+- **Origin-bound security** - Passkeys are tied to your domain
+
+
+## User Flow
+
+```
+Your dApp
+   │
+   │  1. User clicks Connect
+   │
+   │  2. Modal opens (within your app)
+   │     ┌─────────────────────────┐
+   │     │   Authentication UI     │
+   │     │   (ReactUIHandler or    │
+   │     │    custom uiHandler)    │
+   │     └─────────────────────────┘
+   │
+   │  3. User authenticates with passkey
+   │
+   │  4. Modal closes
+   │
+   │  5. User connected
+   └──────────────────────────────────
+```
+
+
+## uiHandler
+
+The `uiHandler` is responsible for rendering approval dialogs for wallet operations (connect, sign, transact, etc.).
+
+**Type:** `UIHandler`
+**Required:** Yes (for AppSpecific mode)
+
+### ReactUIHandler
+
+For React applications, `ReactUIHandler` from `@jaw.id/ui` provides pre-built, styled dialogs that handle all wallet operations:
+
+- Onboarding / Connect
+- Message signing
+- Typed data signing (EIP-712)
+- Transaction approval
+- Permission management
+
+```typescript
+import { ReactUIHandler } from '@jaw.id/ui';
+
+const uiHandler = new ReactUIHandler();
+```
+
+### Custom UIHandler
+
+For non-React apps or when you need complete control over the UI, implement the `UIHandler` interface:
+
+```typescript
+interface UIHandler {
+  init(config: UIHandlerConfig): void;
+  request(method: string, params: unknown): Promise<UIResponse>;
+  canHandle(method: string): boolean;
+  cleanup(): void;
+}
+```
+
+See the [Custom UI Handler](/advanced/custom-ui-handler) documentation for the full interface specification and implementation examples.
+
+
+## Related
+
+- [Mode Overview](/configuration/mode) - Compare all authentication modes
+- [CrossPlatform Mode](/configuration/mode/cross-platform) - Enable wallet reuse across apps
+- [Custom UI Handler](/advanced/custom-ui-handler) - Build your own authentication UI
