@@ -41,6 +41,8 @@ export const PermissionDialog = ({
   onFeeTokenSelect,
   showFeeTokenSelector,
   isPayingWithErc20,
+  // RPC configuration
+  mainnetRpcUrl,
 }: PermissionDialogProps) => {
   const isMobile = useIsMobile();
 
@@ -62,7 +64,7 @@ export const PermissionDialog = ({
       return;
     }
 
-    const justaName = getJustaNameInstance();
+    const justaName = getJustaNameInstance(mainnetRpcUrl);
     const addressesToResolve: string[] = [];
 
     if (spenderAddress) {

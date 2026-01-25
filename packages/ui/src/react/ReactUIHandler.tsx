@@ -457,6 +457,11 @@ function buildChainConfigFromApiKey(chainId: number, apiKey?: string, paymasterU
   };
 }
 
+// Helper to build mainnet RPC URL for JustaName SDK (ENS resolution always uses mainnet)
+function getMainnetRpcUrl(apiKey?: string): string {
+  return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
+}
+
 // Helper to get Account for signing operations
 async function getAccountForSigning(
   apiKey?: string,
@@ -858,6 +863,7 @@ function OnboardingDialogWrapper({
           chainName={chainName}
           chainId={targetChainId}
           chainIcon={chainIcon}
+          mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
           onSign={handleSiweSign}
           onCancel={handleSiweCancel}
           isProcessing={isSiweSigning}
@@ -885,6 +891,7 @@ function OnboardingDialogWrapper({
         chainName={chainName}
         chainId={targetChainId}
         chainIcon={chainIcon}
+        mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         onConnect={async () => handleConnectConfirm()}
         onCancel={handleConnectCancel}
         isProcessing={isConnecting}
@@ -913,6 +920,7 @@ function OnboardingDialogWrapper({
         isCreating={isCreating}
         ensDomain={ensDomain}
         chainId={chainId}
+        mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         apiKey={apiKey}
         supportedChains={SUPPORTED_CHAINS.map(chain => ({ id: chain.id }))}
         subnameTextRecords={subnameTextRecords}
@@ -993,6 +1001,7 @@ function SignatureDialogWrapper({
       chainName={chainName}
       chainId={chainId}
       chainIcon={chainIcon}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1079,6 +1088,7 @@ function Eip712DialogWrapper({
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
       accountAddress={request.data.address}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1406,7 +1416,7 @@ function TransactionDialogWrapper({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
-      apiKey={apiKey}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -1720,7 +1730,7 @@ function SendTransactionDialogWrapper({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
-      apiKey={apiKey}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -2258,6 +2268,7 @@ function PermissionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -2383,6 +2394,7 @@ function SiweDialogWrapper({
       chainName={chainName}
       chainId={chainId}
       chainIcon={chainIcon}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -2606,6 +2618,7 @@ function RevokePermissionDialogWrapper({
       status={status}
       isLoadingTokenInfo={isLoadingPermissionDetails}
       timestamp={new Date(request.timestamp)}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
     />
   );
 }

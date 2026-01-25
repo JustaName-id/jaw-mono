@@ -59,7 +59,15 @@ export default defineConfig({
         { text: 'appName', link: '/configuration/appName' },
         { text: 'appLogoUrl', link: '/configuration/appLogoUrl' },
         { text: 'defaultChainId', link: '/configuration/defaultChainId' },
-        { text: 'preference', link: '/configuration/preference' },
+        {
+          text: 'mode',
+          collapsed: true,
+          items: [
+            { text: 'Overview', link: '/configuration/mode' },
+            { text: 'CrossPlatform', link: '/configuration/mode/cross-platform' },
+            { text: 'AppSpecific', link: '/configuration/mode/app-specific' },
+          ],
+        },
         { text: 'paymasters', link: '/configuration/paymasters' },
       ],
     },

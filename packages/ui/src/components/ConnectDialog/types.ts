@@ -19,6 +19,9 @@ export interface ConnectDialogProps {
   chainId?: number;
   chainIcon?: JSX.Element;
 
+  // RPC configuration
+  mainnetRpcUrl: string;
+
   // Actions
   onConnect: () => Promise<void>;
   onCancel: () => void;

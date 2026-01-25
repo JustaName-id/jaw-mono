@@ -5,7 +5,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, Hash, Hex, formatUnits } from "viem";
 import { getChainNameFromId } from "../../lib/chain-handlers";
 import { usePasskeys, useAuth } from "../../hooks";
-import { Account, type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, type FeeTokenCapability } from "@jaw.id/core";
+import { Account, type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, JAW_RPC_URL, type FeeTokenCapability } from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -86,6 +86,11 @@ export const TransactionModal = ({
     }
     return '';
   }, [apiKey, chain?.rpcUrl]);
+
+  // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
+  const mainnetRpcUrl = useMemo(() => {
+    return effectiveApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}` : `${JAW_RPC_URL}?chainId=1`;
+  }, [effectiveApiKey]);
 
   // Determine if sponsored based on transactionRequest or prop
   const isSponsored = useMemo(() => {
@@ -489,7 +494,7 @@ export const TransactionModal = ({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
-      apiKey={effectiveApiKey}
+      mainnetRpcUrl={mainnetRpcUrl}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}

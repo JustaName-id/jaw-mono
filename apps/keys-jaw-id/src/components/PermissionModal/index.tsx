@@ -16,6 +16,7 @@ import {
     buildGrantPermissionCall,
     standardErrorCodes,
     JAW_PAYMASTER_URL,
+    JAW_RPC_URL,
     SUPPORTED_CHAINS,
     handleGetCapabilitiesRequest,
     type FeeTokenCapability,
@@ -163,6 +164,11 @@ export const PermissionModal = ({
 
     return '';
   }, [apiKey, chain?.rpcUrl]);
+
+  // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
+  const mainnetRpcUrl = useMemo(() => {
+    return extractedApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${extractedApiKey}` : `${JAW_RPC_URL}?chainId=1`;
+  }, [extractedApiKey]);
 
   // Determine mode from request method
   const mode = useMemo(() => {
@@ -846,6 +852,7 @@ export const PermissionModal = ({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      mainnetRpcUrl={mainnetRpcUrl}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}

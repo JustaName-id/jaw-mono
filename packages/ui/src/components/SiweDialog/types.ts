@@ -28,4 +28,7 @@ export interface SiweDialogProps {
 
   // Security warning for origin mismatch
   warningMessage?: string;
+
+  // RPC configuration
+  mainnetRpcUrl: string;
 }

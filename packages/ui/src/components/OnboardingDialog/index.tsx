@@ -23,6 +23,7 @@ export function OnboardingDialog({
   isCreating,
   ensDomain,
   chainId,
+  mainnetRpcUrl,
   apiKey,
   supportedChains,
   subnameTextRecords,
@@ -88,7 +89,7 @@ export function OnboardingDialog({
         setMessage('Checking availability...');
 
         try {
-          const justaName = getJustaNameInstance();
+          const justaName = getJustaNameInstance(mainnetRpcUrl);
           const result = await justaName.subnames.isSubnameAvailable({
             subname: debouncedUsername + '.' + ensDomain,
             chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
@@ -123,7 +124,7 @@ export function OnboardingDialog({
 
       if (ensDomain && chainId && apiKey && supportedChains && address) {
         try {
-          const justaName = getJustaNameInstance();
+          const justaName = getJustaNameInstance(mainnetRpcUrl);
 
           const addresses = supportedChains.map(chain => ({
             address: address,

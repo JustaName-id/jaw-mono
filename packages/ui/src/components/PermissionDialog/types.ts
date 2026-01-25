@@ -71,4 +71,7 @@ export interface PermissionDialogProps {
 
   // ERC-20 payment indicator (when user selected non-native token)
   isPayingWithErc20?: boolean;
+
+  // RPC configuration
+  mainnetRpcUrl: string;
 }
