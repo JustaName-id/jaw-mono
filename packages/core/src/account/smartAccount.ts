@@ -23,7 +23,7 @@ import {
     WebAuthnAccount
 } from "viem/account-abstraction";
 import {Chain} from "../store/index.js";
-import {arbitrum, arbitrumSepolia, base, baseSepolia, linea, lineaSepolia, mainnet, optimism, optimismSepolia, sepolia} from "viem/chains";
+import {arbitrum, arbitrumSepolia, base, baseSepolia, linea, lineaSepolia, mainnet, optimism, optimismSepolia, sepolia , avalanche, avalancheFuji, bsc, bscTestnet} from "viem/chains";
 import {PERMISSIONS_MANAGER_ADDRESS} from "../constants.js";
 import {
     getPermissionFromRelay,
@@ -63,6 +63,8 @@ export const MAINNET_CHAINS = [
     optimism,
     arbitrum,
     linea,
+    avalanche,
+    bsc
 ]
 
 export const TESTNET_CHAINS = [
@@ -71,6 +73,8 @@ export const TESTNET_CHAINS = [
     optimismSepolia,
     arbitrumSepolia,
     lineaSepolia,
+    avalancheFuji,
+    bscTestnet
 ]
 
 export const SUPPORTED_CHAINS = [

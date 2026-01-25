@@ -1,10 +1,10 @@
 'use client'
 
-import { Eip712Dialog, useChainIcon } from "@jaw.id/ui";
+import { Eip712Dialog, useChainIconURI } from "@jaw.id/ui";
 import { usePasskeys } from "../../hooks";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
-import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
+import { getChainNameFromId } from "../../lib/chain-handlers";
 import { Account, standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
 
 export interface Eip712ModalProps {
@@ -62,8 +62,7 @@ export const Eip712Modal = ({
 
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
-  const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
+  const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
 
   // Parse typed data
   const typedData = useMemo(() => {

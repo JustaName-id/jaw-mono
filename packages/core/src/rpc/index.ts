@@ -26,7 +26,7 @@ export {
     type WalletGetAssetsResponse,
 } from './wallet_getAssets.js';
 
-export { handleGetCapabilitiesRequest } from './capabilities.js';
+export { handleGetCapabilitiesRequest, type ChainMetadataCapability } from './capabilities.js';
 
 export {
     type Permission,

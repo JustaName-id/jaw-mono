@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { JAW } from '@jaw.id/core';
+import { JAW, MAINNET_CHAINS as CORE_MAINNET_CHAINS, TESTNET_CHAINS as CORE_TESTNET_CHAINS } from '@jaw.id/core';
 
 type Capabilities = Record<string, Record<string, unknown>>;
 
@@ -11,21 +11,18 @@ interface ChainInfo {
   hexId: string;
 }
 
-const MAINNET_CHAINS: ChainInfo[] = [
-  { name: 'Ethereum', chainId: 1, hexId: '0x1' },
-  { name: 'Optimism', chainId: 10, hexId: '0xa' },
-  { name: 'Base', chainId: 8453, hexId: '0x2105' },
-  { name: 'Arbitrum One', chainId: 42161, hexId: '0xa4b1' },
-  { name: 'Linea', chainId: 59144, hexId: '0xe708' },
-];
+// Generate chain info from core's SUPPORTED_CHAINS
+const MAINNET_CHAINS: ChainInfo[] = CORE_MAINNET_CHAINS.map(chain => ({
+  name: chain.name,
+  chainId: chain.id,
+  hexId: `0x${chain.id.toString(16)}`,
+}));
 
-const TESTNET_CHAINS: ChainInfo[] = [
-  { name: 'Ethereum Sepolia', chainId: 11155111, hexId: '0xaa36a7' },
-  { name: 'Optimism Sepolia', chainId: 11155420, hexId: '0xaa37dc' },
-  { name: 'Base Sepolia', chainId: 84532, hexId: '0x14a34' },
-  { name: 'Arbitrum Sepolia', chainId: 421614, hexId: '0x66eee' },
-  { name: 'Linea Sepolia', chainId: 59141, hexId: '0xe705' },
-];
+const TESTNET_CHAINS: ChainInfo[] = CORE_TESTNET_CHAINS.map(chain => ({
+  name: chain.name,
+  chainId: chain.id,
+  hexId: `0x${chain.id.toString(16)}`,
+}));
 
 const CheckIcon = () => (
   <svg
