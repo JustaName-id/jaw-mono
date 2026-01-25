@@ -1,14 +1,11 @@
 'use client'
 
 import { Eip712Dialog, useChainIconURI } from "@jaw.id/ui";
-import { useOriginAccount } from "../../hooks";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePasskeys, useAuth } from "../../hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
-
-// Error code for session errors (used by dApps to trigger re-authentication)
-const SESSION_ERROR_CODE = 4901;
+import { Account, standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
 
 export interface Eip712ModalProps {
   origin: string;
@@ -37,9 +34,13 @@ export const Eip712Modal = ({
   onSuccess,
   onError
 }: Eip712ModalProps) => {
+  const { restoreAccount } = usePasskeys();
+  const { credentialId, publicKey } = useAuth({ origin });
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
+  const [account, setAccount] = useState<Account | null>(null);
   const [timestamp] = useState(() => new Date());
+  const isInitializingRef = useRef(false);
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -54,13 +55,6 @@ export const Eip712Modal = ({
     }
     return '';
   }, [apiKey, chain?.rpcUrl]);
-
-  // Get account for this origin - ensures correct account is used for multi-session
-  const { account, isLoading: isAccountLoading, error: accountError } = useOriginAccount(
-    origin,
-    chain?.id ?? 1,
-    effectiveApiKey
-  );
 
   // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
   const mainnetRpcUrl = useMemo(() => {
@@ -81,6 +75,30 @@ export const Eip712Modal = ({
     }
   }, [typedDataJson]);
 
+  // Initialize account when modal opens
+  useEffect(() => {
+    const initAccount = async () => {
+      if (!chain || !credentialId || !publicKey || isInitializingRef.current) return;
+
+      isInitializingRef.current = true;
+      try {
+        const restored = await restoreAccount(
+          { id: chain.id, rpcUrl: chain.rpcUrl, paymaster: chain.paymaster },
+          credentialId,
+          publicKey,
+          effectiveApiKey
+        );
+        setAccount(restored);
+      } catch (err) {
+        console.error('Failed to restore account:', err);
+      } finally {
+        isInitializingRef.current = false;
+      }
+    };
+
+    initAccount();
+  }, [chain, credentialId, publicKey, restoreAccount, effectiveApiKey]);
+
   const signTypedData = useCallback(async () => {
     try {
       setIsProcessing(true);
@@ -100,7 +118,6 @@ export const Eip712Modal = ({
         primaryType: typedData.primaryType,
         message: typedData.message,
       });
-      console.log('Typed Data Signature:', signature);
 
       setSignatureStatus('Signature created successfully!');
 
@@ -122,22 +139,14 @@ export const Eip712Modal = ({
 
   const handleCancel = () => {
     if (!isProcessing) {
-      console.log('User cancelled typed data signature request');
+      setAccount(null);
       // User rejected request (EIP-1193 code 4001)
       onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setSignatureStatus('');
     }
   };
 
-  // Handle session errors - reject the request so dApp can trigger re-authentication
-  useEffect(() => {
-    if (accountError) {
-      console.error('Session error:', accountError);
-      onError(new Error(`Session error: ${accountError}`), SESSION_ERROR_CODE);
-    }
-  }, [accountError, onError]);
-
-  const canSign = !isProcessing && !isAccountLoading && !!typedDataJson && !!account && !!typedData && !accountError;
+  const canSign = !isProcessing && !!typedDataJson && !!account && !!typedData;
 
   return (
     <Eip712Dialog

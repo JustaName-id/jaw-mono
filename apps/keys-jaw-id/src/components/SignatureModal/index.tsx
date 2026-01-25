@@ -1,14 +1,11 @@
 'use client'
 
 import { SignatureDialog, useChainIconURI } from "@jaw.id/ui";
-import { useOriginAccount } from "../../hooks";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSessionAccount } from "../../hooks";
+import { useCallback, useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId } from "../../lib/chain-handlers";
 import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
-
-// Error code for session errors (used by dApps to trigger re-authentication)
-const SESSION_ERROR_CODE = 4901;
 
 export interface SignatureModalProps {
   origin: string;
@@ -29,11 +26,18 @@ export const SignatureModal = ({
   onSuccess,
   onError
 }: SignatureModalProps) => {
+  // Single hook handles session lookup + account restoration
+  const { account, isLoading: isAccountLoading } = useSessionAccount({
+    origin,
+    chain,
+    apiKey,
+  });
+
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
   const [timestamp] = useState(() => new Date());
 
-  // Extract API key from rpcUrl if not provided as prop
+  // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
     if (apiKey) return apiKey;
     if (chain?.rpcUrl) {
@@ -47,13 +51,6 @@ export const SignatureModal = ({
     return '';
   }, [apiKey, chain?.rpcUrl]);
 
-  // Get account for this origin - ensures correct account is used for multi-session
-  const { account, isLoading: isAccountLoading, error: accountError } = useOriginAccount(
-    origin,
-    chain?.id ?? 1,
-    effectiveApiKey
-  );
-
   // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
   const mainnetRpcUrl = useMemo(() => {
     return effectiveApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}` : `${JAW_RPC_URL}?chainId=1`;
@@ -62,7 +59,6 @@ export const SignatureModal = ({
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
-
 
   const signMessage = useCallback(async () => {
     try {
@@ -74,12 +70,10 @@ export const SignatureModal = ({
       }
 
       const signature = await account.signMessage(messageToSign);
-      console.log('Signature:', signature);
 
       setSignatureStatus('Signature created successfully!');
 
       // Call onSuccess immediately - parent will handle closing
-      // The parent sets state to 'success' and closes the window after onApprove completes
       onSuccess(signature, messageToSign);
 
     } catch (error) {
@@ -97,27 +91,16 @@ export const SignatureModal = ({
 
   const handleCancel = () => {
     if (!isProcessing) {
-      console.log('User cancelled signature request');
       // User rejected request (EIP-1193 code 4001)
       onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setSignatureStatus('');
     }
   };
 
-  // Handle session errors - reject the request so dApp can trigger re-authentication
-  useEffect(() => {
-    if (accountError) {
-      console.error('Session error:', accountError);
-      onError(new Error(`Session error: ${accountError}`), SESSION_ERROR_CODE);
-    }
-  }, [accountError, onError]);
-
-  const canSign = !isProcessing && !isAccountLoading && !!messageToSign && !!account && !accountError;
+  const canSign = !isProcessing && !isAccountLoading && !!messageToSign && !!account;
 
   return (
     <SignatureDialog
-      // open={open}
-      // onOpenChange={onOpenChange}
       open={true}
       onOpenChange={() => { console.log('onOpenChange') }}
       message={messageToSign}

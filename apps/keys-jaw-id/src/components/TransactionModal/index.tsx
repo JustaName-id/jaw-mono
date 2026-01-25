@@ -4,11 +4,8 @@ import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, 
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, Hash, Hex, formatUnits } from "viem";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { useOriginAccount, useAuth } from "../../hooks";
-import { type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, JAW_RPC_URL, type FeeTokenCapability } from "@jaw.id/core";
-
-// Error code for session errors (used by dApps to trigger re-authentication)
-const SESSION_ERROR_CODE = 4901;
+import { usePasskeys, useAuth } from "../../hooks";
+import { Account, type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, JAW_RPC_URL, type FeeTokenCapability } from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -60,10 +57,13 @@ export const TransactionModal = ({
   onSuccess,
   onError
 }: TransactionModalProps) => {
-  const { walletAddress } = useAuth(origin);
+  const { restoreAccount } = usePasskeys();
+  const { walletAddress, credentialId, publicKey } = useAuth({ origin });
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [account, setAccount] = useState<Account | null>(null);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const isInitializingRef = useRef(false);
 
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -89,18 +89,6 @@ export const TransactionModal = ({
     }
     return '';
   }, [apiKey, chain?.rpcUrl]);
-
-  // Get account for this origin - ensures correct account is used for multi-session
-  const { account, isLoading: isAccountLoading, error: accountError } = useOriginAccount(
-    origin ?? null,
-    chain?.id ?? 1,
-    effectiveApiKey
-  );
-
-  // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
-  const mainnetRpcUrl = useMemo(() => {
-    return effectiveApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}` : `${JAW_RPC_URL}?chainId=1`;
-  }, [effectiveApiKey]);
 
   // Determine if sponsored based on transactionRequest or prop
   const isSponsored = useMemo(() => {
@@ -333,13 +321,29 @@ export const TransactionModal = ({
     };
   }, [chain, effectiveApiKey, walletAddress, effectivePaymasterUrl]);
 
-  // Handle session errors - reject the request so dApp can trigger re-authentication
+  // Initialize account when modal opens
   useEffect(() => {
-    if (accountError) {
-      console.error('Session error:', accountError);
-      onError?.(new Error(`Session error: ${accountError}`), SESSION_ERROR_CODE);
-    }
-  }, [accountError, onError]);
+    const initAccount = async () => {
+      if (!chain || !credentialId || !publicKey || isInitializingRef.current) return;
+
+      isInitializingRef.current = true;
+      try {
+        const restored = await restoreAccount(
+          { id: chain.id, rpcUrl: chain.rpcUrl, paymaster: chain.paymaster },
+          credentialId,
+          publicKey,
+          effectiveApiKey
+        );
+        setAccount(restored);
+      } catch (err) {
+        console.error('Failed to restore account:', err);
+      } finally {
+        isInitializingRef.current = false;
+      }
+    };
+
+    initAccount();
+  }, [chain, credentialId, publicKey, restoreAccount, effectiveApiKey]);
 
   // Cleanup timeout on unmount
   useEffect(() => {
@@ -451,6 +455,11 @@ export const TransactionModal = ({
     }
   }, [isProcessing, onError, setSelectedFeeToken]);
 
+  // Compute mainnet RPC URL for ENS resolution
+  const mainnetRpcUrl = effectiveApiKey
+    ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}`
+    : `${JAW_RPC_URL}?chainId=1`;
+
   return (
     <TransactionDialog
       // open={open}
@@ -460,7 +469,7 @@ export const TransactionModal = ({
       transactions={normalizedTransactions}
       walletAddress={walletAddress ?? ''}
       gasFee={gasFee}
-      gasFeeLoading={gasFeeLoading || isAccountLoading}
+      gasFeeLoading={gasFeeLoading || !account}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
       onConfirm={handleConfirm}

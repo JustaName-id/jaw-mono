@@ -6,6 +6,13 @@ import { useState, useMemo } from 'react';
 import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest, JAW_RPC_URL } from '@jaw.id/core';
 import { ChainId } from '../../utils/types';
 
+// Authenticated account data returned after successful login
+export interface AuthenticatedAccount {
+    address: `0x${string}`;
+    credentialId: string;
+    username: string;
+    publicKey: `0x${string}`;
+}
 
 interface SignInScreenProps {
     onComplete: () => void
@@ -21,7 +28,7 @@ export function SignInScreen({ onComplete, ensConfig, chainId, apiKey, chainConf
     const { accounts, refetchAccounts } = usePasskeys({ apiKey });
     const { mutateAsync: login } = useLogin();
     const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
-    const { refetch: refetchAuth } = useAuth(origin);
+    const { refetch: refetchAuth } = useAuth({ origin });
     const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
 
     // Compute mainnet RPC URL for JustaName SDK (ENS resolution)

@@ -1,14 +1,11 @@
 'use client'
 
 import { SiweDialog, useChainIconURI } from "@jaw.id/ui";
-import { useOriginAccount } from "../../hooks";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { usePasskeys, useAuth } from "../../hooks";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
-
-// Error code for session errors (used by dApps to trigger re-authentication)
-const SESSION_ERROR_CODE = 4901;
+import { Account, standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
 
 export interface SiweModalProps {
   origin: string;
@@ -33,9 +30,13 @@ export const SiweModal = ({
   onSuccess,
   onError
 }: SiweModalProps) => {
+  const { restoreAccount } = usePasskeys();
+  const { credentialId, publicKey } = useAuth({ origin });
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
+  const [account, setAccount] = useState<Account | null>(null);
   const [timestamp] = useState(() => new Date());
+  const isInitializingRef = useRef(false);
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -51,13 +52,6 @@ export const SiweModal = ({
     return '';
   }, [apiKey, chain?.rpcUrl]);
 
-  // Get account for this origin - ensures correct account is used for multi-session
-  const { account, isLoading: isAccountLoading, error: accountError } = useOriginAccount(
-    origin,
-    chain?.id ?? 1,
-    effectiveApiKey
-  );
-
   // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
   const mainnetRpcUrl = useMemo(() => {
     return effectiveApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}` : `${JAW_RPC_URL}?chainId=1`;
@@ -66,6 +60,30 @@ export const SiweModal = ({
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
+
+  // Initialize account when modal opens
+  useEffect(() => {
+    const initAccount = async () => {
+      if (!chain || !credentialId || !publicKey || isInitializingRef.current) return;
+
+      isInitializingRef.current = true;
+      try {
+        const restored = await restoreAccount(
+          { id: chain.id, rpcUrl: chain.rpcUrl, paymaster: chain.paymaster },
+          credentialId,
+          publicKey,
+          effectiveApiKey
+        );
+        setAccount(restored);
+      } catch (err) {
+        console.error('Failed to restore account:', err);
+      } finally {
+        isInitializingRef.current = false;
+      }
+    };
+
+    initAccount();
+  }, [chain, credentialId, publicKey, restoreAccount, effectiveApiKey]);
 
   const signMessage = useCallback(async () => {
     try {
@@ -77,7 +95,6 @@ export const SiweModal = ({
       }
 
       const signature = await account.signMessage(messageToSign);
-      console.log('SIWE Signature:', signature);
 
       setSiweStatus('Sign in successful!');
 
@@ -99,22 +116,14 @@ export const SiweModal = ({
 
   const handleCancel = () => {
     if (!isProcessing) {
-      console.log('User cancelled SIWE sign in request');
+      setAccount(null);
       // User rejected request (EIP-1193 code 4001)
       onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setSiweStatus('');
     }
   };
 
-  // Handle session errors - reject the request so dApp can trigger re-authentication
-  useEffect(() => {
-    if (accountError) {
-      console.error('Session error:', accountError);
-      onError(new Error(`Session error: ${accountError}`), SESSION_ERROR_CODE);
-    }
-  }, [accountError, onError]);
-
-  const canSign = !isProcessing && !isAccountLoading && !!messageToSign && !!account && !accountError;
+  const canSign = !isProcessing && !!messageToSign && !!account;
 
   return (
     <SiweDialog

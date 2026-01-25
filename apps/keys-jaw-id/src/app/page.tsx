@@ -3,7 +3,7 @@
 import { useEffect, useState, useRef } from 'react';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen } from '../components/OnboardingSection';
-import { Account } from '@jaw.id/core';
+import { Account, type PasskeyAccount } from '@jaw.id/core';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
@@ -13,10 +13,9 @@ import { TransactionModal, type TransactionResult, type TransactionRequestData }
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
-import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
-import { SessionManager } from '../lib/session-manager';
+import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
@@ -43,11 +42,11 @@ type PopupState =
 
 
 export default function KeysJawIdApp() {
-  // Track the current origin for per-origin isolation
+  // Current origin for session-based auth
   const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
 
-  // Use hooks for passkey operations (origin-aware auth)
-  const authQuery = useAuth(currentOrigin || undefined);
+  // Use hooks for passkey operations (pass origin for session-based auth)
+  const authQuery = useAuth({ origin: currentOrigin || undefined });
   const passkeyQuery = usePasskeys();
 
   // Service instances (created once)
@@ -67,8 +66,6 @@ export default function KeysJawIdApp() {
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
-  const originSetRef = useRef<boolean>(false);
-  const currentOriginRef = useRef<string | null>(null);
 
   // Single useEffect for all message handling
   useEffect(() => {
@@ -95,18 +92,8 @@ export default function KeysJawIdApp() {
 
     // Listen for messages
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const cleanup = communicator.onMessage<PopupConfig>(async (message: any) => {
+    const cleanup = communicator.onMessage<PopupConfig>((message: any) => {
       console.log('📥 Received message:', message);
-
-      // Capture origin early from communicator and set on CryptoHandler
-      const origin = communicator.getOrigin();
-      if (origin && !originSetRef.current) {
-        console.log('🔒 Setting origin for per-origin isolation:', origin);
-        originSetRef.current = true;
-        currentOriginRef.current = origin;
-        setCurrentOrigin(origin);
-        await cryptoHandler.setOrigin(origin);
-      }
 
       // Handle config message
       if (message.data?.version) {
@@ -214,55 +201,68 @@ export default function KeysJawIdApp() {
   // Handle handshake request (unencrypted)
   const handleHandshakeRequest = async (request: RPCRequestMessage) => {
     try {
-      // Ensure origin is set on CryptoHandler before processing
-      const origin = communicator.getOrigin();
-      if (origin && cryptoHandler.getOrigin() !== origin) {
-        await cryptoHandler.setOrigin(origin);
-        if (!originSetRef.current) {
-          originSetRef.current = true;
-          currentOriginRef.current = origin;
-          setCurrentOrigin(origin);
-        }
-      }
-
-      // Clear old keys and process new handshake
-      await cryptoHandler.clear();
-      await cryptoHandler.processHandshakeRequest(request);
-
-
       if (!('handshake' in request.content) || !request.content.handshake) {
         console.error('❌ Invalid handshake request');
         return;
       }
 
-      console.log('🔍 =========================');
-      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
-      console.log('🔍 =========================');
-      console.log(JSON.stringify(request, null, 2));
-      console.log('🔍 =========================');
+      // Get origin and set it as current context
+      const origin = communicator.getOrigin() || '';
+      setCurrentOrigin(origin);
+      cryptoHandler.setOrigin(origin);
 
-      // Determine request type
+      const peerPublicKey = request.sender;
       const method = request.content.handshake.method;
       const params = request.content.handshake.params;
       const chain = request.content.chain;
-      const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
 
+      console.log('🔍 =========================');
+      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
+      console.log('🔍 Origin:', origin);
+      console.log('🔍 Method:', method);
+      console.log('🔍 =========================');
+
+      const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
       if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
         setApiKey(apiKeyFromProvider);
       }
 
-      // For pure key exchange handshake (method: 'handshake'), send immediate response
+      // Check for existing session
+      const existingSession = cryptoHandler.getSession(origin);
+
+      // For pure key exchange handshake (method: 'handshake')
       if (method === 'handshake') {
-        // Send empty accounts response for key exchange handshake
+        if (existingSession && existingSession.peerPublicKey !== peerPublicKey) {
+          // Update peer key if changed
+          await cryptoHandler.getSessionManager().updatePeerKey(origin, peerPublicKey);
+        }
+        // For key exchange without session, we can't create one yet (no account)
+        // Just acknowledge the handshake
         const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         communicator.sendMessage(response as unknown as Message);
         return;
       }
 
-      // For eth_requestAccounts and wallet_connect, we need to show approval UI
+      // For eth_requestAccounts and wallet_connect
       if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
-        const origin = communicator.getOrigin() || "";
+        // Always create a fresh session with new keys for each connection request
+        if (existingSession) {
+          console.log('🗑️ Deleting old session for:', origin);
+          cryptoHandler.getSessionManager().deleteSession(origin);
+        }
+
+        // Create new session with fresh keys (account will be set when user approves)
+        console.log('🔐 Creating fresh session for:', origin);
+        await cryptoHandler.getSessionManager().createSession({
+          origin,
+          peerPublicKey,
+        });
+
+        // Reload session after creation
+        cryptoHandler.loadSession(origin);
+
+        // Set up pending request (for both new connections and SIWE)
         setPendingRequest({
           origin,
           type: SDKRequestType.CONNECT,
@@ -280,22 +280,12 @@ export default function KeysJawIdApp() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(response as any);
           },
-          onReject: async (error: string, errorCode?: number) => {
-            // Send error response for handshake rejection
-            try {
-              const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
-                request.id,
-                request.correlationId || '',
-                errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
-                error || 'User rejected the request'
-              );
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              communicator.sendMessage(errorResponse as any);
-            } catch (err) {
-              console.error('❌ Failed to send rejection response:', err);
-            }
+          onReject: async () => {
+            window.close();
           },
         });
+
+        // Fresh session has no account - checkForPasskeys flow will handle passkey creation/selection
       }
     } catch (err) {
       console.error('❌ Failed to handle handshake:', err);
@@ -307,8 +297,21 @@ export default function KeysJawIdApp() {
   // Handle encrypted request
   const handleEncryptedRequest = async (request: RPCRequestMessage) => {
     try {
-      // Restore shared secret from message
-      await cryptoHandler.restoreSharedSecretFromMessage(request);
+      // Load session for this origin
+      const origin = communicator.getOrigin() || '';
+
+      // Update React state with current origin (needed for useAuth hook)
+      setCurrentOrigin(origin);
+
+      const session = cryptoHandler.loadSession(origin);
+
+      if (!session) {
+        console.error('❌ No session found for origin:', origin);
+        throw new Error('No session found. Please reconnect.');
+      }
+
+      // Verify and update peer key if changed
+      await cryptoHandler.verifyAndUpdatePeerKey(request);
 
       // Decrypt the request
       const decrypted = await cryptoHandler.decryptRequest(request);
@@ -350,7 +353,6 @@ export default function KeysJawIdApp() {
         requestType = SDKRequestType.UNSUPPORTED_METHOD;
       }
 
-      const origin = communicator.getOrigin() ?? '';
       setPendingRequest({
         origin,
         type: requestType,
@@ -877,14 +879,17 @@ export default function KeysJawIdApp() {
                   const newestAccount = accounts[accounts.length - 1] || null;
                   setCurrentAccount(newestAccount);
 
-                  // Store session using SessionManager for per-origin isolation
-                  // Get the address from global auth state (SignInScreen just set it)
-                  const originForSession = currentOriginRef.current;
+                  // Update session auth state for per-origin isolation
                   const authenticatedAddress = Account.getAuthenticatedAddress(apiKey);
-                  if (originForSession && newestAccount && authenticatedAddress) {
-                    const sessionManager = new SessionManager(originForSession);
-                    sessionManager.storeSession(authenticatedAddress, newestAccount.credentialId);
-                    console.log('✅ Session stored for origin:', originForSession);
+                  if (currentOrigin && newestAccount && authenticatedAddress) {
+                    const authState: SessionAuthState = {
+                      address: authenticatedAddress as `0x${string}`,
+                      credentialId: newestAccount.credentialId,
+                      username: newestAccount.username,
+                      publicKey: newestAccount.publicKey as `0x${string}`,
+                    };
+                    cryptoHandler.updateAuthState(authState);
+                    console.log('✅ Session auth state updated for origin:', currentOrigin);
                   }
 
                   await authQuery.refetch();
@@ -963,12 +968,16 @@ export default function KeysJawIdApp() {
 
                   setCurrentAccount(authenticatedAccount);
 
-                  // Store session using SessionManager for per-origin isolation
-                  const originForSession = currentOriginRef.current;
-                  if (originForSession && authenticatedAccount && authenticatedAddress) {
-                    const sessionManager = new SessionManager(originForSession);
-                    sessionManager.storeSession(authenticatedAddress, authenticatedAccount.credentialId);
-                    console.log('✅ Session stored for origin:', originForSession, 'with credentialId:', authenticatedAccount.credentialId);
+                  // Update session auth state for per-origin isolation
+                  if (currentOrigin && authenticatedAccount && authenticatedAddress) {
+                    const authState: SessionAuthState = {
+                      address: authenticatedAddress as `0x${string}`,
+                      credentialId: authenticatedAccount.credentialId,
+                      username: authenticatedAccount.username,
+                      publicKey: authenticatedAccount.publicKey as `0x${string}`,
+                    };
+                    cryptoHandler.updateAuthState(authState);
+                    console.log('✅ Session auth state updated for origin:', currentOrigin, 'with credentialId:', authenticatedAccount.credentialId);
                   }
 
                   await authQuery.refetch();

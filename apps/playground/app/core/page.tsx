@@ -41,7 +41,6 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         mode: mode,
         uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
       },
-      ens: "justan.id",
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
     })
   );

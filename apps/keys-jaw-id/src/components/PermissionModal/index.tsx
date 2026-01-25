@@ -1,11 +1,12 @@
 'use client'
 
 import { PermissionDialog, useGasEstimation, useFeeTokenPrice, type FeeTokenOption, fetchTokenBalance, isNativeToken } from "@jaw.id/ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { useOriginAccount, useAuth } from "../../hooks";
+import { usePasskeys, useAuth } from "../../hooks";
 import {
+    Account,
     type Chain,
     type WalletGrantPermissionsRequest,
     type WalletRevokePermissionsRequest,
@@ -20,9 +21,6 @@ import {
     handleGetCapabilitiesRequest,
     type FeeTokenCapability,
 } from "@jaw.id/core";
-
-// Error code for session errors (used by dApps to trigger re-authentication)
-const SESSION_ERROR_CODE = 4901;
 
 // Known function selectors mapping
 const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
@@ -130,15 +128,18 @@ export const PermissionModal = ({
   onSuccess,
   onError
 }: PermissionModalProps) => {
-  const { walletAddress } = useAuth(origin);
+  const { restoreAccount } = usePasskeys();
+  const { walletAddress, credentialId, publicKey } = useAuth({ origin });
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [account, setAccount] = useState<Account | null>(null);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState<boolean>(true);
+  const isInitializingRef = useRef(false);
 
   // Get native token symbol from feeTokens (defaults to ETH if not found)
   const nativeToken = feeTokens?.find(t => t.isNative);
@@ -164,12 +165,29 @@ export const PermissionModal = ({
     return '';
   }, [apiKey, chain?.rpcUrl]);
 
-  // Get account for this origin - ensures correct account is used for multi-session
-  const { account, isLoading: isAccountLoading, error: accountError } = useOriginAccount(
-    origin ?? null,
-    chain?.id ?? 1,
-    extractedApiKey
-  );
+  // Initialize account when modal opens
+  useEffect(() => {
+    const initAccount = async () => {
+      if (!chain || !credentialId || !publicKey || isInitializingRef.current) return;
+
+      isInitializingRef.current = true;
+      try {
+        const restored = await restoreAccount(
+          { id: chain.id, rpcUrl: chain.rpcUrl, paymaster: chain.paymaster },
+          credentialId,
+          publicKey,
+          extractedApiKey
+        );
+        setAccount(restored);
+      } catch (err) {
+        console.error('Failed to restore account:', err);
+      } finally {
+        isInitializingRef.current = false;
+      }
+    };
+
+    initAccount();
+  }, [chain, credentialId, publicKey, restoreAccount, extractedApiKey]);
 
   // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
   const mainnetRpcUrl = useMemo(() => {
@@ -608,14 +626,6 @@ export const PermissionModal = ({
     };
   }, [chain, extractedApiKey, viemChain, walletAddress, effectivePaymasterUrl]);
 
-  // Handle session errors - reject the request so dApp can trigger re-authentication
-  useEffect(() => {
-    if (accountError) {
-      console.error('Session error:', accountError);
-      onError?.(new Error(`Session error: ${accountError}`), SESSION_ERROR_CODE);
-    }
-  }, [accountError, onError]);
-
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
     if (!chain || spendsData.length === 0) {
@@ -808,7 +818,7 @@ export const PermissionModal = ({
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
-      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isAccountLoading}
+      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || !account}
       warningMessage={warningMessage}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
