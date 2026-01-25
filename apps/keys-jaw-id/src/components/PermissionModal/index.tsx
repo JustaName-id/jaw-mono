@@ -1,12 +1,11 @@
 'use client'
 
 import { PermissionDialog, useGasEstimation, useFeeTokenPrice, type FeeTokenOption, fetchTokenBalance, isNativeToken } from "@jaw.id/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { usePasskeys, useAuth } from "../../hooks";
+import { useSessionAccount } from "../../hooks";
 import {
-    Account,
     type Chain,
     type WalletGrantPermissionsRequest,
     type WalletRevokePermissionsRequest,
@@ -128,18 +127,21 @@ export const PermissionModal = ({
   onSuccess,
   onError
 }: PermissionModalProps) => {
-  const { restoreAccount } = usePasskeys();
-  const { walletAddress, credentialId, publicKey } = useAuth({ origin });
+  // Single hook handles session lookup + account restoration
+  const { account, isLoading: isAccountLoading, walletAddress } = useSessionAccount({
+    origin,
+    chain,
+    apiKey,
+  });
+
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [account, setAccount] = useState<Account | null>(null);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState<boolean>(true);
-  const isInitializingRef = useRef(false);
 
   // Get native token symbol from feeTokens (defaults to ETH if not found)
   const nativeToken = feeTokens?.find(t => t.isNative);
@@ -165,29 +167,7 @@ export const PermissionModal = ({
     return '';
   }, [apiKey, chain?.rpcUrl]);
 
-  // Initialize account when modal opens
-  useEffect(() => {
-    const initAccount = async () => {
-      if (!chain || !credentialId || !publicKey || isInitializingRef.current) return;
-
-      isInitializingRef.current = true;
-      try {
-        const restored = await restoreAccount(
-          { id: chain.id, rpcUrl: chain.rpcUrl, paymaster: chain.paymaster },
-          credentialId,
-          publicKey,
-          extractedApiKey
-        );
-        setAccount(restored);
-      } catch (err) {
-        console.error('Failed to restore account:', err);
-      } finally {
-        isInitializingRef.current = false;
-      }
-    };
-
-    initAccount();
-  }, [chain, credentialId, publicKey, restoreAccount, extractedApiKey]);
+  // Note: Account initialization is handled by useSessionAccount hook
 
   // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
   const mainnetRpcUrl = useMemo(() => {
@@ -818,7 +798,7 @@ export const PermissionModal = ({
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
-      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || !account}
+      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isAccountLoading}
       warningMessage={warningMessage}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}

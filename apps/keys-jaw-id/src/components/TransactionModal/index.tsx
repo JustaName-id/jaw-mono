@@ -1,11 +1,11 @@
 'use client'
 
 import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useFeeTokenPrice, useGasEstimation } from "@jaw.id/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Address, Hash, Hex, formatUnits } from "viem";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { usePasskeys, useAuth } from "../../hooks";
-import { Account, type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, JAW_RPC_URL, type FeeTokenCapability } from "@jaw.id/core";
+import { useSessionAccount } from "../../hooks";
+import { type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, JAW_RPC_URL, type FeeTokenCapability } from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -57,13 +57,15 @@ export const TransactionModal = ({
   onSuccess,
   onError
 }: TransactionModalProps) => {
-  const { restoreAccount } = usePasskeys();
-  const { walletAddress, credentialId, publicKey } = useAuth({ origin });
+  // Single hook handles session lookup + account restoration
+  const { account, isLoading: isAccountLoading, walletAddress } = useSessionAccount({
+    origin,
+    chain,
+    apiKey,
+  });
+
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [account, setAccount] = useState<Account | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const isInitializingRef = useRef(false);
 
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -321,41 +323,8 @@ export const TransactionModal = ({
     };
   }, [chain, effectiveApiKey, walletAddress, effectivePaymasterUrl]);
 
-  // Initialize account when modal opens
-  useEffect(() => {
-    const initAccount = async () => {
-      if (!chain || !credentialId || !publicKey || isInitializingRef.current) return;
-
-      isInitializingRef.current = true;
-      try {
-        const restored = await restoreAccount(
-          { id: chain.id, rpcUrl: chain.rpcUrl, paymaster: chain.paymaster },
-          credentialId,
-          publicKey,
-          effectiveApiKey
-        );
-        setAccount(restored);
-      } catch (err) {
-        console.error('Failed to restore account:', err);
-      } finally {
-        isInitializingRef.current = false;
-      }
-    };
-
-    initAccount();
-  }, [chain, credentialId, publicKey, restoreAccount, effectiveApiKey]);
-
-  // Cleanup timeout on unmount
-  useEffect(() => {
-    return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, []);
-
-  // Note: Gas estimation is now handled by useGasEstimation hook
+  // Note: Account initialization is handled by useSessionAccount hook
+  // Note: Gas estimation is handled by useGasEstimation hook
 
   const handleConfirm = useCallback(async () => {
     try {
@@ -469,7 +438,7 @@ export const TransactionModal = ({
       transactions={normalizedTransactions}
       walletAddress={walletAddress ?? ''}
       gasFee={gasFee}
-      gasFeeLoading={gasFeeLoading || !account}
+      gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
       onConfirm={handleConfirm}

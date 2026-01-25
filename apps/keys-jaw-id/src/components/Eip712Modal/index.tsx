@@ -1,11 +1,11 @@
 'use client'
 
 import { Eip712Dialog, useChainIconURI } from "@jaw.id/ui";
-import { usePasskeys, useAuth } from "../../hooks";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSessionAccount } from "../../hooks";
+import { useCallback, useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { Account, standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
+import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
 
 export interface Eip712ModalProps {
   origin: string;
@@ -34,15 +34,18 @@ export const Eip712Modal = ({
   onSuccess,
   onError
 }: Eip712ModalProps) => {
-  const { restoreAccount } = usePasskeys();
-  const { credentialId, publicKey } = useAuth({ origin });
+  // Single hook handles session lookup + account restoration
+  const { account, isLoading: isAccountLoading } = useSessionAccount({
+    origin,
+    chain,
+    apiKey,
+  });
+
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [account, setAccount] = useState<Account | null>(null);
   const [timestamp] = useState(() => new Date());
-  const isInitializingRef = useRef(false);
 
-  // Extract API key from rpcUrl if not provided as prop
+  // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
     if (apiKey) return apiKey;
     if (chain?.rpcUrl) {
@@ -74,30 +77,6 @@ export const Eip712Modal = ({
       return null;
     }
   }, [typedDataJson]);
-
-  // Initialize account when modal opens
-  useEffect(() => {
-    const initAccount = async () => {
-      if (!chain || !credentialId || !publicKey || isInitializingRef.current) return;
-
-      isInitializingRef.current = true;
-      try {
-        const restored = await restoreAccount(
-          { id: chain.id, rpcUrl: chain.rpcUrl, paymaster: chain.paymaster },
-          credentialId,
-          publicKey,
-          effectiveApiKey
-        );
-        setAccount(restored);
-      } catch (err) {
-        console.error('Failed to restore account:', err);
-      } finally {
-        isInitializingRef.current = false;
-      }
-    };
-
-    initAccount();
-  }, [chain, credentialId, publicKey, restoreAccount, effectiveApiKey]);
 
   const signTypedData = useCallback(async () => {
     try {
@@ -139,14 +118,13 @@ export const Eip712Modal = ({
 
   const handleCancel = () => {
     if (!isProcessing) {
-      setAccount(null);
       // User rejected request (EIP-1193 code 4001)
       onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setSignatureStatus('');
     }
   };
 
-  const canSign = !isProcessing && !!typedDataJson && !!account && !!typedData;
+  const canSign = !isProcessing && !isAccountLoading && !!typedDataJson && !!account && !!typedData;
 
   return (
     <Eip712Dialog
