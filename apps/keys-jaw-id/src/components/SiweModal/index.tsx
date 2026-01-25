@@ -1,11 +1,11 @@
 'use client'
 
-import { SiweDialog, useChainIcon } from "@jaw.id/ui";
+import { SiweDialog, useChainIconURI } from "@jaw.id/ui";
 import { useOriginAccount } from "../../hooks";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
-import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { standardErrorCodes } from "@jaw.id/core";
+import { getChainNameFromId } from "../../lib/chain-handlers";
+import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
 
 // Error code for session errors (used by dApps to trigger re-authentication)
 const SESSION_ERROR_CODE = 4901;
@@ -58,10 +58,14 @@ export const SiweModal = ({
     effectiveApiKey
   );
 
+  // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
+  const mainnetRpcUrl = useMemo(() => {
+    return effectiveApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}` : `${JAW_RPC_URL}?chainId=1`;
+  }, [effectiveApiKey]);
+
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
-  const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
+  const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
 
   const signMessage = useCallback(async () => {
     try {
@@ -125,6 +129,7 @@ export const SiweModal = ({
       chainName={chainName}
       chainIcon={chainIcon}
       chainId={chain.id}
+      mainnetRpcUrl={mainnetRpcUrl}
       onSign={signMessage}
       onCancel={handleCancel}
       isProcessing={isProcessing}

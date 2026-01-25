@@ -40,6 +40,7 @@ export {
     buildGrantPermissionCall,
     // Capability utilities
     handleGetCapabilitiesRequest,
+    type ChainMetadataCapability,
     // Permission selector constants
     ANY_TARGET,
     ANY_FN_SEL,

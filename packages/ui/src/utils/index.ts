@@ -1,4 +1,4 @@
 export * from './justaNameInstance';
-export * from './coingecko';
+export * from './tokenPrice';
 export * from './formatAddress';
 export * from './tokenBalance';

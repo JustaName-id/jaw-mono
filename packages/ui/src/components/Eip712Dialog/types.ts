@@ -21,4 +21,7 @@ export interface Eip712DialogProps {
   isProcessing: boolean;
   signatureStatus: string;
   canSign: boolean;
+
+  // RPC configuration
+  mainnetRpcUrl: string;
 }

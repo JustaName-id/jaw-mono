@@ -1,11 +1,11 @@
 'use client'
 
-import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useEthPrice, useGasEstimation } from "@jaw.id/ui";
+import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useFeeTokenPrice, useGasEstimation } from "@jaw.id/ui";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Address, Hash, Hex, formatUnits } from "viem";
-import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
+import { getChainNameFromId } from "../../lib/chain-handlers";
 import { useOriginAccount, useAuth } from "../../hooks";
-import { type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, type FeeTokenCapability } from "@jaw.id/core";
+import { type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, JAW_RPC_URL, type FeeTokenCapability } from "@jaw.id/core";
 
 // Error code for session errors (used by dApps to trigger re-authentication)
 const SESSION_ERROR_CODE = 4901;
@@ -61,7 +61,6 @@ export const TransactionModal = ({
   onError
 }: TransactionModalProps) => {
   const { walletAddress } = useAuth(origin);
-  const ethPrice = useEthPrice();
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const timeoutRef = useRef<NodeJS.Timeout | null>(null);
@@ -69,6 +68,13 @@ export const TransactionModal = ({
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -90,6 +96,11 @@ export const TransactionModal = ({
     chain?.id ?? 1,
     effectiveApiKey
   );
+
+  // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
+  const mainnetRpcUrl = useMemo(() => {
+    return effectiveApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}` : `${JAW_RPC_URL}?chainId=1`;
+  }, [effectiveApiKey]);
 
   // Determine if sponsored based on transactionRequest or prop
   const isSponsored = useMemo(() => {
@@ -127,16 +138,6 @@ export const TransactionModal = ({
 
     // Use the getChainNameFromId utility which has comprehensive chain mapping
     return getChainNameFromId(chainId);
-  }, [normalizedTransactions, chain]);
-
-  const chainIconKey = useMemo(() => {
-    // Use chain prop if available, otherwise fall back to transaction chainId
-    const chainId = chain?.id ?? normalizedTransactions[0]?.chainId;
-
-    if (!chainId) return 'ethereum';
-
-    // Use getChainIconKeyFromId to get the correct icon key format
-    return getChainIconKeyFromId(chainId);
   }, [normalizedTransactions, chain]);
 
   const resetModalState = useCallback(() => {
@@ -232,7 +233,7 @@ export const TransactionModal = ({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -240,7 +241,7 @@ export const TransactionModal = ({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
 
   // Determine if fee token selector should be shown
   const showFeeTokenSelector = !isSponsored && feeTokens.some(t => !t.isNative);
@@ -462,13 +463,12 @@ export const TransactionModal = ({
       gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
-      chainIconKey={chainIconKey}
+      mainnetRpcUrl={mainnetRpcUrl}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}

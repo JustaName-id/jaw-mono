@@ -86,6 +86,20 @@ export function create(params: CreateJAWSDKOptions) {
     );
     store.chains.set(initialChains);
     createClients(initialChains);
+
+    // Update stored account chain if defaultChainId is provided and differs from stored chain
+    if (params.defaultChainId !== undefined) {
+      const currentAccount = store.account.get();
+      const storedChainId = currentAccount.chain?.id;
+
+      // Only update if the stored chain differs from the requested default
+      if (storedChainId !== params.defaultChainId) {
+        const targetChain = initialChains.find(c => c.id === params.defaultChainId);
+        if (targetChain) {
+          store.account.set({ chain: targetChain });
+        }
+      }
+    }
   }
 
   let provider: ProviderInterface | null = null;
