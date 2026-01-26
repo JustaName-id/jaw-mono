@@ -1,11 +1,11 @@
 'use client'
 
 import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useFeeTokenPrice, useGasEstimation } from "@jaw.id/ui";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { Address, Hash, Hex, formatUnits } from "viem";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { usePasskeys, useAuth } from "../../hooks";
-import { Account, type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, JAW_RPC_URL, type FeeTokenCapability } from "@jaw.id/core";
+import { useSessionAccount } from "../../hooks";
+import { type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, JAW_RPC_URL, type FeeTokenCapability } from "@jaw.id/core";
 
 // Transaction execution result
 export interface TransactionResult {
@@ -42,6 +42,7 @@ export interface TransactionModalProps {
   sponsored?: boolean;
   chain?: Chain;  // Chain info with RPC and paymaster URLs
   apiKey?: string;
+  origin?: string;  // Origin for per-origin auth session
   onSuccess?: (result: TransactionResult) => void;
   onError?: (error: Error, errorCode?: number) => void;
 }
@@ -52,15 +53,19 @@ export const TransactionModal = ({
   sponsored = false,
   chain,
   apiKey,
+  origin,
   onSuccess,
   onError
 }: TransactionModalProps) => {
-  const { getAccount } = usePasskeys();
-  const { walletAddress } = useAuth();
+  // Single hook handles session lookup + account restoration
+  const { account, isLoading: isAccountLoading, walletAddress } = useSessionAccount({
+    origin,
+    chain,
+    apiKey,
+  });
+
   const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [account, setAccount] = useState<Account | null>(null);
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -86,11 +91,6 @@ export const TransactionModal = ({
     }
     return '';
   }, [apiKey, chain?.rpcUrl]);
-
-  // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
-  const mainnetRpcUrl = useMemo(() => {
-    return effectiveApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}` : `${JAW_RPC_URL}?chainId=1`;
-  }, [effectiveApiKey]);
 
   // Determine if sponsored based on transactionRequest or prop
   const isSponsored = useMemo(() => {
@@ -323,60 +323,8 @@ export const TransactionModal = ({
     };
   }, [chain, effectiveApiKey, walletAddress, effectivePaymasterUrl]);
 
-  // Initialize account when modal opens
-  useEffect(() => {
-    let isMounted = true;
-
-    const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false);
-          console.log('🔐 Initializing transaction modal');
-
-          // Merge paymasterUrl from capabilities or ERC-20 selection into chain before creating account
-          const chainWithPaymaster = {
-            ...chain,
-            ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
-          };
-
-          const restoredAccount = await getAccount(chainWithPaymaster, effectiveApiKey);
-
-          if (isMounted) {
-            setAccount(restoredAccount);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          if (isMounted) {
-            setTransactionStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError?.(errorObj, errorCode);
-          }
-        }
-      } else {
-        // Reset when chain is not provided
-        setAccount(null);
-        setTransactionStatus('');
-        setIsProcessing(false);
-        setFeeTokens([]);
-      }
-    };
-
-    initializeModal();
-
-    return () => {
-      isMounted = false;
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, [chain, effectiveApiKey, computedPaymasterUrl, getAccount, onError]);
-
-  // Note: Gas estimation is now handled by useGasEstimation hook
+  // Note: Account initialization is handled by useSessionAccount hook
+  // Note: Gas estimation is handled by useGasEstimation hook
 
   const handleConfirm = useCallback(async () => {
     try {
@@ -466,7 +414,6 @@ export const TransactionModal = ({
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
-      setAccount(null);
       console.log('❌ User cancelled transaction request');
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
@@ -475,7 +422,12 @@ export const TransactionModal = ({
       setFeeTokens([]);
       setSelectedFeeToken(null);
     }
-  }, [isProcessing, onError]);
+  }, [isProcessing, onError, setSelectedFeeToken]);
+
+  // Compute mainnet RPC URL for ENS resolution
+  const mainnetRpcUrl = effectiveApiKey
+    ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}`
+    : `${JAW_RPC_URL}?chainId=1`;
 
   return (
     <TransactionDialog
@@ -486,7 +438,7 @@ export const TransactionModal = ({
       transactions={normalizedTransactions}
       walletAddress={walletAddress ?? ''}
       gasFee={gasFee}
-      gasFeeLoading={gasFeeLoading}
+      gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
       onConfirm={handleConfirm}
@@ -494,6 +446,7 @@ export const TransactionModal = ({
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
+      apiKey={effectiveApiKey}
       mainnetRpcUrl={mainnetRpcUrl}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}

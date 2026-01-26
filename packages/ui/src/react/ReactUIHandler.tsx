@@ -46,7 +46,7 @@ import { TransactionDialog } from '../components/TransactionDialog';
 import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
-import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
+import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
 import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
@@ -502,9 +502,6 @@ function OnboardingDialogWrapper({
   const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  // Use refs to store pending values that callbacks can access immediately
-  const pendingAddressRef = React.useRef<string | null>(null);
-  const pendingUsernameRef = React.useRef<string | null>(null);
 
   // State for ConnectDialog confirmation
   const [showConnectDialog, setShowConnectDialog] = useState(false);
@@ -671,7 +668,7 @@ function OnboardingDialogWrapper({
   };
 
   // Handle creating a new account
-  const handleCreateAccount = async (username: string): Promise<string> => {
+  const handleCreateAccount = async (username: string): Promise<CreatedAccountData> => {
     try {
       if (!apiKey) {
         throw new Error('API key is required');
@@ -698,12 +695,21 @@ function OnboardingDialogWrapper({
         }
       );
 
-      // Store address and username for completion callback
-      // Use refs since they are immediately available for callbacks
-      pendingAddressRef.current = accountInstance.address;
-      pendingUsernameRef.current = username;
+      // Get full account data including credentialId and publicKey from stored accounts
+      const storedAccounts = Account.getStoredAccounts(apiKey);
+      const createdAccount = storedAccounts.find(acc => acc.username === fullUsername);
 
-      return accountInstance.address;
+      if (!createdAccount) {
+        throw new Error('Failed to retrieve created account data');
+      }
+
+      // Return full account data - OnboardingDialog will pass it to onAccountCreationComplete
+      return {
+        address: accountInstance.address,
+        credentialId: createdAccount.credentialId,
+        username: fullUsername,
+        publicKey: createdAccount.publicKey,
+      };
     } catch (error) {
       console.error('Account creation failed:', error);
       setIsCreating(false);
@@ -712,29 +718,22 @@ function OnboardingDialogWrapper({
   };
 
   // Handle account creation completion (after subname registration if applicable)
-  // Note: We use the refs since state updates may not be synchronous when this callback is called
-  const handleAccountCreationComplete = async () => {
-    const address = pendingAddressRef.current;
-    const username = pendingUsernameRef.current;
-
-    if (address) {
-      // If silent mode, skip ConnectDialog and approve immediately
-      if (request.data.silent) {
-        console.log('🔇 Silent mode: skipping connect confirmation');
-        setIsCreating(false);
-        onApprove({
-          accounts: [{ address }],
-        });
-        return;
-      }
-
-      // Show ConnectDialog for confirmation instead of immediately approving
-      setAuthenticatedAccountName(username || 'New Account');
-      setAuthenticatedWalletAddress(address);
-      setShowConnectDialog(true);
-    } else {
-      console.error('[OnboardingDialogWrapper] handleAccountCreationComplete called but pendingAddress is null');
+  // Account data flows through from onCreateAccount - no intermediate state needed
+  const handleAccountCreationComplete = async (accountData: CreatedAccountData) => {
+    // If silent mode, skip ConnectDialog and approve immediately
+    if (request.data.silent) {
+      console.log('🔇 Silent mode: skipping connect confirmation');
+      setIsCreating(false);
+      onApprove({
+        accounts: [{ address: accountData.address }],
+      });
+      return;
     }
+
+    // Show ConnectDialog for confirmation instead of immediately approving
+    setAuthenticatedAccountName(accountData.username || 'New Account');
+    setAuthenticatedWalletAddress(accountData.address);
+    setShowConnectDialog(true);
     setIsCreating(false);
   };
 

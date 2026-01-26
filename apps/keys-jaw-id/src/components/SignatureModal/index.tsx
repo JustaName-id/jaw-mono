@@ -1,13 +1,11 @@
 'use client'
 
 import { SignatureDialog, useChainIconURI } from "@jaw.id/ui";
-import { usePasskeys } from "../../hooks";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useSessionAccount } from "../../hooks";
+import { useCallback, useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { Account, standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
-
-
+import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
 
 export interface SignatureModalProps {
   origin: string;
@@ -28,14 +26,18 @@ export const SignatureModal = ({
   onSuccess,
   onError
 }: SignatureModalProps) => {
+  // Single hook handles session lookup + account restoration
+  const { account, isLoading: isAccountLoading } = useSessionAccount({
+    origin,
+    chain,
+    apiKey,
+  });
+
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [account, setAccount] = useState<Account | null>(null);
   const [timestamp] = useState(() => new Date());
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { getAccount } = usePasskeys();
 
-  // Extract API key from rpcUrl if not provided as prop
+  // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
     if (apiKey) return apiKey;
     if (chain?.rpcUrl) {
@@ -58,7 +60,6 @@ export const SignatureModal = ({
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
   const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
 
-
   const signMessage = useCallback(async () => {
     try {
       setIsProcessing(true);
@@ -69,12 +70,10 @@ export const SignatureModal = ({
       }
 
       const signature = await account.signMessage(messageToSign);
-      console.log('Signature:', signature);
 
       setSignatureStatus('Signature created successfully!');
 
       // Call onSuccess immediately - parent will handle closing
-      // The parent sets state to 'success' and closes the window after onApprove completes
       onSuccess(signature, messageToSign);
 
     } catch (error) {
@@ -92,69 +91,16 @@ export const SignatureModal = ({
 
   const handleCancel = () => {
     if (!isProcessing) {
-      setAccount(null);
-      console.log('User cancelled signature request');
       // User rejected request (EIP-1193 code 4001)
       onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setSignatureStatus('');
     }
   };
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false); // Reset processing state when opening
-          console.log('Initializing signature modal with message:', messageToSign);
-          console.log('Address:', address);
-          const restoredAccount = await getAccount(chain, effectiveApiKey);
-
-          // Only update state if component is still mounted
-          if (isMounted) {
-            setAccount(restoredAccount);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          // Only update state if component is still mounted
-          if (isMounted) {
-            setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError(errorObj, errorCode);
-          }
-        }
-      } else {
-        // Reset everything when modal closes
-        setAccount(null);
-        setSignatureStatus('');
-        setIsProcessing(false);
-      }
-    };
-
-    initializeModal();
-
-    // Cleanup function
-    return () => {
-      isMounted = false;
-      // Clear any pending timeouts
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, [chain, messageToSign, address, effectiveApiKey, onError, getAccount]);
-
-  const canSign = !isProcessing && !!messageToSign && !!account;
+  const canSign = !isProcessing && !isAccountLoading && !!messageToSign && !!account;
 
   return (
     <SignatureDialog
-      // open={open}
-      // onOpenChange={onOpenChange}
       open={true}
       onOpenChange={() => { console.log('onOpenChange') }}
       message={messageToSign}

@@ -7,6 +7,17 @@ export interface LocalStorageAccount {
   isImported?: boolean;
 }
 
+/**
+ * Data returned from account creation, passed through to completion handler.
+ * This allows data to flow naturally through callbacks without intermediate state.
+ */
+export interface CreatedAccountData {
+  address: string;
+  credentialId: string;
+  username: string;
+  publicKey: `0x${string}`;
+}
+
 export interface OnboardingDialogProps {
   // Account list section
   accounts: LocalStorageAccount[];
@@ -18,8 +29,8 @@ export interface OnboardingDialogProps {
   isImporting: boolean;
 
   // Create new account section
-  onCreateAccount: (username: string) => Promise<string>;
-  onAccountCreationComplete: () => Promise<void>;
+  onCreateAccount: (username: string) => Promise<CreatedAccountData>;
+  onAccountCreationComplete: (account: CreatedAccountData) => Promise<void>;
   isCreating: boolean;
 
   // Configuration

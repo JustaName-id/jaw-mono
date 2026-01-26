@@ -4,9 +4,8 @@ import { PermissionDialog, useGasEstimation, useFeeTokenPrice, type FeeTokenOpti
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
 import { getChainNameFromId } from "../../lib/chain-handlers";
-import { usePasskeys, useAuth } from "../../hooks";
+import { useSessionAccount } from "../../hooks";
 import {
-    Account,
     type Chain,
     type WalletGrantPermissionsRequest,
     type WalletRevokePermissionsRequest,
@@ -124,16 +123,19 @@ export const PermissionModal = ({
   permissionRequest,
   chain,
   apiKey,
-  origin = 'http://localhost:3000',
+  origin,
   onSuccess,
   onError
 }: PermissionModalProps) => {
-  const { getAccount } = usePasskeys();
-  const { walletAddress } = useAuth();
+  // Single hook handles session lookup + account restoration
+  const { account, isLoading: isAccountLoading, walletAddress } = useSessionAccount({
+    origin,
+    chain,
+    apiKey,
+  });
+
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [account, setAccount] = useState<Account | null>(null);
-  const [isLoadingSmartAccount, setIsLoadingSmartAccount] = useState<boolean>(true); // Start true to prevent early clicks
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
@@ -164,6 +166,8 @@ export const PermissionModal = ({
 
     return '';
   }, [apiKey, chain?.rpcUrl]);
+
+  // Note: Account initialization is handled by useSessionAccount hook
 
   // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
   const mainnetRpcUrl = useMemo(() => {
@@ -602,57 +606,6 @@ export const PermissionModal = ({
     };
   }, [chain, extractedApiKey, viemChain, walletAddress, effectivePaymasterUrl]);
 
-  // Initialize account when modal opens or permission request changes
-  useEffect(() => {
-    let isMounted = true;
-
-    const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false);
-          setIsLoadingSmartAccount(true);
-          console.log('Initializing permission modal');
-
-          // Merge paymasterUrl from capabilities into chain before creating account
-          const chainWithPaymaster = {
-            ...chain,
-            ...(computedPaymasterUrl && { paymaster: { url: computedPaymasterUrl } }),
-          };
-
-          const restoredAccount = await getAccount(chainWithPaymaster, extractedApiKey);
-
-          if (isMounted) {
-            setAccount(restoredAccount);
-            setIsLoadingSmartAccount(false);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          if (isMounted) {
-            setIsLoadingSmartAccount(false);
-            setStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError?.(errorObj, errorCode);
-          }
-        }
-      } else {
-        setAccount(null);
-        setIsLoadingSmartAccount(false);
-        setStatus('');
-        setIsProcessing(false);
-      }
-    };
-
-    initializeModal();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [chain, permissionRequest, extractedApiKey, computedPaymasterUrl, getAccount, onError]);
-
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
     if (!chain || spendsData.length === 0) {
@@ -812,7 +765,6 @@ export const PermissionModal = ({
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
-      setAccount(null);
       console.log('❌ User cancelled permission request');
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
@@ -835,7 +787,7 @@ export const PermissionModal = ({
       mode={mode}
       permissionId={mode === 'revoke' && 'permissionId' in permissionDetails ? permissionDetails.permissionId : undefined}
       spenderAddress={spenderAddress}
-      origin={origin}
+      origin={origin || ''}
       spends={formattedSpends}
       calls={formattedCalls}
       expiryDate={expiryDate}
@@ -846,7 +798,7 @@ export const PermissionModal = ({
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
-      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isLoadingSmartAccount}
+      isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isAccountLoading}
       warningMessage={warningMessage}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
