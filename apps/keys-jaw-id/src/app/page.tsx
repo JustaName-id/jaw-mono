@@ -230,14 +230,19 @@ export default function KeysJawIdApp() {
       // Check for existing session
       const existingSession = await cryptoHandler.getSession(origin);
 
-      // For pure key exchange handshake (method: 'handshake')
+      // For pure key exchange handshake (method: 'handshake') 
+      // This situation never happens because the wallet_connect/ eth_requestAccounts request is always sent first
       if (method === 'handshake') {
-        if (existingSession && existingSession.peerPublicKey !== peerPublicKey) {
+        if (!existingSession) {
+          // No session yet - nothing to respond to, wait for wallet_connect
+          console.log('🔑 Handshake without session, waiting for wallet_connect');
+          return;
+        }
+        if (existingSession.peerPublicKey !== peerPublicKey) {
           // Update peer key if changed
           await cryptoHandler.getSessionManager().updatePeerKey(origin, peerPublicKey);
         }
-        // For key exchange without session, we can't create one yet (no account)
-        // Just acknowledge the handshake
+        // Acknowledge the handshake
         const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         communicator.sendMessage(response as unknown as Message);
