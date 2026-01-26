@@ -52,10 +52,32 @@ function generateUUID(): string {
   });
 }
 
+// Base64URL encoding/decoding helpers (URL-safe base64)
+// Must match the format used by MobileCommunicationAdapter in React Native
+function base64UrlEncode(str: string): string {
+  const base64 = btoa(str);
+  // Convert to base64url format (URL-safe)
+  return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+}
+
+function base64UrlDecode(str: string): string {
+  // Convert from base64url to standard base64
+  let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+  // Restore padding
+  const pad = base64.length % 4;
+  if (pad > 0) {
+    base64 += '='.repeat(4 - pad);
+  }
+  return atob(base64);
+}
+
 export default function KeysJawIdApp() {
+  // State needs to be declared before hook calls
+  const [apiKey, setApiKey] = useState<string | undefined>(undefined);
+
   // Use hooks for passkey operations
   const authQuery = useAuth();
-  const passkeyQuery = usePasskeys();
+  const passkeyQuery = usePasskeys({ apiKey });
 
   // Service instances (created once)
   const [communicator] = useState(() => new PopupCommunicator());
@@ -70,7 +92,6 @@ export default function KeysJawIdApp() {
   const [error, setError] = useState<string | null>(null);
   const [ensConfig, setEnsConfig] = useState<string | undefined>(undefined);
   const [chainId, setChainId] = useState<ChainId | undefined>(undefined);
-  const [apiKey, setApiKey] = useState<string | undefined>(undefined);
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
@@ -78,13 +99,15 @@ export default function KeysJawIdApp() {
   // === NEW: Browser mode state (for React Native Safari View Controller) ===
   const [isBrowserMode, setIsBrowserMode] = useState(false);
   const callbackUrlRef = useRef<string | null>(null);
+  const requestIdRef = useRef<string | undefined>(undefined);
 
   // Browser action state for sign/send operations
   interface BrowserAction {
-    type: 'connect' | 'signMessage' | 'signTypedData' | 'sendTransaction' | 'grantPermissions';
+    type: 'connect' | 'signMessage' | 'signTypedData' | 'sendTransaction' | 'grantPermissions' | 'revokePermissions';
     message?: string;
     typedData?: object;
     tx?: { to: string; value?: string; data?: string; chainId?: number };
+    calls?: Array<{ to: string; value?: string; data?: string }>; // For wallet_sendCalls
     permissions?: WalletGrantPermissionsRequest['params'][0];
     chainId?: number;
     chain?: Chain;
@@ -93,20 +116,20 @@ export default function KeysJawIdApp() {
   const [browserAction, setBrowserAction] = useState<BrowserAction | null>(null);
 
   // === NEW: Browser mode redirect helpers ===
-  const redirectWithResult = (callbackUrl: string, result: unknown) => {
-    const resultStr = btoa(JSON.stringify(result));
+  const redirectWithResult = (callbackUrl: string, result: unknown, requestId?: string) => {
+    const resultStr = base64UrlEncode(JSON.stringify(result));
     const params = new URLSearchParams({
       result: resultStr,
-      requestId: generateUUID(),
+      requestId: requestId || generateUUID(), // Echo requestId if provided
     });
     const redirectUrl = `${callbackUrl}?${params.toString()}`;
     window.location.replace(redirectUrl);
   };
 
-  const redirectWithError = (callbackUrl: string, errorMsg: string) => {
+  const redirectWithError = (callbackUrl: string, errorMsg: string, requestId?: string) => {
     const params = new URLSearchParams({
       error: errorMsg,
-      requestId: generateUUID(),
+      requestId: requestId || generateUUID(), // Echo requestId if provided
     });
     const redirectUrl = `${callbackUrl}?${params.toString()}`;
     window.location.replace(redirectUrl);
@@ -116,11 +139,34 @@ export default function KeysJawIdApp() {
   const handleBrowserMode = async (callbackUrl: string, configParam: string, urlParams: URLSearchParams) => {
     try {
       // Parse config from URL
-      const parsedConfig = JSON.parse(atob(configParam));
+      const parsedConfig = JSON.parse(base64UrlDecode(configParam));
 
       setConfig(parsedConfig);
       configRef.current = parsedConfig;
-      setApiKey(parsedConfig.apiKey);
+
+      // Extract API key from chain.rpcUrl (new secure method)
+      // The API key is no longer in parsedConfig for security reasons (Issue 1 fix)
+      // Instead, it's embedded in the chain's RPC URL
+      let extractedApiKey: string | undefined = parsedConfig.apiKey; // Backward compatibility fallback
+
+      const chainParam = urlParams.get('chain');
+
+      if (chainParam) {
+        try {
+          const chain = JSON.parse(base64UrlDecode(chainParam));
+
+          // Extract API key from rpcUrl query param (e.g., "https://rpc.jaw.id/1?api-key=xxx")
+          if (chain?.rpcUrl) {
+            const apiKeyFromChain = chain.rpcUrl.split('api-key=')[1]?.split('&')[0];
+            if (apiKeyFromChain) {
+              extractedApiKey = apiKeyFromChain;
+            }
+          }
+        } catch (e) {
+          console.error('Failed to parse chain:', e);
+        }
+      }
+      setApiKey(extractedApiKey);
       setChainId(parsedConfig.metadata?.defaultChainId as ChainId);
       setEnsConfig(parsedConfig.preference?.ens);
 
@@ -128,21 +174,23 @@ export default function KeysJawIdApp() {
       setIsBrowserMode(true);
       setIsSDKMode(true);
 
-      // Store callback URL for later redirect
+      // Store callback URL and requestId for later redirect
       callbackUrlRef.current = callbackUrl;
+      requestIdRef.current = urlParams.get('requestId') || undefined;
 
       // Parse action type and params
       const action = urlParams.get('action') || 'connect';
       const credentialId = urlParams.get('credentialId') || undefined;
+      const requestId = requestIdRef.current;
 
       switch (action) {
         case 'signMessage': {
           const messageParam = urlParams.get('message');
           if (!messageParam || !credentialId) {
-            redirectWithError(callbackUrl, 'Missing message or credentialId');
+            redirectWithError(callbackUrl, 'Missing message or credentialId', requestId);
             return;
           }
-          const message = atob(messageParam);
+          const message = base64UrlDecode(messageParam);
           setBrowserAction({ type: 'signMessage', message, credentialId });
           break;
         }
@@ -150,22 +198,35 @@ export default function KeysJawIdApp() {
         case 'signTypedData': {
           const typedDataParam = urlParams.get('typedData');
           if (!typedDataParam || !credentialId) {
-            redirectWithError(callbackUrl, 'Missing typedData or credentialId');
+            redirectWithError(callbackUrl, 'Missing typedData or credentialId', requestId);
             return;
           }
-          const typedData = JSON.parse(atob(typedDataParam));
+          const typedData = JSON.parse(base64UrlDecode(typedDataParam));
           setBrowserAction({ type: 'signTypedData', typedData, credentialId });
           break;
         }
 
         case 'sendTransaction': {
+          const callsParam = urlParams.get('calls');
           const txParam = urlParams.get('tx');
-          if (!txParam || !credentialId) {
-            redirectWithError(callbackUrl, 'Missing tx or credentialId');
+
+          if (!credentialId) {
+            redirectWithError(callbackUrl, 'Missing credentialId', requestId);
             return;
           }
-          const tx = JSON.parse(atob(txParam));
-          setBrowserAction({ type: 'sendTransaction', tx, credentialId });
+
+          if (callsParam) {
+            // wallet_sendCalls: array of calls
+            const calls = JSON.parse(base64UrlDecode(callsParam));
+            setBrowserAction({ type: 'sendTransaction', calls, credentialId });
+          } else if (txParam) {
+            // eth_sendTransaction: single tx
+            const tx = JSON.parse(base64UrlDecode(txParam));
+            setBrowserAction({ type: 'sendTransaction', tx, credentialId });
+          } else {
+            redirectWithError(callbackUrl, 'Missing tx or calls parameter', requestId);
+            return;
+          }
           break;
         }
 
@@ -173,15 +234,15 @@ export default function KeysJawIdApp() {
           const permissionsParam = urlParams.get('permissions');
           const chainParam = urlParams.get('chain');
           if (!permissionsParam || !credentialId) {
-            redirectWithError(callbackUrl, 'Missing permissions or credentialId');
+            redirectWithError(callbackUrl, 'Missing permissions or credentialId', requestId);
             return;
           }
-          const permissionsData = JSON.parse(atob(permissionsParam));
+          const permissionsData = JSON.parse(base64UrlDecode(permissionsParam));
 
           let chain = undefined;
           if (chainParam) {
             try {
-              chain = JSON.parse(atob(chainParam));
+              chain = JSON.parse(base64UrlDecode(chainParam));
             } catch (e) {
               console.warn('Failed to parse chain parameter:', e);
             }
@@ -189,6 +250,34 @@ export default function KeysJawIdApp() {
 
           setBrowserAction({
             type: 'grantPermissions',
+            permissions: permissionsData,
+            chainId: permissionsData.chainId,
+            chain,
+            credentialId
+          });
+          break;
+        }
+
+        case 'revokePermissions': {
+          const permissionsParam = urlParams.get('permissions');
+          const chainParam = urlParams.get('chain');
+          if (!permissionsParam || !credentialId) {
+            redirectWithError(callbackUrl, 'Missing permissions or credentialId', requestId);
+            return;
+          }
+          const permissionsData = JSON.parse(base64UrlDecode(permissionsParam));
+
+          let chain = undefined;
+          if (chainParam) {
+            try {
+              chain = JSON.parse(base64UrlDecode(chainParam));
+            } catch (e) {
+              console.warn('Failed to parse chain parameter:', e);
+            }
+          }
+
+          setBrowserAction({
+            type: 'revokePermissions',
             permissions: permissionsData,
             chainId: permissionsData.chainId,
             chain,
@@ -207,7 +296,7 @@ export default function KeysJawIdApp() {
       await checkForPasskeys();
     } catch (err) {
       console.error('Failed to parse browser mode config:', err);
-      redirectWithError(callbackUrl, 'Invalid configuration');
+      redirectWithError(callbackUrl, 'Invalid configuration', urlParams.get('requestId') || undefined);
     }
   };
 
@@ -542,6 +631,33 @@ export default function KeysJawIdApp() {
     // === BROWSER MODE: Sign/Send operations (React Native Safari View Controller) ===
     if (isBrowserMode && authQuery.isAuthenticated && browserAction && callbackUrlRef.current) {
       const callbackUrl = callbackUrlRef.current;
+      const requestId = requestIdRef.current;
+
+      // Parse chain from URL params for proper RPC URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const chainParam = urlParams.get('chain');
+      let parsedChain: Chain | undefined;
+      if (chainParam) {
+        try {
+          parsedChain = JSON.parse(base64UrlDecode(chainParam));
+        } catch (e) {
+          console.warn('Failed to parse chain parameter:', e);
+        }
+      }
+
+      // Build proper chain with RPC URL for modals
+      const buildChainForModal = (chainId?: number): Chain => {
+        if (parsedChain) {
+          return parsedChain; // Use full chain from URL params (includes rpcUrl with API key)
+        }
+        // Fallback: construct RPC URL with API key
+        const id = chainId || effectiveChainId;
+        return {
+          id,
+          rpcUrl: apiKey ? `https://rpc.jaw.id/${id}?api-key=${apiKey}` : `https://rpc.jaw.id/${id}`,
+          paymaster: undefined
+        };
+      };
 
       // Browser mode: Sign Message
       if (browserAction.type === 'signMessage' && browserAction.message) {
@@ -550,13 +666,13 @@ export default function KeysJawIdApp() {
             origin={config?.metadata?.appName || 'App'}
             message={browserAction.message}
             address={authQuery.walletAddress ?? undefined}
-            chain={{ id: effectiveChainId, rpcUrl: '', paymaster: undefined }}
+            chain={buildChainForModal()}
             apiKey={apiKey}
             onSuccess={async (signature) => {
-              redirectWithResult(callbackUrl, { signature });
+              redirectWithResult(callbackUrl, { signature }, requestId);
             }}
             onError={async (error) => {
-              redirectWithError(callbackUrl, error.message);
+              redirectWithError(callbackUrl, error.message, requestId);
             }}
           />
         );
@@ -569,46 +685,67 @@ export default function KeysJawIdApp() {
             origin={config?.metadata?.appName || 'App'}
             typedDataJson={JSON.stringify(browserAction.typedData)}
             address={authQuery.walletAddress ?? undefined}
-            chain={{ id: effectiveChainId, rpcUrl: '', paymaster: undefined }}
+            chain={buildChainForModal()}
             apiKey={apiKey}
             onSuccess={async (signature) => {
-              redirectWithResult(callbackUrl, { signature });
+              redirectWithResult(callbackUrl, { signature }, requestId);
             }}
             onError={async (error) => {
-              redirectWithError(callbackUrl, error.message);
+              redirectWithError(callbackUrl, error.message, requestId);
             }}
           />
         );
       }
 
       // Browser mode: Send Transaction
-      if (browserAction.type === 'sendTransaction' && browserAction.tx) {
-        const txChainId = browserAction.tx.chainId || effectiveChainId;
-        const txData: TransactionRequestData = {
-          method: 'eth_sendTransaction',
-          transactions: [{
-            to: browserAction.tx.to,
-            value: browserAction.tx.value || '0x0',
-            data: browserAction.tx.data,
+      if (browserAction.type === 'sendTransaction' && (browserAction.tx || browserAction.calls)) {
+        let txData: TransactionRequestData;
+        let txChainId: number;
+
+        if (browserAction.calls) {
+          // wallet_sendCalls: array of calls
+          txChainId = browserAction.chainId || effectiveChainId;
+          txData = {
+            method: 'wallet_sendCalls',
+            transactions: browserAction.calls.map(call => ({
+              to: call.to,
+              value: call.value || '0x0',
+              data: call.data,
+              chainId: txChainId,
+            })),
             chainId: txChainId,
-          }],
-          chainId: txChainId,
-        };
+          };
+        } else if (browserAction.tx) {
+          // eth_sendTransaction: single tx
+          txChainId = browserAction.tx.chainId || effectiveChainId;
+          txData = {
+            method: 'eth_sendTransaction',
+            transactions: [{
+              to: browserAction.tx.to,
+              value: browserAction.tx.value || '0x0',
+              data: browserAction.tx.data,
+              chainId: txChainId,
+            }],
+            chainId: txChainId,
+          };
+        } else {
+          return null;
+        }
 
         return (
           <TransactionModal
             transactionRequest={txData}
-            chain={{ id: browserAction.tx.chainId || effectiveChainId, rpcUrl: '', paymaster: undefined }}
+            chain={buildChainForModal(txChainId)}
             apiKey={apiKey}
             onSuccess={async (result: TransactionResult) => {
               redirectWithResult(callbackUrl, {
                 txHash: result.hash,
                 id: result.id,
                 chainId: result.chainId,
-              });
+              }, requestId);
             }}
             onError={async (error) => {
-              redirectWithError(callbackUrl, error.message);
+              redirectWithError(callbackUrl, error.message, requestId);
             }}
           />
         );
@@ -621,12 +758,8 @@ export default function KeysJawIdApp() {
           params: [browserAction.permissions],
         };
 
-        // Use full chain object from browserAction if available, otherwise construct minimal chain
-        const chainForModal = browserAction.chain || {
-          id: browserAction.chainId || effectiveChainId,
-          rpcUrl: '',
-          paymaster: undefined
-        };
+        // Use full chain object from browserAction, or build from parsed chain/chainId
+        const chainForModal = browserAction.chain || buildChainForModal(browserAction.chainId);
 
         return (
           <PermissionModal
@@ -636,7 +769,7 @@ export default function KeysJawIdApp() {
             origin={config?.metadata?.appName || 'App'}
             onSuccess={async (result) => {
               if ('success' in result) {
-                redirectWithResult(callbackUrl, { success: result.success });
+                redirectWithResult(callbackUrl, { success: result.success }, requestId);
               } else {
                 redirectWithResult(callbackUrl, {
                   permissionId: result.permissionId,
@@ -644,11 +777,42 @@ export default function KeysJawIdApp() {
                   account: result.account,
                   spender: result.spender,
                   chainId: result.chainId,
-                });
+                }, requestId);
               }
             }}
             onError={async (error) => {
-              redirectWithError(callbackUrl, error.message);
+              redirectWithError(callbackUrl, error.message, requestId);
+            }}
+          />
+        );
+      }
+
+      // Browser mode: Revoke Permissions
+      if (browserAction.type === 'revokePermissions' && browserAction.permissions) {
+        const permissionRequestData: PermissionRequestData = {
+          method: 'wallet_revokePermissions',
+          params: [browserAction.permissions],
+        };
+
+        // Use full chain object from browserAction, or build from parsed chain/chainId
+        const chainForModal = browserAction.chain || buildChainForModal(browserAction.chainId);
+
+        return (
+          <PermissionModal
+            permissionRequest={permissionRequestData}
+            chain={chainForModal}
+            apiKey={apiKey || ''}
+            origin={config?.metadata?.appName || 'App'}
+            onSuccess={async (result) => {
+              if ('success' in result) {
+                redirectWithResult(callbackUrl, { success: result.success }, requestId);
+              } else {
+                // For revoke, still return success format
+                redirectWithResult(callbackUrl, { success: true }, requestId);
+              }
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message, requestId);
             }}
           />
         );

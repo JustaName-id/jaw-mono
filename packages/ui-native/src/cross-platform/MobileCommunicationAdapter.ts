@@ -31,11 +31,15 @@
 
 import * as WebBrowser from 'expo-web-browser';
 import * as Linking from 'expo-linking';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import type { CommunicationAdapter } from '@jaw.id/core';
 import { Message, MessageID, RPCResponseMessage, RPCResponse, RPCRequestMessage } from '@jaw.id/core';
 
 // SDK version - should match core package
 const SDK_VERSION = '1.0.0';
+
+// AsyncStorage key for persisting credentialId
+const CREDENTIAL_ID_KEY = 'JAW_CREDENTIAL_ID';
 
 export interface MobileCommunicationConfig {
   apiKey: string;
@@ -87,6 +91,15 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
     // Generate callback URL using app's scheme
     // This creates a URL like: jaw-demo://auth
     this.callbackUrl = Linking.createURL('auth');
+
+    // Load persisted credentialId asynchronously (don't block initialization)
+    AsyncStorage.getItem(CREDENTIAL_ID_KEY).then(credentialId => {
+      if (credentialId) {
+        this.credentialId = credentialId;
+      }
+    }).catch(error => {
+      console.warn('[MobileCommunicationAdapter] Failed to load credentialId:', error);
+    });
   }
 
   /**
@@ -105,19 +118,15 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
       return;
     }
 
-    console.log('[MobileCommunicationAdapter] Setting up deep link listener...');
-
     // Set up deep link listener if not already done
     if (!this.linkingSubscription) {
       this.linkingSubscription = Linking.addEventListener('url', this.handleDeepLink.bind(this));
-      console.log('[MobileCommunicationAdapter] Deep link listener registered');
     }
 
     // Check if there's an initial URL (app was opened via deep link)
     try {
       const initialUrl = await Linking.getInitialURL();
       if (initialUrl) {
-        console.log('[MobileCommunicationAdapter] Found initial URL:', initialUrl);
         this.handleDeepLink({ url: initialUrl });
       }
     } catch (error) {
@@ -149,8 +158,6 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
         // Don't use ephemeral session - we want passkeys to persist
         preferEphemeralSession: false,
       }).then((result) => {
-        console.log('[MobileCommunicationAdapter] Browser session result:', result);
-
         // Handle browser session result
         if (result.type === 'cancel' || result.type === 'dismiss') {
           this.pendingRequests.delete(request.id);
@@ -161,7 +168,6 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
         // On iOS Safari View Controller, deep links don't always fire
         // So we need to check if the result contains the URL with response data
         if (result.type === 'success' && result.url) {
-          console.log('[MobileCommunicationAdapter] Browser returned with URL:', result.url);
           // Manually trigger deep link handler with the returned URL
           this.handleDeepLink({ url: result.url });
         }
@@ -228,7 +234,13 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
     });
     this.pendingRequests.clear();
     this.messageListeners.clear();
-    this.credentialId = null; // Clear stored credential
+
+    // Clear stored credential (both memory and storage)
+    this.credentialId = null;
+    AsyncStorage.removeItem(CREDENTIAL_ID_KEY).catch(error => {
+      console.warn('[MobileCommunicationAdapter] Failed to clear credentialId:', error);
+    });
+
     this.isReady = false;
   }
 
@@ -240,13 +252,9 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
       const parsed = Linking.parse(event.url);
       const queryParams = parsed.queryParams || {};
 
-      console.log('[MobileCommunicationAdapter] Deep link received:', event.url);
-      console.log('[MobileCommunicationAdapter] Query params:', queryParams);
-
       // Check for error
       if (queryParams.error) {
         const errorMsg = String(queryParams.error);
-        console.log('[MobileCommunicationAdapter] Error in deep link:', errorMsg);
         // Reject all pending requests with this error
         this.pendingRequests.forEach(({ reject }) => {
           reject(new Error(errorMsg));
@@ -259,17 +267,47 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
       const responseParam = queryParams.response || queryParams.result;
       if (responseParam) {
         const responseStr = String(responseParam);
-        const rawResponse = JSON.parse(this.base64Decode(responseStr));
 
-        console.log('[MobileCommunicationAdapter] Decoded response:', rawResponse);
+        let rawResponse;
+        try {
+          // iOS URL handling encodes query params, need to URL decode first
+          const decodedResponseStr = decodeURIComponent(responseStr);
+          const decoded = this.base64Decode(decodedResponseStr);
+          rawResponse = JSON.parse(decoded);
+        } catch (decodeError) {
+          console.error('[MobileCommunicationAdapter] Failed to decode response:', decodeError);
 
-        // Resolve pending request
-        // For browser mode, keys.jaw.id doesn't include requestId in the response
-        // So we resolve the first (and should be only) pending request
-        if (this.pendingRequests.size > 0) {
-          const [firstRequestId, firstRequest] = Array.from(this.pendingRequests.entries())[0];
-          console.log('[MobileCommunicationAdapter] Resolving request:', firstRequestId);
+          // Reject all pending requests with decode error
+          this.pendingRequests.forEach(({ reject }) => {
+            reject(new Error(`Failed to decode response: ${decodeError instanceof Error ? decodeError.message : String(decodeError)}`));
+          });
+          this.pendingRequests.clear();
+          return;
+        }
 
+        // Resolve pending request - match by requestId if available
+        const requestIdParam = queryParams.requestId as MessageID | undefined;
+
+        let matchedRequestId: MessageID | undefined;
+        let matchedRequest: { resolve: (value: unknown) => void; reject: (error: Error) => void } | undefined;
+
+        if (requestIdParam && this.pendingRequests.has(requestIdParam)) {
+          // Match by requestId (correct correlation)
+          matchedRequestId = requestIdParam;
+          matchedRequest = this.pendingRequests.get(requestIdParam);
+        } else if (this.pendingRequests.size === 1) {
+          // Fallback: only one pending request, use it
+          [matchedRequestId, matchedRequest] = Array.from(this.pendingRequests.entries())[0];
+        } else if (this.pendingRequests.size > 1) {
+          // Multiple pending requests but no match = error
+          this.pendingRequests.forEach(({ reject }) => {
+            reject(new Error('Request correlation failed: multiple pending requests'));
+          });
+          this.pendingRequests.clear();
+          return;
+        }
+
+        if (matchedRequest && matchedRequestId) {
           // Transform browser mode response to expected RPC message format
           // Different methods return different response formats
           let rpcResponse: RPCResponse;
@@ -279,7 +317,11 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
             // Store credentialId for future requests
             if (rawResponse.credentialId) {
               this.credentialId = rawResponse.credentialId;
-              console.log('[MobileCommunicationAdapter] Stored credentialId:', this.credentialId);
+
+              // Persist to AsyncStorage
+              AsyncStorage.setItem(CREDENTIAL_ID_KEY, this.credentialId).catch(error => {
+                console.warn('[MobileCommunicationAdapter] Failed to persist credentialId:', error);
+              });
             }
 
             // eth_requestAccounts expects result.value to be Address[]
@@ -323,13 +365,11 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
             };
           }
 
-          console.log('[MobileCommunicationAdapter] Created RPC response:', rpcResponse);
-
           // Wrap in RPCResponseMessage format with unencrypted content
           // This matches the format used by WebCommunicationAdapter (which uses encrypted content)
           const responseMessage: RPCResponseMessage = {
             id: this.generateMessageId(),
-            requestId: firstRequestId,
+            requestId: matchedRequestId,
             sender: '', // Not used in browser mode (no encryption)
             content: {
               unencrypted: rpcResponse,
@@ -343,13 +383,9 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
           });
 
           // Resolve with the RPCResponseMessage (matches WebCommunicationAdapter return type)
-          firstRequest.resolve(responseMessage);
-          this.pendingRequests.delete(firstRequestId);
-        } else {
-          console.warn('[MobileCommunicationAdapter] No pending requests to resolve');
+          matchedRequest.resolve(responseMessage);
+          this.pendingRequests.delete(matchedRequestId);
         }
-      } else {
-        console.warn('[MobileCommunicationAdapter] No response or result in deep link');
       }
     } catch (error) {
       console.error('[MobileCommunicationAdapter] Deep link parse error:', error);
@@ -380,7 +416,7 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
         keysUrl: config.keysUrl,
         showTestnets: config.showTestnets,
       },
-      apiKey: config.apiKey,
+      // API key removed - now embedded in chain.rpcUrl (see below)
       location: 'react-native-browser',
     };
 
@@ -390,23 +426,45 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
     const requestParams = ('handshake' in requestData.content ? requestData.content.handshake.params : []);
     const chain = ('handshake' in requestData.content ? requestData.content.chain : undefined);
 
-    console.log('[MobileCommunicationAdapter] Request method:', method);
-    console.log('[MobileCommunicationAdapter] Request params:', requestParams);
-    console.log('[MobileCommunicationAdapter] Request chain:', chain);
-
     // Determine action type for keys.jaw.id
     let action = 'connect';
     const urlParams: Record<string, string> = {
       callback: callbackUrl,
       mode: 'browser',
       config: this.base64Encode(JSON.stringify(configData)),
+      requestId: request.id, // Include requestId for correlation
     };
 
     // Add chain object to URL params if available
     // keys.jaw.id needs the full chain config, not just chainId
-    if (chain) {
-      urlParams.chain = this.base64Encode(JSON.stringify(chain));
+    // IMPORTANT: Embed API key in chain.rpcUrl (not in URL params) for security
+    // CRITICAL: Always send chain for browser mode (even for connect) to pass API key
+    let chainToSend = chain;
+
+    // If no chain in request, create a minimal chain with just chainId and API key
+    if (!chainToSend) {
+      const chainId = config.defaultChainId || 1;
+      chainToSend = { id: chainId };
     }
+
+    // Clone chain to avoid modifying original
+    const chainWithApiKey = { ...chainToSend };
+
+    // Ensure API key is embedded in RPC URL
+    if (config.apiKey) {
+      // Build RPC URL with API key if not already present
+      if (!chainWithApiKey.rpcUrl) {
+        // No RPC URL yet - create one with API key
+        chainWithApiKey.rpcUrl = `https://api.justaname.id/proxy/v1/rpc?chainId=${chainWithApiKey.id}&api-key=${config.apiKey}`;
+      } else if (!chainWithApiKey.rpcUrl.includes('api-key=')) {
+        // RPC URL exists but no API key - add it
+        const separator = chainWithApiKey.rpcUrl.includes('?') ? '&' : '?';
+        chainWithApiKey.rpcUrl = `${chainWithApiKey.rpcUrl}${separator}api-key=${config.apiKey}`;
+      }
+    }
+
+    // Always send chain (critical for API key extraction in browser mode)
+    urlParams.chain = this.base64Encode(JSON.stringify(chainWithApiKey));
 
     // Map method to action and add necessary params
     if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
@@ -425,15 +483,29 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
       if (this.credentialId) {
         urlParams.credentialId = this.credentialId;
       }
-    } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
+    } else if (method === 'wallet_sendCalls') {
       action = 'sendTransaction';
-      const tx = method === 'wallet_sendCalls' ? requestParams[0]?.calls?.[0] : requestParams[0];
+      // Send all calls, not just the first one
+      const calls = requestParams[0]?.calls || [];
+      urlParams.calls = this.base64Encode(JSON.stringify(calls));
+      if (this.credentialId) {
+        urlParams.credentialId = this.credentialId;
+      }
+    } else if (method === 'eth_sendTransaction') {
+      action = 'sendTransaction';
+      const tx = requestParams[0];
       urlParams.tx = this.base64Encode(JSON.stringify(tx));
       if (this.credentialId) {
         urlParams.credentialId = this.credentialId;
       }
     } else if (method === 'wallet_grantPermissions') {
       action = 'grantPermissions';
+      urlParams.permissions = this.base64Encode(JSON.stringify(requestParams[0]));
+      if (this.credentialId) {
+        urlParams.credentialId = this.credentialId;
+      }
+    } else if (method === 'wallet_revokePermissions') {
+      action = 'revokePermissions';
       urlParams.permissions = this.base64Encode(JSON.stringify(requestParams[0]));
       if (this.credentialId) {
         urlParams.credentialId = this.credentialId;
@@ -445,34 +517,59 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
     const params = new URLSearchParams(urlParams);
     const url = `${config.keysUrl}?${params.toString()}`;
 
-    console.log('[MobileCommunicationAdapter] Opening URL:', url);
-    console.log('[MobileCommunicationAdapter] Callback URL:', callbackUrl);
+    // URL length validation - Safari/Chrome have ~2048 char limit
+    const URL_LENGTH_LIMIT = 2000;
+
+    if (url.length > URL_LENGTH_LIMIT) {
+      throw new Error(
+        `Request data too large (${url.length} chars, limit: ${URL_LENGTH_LIMIT}). ` +
+        `EIP-712 typed data or complex transactions may exceed URL limits. ` +
+        `Consider using encrypted popup mode instead.`
+      );
+    }
 
     return url;
   }
 
   /**
-   * Base64 encode (works in React Native)
+   * Base64URL encode (URL-safe base64 encoding)
+   * Replaces + with -, / with _, and removes padding =
    */
   private base64Encode(str: string): string {
+    let base64: string;
+
     // Use global btoa if available, otherwise use Buffer
     if (typeof btoa !== 'undefined') {
-      return btoa(str);
+      base64 = btoa(str);
+    } else {
+      // Fallback for React Native
+      base64 = Buffer.from(str, 'utf-8').toString('base64');
     }
-    // Fallback for React Native
-    return Buffer.from(str, 'utf-8').toString('base64');
+
+    // Convert to base64url format (URL-safe)
+    return base64.replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
   }
 
   /**
-   * Base64 decode (works in React Native)
+   * Base64URL decode (URL-safe base64 decoding)
+   * Replaces - with +, _ with /, and restores padding =
    */
   private base64Decode(str: string): string {
+    // Convert from base64url to standard base64
+    let base64 = str.replace(/-/g, '+').replace(/_/g, '/');
+
+    // Restore padding
+    const pad = base64.length % 4;
+    if (pad > 0) {
+      base64 += '='.repeat(4 - pad);
+    }
+
     // Use global atob if available, otherwise use Buffer
     if (typeof atob !== 'undefined') {
-      return atob(str);
+      return atob(base64);
     }
     // Fallback for React Native
-    return Buffer.from(str, 'base64').toString('utf-8');
+    return Buffer.from(base64, 'base64').toString('utf-8');
   }
 
   /**

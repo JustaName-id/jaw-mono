@@ -407,12 +407,14 @@ export function extractPublicKeyFromAttestation(
     // Convert to SPKI format if requested (needed for react-native-quick-crypto)
     if (asSpki) {
       const spkiKey = rawP256ToSpki(rawPublicKey);
-      return spkiKey ? spkiKey.buffer : null;
+      if (!spkiKey) {
+        return null;
+      }
+      return spkiKey.buffer;
     }
 
     return rawPublicKey.buffer;
   } catch (error) {
-    console.error('Failed to extract public key from attestation:', error);
     return null;
   }
 }

@@ -403,11 +403,13 @@ export async function createNativePasskeyCredential(
     // Create the raw credential object for viem
     const rawCredential = convertFromRNResponse(rnResponse);
 
-    return {
+    const result = {
       id: rnResponse.id,
       publicKey: publicKeyHex,
       raw: rawCredential,
     };
+
+    return result;
   } catch (error) {
     if (error instanceof Error) {
       const errorMessage = error.message.toLowerCase();
