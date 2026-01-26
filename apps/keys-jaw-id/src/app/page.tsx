@@ -2,8 +2,8 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useAuth, usePasskeys } from '../hooks';
-import { SignInScreen } from '../components/OnboardingSection';
-import { Account, type PasskeyAccount } from '@jaw.id/core';
+import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
+import { type PasskeyAccount } from '@jaw.id/core';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
@@ -874,24 +874,24 @@ export default function KeysJawIdApp() {
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
-              onComplete={async () => {
+              onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
-
-                  // SignInScreen already created the passkey, just refetch and proceed
-                  const accountsResult = await passkeyQuery.refetchAccounts();
-
-                  const accounts = accountsResult.data || [];
-                  const newestAccount = accounts[accounts.length - 1] || null;
-                  setCurrentAccount(newestAccount);
+                  // Set the current account from the passed data
+                  setCurrentAccount({
+                    credentialId: authenticatedAccount.credentialId,
+                    username: authenticatedAccount.username,
+                    publicKey: authenticatedAccount.publicKey,
+                    creationDate: new Date().toISOString(),
+                    isImported: false,
+                  });
 
                   // Update session auth state for per-origin isolation
-                  const authenticatedAddress = Account.getAuthenticatedAddress(apiKey);
-                  if (currentOrigin && newestAccount && authenticatedAddress) {
+                  if (currentOrigin) {
                     const authState: SessionAuthState = {
-                      address: authenticatedAddress as `0x${string}`,
-                      credentialId: newestAccount.credentialId,
-                      username: newestAccount.username,
-                      publicKey: newestAccount.publicKey as `0x${string}`,
+                      address: authenticatedAccount.address,
+                      credentialId: authenticatedAccount.credentialId,
+                      username: authenticatedAccount.username,
+                      publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
                     console.log('✅ Session auth state updated for origin:', currentOrigin);
@@ -948,38 +948,24 @@ export default function KeysJawIdApp() {
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
-              onComplete={async () => {
+              onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
-                  const accountsResult = await passkeyQuery.refetchAccounts();
-
-                  const accounts = accountsResult.data || [];
-
-                  // Get the address from global auth state (SignInScreen just set it)
-                  // Then find the account that matches this address
-                  const authenticatedAddress = Account.getAuthenticatedAddress(apiKey);
-
-                  // Find the account that was actually authenticated by matching the credentialId
-                  // from the global auth state. The authenticated credentialId is stored when user logs in.
-                  const globalAuthState = (() => {
-                    try {
-                      const stored = localStorage.getItem('jaw:passkey:authState');
-                      return stored ? JSON.parse(stored) : null;
-                    } catch { return null; }
-                  })();
-
-                  const authenticatedAccount = globalAuthState?.credentialId
-                    ? accounts.find((acc: PasskeyAccount) => acc.credentialId === globalAuthState.credentialId) || accounts[0] || null
-                    : accounts[0] || null;
-
-                  setCurrentAccount(authenticatedAccount);
+                  // Set the current account from the passed data
+                  setCurrentAccount({
+                    credentialId: authenticatedAccount.credentialId,
+                    username: authenticatedAccount.username,
+                    publicKey: authenticatedAccount.publicKey,
+                    creationDate: new Date().toISOString(),
+                    isImported: false,
+                  });
 
                   // Update session auth state for per-origin isolation
-                  if (currentOrigin && authenticatedAccount && authenticatedAddress) {
+                  if (currentOrigin) {
                     const authState: SessionAuthState = {
-                      address: authenticatedAddress as `0x${string}`,
+                      address: authenticatedAccount.address,
                       credentialId: authenticatedAccount.credentialId,
                       username: authenticatedAccount.username,
-                      publicKey: authenticatedAccount.publicKey as `0x${string}`,
+                      publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
                     console.log('✅ Session auth state updated for origin:', currentOrigin, 'with credentialId:', authenticatedAccount.credentialId);
