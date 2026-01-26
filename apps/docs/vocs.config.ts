@@ -72,6 +72,17 @@ export default defineConfig({
       ],
     },
     {
+      text: 'Guides',
+      collapsed: false,
+      items: [
+        { text: 'Quickstart', link: '/guides/quickstart' },
+        { text: 'Onchain Identity', link: '/guides/onchain-identity' },
+        { text: 'Gas Sponsoring', link: '/guides/gas-sponsoring' },
+        { text: 'Sign-In With Ethereum', link: '/guides/siwe' },
+        { text: 'Subscription Payments', link: '/guides/subscription' },
+      ],
+    },
+    {
       text: 'Wagmi',
       collapsed: false,
       items: [
@@ -179,13 +190,6 @@ export default defineConfig({
             { text: 'getPermission()', link: '/account/getPermission' },
           ],
         },
-      ],
-    },
-    {
-      text: 'Guides',
-      collapsed: false,
-      items: [
-        { text: 'Subscription Payments', link: '/guides/subscription' },
       ],
     },
     {

@@ -1,0 +1,306 @@
+# Quickstart
+
+Integrate smart accounts with passkey authentication in minutes. Your users get seedless wallets that support batched transactions, stablecoin gas payments, and optional gas sponsorship - all through a familiar Web3 interface.
+
+**What you'll build:**
+
+- **Issue Accounts** - Users create accounts with passkeys, no seed phrases
+- **Passkey Auth** - Secure, passwordless WebAuthn authentication
+- **Send & Receive** - Standard transaction support with gas sponsorship
+- **Batch Transactions** - Multiple operations in a single approval
+
+
+## 1. Integration Path
+
+Pick your integration method:
+
+| Approach | Best For |
+|----------|----------|
+| **Wagmi** | React apps already using wagmi connectors. Instant integration with familiar hooks. |
+| **Core SDK** | Custom implementations, non-React apps, or when you need direct control over account creation and signing. |
+
+:::info
+This guide shows both approaches. Choose the tabs that match your setup.
+:::
+
+
+## 2. Install the SDK
+
+**Wagmi:**
+
+:::code-group
+
+```bash [npm]
+npm install @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+```bash [pnpm]
+pnpm add @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+```bash [yarn]
+yarn add @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+```bash [bun]
+bun add @jaw.id/wagmi wagmi viem @tanstack/react-query
+```
+
+:::
+
+**Core SDK:**
+
+:::code-group
+
+```bash [npm]
+npm install @jaw.id/core viem
+```
+
+```bash [pnpm]
+pnpm add @jaw.id/core viem
+```
+
+```bash [yarn]
+yarn add @jaw.id/core viem
+```
+
+```bash [bun]
+bun add @jaw.id/core viem
+```
+
+:::
+
+
+## 3. Create API Key
+
+Create an API key to authenticate your application's SDK requests for account deployment, identity operations, and transaction routing.
+
+**[Get your API key at dashboard.jaw.id](https://dashboard.jaw.id/)**
+
+
+## 4. Configure the SDK
+
+Initialize JAW with your API key, app details, and default chain. The `appName` and `appLogoUrl` appear in user-facing interfaces during authentication. The `defaultChainId` specifies the primary chain for account operations. You can override this per operation by passing a `chainId` parameter, or by using [`wallet_switchEthereumChain`](/api-reference/wallet_switchEthereumChain).
+
+:::code-group
+
+```typescript [Wagmi]
+// config.ts
+import { createConfig, http } from 'wagmi';
+import { mainnet, base } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+export const config = createConfig({
+  chains: [mainnet, base],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_API_KEY',
+      appName: 'My App',
+      appLogoUrl: 'https://myapp.com/logo.png',
+      defaultChainId: 1, // Ethereum mainnet
+    }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+    [base.id]: http(),
+  },
+});
+```
+
+```typescript [Core SDK]
+import { JAW, Mode } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'YOUR_API_KEY',
+  appName: 'My App',
+  appLogoUrl: 'https://myapp.com/logo.png',
+  defaultChainId: 1, // Ethereum mainnet
+  preference: {
+    mode: Mode.CrossPlatform,
+  },
+});
+```
+
+:::
+
+:::info
+Add paymasters, ENS subnames, and other features later using the [Configuration](/configuration) options.
+:::
+
+
+## 5. Connect and Display Account
+
+Add wallet connection to your app. Users authenticate with passkeys and see their account details.
+
+:::code-group
+
+```tsx [Wagmi]
+import { useAccount } from 'wagmi';
+import { useConnect, useDisconnect } from '@jaw.id/wagmi';
+import { config } from './config';
+
+function ConnectButton() {
+  const { address, isConnected } = useAccount();
+  const { mutate: connect, isPending } = useConnect();
+  const { mutate: disconnect } = useDisconnect();
+
+  if (isConnected) {
+    return (
+      <div>
+        <p>Connected: {address}</p>
+        <button onClick={() => disconnect({})}>
+          Disconnect
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <button
+      onClick={() => connect({ connector: config.connectors[0] })}
+      disabled={isPending}
+    >
+      {isPending ? 'Connecting...' : 'Connect Wallet'}
+    </button>
+  );
+}
+```
+
+```typescript [Core SDK]
+// Connect - opens authentication popup
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{}],
+});
+console.log('Connected:', result.accounts[0].address);
+
+// Get current connected account
+const accounts = await jaw.provider.request({
+  method: 'eth_accounts',
+});
+console.log('Address:', accounts[0]);
+```
+
+:::
+
+
+## 6. Send Transactions
+
+Send single and batched transactions by providing recipient addresses and amounts. The SDK manages gas estimation, routing, and confirmation. Batched calls bundle multiple actions into one approval for better UX.
+
+:::code-group
+
+```tsx [Wagmi]
+import { useSendCalls } from 'wagmi';
+import { parseEther, encodeFunctionData } from 'viem';
+
+function SendTransaction() {
+  const { sendCalls, isPending } = useSendCalls();
+
+  // Single transaction
+  const handleSend = () => {
+    sendCalls({
+      calls: [{
+        to: '0xRecipientAddress...',
+        value: parseEther('0.01'),
+      }],
+    });
+  };
+
+  // Batch multiple transactions
+  const handleBatchSend = () => {
+    sendCalls({
+      calls: [
+        { to: '0xAlice...', value: parseEther('0.01') },
+        { to: '0xBob...', value: parseEther('0.02') },
+      ],
+    });
+  };
+
+  return (
+    <div>
+      <button onClick={handleSend} disabled={isPending}>
+        Send ETH
+      </button>
+      <button onClick={handleBatchSend} disabled={isPending}>
+        Batch Send
+      </button>
+    </div>
+  );
+}
+```
+
+```typescript [Core SDK]
+// Batch multiple transactions
+const result = await jaw.provider.request({
+  method: 'wallet_sendCalls',
+  params: [{
+    calls: [
+      {
+        to: '0xAlice...',
+        value: '0x2386F26FC10000', // 0.01 ETH in hex
+      },
+      {
+        to: '0xBob...',
+        value: '0x470DE4DF820000', // 0.02 ETH in hex
+      },
+    ],
+  }],
+});
+
+console.log('Batch ID:', result);
+```
+
+:::
+
+:::info
+Users can pay gas fees in stablecoins natively - no extra configuration required. For fully sponsored (gasless) transactions, see [paymasters](/configuration/paymasters).
+:::
+
+
+## 7. Disconnect Account
+
+Disconnect the wallet from JAW to end the session.
+
+:::code-group
+
+```tsx [Wagmi]
+import { useDisconnect } from '@jaw.id/wagmi';
+
+function DisconnectButton() {
+  const { mutate: disconnect } = useDisconnect();
+
+  return (
+    <button onClick={() => disconnect({})}>
+      Disconnect
+    </button>
+  );
+}
+```
+
+```typescript [Core SDK]
+await jaw.provider.request({
+  method: 'wallet_disconnect',
+});
+console.log('Disconnected');
+```
+
+:::
+
+
+## Next Steps
+
+Now that you have the basics working, explore these features:
+
+- **[Gas Sponsorship](/configuration/paymasters)** - Sponsor gas fees for your users
+- **[ENS Subnames](/configuration/ens)** - Issue human-readable names like `alice.yourapp.eth`
+- **[Subscription Payments](/guides/subscription)** - Set up recurring payments with permissions
+- **[Batch Transactions](/api-reference/wallet_sendCalls)** - Advanced batching patterns
+
+
+## Related
+
+- [Configuration](/configuration) - All configuration options
+- [Wagmi Integration](/wagmi) - Full wagmi hooks reference
+- [Provider API Reference](/api-reference) - All RPC methods
+- [Supported Networks](/supported-networks) - Available chains
