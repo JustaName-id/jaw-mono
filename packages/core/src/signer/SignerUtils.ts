@@ -86,7 +86,7 @@ export function assertParamsChainId(params: unknown): asserts params is [
 }
 
 /** Default auth TTL: 24 hours in seconds */
-const DEFAULT_AUTH_TTL = 86400;
+export const DEFAULT_AUTH_TTL = 86400;
 
 export async function getCachedWalletConnectResponse(): Promise<WalletConnectResponse | null> {
     const accountState = store.account.get();
@@ -100,9 +100,16 @@ export async function getCachedWalletConnectResponse(): Promise<WalletConnectRes
     const connectedAt = accountState.connectedAt;
     if (connectedAt) {
         const config = store.config.get();
-        const authTTL = config.authTTL ?? DEFAULT_AUTH_TTL;
-        const expiresAt = connectedAt + (authTTL * 1000);
+        // Clamp negative values to 0 (immediate expiration)
+        const authTTL = Math.max(0, config.authTTL ?? DEFAULT_AUTH_TTL);
 
+        // TTL of 0 means cache is disabled - always require re-auth
+        if (authTTL === 0) {
+            store.account.clear();
+            return null;
+        }
+
+        const expiresAt = connectedAt + (authTTL * 1000);
         if (Date.now() > expiresAt) {
             // Cache has expired, clear account state and return null
             store.account.clear();
