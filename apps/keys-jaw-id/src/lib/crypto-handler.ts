@@ -135,7 +135,7 @@ export class CryptoHandler {
    *
    * @returns The current session, or null if no origin set or no session exists
    */
-  getCurrentSession(): AppSession | null {
+  async getCurrentSession(): Promise<AppSession | null> {
     if (!this.currentOrigin) {
       console.warn(`${LOG_PREFIX} No origin set`);
       return null;
@@ -149,7 +149,7 @@ export class CryptoHandler {
    * @param origin - The app origin
    * @returns The session, or null if not found
    */
-  getSession(origin: string): AppSession | null {
+  async getSession(origin: string): Promise<AppSession | null> {
     return this.sessionManager.getSession(origin);
   }
 
@@ -159,7 +159,7 @@ export class CryptoHandler {
    * @param origin - The app origin
    * @returns The loaded session, or null if not found
    */
-  loadSession(origin: string): AppSession | null {
+  async loadSession(origin: string): Promise<AppSession | null> {
     this.currentOrigin = origin;
     return this.sessionManager.getSession(origin);
   }
@@ -169,7 +169,7 @@ export class CryptoHandler {
    *
    * @returns true if authenticated, false otherwise
    */
-  isAuthenticated(): boolean {
+  async isAuthenticated(): Promise<boolean> {
     if (!this.currentOrigin) return false;
     return this.sessionManager.isAuthenticated(this.currentOrigin);
   }
@@ -179,7 +179,7 @@ export class CryptoHandler {
    *
    * @returns The authState, or null if no session
    */
-  getAuthState(): SessionAuthState | null {
+  async getAuthState(): Promise<SessionAuthState | null> {
     if (!this.currentOrigin) return null;
     return this.sessionManager.getAuthStateForOrigin(this.currentOrigin);
   }
@@ -217,7 +217,7 @@ export class CryptoHandler {
   ): Promise<AppSession> {
     this.currentOrigin = origin;
 
-    let session = this.sessionManager.getSession(origin);
+    let session = await this.sessionManager.getSession(origin);
 
     if (session) {
       // Session exists - check if updates needed
@@ -236,7 +236,7 @@ export class CryptoHandler {
       // Check if authState changed (only if authState provided)
       if (authState && session.authState?.address !== authState.address) {
         console.log(`${LOG_PREFIX} AuthState changed for:`, origin);
-        session = this.sessionManager.updateSessionAuthState(origin, authState);
+        session = await this.sessionManager.updateSessionAuthState(origin, authState);
         if (!session) {
           throw new Error('Failed to update authState');
         }
@@ -245,7 +245,7 @@ export class CryptoHandler {
 
       // Touch session if no updates (updates already touch)
       if (!needsUpdate) {
-        this.sessionManager.touchSession(origin);
+        await this.sessionManager.touchSession(origin);
       }
 
       return session;
@@ -268,7 +268,7 @@ export class CryptoHandler {
    * @param authState - The new authState data
    * @returns The updated session, or null if no current session
    */
-  updateAuthState(authState: SessionAuthState): AppSession | null {
+  async updateAuthState(authState: SessionAuthState): Promise<AppSession | null> {
     if (!this.currentOrigin) {
       console.error(`${LOG_PREFIX} Cannot update authState: no origin set`);
       return null;
@@ -283,14 +283,14 @@ export class CryptoHandler {
    * @param origin - The app origin (defaults to current origin)
    * @returns true if deleted, false if not found
    */
-  deleteSession(origin?: string): boolean {
+  async deleteSession(origin?: string): Promise<boolean> {
     const targetOrigin = origin || this.currentOrigin;
     if (!targetOrigin) {
       console.error(`${LOG_PREFIX} Cannot delete session: no origin`);
       return false;
     }
 
-    const result = this.sessionManager.deleteSession(targetOrigin);
+    const result = await this.sessionManager.deleteSession(targetOrigin);
 
     if (targetOrigin === this.currentOrigin) {
       this.currentOrigin = null;
@@ -322,7 +322,7 @@ export class CryptoHandler {
    *
    * @returns The public key (hex), or null if no session
    */
-  getPopupPublicKey(): string | null {
+  async getPopupPublicKey(): Promise<string | null> {
     if (!this.currentOrigin) {
       console.error(`${LOG_PREFIX} Cannot get public key: no origin set`);
       return null;
@@ -353,7 +353,7 @@ export class CryptoHandler {
       throw new Error('No session available for encryption');
     }
 
-    const popupPublicKey = this.getPopupPublicKey();
+    const popupPublicKey = await this.getPopupPublicKey();
     if (!popupPublicKey) {
       throw new Error('No popup public key available');
     }
@@ -424,7 +424,7 @@ export class CryptoHandler {
       throw new Error('No session available for encryption');
     }
 
-    const popupPublicKey = this.getPopupPublicKey();
+    const popupPublicKey = await this.getPopupPublicKey();
     if (!popupPublicKey) {
       throw new Error('No popup public key available');
     }
@@ -473,7 +473,7 @@ export class CryptoHandler {
       throw new Error('No session available for encryption');
     }
 
-    const popupPublicKey = this.getPopupPublicKey();
+    const popupPublicKey = await this.getPopupPublicKey();
     if (!popupPublicKey) {
       throw new Error('No popup public key available');
     }
@@ -527,7 +527,7 @@ export class CryptoHandler {
       return false;
     }
 
-    const session = this.getCurrentSession();
+    const session = await this.getCurrentSession();
     if (!session) {
       console.error(`${LOG_PREFIX} No session for origin:`, this.currentOrigin);
       return false;

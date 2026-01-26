@@ -50,12 +50,12 @@ export function useAuth(options: UseAuthOptions = {}): UseAuthReturn {
 
   const query = useQuery({
     queryKey: ['auth', origin ?? 'global', apiKey ?? 'default'],
-    queryFn: () => {
+    queryFn: async () => {
       // Get global accounts
       const allAccounts = Account.getStoredAccounts(apiKey);
 
       // Get session state if origin provided
-      const session = origin ? sessionManager.getSession(origin) : null;
+      const session = origin ? await sessionManager.getSession(origin) : null;
       const authState = session?.authState ?? null;
 
       return {

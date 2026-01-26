@@ -228,7 +228,7 @@ export default function KeysJawIdApp() {
       }
 
       // Check for existing session
-      const existingSession = cryptoHandler.getSession(origin);
+      const existingSession = await cryptoHandler.getSession(origin);
 
       // For pure key exchange handshake (method: 'handshake')
       if (method === 'handshake') {
@@ -249,7 +249,7 @@ export default function KeysJawIdApp() {
         // Always create a fresh session with new keys for each connection request
         if (existingSession) {
           console.log('🗑️ Deleting old session for:', origin);
-          cryptoHandler.getSessionManager().deleteSession(origin);
+          await cryptoHandler.getSessionManager().deleteSession(origin);
         }
 
         // Create new session with fresh keys (account will be set when user approves)
@@ -260,7 +260,7 @@ export default function KeysJawIdApp() {
         });
 
         // Reload session after creation
-        cryptoHandler.loadSession(origin);
+        await cryptoHandler.loadSession(origin);
 
         // Set up pending request (for both new connections and SIWE)
         setPendingRequest({
@@ -303,7 +303,7 @@ export default function KeysJawIdApp() {
       // Update React state with current origin (needed for useAuth hook)
       setCurrentOrigin(origin);
 
-      const session = cryptoHandler.loadSession(origin);
+      const session = await cryptoHandler.loadSession(origin);
 
       if (!session) {
         console.error('❌ No session found for origin:', origin);
@@ -888,7 +888,7 @@ export default function KeysJawIdApp() {
                       username: newestAccount.username,
                       publicKey: newestAccount.publicKey as `0x${string}`,
                     };
-                    cryptoHandler.updateAuthState(authState);
+                    await cryptoHandler.updateAuthState(authState);
                     console.log('✅ Session auth state updated for origin:', currentOrigin);
                   }
 
@@ -976,7 +976,7 @@ export default function KeysJawIdApp() {
                       username: authenticatedAccount.username,
                       publicKey: authenticatedAccount.publicKey as `0x${string}`,
                     };
-                    cryptoHandler.updateAuthState(authState);
+                    await cryptoHandler.updateAuthState(authState);
                     console.log('✅ Session auth state updated for origin:', currentOrigin, 'with credentialId:', authenticatedAccount.credentialId);
                   }
 

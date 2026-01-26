@@ -7,6 +7,8 @@
  * - Associated account
  * - Session metadata
  *
+ * Origins are hashed before being used as keys for privacy.
+ *
  * This replaces the global authState approach, allowing multiple apps to
  * connect simultaneously with different accounts and isolated encryption keys.
  */
@@ -39,11 +41,9 @@ export interface SessionAuthState {
 
 /**
  * Complete session data for a connected app.
+ * Note: origin is NOT stored here - a hash of it is used as the key in StoredSessions.
  */
 export interface AppSession {
-  /** App origin (e.g., "https://app.example.com") */
-  origin: string;
-
   /** Popup's private key for this session (hex encoded) */
   popupPrivateKey: string;
   /** Popup's public key for this session (hex encoded) */
@@ -62,7 +62,7 @@ export interface AppSession {
 
 /**
  * Serialized session data for storage.
- * Same as AppSession but explicitly typed for storage operations.
+ * Keys are hashed origins.
  */
 type StoredSessions = Record<string, AppSession>;
 
@@ -91,6 +91,39 @@ export interface SessionResult<T> {
 
 const STORAGE_KEY = 'jaw:sessions:apps';
 const LOG_PREFIX = '[SessionManager]';
+
+// In-memory cache for hashed origins to avoid re-computing
+const originHashCache = new Map<string, string>();
+
+// ============================================================================
+// Hash Helper
+// ============================================================================
+
+/**
+ * Hashes an origin using SHA-256 for privacy.
+ * Results are cached in memory for performance.
+ *
+ * @param origin - The origin URL to hash
+ * @returns The hex-encoded SHA-256 hash
+ */
+async function hashOrigin(origin: string): Promise<string> {
+  // Check cache first
+  const cached = originHashCache.get(origin);
+  if (cached) {
+    return cached;
+  }
+
+  // Compute hash
+  const encoder = new TextEncoder();
+  const data = encoder.encode(origin);
+  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashArray = Array.from(new Uint8Array(hashBuffer));
+  const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+
+  // Cache and return
+  originHashCache.set(origin, hash);
+  return hash;
+}
 
 // ============================================================================
 // Storage Helpers
@@ -211,7 +244,6 @@ function isValidSession(session: unknown): session is AppSession {
   const s = session as Record<string, unknown>;
 
   return (
-    typeof s.origin === 'string' &&
     typeof s.popupPrivateKey === 'string' &&
     typeof s.popupPublicKey === 'string' &&
     typeof s.peerPublicKey === 'string' &&
@@ -233,6 +265,7 @@ function isValidSession(session: unknown): session is AppSession {
  * - Per-app account management
  * - Automatic key pair generation
  * - Session persistence in localStorage
+ * - Origin hashing for privacy
  *
  * @example
  * ```typescript
@@ -246,7 +279,7 @@ function isValidSession(session: unknown): session is AppSession {
  * });
  *
  * // Get existing session
- * const existing = manager.getSession('https://app.example.com');
+ * const existing = await manager.getSession('https://app.example.com');
  *
  * // Derive shared secret for encryption
  * const secret = await manager.deriveSharedSecret('https://app.example.com');
@@ -276,11 +309,11 @@ export class SessionManager {
       const validSessions: StoredSessions = {};
       let hasInvalid = false;
 
-      for (const [origin, session] of Object.entries(this.cache)) {
+      for (const [hashedOrigin, session] of Object.entries(this.cache)) {
         if (isValidSession(session)) {
-          validSessions[origin] = session;
+          validSessions[hashedOrigin] = session;
         } else {
-          console.warn(`${LOG_PREFIX} Removing invalid session for:`, origin);
+          console.warn(`${LOG_PREFIX} Removing invalid session for hash:`, hashedOrigin.slice(0, 8) + '...');
           hasInvalid = true;
         }
       }
@@ -318,8 +351,9 @@ export class SessionManager {
 
   /**
    * Gets all stored sessions.
+   * Note: Keys are hashed origins, not plain origins.
    *
-   * @returns Record of origin -> session mappings
+   * @returns Record of hashedOrigin -> session mappings
    */
   getAllSessions(): StoredSessions {
     return { ...this.ensureCache() };
@@ -331,11 +365,12 @@ export class SessionManager {
    * @param origin - The app origin (e.g., "https://app.example.com")
    * @returns The session if found, null otherwise
    */
-  getSession(origin: string): AppSession | null {
+  async getSession(origin: string): Promise<AppSession | null> {
     if (!origin) return null;
 
+    const hashedOrigin = await hashOrigin(origin);
     const sessions = this.ensureCache();
-    const session = sessions[origin];
+    const session = sessions[hashedOrigin];
 
     if (session && isValidSession(session)) {
       return { ...session };
@@ -373,6 +408,9 @@ export class SessionManager {
 
     console.log(`${LOG_PREFIX} Creating session for:`, origin, account ? `with account ${account.address}` : '(pending account)');
 
+    // Hash the origin for storage
+    const hashedOrigin = await hashOrigin(origin);
+
     // Generate unique key pair for this session
     const keyPair = await generateKeyPair();
     const popupPrivateKey = await exportKeyToHexString('private', keyPair.privateKey);
@@ -380,7 +418,6 @@ export class SessionManager {
 
     const now = Date.now();
     const session: AppSession = {
-      origin,
       popupPrivateKey,
       popupPublicKey,
       peerPublicKey,
@@ -389,9 +426,9 @@ export class SessionManager {
       lastUsedAt: now,
     };
 
-    // Save to cache and storage
+    // Save to cache and storage using hashed origin
     const sessions = this.ensureCache();
-    sessions[origin] = session;
+    sessions[hashedOrigin] = session;
     this.cache = sessions;
 
     if (!this.saveToStorage()) {
@@ -409,17 +446,18 @@ export class SessionManager {
    * @param updates - Partial session data to update
    * @returns The updated session, or null if session doesn't exist
    */
-  updateSession(origin: string, updates: Partial<Omit<AppSession, 'origin' | 'createdAt'>>): AppSession | null {
-    const session = this.getSession(origin);
+  async updateSession(origin: string, updates: Partial<Omit<AppSession, 'createdAt'>>): Promise<AppSession | null> {
+    const session = await this.getSession(origin);
     if (!session) {
       console.warn(`${LOG_PREFIX} Cannot update non-existent session:`, origin);
       return null;
     }
 
+    const hashedOrigin = await hashOrigin(origin);
+
     const updatedSession: AppSession = {
       ...session,
       ...updates,
-      origin, // Ensure origin cannot be changed
       createdAt: session.createdAt, // Ensure createdAt cannot be changed
       lastUsedAt: Date.now(),
     };
@@ -432,7 +470,7 @@ export class SessionManager {
 
     // Save to cache and storage
     const sessions = this.ensureCache();
-    sessions[origin] = updatedSession;
+    sessions[hashedOrigin] = updatedSession;
     this.cache = sessions;
     this.saveToStorage();
 
@@ -446,14 +484,15 @@ export class SessionManager {
    * @param origin - The app origin to delete
    * @returns true if session was deleted, false if it didn't exist
    */
-  deleteSession(origin: string): boolean {
+  async deleteSession(origin: string): Promise<boolean> {
+    const hashedOrigin = await hashOrigin(origin);
     const sessions = this.ensureCache();
 
-    if (!sessions[origin]) {
+    if (!sessions[hashedOrigin]) {
       return false;
     }
 
-    delete sessions[origin];
+    delete sessions[hashedOrigin];
     this.cache = sessions;
     this.saveToStorage();
 
@@ -468,6 +507,7 @@ export class SessionManager {
    */
   clearAllSessions(): void {
     this.cache = {};
+    originHashCache.clear(); // Also clear the hash cache
     removeFromStorage(STORAGE_KEY);
     console.log(`${LOG_PREFIX} All sessions cleared`);
   }
@@ -487,7 +527,7 @@ export class SessionManager {
    * @returns The updated session, or null if session doesn't exist
    */
   async updatePeerKey(origin: string, newPeerPublicKey: string): Promise<AppSession | null> {
-    const session = this.getSession(origin);
+    const session = await this.getSession(origin);
     if (!session) {
       console.warn(`${LOG_PREFIX} Cannot update peer key for non-existent session:`, origin);
       return null;
@@ -521,7 +561,7 @@ export class SessionManager {
    * @param account - The new account data
    * @returns The updated session, or null if session doesn't exist
    */
-  updateSessionAuthState(origin: string, authState: SessionAuthState): AppSession | null {
+  async updateSessionAuthState(origin: string, authState: SessionAuthState): Promise<AppSession | null> {
     if (!isValidSessionAuthState(authState)) {
       console.error(`${LOG_PREFIX} Invalid authState data`);
       return null;
@@ -538,10 +578,10 @@ export class SessionManager {
    *
    * @param origin - The app origin
    */
-  touchSession(origin: string): void {
-    const session = this.getSession(origin);
+  async touchSession(origin: string): Promise<void> {
+    const session = await this.getSession(origin);
     if (session) {
-      this.updateSession(origin, {});
+      await this.updateSession(origin, {});
     }
   }
 
@@ -555,8 +595,8 @@ export class SessionManager {
    * @param origin - The app origin
    * @returns true if the origin has a valid session with authState
    */
-  isAuthenticated(origin: string): boolean {
-    const session = this.getSession(origin);
+  async isAuthenticated(origin: string): Promise<boolean> {
+    const session = await this.getSession(origin);
     return session !== null && isValidSessionAuthState(session.authState);
   }
 
@@ -566,15 +606,16 @@ export class SessionManager {
    * @param origin - The app origin
    * @returns The authState if session exists, null otherwise
    */
-  getAuthStateForOrigin(origin: string): SessionAuthState | null {
-    const session = this.getSession(origin);
+  async getAuthStateForOrigin(origin: string): Promise<SessionAuthState | null> {
+    const session = await this.getSession(origin);
     return session?.authState || null;
   }
 
   /**
    * Gets all connected app origins.
+   * Note: Returns hashed origins since we don't store plain origins.
    *
-   * @returns Array of origin strings
+   * @returns Array of hashed origin strings
    */
   getConnectedOrigins(): string[] {
     return Object.keys(this.ensureCache());
@@ -602,7 +643,7 @@ export class SessionManager {
    * @returns The derived shared secret, or null if session doesn't exist
    */
   async deriveSharedSecret(origin: string): Promise<CryptoKey | null> {
-    const session = this.getSession(origin);
+    const session = await this.getSession(origin);
     if (!session) {
       console.warn(`${LOG_PREFIX} Cannot derive secret for non-existent session:`, origin);
       return null;
@@ -626,8 +667,8 @@ export class SessionManager {
    * @param origin - The app origin
    * @returns The popup's public key (hex encoded), or null if session doesn't exist
    */
-  getPopupPublicKey(origin: string): string | null {
-    const session = this.getSession(origin);
+  async getPopupPublicKey(origin: string): Promise<string | null> {
+    const session = await this.getSession(origin);
     return session?.popupPublicKey || null;
   }
 
@@ -637,12 +678,13 @@ export class SessionManager {
 
   /**
    * Gets session statistics for debugging.
+   * Note: Origins are hashed, so only hashes are returned.
    *
    * @returns Session statistics object
    */
   getStats(): {
     totalSessions: number;
-    origins: string[];
+    hashedOrigins: string[];
     oldestSession: number | null;
     newestSession: number | null;
   } {
@@ -652,7 +694,7 @@ export class SessionManager {
     if (entries.length === 0) {
       return {
         totalSessions: 0,
-        origins: [],
+        hashedOrigins: [],
         oldestSession: null,
         newestSession: null,
       };
@@ -662,7 +704,7 @@ export class SessionManager {
 
     return {
       totalSessions: entries.length,
-      origins: Object.keys(sessions),
+      hashedOrigins: Object.keys(sessions),
       oldestSession: Math.min(...timestamps),
       newestSession: Math.max(...timestamps),
     };
