@@ -409,7 +409,7 @@ export default function KeysJawIdApp() {
   };
 
   // ==========================================
-  // SDK MODE - When opened by Coinbase SDK
+  // SDK MODE
   // ==========================================
   if (isSDKMode) {
 
