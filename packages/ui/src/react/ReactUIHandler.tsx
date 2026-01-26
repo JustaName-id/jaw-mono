@@ -1416,6 +1416,7 @@ function TransactionDialogWrapper({
       transactionStatus={transactionStatus}
       networkName={networkName}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
+      apiKey={apiKey}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -1730,6 +1731,7 @@ function SendTransactionDialogWrapper({
       transactionStatus={transactionStatus}
       networkName={networkName}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
+      apiKey={apiKey}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
