@@ -64,6 +64,8 @@ export interface JawProviderPreference {
     showTestnets?: boolean;
     /** UI handler for app-specific mode (required when mode is Mode.AppSpecific) */
     uiHandler?: UIHandler;
+    /** Session cache TTL in seconds. Default: 86400 (24 hours). Set to 0 to disable caching. */
+    authTTL?: number;
 }
 
 export type ProviderEventCallback = ProviderInterface['emit'];

@@ -104,7 +104,12 @@ const createChainSlice: StateCreator<StoreState, [], [], ChainSlice> = () => {
     get: () => sdkstore.getState().account,
     set: (account: Partial<Account>) => {
       sdkstore.setState((state) => ({
-        account: { ...state.account, ...account },
+        account: {
+          ...state.account,
+          ...account,
+          // Set connectedAt when accounts are provided (new connection)
+          ...(account.accounts && { connectedAt: Date.now() }),
+        },
       }));
     },
     clear: () => {
