@@ -47,12 +47,12 @@ describe('SignerUtils', () => {
       expect(normalizeAuthTTL(86400)).toBe(86400);
     });
 
-    it('should return Infinity for Infinity', () => {
-      expect(normalizeAuthTTL(Infinity)).toBe(Infinity);
+    it('should return DEFAULT_AUTH_TTL for Infinity', () => {
+      expect(normalizeAuthTTL(Infinity)).toBe(DEFAULT_AUTH_TTL);
     });
 
-    it('should return 0 for -Infinity', () => {
-      expect(normalizeAuthTTL(-Infinity)).toBe(0);
+    it('should return DEFAULT_AUTH_TTL for -Infinity', () => {
+      expect(normalizeAuthTTL(-Infinity)).toBe(DEFAULT_AUTH_TTL);
     });
   });
 
@@ -214,7 +214,7 @@ describe('SignerUtils', () => {
         expect(store.account.get().accounts).toBeUndefined();
       });
 
-      it('should never expire when authTTL is Infinity', async () => {
+      it('should use DEFAULT_AUTH_TTL when authTTL is Infinity', async () => {
         vi.useFakeTimers();
         const now = Date.now();
         vi.setSystemTime(now);
@@ -222,14 +222,15 @@ describe('SignerUtils', () => {
         store.config.set({ authTTL: Infinity });
         store.account.set({
           accounts: ['0x1234567890123456789012345678901234567890'],
+          connectedAt: now,
         });
 
-        // Advance time by 100 years
-        vi.setSystemTime(now + (100 * 365 * 24 * 60 * 60 * 1000));
+        // Advance time past DEFAULT_AUTH_TTL (24 hours)
+        vi.setSystemTime(now + (DEFAULT_AUTH_TTL * 1000) + 1000);
 
         const result = await getCachedWalletConnectResponse();
-        expect(result).not.toBeNull();
-        expect(result?.accounts[0].address).toBe('0x1234567890123456789012345678901234567890');
+        expect(result).toBeNull();
+        expect(store.account.get().accounts).toBeUndefined();
       });
     });
 

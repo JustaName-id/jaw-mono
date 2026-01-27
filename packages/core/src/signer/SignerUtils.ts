@@ -93,7 +93,7 @@ export const DEFAULT_AUTH_TTL = 86400;
  * - undefined/null → DEFAULT_AUTH_TTL
  * - NaN → 0 (immediate expiration)
  * - negative → 0 (immediate expiration)
- * - Infinity → Infinity (never expires)
+ * - Infinity → DEFAULT_AUTH_TTL
  * - positive number → used as-is
  */
 export function normalizeAuthTTL(authTTL: number | undefined): number {
@@ -102,6 +102,10 @@ export function normalizeAuthTTL(authTTL: number | undefined): number {
     }
     if (Number.isNaN(authTTL)) {
         return 0;
+    }
+    if (!Number.isFinite(authTTL)) {
+        // Infinity or -Infinity → use default TTL
+        return DEFAULT_AUTH_TTL;
     }
     return Math.max(0, authTTL);
 }
@@ -128,14 +132,11 @@ export async function getCachedWalletConnectResponse(): Promise<WalletConnectRes
             return null;
         }
 
-        // Infinity TTL means never expires
-        if (authTTL !== Infinity) {
-            const expiresAt = connectedAt + (authTTL * 1000);
-            if (Date.now() > expiresAt) {
-                // Cache has expired, clear account state and return null
-                store.account.clear();
-                return null;
-            }
+        const expiresAt = connectedAt + (authTTL * 1000);
+        if (Date.now() > expiresAt) {
+            // Cache has expired, clear account state and return null
+            store.account.clear();
+            return null;
         }
     }
 
