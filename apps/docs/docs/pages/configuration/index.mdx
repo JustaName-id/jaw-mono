@@ -16,6 +16,7 @@ const connector = jaw({
   appLogoUrl: 'https://my-dapp.com/logo.png',
   defaultChainId: 1,
   ens: 'myapp.eth',
+  authTTL: 86400, // 24 hours (default)
   preference: {
     showTestnets: true,
   },
@@ -36,6 +37,7 @@ const jaw = JAW.create({
   appLogoUrl: 'https://my-dapp.com/logo.png',
   defaultChainId: 1,
   ens: 'myapp.eth',
+  authTTL: 86400, // 24 hours (default)
   preference: {
     showTestnets: true,
   },
@@ -59,6 +61,7 @@ const jaw = JAW.create({
 | [defaultChainId](/configuration/defaultChainId) | `number` | No | Default blockchain network |
 | [preference](/configuration/mode) | `object` | No | Advanced SDK behavior options |
 | [paymasters](/configuration/paymasters) | `Record<number, { url: string; context?: Record<string, unknown> }>` | No | Custom paymaster configuration per chain |
+| authTTL | `number` | No | Session cache TTL in seconds. Default: `86400` (24 hours). Set to `0` to disable caching. |
 
 
 ## Preference Options
