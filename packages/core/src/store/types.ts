@@ -65,8 +65,6 @@ export type Config = {
     apiKey?: string;
     /** Mapping of chain IDs to paymaster configuration */
     paymasters?: Record<number, PaymasterConfig>;
-    /** Session cache TTL in seconds. Default: 86400 (24 hours) */
-    authTTL?: number;
   };
   
 

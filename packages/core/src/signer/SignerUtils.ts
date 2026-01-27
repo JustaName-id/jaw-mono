@@ -124,7 +124,7 @@ export async function getCachedWalletConnectResponse(): Promise<WalletConnectRes
     // Use !== undefined to handle connectedAt = 0 (epoch) as valid
     if (connectedAt !== undefined) {
         const config = store.config.get();
-        const authTTL = normalizeAuthTTL(config.authTTL);
+        const authTTL = normalizeAuthTTL(config.preference?.authTTL);
 
         // TTL of 0 means cache is disabled - always require re-auth
         if (authTTL === 0) {

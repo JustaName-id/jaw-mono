@@ -11,8 +11,6 @@ export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   paymasters?: Record<number, PaymasterConfig>;
   /** Used to issue subnames */
   ens?: string;
-  /** Session cache TTL in seconds. Default: 86400 (24 hours) */
-  authTTL?: number;
 };
 
 const DEFAULT_PREFERENCE: JawProviderPreference = {
@@ -73,7 +71,6 @@ export function create(params: CreateJAWSDKOptions) {
     preference: options.preference,
     paymasters: options.paymasters,
     apiKey: params.apiKey,
-    authTTL: params.authTTL,
   }
   store.config.set(storedOptions);
 

@@ -121,7 +121,7 @@ describe('SignerUtils', () => {
         vi.setSystemTime(now);
 
         const customTTL = 3600; // 1 hour
-        store.config.set({ authTTL: customTTL });
+        store.config.set({ preference: { authTTL: customTTL } });
         store.account.set({
           accounts: ['0x1234567890123456789012345678901234567890'],
         });
@@ -138,7 +138,7 @@ describe('SignerUtils', () => {
         vi.setSystemTime(now);
 
         const customTTL = 3600; // 1 hour
-        store.config.set({ authTTL: customTTL });
+        store.config.set({ preference: { authTTL: customTTL } });
         store.account.set({
           accounts: ['0x1234567890123456789012345678901234567890'],
         });
@@ -155,7 +155,7 @@ describe('SignerUtils', () => {
         const now = Date.now();
         vi.setSystemTime(now);
 
-        store.config.set({ authTTL: 0 });
+        store.config.set({ preference: { authTTL: 0 } });
         store.account.set({
           accounts: ['0x1234567890123456789012345678901234567890'],
           connectedAt: now,
@@ -172,7 +172,7 @@ describe('SignerUtils', () => {
         const now = Date.now();
         vi.setSystemTime(now);
 
-        store.config.set({ authTTL: -100 });
+        store.config.set({ preference: { authTTL: -100 } });
         store.account.set({
           accounts: ['0x1234567890123456789012345678901234567890'],
           connectedAt: now,
@@ -188,7 +188,7 @@ describe('SignerUtils', () => {
         const now = Date.now();
         vi.setSystemTime(now);
 
-        store.config.set({ authTTL: -999999 });
+        store.config.set({ preference: { authTTL: -999999 } });
         store.account.set({
           accounts: ['0x1234567890123456789012345678901234567890'],
           connectedAt: now,
@@ -203,7 +203,7 @@ describe('SignerUtils', () => {
         const now = Date.now();
         vi.setSystemTime(now);
 
-        store.config.set({ authTTL: NaN });
+        store.config.set({ preference: { authTTL: NaN } });
         store.account.set({
           accounts: ['0x1234567890123456789012345678901234567890'],
           connectedAt: now,
@@ -219,7 +219,7 @@ describe('SignerUtils', () => {
         const now = Date.now();
         vi.setSystemTime(now);
 
-        store.config.set({ authTTL: Infinity });
+        store.config.set({ preference: { authTTL: Infinity } });
         store.account.set({
           accounts: ['0x1234567890123456789012345678901234567890'],
           connectedAt: now,
