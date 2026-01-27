@@ -88,20 +88,39 @@ export function assertParamsChainId(params: unknown): asserts params is [
 /** Default auth TTL: 24 hours in seconds */
 export const DEFAULT_AUTH_TTL = 86400;
 
+/**
+ * Normalizes authTTL to handle edge cases:
+ * - undefined/null → DEFAULT_AUTH_TTL
+ * - NaN → 0 (immediate expiration)
+ * - negative → 0 (immediate expiration)
+ * - Infinity → Infinity (never expires)
+ * - positive number → used as-is
+ */
+export function normalizeAuthTTL(authTTL: number | undefined): number {
+    if (authTTL === undefined || authTTL === null) {
+        return DEFAULT_AUTH_TTL;
+    }
+    if (Number.isNaN(authTTL)) {
+        return 0;
+    }
+    return Math.max(0, authTTL);
+}
+
 export async function getCachedWalletConnectResponse(): Promise<WalletConnectResponse | null> {
     const accountState = store.account.get();
     const accounts = accountState.accounts;
 
-    if (!accounts) {
+    // No accounts or empty accounts array
+    if (!accounts || accounts.length === 0) {
         return null;
     }
 
     // Check if the cache has expired
     const connectedAt = accountState.connectedAt;
-    if (connectedAt) {
+    // Use !== undefined to handle connectedAt = 0 (epoch) as valid
+    if (connectedAt !== undefined) {
         const config = store.config.get();
-        // Clamp negative values to 0 (immediate expiration)
-        const authTTL = Math.max(0, config.authTTL ?? DEFAULT_AUTH_TTL);
+        const authTTL = normalizeAuthTTL(config.authTTL);
 
         // TTL of 0 means cache is disabled - always require re-auth
         if (authTTL === 0) {
@@ -109,11 +128,14 @@ export async function getCachedWalletConnectResponse(): Promise<WalletConnectRes
             return null;
         }
 
-        const expiresAt = connectedAt + (authTTL * 1000);
-        if (Date.now() > expiresAt) {
-            // Cache has expired, clear account state and return null
-            store.account.clear();
-            return null;
+        // Infinity TTL means never expires
+        if (authTTL !== Infinity) {
+            const expiresAt = connectedAt + (authTTL * 1000);
+            if (Date.now() > expiresAt) {
+                // Cache has expired, clear account state and return null
+                store.account.clear();
+                return null;
+            }
         }
     }
 

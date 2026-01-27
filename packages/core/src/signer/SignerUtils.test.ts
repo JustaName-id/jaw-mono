@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { getCachedWalletConnectResponse, DEFAULT_AUTH_TTL } from './SignerUtils.js';
+import { getCachedWalletConnectResponse, DEFAULT_AUTH_TTL, normalizeAuthTTL } from './SignerUtils.js';
 import { store, sdkstore } from '../store/index.js';
 import { SDK_VERSION } from '../sdk-info.js';
 
@@ -20,6 +20,40 @@ describe('SignerUtils', () => {
 
   afterEach(() => {
     vi.useRealTimers();
+  });
+
+  describe('normalizeAuthTTL', () => {
+    it('should return DEFAULT_AUTH_TTL for undefined', () => {
+      expect(normalizeAuthTTL(undefined)).toBe(DEFAULT_AUTH_TTL);
+    });
+
+    it('should return 0 for NaN', () => {
+      expect(normalizeAuthTTL(NaN)).toBe(0);
+    });
+
+    it('should return 0 for negative numbers', () => {
+      expect(normalizeAuthTTL(-1)).toBe(0);
+      expect(normalizeAuthTTL(-100)).toBe(0);
+      expect(normalizeAuthTTL(-999999)).toBe(0);
+    });
+
+    it('should return 0 for zero', () => {
+      expect(normalizeAuthTTL(0)).toBe(0);
+    });
+
+    it('should return the value for positive numbers', () => {
+      expect(normalizeAuthTTL(1)).toBe(1);
+      expect(normalizeAuthTTL(3600)).toBe(3600);
+      expect(normalizeAuthTTL(86400)).toBe(86400);
+    });
+
+    it('should return Infinity for Infinity', () => {
+      expect(normalizeAuthTTL(Infinity)).toBe(Infinity);
+    });
+
+    it('should return 0 for -Infinity', () => {
+      expect(normalizeAuthTTL(-Infinity)).toBe(0);
+    });
   });
 
   describe('getCachedWalletConnectResponse', () => {
@@ -159,6 +193,96 @@ describe('SignerUtils', () => {
           accounts: ['0x1234567890123456789012345678901234567890'],
           connectedAt: now,
         });
+
+        const result = await getCachedWalletConnectResponse();
+        expect(result).toBeNull();
+      });
+
+      it('should treat NaN authTTL as 0 (immediate expiration)', async () => {
+        vi.useFakeTimers();
+        const now = Date.now();
+        vi.setSystemTime(now);
+
+        store.config.set({ authTTL: NaN });
+        store.account.set({
+          accounts: ['0x1234567890123456789012345678901234567890'],
+          connectedAt: now,
+        });
+
+        const result = await getCachedWalletConnectResponse();
+        expect(result).toBeNull();
+        expect(store.account.get().accounts).toBeUndefined();
+      });
+
+      it('should never expire when authTTL is Infinity', async () => {
+        vi.useFakeTimers();
+        const now = Date.now();
+        vi.setSystemTime(now);
+
+        store.config.set({ authTTL: Infinity });
+        store.account.set({
+          accounts: ['0x1234567890123456789012345678901234567890'],
+        });
+
+        // Advance time by 100 years
+        vi.setSystemTime(now + (100 * 365 * 24 * 60 * 60 * 1000));
+
+        const result = await getCachedWalletConnectResponse();
+        expect(result).not.toBeNull();
+        expect(result?.accounts[0].address).toBe('0x1234567890123456789012345678901234567890');
+      });
+    });
+
+    describe('connectedAt edge cases', () => {
+      it('should handle connectedAt = 0 (epoch timestamp) as valid', async () => {
+        vi.useFakeTimers();
+        // Set current time to 1 hour after epoch
+        const oneHour = 60 * 60 * 1000;
+        vi.setSystemTime(oneHour);
+
+        // Manually set connectedAt to 0 (epoch) by directly manipulating store
+        sdkstore.setState((state) => ({
+          ...state,
+          account: {
+            accounts: ['0x1234567890123456789012345678901234567890'],
+            connectedAt: 0,
+          },
+        }));
+
+        // With default TTL of 24 hours, session should still be valid
+        const result = await getCachedWalletConnectResponse();
+        expect(result).not.toBeNull();
+      });
+
+      it('should expire session with connectedAt = 0 after TTL passes', async () => {
+        vi.useFakeTimers();
+        // Set current time to 25 hours after epoch (past default 24h TTL)
+        const twentyFiveHours = 25 * 60 * 60 * 1000;
+        vi.setSystemTime(twentyFiveHours);
+
+        // Manually set connectedAt to 0 (epoch)
+        sdkstore.setState((state) => ({
+          ...state,
+          account: {
+            accounts: ['0x1234567890123456789012345678901234567890'],
+            connectedAt: 0,
+          },
+        }));
+
+        const result = await getCachedWalletConnectResponse();
+        expect(result).toBeNull();
+      });
+    });
+
+    describe('empty accounts edge cases', () => {
+      it('should return null for empty accounts array', async () => {
+        sdkstore.setState((state) => ({
+          ...state,
+          account: {
+            accounts: [],
+            connectedAt: Date.now(),
+          },
+        }));
 
         const result = await getCachedWalletConnectResponse();
         expect(result).toBeNull();
