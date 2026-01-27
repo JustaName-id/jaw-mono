@@ -131,3 +131,51 @@ export function getAssetsQueryKey<config extends Config>(
   ] as const;
 }
 
+// ============================================================================
+// getCallsHistoryQueryKey
+// ============================================================================
+
+export namespace getCallsHistoryQueryKey {
+  export type Parameters<config extends Config = Config> = {
+    address?: Address;
+    chainId?: number;
+    connector?: Connector;
+    index?: number;
+    limit?: number;
+    sort?: 'asc' | 'desc';
+  };
+
+  export type Value<config extends Config = Config> = readonly [
+    'callsHistory',
+    {
+      address: Address | undefined;
+      chainId: number | undefined;
+      connectorUid: string | undefined;
+      index: number | undefined;
+      limit: number | undefined;
+      sort: 'asc' | 'desc' | undefined;
+    },
+  ];
+}
+
+/**
+ * Creates a query key for getCallsHistory.
+ * Used by useCallsHistory hook and for cache invalidation.
+ */
+export function getCallsHistoryQueryKey<config extends Config>(
+  parameters: getCallsHistoryQueryKey.Parameters<config>,
+): getCallsHistoryQueryKey.Value<config> {
+  const { address, chainId, connector, index, limit, sort } = parameters;
+  return [
+    'callsHistory',
+    {
+      address,
+      chainId,
+      connectorUid: connector?.uid,
+      index,
+      limit,
+      sort,
+    },
+  ] as const;
+}
+

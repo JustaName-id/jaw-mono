@@ -31,8 +31,9 @@ import {
   getAssets,
   getCapabilities,
   sign,
+  getCallsHistory,
 } from './core.js';
-import { getPermissionsQueryKey, getAssetsQueryKey, getCapabilitiesQueryKey } from './query.js';
+import { getPermissionsQueryKey, getAssetsQueryKey, getCapabilitiesQueryKey, getCallsHistoryQueryKey } from './query.js';
 
 // ============================================================================
 // useConnect
@@ -789,5 +790,129 @@ export function useSign<
     },
     mutationKey: ['sign'],
   }) as useSign.ReturnType<config, context>;
+}
+
+// ============================================================================
+// useCallsHistory
+// ============================================================================
+
+export namespace useCallsHistory {
+  export type Parameters<
+    config extends Config = Config,
+    selectData = getCallsHistory.ReturnType,
+  > = getCallsHistory.Parameters<config> & {
+    config?: config;
+    query?:
+      | Omit<
+          UseQueryParameters<
+            getCallsHistory.ReturnType,
+            getCallsHistory.ErrorType,
+            selectData,
+            getCallsHistoryQueryKey.Value<config>
+          >,
+          'gcTime' | 'staleTime'
+        >
+      | undefined;
+  };
+
+  export type ReturnType<selectData = getCallsHistory.ReturnType> =
+    UseQueryReturnType<selectData, getCallsHistory.ErrorType>;
+}
+
+/**
+ * Hook to get the calls history for an account.
+ * Can be called without a connected account if address is provided.
+ *
+ * @example
+ * ```tsx
+ * // Get calls history for connected account
+ * const { data: history, isLoading } = useCallsHistory();
+ *
+ * // With specific address (works even when not connected)
+ * const { data } = useCallsHistory({ address: '0x...' });
+ *
+ * // With pagination
+ * const { data } = useCallsHistory({
+ *   address: '0x...',
+ *   limit: 10,
+ *   sort: 'desc',
+ * });
+ * ```
+ */
+export function useCallsHistory<
+  config extends Config = ResolvedRegister['config'],
+  selectData = getCallsHistory.ReturnType,
+>(
+  parameters: useCallsHistory.Parameters<config, selectData> = {},
+): useCallsHistory.ReturnType<selectData> {
+  const { query = {}, ...rest } = parameters;
+
+  const config = useConfig(rest as { config?: Config });
+  const chainId = useChainId({ config });
+  const { address: connectedAddress, connector, status } = useAccount({ config });
+  const connectors = useConnectors({ config });
+  // Use account connector if connected, otherwise find JAW connector from available connectors
+  const jawConnector = connectors.find((c) => c.id === 'jaw');
+  const activeConnector = parameters.connector ?? connector ?? jawConnector;
+
+  // Use explicit address if provided, otherwise fall back to connected address
+  const targetAddress = parameters.address ?? connectedAddress;
+
+  // Enable query if:
+  // 1. Connected (existing behavior), OR
+  // 2. Explicit address provided AND connector available (disconnected query)
+  const isConnected = status === 'connected' || (status === 'reconnecting' && activeConnector?.getProvider);
+  const canQueryDisconnected = Boolean(targetAddress && activeConnector?.getProvider);
+
+  const enabled = Boolean(
+    (isConnected || canQueryDisconnected) && (query.enabled ?? true),
+  );
+
+  const queryKey = useMemo(
+    () =>
+      getCallsHistoryQueryKey({
+        address: targetAddress,
+        chainId: parameters.chainId ?? chainId,
+        connector: activeConnector,
+        index: parameters.index,
+        limit: parameters.limit,
+        sort: parameters.sort,
+      }),
+    [targetAddress, chainId, parameters.chainId, activeConnector, parameters.index, parameters.limit, parameters.sort],
+  );
+
+  return useQuery({
+    ...query,
+    enabled,
+    gcTime: 0,
+    queryFn: activeConnector
+      ? async () => {
+          // When connected, use the standard flow
+          if (isConnected) {
+            return getCallsHistory(config, {
+              ...rest,
+              address: targetAddress,
+              connector: activeConnector,
+            });
+          }
+          // When disconnected but have address, make direct provider call
+          const provider = (await activeConnector.getProvider?.()) as EIP1193Provider | undefined;
+          if (!provider) throw new Error('Provider not available');
+          if (!targetAddress) throw new Error('Address is required when not connected');
+
+          return provider.request({
+            method: 'wallet_getCallsHistory' as never,
+            params: [{
+              address: targetAddress,
+              index: parameters.index,
+              limit: parameters.limit,
+              sort: parameters.sort,
+            }] as never,
+          }) as Promise<getCallsHistory.ReturnType>;
+        }
+      : skipToken,
+    queryKey,
+    staleTime: 30_000, // Cache for 30 seconds
+  }) as useCallsHistory.ReturnType<selectData>;
 }
 

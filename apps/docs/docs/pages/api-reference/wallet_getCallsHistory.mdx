@@ -1,0 +1,171 @@
+# wallet_getCallsHistory
+
+Get the history of call bundles for an address.
+
+**Authentication Required:** No
+
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_getCallsHistory',
+  params: [{
+    address: '0x...',
+    limit: 20,
+    sort: 'desc',
+  }],
+});
+```
+
+### Parameters
+
+| Name | Type | Required | Description |
+|------|------|----------|-------------|
+| `address` | `Address` | Yes | The wallet address to fetch call history for |
+| `index` | `number` | No | Index cursor for pagination |
+| `limit` | `number` | No | Maximum bundles to return (default: 20) |
+| `sort` | `'asc' \| 'desc'` | No | Sort direction by index (default: 'desc') |
+
+### Example
+
+```json
+[{
+  "address": "0x1234567890123456789012345678901234567890",
+  "limit": 10,
+  "sort": "desc"
+}]
+```
+
+
+## Response
+
+Returns an array of call history items.
+
+### Example
+
+```json
+[
+  {
+    "id": "0xabc123...",
+    "index": 42,
+    "address": "0x1234567890123456789012345678901234567890",
+    "status": 200,
+    "timestamp": 1706054400,
+    "transactions": [{
+      "chainId": 1,
+      "transactionHash": "0xdef456..."
+    }]
+  },
+  {
+    "id": "0x789xyz...",
+    "index": 41,
+    "address": "0x1234567890123456789012345678901234567890",
+    "status": 100,
+    "timestamp": 1706050800,
+    "transactions": []
+  }
+]
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `id` | `string` | The userOpHash (batch identifier) |
+| `index` | `number` | Auto-incrementing index per address (for cursor pagination) |
+| `address` | `string` | The wallet address |
+| `status` | `number` | Status code (see below) |
+| `timestamp` | `number` | Unix timestamp in seconds |
+| `transactions` | `array` | Transaction details (empty when pending) |
+
+### Status Codes
+
+| Code | Status | Description |
+|------|--------|-------------|
+| 100 | Pending | Not yet on-chain |
+| 200 | Completed | Successfully executed on-chain |
+| 500 | Onchain Revert | Reverted on-chain |
+
+
+## Behavior
+
+- Can be called without authentication
+- Returns call history for any address
+- Results are paginated using `index` cursor
+- Default sort is newest first (`desc`)
+- Useful for displaying transaction history UI
+
+
+## Examples
+
+### Basic Usage
+
+```typescript
+const history = await jaw.provider.request({
+  method: 'wallet_getCallsHistory',
+  params: [{
+    address: '0x1234567890123456789012345678901234567890',
+  }],
+});
+
+console.log(`Found ${history.length} transactions`);
+```
+
+### Paginated Fetch
+
+```typescript
+async function fetchAllHistory(address: string) {
+  const allHistory = [];
+  let lastIndex: number | undefined;
+
+  while (true) {
+    const batch = await jaw.provider.request({
+      method: 'wallet_getCallsHistory',
+      params: [{
+        address,
+        index: lastIndex,
+        limit: 20,
+        sort: 'desc',
+      }],
+    });
+
+    if (batch.length === 0) break;
+
+    allHistory.push(...batch);
+    lastIndex = batch[batch.length - 1].index;
+  }
+
+  return allHistory;
+}
+```
+
+### Display Transaction History
+
+```typescript
+const history = await jaw.provider.request({
+  method: 'wallet_getCallsHistory',
+  params: [{ address: account }],
+});
+
+history.forEach((item) => {
+  const status = item.status === 200 ? 'Success' :
+                 item.status === 100 ? 'Pending' : 'Failed';
+  const date = new Date(item.timestamp * 1000).toLocaleDateString();
+
+  console.log(`${date}: ${status} - ${item.id}`);
+
+  if (item.transactions.length > 0) {
+    item.transactions.forEach((tx) => {
+      console.log(`  Chain ${tx.chainId}: ${tx.transactionHash}`);
+    });
+  }
+});
+```
+
+
+## Related Methods
+
+- [wallet_sendCalls](/api-reference/wallet_sendCalls) - Send atomic batch of calls
+- [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) - Get status of a specific batch
+- [useCallsHistory](/wagmi/useCallsHistory) - React hook for calls history

@@ -92,6 +92,7 @@ export default defineConfig({
           text: 'Hooks',
           collapsed: true,
           items: [
+            { text: 'useCallsHistory()', link: '/wagmi/useCallsHistory' },
             { text: 'useCapabilities()', link: '/wagmi/useCapabilities' },
             { text: 'useConnect()', link: '/wagmi/useConnect' },
             { text: 'useDisconnect()', link: '/wagmi/useDisconnect' },
@@ -116,6 +117,7 @@ export default defineConfig({
         { text: 'eth_sendTransaction', link: '/api-reference/eth_sendTransaction' },
         { text: 'wallet_sendCalls', link: '/api-reference/wallet_sendCalls' },
         { text: 'wallet_getCallsStatus', link: '/api-reference/wallet_getCallsStatus' },
+        { text: 'wallet_getCallsHistory', link: '/api-reference/wallet_getCallsHistory' },
         { text: 'wallet_showCallsStatus', link: '/api-reference/wallet_showCallsStatus' },
         { text: 'personal_sign', link: '/api-reference/personal_sign' },
         { text: 'eth_signTypedData_v4', link: '/api-reference/eth_signTypedData_v4' },

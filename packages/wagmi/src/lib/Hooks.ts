@@ -7,4 +7,5 @@ export {
   useGetAssets,
   useCapabilities,
   useSign,
+  useCallsHistory,
 } from './internal/react.js';

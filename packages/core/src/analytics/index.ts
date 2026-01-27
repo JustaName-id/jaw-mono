@@ -3,6 +3,7 @@ import { restCall } from '../api/index.js';
 import type { IssuanceType } from '../api/routes/index.js';
 
 export type { IssuanceType } from '../api/routes/index.js';
+export { notifyReceiptReceived, type NotifyReceiptParams } from './receiptNotification.js';
 
 /**
  * Parameters for logging account issuance

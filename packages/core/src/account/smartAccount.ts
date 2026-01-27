@@ -30,6 +30,7 @@ import {
     relayPermissionToPermission,
     encodeExecuteBatchWithPermission,
 } from "../rpc/permissions.js";
+import { notifyReceiptReceived } from "../analytics/index.js";
 
 export type FindOwnerIndexParams = {
     /**
@@ -149,7 +150,8 @@ export async function sendTransaction(
     }>,
     chain: Chain,
     paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
+    paymasterContextOverride?: Record<string, unknown>,
+    apiKey?: string
 ): Promise<Hash> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
@@ -166,6 +168,18 @@ export async function sendTransaction(
     const receipt = await bundlerClient.waitForUserOperationReceipt({
         hash: userOpHash
     })
+
+    // Fire-and-forget notification to proxy
+    if (apiKey) {
+        const receiptStatus = (receipt as any).receipt?.status ?? (receipt as any).status;
+        const isSuccess = receiptStatus === '0x1' || receiptStatus === 1 || receiptStatus === 'success';
+        notifyReceiptReceived({
+            userOpHash,
+            transactionHash: receipt.receipt.transactionHash,
+            success: isSuccess,
+            apiKey,
+        });
+    }
 
     return receipt.receipt.transactionHash
 }
