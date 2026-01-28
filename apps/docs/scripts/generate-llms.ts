@@ -38,7 +38,7 @@ function findDistDir(): string {
 // DIST_DIR is resolved lazily inside main() to ensure vocs build has completed
 let DIST_DIR: string
 
-const BASE_URL = 'https://jaw.id/docs'
+const BASE_URL = 'https://docs.jaw.id'
 
 // Domain configuration
 const DOMAINS = {
