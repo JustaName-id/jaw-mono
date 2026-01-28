@@ -15,11 +15,30 @@ import type { Heading } from 'mdast'
 const __filename = fileURLToPath(import.meta.url)
 const __dirname = dirname(__filename)
 
-const DOCS_ROOT = join(__dirname, '../docs')
-const PAGES_DIR = join(DOCS_ROOT, 'pages')
-const DIST_DIR = join(DOCS_ROOT, 'dist')
+// apps/docs is the root of the docs app
+const DOCS_APP_ROOT = join(__dirname, '..')
+const PAGES_DIR = join(DOCS_APP_ROOT, 'docs/pages')
 
-console.log('Paths:', { DOCS_ROOT, PAGES_DIR, DIST_DIR })
+// Find the dist directory - Vocs may output to different locations
+function findDistDir(): string {
+  const candidates = [
+    join(DOCS_APP_ROOT, 'docs/dist'),  // Vocs default with docs/ content root
+    join(DOCS_APP_ROOT, 'dist'),        // Alternative location
+  ]
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      console.log('Found dist directory:', candidate)
+      return candidate
+    }
+  }
+
+  console.error('Could not find dist directory. Checked:', candidates)
+  throw new Error('Dist directory not found')
+}
+
+const DIST_DIR = findDistDir()
+console.log('Paths:', { DOCS_APP_ROOT, PAGES_DIR, DIST_DIR })
 
 const BASE_URL = 'https://jaw.id/docs'
 
