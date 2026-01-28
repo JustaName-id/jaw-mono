@@ -12,6 +12,9 @@ export default defineConfig({
         '@jaw.id/core': resolve(__dirname, '../../packages/core/dist/index.js'),
       },
     },
+    build: {
+      outDir: resolve(__dirname, 'docs/dist'),
+    },
   },
   // Set to 'warn' to allow build to succeed with dead links (they'll be logged as warnings)
   checkDeadlinks: 'warn',

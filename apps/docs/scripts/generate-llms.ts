@@ -21,15 +21,24 @@ const PAGES_DIR = join(DOCS_APP_ROOT, 'docs/pages')
 
 // Find the dist directory - Vocs may output to different locations
 function findDistDir(): string {
+  const cwd = process.cwd()
+  // Monorepo root (3 levels up from scripts/)
+  const repoRoot = join(DOCS_APP_ROOT, '../..')
   const candidates = [
-    join(DOCS_APP_ROOT, 'docs/dist'),       // Vocs default with docs/ content root
-    join(DOCS_APP_ROOT, 'dist'),            // Alternative location
-    join(DOCS_APP_ROOT, 'docs/.vocs/dist'), // Vocs .vocs directory
-    join(DOCS_APP_ROOT, '.vocs/dist'),      // Vocs .vocs at root
+    join(DOCS_APP_ROOT, 'docs/dist'),              // Vocs default with docs/ content root
+    join(DOCS_APP_ROOT, 'dist'),                   // Alternative location
+    join(DOCS_APP_ROOT, 'docs/.vocs/dist'),        // Vocs .vocs directory
+    join(DOCS_APP_ROOT, '.vocs/dist'),             // Vocs .vocs at root
+    join(DOCS_APP_ROOT, '.vercel/output/static'),  // Vercel static output
+    join(cwd, 'dist'),                             // CWD-relative dist
+    join(cwd, 'docs/dist'),                        // CWD-relative docs/dist
+    join(repoRoot, 'dist'),                        // Repo root dist
+    join(repoRoot, 'apps/docs/dist'),              // Explicit path from repo root
   ]
 
   console.log('Searching for dist directory...')
   console.log('DOCS_APP_ROOT:', DOCS_APP_ROOT)
+  console.log('Current working directory:', process.cwd())
 
   for (const candidate of candidates) {
     const exists = existsSync(candidate)
@@ -50,6 +59,18 @@ function findDistDir(): string {
     if (existsSync(docsPath)) {
       const docsEntries = readdirSync(docsPath)
       console.error('  docs/ contents:', docsEntries.join(', '))
+    }
+
+    // Check .vercel directory structure
+    const vercelPath = join(DOCS_APP_ROOT, '.vercel')
+    if (existsSync(vercelPath)) {
+      const vercelEntries = readdirSync(vercelPath)
+      console.error('  .vercel/ contents:', vercelEntries.join(', '))
+      const outputPath = join(vercelPath, 'output')
+      if (existsSync(outputPath)) {
+        const outputEntries = readdirSync(outputPath)
+        console.error('  .vercel/output/ contents:', outputEntries.join(', '))
+      }
     }
   } catch (e) {
     console.error('  Failed to list directory:', e)
