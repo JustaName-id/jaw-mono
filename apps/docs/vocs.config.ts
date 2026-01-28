@@ -15,8 +15,8 @@ export default defineConfig({
   },
   // Set to 'warn' to allow build to succeed with dead links (they'll be logged as warnings)
   checkDeadlinks: 'warn',
-  title: 'JAW Core Documentation',
-  description: 'Official documentation for @jaw.id/core package',
+  title: 'JAW.id Documentation',
+  description: 'Official documentation for JAW.id',
   logoUrl: {
     light: '/logo.svg',
     dark: '/logo-dark.svg',

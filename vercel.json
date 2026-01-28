@@ -1,7 +1,7 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "framework": null,
-  "buildCommand": "cd ../.. && nx run docs:build",
-  "outputDirectory": "docs/dist",
-  "installCommand": "cd ../.. && bun install"
+  "buildCommand": "bunx nx run docs:build",
+  "outputDirectory": "apps/docs/docs/dist",
+  "installCommand": "bun install"
 }
