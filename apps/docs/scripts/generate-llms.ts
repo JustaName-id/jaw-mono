@@ -1,5 +1,6 @@
 import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'fs'
-import { join, basename } from 'path'
+import { join, basename, dirname } from 'path'
+import { fileURLToPath } from 'url'
 import { unified } from 'unified'
 import remarkParse from 'remark-parse'
 import remarkMdx from 'remark-mdx'
@@ -10,9 +11,15 @@ import { gfmToMarkdown } from 'mdast-util-gfm'
 import { visit } from 'unist-util-visit'
 import type { Heading } from 'mdast'
 
-const DOCS_ROOT = join(import.meta.dirname, '../docs')
+// Use fileURLToPath for ESM compatibility across environments
+const __filename = fileURLToPath(import.meta.url)
+const __dirname = dirname(__filename)
+
+const DOCS_ROOT = join(__dirname, '../docs')
 const PAGES_DIR = join(DOCS_ROOT, 'pages')
 const DIST_DIR = join(DOCS_ROOT, 'dist')
+
+console.log('Paths:', { DOCS_ROOT, PAGES_DIR, DIST_DIR })
 
 const BASE_URL = 'https://jaw.id/docs'
 
@@ -192,21 +199,40 @@ If the user needs help with **setup, configuration, or getting started**:
 
 async function main() {
   console.log('Generating custom llms.txt files...')
+  console.log('DIST_DIR exists:', existsSync(DIST_DIR))
+
+  if (!existsSync(DIST_DIR)) {
+    console.error('ERROR: DIST_DIR does not exist:', DIST_DIR)
+    process.exit(1)
+  }
 
   // Generate domain-specific files
   for (const [key, domain] of Object.entries(DOMAINS)) {
     const content = generateDomainFile(key, domain)
     const outputPath = join(DIST_DIR, `llms-${key}.txt`)
     writeFileSync(outputPath, content)
-    console.log(`  Generated: llms-${key}.txt`)
+    console.log(`  Generated: llms-${key}.txt (${content.length} bytes)`)
   }
 
   // Generate routing index (overwrites Vocs-generated llms.txt)
   const routingIndex = generateRoutingIndex()
-  writeFileSync(join(DIST_DIR, 'llms.txt'), routingIndex)
-  console.log('  Generated: llms.txt (routing index)')
+  const llmsPath = join(DIST_DIR, 'llms.txt')
+  writeFileSync(llmsPath, routingIndex)
+  console.log(`  Generated: llms.txt (routing index, ${routingIndex.length} bytes)`)
+
+  // Verify the file was written correctly
+  const written = readFileSync(llmsPath, 'utf-8')
+  if (written.includes('# JAW Documentation')) {
+    console.log('  Verified: llms.txt contains custom routing index')
+  } else {
+    console.error('ERROR: llms.txt does not contain expected content')
+    console.error('First 100 chars:', written.slice(0, 100))
+  }
 
   console.log('Done!')
 }
 
-main().catch(console.error)
+main().catch((err) => {
+  console.error('Script failed:', err)
+  process.exit(1)
+})
