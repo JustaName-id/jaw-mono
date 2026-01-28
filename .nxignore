@@ -1,1 +1,2 @@
-# Empty - no directories to ignore
+# Ignore Foundry git submodule dependencies
+contracts/**/lib/**

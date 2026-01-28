@@ -9,8 +9,12 @@
       "executor": "nx:run-commands",
       "outputs": ["{projectRoot}/dist"],
       "options": {
-        "command": "vocs build",
-        "cwd": "apps/docs"
+        "commands": [
+          "vocs build",
+          "tsx scripts/generate-llms.ts"
+        ],
+        "cwd": "apps/docs",
+        "parallel": false
       }
     },
     "dev": {
