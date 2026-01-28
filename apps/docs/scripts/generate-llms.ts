@@ -19,64 +19,20 @@ const __dirname = dirname(__filename)
 const DOCS_APP_ROOT = join(__dirname, '..')
 const PAGES_DIR = join(DOCS_APP_ROOT, 'docs/pages')
 
-// Find the dist directory - Vocs may output to different locations
+// Find the dist directory - Vocs outputs to different locations locally vs Vercel
 function findDistDir(): string {
-  const cwd = process.cwd()
-  // Monorepo root (3 levels up from scripts/)
-  const repoRoot = join(DOCS_APP_ROOT, '../..')
   const candidates = [
-    join(DOCS_APP_ROOT, 'docs/dist'),              // Vocs default with docs/ content root
-    join(DOCS_APP_ROOT, 'dist'),                   // Alternative location
-    join(DOCS_APP_ROOT, 'docs/.vocs/dist'),        // Vocs .vocs directory
-    join(DOCS_APP_ROOT, '.vocs/dist'),             // Vocs .vocs at root
-    join(DOCS_APP_ROOT, '.vercel/output/static'),  // Vercel static output
-    join(cwd, 'dist'),                             // CWD-relative dist
-    join(cwd, 'docs/dist'),                        // CWD-relative docs/dist
-    join(repoRoot, 'dist'),                        // Repo root dist
-    join(repoRoot, 'apps/docs/dist'),              // Explicit path from repo root
+    join(DOCS_APP_ROOT, 'docs/dist'),              // Local: Vocs default
+    join(DOCS_APP_ROOT, '.vercel/output/static'),  // Vercel: static output
   ]
 
-  console.log('Searching for dist directory...')
-  console.log('DOCS_APP_ROOT:', DOCS_APP_ROOT)
-  console.log('Current working directory:', process.cwd())
-
   for (const candidate of candidates) {
-    const exists = existsSync(candidate)
-    console.log(`  Checking: ${candidate} - ${exists ? 'EXISTS' : 'not found'}`)
-    if (exists) {
+    if (existsSync(candidate)) {
       return candidate
     }
   }
 
-  // List what actually exists in the docs app root for debugging
-  console.error('Could not find dist directory. Listing DOCS_APP_ROOT contents:')
-  try {
-    const entries = readdirSync(DOCS_APP_ROOT)
-    console.error('  Contents:', entries.join(', '))
-
-    // Also check docs/ subdirectory
-    const docsPath = join(DOCS_APP_ROOT, 'docs')
-    if (existsSync(docsPath)) {
-      const docsEntries = readdirSync(docsPath)
-      console.error('  docs/ contents:', docsEntries.join(', '))
-    }
-
-    // Check .vercel directory structure
-    const vercelPath = join(DOCS_APP_ROOT, '.vercel')
-    if (existsSync(vercelPath)) {
-      const vercelEntries = readdirSync(vercelPath)
-      console.error('  .vercel/ contents:', vercelEntries.join(', '))
-      const outputPath = join(vercelPath, 'output')
-      if (existsSync(outputPath)) {
-        const outputEntries = readdirSync(outputPath)
-        console.error('  .vercel/output/ contents:', outputEntries.join(', '))
-      }
-    }
-  } catch (e) {
-    console.error('  Failed to list directory:', e)
-  }
-
-  throw new Error('Dist directory not found')
+  throw new Error(`Dist directory not found. Checked: ${candidates.join(', ')}`)
 }
 
 // DIST_DIR is resolved lazily inside main() to ensure vocs build has completed
@@ -259,11 +215,9 @@ If the user needs help with **setup, configuration, or getting started**:
 }
 
 async function main() {
-  console.log('Generating custom llms.txt files...')
-
   // Resolve DIST_DIR at runtime (after vocs build has completed)
   DIST_DIR = findDistDir()
-  console.log('Using DIST_DIR:', DIST_DIR)
+  console.log('Generating llms.txt files to:', DIST_DIR)
 
   // Generate domain-specific files
   for (const [key, domain] of Object.entries(DOMAINS)) {
