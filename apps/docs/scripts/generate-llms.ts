@@ -22,23 +22,44 @@ const PAGES_DIR = join(DOCS_APP_ROOT, 'docs/pages')
 // Find the dist directory - Vocs may output to different locations
 function findDistDir(): string {
   const candidates = [
-    join(DOCS_APP_ROOT, 'docs/dist'),  // Vocs default with docs/ content root
-    join(DOCS_APP_ROOT, 'dist'),        // Alternative location
+    join(DOCS_APP_ROOT, 'docs/dist'),       // Vocs default with docs/ content root
+    join(DOCS_APP_ROOT, 'dist'),            // Alternative location
+    join(DOCS_APP_ROOT, 'docs/.vocs/dist'), // Vocs .vocs directory
+    join(DOCS_APP_ROOT, '.vocs/dist'),      // Vocs .vocs at root
   ]
 
+  console.log('Searching for dist directory...')
+  console.log('DOCS_APP_ROOT:', DOCS_APP_ROOT)
+
   for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      console.log('Found dist directory:', candidate)
+    const exists = existsSync(candidate)
+    console.log(`  Checking: ${candidate} - ${exists ? 'EXISTS' : 'not found'}`)
+    if (exists) {
       return candidate
     }
   }
 
-  console.error('Could not find dist directory. Checked:', candidates)
+  // List what actually exists in the docs app root for debugging
+  console.error('Could not find dist directory. Listing DOCS_APP_ROOT contents:')
+  try {
+    const entries = readdirSync(DOCS_APP_ROOT)
+    console.error('  Contents:', entries.join(', '))
+
+    // Also check docs/ subdirectory
+    const docsPath = join(DOCS_APP_ROOT, 'docs')
+    if (existsSync(docsPath)) {
+      const docsEntries = readdirSync(docsPath)
+      console.error('  docs/ contents:', docsEntries.join(', '))
+    }
+  } catch (e) {
+    console.error('  Failed to list directory:', e)
+  }
+
   throw new Error('Dist directory not found')
 }
 
-const DIST_DIR = findDistDir()
-console.log('Paths:', { DOCS_APP_ROOT, PAGES_DIR, DIST_DIR })
+// DIST_DIR is resolved lazily inside main() to ensure vocs build has completed
+let DIST_DIR: string
 
 const BASE_URL = 'https://jaw.id/docs'
 
@@ -218,12 +239,10 @@ If the user needs help with **setup, configuration, or getting started**:
 
 async function main() {
   console.log('Generating custom llms.txt files...')
-  console.log('DIST_DIR exists:', existsSync(DIST_DIR))
 
-  if (!existsSync(DIST_DIR)) {
-    console.error('ERROR: DIST_DIR does not exist:', DIST_DIR)
-    process.exit(1)
-  }
+  // Resolve DIST_DIR at runtime (after vocs build has completed)
+  DIST_DIR = findDistDir()
+  console.log('Using DIST_DIR:', DIST_DIR)
 
   // Generate domain-specific files
   for (const [key, domain] of Object.entries(DOMAINS)) {
