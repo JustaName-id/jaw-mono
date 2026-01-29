@@ -312,26 +312,73 @@ This file is a **routing index only**. To help users with JAW:
 
 ## Routing Table
 
-| User is asking about... | Fetch this file |
-|-------------------------|-----------------|
-| React hooks, useConnect, useDisconnect, wagmi connector, Next.js | ${BASE_URL}/llms-wagmi.txt |
-| provider.request, EIP-1193, eth_sendTransaction, wallet_sendCalls, non-React apps | ${BASE_URL}/llms-core.txt |
-| account.sendTransaction, account.signMessage, direct account operations | ${BASE_URL}/llms-account.txt |
-| Getting started, tutorials, SIWE authentication, subscriptions, guides | ${BASE_URL}/llms-quickstart.txt |
-| API key setup, paymaster, gasless transactions, ENS subnames, configuration options | ${BASE_URL}/llms-configuration.txt |
-| Custom UI, passkey server, app-specific mode, ReactUIHandler, advanced setup | ${BASE_URL}/llms-advanced.txt |
+### llms-wagmi.txt — React/Next.js Integration
+**Use this when:** User is building a React or Next.js app and wants to integrate JAW wallet
+**Example questions:**
+- "How do I add a connect wallet button in React?"
+- "How do I get the connected account in my Next.js app?"
+- "How do I set up JAW with wagmi?"
+- "How do I disconnect the wallet?"
+- "How do I check if the user is connected?"
+**Package:** \`@jaw.id/wagmi\`
+**URL:** ${BASE_URL}/llms-wagmi.txt
 
-## Decision Flowchart
+### llms-core.txt — EIP-1193 Provider & RPC Methods
+**Use this when:** User needs low-level provider access, isn't using React, or wants to make raw RPC calls
+**Example questions:**
+- "How do I use JAW without React?"
+- "How do I send a transaction with the provider?"
+- "How do I call wallet_sendCalls?"
+- "How do I integrate JAW with vanilla JavaScript?"
+- "What RPC methods does JAW support?"
+**Package:** \`@jaw.id/core\`
+**URL:** ${BASE_URL}/llms-core.txt
 
-\`\`\`
-Is the user building a React/Next.js app?
-├─ YES → Are they using Wagmi?
-│        ├─ YES → llms-wagmi.txt
-│        └─ NO/UNSURE → llms-wagmi.txt (recommended for React)
-└─ NO → Are they building a custom integration?
-         ├─ YES → llms-core.txt (EIP-1193 provider)
-         └─ UNSURE → llms-quickstart.txt (start here)
-\`\`\`
+### llms-account.txt — Account API & Direct Operations
+**Use this when:** User wants to perform operations directly on the smart account (signing, transactions, permissions)
+**Example questions:**
+- "How do I send a transaction from the account?"
+- "How do I sign a message?"
+- "How do I sign typed data (EIP-712)?"
+- "How do I get the account address?"
+- "How do I send multiple transactions in one call?"
+**Package:** \`@jaw.id/core\` (Account class)
+**URL:** ${BASE_URL}/llms-account.txt
+
+### llms-quickstart.txt — Getting Started & Guides
+**Use this when:** User is new to JAW, setting up for the first time, or following a tutorial
+**Example questions:**
+- "How do I get started with JAW?"
+- "How do I install JAW?"
+- "How do I implement Sign-In with Ethereum?"
+- "How do I set up recurring payments/subscriptions?"
+- "What networks does JAW support?"
+- "Can you walk me through a basic setup?"
+**URL:** ${BASE_URL}/llms-quickstart.txt
+
+### llms-configuration.txt — Configuration Options
+**Use this when:** User wants to configure JAW options like gas sponsorship, ENS, or authentication modes
+**Example questions:**
+- "How do I sponsor gas for my users?"
+- "How do I set up gasless transactions?"
+- "How do I configure ENS subnames?"
+- "What's the difference between crossPlatform and appSpecific mode?"
+- "How do I set up a paymaster?"
+- "Where do I get an API key?"
+**URL:** ${BASE_URL}/llms-configuration.txt
+
+### llms-advanced.txt — Advanced Implementation
+**Use this when:** User needs custom UI, self-hosted passkeys, or white-label integration
+**Example questions:**
+- "How do I build a custom connect UI?"
+- "How do I implement app-specific passkeys?"
+- "How do I set up my own passkey server?"
+- "How do I use ReactUIHandler?"
+- "How do I white-label the wallet experience?"
+**Package:** \`@jaw.id/core\` + \`@jaw.id/ui\`
+**URL:** ${BASE_URL}/llms-advanced.txt
+
+---
 
 ## Package Overview
 
