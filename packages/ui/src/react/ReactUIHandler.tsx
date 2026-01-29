@@ -46,9 +46,9 @@ import { TransactionDialog } from '../components/TransactionDialog';
 import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
-import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
-import { useChainIcon } from '../hooks/useChainIcon';
-import { useEthPrice } from '../hooks/useEthPrice';
+import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
+import { useChainIconURI } from '../hooks/useChainIconURI';
+import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 
@@ -110,24 +110,6 @@ function isSiweMessage(message: string): boolean {
 function getChainNameFromId(chainId: number): string {
   const chain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   return chain?.name || 'Unknown Network';
-}
-
-/**
- * Get chain icon key from chain ID (for useChainIcon hook)
- */
-function getChainIconKeyFromId(chainId: number): string {
-  const chainIconMap: Record<number, string> = {
-    1: 'ethereum',
-    11155111: 'ethereum', // Sepolia
-    8453: 'base',
-    84532: 'base', // Base Sepolia
-    80001: 'polygon', // Polygon Mumbai
-    42161: 'arbitrum',
-    421614: 'arbitrum', // Arbitrum Sepolia
-    10: 'optimism',
-    11155420: 'optimism', // Optimism Sepolia
-  };
-  return chainIconMap[chainId] || 'ethereum';
 }
 
 // ============================================================================
@@ -475,6 +457,11 @@ function buildChainConfigFromApiKey(chainId: number, apiKey?: string, paymasterU
   };
 }
 
+// Helper to build mainnet RPC URL for JustaName SDK (ENS resolution always uses mainnet)
+function getMainnetRpcUrl(apiKey?: string): string {
+  return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
+}
+
 // Helper to get Account for signing operations
 async function getAccountForSigning(
   apiKey?: string,
@@ -515,9 +502,6 @@ function OnboardingDialogWrapper({
   const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  // Use refs to store pending values that callbacks can access immediately
-  const pendingAddressRef = React.useRef<string | null>(null);
-  const pendingUsernameRef = React.useRef<string | null>(null);
 
   // State for ConnectDialog confirmation
   const [showConnectDialog, setShowConnectDialog] = useState(false);
@@ -537,8 +521,7 @@ function OnboardingDialogWrapper({
   // Get chain info for ConnectDialog
   const targetChainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(targetChainId);
-  const chainIconKey = getChainIconKeyFromId(targetChainId);
-  const chainIcon = useChainIcon(chainIconKey, 24);
+  const chainIcon = useChainIconURI(targetChainId, apiKey, 24);
 
   // Load accounts on mount using Account class
   useEffect(() => {
@@ -685,7 +668,7 @@ function OnboardingDialogWrapper({
   };
 
   // Handle creating a new account
-  const handleCreateAccount = async (username: string): Promise<string> => {
+  const handleCreateAccount = async (username: string): Promise<CreatedAccountData> => {
     try {
       if (!apiKey) {
         throw new Error('API key is required');
@@ -712,12 +695,21 @@ function OnboardingDialogWrapper({
         }
       );
 
-      // Store address and username for completion callback
-      // Use refs since they are immediately available for callbacks
-      pendingAddressRef.current = accountInstance.address;
-      pendingUsernameRef.current = username;
+      // Get full account data including credentialId and publicKey from stored accounts
+      const storedAccounts = Account.getStoredAccounts(apiKey);
+      const createdAccount = storedAccounts.find(acc => acc.username === fullUsername);
 
-      return accountInstance.address;
+      if (!createdAccount) {
+        throw new Error('Failed to retrieve created account data');
+      }
+
+      // Return full account data - OnboardingDialog will pass it to onAccountCreationComplete
+      return {
+        address: accountInstance.address,
+        credentialId: createdAccount.credentialId,
+        username: fullUsername,
+        publicKey: createdAccount.publicKey,
+      };
     } catch (error) {
       console.error('Account creation failed:', error);
       setIsCreating(false);
@@ -726,29 +718,22 @@ function OnboardingDialogWrapper({
   };
 
   // Handle account creation completion (after subname registration if applicable)
-  // Note: We use the refs since state updates may not be synchronous when this callback is called
-  const handleAccountCreationComplete = async () => {
-    const address = pendingAddressRef.current;
-    const username = pendingUsernameRef.current;
-
-    if (address) {
-      // If silent mode, skip ConnectDialog and approve immediately
-      if (request.data.silent) {
-        console.log('🔇 Silent mode: skipping connect confirmation');
-        setIsCreating(false);
-        onApprove({
-          accounts: [{ address }],
-        });
-        return;
-      }
-
-      // Show ConnectDialog for confirmation instead of immediately approving
-      setAuthenticatedAccountName(username || 'New Account');
-      setAuthenticatedWalletAddress(address);
-      setShowConnectDialog(true);
-    } else {
-      console.error('[OnboardingDialogWrapper] handleAccountCreationComplete called but pendingAddress is null');
+  // Account data flows through from onCreateAccount - no intermediate state needed
+  const handleAccountCreationComplete = async (accountData: CreatedAccountData) => {
+    // If silent mode, skip ConnectDialog and approve immediately
+    if (request.data.silent) {
+      console.log('🔇 Silent mode: skipping connect confirmation');
+      setIsCreating(false);
+      onApprove({
+        accounts: [{ address: accountData.address }],
+      });
+      return;
     }
+
+    // Show ConnectDialog for confirmation instead of immediately approving
+    setAuthenticatedAccountName(accountData.username || 'New Account');
+    setAuthenticatedWalletAddress(accountData.address);
+    setShowConnectDialog(true);
     setIsCreating(false);
   };
 
@@ -877,6 +862,7 @@ function OnboardingDialogWrapper({
           chainName={chainName}
           chainId={targetChainId}
           chainIcon={chainIcon}
+          mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
           onSign={handleSiweSign}
           onCancel={handleSiweCancel}
           isProcessing={isSiweSigning}
@@ -904,6 +890,7 @@ function OnboardingDialogWrapper({
         chainName={chainName}
         chainId={targetChainId}
         chainIcon={chainIcon}
+        mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         onConnect={async () => handleConnectConfirm()}
         onCancel={handleConnectCancel}
         isProcessing={isConnecting}
@@ -932,6 +919,7 @@ function OnboardingDialogWrapper({
         isCreating={isCreating}
         ensDomain={ensDomain}
         chainId={chainId}
+        mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         apiKey={apiKey}
         supportedChains={SUPPORTED_CHAINS.map(chain => ({ id: chain.id }))}
         subnameTextRecords={subnameTextRecords}
@@ -962,8 +950,7 @@ function SignatureDialogWrapper({
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(chainId);
-  const chainIconKey = getChainIconKeyFromId(chainId);
-  const chainIcon = useChainIcon(chainIconKey, 24);
+  const chainIcon = useChainIconURI(chainId, apiKey, 24);
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -1013,6 +1000,7 @@ function SignatureDialogWrapper({
       chainName={chainName}
       chainId={chainId}
       chainIcon={chainIcon}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1099,6 +1087,7 @@ function Eip712DialogWrapper({
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
       accountAddress={request.data.address}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1127,16 +1116,20 @@ function TransactionDialogWrapper({
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<string>('');
-  const ethPrice = useEthPrice();
-
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
+
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1226,7 +1219,7 @@ function TransactionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -1234,7 +1227,7 @@ function TransactionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1417,13 +1410,13 @@ function TransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
-      chainIconKey={chainIconKey}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
+      apiKey={apiKey}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -1455,16 +1448,20 @@ function SendTransactionDialogWrapper({
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<string>('');
-  const ethPrice = useEthPrice();
-
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
+
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1548,7 +1545,7 @@ function SendTransactionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -1556,7 +1553,7 @@ function SendTransactionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1728,13 +1725,13 @@ function SendTransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
-      chainIconKey={chainIconKey}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
+      apiKey={apiKey}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -1787,7 +1784,13 @@ function PermissionDialogWrapper({
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
-  const ethPrice = useEthPrice();
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
@@ -1796,7 +1799,6 @@ function PermissionDialogWrapper({
     : (requestChainId || defaultChainId || 1);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1886,7 +1888,7 @@ function PermissionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -1894,7 +1896,7 @@ function PermissionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, ethPrice]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
 
   const chain = useMemo(
     () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
@@ -1930,9 +1932,12 @@ function PermissionDialogWrapper({
           continue;
         }
 
-        // If native token, use ETH defaults
+        // If native token, use chain's native currency
         if (isNativeToken(tokenAddress)) {
-          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+          newTokenInfoMap[tokenAddress] = {
+            decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+            symbol: viemChain?.nativeCurrency?.symbol || 'ETH'
+          };
           continue;
         }
 
@@ -1942,7 +1947,7 @@ function PermissionDialogWrapper({
             chain: {
               id: chainId,
               name: networkName,
-              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              nativeCurrency: viemChain?.nativeCurrency || { name: 'Ether', symbol: 'ETH', decimals: 18 },
               rpcUrls: {
                 default: { http: [chain.rpcUrl || ''] },
                 public: { http: [chain.rpcUrl || ''] },
@@ -1986,7 +1991,7 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [chainId, spendsData, networkName, chain.rpcUrl]);
+  }, [chainId, spendsData, networkName, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens from capabilities (same pattern as TransactionDialogWrapper)
   useEffect(() => {
@@ -2115,7 +2120,7 @@ function PermissionDialogWrapper({
   // Convert to SpendPermission array format expected by PermissionDialog
   const spends = useMemo(() => spendsData.map(spend => {
     const tokenInfo = tokenInfoMap[spend.token] || (isNativeToken(spend.token)
-      ? { decimals: 18, symbol: 'ETH' }
+      ? { decimals: viemChain?.nativeCurrency?.decimals ?? 18, symbol: nativeSymbol }
       : { decimals: 18, symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4) });
 
     const allowance = BigInt(spend.allowance);
@@ -2128,12 +2133,12 @@ function PermissionDialogWrapper({
 
     return {
       amount,
-      token: isNativeToken(spend.token) ? 'Native (ETH)' : tokenInfo.symbol,
+      token: isNativeToken(spend.token) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
       tokenAddress: spend.token,
       duration,
       limit,
     };
-  }), [spendsData, tokenInfoMap]);
+  }), [spendsData, tokenInfoMap, viemChain, nativeSymbol]);
 
   // Format call permissions
   const calls = useMemo(() => callsData.map(call => ({
@@ -2252,7 +2257,7 @@ function PermissionDialogWrapper({
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
-      chainIconKey={chainIconKey}
+      apiKey={apiKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -2264,7 +2269,7 @@ function PermissionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -2299,8 +2304,7 @@ function SiweDialogWrapper({
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(chainId);
-  const chainIconKey = getChainIconKeyFromId(chainId);
-  const chainIcon = useChainIcon(chainIconKey, 24);
+  const chainIcon = useChainIconURI(chainId, apiKey, 24);
   const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
 
   // Decode message if it's hex encoded
@@ -2391,6 +2395,7 @@ function SiweDialogWrapper({
       chainName={chainName}
       chainId={chainId}
       chainIcon={chainIcon}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -2436,7 +2441,7 @@ function RevokePermissionDialogWrapper({
   const chain = buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
+  const nativeSymbol = viemChain?.nativeCurrency?.symbol || 'ETH';
 
   // Fetch permission details from relay
   useEffect(() => {
@@ -2457,14 +2462,17 @@ function RevokePermissionDialogWrapper({
           for (const spend of permData.spends) {
             const tokenAddress = spend.token;
             if (isNativeToken(tokenAddress)) {
-              newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+              newTokenInfoMap[tokenAddress] = {
+                decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+                symbol: viemChain?.nativeCurrency?.symbol || 'ETH'
+              };
             } else {
               try {
                 const publicClient = createPublicClient({
                   chain: {
                     id: chainId,
                     name: networkName,
-                    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                    nativeCurrency: viemChain?.nativeCurrency || { name: 'Ether', symbol: 'ETH', decimals: 18 },
                     rpcUrls: {
                       default: { http: [chain.rpcUrl || ''] },
                       public: { http: [chain.rpcUrl || ''] },
@@ -2509,7 +2517,10 @@ function RevokePermissionDialogWrapper({
 
     return fetchedPermissionData.spends.map((spend: any) => {
       const tokenAddress = spend.token;
-      const tokenInfo = tokenInfoMap[tokenAddress] || { decimals: 18, symbol: 'ETH' };
+      const tokenInfo = tokenInfoMap[tokenAddress] || {
+        decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+        symbol: nativeSymbol
+      };
       const allowance = BigInt(spend.allowance);
       const amount = formatUnits(allowance, tokenInfo.decimals);
       const limit = `${amount} ${tokenInfo.symbol}`;
@@ -2520,14 +2531,14 @@ function RevokePermissionDialogWrapper({
       return {
         amount,
         token: isNativeToken(tokenAddress)
-          ? 'Native (ETH)'
+          ? `Native (${nativeSymbol})`
           : tokenInfo.symbol,
         tokenAddress,
         duration,
         limit,
       };
     });
-  }, [fetchedPermissionData, tokenInfoMap]);
+  }, [fetchedPermissionData, tokenInfoMap, viemChain, nativeSymbol]);
 
   // Format call permissions from fetched data
   const formattedCalls = useMemo(() => {
@@ -2601,13 +2612,14 @@ function RevokePermissionDialogWrapper({
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
-      chainIconKey={chainIconKey}
+      apiKey={apiKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingPermissionDetails}
       timestamp={new Date(request.timestamp)}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
     />
   );
 }

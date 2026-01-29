@@ -1,11 +1,11 @@
 'use client'
 
-import { Eip712Dialog, useChainIcon } from "@jaw.id/ui";
-import { usePasskeys } from "../../hooks";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Eip712Dialog, useChainIconURI } from "@jaw.id/ui";
+import { useSessionAccount } from "../../hooks";
+import { useCallback, useMemo, useState } from "react";
 import type { chain } from "../../lib/sdk-types";
-import { getChainNameFromId, getChainIconKeyFromId } from "../../lib/chain-handlers";
-import { Account, standardErrorCodes } from "@jaw.id/core";
+import { getChainNameFromId } from "../../lib/chain-handlers";
+import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
 
 export interface Eip712ModalProps {
   origin: string;
@@ -34,14 +34,18 @@ export const Eip712Modal = ({
   onSuccess,
   onError
 }: Eip712ModalProps) => {
+  // Single hook handles session lookup + account restoration
+  const { account, isLoading: isAccountLoading } = useSessionAccount({
+    origin,
+    chain,
+    apiKey,
+  });
+
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [account, setAccount] = useState<Account | null>(null);
   const [timestamp] = useState(() => new Date());
-  const timeoutRef = useRef<NodeJS.Timeout | null>(null);
-  const { getAccount } = usePasskeys();
 
-  // Extract API key from rpcUrl if not provided as prop
+  // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
     if (apiKey) return apiKey;
     if (chain?.rpcUrl) {
@@ -55,10 +59,14 @@ export const Eip712Modal = ({
     return '';
   }, [apiKey, chain?.rpcUrl]);
 
+  // Compute mainnet RPC URL for JustaName SDK (ENS resolution)
+  const mainnetRpcUrl = useMemo(() => {
+    return effectiveApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${effectiveApiKey}` : `${JAW_RPC_URL}?chainId=1`;
+  }, [effectiveApiKey]);
+
   // Get chain name and icon
   const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
-  const chainIconKey = useMemo(() => chain ? getChainIconKeyFromId(chain.id) : undefined, [chain]);
-  const chainIcon = useChainIcon(chainIconKey || 'ethereum', 24);
+  const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
 
   // Parse typed data
   const typedData = useMemo(() => {
@@ -89,7 +97,6 @@ export const Eip712Modal = ({
         primaryType: typedData.primaryType,
         message: typedData.message,
       });
-      console.log('Typed Data Signature:', signature);
 
       setSignatureStatus('Signature created successfully!');
 
@@ -111,65 +118,13 @@ export const Eip712Modal = ({
 
   const handleCancel = () => {
     if (!isProcessing) {
-      setAccount(null);
-      console.log('User cancelled typed data signature request');
       // User rejected request (EIP-1193 code 4001)
       onError(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setSignatureStatus('');
     }
   };
 
-  useEffect(() => {
-    let isMounted = true;
-
-    const initializeModal = async () => {
-      if (chain) {
-        try {
-          setIsProcessing(false); // Reset processing state when opening
-          console.log('Initializing EIP-712 signature modal');
-          console.log('Address:', address);
-          console.log('Typed Data:', typedData);
-          const restoredAccount = await getAccount(chain, effectiveApiKey);
-
-          // Only update state if component is still mounted
-          if (isMounted) {
-            setAccount(restoredAccount);
-          }
-        } catch (error) {
-          console.error("Error initializing account:", error);
-          // Only update state if component is still mounted
-          if (isMounted) {
-            setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Initialization failed'}`);
-            const errorObj = error instanceof Error ? error : new Error(String(error));
-            // Check if user cancelled passkey prompt (NotAllowedError)
-            const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-              ? standardErrorCodes.provider.userRejectedRequest
-              : standardErrorCodes.rpc.internal;
-            onError(errorObj, errorCode);
-          }
-        }
-      } else {
-        // Reset everything when modal closes
-        setAccount(null);
-        setSignatureStatus('');
-        setIsProcessing(false);
-      }
-    };
-
-    initializeModal();
-
-    // Cleanup function
-    return () => {
-      isMounted = false;
-      // Clear any pending timeouts
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
-    };
-  }, [typedDataJson, address, effectiveApiKey, onError, getAccount, chain, typedData]);
-
-  const canSign = !isProcessing && !!typedDataJson && !!account && !!typedData;
+  const canSign = !isProcessing && !isAccountLoading && !!typedDataJson && !!account && !!typedData;
 
   return (
     <Eip712Dialog
@@ -182,6 +137,7 @@ export const Eip712Modal = ({
       chainName={chainName}
       chainIcon={chainIcon}
       chainId={chain.id}
+      mainnetRpcUrl={mainnetRpcUrl}
       onSign={signTypedData}
       onCancel={handleCancel}
       isProcessing={isProcessing}

@@ -40,6 +40,7 @@ export {
     buildGrantPermissionCall,
     // Capability utilities
     handleGetCapabilitiesRequest,
+    type ChainMetadataCapability,
     // Permission selector constants
     ANY_TARGET,
     ANY_FN_SEL,
@@ -78,6 +79,7 @@ export {
 
 /** Passkey types (used with Account class) **/
 export {
+    PasskeyManager,
     type PasskeyAccount,
 } from './passkey-manager/index.js';
 

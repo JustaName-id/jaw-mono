@@ -23,6 +23,7 @@ export function OnboardingDialog({
   isCreating,
   ensDomain,
   chainId,
+  mainnetRpcUrl,
   apiKey,
   supportedChains,
   subnameTextRecords,
@@ -88,7 +89,7 @@ export function OnboardingDialog({
         setMessage('Checking availability...');
 
         try {
-          const justaName = getJustaNameInstance();
+          const justaName = getJustaNameInstance(mainnetRpcUrl);
           const result = await justaName.subnames.isSubnameAvailable({
             subname: debouncedUsername + '.' + ensDomain,
             chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
@@ -119,14 +120,15 @@ export function OnboardingDialog({
     setError(null);
 
     try {
-      const address = await onCreateAccount(username);
+      // onCreateAccount now returns full account data (not just address)
+      const accountData = await onCreateAccount(username);
 
-      if (ensDomain && chainId && apiKey && supportedChains && address) {
+      if (ensDomain && chainId && apiKey && supportedChains && accountData.address) {
         try {
-          const justaName = getJustaNameInstance();
+          const justaName = getJustaNameInstance(mainnetRpcUrl);
 
           const addresses = supportedChains.map(chain => ({
-            address: address,
+            address: accountData.address,
             coinType: toCoinType(chain.id).toString(),
           }));
 
@@ -146,7 +148,7 @@ export function OnboardingDialog({
             },
             {
               xApiKey: apiKey,
-              xAddress: address,
+              xAddress: accountData.address,
               xMessage: "",
             }
           );
@@ -159,7 +161,8 @@ export function OnboardingDialog({
         }
       }
 
-      await onAccountCreationComplete();
+      // Pass account data through to completion handler
+      await onAccountCreationComplete(accountData);
     } catch (error) {
       const errorMessage = `Account creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
       console.error('❌ ACCOUNT CREATION ERROR:', errorMessage, error);

@@ -466,6 +466,11 @@ export class MobileCommunicationAdapter implements CommunicationAdapter {
     // Always send chain (critical for API key extraction in browser mode)
     urlParams.chain = this.base64Encode(JSON.stringify(chainWithApiKey));
 
+    // Include app origin for session management
+    // Use callback URL scheme as stable app identifier (e.g., "jaw-demo://")
+    const callbackScheme = callbackUrl.split('://')[0];
+    urlParams.origin = `${callbackScheme}://`;
+
     // Map method to action and add necessary params
     if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
       action = 'connect';

@@ -26,7 +26,6 @@ export interface TransactionDialogProps {
   gasFeeLoading: boolean;
   gasEstimationError: string;
   sponsored: boolean;
-  ethPrice: number;
 
   // Actions
   onConfirm: () => Promise<void>;
@@ -38,7 +37,7 @@ export interface TransactionDialogProps {
 
   // Display utilities
   networkName: string;
-  chainIconKey?: string;
+  apiKey?: string;
 
   // Fee token selection (for ERC-20 paymaster)
   feeTokens?: FeeTokenOption[];
@@ -49,4 +48,7 @@ export interface TransactionDialogProps {
 
   // ERC-20 payment indicator (when user selected non-native token)
   isPayingWithErc20?: boolean;
+
+  // RPC configuration
+  mainnetRpcUrl: string;
 }

@@ -57,7 +57,7 @@ const jaw = JAW.create({
 | [appLogoUrl](/configuration/appLogoUrl) | `string \| null` | No | URL to application logo image |
 | [ens](/configuration/ens) | `string` | No | ENS domain for issuing subnames |
 | [defaultChainId](/configuration/defaultChainId) | `number` | No | Default blockchain network |
-| [preference](/configuration/preference) | `object` | No | Advanced SDK behavior options |
+| [preference](/configuration/mode) | `object` | No | Advanced SDK behavior options |
 | [paymasters](/configuration/paymasters) | `Record<number, { url: string; context?: Record<string, unknown> }>` | No | Custom paymaster configuration per chain |
 
 
@@ -67,12 +67,10 @@ The `preference` object contains advanced configuration:
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| mode | `Mode.CrossPlatform` \| `Mode.AppSpecific` | `Mode.CrossPlatform` | Authentication mode |
-| serverUrl | `string` | JAW Server | Custom passkey server URL |
-| showTestnets | `boolean` | `false` | Include testnet networks |
-| uiHandler | `UIHandler` | `undefined` | Custom UI handler for app-specific mode |
+| [mode](/configuration/mode) | `Mode.CrossPlatform` \| `Mode.AppSpecific` | `Mode.CrossPlatform` | Authentication mode |
+| showTestnets | `boolean` | `false` | Include testnet networks (see [Supported Networks](/supported-networks)) |
 
-[See all preference options →](/configuration/preference)
+[Learn more about authentication modes →](/configuration/mode)
 
 
 ## Return Value

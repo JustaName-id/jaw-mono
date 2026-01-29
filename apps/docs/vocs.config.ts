@@ -59,9 +59,28 @@ export default defineConfig({
         { text: 'appName', link: '/configuration/appName' },
         { text: 'appLogoUrl', link: '/configuration/appLogoUrl' },
         { text: 'defaultChainId', link: '/configuration/defaultChainId' },
-        { text: 'preference', link: '/configuration/preference' },
+        {
+          text: 'mode',
+          collapsed: true,
+          items: [
+            { text: 'Overview', link: '/configuration/mode' },
+            { text: 'CrossPlatform', link: '/configuration/mode/cross-platform' },
+            { text: 'AppSpecific', link: '/configuration/mode/app-specific' },
+          ],
+        },
         { text: 'paymasters', link: '/configuration/paymasters' },
         { text: 'React Native', link: '/configuration/react-native' },
+      ],
+    },
+    {
+      text: 'Guides',
+      collapsed: false,
+      items: [
+        { text: 'Quickstart', link: '/guides/quickstart' },
+        { text: 'Onchain Identity', link: '/guides/onchain-identity' },
+        { text: 'Gas Sponsoring', link: '/guides/gas-sponsoring' },
+        { text: 'Sign-In With Ethereum', link: '/guides/siwe' },
+        { text: 'Subscription Payments', link: '/guides/subscription' },
       ],
     },
     {
@@ -172,13 +191,6 @@ export default defineConfig({
             { text: 'getPermission()', link: '/account/getPermission' },
           ],
         },
-      ],
-    },
-    {
-      text: 'Guides',
-      collapsed: false,
-      items: [
-        { text: 'Subscription Payments', link: '/guides/subscription' },
       ],
     },
     {

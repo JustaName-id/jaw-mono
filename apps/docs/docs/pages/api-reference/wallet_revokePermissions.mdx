@@ -21,6 +21,19 @@ await jaw.provider.request({
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `id` | `string` | Yes | Permission ID to revoke |
+| `capabilities` | `object` | No | Additional capabilities (see below) |
+
+### Capabilities
+
+| Name | Type | Description |
+|------|------|-------------|
+| `capabilities.paymasterService` | `object` | Paymaster service for gas sponsorship |
+| `capabilities.paymasterService.url` | `string` | Paymaster service URL (ERC-7677 compliant) |
+| `capabilities.paymasterService.context` | `object` | Optional context (e.g., `{ sponsorshipPolicyId: '...' }`) |
+
+:::info
+The `paymasterService` capability allows you to specify a paymaster per-call, overriding any paymaster configured at the SDK level.
+:::
 
 ### Example
 

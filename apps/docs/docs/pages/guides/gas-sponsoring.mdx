@@ -1,0 +1,226 @@
+# Paymaster & Gas Sponsoring
+
+Let users interact with your app without holding ETH or native tokens first. Paymasters allow you to sponsor gas fees for your users entirely.
+
+**What you can do:**
+
+- **Sponsor Gas** - Cover transaction costs for your users
+- **Multi-Chain** - Same experience across all supported networks
+- **Set Policies** - Control which transactions you sponsor
+
+:::info
+Users can already pay gas in stablecoins natively - no configuration required. This guide covers **full gas sponsorship** where you cover the costs.
+:::
+
+:::warning
+**Requirement:** This guide uses EIP-7677 compatible paymasters with EntryPoint v0.8.
+:::
+
+
+## 1. Choose a Provider
+
+Pick a paymaster provider and create an account. Generate your API key in their dashboard and deposit funds to cover gas costs.
+
+**Compatible Providers:**
+
+| Provider | Dashboard |
+|----------|-----------|
+| [Pimlico](https://pimlico.io) | [dashboard.pimlico.io](https://dashboard.pimlico.io) |
+| [Etherspot](https://etherspot.io) | [developer.etherspot.io](https://developer.etherspot.io/dashboard) |
+
+:::info
+Ensure your provider supports **EntryPoint v0.8** and **EIP-7677**. Not all providers support this yet.
+:::
+
+
+## 2. Integration Path
+
+Pick your integration method:
+
+| Approach | Best For |
+|----------|----------|
+| **Wagmi** | React apps already using wagmi connectors. |
+| **Core SDK** | Custom implementations or non-React apps. |
+
+
+## 3. Enable Paymasters
+
+Add the `paymasters` configuration to your existing JAW setup. Use the URL from your provider along with your API key.
+
+:::code-group
+
+```typescript [Wagmi]
+import { createConfig, http } from 'wagmi';
+import { base } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+export const config = createConfig({
+  chains: [base],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_JAW_API_KEY',
+      appName: 'My App',
+      // Add paymasters configuration
+      paymasters: {
+        8453: { url: 'https://api.pimlico.io/v2/8453/rpc?apikey=YOUR_PIMLICO_KEY' },
+      },
+    }),
+  ],
+  transports: {
+    [base.id]: http(),
+  },
+});
+```
+
+```typescript [Core SDK]
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'YOUR_JAW_API_KEY',
+  appName: 'My App',
+  defaultChainId: 8453,
+  // Add paymasters configuration
+  paymasters: {
+    8453: { url: 'https://api.pimlico.io/v2/8453/rpc?apikey=YOUR_PIMLICO_KEY' },
+  },
+});
+```
+
+:::
+
+:::info
+If you haven't set up JAW yet, start with the [Quickstart](/guides/quickstart) guide first.
+:::
+
+
+## 4. Configuration Format
+
+Each network is configured by chain ID with its own paymaster URL. The optional `context` object passes sponsorship policies or provider-specific settings.
+
+```typescript
+paymasters: {
+  [chainId: number]: {
+    url: string;                        // Paymaster service URL (required)
+    context?: Record<string, unknown>;  // Additional context sent with requests (optional)
+  }
+}
+```
+
+
+## 5. Add Sponsorship Policies
+
+Control which transactions you sponsor with policies. Create these in your paymaster provider's dashboard.
+
+**Common policy options:**
+
+- Sponsor only new users
+- Set daily limits per user
+- Sponsor during active time periods
+- Whitelist specific contracts
+- Blacklist certain operations
+
+**To use a policy:**
+
+1. Log into your paymaster provider dashboard
+2. Create a sponsorship policy with your rules
+3. Copy the policy ID from the policy page
+4. Add it to your paymaster configuration's `context`
+
+:::code-group
+
+```typescript [Wagmi]
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'YOUR_JAW_API_KEY',
+  paymasters: {
+    8453: {
+      url: 'https://api.pimlico.io/v2/8453/rpc?apikey=YOUR_PIMLICO_KEY',
+      // Add sponsorship policy (key name varies by provider)
+      context: {
+        sponsorshipPolicyId: 'sp_your_policy_id', // Pimlico
+      },
+    },
+  },
+});
+```
+
+```typescript [Core SDK]
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'YOUR_JAW_API_KEY',
+  paymasters: {
+    8453: {
+      url: 'https://api.pimlico.io/v2/8453/rpc?apikey=YOUR_PIMLICO_KEY',
+      // Add sponsorship policy (key name varies by provider)
+      context: {
+        sponsorshipPolicyId: 'sp_your_policy_id', // Pimlico
+      },
+    },
+  },
+});
+```
+
+:::
+
+:::warning
+The `context` keys are provider-specific. Check your paymaster provider's documentation for the correct format.
+:::
+
+
+## 6. Multi-Chain Configuration
+
+Support multiple blockchains with gas sponsorship. Set up a paymaster for each network so users get the same smooth experience everywhere.
+
+:::code-group
+
+```typescript [Wagmi]
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'YOUR_JAW_API_KEY',
+  paymasters: {
+    1: { url: 'https://api.pimlico.io/v2/1/rpc?apikey=...' },      // Ethereum Mainnet
+    10: { url: 'https://api.pimlico.io/v2/10/rpc?apikey=...' },    // Optimism
+    8453: { url: 'https://api.pimlico.io/v2/8453/rpc?apikey=...' }, // Base
+    42161: { url: 'https://api.pimlico.io/v2/42161/rpc?apikey=...' }, // Arbitrum
+  },
+});
+```
+
+```typescript [Core SDK]
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'YOUR_JAW_API_KEY',
+  paymasters: {
+    1: { url: 'https://api.pimlico.io/v2/1/rpc?apikey=...' },      // Ethereum Mainnet
+    10: { url: 'https://api.pimlico.io/v2/10/rpc?apikey=...' },    // Optimism
+    8453: { url: 'https://api.pimlico.io/v2/8453/rpc?apikey=...' }, // Base
+    42161: { url: 'https://api.pimlico.io/v2/42161/rpc?apikey=...' }, // Arbitrum
+  },
+});
+```
+
+:::
+
+:::info
+Sponsorship policies are configured per-provider. Check your provider's documentation for chain-specific settings.
+:::
+
+
+## Configuration Reference
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `url` | `string` | Yes | The paymaster service endpoint URL |
+| `context` | `Record<string, unknown>` | No | Additional context passed to the paymaster (e.g., `sponsorshipPolicyId`) |
+
+
+## Related
+
+- [paymasters Configuration](/configuration/paymasters) - Full configuration reference
+- [Quickstart](/guides/quickstart) - Initial JAW setup
+- [wallet_sendCalls](/api-reference/wallet_sendCalls) - Batched transactions with sponsorship
+- [Supported Networks](/supported-networks) - Available chains

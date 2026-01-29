@@ -2,19 +2,20 @@
 
 import { useEffect, useState, useRef } from 'react';
 import { useAuth, usePasskeys } from '../hooks';
-import { SignInScreen } from '../components/OnboardingSection';
+import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
+import { type PasskeyAccount } from '@jaw.id/core';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
-import { Account, ensureIntNumber, type SignInWithEthereumCapabilityRequest, type WalletGrantPermissionsRequest } from '@jaw.id/core';
+import { Account, PasskeyManager, ensureIntNumber, type SignInWithEthereumCapabilityRequest, type WalletGrantPermissionsRequest } from '@jaw.id/core';
 import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
-import type { PasskeyAccount } from '@jaw.id/core';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { CryptoHandler } from '../lib/crypto-handler';
+import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
@@ -75,9 +76,12 @@ export default function KeysJawIdApp() {
   // State needs to be declared before hook calls
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
 
-  // Use hooks for passkey operations
-  const authQuery = useAuth();
-  const passkeyQuery = usePasskeys({ apiKey });
+  // Current origin for session-based auth
+  const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
+
+  // Use hooks for passkey operations (pass origin for session-based auth)
+  const authQuery = useAuth({ origin: currentOrigin || undefined });
+  const passkeyQuery = usePasskeys({apiKey});
 
   // Service instances (created once)
   const [communicator] = useState(() => new PopupCommunicator());
@@ -169,6 +173,14 @@ export default function KeysJawIdApp() {
       setApiKey(extractedApiKey);
       setChainId(parsedConfig.metadata?.defaultChainId as ChainId);
       setEnsConfig(parsedConfig.preference?.ens);
+
+      // Extract origin from URL params for session-based auth
+      const originParam = urlParams.get('origin');
+      if (originParam) {
+        setCurrentOrigin(originParam);
+        // Also set origin on CryptoHandler so it can update auth state
+        cryptoHandler.setOrigin(originParam);
+      }
 
       // Set browser mode flags
       setIsBrowserMode(true);
@@ -292,8 +304,14 @@ export default function KeysJawIdApp() {
           break;
       }
 
-      // Check for passkeys and show appropriate UI
-      await checkForPasskeys();
+      // Conditionally authenticate based on action type
+      // For connect action or when no credentialId is provided, show passkey selection
+      // For sign/send operations with credentialId, auto-authenticate to skip auth screen
+      if (action === 'connect' || !credentialId) {
+        await checkForPasskeys();
+      } else {
+        await autoAuthenticateFromCredential(credentialId, extractedApiKey);
+      }
     } catch (err) {
       console.error('Failed to parse browser mode config:', err);
       redirectWithError(callbackUrl, 'Invalid configuration', urlParams.get('requestId') || undefined);
@@ -419,6 +437,68 @@ export default function KeysJawIdApp() {
     }
   }, [pendingRequest, isSDKMode]);
 
+  /**
+   * Auto-authenticate user from credentialId in browser mode
+   * This allows sign/send operations to skip the passkey selection screen
+   */
+  const autoAuthenticateFromCredential = async (credentialId: string, apiKey?: string) => {
+    try {
+      console.log('[AutoAuth] Attempting auto-authentication with credentialId:', credentialId);
+
+      // API key is required for account restoration
+      if (!apiKey) {
+        console.warn('[AutoAuth] No API key available, falling back to passkey check');
+        await checkForPasskeys();
+        return;
+      }
+
+      // Find the stored account matching this credentialId
+      const allAccounts = Account.getStoredAccounts(apiKey);
+      const matchingAccount = allAccounts.find(
+        acc => acc.credentialId === credentialId
+      );
+
+      if (!matchingAccount) {
+        console.warn('[AutoAuth] No stored account found for credentialId:', credentialId);
+        // Fall back to passkey check
+        await checkForPasskeys();
+        return;
+      }
+
+      console.log('[AutoAuth] Found matching account for credentialId:', credentialId);
+
+      // Restore account to compute smart account address (no WebAuthn prompt)
+      // This is necessary because the smart account address is not stored in PasskeyAccount
+      const account = await Account.restore(
+        {
+          chainId: effectiveChainId,
+          apiKey,
+        },
+        matchingAccount.credentialId,
+        matchingAccount.publicKey
+      );
+
+      console.log('[AutoAuth] Restored account with address:', account.address);
+
+      // Set the account as authenticated by storing auth state
+      // This mimics what Account.get() does when credentialId is provided
+      const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+      passkeyManager.storeAuthState(account.address, matchingAccount.credentialId);
+
+      // Update current account state
+      setCurrentAccount(matchingAccount);
+
+      // Refetch auth query to update isAuthenticated
+      await authQuery.refetch();
+
+      console.log('✅ [AutoAuth] Auto-authenticated with credentialId:', credentialId);
+    } catch (error) {
+      console.error('[AutoAuth] Failed to auto-authenticate:', error);
+      // Fall back to passkey check on error
+      await checkForPasskeys();
+    }
+  };
+
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
     setState('passkey-check');
@@ -446,45 +526,73 @@ export default function KeysJawIdApp() {
   // Handle handshake request (unencrypted)
   const handleHandshakeRequest = async (request: RPCRequestMessage) => {
     try {
-
-      // Clear old keys and process new handshake
-      await cryptoHandler.clear();
-      await cryptoHandler.processHandshakeRequest(request);
-
-
       if (!('handshake' in request.content) || !request.content.handshake) {
         console.error('❌ Invalid handshake request');
         return;
       }
 
-      console.log('🔍 =========================');
-      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
-      console.log('🔍 =========================');
-      console.log(JSON.stringify(request, null, 2));
-      console.log('🔍 =========================');
+      // Get origin and set it as current context
+      const origin = communicator.getOrigin() || '';
+      setCurrentOrigin(origin);
+      cryptoHandler.setOrigin(origin);
 
-      // Determine request type
+      const peerPublicKey = request.sender;
       const method = request.content.handshake.method;
       const params = request.content.handshake.params;
       const chain = request.content.chain;
-      const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
 
+      console.log('🔍 =========================');
+      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
+      console.log('🔍 Origin:', origin);
+      console.log('🔍 Method:', method);
+      console.log('🔍 =========================');
+
+      const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
       if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
         setApiKey(apiKeyFromProvider);
       }
 
-      // For pure key exchange handshake (method: 'handshake'), send immediate response
+      // Check for existing session
+      const existingSession = await cryptoHandler.getSession(origin);
+
+      // For pure key exchange handshake (method: 'handshake')
+      // This situation never happens because the wallet_connect/ eth_requestAccounts request is always sent first
       if (method === 'handshake') {
-        // Send empty accounts response for key exchange handshake
+        if (!existingSession) {
+          // No session yet - nothing to respond to, wait for wallet_connect
+          console.log('🔑 Handshake without session, waiting for wallet_connect');
+          return;
+        }
+        if (existingSession.peerPublicKey !== peerPublicKey) {
+          // Update peer key if changed
+          await cryptoHandler.getSessionManager().updatePeerKey(origin, peerPublicKey);
+        }
+        // Acknowledge the handshake
         const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         communicator.sendMessage(response as unknown as Message);
         return;
       }
 
-      // For eth_requestAccounts and wallet_connect, we need to show approval UI
+      // For eth_requestAccounts and wallet_connect
       if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
-        const origin = communicator.getOrigin() || "";
+        // Always create a fresh session with new keys for each connection request
+        if (existingSession) {
+          console.log('🗑️ Deleting old session for:', origin);
+          await cryptoHandler.getSessionManager().deleteSession(origin);
+        }
+
+        // Create new session with fresh keys (account will be set when user approves)
+        console.log('🔐 Creating fresh session for:', origin);
+        await cryptoHandler.getSessionManager().createSession({
+          origin,
+          peerPublicKey,
+        });
+
+        // Reload session after creation
+        await cryptoHandler.loadSession(origin);
+
+        // Set up pending request (for both new connections and SIWE)
         setPendingRequest({
           origin,
           type: SDKRequestType.CONNECT,
@@ -502,22 +610,12 @@ export default function KeysJawIdApp() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(response as any);
           },
-          onReject: async (error: string, errorCode?: number) => {
-            // Send error response for handshake rejection
-            try {
-              const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
-                request.id,
-                request.correlationId || '',
-                errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
-                error || 'User rejected the request'
-              );
-              // eslint-disable-next-line @typescript-eslint/no-explicit-any
-              communicator.sendMessage(errorResponse as any);
-            } catch (err) {
-              console.error('❌ Failed to send rejection response:', err);
-            }
+          onReject: async () => {
+            window.close();
           },
         });
+
+        // Fresh session has no account - checkForPasskeys flow will handle passkey creation/selection
       }
     } catch (err) {
       console.error('❌ Failed to handle handshake:', err);
@@ -529,8 +627,21 @@ export default function KeysJawIdApp() {
   // Handle encrypted request
   const handleEncryptedRequest = async (request: RPCRequestMessage) => {
     try {
-      // Restore shared secret from message
-      await cryptoHandler.restoreSharedSecretFromMessage(request);
+      // Load session for this origin
+      const origin = communicator.getOrigin() || '';
+
+      // Update React state with current origin (needed for useAuth hook)
+      setCurrentOrigin(origin);
+
+      const session = await cryptoHandler.loadSession(origin);
+
+      if (!session) {
+        console.error('❌ No session found for origin:', origin);
+        throw new Error('No session found. Please reconnect.');
+      }
+
+      // Verify and update peer key if changed
+      await cryptoHandler.verifyAndUpdatePeerKey(request);
 
       // Decrypt the request
       const decrypted = await cryptoHandler.decryptRequest(request);
@@ -572,7 +683,6 @@ export default function KeysJawIdApp() {
         requestType = SDKRequestType.UNSUPPORTED_METHOD;
       }
 
-      const origin = communicator.getOrigin() ?? '';
       setPendingRequest({
         origin,
         type: requestType,
@@ -624,7 +734,7 @@ export default function KeysJawIdApp() {
   };
 
   // ==========================================
-  // SDK MODE - When opened by Coinbase SDK
+  // SDK MODE
   // ==========================================
   if (isSDKMode) {
 
@@ -663,7 +773,7 @@ export default function KeysJawIdApp() {
       if (browserAction.type === 'signMessage' && browserAction.message) {
         return (
           <SignatureModal
-            origin={config?.metadata?.appName || 'App'}
+            origin={currentOrigin || config?.metadata?.appName || 'App'}
             message={browserAction.message}
             address={authQuery.walletAddress ?? undefined}
             chain={buildChainForModal()}
@@ -682,7 +792,7 @@ export default function KeysJawIdApp() {
       if (browserAction.type === 'signTypedData' && browserAction.typedData) {
         return (
           <Eip712Modal
-            origin={config?.metadata?.appName || 'App'}
+            origin={currentOrigin || config?.metadata?.appName || 'App'}
             typedDataJson={JSON.stringify(browserAction.typedData)}
             address={authQuery.walletAddress ?? undefined}
             chain={buildChainForModal()}
@@ -766,7 +876,7 @@ export default function KeysJawIdApp() {
             permissionRequest={permissionRequestData}
             chain={chainForModal}
             apiKey={apiKey || ''}
-            origin={config?.metadata?.appName || 'App'}
+            origin={currentOrigin || config?.metadata?.appName || 'App'}
             onSuccess={async (result) => {
               if ('success' in result) {
                 redirectWithResult(callbackUrl, { success: result.success }, requestId);
@@ -802,7 +912,7 @@ export default function KeysJawIdApp() {
             permissionRequest={permissionRequestData}
             chain={chainForModal}
             apiKey={apiKey || ''}
-            origin={config?.metadata?.appName || 'App'}
+            origin={currentOrigin || config?.metadata?.appName || 'App'}
             onSuccess={async (result) => {
               if ('success' in result) {
                 redirectWithResult(callbackUrl, { success: result.success }, requestId);
@@ -846,6 +956,7 @@ export default function KeysJawIdApp() {
           transactionRequest={txData}
           chain={pendingRequest.chain as Chain}
           apiKey={apiKey}
+          origin={currentOrigin || undefined}
           onSuccess={async (result: TransactionResult) => {
             setState('processing');
             try {
@@ -1278,15 +1389,34 @@ export default function KeysJawIdApp() {
               apiKey={apiKey}
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
-              onComplete={async () => {
+              origin={currentOrigin || undefined}
+              onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
+                  // Set the current account from the passed data
+                  setCurrentAccount({
+                    credentialId: authenticatedAccount.credentialId,
+                    username: authenticatedAccount.username,
+                    publicKey: authenticatedAccount.publicKey,
+                    creationDate: new Date().toISOString(),
+                    isImported: false,
+                  });
 
-                  // SignInScreen already created the passkey, just refetch and proceed
-                  const accountsResult = await passkeyQuery.refetchAccounts();
+                  // Update session auth state for per-origin isolation (SDK mode only)
+                  // In browser mode, credentials are stored via Account.authenticate() and retrieved via fallback in useAuth
+                  if (currentOrigin && !isBrowserMode) {
+                    const authState: SessionAuthState = {
+                      address: authenticatedAccount.address,
+                      credentialId: authenticatedAccount.credentialId,
+                      username: authenticatedAccount.username,
+                      publicKey: authenticatedAccount.publicKey,
+                    };
+                    await cryptoHandler.updateAuthState(authState);
+                    console.log('✅ Session auth state updated for origin:', currentOrigin);
+                  }
 
                   await authQuery.refetch();
 
-                  const accounts = accountsResult.data || [];
+                  const accounts = authQuery.allAccounts;
                   const newestAccount = accounts[accounts.length - 1] || null;
                   setCurrentAccount(newestAccount);
 
@@ -1367,13 +1497,34 @@ export default function KeysJawIdApp() {
               apiKey={apiKey}
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
-              onComplete={async () => {
+              origin={currentOrigin || undefined}
+              onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
-                  const accountsResult = await passkeyQuery.refetchAccounts();
+                  // Set the current account from the passed data
+                  setCurrentAccount({
+                    credentialId: authenticatedAccount.credentialId,
+                    username: authenticatedAccount.username,
+                    publicKey: authenticatedAccount.publicKey,
+                    creationDate: new Date().toISOString(),
+                    isImported: false,
+                  });
+
+                  // Update session auth state for per-origin isolation (SDK mode only)
+                  // In browser mode, credentials are stored via Account.authenticate() and retrieved via fallback in useAuth
+                  if (currentOrigin && !isBrowserMode) {
+                    const authState: SessionAuthState = {
+                      address: authenticatedAccount.address,
+                      credentialId: authenticatedAccount.credentialId,
+                      username: authenticatedAccount.username,
+                      publicKey: authenticatedAccount.publicKey,
+                    };
+                    await cryptoHandler.updateAuthState(authState);
+                    console.log('✅ Session auth state updated for origin:', currentOrigin, 'with credentialId:', authenticatedAccount.credentialId);
+                  }
 
                   await authQuery.refetch();
 
-                  const accounts = accountsResult.data || [];
+                  const accounts = authQuery.allAccounts;
                   setCurrentAccount(accounts[0] || null);
 
                   // Browser mode redirect

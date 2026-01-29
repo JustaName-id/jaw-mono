@@ -4,7 +4,7 @@ import { Button } from "../ui/button";
 import { DefaultDialog } from "../DefaultDialog";
 import { FeeTokenSelector } from "../FeeTokenSelector";
 import { PermissionDialogProps } from "./types";
-import { useIsMobile, useChainIcon } from "../../hooks";
+import { useIsMobile, useChainIconURI, useFeeTokenPrice } from "../../hooks";
 import {CopiedIcon, CopyIcon, WalletIcon} from "../../icons";
 import { useState, useEffect } from "react";
 import { getJustaNameInstance } from "../../utils/justaNameInstance";
@@ -22,7 +22,7 @@ export const PermissionDialog = ({
   networkName,
   chainId,
   chainIcon,
-  chainIconKey,
+  apiKey,
   onConfirm,
   onCancel,
   isProcessing,
@@ -34,7 +34,6 @@ export const PermissionDialog = ({
   gasFeeLoading = false,
   gasEstimationError,
   sponsored = false,
-  ethPrice = 0,
   // Fee token props
   feeTokens,
   feeTokensLoading,
@@ -42,8 +41,18 @@ export const PermissionDialog = ({
   onFeeTokenSelect,
   showFeeTokenSelector,
   isPayingWithErc20,
+  // RPC configuration
+  mainnetRpcUrl,
 }: PermissionDialogProps) => {
   const isMobile = useIsMobile();
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
+
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
   const [isResolvingAddresses, setIsResolvingAddresses] = useState(true); // Start true to prevent early clicks
@@ -55,7 +64,7 @@ export const PermissionDialog = ({
       return;
     }
 
-    const justaName = getJustaNameInstance();
+    const justaName = getJustaNameInstance(mainnetRpcUrl);
     const addressesToResolve: string[] = [];
 
     if (spenderAddress) {
@@ -102,8 +111,8 @@ export const PermissionDialog = ({
     });
   }, [spenderAddress, calls, chainId]);
 
-  // Get chain icon using the hook
-  const defaultChainIcon = useChainIcon(chainIconKey || networkName?.toLowerCase() || 'ethereum', 24);
+  // Get chain icon using the hook - fetch from capabilities chainMetadata
+  const defaultChainIcon = useChainIconURI(chainId || 1, apiKey, 24);
   const displayChainIcon = chainIcon || defaultChainIcon;
 
   // Truncate address for display (e.g., 0x43e...ead3)
@@ -121,7 +130,24 @@ export const PermissionDialog = ({
     }
   };
 
-  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses && !gasFeeLoading;
+  // Check if there are any selectable payment options
+  // If feeTokens is not loaded yet (null/undefined/empty), assume there are selectable options
+  const hasSelectablePaymentOption = !feeTokens || feeTokens.length === 0
+    ? true
+    : feeTokens.some(t => t.isSelectable);
+
+  // Determine if user has insufficient funds:
+  // - No selectable payment options at all, OR
+  // - Gas estimation error exists AND not sponsored AND not paying with ERC-20
+  const hasInsufficientFunds = !hasSelectablePaymentOption || (gasEstimationError && !sponsored && !isPayingWithErc20);
+
+  // Only enable confirmation button if:
+  // - Not processing
+  // - Token info loaded
+  // - Addresses resolved
+  // - Gas estimation not loading
+  // - No insufficient funds condition
+  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses && !gasFeeLoading && !hasInsufficientFunds;
 
   // Count total permissions
   const totalSpends = spends.length;
@@ -415,10 +441,10 @@ export const PermissionDialog = ({
                   ) : sponsored || gasFee === 'sponsored' ? (
                     <div className="flex flex-col">
                       <div className="flex items-center gap-2">
-                        {sponsored && gasFee && gasFee !== 'sponsored' && ethPrice > 0 && (
+                        {sponsored && gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
                           <div className="flex flex-col line-through text-muted-foreground">
                             <p className="text-base font-normal">
-                              ${(ethPrice * Number(gasFee)).toFixed(4)}
+                              ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
                             </p>
                           </div>
                         )}
@@ -456,7 +482,7 @@ export const PermissionDialog = ({
                             onSelect={onFeeTokenSelect}
                             isLoading={feeTokensLoading ?? false}
                             disabled={isProcessing}
-                            ethPrice={ethPrice}
+                            nativeTokenPrice={nativeTokenPrice}
                             estimatedGasEth={gasFee || '0'}
                           />
                         )}
@@ -470,9 +496,9 @@ export const PermissionDialog = ({
                   ) : gasFee && gasFee !== 'sponsored' ? (
                     <div className="flex flex-col gap-0.5 w-full">
                       <div className="flex items-center justify-between w-full">
-                        {ethPrice > 0 && (
+                        {nativeTokenPrice > 0 && (
                           <p className="text-base font-normal text-foreground">
-                            ${(ethPrice * Number(gasFee)).toFixed(4)}
+                            ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
                           </p>
                         )}
                         {/* Inline Fee Token Selector (when paying with ETH but selector is available) */}
@@ -483,7 +509,7 @@ export const PermissionDialog = ({
                             onSelect={onFeeTokenSelect}
                             isLoading={feeTokensLoading ?? false}
                             disabled={isProcessing}
-                            ethPrice={ethPrice}
+                            nativeTokenPrice={nativeTokenPrice}
                             estimatedGasEth={gasFee || '0'}
                           />
                         )}
