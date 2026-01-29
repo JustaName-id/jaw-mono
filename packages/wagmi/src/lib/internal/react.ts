@@ -793,10 +793,10 @@ export function useSign<
 }
 
 // ============================================================================
-// useCallsHistory
+// useGetCallsHistory
 // ============================================================================
 
-export namespace useCallsHistory {
+export namespace useGetCallsHistory {
   export type Parameters<
     config extends Config = Config,
     selectData = getCallsHistory.ReturnType,
@@ -826,25 +826,25 @@ export namespace useCallsHistory {
  * @example
  * ```tsx
  * // Get calls history for connected account
- * const { data: history, isLoading } = useCallsHistory();
+ * const { data: history, isLoading } = useGetCallsHistory();
  *
  * // With specific address (works even when not connected)
- * const { data } = useCallsHistory({ address: '0x...' });
+ * const { data } = useGetCallsHistory({ address: '0x...' });
  *
  * // With pagination
- * const { data } = useCallsHistory({
+ * const { data } = useGetCallsHistory({
  *   address: '0x...',
  *   limit: 10,
  *   sort: 'desc',
  * });
  * ```
  */
-export function useCallsHistory<
+export function useGetCallsHistory<
   config extends Config = ResolvedRegister['config'],
   selectData = getCallsHistory.ReturnType,
 >(
-  parameters: useCallsHistory.Parameters<config, selectData> = {},
-): useCallsHistory.ReturnType<selectData> {
+  parameters: useGetCallsHistory.Parameters<config, selectData> = {},
+): useGetCallsHistory.ReturnType<selectData> {
   const { query = {}, ...rest } = parameters;
 
   const config = useConfig(rest as { config?: Config });
@@ -913,6 +913,6 @@ export function useCallsHistory<
       : skipToken,
     queryKey,
     staleTime: 30_000, // Cache for 30 seconds
-  }) as useCallsHistory.ReturnType<selectData>;
+  }) as useGetCallsHistory.ReturnType<selectData>;
 }
 

@@ -228,8 +228,8 @@ export async function waitForReceiptInBackground(userOpHash: string, chainId: nu
         // - status === '0x0' or 0 means failure (reverted)
         // - If status is undefined but receipt exists, assume success (included on-chain)
         const isSuccess = receiptStatus === '0x1' ||
-                         receiptStatus === 1 ||
-                         (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
+            receiptStatus === 1 ||
+            (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
 
         // Fire-and-forget notification to proxy
         if (apiKey) {

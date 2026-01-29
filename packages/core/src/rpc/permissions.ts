@@ -326,7 +326,8 @@ export async function grantPermissions(
         calls,
         chain,
         paymasterUrlOverride,
-        paymasterContextOverride
+        paymasterContextOverride,
+        apiKey
     );
 
     // Extract the permission hash from the PermissionApproved event
@@ -399,7 +400,9 @@ export async function revokePermission(
             },
         ],
         chain,
-        paymasterUrlOverride
+        paymasterUrlOverride,
+        undefined,
+        apiKey
     );
 
     return await deletePermissionFromRelay(permissionId, apiKey);

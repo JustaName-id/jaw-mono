@@ -28,6 +28,7 @@ import {
   useGetAssets,
   useCapabilities,
   useSign,
+  useGetCallsHistory,
   type PersonalSignRequestData,
   type TypedDataRequestData,
 } from '@jaw.id/wagmi';
@@ -68,6 +69,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
   const [permissionsAddress, setPermissionsAddress] = useState<string | undefined>();
   const [assetsAddress, setAssetsAddress] = useState<string | undefined>();
   const [capabilitiesAddress, setCapabilitiesAddress] = useState<string | undefined>();
+  const [callsHistoryAddress, setCallsHistoryAddress] = useState<string | undefined>();
 
   const { data: permissions, refetch: refetchPermissions, isLoading: isLoadingPermissions } = usePermissions({
     address: (permissionsAddress || address) as Address | undefined,
@@ -77,6 +79,9 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
   });
   const { data: capabilities, refetch: refetchCapabilities, isLoading: isLoadingCapabilities } = useCapabilities({
     address: (capabilitiesAddress || address) as Address | undefined,
+  });
+  const { data: callsHistory, refetch: refetchCallsHistory, isLoading: isLoadingCallsHistory } = useGetCallsHistory({
+    address: (callsHistoryAddress || address) as Address | undefined,
   });
 
   // Calls status state
@@ -208,6 +213,16 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
             break;
           }
 
+          case 'useGetCallsHistory': {
+            const targetAddress = (params.address as string) || address;
+            if (targetAddress) {
+              flushSync(() => setCallsHistoryAddress(targetAddress));
+            }
+            const { data } = await refetchCallsHistory();
+            result = data;
+            break;
+          }
+
           default:
             throw new Error(`Unknown hook type: ${method.hookType}`);
         }
@@ -252,6 +267,9 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
       refetchCapabilities,
       refetchCallsStatus,
       callsStatus,
+      setCallsHistoryAddress,
+      refetchCallsHistory,
+      callsHistory,
       addLog,
     ]
   );
@@ -281,6 +299,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
     isLoadingAssets ||
     isLoadingCapabilities ||
     isLoadingCallsStatus ||
+    isLoadingCallsHistory ||
     isExecuting;
 
   return (

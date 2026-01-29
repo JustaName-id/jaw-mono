@@ -310,6 +310,60 @@ console.log('Status:', status.status);
 console.log('Receipts:', status.receipts);`,
     buildParams: (params) => [params.batchId],
   },
+  {
+    id: 'wallet_getCallsHistory',
+    name: 'wallet_getCallsHistory',
+    method: 'wallet_getCallsHistory',
+    category: 'transaction',
+    description: 'Get transaction history for an account',
+    requiresConnection: false,
+    parameters: [
+      {
+        name: 'address',
+        type: 'address',
+        label: 'Address',
+        description: 'Account address (optional if connected)',
+        required: false,
+        autoFill: 'address',
+      },
+      {
+        name: 'limit',
+        type: 'number',
+        label: 'Limit',
+        description: 'Maximum number of bundles to return (default: 20)',
+        required: false,
+        defaultValue: '20',
+      },
+      {
+        name: 'sort',
+        type: 'select',
+        label: 'Sort',
+        description: 'Sort direction (default: desc - newest first)',
+        required: false,
+        defaultValue: 'desc',
+        options: [
+          { label: 'Newest first (desc)', value: 'desc' },
+          { label: 'Oldest first (asc)', value: 'asc' },
+        ],
+      },
+    ],
+    getCodeSnippet: (params) => `const history = await jaw.provider.request({
+  method: 'wallet_getCallsHistory',
+  params: [{
+    address: '${params.address || 'account'}',
+    limit: ${params.limit || 20},
+    sort: '${params.sort || 'desc'}',
+  }],
+});
+
+// History contains bundles with calls and receipts
+console.log('History:', history);`,
+    buildParams: (params, context) => [{
+      address: params.address || context.address,
+      limit: params.limit ? parseInt(params.limit) : undefined,
+      sort: params.sort || undefined,
+    }],
+  },
 
   // ===== Signing Methods =====
   {

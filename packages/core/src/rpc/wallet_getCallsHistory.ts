@@ -1,8 +1,8 @@
-import { restCall } from '../api/index.js';
-import { JAW_PROXY_URL } from '../constants.js';
+import { JAW_RPC_URL } from '../constants.js';
 import { standardErrors } from '../errors/index.js';
 import type { RequestArguments } from '../provider/index.js';
 import type { Address } from 'viem';
+import { buildHandleJawRpcUrl, fetchRPCRequest } from '../utils/index.js';
 import type { CallsHistoryItem } from '../api/routes/index.js';
 
 /**
@@ -26,11 +26,11 @@ export type WalletGetCallsHistoryResponse = CallsHistoryItem[];
 
 /**
  * Handles the wallet_getCallsHistory RPC request.
- * Fetches the call history for a given address from the proxy.
+ * Fetches the call history for a given address from the RPC server.
  *
  * @param request - The RPC request arguments
  * @param apiKey - The API key for authentication
- * @param connectedAddress - Optional connected account address to use as fallback
+ * @param connectedAddress - Optional connected account address to inject if no address in params
  * @returns Array of call history items
  */
 export async function handleGetCallsHistoryRequest(
@@ -38,57 +38,27 @@ export async function handleGetCallsHistoryRequest(
     apiKey: string,
     connectedAddress?: Address
 ): Promise<WalletGetCallsHistoryResponse> {
-    // Validate params
-    if (!Array.isArray(request.params) || request.params.length === 0) {
-        throw standardErrors.rpc.invalidParams('params must be an array with at least one element');
+    const params = request.params as Array<{ address?: Address }> | undefined;
+
+    // Determine which address to use
+    let modifiedRequest = request;
+    if (!params || params.length === 0 || !params[0]?.address) {
+        if (connectedAddress) {
+            // Inject the connected account's address
+            modifiedRequest = {
+                ...request,
+                params: [{
+                    ...params?.[0],
+                    address: connectedAddress
+                }]
+            };
+        } else {
+            // No address provided and no connected address - throw error
+            throw standardErrors.rpc.invalidParams('address is required');
+        }
     }
 
-    const params = request.params[0] as WalletGetCallsHistoryParams[0];
-
-    if (!params || typeof params !== 'object') {
-        throw standardErrors.rpc.invalidParams('params[0] must be an object');
-    }
-
-    // Use params.address if provided, otherwise fall back to connected address
-    const address = params.address ?? connectedAddress;
-
-    if (!address) {
-        throw standardErrors.rpc.invalidParams('address is required');
-    }
-
-    // Build request payload
-    const requestPayload: {
-        address: Address;
-        index?: number;
-        limit?: number;
-        sort?: 'asc' | 'desc';
-    } = {
-        address,
-    };
-
-    if (params.index !== undefined) {
-        requestPayload.index = params.index;
-    }
-
-    if (params.limit !== undefined) {
-        requestPayload.limit = params.limit;
-    }
-
-    if (params.sort !== undefined) {
-        requestPayload.sort = params.sort;
-    }
-
-    // Call the API
-    const result = await restCall(
-        'GET_CALLS_HISTORY',
-        'GET',
-        requestPayload,
-        undefined,
-        undefined,
-        undefined,
-        JAW_PROXY_URL,
-        { 'api-key': apiKey }
-    );
-
-    return result;
+    const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, apiKey);
+    const result = await fetchRPCRequest(modifiedRequest, rpcUrl);
+    return result as WalletGetCallsHistoryResponse;
 }
