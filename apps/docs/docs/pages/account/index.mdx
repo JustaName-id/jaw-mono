@@ -54,6 +54,7 @@ Factory methods for creating Account instances:
 | [Account.get()](/account/get) | Get account - restores session or triggers login |
 | [Account.create()](/account/create) | Create new account with passkey |
 | [Account.import()](/account/import) | Import passkey from cloud backup |
+| [Account.restore()](/account/restore) | Restore account from credential data (no WebAuthn prompt) |
 | [Account.fromLocalAccount()](/account/fromLocalAccount) | Create from viem LocalAccount (server-side) |
 
 Utility methods:
@@ -61,6 +62,7 @@ Utility methods:
 | Method | Description |
 |--------|-------------|
 | [Account.getAuthenticatedAddress()](/account/getAuthenticatedAddress) | Get current authenticated address |
+| [Account.getCurrentAccount()](/account/getCurrentAccount) | Get current authenticated account data |
 | [Account.getStoredAccounts()](/account/getStoredAccounts) | Get all stored passkey accounts |
 | [Account.logout()](/account/logout) | Clear authentication state |
 
@@ -122,6 +124,8 @@ interface AccountConfig {
   apiKey: string;
   /** Custom paymaster URL for gas sponsorship */
   paymasterUrl?: string;
+  /** Custom paymaster context for gas sponsorship */
+  paymasterContext?: Record<string, unknown>;
 }
 ```
 

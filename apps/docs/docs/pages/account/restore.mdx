@@ -1,0 +1,107 @@
+# Account.restore()
+
+Restore an account from existing credential data without triggering a WebAuthn prompt.
+
+**Type:** `static async`
+
+
+## Signature
+
+```typescript
+static async restore(
+  config: AccountConfig,
+  credentialId: string,
+  publicKey: `0x${string}`
+): Promise<Account>
+```
+
+
+## Parameters
+
+### config
+
+Type: `AccountConfig`
+
+| Property | Type | Required | Description |
+|----------|------|----------|-------------|
+| `chainId` | `number` | Yes | Chain ID for the account |
+| `apiKey` | `string` | Yes | API key for JAW services |
+| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
+| `paymasterContext` | `Record<string, unknown>` | No | Custom paymaster context |
+
+### credentialId
+
+Type: `string`
+
+The credential ID of the passkey to restore.
+
+### publicKey
+
+Type: `` `0x${string}` ``
+
+The public key of the passkey (hex encoded).
+
+
+## Returns
+
+`Promise<Account>` - The Account instance
+
+
+## Behavior
+
+This method restores an Account instance from credential data **without triggering a WebAuthn prompt**. The actual signing operations will trigger their own WebAuthn prompts when needed.
+
+Use this method when:
+- The user has already authenticated (e.g., during connection)
+- You have the credential data stored in your session
+- You want to avoid redundant WebAuthn prompts
+
+
+## Errors
+
+| Error | Description |
+|-------|-------------|
+| `credentialId and publicKey are required` | Missing required parameters |
+
+
+## Examples
+
+### Restore from Session Data
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// Restore account from session data (no WebAuthn prompt)
+const account = await Account.restore(
+  { chainId: 1, apiKey: 'your-api-key' },
+  session.authState.credentialId,
+  session.authState.publicKey
+);
+
+// Signing will trigger WebAuthn when needed
+const signature = await account.signMessage('Hello');
+```
+
+### Custom UI Handler Integration
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+// In your UI handler, restore account from stored credentials
+async function handleSignRequest(credentialId: string, publicKey: `0x${string}`) {
+  const account = await Account.restore(
+    { chainId: 8453, apiKey: 'your-api-key' },
+    credentialId,
+    publicKey
+  );
+
+  return account;
+}
+```
+
+
+## Related
+
+- [Account.get()](/account/get) - Get account with optional WebAuthn prompt
+- [Account.getCurrentAccount()](/account/getCurrentAccount) - Get current account data
+- [Account.getStoredAccounts()](/account/getStoredAccounts) - List available accounts

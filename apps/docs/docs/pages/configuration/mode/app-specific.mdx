@@ -14,27 +14,28 @@ For React applications, install the `@jaw.id/ui` package which provides pre-buil
 :::code-group
 
 ```bash [npm]
-npm install @jaw.id/ui @jaw.id/core
+npm install @jaw.id/wagmi @jaw.id/ui @jaw.id/core
 ```
 
 ```bash [pnpm]
-pnpm add @jaw.id/ui @jaw.id/core
+pnpm add @jaw.id/wagmi @jaw.id/ui @jaw.id/core
 ```
 
 ```bash [yarn]
-yarn add @jaw.id/ui @jaw.id/core
+yarn add @jaw.id/wagmi @jaw.id/ui @jaw.id/core
 ```
 
 ```bash [bun]
-bun add @jaw.id/ui @jaw.id/core
+bun add @jaw.id/wagmi @jaw.id/ui @jaw.id/core
 ```
 
 :::
 
 Then configure the SDK with `ReactUIHandler`:
 
+### With Wagmi (Recommended)
+
 ```typescript
-// Wagmi
 import { jaw } from '@jaw.id/wagmi';
 import { Mode } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
@@ -48,8 +49,9 @@ const connector = jaw({
 });
 ```
 
+### With Provider Directly
+
 ```typescript
-// EIP-1193 Provider
 import { JAW, Mode } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
 

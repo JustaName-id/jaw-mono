@@ -116,7 +116,6 @@ export default defineConfig({
         { text: 'eth_sendTransaction', link: '/api-reference/eth_sendTransaction' },
         { text: 'wallet_sendCalls', link: '/api-reference/wallet_sendCalls' },
         { text: 'wallet_getCallsStatus', link: '/api-reference/wallet_getCallsStatus' },
-        { text: 'wallet_showCallsStatus', link: '/api-reference/wallet_showCallsStatus' },
         { text: 'personal_sign', link: '/api-reference/personal_sign' },
         { text: 'eth_signTypedData_v4', link: '/api-reference/eth_signTypedData_v4' },
         { text: 'wallet_sign', link: '/api-reference/wallet_sign' },
@@ -141,6 +140,7 @@ export default defineConfig({
             { text: 'get()', link: '/account/get' },
             { text: 'create()', link: '/account/create' },
             { text: 'import()', link: '/account/import' },
+            { text: 'restore()', link: '/account/restore' },
             { text: 'fromLocalAccount()', link: '/account/fromLocalAccount' },
           ],
         },
@@ -149,6 +149,7 @@ export default defineConfig({
           collapsed: true,
           items: [
             { text: 'getAuthenticatedAddress()', link: '/account/getAuthenticatedAddress' },
+            { text: 'getCurrentAccount()', link: '/account/getCurrentAccount' },
             { text: 'getStoredAccounts()', link: '/account/getStoredAccounts' },
             { text: 'logout()', link: '/account/logout' },
           ],

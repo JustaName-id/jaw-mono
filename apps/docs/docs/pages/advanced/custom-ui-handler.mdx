@@ -76,8 +76,8 @@ The SDK passes configuration to your handler via the `init()` method:
 
 ```typescript
 interface UIHandlerConfig {
-  /** JAW API key for RPC URL resolution */
-  apiKey?: string;
+  /** JAW API key for RPC URL resolution (required) */
+  apiKey: string;
   /** Default chain ID */
   defaultChainId?: number;
   /** Paymaster configuration per chain for gasless transactions */
@@ -86,6 +86,10 @@ interface UIHandlerConfig {
   appName?: string;
   /** App logo URL */
   appLogoUrl?: string | null;
+  /** ENS to issue subnames from */
+  ens?: string;
+  /** Whether to show testnet chains */
+  showTestnets?: boolean;
 }
 ```
 
@@ -197,16 +201,18 @@ interface PermissionUIRequest {
     spender: Address;
     permissions: {
       spends?: Array<{
-        limit: string;
-        period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
         token: Address;
+        allowance: string;
+        unit: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
+        multiplier?: number;
       }>;
       calls?: Array<{
         target: Address;
-        selector: `0x${string}`;
+        selector?: `0x${string}`;
         functionSignature?: string;
       }>;
     };
+    capabilities?: RequestCapabilities;
   };
 }
 ```

@@ -1,15 +1,18 @@
 # Getting Started
 
-The JAW SDK is a TypeScript library for integrating smart wallets with passkey authentication into your application.
+## What is JAW?
 
-## Features
+JAW (JustaName Account Wallet) is a smart wallet SDK that brings the security of blockchain wallets with the simplicity of passkeys.
 
-- **Passkey Authentication** - Secure, passwordless authentication using WebAuthn
-- **Gasless Transactions** - Built-in paymaster support for sponsored transactions
-- **Atomic Batch Operations** - Execute multiple calls atomically via `useSendCalls` (EIP-5792)
-- **Permission System** - Grant granular spend and call permissions to third parties
-- **Multi-Chain Support** - Works across Ethereum and EVM-compatible chains
-- **Identity-Centric by Design** - Issue ENS subnames during onboarding, so your users are never exposed to hexadecimal addresses
+**Smart wallets** are blockchain accounts controlled by smart contracts instead of private keys. This enables powerful features like:
+- **Gasless transactions** - Users don't need ETH to pay for gas
+- **Batch operations** - Execute multiple actions in a single transaction
+- **Programmable permissions** - Grant limited access to third parties
+
+**Passkeys** replace seed phrases and passwords with biometric authentication (Face ID, fingerprint, or device PIN). Your users get:
+- No seed phrases to lose or steal
+- Phishing-resistant authentication
+- Cross-device sync via iCloud/Google
 
 ## Installation
 
@@ -94,6 +97,7 @@ function App({ children }: { children: React.ReactNode }) {
 import { useAccount, useSendTransaction } from 'wagmi';
 import { useConnect, useDisconnect } from '@jaw.id/wagmi';
 import { parseEther } from 'viem';
+import { config } from './config';
 
 function WalletButton() {
   const { address, isConnected } = useAccount();
@@ -129,94 +133,9 @@ function WalletButton() {
 }
 ```
 
+When users click "Connect Wallet", a popup appears for passkey authentication:
 
-## Wagmi Compatibility
-
-With the JAW connector, standard wagmi hooks work out of the box:
-
-| Wagmi Hook | Description |
-|------------|-------------|
-| `useAccount` | Get connected account info |
-| `useSendTransaction` | Send transactions (gasless if paymaster configured) |
-| `useSignMessage` | Sign messages (EIP-191) |
-| `useSignTypedData` | Sign typed data (EIP-712) |
-| `useSwitchChain` | Switch networks |
-| `useSendCalls` | Atomic batch operations (EIP-5792) |
-| `useWriteContract` | Call contract functions |
-| `useBalance` | Get token balances |
-
-
-## JAW-Specific Hooks
-
-For JAW-specific features like permissions, import directly from `@jaw.id/wagmi`:
-
-```typescript
-import {
-  useConnect,
-  useDisconnect,
-  useGrantPermissions,
-  usePermissions,
-  useRevokePermissions
-} from '@jaw.id/wagmi';
-```
-
-| Hook | Description |
-|------|-------------|
-| `useConnect` | Connect with optional capabilities (SIWE, subnames) |
-| `useDisconnect` | Disconnect and clean up session |
-| `useGrantPermissions` | Grant spend/call permissions to a spender |
-| `usePermissions` | Query current permissions |
-| `useRevokePermissions` | Revoke a permission |
-
-
-## Batch Transactions Example
-
-Send multiple calls atomically using wagmi's `useSendCalls`:
-
-```tsx
-import { useSendCalls } from 'wagmi';
-import { encodeFunctionData } from 'viem';
-
-function BatchTransfer() {
-  const { sendCalls, isPending } = useSendCalls();
-
-  const handleBatchTransfer = () => {
-    sendCalls({
-      calls: [
-        {
-          to: USDC_ADDRESS,
-          data: encodeFunctionData({
-            abi: erc20Abi,
-            functionName: 'transfer',
-            args: ['0xAlice...', 1000000n],
-          }),
-        },
-        {
-          to: USDC_ADDRESS,
-          data: encodeFunctionData({
-            abi: erc20Abi,
-            functionName: 'transfer',
-            args: ['0xBob...', 2000000n],
-          }),
-        },
-      ],
-    });
-  };
-
-  return (
-    <button onClick={handleBatchTransfer} disabled={isPending}>
-      {isPending ? 'Sending...' : 'Send to Alice & Bob'}
-    </button>
-  );
-}
-```
-
-
-## Next Steps
-
-- **[Configuration](/configuration)** - All configuration options
-- **[Wagmi Integration](/wagmi)** - Full wagmi hooks reference
-- **[Supported Networks](/supported-networks)** - Available chains
+![JAW Connect Popup](/images/connect-popup.png)
 
 
 ## Using the Provider Directly
@@ -238,3 +157,11 @@ const accounts = await jaw.provider.request({
 ```
 
 See the [Provider API Reference](/api-reference) for all available methods.
+
+
+## Next Steps
+
+- **[Configuration](/configuration)** - All configuration options
+- **[Wagmi Integration](/wagmi)** - Full wagmi hooks reference
+- **[Guides](/guides)** - Tutorials for common use cases
+- **[Supported Networks](/supported-networks)** - Available chains
