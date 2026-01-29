@@ -21,6 +21,8 @@ export interface UpdateCallStatusRequest {
 export interface GetCallsHistoryRequest {
   /** Address to fetch call bundles for */
   address: Address;
+  /** Optional chain ID to filter by */
+  chainId?: number;
   /** Optional index cursor for pagination */
   index?: number;
   /** Maximum number of bundles to return (default: 20) */
@@ -43,11 +45,10 @@ export interface CallsHistoryItem {
   status: number;
   /** Unix timestamp in seconds */
   timestamp: number;
-  /** Empty when pending, single entry when completed */
-  transactions: {
-    chainId: number;
-    transactionHash: Hash;
-  }[];
+  /** Chain ID */
+  chainId: number;
+  /** Transaction hash (null when pending) */
+  transactionHash: Hash | null;
 }
 
 /**

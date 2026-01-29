@@ -11,6 +11,8 @@ import type { CallsHistoryItem } from '../api/routes/index.js';
 export type WalletGetCallsHistoryParams = [{
     /** Address to fetch call bundles for (required) */
     address: Address;
+    /** Optional chain ID to filter by */
+    chainId?: number;
     /** Optional index cursor for pagination */
     index?: number;
     /** Maximum number of bundles to return (default: 20) */

@@ -40,7 +40,7 @@ Specific account address to get history for. If not provided when connected, use
 
 Type: `number` (optional)
 
-Specific chain ID. Defaults to current chain.
+Chain ID to filter results by. When provided, only returns history items for that chain.
 
 ### connector
 
@@ -109,11 +109,10 @@ interface CallsHistoryItem {
   status: number;
   /** Unix timestamp in seconds */
   timestamp: number;
-  /** Empty when pending, single entry when completed */
-  transactions: {
-    chainId: number;
-    transactionHash: `0x${string}`;
-  }[];
+  /** Chain ID */
+  chainId: number;
+  /** Transaction hash (null when pending) */
+  transactionHash: `0x${string}` | null;
 }
 ```
 

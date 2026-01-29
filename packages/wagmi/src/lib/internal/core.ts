@@ -494,6 +494,7 @@ export async function getCallsHistory<config extends Config>(
     method: 'wallet_getCallsHistory' as never,
     params: [{
       address,
+      chainId,
       index,
       limit,
       sort,

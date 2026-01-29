@@ -904,6 +904,7 @@ export function useGetCallsHistory<
             method: 'wallet_getCallsHistory' as never,
             params: [{
               address: targetAddress,
+              chainId: parameters.chainId,
               index: parameters.index,
               limit: parameters.limit,
               sort: parameters.sort,
