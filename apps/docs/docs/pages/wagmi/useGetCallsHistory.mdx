@@ -1,4 +1,4 @@
-# useCallsHistory
+# useGetCallsHistory
 
 Hook to get the call history for an account. Can be called with or without a connected wallet.
 
@@ -8,14 +8,14 @@ Hook to get the call history for an account. Can be called with or without a con
 ## Import
 
 ```typescript
-import { useCallsHistory } from '@jaw.id/wagmi';
+import { useGetCallsHistory } from '@jaw.id/wagmi';
 ```
 
 
 ## Signature
 
 ```typescript
-function useCallsHistory(parameters?: {
+function useGetCallsHistory(parameters?: {
   address?: Address;
   chainId?: number;
   connector?: Connector;
@@ -132,11 +132,11 @@ interface CallsHistoryItem {
 
 ```tsx
 import { useAccount } from 'wagmi';
-import { useCallsHistory } from '@jaw.id/wagmi';
+import { useGetCallsHistory } from '@jaw.id/wagmi';
 
 function TransactionHistory() {
   const { isConnected } = useAccount();
-  const { data: history, isLoading } = useCallsHistory();
+  const { data: history, isLoading } = useGetCallsHistory();
 
   if (!isConnected) return <p>Connect wallet to view history</p>;
   if (isLoading) return <p>Loading history...</p>;
@@ -157,11 +157,11 @@ function TransactionHistory() {
 ### Without Connection (Address Required)
 
 ```tsx
-import { useCallsHistory } from '@jaw.id/wagmi';
+import { useGetCallsHistory } from '@jaw.id/wagmi';
 
 function AddressHistory({ address }: { address: `0x${string}` }) {
   // Works without wallet connection!
-  const { data: history, isLoading } = useCallsHistory({ address });
+  const { data: history, isLoading } = useGetCallsHistory({ address });
 
   if (isLoading) return <p>Loading...</p>;
 
@@ -178,12 +178,12 @@ function AddressHistory({ address }: { address: `0x${string}` }) {
 
 ```tsx
 import { useState } from 'react';
-import { useCallsHistory } from '@jaw.id/wagmi';
+import { useGetCallsHistory } from '@jaw.id/wagmi';
 
 function PaginatedHistory({ address }: { address: `0x${string}` }) {
   const [cursor, setCursor] = useState<number | undefined>();
 
-  const { data: history, isLoading, isFetching } = useCallsHistory({
+  const { data: history, isLoading, isFetching } = useGetCallsHistory({
     address,
     index: cursor,
     limit: 10,
@@ -214,10 +214,10 @@ function PaginatedHistory({ address }: { address: `0x${string}` }) {
 ### Filtering by Status
 
 ```tsx
-import { useCallsHistory } from '@jaw.id/wagmi';
+import { useGetCallsHistory } from '@jaw.id/wagmi';
 
 function PendingTransactions() {
-  const { data: history } = useCallsHistory();
+  const { data: history } = useGetCallsHistory();
 
   const pending = history?.filter((item) => item.status === 100) || [];
 
@@ -237,10 +237,10 @@ function PendingTransactions() {
 ### Manual Refresh
 
 ```tsx
-import { useCallsHistory } from '@jaw.id/wagmi';
+import { useGetCallsHistory } from '@jaw.id/wagmi';
 
 function RefreshableHistory() {
-  const { data, refetch, isFetching } = useCallsHistory();
+  const { data, refetch, isFetching } = useGetCallsHistory();
 
   return (
     <div>

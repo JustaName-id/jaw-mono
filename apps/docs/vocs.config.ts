@@ -92,7 +92,7 @@ export default defineConfig({
           text: 'Hooks',
           collapsed: true,
           items: [
-            { text: 'useCallsHistory()', link: '/wagmi/useCallsHistory' },
+            { text: 'useGetCallsHistory()', link: '/wagmi/useGetCallsHistory' },
             { text: 'useCapabilities()', link: '/wagmi/useCapabilities' },
             { text: 'useConnect()', link: '/wagmi/useConnect' },
             { text: 'useDisconnect()', link: '/wagmi/useDisconnect' },
