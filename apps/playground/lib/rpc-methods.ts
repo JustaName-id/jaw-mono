@@ -263,28 +263,6 @@ console.log('Batch ID:', result.id);`;
     },
   },
   {
-    id: 'wallet_showCallsStatus',
-    name: 'wallet_showCallsStatus',
-    method: 'wallet_showCallsStatus',
-    category: 'transaction',
-    description: 'Show batch transaction status UI',
-    requiresConnection: true,
-    parameters: [
-      {
-        name: 'batchId',
-        type: 'hex',
-        label: 'Batch ID',
-        description: 'The batch ID from wallet_sendCalls',
-        required: true,
-      },
-    ],
-    getCodeSnippet: (params) => `await jaw.provider.request({
-  method: 'wallet_showCallsStatus',
-  params: ['${params.batchId || '0x...'}'],
-});`,
-    buildParams: (params) => [params.batchId],
-  },
-  {
     id: 'wallet_getCallsStatus',
     name: 'wallet_getCallsStatus',
     method: 'wallet_getCallsStatus',
