@@ -53,7 +53,13 @@ export {
     type AssetFilter,
     type WalletGetAssetsParams,
     type WalletGetAssetsResponse,
+    // Calls history types
+    type WalletGetCallsHistoryParams,
+    type WalletGetCallsHistoryResponse,
 } from './rpc/index.js';
+
+/** Calls history types (from API routes) **/
+export type { CallsHistoryItem } from './api/routes/index.js';
 
 /**  Account exports **/
 export * from './account/index.js';

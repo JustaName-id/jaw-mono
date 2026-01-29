@@ -90,6 +90,7 @@ export type Config = {
     receipts?: unknown[];
     chainId?: number;
     error?: string;
+    apiKey?: string;
   };
 
   export type CallStatusSlice = {

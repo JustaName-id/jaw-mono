@@ -10,6 +10,7 @@ import {
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
+import { handleGetCallsHistoryRequest } from '../rpc/wallet_getCallsHistory.js';
 
 import { standardErrors } from '../errors/index.js';
 import { RPCResponse } from '../messages/index.js';
@@ -178,6 +179,17 @@ export abstract class JAWSigner implements Signer {
             case 'wallet_getCallsStatus':
                 return await handleGetCallsStatusRequest(request);
 
+            case 'wallet_getCallsHistory': {
+                const config = store.config.get();
+                const apiKey = config.apiKey;
+
+                if (!apiKey) {
+                    throw standardErrors.rpc.internal('No API key configured');
+                }
+
+                return await handleGetCallsHistoryRequest(request, apiKey, this.accounts[0]);
+            }
+
             case 'wallet_getAssets': {
                 const config = store.config.get();
                 const apiKey = config.apiKey;
@@ -311,10 +323,11 @@ export abstract class JAWSigner implements Signer {
     protected trackSendCallsResult(result: { id?: string; chainId?: number }): void {
         const userOpHash = result?.id;
         const chainId = result?.chainId;
+        const apiKey = store.getState().config.apiKey;
 
         if (userOpHash && chainId) {
-            storeCallStatus(userOpHash, chainId);
-            waitForReceiptInBackground(userOpHash, chainId).catch((error) => {
+            storeCallStatus(userOpHash, chainId, apiKey);
+            waitForReceiptInBackground(userOpHash, chainId, apiKey).catch((error) => {
                 console.error('Background receipt wait failed:', error);
             });
         }
