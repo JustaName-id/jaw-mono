@@ -52,6 +52,8 @@ export type Account = {
     accounts?: Address[];
     capabilities?: WalletConnectResponse['accounts'][number]['capabilities'];
     chain?: Chain;
+    /** Timestamp (in ms) when the account was connected */
+    connectedAt?: number;
 };
 
 

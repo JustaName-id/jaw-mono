@@ -150,7 +150,17 @@ export abstract class JAWSigner implements Signer {
      */
     protected async handleAuthenticatedRequest(request: RequestArguments): Promise<unknown> {
         switch (request.method) {
-            case 'eth_requestAccounts':
+            case 'eth_requestAccounts': {
+                const cachedResponse = await this.getCachedWalletConnectResponse();
+                if (!cachedResponse) {
+                    // Session expired, trigger re-authentication
+                    this.accounts = [];
+                    return this.handleUnauthenticatedRequest(request);
+                }
+                this.emitConnect();
+                return this.accounts;
+            }
+
             case 'eth_accounts': {
                 this.emitConnect();
                 return this.accounts;

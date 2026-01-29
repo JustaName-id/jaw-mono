@@ -71,6 +71,8 @@ export interface JawProviderPreference {
      * If not provided, defaults to WebCommunicationAdapter on web platforms.
      */
     communicationAdapter?: CommunicationAdapter;
+    /** Session cache TTL in seconds. Default: 86400 (24 hours). Set to 0 to disable caching. */
+    authTTL?: number;
 }
 
 export type ProviderEventCallback = ProviderInterface['emit'];

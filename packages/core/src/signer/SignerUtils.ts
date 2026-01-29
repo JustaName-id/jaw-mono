@@ -85,12 +85,59 @@ export function assertParamsChainId(params: unknown): asserts params is [
     }
 }
 
+/** Default auth TTL: 24 hours in seconds */
+export const DEFAULT_AUTH_TTL = 86400;
+
+/**
+ * Normalizes authTTL to handle edge cases:
+ * - undefined/null → DEFAULT_AUTH_TTL
+ * - NaN → 0 (immediate expiration)
+ * - negative → 0 (immediate expiration)
+ * - Infinity → DEFAULT_AUTH_TTL
+ * - positive number → used as-is
+ */
+export function normalizeAuthTTL(authTTL: number | undefined): number {
+    if (authTTL === undefined || authTTL === null) {
+        return DEFAULT_AUTH_TTL;
+    }
+    if (Number.isNaN(authTTL)) {
+        return 0;
+    }
+    if (!Number.isFinite(authTTL)) {
+        // Infinity or -Infinity → use default TTL
+        return DEFAULT_AUTH_TTL;
+    }
+    return Math.max(0, authTTL);
+}
+
 export async function getCachedWalletConnectResponse(): Promise<WalletConnectResponse | null> {
     const accountState = store.account.get();
     const accounts = accountState.accounts;
 
-    if (!accounts) {
+    // No accounts or empty accounts array
+    if (!accounts || accounts.length === 0) {
         return null;
+    }
+
+    // Check if the cache has expired
+    const connectedAt = accountState.connectedAt;
+    // Use !== undefined to handle connectedAt = 0 (epoch) as valid
+    if (connectedAt !== undefined) {
+        const config = store.config.get();
+        const authTTL = normalizeAuthTTL(config.preference?.authTTL);
+
+        // TTL of 0 means cache is disabled - always require re-auth
+        if (authTTL === 0) {
+            store.account.clear();
+            return null;
+        }
+
+        const expiresAt = connectedAt + (authTTL * 1000);
+        if (Date.now() > expiresAt) {
+            // Cache has expired, clear account state and return null
+            store.account.clear();
+            return null;
+        }
     }
 
     // Get stored capabilities (e.g., signInWithEthereum response)
