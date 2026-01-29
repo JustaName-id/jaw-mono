@@ -60,11 +60,23 @@ const DOMAINS = {
     dirs: ['account'],
     includes: [],
   },
-  'getting-started': {
-    title: 'JAW Getting Started',
-    description: 'Setup, configuration, and guides for integrating JAW smart accounts.',
-    dirs: ['configuration', 'guides', 'advanced'],
+  quickstart: {
+    title: 'JAW Quickstart & Guides',
+    description: 'Getting started with JAW smart accounts - setup, tutorials, and common use cases.',
+    dirs: ['guides'],
     includes: ['index.mdx', 'supported-networks.mdx'],
+  },
+  configuration: {
+    title: 'JAW Configuration Reference',
+    description: 'Configuration options for JAW - applies to both core and wagmi integrations.',
+    dirs: ['configuration'],
+    includes: [],
+  },
+  advanced: {
+    title: 'JAW Advanced Topics',
+    description: 'Advanced implementation details - custom UI handlers, passkey server setup, and specialized configurations.',
+    dirs: ['advanced'],
+    includes: [],
   },
 }
 
@@ -203,8 +215,14 @@ If the user wants **provider-level control** (EIP-1193 provider, RPC methods, cu
 If the user wants to **embed specific account functionality** (direct account operations, signing, transactions, permissions):
 → ${BASE_URL}/llms-account.txt
 
-If the user needs help with **setup, configuration, or getting started**:
-→ ${BASE_URL}/llms-getting-started.txt
+If the user needs help with **getting started, setup, or tutorials** (quickstart, gas sponsoring, SIWE, subscriptions):
+→ ${BASE_URL}/llms-quickstart.txt
+
+If the user needs help with **configuration options** (apiKey, appName, paymasters, mode, ENS):
+→ ${BASE_URL}/llms-configuration.txt
+
+If the user needs help with **advanced topics** (custom UI handlers, passkey server, app-specific mode implementation):
+→ ${BASE_URL}/llms-advanced.txt
 
 ## About JAW Packages
 

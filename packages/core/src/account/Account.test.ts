@@ -326,8 +326,8 @@ describe('Account', () => {
 
       expect(result.id).toBe(mockUserOpHash);
       expect(result.chainId).toBe(1);
-      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1);
-      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1);
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1, 'test-api-key');
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1, 'test-api-key');
     });
 
     it('getCallStatus should return status from getCallStatusEIP5792', async () => {
@@ -470,8 +470,8 @@ describe('Account', () => {
         undefined,
         undefined
       );
-      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1);
-      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1);
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1, 'test-api-key');
+      expect(waitForReceiptInBackground).toHaveBeenCalledWith(mockUserOpHash, 1, 'test-api-key');
     });
 
     it('sendCalls without permissionId should use standard sendCalls', async () => {
@@ -516,7 +516,7 @@ describe('Account', () => {
       expect(result.id).toBe(mockUserOpHash);
       expect(sendSmartAccountCalls).toHaveBeenCalled();
       expect(sendCallsWithPermission).not.toHaveBeenCalled();
-      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1);
+      expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1, 'test-api-key');
     });
   });
 

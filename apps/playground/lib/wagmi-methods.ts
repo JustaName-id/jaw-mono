@@ -72,7 +72,8 @@ export type WagmiHookType =
   | 'useRevokePermissions'
   | 'usePermissions'
   | 'useGetAssets'
-  | 'useCapabilities';
+  | 'useCapabilities'
+  | 'useGetCallsHistory';
 
 export type WagmiMethod = {
   id: string;
@@ -272,6 +273,61 @@ console.log('Status:', callsStatus?.status);
 console.log('Receipts:', callsStatus?.receipts);`,
     buildParams: (params) => ({
       id: params.id,
+    }),
+  },
+  {
+    id: 'wallet_getCallsHistory',
+    name: 'useGetCallsHistory',
+    method: 'wallet_getCallsHistory',
+    hookType: 'useGetCallsHistory',
+    category: 'transaction',
+    description: 'Get transaction history for an account',
+    requiresConnection: false,
+    parameters: [
+      {
+        name: 'address',
+        type: 'address',
+        label: 'Address',
+        description: 'Account address (optional if connected)',
+        required: false,
+        autoFill: 'address',
+      },
+      {
+        name: 'limit',
+        type: 'number',
+        label: 'Limit',
+        description: 'Maximum number of bundles to return (default: 20)',
+        required: false,
+        defaultValue: '20',
+      },
+      {
+        name: 'sort',
+        type: 'select',
+        label: 'Sort',
+        description: 'Sort direction (default: desc - newest first)',
+        required: false,
+        defaultValue: 'desc',
+        options: [
+          { label: 'Newest first (desc)', value: 'desc' },
+          { label: 'Oldest first (asc)', value: 'asc' },
+        ],
+      },
+    ],
+    getCodeSnippet: (params) => `import { useGetCallsHistory } from '@jaw.id/wagmi';
+
+// Works without wallet connection when address is provided
+const { data: history, isLoading, refetch } = useGetCallsHistory(${params.address ? `{
+  address: '${params.address}',
+  limit: ${params.limit || 20},
+  sort: '${params.sort || 'desc'}',
+}` : ''});
+
+// History contains bundles with calls and receipts
+console.log('History:', history);`,
+    buildParams: (params) => ({
+      address: params.address || undefined,
+      limit: params.limit ? parseInt(params.limit) : undefined,
+      sort: params.sort || undefined,
     }),
   },
 
