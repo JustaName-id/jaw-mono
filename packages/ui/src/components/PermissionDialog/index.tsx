@@ -6,7 +6,7 @@ import { FeeTokenSelector } from "../FeeTokenSelector";
 import { PermissionDialogProps } from "./types";
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from "../../hooks";
 import {CopiedIcon, CopyIcon, WalletIcon} from "../../icons";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { getJustaNameInstance } from "../../utils/justaNameInstance";
 
 export const PermissionDialog = ({
@@ -44,6 +44,9 @@ export const PermissionDialog = ({
   // RPC configuration
   mainnetRpcUrl,
 }: PermissionDialogProps) => {
+  // Ref for scrollable container
+  const scrollableRef = useRef<HTMLDivElement>(null);
+
   const isMobile = useIsMobile();
 
   // Get native token symbol from feeTokens (defaults to ETH if not found)
@@ -111,6 +114,26 @@ export const PermissionDialog = ({
     });
   }, [spenderAddress, calls, chainId]);
 
+  // Handle wheel events for smooth scrolling over content
+  useEffect(() => {
+    const scrollable = scrollableRef.current;
+    if (!scrollable) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Prevent default to handle scroll manually
+      e.preventDefault();
+      // Smooth scroll
+      scrollable.scrollTop += e.deltaY;
+    };
+
+    // Add event listener with passive: false to allow preventDefault
+    scrollable.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      scrollable.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   // Get chain icon using the hook - fetch from capabilities chainMetadata
   const defaultChainIcon = useChainIconURI(chainId || 1, apiKey, 24);
   const displayChainIcon = chainIcon || defaultChainIcon;
@@ -173,7 +196,7 @@ export const PermissionDialog = ({
     >
       <div className="flex flex-col gap-6 justify-between max-md:h-full h-full overflow-hidden">
         {/* Scrollable Content Area */}
-        <div className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0 max-h-[60vh] max-md:pb-2">
+        <div ref={scrollableRef} className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0 max-h-[60vh] max-md:pb-2">
           {/* Permission ID Card - Only for revoke mode */}
           {mode === 'revoke' && permissionId && (
             <div className="flex flex-col gap-2.5 p-3.5 border border-border rounded-[6px]">

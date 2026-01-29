@@ -8,7 +8,7 @@ import { WalletIcon } from '../../icons';
 import { ChevronRight } from 'lucide-react';
 import { OrSeparator } from '../OrSeparator';
 import { OnboardingDialogProps } from './types';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
 import {toCoinType} from "viem";
 
@@ -28,6 +28,9 @@ export function OnboardingDialog({
   supportedChains,
   subnameTextRecords,
 }: OnboardingDialogProps) {
+  // Ref for scrollable container
+  const scrollableRef = useRef<HTMLDivElement>(null);
+
   // Validation state
   const [isValid, setIsValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -115,6 +118,26 @@ export function OnboardingDialog({
     validateUsername();
   }, [debouncedUsername, username, ensDomain, chainId]);
 
+  // Handle wheel events for smooth scrolling over buttons
+  useEffect(() => {
+    const scrollable = scrollableRef.current;
+    if (!scrollable) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Prevent default to handle scroll manually
+      e.preventDefault();
+      // Smooth scroll
+      scrollable.scrollTop += e.deltaY;
+    };
+
+    // Add event listener with passive: false to allow preventDefault
+    scrollable.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      scrollable.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   const handleCreateAccountClick = async () => {
     // Clear any previous errors
     setError(null);
@@ -186,7 +209,7 @@ export function OnboardingDialog({
 
       <CardContent className="flex flex-col gap-5">
         {/* Existing Accounts */}
-        <div className="flex flex-col gap-1 max-h-[40vh] overflow-y-auto">
+        <div ref={scrollableRef} className="flex flex-col gap-1 max-h-[40vh] overflow-y-auto overscroll-contain">
           {accounts.map((account) => (
             <Button
               key={account.credentialId || account.username || Math.random().toString()}

@@ -901,7 +901,10 @@ function OnboardingDialogWrapper({
   return (
     <DefaultDialogComponent
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       handleClose={handleCancel}
       contentStyle={{
         width: 'fit-content',
@@ -992,7 +995,10 @@ function SignatureDialogWrapper({
   return (
     <SignatureDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       message={request.data.message}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
@@ -1082,7 +1088,10 @@ function Eip712DialogWrapper({
   return (
     <Eip712Dialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       typedDataJson={request.data.typedData}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
@@ -1403,7 +1412,10 @@ function TransactionDialogWrapper({
   return (
     <TransactionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       transactions={transactions}
       walletAddress={request.data.from}
       gasFee={gasFee}
@@ -1718,7 +1730,10 @@ function SendTransactionDialogWrapper({
   return (
     <TransactionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       transactions={transactions}
       walletAddress={request.data.from}
       gasFee={gasFee}
@@ -2248,7 +2263,10 @@ function PermissionDialogWrapper({
   return (
     <PermissionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       mode="grant"
       spenderAddress={request.data.spender}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
@@ -2386,7 +2404,10 @@ function SiweDialogWrapper({
   return (
     <SiweDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       message={decodedMessage}
       origin={origin}
       timestamp={new Date(request.timestamp)}
@@ -2602,7 +2623,10 @@ function RevokePermissionDialogWrapper({
   return (
     <PermissionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       mode="revoke"
       permissionId={request.data.permissionId}
       spenderAddress={spenderAddress}
@@ -2650,7 +2674,10 @@ function UnsupportedMethodDialogWrapper({
   return (
     <DefaultDialogComponent
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleClose();
+        else setOpen(newOpen);
+      }}
       handleClose={handleClose}
       contentStyle={{
         width: 'fit-content',
