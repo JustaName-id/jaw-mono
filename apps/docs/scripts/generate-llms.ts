@@ -40,43 +40,119 @@ let DIST_DIR: string
 
 const BASE_URL = 'https://docs.jaw.id'
 
-// Domain configuration
-const DOMAINS = {
+// Domain configuration with rich headers for LLM discoverability
+interface DomainConfig {
+  title: string
+  description: string
+  dirs: string[]
+  includes: string[]
+  packageName?: string
+  installCommand?: string
+  quickExample?: string
+}
+
+const DOMAINS: Record<string, DomainConfig> = {
   wagmi: {
     title: 'JAW Wagmi Integration',
     description: 'Wagmi connector and React hooks for integrating JAW smart accounts into React/Next.js applications.',
     dirs: ['wagmi'],
     includes: [],
+    packageName: '@jaw.id/wagmi',
+    installCommand: 'npm install @jaw.id/wagmi wagmi viem @tanstack/react-query',
+    quickExample: `import { jaw } from '@jaw.id/wagmi';
+import { createConfig, http } from 'wagmi';
+import { base } from 'wagmi/chains';
+
+const config = createConfig({
+  chains: [base],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_API_KEY',
+      appName: 'My App',
+    }),
+  ],
+  transports: { [base.id]: http() },
+});`,
   },
   core: {
     title: 'JAW Provider - RPC Reference',
     description: 'EIP-1193 compliant provider with full RPC method support for smart account operations.',
     dirs: ['api-reference'],
     includes: [],
+    packageName: '@jaw.id/core',
+    installCommand: 'npm install @jaw.id/core viem',
+    quickExample: `import { JAW } from '@jaw.id/core';
+
+const provider = await JAW.create({
+  apiKey: 'YOUR_API_KEY',
+  appName: 'My App',
+  chains: [{ id: 8453, rpcUrl: 'https://mainnet.base.org' }],
+});
+
+// EIP-1193 compliant - use with any library
+const accounts = await provider.request({ method: 'eth_requestAccounts' });`,
   },
   account: {
     title: 'JAW Account API',
     description: 'Direct smart account operations including signing, transactions, and permission management.',
     dirs: ['account'],
     includes: [],
+    packageName: '@jaw.id/core',
+    installCommand: 'npm install @jaw.id/core viem',
+    quickExample: `import { JAW } from '@jaw.id/core';
+
+const provider = await JAW.create({ apiKey: 'KEY', appName: 'App', chains: [...] });
+const account = provider.getAccount();
+
+// Send a transaction
+const hash = await account.sendTransaction({
+  to: '0x...',
+  value: parseEther('0.01'),
+});`,
   },
   quickstart: {
     title: 'JAW Quickstart & Guides',
     description: 'Getting started with JAW smart accounts - setup, tutorials, and common use cases.',
     dirs: ['guides'],
     includes: ['index.mdx', 'supported-networks.mdx'],
+    packageName: '@jaw.id/wagmi (React) or @jaw.id/core (vanilla JS)',
+    installCommand: 'npm install @jaw.id/wagmi wagmi viem @tanstack/react-query',
+    quickExample: `// 1. Get API key at https://dashboard.jaw.id
+// 2. Install packages
+// 3. Configure connector (see full docs below)`,
   },
   configuration: {
     title: 'JAW Configuration Reference',
     description: 'Configuration options for JAW - applies to both core and wagmi integrations.',
     dirs: ['configuration'],
     includes: [],
+    packageName: '@jaw.id/wagmi or @jaw.id/core',
+    quickExample: `jaw({
+  apiKey: 'YOUR_API_KEY',      // Required - from dashboard.jaw.id
+  appName: 'My App',           // Required - shown in passkey prompts
+  mode: 'crossPlatform',       // Optional - 'crossPlatform' | 'appSpecific'
+  paymasterUrl: '...',         // Optional - for gas sponsoring
+  ensConfig: { ... },          // Optional - for ENS subnames
+})`,
   },
   advanced: {
     title: 'JAW Advanced Topics',
     description: 'Advanced implementation details - custom UI handlers, passkey server setup, and specialized configurations.',
     dirs: ['advanced'],
     includes: [],
+    packageName: '@jaw.id/core + @jaw.id/ui',
+    installCommand: 'npm install @jaw.id/core @jaw.id/ui viem',
+    quickExample: `// App-specific mode with custom UI
+import { JAW } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw.id/ui';
+
+const provider = await JAW.create({
+  apiKey: 'KEY',
+  appName: 'App',
+  mode: 'appSpecific',
+  uiHandler: new ReactUIHandler(),
+  chains: [...],
+});`,
   },
 }
 
@@ -141,13 +217,39 @@ function parseMdxFile(filePath: string): { title: string; content: string } {
   return { title, content }
 }
 
-function generateDomainFile(domainKey: string, domain: typeof DOMAINS[keyof typeof DOMAINS]): string {
+function generateDomainFile(domainKey: string, domain: DomainConfig): string {
   const lines: string[] = [
     `# ${domain.title}`,
     '',
     `> ${domain.description}`,
     '',
+    '**This file is self-contained.** You have everything needed to help with this topic. Do NOT fetch other llms-*.txt files unless the user explicitly asks about a different topic.',
+    '',
   ]
+
+  // Add key info section
+  lines.push('## Key Info')
+  if (domain.packageName) {
+    lines.push(`- **Package:** \`${domain.packageName}\``)
+  }
+  if (domain.installCommand) {
+    lines.push(`- **Install:** \`${domain.installCommand}\``)
+  }
+  lines.push('- **Dashboard:** https://dashboard.jaw.id')
+  lines.push('- **Docs:** https://docs.jaw.id')
+  lines.push('')
+
+  // Add quick example
+  if (domain.quickExample) {
+    lines.push('## Quick Example')
+    lines.push('```typescript')
+    lines.push(domain.quickExample)
+    lines.push('```')
+    lines.push('')
+  }
+
+  lines.push('---')
+  lines.push('')
 
   // Collect all files for this domain
   const files: string[] = []
@@ -195,40 +297,82 @@ function generateRoutingIndex(): string {
 
 JAW provides an EIP-1193 compliant provider for interacting with smart accounts, supporting both cross-platform (popup) and app-specific (embedded) authentication via passkeys.
 
-## Instructions
+## Instructions for AI Assistants
 
-This file is a routing index. To help users with JAW, you MUST:
-1. Read the routing table below to identify which integration the user needs.
-2. Fetch exactly ONE context file — the single best match for the user's question.
+This file is a **routing index only**. To help users with JAW:
 
-Do NOT attempt to answer using only this file — it does not contain implementation details.
-Do NOT fetch all files — each file is self-contained, so only one is needed.
+1. **Read the routing table below** to identify which file matches the user's question
+2. **Fetch exactly ONE file** — the single best match
+3. **Answer using that file's content**
 
-## Routing
+**IMPORTANT:**
+- Do NOT answer questions using only this routing file — it lacks implementation details
+- Do NOT fetch multiple files at once — each domain file is self-contained
+- Do NOT guess — if unclear, ask the user what they're trying to build
 
-If the user is building a **React/Next.js app with Wagmi** (connectors, hooks, standard dApp integration):
-→ ${BASE_URL}/llms-wagmi.txt
+## Routing Table
 
-If the user wants **provider-level control** (EIP-1193 provider, RPC methods, custom provider handling):
-→ ${BASE_URL}/llms-core.txt
+| User is asking about... | Fetch this file |
+|-------------------------|-----------------|
+| React hooks, useConnect, useDisconnect, wagmi connector, Next.js | ${BASE_URL}/llms-wagmi.txt |
+| provider.request, EIP-1193, eth_sendTransaction, wallet_sendCalls, non-React apps | ${BASE_URL}/llms-core.txt |
+| account.sendTransaction, account.signMessage, direct account operations | ${BASE_URL}/llms-account.txt |
+| Getting started, tutorials, SIWE authentication, subscriptions, guides | ${BASE_URL}/llms-quickstart.txt |
+| API key setup, paymaster, gasless transactions, ENS subnames, configuration options | ${BASE_URL}/llms-configuration.txt |
+| Custom UI, passkey server, app-specific mode, ReactUIHandler, advanced setup | ${BASE_URL}/llms-advanced.txt |
 
-If the user wants to **embed specific account functionality** (direct account operations, signing, transactions, permissions):
-→ ${BASE_URL}/llms-account.txt
+## Decision Flowchart
 
-If the user needs help with **getting started, setup, or tutorials** (quickstart, gas sponsoring, SIWE, subscriptions):
-→ ${BASE_URL}/llms-quickstart.txt
+\`\`\`
+Is the user building a React/Next.js app?
+├─ YES → Are they using Wagmi?
+│        ├─ YES → llms-wagmi.txt
+│        └─ NO/UNSURE → llms-wagmi.txt (recommended for React)
+└─ NO → Are they building a custom integration?
+         ├─ YES → llms-core.txt (EIP-1193 provider)
+         └─ UNSURE → llms-quickstart.txt (start here)
+\`\`\`
 
-If the user needs help with **configuration options** (apiKey, appName, paymasters, mode, ENS):
-→ ${BASE_URL}/llms-configuration.txt
+## Package Overview
 
-If the user needs help with **advanced topics** (custom UI handlers, passkey server, app-specific mode implementation):
-→ ${BASE_URL}/llms-advanced.txt
+| Package | Use Case | Install |
+|---------|----------|---------|
+| \`@jaw.id/wagmi\` | React/Next.js apps with Wagmi | \`npm install @jaw.id/wagmi wagmi viem @tanstack/react-query\` |
+| \`@jaw.id/core\` | Non-React or custom provider setups | \`npm install @jaw.id/core viem\` |
+| \`@jaw.id/ui\` | Custom UI for app-specific mode | \`npm install @jaw.id/ui\` |
 
-## About JAW Packages
+## Quick Links
 
-- **@jaw.id/wagmi**: Wagmi connector and React hooks for standard dApp integration. Best for React/Next.js apps already using Wagmi.
-- **@jaw.id/core**: EIP-1193 compliant provider with full RPC method support. Best for custom provider implementations or non-React apps.
-- **Account API**: Direct smart account operations including factory methods, signing, transactions, and permission management. Best for embedding specific functionality.
+- **Dashboard (get API key):** https://dashboard.jaw.id
+- **Documentation:** https://docs.jaw.id
+- **GitHub:** https://github.com/JustaName-id/jaw-mono
+`
+}
+
+function generateFullTxt(): string {
+  return `# JAW Full Documentation
+
+> This file redirects to the routing index for efficient AI assistance.
+
+For the best experience, please fetch the routing index instead:
+→ ${BASE_URL}/llms.txt
+
+The routing index will direct you to the specific documentation file you need based on your question. This approach is more efficient than loading all documentation at once.
+
+## Why Use the Router?
+
+1. **Faster responses** - Only loads the documentation relevant to your question
+2. **Better context** - Each domain file is self-contained and focused
+3. **More accurate** - AI can provide better answers with focused context
+
+## Direct Links (if you know what you need)
+
+- Wagmi/React integration: ${BASE_URL}/llms-wagmi.txt
+- Core provider (EIP-1193): ${BASE_URL}/llms-core.txt
+- Account API: ${BASE_URL}/llms-account.txt
+- Quickstart & guides: ${BASE_URL}/llms-quickstart.txt
+- Configuration: ${BASE_URL}/llms-configuration.txt
+- Advanced topics: ${BASE_URL}/llms-advanced.txt
 `
 }
 
@@ -259,6 +403,12 @@ async function main() {
     console.error('ERROR: llms.txt does not contain expected content')
     console.error('First 100 chars:', written.slice(0, 100))
   }
+
+  // Generate llms-full.txt (redirects to router - some tools look for this file)
+  const fullTxt = generateFullTxt()
+  const fullPath = join(DIST_DIR, 'llms-full.txt')
+  writeFileSync(fullPath, fullTxt)
+  console.log(`  Generated: llms-full.txt (redirect, ${fullTxt.length} bytes)`)
 
   console.log('Done!')
 }
