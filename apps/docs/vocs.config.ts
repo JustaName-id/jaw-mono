@@ -12,11 +12,14 @@ export default defineConfig({
         '@jaw.id/core': resolve(__dirname, '../../packages/core/dist/index.js'),
       },
     },
+    build: {
+      outDir: resolve(__dirname, 'docs/dist'),
+    },
   },
   // Set to 'warn' to allow build to succeed with dead links (they'll be logged as warnings)
   checkDeadlinks: 'warn',
-  title: 'JAW Core Documentation',
-  description: 'Official documentation for @jaw.id/core package',
+  title: 'JAW.id Documentation',
+  description: 'Official documentation for JAW.id',
   logoUrl: {
     light: '/logo.svg',
     dark: '/logo-dark.svg',
@@ -92,6 +95,7 @@ export default defineConfig({
           text: 'Hooks',
           collapsed: true,
           items: [
+            { text: 'useGetCallsHistory()', link: '/wagmi/useGetCallsHistory' },
             { text: 'useCapabilities()', link: '/wagmi/useCapabilities' },
             { text: 'useConnect()', link: '/wagmi/useConnect' },
             { text: 'useDisconnect()', link: '/wagmi/useDisconnect' },
@@ -116,6 +120,7 @@ export default defineConfig({
         { text: 'eth_sendTransaction', link: '/api-reference/eth_sendTransaction' },
         { text: 'wallet_sendCalls', link: '/api-reference/wallet_sendCalls' },
         { text: 'wallet_getCallsStatus', link: '/api-reference/wallet_getCallsStatus' },
+        { text: 'wallet_getCallsHistory', link: '/api-reference/wallet_getCallsHistory' },
         { text: 'personal_sign', link: '/api-reference/personal_sign' },
         { text: 'eth_signTypedData_v4', link: '/api-reference/eth_signTypedData_v4' },
         { text: 'wallet_sign', link: '/api-reference/wallet_sign' },

@@ -16,6 +16,7 @@ import {
   type AssetFilter,
   type PersonalSignRequestData,
   type TypedDataRequestData,
+  type WalletGetCallsHistoryResponse,
 } from '@jaw.id/core';
 import type { AccountWithCapabilities } from '../Connector.js';
 
@@ -430,5 +431,76 @@ export async function sign<config extends Config>(
   });
 
   return result as sign.ReturnType;
+}
+
+// ============================================================================
+// getCallsHistory
+// ============================================================================
+
+export namespace getCallsHistory {
+  export type Parameters<config extends Config = Config> = {
+    /** Address of the account to get calls history for (required when not connected) */
+    address?: Address;
+    chainId?: number;
+    connector?: Connector;
+    /** Optional index cursor for pagination */
+    index?: number;
+    /** Maximum number of bundles to return (default: 20) */
+    limit?: number;
+    /** Sort direction based on index (default: 'desc' - newest first) */
+    sort?: 'asc' | 'desc';
+  };
+
+  export type ReturnType = WalletGetCallsHistoryResponse;
+  export type ErrorType = Error;
+}
+
+/**
+ * Gets the calls history for an address.
+ * This calls wallet_getCallsHistory on the wallet.
+ * Can be called without a connected account if address is provided.
+ *
+ * @example
+ * ```ts
+ * // Get calls history for connected account
+ * const history = await Actions.getCallsHistory(config, {});
+ *
+ * // Get calls history for specific address (works without connection)
+ * const history = await Actions.getCallsHistory(config, {
+ *   address: '0x...',
+ * });
+ *
+ * // With pagination
+ * const history = await Actions.getCallsHistory(config, {
+ *   address: '0x...',
+ *   limit: 10,
+ *   sort: 'desc',
+ * });
+ * ```
+ */
+export async function getCallsHistory<config extends Config>(
+  config: config,
+  parameters: getCallsHistory.Parameters<config> = {},
+): Promise<getCallsHistory.ReturnType> {
+  const { address, chainId, connector, index, limit, sort } = parameters;
+
+  const client = await getConnectorClient(config, {
+    account: address,
+    chainId,
+    connector,
+  });
+
+  const result = await client.request({
+    method: 'wallet_getCallsHistory' as never,
+    params: [{
+      address,
+      chainId,
+      index,
+      limit,
+      sort,
+    }] as never,
+  });
+
+  return result as getCallsHistory.ReturnType;
 }
 

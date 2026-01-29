@@ -699,7 +699,8 @@ export class Account {
       finalCalls,
       this._chain,
       paymasterUrlOverride,
-      Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined
+      Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined,
+      this._apiKey
     );
   }
 
@@ -770,8 +771,8 @@ export class Account {
     }
 
     // Store call status as pending and start background receipt waiting
-    storeCallStatus(result.id, result.chainId);
-    waitForReceiptInBackground(result.id, result.chainId);
+    storeCallStatus(result.id, result.chainId, this._apiKey);
+    waitForReceiptInBackground(result.id, result.chainId, this._apiKey);
 
     return result;
   }

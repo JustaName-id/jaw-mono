@@ -30,6 +30,7 @@ import {
     relayPermissionToPermission,
     encodeExecuteBatchWithPermission,
 } from "../rpc/permissions.js";
+import { notifyReceiptReceived } from "../analytics/index.js";
 
 export type FindOwnerIndexParams = {
     /**
@@ -149,7 +150,8 @@ export async function sendTransaction(
     }>,
     chain: Chain,
     paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
+    paymasterContextOverride?: Record<string, unknown>,
+    apiKey?: string
 ): Promise<Hash> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
@@ -166,6 +168,27 @@ export async function sendTransaction(
     const receipt = await bundlerClient.waitForUserOperationReceipt({
         hash: userOpHash
     })
+
+    // Fire-and-forget notification to proxy
+    if (apiKey) {
+        // Extract the actual receipt - same logic as wallet_sendCalls.ts
+        const actualReceipt = (receipt as any).receipt || receipt;
+        const receiptStatus = actualReceipt.status;
+
+        // Determine if transaction succeeded:
+        // - status === '0x1' or 1 means success
+        // - If status is undefined but transactionHash exists, assume success (included on-chain)
+        const isSuccess = receiptStatus === '0x1' ||
+            receiptStatus === 1 ||
+            (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
+
+        notifyReceiptReceived({
+            userOpHash,
+            transactionHash: actualReceipt.transactionHash,
+            success: isSuccess,
+            apiKey,
+        });
+    }
 
     return receipt.receipt.transactionHash
 }
