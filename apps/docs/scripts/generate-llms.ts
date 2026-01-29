@@ -293,9 +293,9 @@ function generateDomainFile(domainKey: string, domain: DomainConfig): string {
 function generateRoutingIndex(): string {
   return `# JAW Documentation
 
-> Smart account wallet infrastructure with passkey authentication for blockchain applications.
+> TypeScript SDK for identity-first smart accounts with passkey authentication and programmable permissions.
 
-JAW provides an EIP-1193 compliant provider for interacting with smart accounts, supporting both cross-platform (popup) and app-specific (embedded) authentication via passkeys.
+JAW provides an EIP-1193 compliant provider for creating and managing smart accounts on EVM chains. Supports cross-platform (popup) and embedded (app-specific) authentication modes, with extensible permission delegation for apps and AI agents.
 
 ## Instructions for AI Assistants
 
@@ -393,6 +393,7 @@ This file is a **routing index only**. To help users with JAW:
 - **Dashboard (get API key):** https://dashboard.jaw.id
 - **Documentation:** https://docs.jaw.id
 - **GitHub:** https://github.com/JustaName-id/jaw-mono
+- **Developers Chat:** https://t.me/+RsFLPfky7-YxZjVk  
 `
 }
 
