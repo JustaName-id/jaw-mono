@@ -10,7 +10,9 @@ Send multiple calls as a bundled user operation without waiting for receipt.
 ```typescript
 async sendCalls(
   calls: TransactionCall[],
-  options?: SendCallsOptions
+  options?: SendCallsOptions,
+  paymasterUrlOverride?: string,
+  paymasterContextOverride?: Record<string, unknown>
 ): Promise<BundledTransactionResult>
 ```
 
@@ -45,6 +47,22 @@ interface SendCallsOptions {
   /** Permission ID to use for executing the calls through the permission manager */
   permissionId?: Hex;
 }
+```
+
+### paymasterUrlOverride (optional)
+
+Type: `string`
+
+Custom paymaster URL for gas sponsorship or ERC-20 token payment. Overrides the paymaster URL configured in `AccountConfig`.
+
+### paymasterContextOverride (optional)
+
+Type: `Record<string, unknown>`
+
+Custom paymaster context. For ERC-20 payment, include the token address:
+
+```typescript
+{ token: '0xUSDC_ADDRESS...' }
 ```
 
 

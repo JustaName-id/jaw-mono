@@ -46,20 +46,24 @@ Returns an array of permission objects.
 ```json
 [
   {
-    "id": "0xabc123...",
+    "permissionId": "0xabc123...",
     "account": "0x1234567890123456789012345678901234567890",
     "spender": "0x5678901234567890123456789012345678901234",
-    "chainId": "0x1",
-    "expiry": 1735689600,
+    "start": 1704067200,
+    "end": 1735689600,
+    "salt": "0x1a2b3c...",
     "calls": [{
       "target": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      "selector": "0xa9059cbb"
+      "selector": "0xa9059cbb",
+      "checker": "0x0000000000000000000000000000000000000000"
     }],
     "spends": [{
       "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-      "limit": "0x16345785d8a0000",
-      "period": "day"
-    }]
+      "allowance": "0x16345785d8a0000",
+      "unit": "day",
+      "multiplier": 1
+    }],
+    "chainId": "0x1"
   }
 ]
 ```
@@ -68,13 +72,15 @@ Returns an array of permission objects.
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `id` | `string` | Unique permission identifier (hash) |
+| `permissionId` | `string` | Unique permission identifier (hash) |
 | `account` | `string` | Account that granted the permission |
 | `spender` | `string` | Address that received permissions |
-| `chainId` | `string` | Chain ID (hex) |
-| `expiry` | `number` | Unix timestamp when permission expires |
+| `start` | `number` | Unix timestamp when permission becomes valid |
+| `end` | `number` | Unix timestamp when permission expires |
+| `salt` | `string` | Salt for permission uniqueness (hex) |
 | `calls` | `array` | Granted call permissions |
 | `spends` | `array` | Granted spend limits |
+| `chainId` | `string` | Chain ID (hex) |
 
 
 ## Behavior
