@@ -6,7 +6,7 @@ import { DefaultDialog } from "../DefaultDialog";
 import { Eip712DialogProps } from "./types";
 import { useIsMobile } from "../../hooks";
 import { getJustaNameInstance, getDisplayAddress } from "../../utils";
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 
 // EIP-712 TypedData structure
 interface TypedData {
@@ -314,6 +314,9 @@ export const Eip712Dialog = ({
   signatureStatus,
   canSign,
 }: Eip712DialogProps) => {
+  // Ref for scrollable container
+  const scrollableRef = useRef<HTMLDivElement>(null);
+
   const isMobile = useIsMobile();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
 
@@ -343,6 +346,35 @@ export const Eip712Dialog = ({
       });
     }
   }, [accountAddress, chainId]);
+
+  // Handle wheel events for smooth scrolling over JSON content
+  useEffect(() => {
+    if (!open) return;
+
+    let cleanupFn: (() => void) | null = null;
+
+    // Use a small delay to ensure the DOM is ready
+    const timer = setTimeout(() => {
+      const scrollable = scrollableRef.current;
+      if (!scrollable) return;
+
+      const handleWheel = (e: WheelEvent) => {
+        e.preventDefault();
+        scrollable.scrollTop += e.deltaY;
+      };
+
+      scrollable.addEventListener('wheel', handleWheel, { passive: false });
+
+      cleanupFn = () => {
+        scrollable.removeEventListener('wheel', handleWheel);
+      };
+    }, 100);
+
+    return () => {
+      clearTimeout(timer);
+      if (cleanupFn) cleanupFn();
+    };
+  }, [open]);
 
   // Get display address - use resolved name or formatted address
   const displayAddress = getDisplayAddress(resolvedAddress, accountAddress || '');
@@ -400,7 +432,7 @@ export const Eip712Dialog = ({
         {/* Main Content - Typed Data Tree View */}
         <div className="flex flex-col gap-3 max-md:flex-1 max-h-[60vh] overflow-y-auto min-h-0">
           {typedData ? (
-            <div className="max-h-[50vh] flex flex-1 overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border">
+            <div ref={scrollableRef} className="max-h-[50vh] flex flex-1 overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border">
               {/* Combine domain and message into single tree */}
               <NestedDataView
                 data={
