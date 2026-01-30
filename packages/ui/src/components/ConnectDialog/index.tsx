@@ -105,7 +105,7 @@ export const ConnectDialog = ({
         maxWidth: '500px',
       }}
     >
-      <div className="flex flex-col h-full gap-3 max-h-[60vh] overflow-y-auto min-h-0">
+      <div className="flex flex-col h-full gap-3 overflow-y-auto min-h-0">
         {/* App Logo and Title */}
         <div className="flex flex-1 flex-col p-3.5 items-center justify-center">
           {appLogoUrl && (
