@@ -133,9 +133,8 @@ export default function KeysJawIdApp() {
       }
     });
 
-    // Send PopupUnload on unmount
+    // Cleanup message listener on unmount (PopupUnload is handled by communicator's beforeunload)
     return () => {
-      communicator.sendPopupUnload();
       cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

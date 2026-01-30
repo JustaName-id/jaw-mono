@@ -21,6 +21,13 @@ export class PopupCommunicator {
     // Get opener reference
     if (typeof window !== 'undefined') {
       this.opener = window.opener;
+
+      // Auto-send PopupUnload when window closes (handles browser X button)
+      if (this.opener) {
+        window.addEventListener('beforeunload', () => {
+          this.sendPopupUnload();
+        });
+      }
     }
   }
 
