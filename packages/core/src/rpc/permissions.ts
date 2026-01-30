@@ -376,6 +376,8 @@ export async function grantPermissions(
  * @param chain - Chain configuration
  * @param apiKey - API key for relay authentication
  * @param paymasterUrlOverride - Optional paymaster URL that overrides chain.paymasterUrl
+ * @param paymasterContextOverride - Optional paymaster context (e.g., token address for ERC-20 payment)
+ * @param erc20ApprovalCall - Optional ERC-20 approval call to prepend for paymaster
  * @returns Response from the relay indicating success
  */
 export async function revokePermission(
@@ -383,7 +385,9 @@ export async function revokePermission(
     permissionId: Hex,
     chain: Chain,
     apiKey: string,
-    paymasterUrlOverride?: string
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>,
+    erc20ApprovalCall?: { to: Address; value?: bigint; data: Hex }
 ): Promise<RevokePermissionApiResponse> {
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
 
@@ -391,17 +395,18 @@ export async function revokePermission(
 
     const revokeCallData = encodeRevokePermission(permission);
 
+    // Build calls array - prepend ERC-20 approval if provided
+    const revokeCall = { to: PERMISSIONS_MANAGER_ADDRESS as Address, data: revokeCallData };
+    const calls: Array<{ to: Address; value?: bigint; data?: Hex }> = erc20ApprovalCall
+        ? [erc20ApprovalCall, revokeCall]
+        : [revokeCall];
+
     await sendTransaction(
         smartAccount,
-        [
-            {
-                to: PERMISSIONS_MANAGER_ADDRESS as Address,
-                data: revokeCallData,
-            },
-        ],
+        calls,
         chain,
         paymasterUrlOverride,
-        undefined,
+        paymasterContextOverride,
         apiKey
     );
 
@@ -738,6 +743,27 @@ export function buildGrantPermissionCall(
     return {
         to: PERMISSIONS_MANAGER_ADDRESS as Address,
         data: approveCallData,
+    };
+}
+
+/**
+ * Build a transaction call for revoking permissions (for gas estimation)
+ *
+ * This function creates a transaction call that can be used for gas estimation
+ * before actually revoking the permission.
+ *
+ * @param relayPermission - The permission data from the relay
+ * @returns Transaction call object with to and data fields
+ */
+export function buildRevokePermissionCall(
+    relayPermission: StorePermissionApiResponse
+): { to: Address; data: Hex } {
+    const permission = relayPermissionToPermission(relayPermission);
+    const revokeCallData = encodeRevokePermission(permission);
+
+    return {
+        to: PERMISSIONS_MANAGER_ADDRESS as Address,
+        data: revokeCallData,
     };
 }
 

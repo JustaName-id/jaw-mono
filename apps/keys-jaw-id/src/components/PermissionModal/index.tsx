@@ -13,6 +13,7 @@ import {
     type SpendPeriod,
     getPermissionFromRelay,
     buildGrantPermissionCall,
+    buildRevokePermissionCall,
     standardErrorCodes,
     JAW_PAYMASTER_URL,
     JAW_RPC_URL,
@@ -209,27 +210,40 @@ export const PermissionModal = ({
   // Check if this is a sponsored transaction (paymaster provided)
   const isSponsored = !!effectivePaymasterUrl;
 
-  // Build the actual permission grant call for gas estimation
+  // Build the actual permission call for gas estimation (grant or revoke)
   const transactionCalls = useMemo(() => {
-    // Only build for grant mode with valid data
-    if (mode !== 'grant' || !walletAddress || !permissionRequest) return [];
+    if (mode === 'grant') {
+      // Grant mode: build grant permission call
+      if (!walletAddress || !permissionRequest) return [];
 
-    try {
-      const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
-      const [grantParams] = params;
+      try {
+        const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
+        const [grantParams] = params;
 
-      const permissionCall = buildGrantPermissionCall(
-        walletAddress as Address,
-        grantParams.spender as Address,
-        grantParams.expiry,
-        grantParams.permissions
-      );
-      return [permissionCall];
-    } catch (error) {
-      console.warn('[PermissionModal] Failed to build permission grant call:', error);
-      return [];
+        const permissionCall = buildGrantPermissionCall(
+          walletAddress as Address,
+          grantParams.spender as Address,
+          grantParams.expiry,
+          grantParams.permissions
+        );
+        return [permissionCall];
+      } catch (error) {
+        console.warn('[PermissionModal] Failed to build permission grant call:', error);
+        return [];
+      }
+    } else {
+      // Revoke mode: build revoke permission call using fetched permission data
+      if (!fetchedPermissionData) return [];
+
+      try {
+        const revokeCall = buildRevokePermissionCall(fetchedPermissionData);
+        return [revokeCall];
+      } catch (error) {
+        console.warn('[PermissionModal] Failed to build permission revoke call:', error);
+        return [];
+      }
     }
-  }, [mode, walletAddress, permissionRequest]);
+  }, [mode, walletAddress, permissionRequest, fetchedPermissionData]);
 
   // Use the gas estimation hook for both ETH and ERC-20 cost estimation
   const {
@@ -741,8 +755,12 @@ export const PermissionModal = ({
           throw new Error('Permission ID is missing.');
         }
 
-        // Account.revokePermission uses the chain's paymasterUrl (which we set from capabilities)
-        await account.revokePermission(permissionDetails.permissionId);
+        // Account.revokePermission with paymaster URL and context for ERC-20 payment
+        await account.revokePermission(
+          permissionDetails.permissionId,
+          computedPaymasterUrl,
+          computedPaymasterContext
+        );
 
         console.log('Permission revoked');
         setStatus('Permission revoked successfully!');

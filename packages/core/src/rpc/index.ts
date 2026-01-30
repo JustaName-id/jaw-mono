@@ -55,6 +55,7 @@ export {
     handleGetPermissionsRequest,
     getPermissionFromRelay,
     buildGrantPermissionCall,
+    buildRevokePermissionCall,
     ANY_TARGET,
     ANY_FN_SEL,
     EMPTY_CALLDATA_FN_SEL
