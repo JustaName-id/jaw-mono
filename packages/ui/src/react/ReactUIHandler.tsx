@@ -2438,6 +2438,13 @@ function RevokePermissionDialogWrapper({
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
+  // Extract paymasterContext from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
+  const effectivePaymasterContext = useMemo(() => {
+    const capabilitiesPaymasterContext = request.data.capabilities?.paymasterService?.context;
+    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
+  }, [request.data.capabilities?.paymasterService?.context, paymasters, chainId]);
+
   const chain = buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
@@ -2572,8 +2579,12 @@ function RevokePermissionDialogWrapper({
         effectivePaymasterUrl
       );
 
-      // Revoke permission using Account class
-      await account.revokePermission(request.data.permissionId as `0x${string}`);
+      // Revoke permission using Account class with paymaster context
+      await account.revokePermission(
+        request.data.permissionId as `0x${string}`,
+        effectivePaymasterUrl,
+        effectivePaymasterContext
+      );
 
       console.log('Permission revoked');
       setStatus('Permission revoked successfully!');

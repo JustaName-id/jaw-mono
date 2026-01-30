@@ -741,8 +741,12 @@ export const PermissionModal = ({
           throw new Error('Permission ID is missing.');
         }
 
-        // Account.revokePermission uses the chain's paymasterUrl (which we set from capabilities)
-        await account.revokePermission(permissionDetails.permissionId);
+        // Account.revokePermission with paymaster URL and context for ERC-20 payment
+        await account.revokePermission(
+          permissionDetails.permissionId,
+          computedPaymasterUrl,
+          computedPaymasterContext
+        );
 
         console.log('Permission revoked');
         setStatus('Permission revoked successfully!');

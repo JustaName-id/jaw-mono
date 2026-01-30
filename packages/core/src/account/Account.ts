@@ -923,6 +923,8 @@ export class Account {
    * Revoke a previously granted permission
    *
    * @param permissionId - The permission ID (hash) to revoke
+   * @param paymasterUrlOverride - Optional paymaster URL for ERC-20 payment
+   * @param paymasterContextOverride - Optional paymaster context (e.g., token address for ERC-20 payment)
    * @returns Promise resolving to the revoke response
    *
    * @example
@@ -931,12 +933,26 @@ export class Account {
    * console.log('Revoked:', response.success);
    * ```
    */
-  async revokePermission(permissionId: Hex): Promise<RevokePermissionApiResponse> {
+  async revokePermission(
+    permissionId: Hex,
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
+  ): Promise<RevokePermissionApiResponse> {
+    // Check if we need an ERC-20 approval for the paymaster
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+
+    // Remove gas field from context (only used for approval logic)
+    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+
     return await revokeSmartAccountPermission(
       this._smartAccount,
       permissionId,
       this._chain,
-      this._apiKey
+      this._apiKey,
+      paymasterUrlOverride,
+      cleanedContext,
+      approvalCall || undefined
     );
   }
 
