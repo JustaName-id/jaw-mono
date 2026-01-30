@@ -400,9 +400,8 @@ export const PermissionDialog = ({
 
         {/* Fixed Bottom Section - Gas Estimation + Action Buttons */}
         <div className="flex-shrink-0 space-y-3">
-          {/* Gas Estimation Section - Only for grant mode */}
-          {mode === 'grant' && (
-            <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
+          {/* Gas Estimation Section - Shown for both grant and revoke modes */}
+          <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
               <div className="flex flex-col text-foreground flex-1 gap-0.5">
                 <p className="text-xs font-bold leading-[133%]">Network</p>
                 <div className="flex flex-row items-center gap-1">
@@ -513,7 +512,6 @@ export const PermissionDialog = ({
                 </div>
               </div>
             </div>
-          )}
 
           {/* Action Buttons */}
           <div className="flex gap-3 p-3.5 max-md:mt-auto">

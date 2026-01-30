@@ -747,6 +747,27 @@ export function buildGrantPermissionCall(
 }
 
 /**
+ * Build a transaction call for revoking permissions (for gas estimation)
+ *
+ * This function creates a transaction call that can be used for gas estimation
+ * before actually revoking the permission.
+ *
+ * @param relayPermission - The permission data from the relay
+ * @returns Transaction call object with to and data fields
+ */
+export function buildRevokePermissionCall(
+    relayPermission: StorePermissionApiResponse
+): { to: Address; data: Hex } {
+    const permission = relayPermissionToPermission(relayPermission);
+    const revokeCallData = encodeRevokePermission(permission);
+
+    return {
+        to: PERMISSIONS_MANAGER_ADDRESS as Address,
+        data: revokeCallData,
+    };
+}
+
+/**
  * Encode the executeBatch function call for JustaPermissionManager
  * This is used when executing calls using a permission
  *
