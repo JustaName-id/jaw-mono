@@ -1098,7 +1098,6 @@ export class Account {
     if (currentAllowance >= requiredAmount) {
       return null;
     }
-
     // Encode ERC-20 approve call for the required amount
     const approveData = encodeFunctionData({
       abi: erc20Abi,
