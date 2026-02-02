@@ -163,8 +163,6 @@ export function createPaymasterFunctions(
                         },
                         userOperation.entryPointAddress
                     );
-
-                    console.log(gasEstimate)
                     return {
                         ...stubData,
                         paymasterVerificationGasLimit: hasInvalidVerificationGasLimit
@@ -204,56 +202,23 @@ export function createPaymasterFunctions(
                 ...(context && { context }),
             });
 
-            // Check if paymaster returned invalid gas limits
+            // If paymaster returned invalid gas limits, use values from userOperation (from stub data)
+            // No need to re-estimate since stub data already has valid values
             const hasInvalidVerificationGasLimit = !paymasterData.paymasterVerificationGasLimit ||
                 BigInt(paymasterData.paymasterVerificationGasLimit) <= 1n;
             const hasInvalidPostOpGasLimit = !paymasterData.paymasterPostOpGasLimit ||
                 BigInt(paymasterData.paymasterPostOpGasLimit) <= 1n;
 
-            // If gas limits are invalid, estimate them
             if (hasInvalidVerificationGasLimit || hasInvalidPostOpGasLimit) {
-                try {
-                    const gasEstimate = await estimateUserOperationGas(
-                        paymasterClient,
-                        {
-                            sender: userOperation.sender,
-                            nonce: userOperation.nonce,
-                            callData: userOperation.callData,
-                            callGasLimit: userOperation.callGasLimit,
-                            verificationGasLimit: userOperation.verificationGasLimit,
-                            preVerificationGas: userOperation.preVerificationGas,
-                            maxFeePerGas,
-                            maxPriorityFeePerGas,
-                            paymaster: paymasterData.paymaster,
-                            paymasterData: paymasterData.paymasterData,
-                            factory: userOperation.factory,
-                            factoryData: userOperation.factoryData,
-                        },
-                        userOperation.entryPointAddress
-                    );
-
-                    return {
-                        ...paymasterData,
-                        paymasterVerificationGasLimit: hasInvalidVerificationGasLimit
-                            ? (gasEstimate.paymasterVerificationGasLimit || userOperation.paymasterVerificationGasLimit)
-                            : paymasterData.paymasterVerificationGasLimit,
-                        paymasterPostOpGasLimit: hasInvalidPostOpGasLimit
-                            ? (gasEstimate.paymasterPostOpGasLimit || userOperation.paymasterPostOpGasLimit)
-                            : paymasterData.paymasterPostOpGasLimit,
-                    } as typeof paymasterData;
-                } catch (error) {
-                    // If estimation fails, use the values from userOperation (from stub data estimation)
-                    console.warn('[createPaymasterFunctions] Gas estimation failed:', error);
-                    return {
-                        ...paymasterData,
-                        paymasterVerificationGasLimit: hasInvalidVerificationGasLimit
-                            ? userOperation.paymasterVerificationGasLimit
-                            : paymasterData.paymasterVerificationGasLimit,
-                        paymasterPostOpGasLimit: hasInvalidPostOpGasLimit
-                            ? userOperation.paymasterPostOpGasLimit
-                            : paymasterData.paymasterPostOpGasLimit,
-                    } as typeof paymasterData;
-                }
+                return {
+                    ...paymasterData,
+                    paymasterVerificationGasLimit: hasInvalidVerificationGasLimit
+                        ? userOperation.paymasterVerificationGasLimit
+                        : paymasterData.paymasterVerificationGasLimit,
+                    paymasterPostOpGasLimit: hasInvalidPostOpGasLimit
+                        ? userOperation.paymasterPostOpGasLimit
+                        : paymasterData.paymasterPostOpGasLimit,
+                } as typeof paymasterData;
             }
 
             return paymasterData;

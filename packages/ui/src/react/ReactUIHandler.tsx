@@ -1327,6 +1327,9 @@ function TransactionDialogWrapper({
   }, [chainId, apiKey, request.data.from, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -1335,7 +1338,7 @@ function TransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1350,7 +1353,7 @@ function TransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -1656,6 +1659,9 @@ function SendTransactionDialogWrapper({
   }, [chainId, apiKey, request.data.from, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -1664,7 +1670,7 @@ function SendTransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1679,7 +1685,7 @@ function SendTransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -2106,6 +2112,9 @@ function PermissionDialogWrapper({
   }, [chainId, apiKey, request.data.address, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -2114,7 +2123,7 @@ function PermissionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -2129,7 +2138,7 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -2719,6 +2728,9 @@ function RevokePermissionDialogWrapper({
   }, [chainId, apiKey, request.data.address, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -2727,7 +2739,7 @@ function RevokePermissionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -2742,7 +2754,7 @@ function RevokePermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Format spends for display
   const formattedSpends = useMemo(() => {
