@@ -1012,7 +1012,7 @@ function SignatureDialogWrapper({
       onCancel={handleCancel}
       isProcessing={isProcessing}
       signatureStatus={signatureStatus}
-      canSign={true}
+      canSign={!isProcessing && !!request.data.message}
     />
   );
 }
