@@ -26,7 +26,7 @@ interface FeeTokenSelectorProps {
 }
 
 // Get token icon - use logoURI if available, otherwise fall back to symbol-based icons
-const getTokenIcon = (symbol: string, logoURI?: string, size: number = 32) => {
+const getTokenIcon = (symbol: string, logoURI?: string, size = 32) => {
   // Use logoURI if available
   if (logoURI) {
     return (

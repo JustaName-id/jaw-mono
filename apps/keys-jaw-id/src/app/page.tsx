@@ -7,7 +7,7 @@ import { type PasskeyAccount } from '@jaw.id/core';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
-import { ensureIntNumber, type SignInWithEthereumCapabilityRequest } from '@jaw.id/core';
+import { ensureIntNumber, type SignInWithEthereumCapabilityRequest, type WalletGrantPermissionsRequest } from '@jaw.id/core';
 import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
@@ -89,7 +89,7 @@ export default function KeysJawIdApp() {
     message?: string;
     typedData?: object;
     tx?: { to: string; value?: string; data?: string; chainId?: number };
-    permissions?: unknown;
+    permissions?: WalletGrantPermissionsRequest['params'][0];
     chainId?: number;
     credentialId?: string;
   }
@@ -646,11 +646,13 @@ export default function KeysJawIdApp() {
             chain={{ id: browserAction.chainId || effectiveChainId, rpcUrl: '', paymaster: undefined }}
             apiKey={apiKey || ''}
             origin={config?.metadata?.appName || 'App'}
-            onSuccess={async (result: { id: string; expiry: number }) => {
-              redirectWithResult(callbackUrl, {
-                permissionId: result.id,
-                expiry: result.expiry,
-              });
+            onSuccess={async (result) => {
+              if ('permissionId' in result) {
+                redirectWithResult(callbackUrl, {
+                  permissionId: result.permissionId,
+                  expiry: result.end,
+                });
+              }
             }}
             onError={async (error) => {
               redirectWithError(callbackUrl, error.message);
@@ -1146,6 +1148,7 @@ export default function KeysJawIdApp() {
 
                   await authQuery.refetch();
 
+                  const accountsResult = await passkeyQuery.refetchAccounts();
                   const accounts = accountsResult.data || [];
                   const newestAccount = accounts[accounts.length - 1] || null;
                   setCurrentAccount(newestAccount);
@@ -1244,6 +1247,7 @@ export default function KeysJawIdApp() {
 
                   await authQuery.refetch();
 
+                  const accountsResult = await passkeyQuery.refetchAccounts();
                   const accounts = accountsResult.data || [];
                   setCurrentAccount(accounts[0] || null);
 
