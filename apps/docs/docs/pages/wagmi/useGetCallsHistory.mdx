@@ -1,0 +1,260 @@
+# useGetCallsHistory
+
+Hook to get the call history for an account. Can be called with or without a connected wallet.
+
+**Type:** `hook`
+
+
+## Import
+
+```typescript
+import { useGetCallsHistory } from '@jaw.id/wagmi';
+```
+
+
+## Signature
+
+```typescript
+function useGetCallsHistory(parameters?: {
+  address?: Address;
+  chainId?: number;
+  connector?: Connector;
+  index?: number;
+  limit?: number;
+  sort?: 'asc' | 'desc';
+  config?: Config;
+  query?: UseQueryParameters;
+}): UseQueryResult
+```
+
+
+## Parameters
+
+### address
+
+Type: `Address` (optional)
+
+Specific account address to get history for. If not provided when connected, uses the connected account's address. **Required when not connected.**
+
+### chainId
+
+Type: `number` (optional)
+
+Chain ID to filter results by. When provided, only returns history items for that chain.
+
+### connector
+
+Type: `Connector` (optional)
+
+Specific connector to use. Defaults to active connector or JAW connector if available.
+
+### index
+
+Type: `number` (optional)
+
+Index cursor for pagination. Use the `index` from the last item in the previous response to fetch the next page.
+
+### limit
+
+Type: `number` (optional)
+
+Maximum number of bundles to return. Defaults to 20.
+
+### sort
+
+Type: `'asc' | 'desc'` (optional)
+
+Sort direction based on index. Defaults to `'desc'` (newest first).
+
+### config
+
+Type: `Config` (optional)
+
+Wagmi config. If not provided, uses the config from `WagmiProvider`.
+
+### query
+
+Type: `UseQueryParameters` (optional)
+
+TanStack React Query options (excluding `gcTime` and `staleTime` which are managed internally).
+
+
+## Returns
+
+Returns a TanStack React Query result:
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `data` | `CallsHistoryItem[]` | Array of call history items |
+| `isLoading` | `boolean` | Whether initial load is in progress |
+| `isFetching` | `boolean` | Whether any fetch is in progress |
+| `isSuccess` | `boolean` | Whether query succeeded |
+| `isError` | `boolean` | Whether query failed |
+| `error` | `Error` | Error if query failed |
+| `refetch` | `function` | Manually refetch history |
+
+### data
+
+When successful, `data` is an array of call history items:
+
+```typescript
+interface CallsHistoryItem {
+  /** userOpHash */
+  id: `0x${string}`;
+  /** Auto-incrementing index per address (for cursor pagination) */
+  index: number;
+  /** Wallet address */
+  address: `0x${string}`;
+  /** 100=Pending, 200=Completed, 500=Onchain Revert */
+  status: number;
+  /** Unix timestamp in seconds */
+  timestamp: number;
+  /** Chain ID */
+  chainId: number;
+  /** Transaction hash (null when pending) */
+  transactionHash: `0x${string}` | null;
+}
+```
+
+
+## Behavior
+
+1. **Works without connection** when `address` is provided
+2. **Uses connected address** automatically when wallet is connected
+3. **Caches for 30 seconds** before becoming stale
+4. **Supports pagination** via `index` cursor
+
+
+## Examples
+
+### Basic Usage (Connected)
+
+```tsx
+import { useAccount } from 'wagmi';
+import { useGetCallsHistory } from '@jaw.id/wagmi';
+
+function TransactionHistory() {
+  const { isConnected } = useAccount();
+  const { data: history, isLoading } = useGetCallsHistory();
+
+  if (!isConnected) return <p>Connect wallet to view history</p>;
+  if (isLoading) return <p>Loading history...</p>;
+
+  return (
+    <ul>
+      {history?.map((item) => (
+        <li key={item.id}>
+          {new Date(item.timestamp * 1000).toLocaleDateString()} -{' '}
+          {item.status === 200 ? 'Success' : item.status === 100 ? 'Pending' : 'Failed'}
+        </li>
+      ))}
+    </ul>
+  );
+}
+```
+
+### Without Connection (Address Required)
+
+```tsx
+import { useGetCallsHistory } from '@jaw.id/wagmi';
+
+function AddressHistory({ address }: { address: `0x${string}` }) {
+  // Works without wallet connection!
+  const { data: history, isLoading } = useGetCallsHistory({ address });
+
+  if (isLoading) return <p>Loading...</p>;
+
+  return (
+    <div>
+      <h3>History for {address}</h3>
+      <p>{history?.length || 0} transactions found</p>
+    </div>
+  );
+}
+```
+
+### With Pagination
+
+```tsx
+import { useState } from 'react';
+import { useGetCallsHistory } from '@jaw.id/wagmi';
+
+function PaginatedHistory({ address }: { address: `0x${string}` }) {
+  const [cursor, setCursor] = useState<number | undefined>();
+
+  const { data: history, isLoading, isFetching } = useGetCallsHistory({
+    address,
+    index: cursor,
+    limit: 10,
+    sort: 'desc',
+  });
+
+  const loadMore = () => {
+    if (history && history.length > 0) {
+      setCursor(history[history.length - 1].index);
+    }
+  };
+
+  return (
+    <div>
+      {history?.map((item) => (
+        <div key={item.id}>
+          {item.status === 200 ? 'Completed' : 'Pending'}
+        </div>
+      ))}
+      <button onClick={loadMore} disabled={isFetching}>
+        {isFetching ? 'Loading...' : 'Load More'}
+      </button>
+    </div>
+  );
+}
+```
+
+### Filtering by Status
+
+```tsx
+import { useGetCallsHistory } from '@jaw.id/wagmi';
+
+function PendingTransactions() {
+  const { data: history } = useGetCallsHistory();
+
+  const pending = history?.filter((item) => item.status === 100) || [];
+
+  return (
+    <div>
+      <h3>Pending Transactions ({pending.length})</h3>
+      {pending.map((item) => (
+        <div key={item.id}>
+          Submitted: {new Date(item.timestamp * 1000).toLocaleString()}
+        </div>
+      ))}
+    </div>
+  );
+}
+```
+
+### Manual Refresh
+
+```tsx
+import { useGetCallsHistory } from '@jaw.id/wagmi';
+
+function RefreshableHistory() {
+  const { data, refetch, isFetching } = useGetCallsHistory();
+
+  return (
+    <div>
+      <button onClick={() => refetch()} disabled={isFetching}>
+        {isFetching ? 'Refreshing...' : 'Refresh'}
+      </button>
+      <p>{data?.length || 0} transactions</p>
+    </div>
+  );
+}
+```
+
+
+## Related
+
+- [wallet_getCallsHistory](/api-reference/wallet_getCallsHistory) - RPC method reference
+- [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) - Get status of specific batch
+- [useGetAssets](/wagmi/useGetAssets) - Query asset balances

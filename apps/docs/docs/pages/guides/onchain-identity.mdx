@@ -1,0 +1,226 @@
+# Onchain Identity & Profiles
+
+Replace wallet addresses with readable usernames powered by ENS. Instead of `0x7b2C...`, users get `alice.yourapp.eth` - making your app more human-friendly.
+
+JAW handles subname registration during account creation. For profile resolution and advanced ENS features, use the `@justaname.id/sdk` package.
+
+**What you can do:**
+
+- **Buy & Configure** - Get your ENS domain from JAW dashboard
+- **Issue Subnames** - Users claim usernames under your domain during onboarding
+- **Resolve Profiles** - Look up avatars, bios, social links, and multichain addresses
+- **Update Profiles** - Let users manage their profile records
+
+:::info
+For advanced ENS features, check the [JustaName documentation](https://docs.justaname.id).
+:::
+
+
+## 1. Configure ENS Domain
+
+Before using ENS features, you need to configure your domain in the JAW Dashboard.
+
+**[Set up your ENS domain at dashboard.jaw.id](https://dashboard.jaw.id)**
+
+
+## 2. Integration Path
+
+| Approach | Best For |
+|----------|----------|
+| **Wagmi** | React apps using wagmi connectors |
+| **Core SDK** | Custom implementations or non-React apps |
+
+
+## 3. Add Domain to Configuration
+
+Add the `ens` option to your existing JAW configuration. Users will automatically be prompted to claim a username (e.g., `alice.yourdomain.eth`) during account creation.
+
+:::code-group
+
+```typescript [Wagmi]
+import { createConfig, http } from 'wagmi';
+import { mainnet } from 'wagmi/chains';
+import { jaw } from '@jaw.id/wagmi';
+
+export const config = createConfig({
+  chains: [mainnet],
+  connectors: [
+    jaw({
+      apiKey: 'YOUR_API_KEY',
+      appName: 'My App',
+      appLogoUrl: 'https://myapp.com/logo.png',
+      // Add ENS domain for subname issuance
+      ens: 'yourdomain.eth',
+    }),
+  ],
+  transports: {
+    [mainnet.id]: http(),
+  },
+});
+```
+
+```typescript [Core SDK]
+import { JAW } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'YOUR_API_KEY',
+  appName: 'My App',
+  appLogoUrl: 'https://myapp.com/logo.png',
+  defaultChainId: 1,
+  // Add ENS domain for subname issuance
+  ens: 'yourdomain.eth',
+});
+```
+
+:::
+
+:::warning
+You must configure your ENS domain in the [JAW Dashboard](https://dashboard.jaw.id) before subname issuance will work.
+:::
+
+
+## 4. Attach Profile Data on Connect
+
+When a user creates an account with a subname, their address is automatically attached to all supported networks - enabling multichain address resolution out of the box.
+
+You can also attach text records (avatar, bio, social links) to the user's subname during account creation using the `subnameTextRecords` capability in `wallet_connect`.
+
+:::code-group
+
+```tsx [Wagmi]
+import { useConnect } from '@jaw.id/wagmi';
+
+function ConnectWithProfile() {
+  const { mutate: connect } = useConnect();
+
+  const handleConnect = () => {
+    connect({
+      connector: config.connectors[0],
+      capabilities: {
+        subnameTextRecords: [
+          { key: 'avatar', value: 'https://myapp.com/avatars/default.png' },
+          { key: 'description', value: 'New user on MyApp' },
+          { key: 'url', value: 'https://myapp.com' },
+        ],
+      },
+    });
+  };
+
+  return <button onClick={handleConnect}>Connect</button>;
+}
+```
+
+```typescript [Core SDK]
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    capabilities: {
+      subnameTextRecords: [
+        { key: 'avatar', value: 'https://myapp.com/avatars/default.png' },
+        { key: 'description', value: 'New user on MyApp' },
+        { key: 'url', value: 'https://myapp.com' },
+      ],
+    },
+  }],
+});
+```
+
+:::
+
+:::info
+Text records are only attached if the `ens` option is configured and the user creates a new account with a subname.
+:::
+
+
+## 5. Resolve Profiles
+
+To retrieve profile data from ENS names, use the `@justaname.id/sdk` package. This returns avatars, bios, social links, and multichain addresses.
+
+### Installation
+
+:::code-group
+
+```bash [npm]
+npm install @justaname.id/sdk
+```
+
+```bash [pnpm]
+pnpm add @justaname.id/sdk
+```
+
+```bash [yarn]
+yarn add @justaname.id/sdk
+```
+
+```bash [bun]
+bun add @justaname.id/sdk
+```
+
+:::
+
+### Resolve by Name
+
+```typescript
+import { JustaName } from '@justaname.id/sdk';
+
+// Initialize the SDK
+const justaName = JustaName.init({
+  networks: [{
+    chainId: 1,
+    providerUrl: 'https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY',
+  }],
+});
+
+// Get profile by ENS name
+const profile = await justaName.subnames.getRecords({
+  ens: 'alice.yourdomain.eth',
+});
+
+```
+
+### Resolve by Address (Reverse Lookup)
+
+```typescript
+// Get ENS name for an address
+const name = await justaName.subnames.reverseResolve({
+  address: '0x1234567890123456789012345678901234567890',
+  chainId: 1,
+});
+```
+
+### Profile Response Structure
+
+```typescript
+interface SubnameResponse {
+  ens: string;                    // e.g., "alice.yourdomain.eth"
+  records: {
+    texts: Array<{
+      key: string;                // e.g., "avatar", "description", "url", "twitter"
+      value: string;
+    }>;
+    coins: Array<{
+      id: number;                 // Coin type (60 = ETH, 0 = BTC, etc.)
+      name: string;               // e.g., "ETH", "BTC"
+      value: string;              // Address on that chain
+    }>;
+    contentHash: {
+      protocolType: string;       // e.g., "ipfs"
+      decoded: string;            // Content hash value
+    } | null;
+  };
+}
+```
+
+
+## 6. Advanced Identity Features
+
+For more control over subname management, custom profile fields, or direct ENS integration, check the JustaName documentation.
+
+**[JustaName Documentation](https://docs.justaname.id)**
+
+
+## Related
+
+- [ens Configuration](/configuration/ens) - ENS configuration reference
+- [wallet_connect](/api-reference/wallet_connect) - Attach text records during connect
+- [Quickstart](/guides/quickstart) - Initial JAW setup

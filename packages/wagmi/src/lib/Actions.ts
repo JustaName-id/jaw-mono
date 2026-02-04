@@ -7,4 +7,5 @@ export {
   getAssets,
   getCapabilities,
   sign,
+  getCallsHistory,
 } from './internal/core.js';

@@ -1,2 +1,4 @@
 # Directories to ignore from Nx processing
 playground/demo-native
+# Ignore Foundry git submodule dependencies
+contracts/**/lib/**

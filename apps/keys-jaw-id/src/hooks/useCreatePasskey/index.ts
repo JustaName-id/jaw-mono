@@ -4,6 +4,7 @@ import { PasskeyService } from "../../lib/passkey-service";
 export interface UseCreatePasskeyResult {
   address: string;
   credentialId: string;
+  publicKey: `0x${string}`;
 }
 
 interface CreatePasskeyParams {
@@ -21,6 +22,7 @@ export function useCreatePasskey() {
       return {
         address: result.address,
         credentialId: result.credentialId,
+        publicKey: result.publicKey,
       };
     },
   });

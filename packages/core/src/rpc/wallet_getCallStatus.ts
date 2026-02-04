@@ -22,7 +22,7 @@ export async function handleGetCallsStatusRequest(request: RequestArguments) {
     // If status is still pending, re-trigger receipt polling in background
     // This handles cases where the initial polling timed out but the operation may have succeeded
     if (callStatus.status === 'pending' && callStatus.chainId) {
-        waitForReceiptInBackground(batchId, callStatus.chainId);
+        waitForReceiptInBackground(batchId, callStatus.chainId, callStatus.apiKey);
     }
 
     // Return status in EIP-5792 format

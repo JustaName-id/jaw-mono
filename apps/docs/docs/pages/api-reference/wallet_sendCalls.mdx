@@ -44,6 +44,13 @@ await jaw.provider.request({
 |------|------|-------------|
 | `capabilities.permissions` | `object` | Permission capability for delegated execution |
 | `capabilities.permissions.id` | `0x${string}` | ID of the permission to use for execution |
+| `capabilities.paymasterService` | `object` | Paymaster service for per-call gas sponsorship |
+| `capabilities.paymasterService.url` | `string` | Paymaster service URL (ERC-7677 compliant) |
+| `capabilities.paymasterService.context` | `object` | Optional context (e.g., `{ sponsorshipPolicyId: '...' }`) |
+
+:::info
+The `paymasterService` capability allows you to specify a paymaster per-call, overriding any paymaster configured at the SDK level.
+:::
 
 
 ## Response
@@ -187,5 +194,4 @@ When using the `permissions` capability:
 ## Related Methods
 
 - [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) - Get batch status
-- [wallet_showCallsStatus](/api-reference/wallet_showCallsStatus) - Show status UI
 - [wallet_grantPermissions](/api-reference/wallet_grantPermissions) - Grant permissions for delegated execution

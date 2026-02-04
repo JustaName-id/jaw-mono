@@ -16,6 +16,12 @@ export {
 export {storeCallStatus, getCallStatus, waitForReceiptInBackground, getCallStatusEIP5792} from './wallet_sendCalls.js';
 
 export {
+    handleGetCallsHistoryRequest,
+    type WalletGetCallsHistoryParams,
+    type WalletGetCallsHistoryResponse,
+} from './wallet_getCallsHistory.js';
+
+export {
     handleGetAssetsRequest,
     type AssetType,
     type AssetMetadata,
@@ -26,7 +32,7 @@ export {
     type WalletGetAssetsResponse,
 } from './wallet_getAssets.js';
 
-export { handleGetCapabilitiesRequest } from './capabilities.js';
+export { handleGetCapabilitiesRequest, type ChainMetadataCapability } from './capabilities.js';
 
 export {
     type Permission,
@@ -49,6 +55,7 @@ export {
     handleGetPermissionsRequest,
     getPermissionFromRelay,
     buildGrantPermissionCall,
+    buildRevokePermissionCall,
     ANY_TARGET,
     ANY_FN_SEL,
     EMPTY_CALLDATA_FN_SEL

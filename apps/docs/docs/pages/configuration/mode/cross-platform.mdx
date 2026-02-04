@@ -1,0 +1,81 @@
+# CrossPlatform Mode
+
+Passkey operations redirect to `keys.jaw.id` in a popup, enabling wallet reuse across multiple applications. This is the default mode.
+
+
+## Usage
+
+### With Wagmi (Recommended)
+
+```typescript
+import { jaw } from '@jaw.id/wagmi';
+import { Mode } from '@jaw.id/core';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.CrossPlatform,
+  },
+});
+```
+
+### With Provider Directly
+
+```typescript
+import { JAW, Mode } from '@jaw.id/core';
+
+const jaw = JAW.create({
+  apiKey: 'your-api-key',
+  preference: {
+    mode: Mode.CrossPlatform,
+  },
+});
+```
+
+:::info
+Since CrossPlatform is the default mode, you can omit the `preference` object entirely if you don't need to configure other options.
+:::
+
+
+## How It Works
+
+1. User clicks "Connect" in your dApp
+2. A popup opens to `keys.jaw.id`
+3. User authenticates with their passkey on the `keys.jaw.id` origin
+4. Popup closes and user is connected to your dApp
+5. The same wallet can be used across any app using CrossPlatform mode
+
+
+## Benefits
+
+- **Single wallet across multiple dApps** - Users don't need to create separate wallets for each application
+- **Seamless cross-application experience** - Connect once, use everywhere
+- **Consistent authentication flow** - Users see the same familiar interface
+- **No UI implementation required** - Authentication UI is handled by JAW
+
+
+## User Flow
+
+```
+Your dApp                    keys.jaw.id (popup)
+   │                              │
+   │  1. User clicks Connect      │
+   │ ─────────────────────────────>
+   │                              │
+   │                    2. Popup opens
+   │                              │
+   │                    3. User authenticates
+   │                       with passkey
+   │                              │
+   │  4. Wallet address returned  │
+   │ <─────────────────────────────
+   │                              │
+   │  5. User connected           │
+   └──────────────────────────────┘
+```
+
+
+## Related
+
+- [Mode Overview](/configuration/mode) - Compare all authentication modes
+- [AppSpecific Mode](/configuration/mode/app-specific) - Keep users within your app

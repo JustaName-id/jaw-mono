@@ -8,8 +8,9 @@ Your JAW API key for authentication with JAW services.
 
 ## Usage
 
+### With Wagmi (Recommended)
+
 ```typescript
-// Wagmi
 import { jaw } from '@jaw.id/wagmi';
 
 const connector = jaw({
@@ -17,8 +18,9 @@ const connector = jaw({
 });
 ```
 
+### With Provider Directly
+
 ```typescript
-// EIP-1193 Provider
 import { JAW } from '@jaw.id/core';
 
 const jaw = JAW.create({
@@ -52,4 +54,4 @@ Requests from domains not in your allowed list will be rejected.
 ## Related Configuration
 
 - [appName](/configuration/appName) - Application name
-- [preference](/configuration/preference) - Advanced options
+- [mode](/configuration/mode) - Authentication mode options

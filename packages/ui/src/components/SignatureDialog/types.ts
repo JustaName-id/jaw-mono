@@ -13,6 +13,9 @@ export interface SignatureDialogProps {
   chainId?: number;
   chainIcon?: JSX.Element;
 
+  // RPC configuration
+  mainnetRpcUrl: string;
+
   // Actions
   onSign: () => Promise<void>;
   onCancel: () => void;

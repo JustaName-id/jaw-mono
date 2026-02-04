@@ -25,6 +25,7 @@ import {
   getPermissionFromRelay,
   handleGetCapabilitiesRequest,
   buildGrantPermissionCall,
+  buildRevokePermissionCall,
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   type PaymasterConfig,
@@ -46,9 +47,9 @@ import { TransactionDialog } from '../components/TransactionDialog';
 import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
-import { type LocalStorageAccount } from '../components/OnboardingDialog/types';
-import { useChainIcon } from '../hooks/useChainIcon';
-import { useEthPrice } from '../hooks/useEthPrice';
+import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
+import { useChainIconURI } from '../hooks/useChainIconURI';
+import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 
@@ -110,24 +111,6 @@ function isSiweMessage(message: string): boolean {
 function getChainNameFromId(chainId: number): string {
   const chain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   return chain?.name || 'Unknown Network';
-}
-
-/**
- * Get chain icon key from chain ID (for useChainIcon hook)
- */
-function getChainIconKeyFromId(chainId: number): string {
-  const chainIconMap: Record<number, string> = {
-    1: 'ethereum',
-    11155111: 'ethereum', // Sepolia
-    8453: 'base',
-    84532: 'base', // Base Sepolia
-    80001: 'polygon', // Polygon Mumbai
-    42161: 'arbitrum',
-    421614: 'arbitrum', // Arbitrum Sepolia
-    10: 'optimism',
-    11155420: 'optimism', // Optimism Sepolia
-  };
-  return chainIconMap[chainId] || 'ethereum';
 }
 
 // ============================================================================
@@ -475,6 +458,11 @@ function buildChainConfigFromApiKey(chainId: number, apiKey?: string, paymasterU
   };
 }
 
+// Helper to build mainnet RPC URL for JustaName SDK (ENS resolution always uses mainnet)
+function getMainnetRpcUrl(apiKey?: string): string {
+  return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
+}
+
 // Helper to get Account for signing operations
 async function getAccountForSigning(
   apiKey?: string,
@@ -515,9 +503,6 @@ function OnboardingDialogWrapper({
   const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
-  // Use refs to store pending values that callbacks can access immediately
-  const pendingAddressRef = React.useRef<string | null>(null);
-  const pendingUsernameRef = React.useRef<string | null>(null);
 
   // State for ConnectDialog confirmation
   const [showConnectDialog, setShowConnectDialog] = useState(false);
@@ -537,8 +522,7 @@ function OnboardingDialogWrapper({
   // Get chain info for ConnectDialog
   const targetChainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(targetChainId);
-  const chainIconKey = getChainIconKeyFromId(targetChainId);
-  const chainIcon = useChainIcon(chainIconKey, 24);
+  const chainIcon = useChainIconURI(targetChainId, apiKey, 24);
 
   // Load accounts on mount using Account class
   useEffect(() => {
@@ -685,7 +669,7 @@ function OnboardingDialogWrapper({
   };
 
   // Handle creating a new account
-  const handleCreateAccount = async (username: string): Promise<string> => {
+  const handleCreateAccount = async (username: string): Promise<CreatedAccountData> => {
     try {
       if (!apiKey) {
         throw new Error('API key is required');
@@ -712,12 +696,21 @@ function OnboardingDialogWrapper({
         }
       );
 
-      // Store address and username for completion callback
-      // Use refs since they are immediately available for callbacks
-      pendingAddressRef.current = accountInstance.address;
-      pendingUsernameRef.current = username;
+      // Get full account data including credentialId and publicKey from stored accounts
+      const storedAccounts = Account.getStoredAccounts(apiKey);
+      const createdAccount = storedAccounts.find(acc => acc.username === fullUsername);
 
-      return accountInstance.address;
+      if (!createdAccount) {
+        throw new Error('Failed to retrieve created account data');
+      }
+
+      // Return full account data - OnboardingDialog will pass it to onAccountCreationComplete
+      return {
+        address: accountInstance.address,
+        credentialId: createdAccount.credentialId,
+        username: fullUsername,
+        publicKey: createdAccount.publicKey,
+      };
     } catch (error) {
       console.error('Account creation failed:', error);
       setIsCreating(false);
@@ -726,29 +719,22 @@ function OnboardingDialogWrapper({
   };
 
   // Handle account creation completion (after subname registration if applicable)
-  // Note: We use the refs since state updates may not be synchronous when this callback is called
-  const handleAccountCreationComplete = async () => {
-    const address = pendingAddressRef.current;
-    const username = pendingUsernameRef.current;
-
-    if (address) {
-      // If silent mode, skip ConnectDialog and approve immediately
-      if (request.data.silent) {
-        console.log('🔇 Silent mode: skipping connect confirmation');
-        setIsCreating(false);
-        onApprove({
-          accounts: [{ address }],
-        });
-        return;
-      }
-
-      // Show ConnectDialog for confirmation instead of immediately approving
-      setAuthenticatedAccountName(username || 'New Account');
-      setAuthenticatedWalletAddress(address);
-      setShowConnectDialog(true);
-    } else {
-      console.error('[OnboardingDialogWrapper] handleAccountCreationComplete called but pendingAddress is null');
+  // Account data flows through from onCreateAccount - no intermediate state needed
+  const handleAccountCreationComplete = async (accountData: CreatedAccountData) => {
+    // If silent mode, skip ConnectDialog and approve immediately
+    if (request.data.silent) {
+      console.log('🔇 Silent mode: skipping connect confirmation');
+      setIsCreating(false);
+      onApprove({
+        accounts: [{ address: accountData.address }],
+      });
+      return;
     }
+
+    // Show ConnectDialog for confirmation instead of immediately approving
+    setAuthenticatedAccountName(accountData.username || 'New Account');
+    setAuthenticatedWalletAddress(accountData.address);
+    setShowConnectDialog(true);
     setIsCreating(false);
   };
 
@@ -877,6 +863,7 @@ function OnboardingDialogWrapper({
           chainName={chainName}
           chainId={targetChainId}
           chainIcon={chainIcon}
+          mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
           onSign={handleSiweSign}
           onCancel={handleSiweCancel}
           isProcessing={isSiweSigning}
@@ -904,6 +891,7 @@ function OnboardingDialogWrapper({
         chainName={chainName}
         chainId={targetChainId}
         chainIcon={chainIcon}
+        mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         onConnect={async () => handleConnectConfirm()}
         onCancel={handleConnectCancel}
         isProcessing={isConnecting}
@@ -914,7 +902,10 @@ function OnboardingDialogWrapper({
   return (
     <DefaultDialogComponent
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       handleClose={handleCancel}
       contentStyle={{
         width: 'fit-content',
@@ -932,6 +923,7 @@ function OnboardingDialogWrapper({
         isCreating={isCreating}
         ensDomain={ensDomain}
         chainId={chainId}
+        mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         apiKey={apiKey}
         supportedChains={SUPPORTED_CHAINS.map(chain => ({ id: chain.id }))}
         subnameTextRecords={subnameTextRecords}
@@ -962,8 +954,7 @@ function SignatureDialogWrapper({
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(chainId);
-  const chainIconKey = getChainIconKeyFromId(chainId);
-  const chainIcon = useChainIcon(chainIconKey, 24);
+  const chainIcon = useChainIconURI(chainId, apiKey, 24);
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -1005,7 +996,10 @@ function SignatureDialogWrapper({
   return (
     <SignatureDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       message={request.data.message}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
@@ -1013,6 +1007,7 @@ function SignatureDialogWrapper({
       chainName={chainName}
       chainId={chainId}
       chainIcon={chainIcon}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1094,11 +1089,15 @@ function Eip712DialogWrapper({
   return (
     <Eip712Dialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       typedDataJson={request.data.typedData}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
       accountAddress={request.data.address}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1127,16 +1126,20 @@ function TransactionDialogWrapper({
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<string>('');
-  const ethPrice = useEthPrice();
-
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
+
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1226,7 +1229,7 @@ function TransactionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -1234,7 +1237,7 @@ function TransactionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1324,6 +1327,9 @@ function TransactionDialogWrapper({
   }, [chainId, apiKey, request.data.from, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -1332,7 +1338,7 @@ function TransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1347,7 +1353,7 @@ function TransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -1410,20 +1416,23 @@ function TransactionDialogWrapper({
   return (
     <TransactionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       transactions={transactions}
       walletAddress={request.data.from}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
-      chainIconKey={chainIconKey}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
+      apiKey={apiKey}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -1455,16 +1464,20 @@ function SendTransactionDialogWrapper({
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
   const [transactionStatus, setTransactionStatus] = useState<string>('');
-  const ethPrice = useEthPrice();
-
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
+
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1548,7 +1561,7 @@ function SendTransactionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -1556,7 +1569,7 @@ function SendTransactionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, ethPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1646,6 +1659,9 @@ function SendTransactionDialogWrapper({
   }, [chainId, apiKey, request.data.from, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -1654,7 +1670,7 @@ function SendTransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1669,7 +1685,7 @@ function SendTransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -1721,20 +1737,23 @@ function SendTransactionDialogWrapper({
   return (
     <TransactionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       transactions={transactions}
       walletAddress={request.data.from}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       transactionStatus={transactionStatus}
       networkName={networkName}
-      chainIconKey={chainIconKey}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
+      apiKey={apiKey}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -1787,7 +1806,13 @@ function PermissionDialogWrapper({
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
-  const ethPrice = useEthPrice();
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
@@ -1796,7 +1821,6 @@ function PermissionDialogWrapper({
     : (requestChainId || defaultChainId || 1);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1886,7 +1910,7 @@ function PermissionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && ethPrice ? ethPrice * Number(gasFee) : 0;
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
       const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
       return {
         token: selectedFeeToken.address,
@@ -1894,7 +1918,7 @@ function PermissionDialogWrapper({
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, ethPrice]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
 
   const chain = useMemo(
     () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
@@ -1930,9 +1954,12 @@ function PermissionDialogWrapper({
           continue;
         }
 
-        // If native token, use ETH defaults
+        // If native token, use chain's native currency
         if (isNativeToken(tokenAddress)) {
-          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+          newTokenInfoMap[tokenAddress] = {
+            decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+            symbol: viemChain?.nativeCurrency?.symbol || 'ETH'
+          };
           continue;
         }
 
@@ -1942,7 +1969,7 @@ function PermissionDialogWrapper({
             chain: {
               id: chainId,
               name: networkName,
-              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              nativeCurrency: viemChain?.nativeCurrency || { name: 'Ether', symbol: 'ETH', decimals: 18 },
               rpcUrls: {
                 default: { http: [chain.rpcUrl || ''] },
                 public: { http: [chain.rpcUrl || ''] },
@@ -1986,7 +2013,7 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [chainId, spendsData, networkName, chain.rpcUrl]);
+  }, [chainId, spendsData, networkName, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens from capabilities (same pattern as TransactionDialogWrapper)
   useEffect(() => {
@@ -2085,6 +2112,9 @@ function PermissionDialogWrapper({
   }, [chainId, apiKey, request.data.address, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -2093,7 +2123,7 @@ function PermissionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -2108,14 +2138,14 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
   // Convert to SpendPermission array format expected by PermissionDialog
   const spends = useMemo(() => spendsData.map(spend => {
     const tokenInfo = tokenInfoMap[spend.token] || (isNativeToken(spend.token)
-      ? { decimals: 18, symbol: 'ETH' }
+      ? { decimals: viemChain?.nativeCurrency?.decimals ?? 18, symbol: nativeSymbol }
       : { decimals: 18, symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4) });
 
     const allowance = BigInt(spend.allowance);
@@ -2128,12 +2158,12 @@ function PermissionDialogWrapper({
 
     return {
       amount,
-      token: isNativeToken(spend.token) ? 'Native (ETH)' : tokenInfo.symbol,
+      token: isNativeToken(spend.token) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
       tokenAddress: spend.token,
       duration,
       limit,
     };
-  }), [spendsData, tokenInfoMap]);
+  }), [spendsData, tokenInfoMap, viemChain, nativeSymbol]);
 
   // Format call permissions
   const calls = useMemo(() => callsData.map(call => ({
@@ -2243,7 +2273,10 @@ function PermissionDialogWrapper({
   return (
     <PermissionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       mode="grant"
       spenderAddress={request.data.spender}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
@@ -2252,7 +2285,7 @@ function PermissionDialogWrapper({
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
-      chainIconKey={chainIconKey}
+      apiKey={apiKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -2264,7 +2297,7 @@ function PermissionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
-      ethPrice={ethPrice}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Fee token props for ERC-20 paymaster
       feeTokens={feeTokens}
       feeTokensLoading={feeTokensLoading}
@@ -2299,8 +2332,7 @@ function SiweDialogWrapper({
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(chainId);
-  const chainIconKey = getChainIconKeyFromId(chainId);
-  const chainIcon = useChainIcon(chainIconKey, 24);
+  const chainIcon = useChainIconURI(chainId, apiKey, 24);
   const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
 
   // Decode message if it's hex encoded
@@ -2382,7 +2414,10 @@ function SiweDialogWrapper({
   return (
     <SiweDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       message={decodedMessage}
       origin={origin}
       timestamp={new Date(request.timestamp)}
@@ -2391,6 +2426,7 @@ function SiweDialogWrapper({
       chainName={chainName}
       chainId={chainId}
       chainIcon={chainIcon}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -2423,8 +2459,20 @@ function RevokePermissionDialogWrapper({
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState(true);
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
+  const [account, setAccount] = useState<Account | null>(null);
+  const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
+  const [feeTokensLoading, setFeeTokensLoading] = useState(true);
 
   const chainId = request.data.chainId || defaultChainId || 1;
+  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
+  const networkName = viemChain?.name || 'Unknown Network';
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -2433,10 +2481,94 @@ function RevokePermissionDialogWrapper({
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
-  const chain = buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl);
-  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
-  const networkName = viemChain?.name || 'Unknown Network';
-  const chainIconKey = getChainIconKeyFromId(chainId);
+  // Extract paymasterContext from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
+  const effectivePaymasterContext = useMemo(() => {
+    const capabilitiesPaymasterContext = (request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
+  }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
+
+  // Check if this is a sponsored transaction (paymaster provided)
+  const isSponsored = !!effectivePaymasterUrl;
+
+  // Build the actual permission revoke call for gas estimation
+  const transactionCalls = useMemo(() => {
+    if (!fetchedPermissionData) return [];
+
+    try {
+      const revokeCall = buildRevokePermissionCall(fetchedPermissionData);
+      return [revokeCall];
+    } catch (error) {
+      console.warn('[RevokePermissionDialogWrapper] Failed to build permission revoke call:', error);
+      return [];
+    }
+  }, [fetchedPermissionData]);
+
+  // Use the gas estimation hook for both ETH and ERC-20 cost estimation
+  const {
+    gasFee,
+    gasFeeLoading,
+    gasEstimationError,
+    tokenEstimates,
+    selectedFeeToken,
+    setSelectedFeeToken,
+    isPayingWithErc20,
+  } = useGasEstimation({
+    account,
+    transactionCalls,
+    chainId,
+    apiKey,
+    feeTokens,
+    isSponsored,
+    onFeeTokensUpdate: setFeeTokens,
+  });
+
+  // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
+  const computedPaymasterUrl = useMemo(() => {
+    // If already sponsored via capabilities or config, use that
+    if (effectivePaymasterUrl) return effectivePaymasterUrl;
+
+    // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
+    }
+
+    // Native ETH - no paymaster needed
+    return undefined;
+  }, [effectivePaymasterUrl, selectedFeeToken, chainId, apiKey]);
+
+  // Compute paymaster context based on fee token selection
+  const computedPaymasterContext = useMemo(() => {
+    // If using ERC-20 paymaster, include token address and gas amount in context
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      // Use the actual estimate from tokenEstimates if available
+      const estimate = tokenEstimates.find(
+        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+      );
+
+      if (estimate) {
+        // Use the actual token cost from paymaster quote
+        return {
+          token: selectedFeeToken.address,
+          gas: estimate.tokenCost.toString(),
+        };
+      }
+
+      // Fallback to client-side calculation if no estimate yet
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
+      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      return {
+        token: selectedFeeToken.address,
+        gas: gasInTokenUnits.toString(),
+      };
+    }
+    return effectivePaymasterContext;
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
+
+  const chain = useMemo(
+    () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
+    [chainId, apiKey, computedPaymasterUrl]
+  );
 
   // Fetch permission details from relay
   useEffect(() => {
@@ -2457,14 +2589,17 @@ function RevokePermissionDialogWrapper({
           for (const spend of permData.spends) {
             const tokenAddress = spend.token;
             if (isNativeToken(tokenAddress)) {
-              newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+              newTokenInfoMap[tokenAddress] = {
+                decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+                symbol: viemChain?.nativeCurrency?.symbol || 'ETH'
+              };
             } else {
               try {
                 const publicClient = createPublicClient({
                   chain: {
                     id: chainId,
                     name: networkName,
-                    nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                    nativeCurrency: viemChain?.nativeCurrency || { name: 'Ether', symbol: 'ETH', decimals: 18 },
                     rpcUrls: {
                       default: { http: [chain.rpcUrl || ''] },
                       public: { http: [chain.rpcUrl || ''] },
@@ -2501,7 +2636,125 @@ function RevokePermissionDialogWrapper({
     };
 
     fetchPermissionDetails();
-  }, [request.data.permissionId, apiKey, chainId, networkName, chain.rpcUrl]);
+  }, [request.data.permissionId, apiKey, chainId, networkName, chain.rpcUrl, viemChain]);
+
+  // Fetch fee tokens for ERC-20 paymaster support
+  useEffect(() => {
+    // Skip if already sponsored via capabilities/config
+    if (effectivePaymasterUrl) {
+      setFeeTokensLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchFeeTokensData = async () => {
+      try {
+        // Fetch capabilities to get available fee tokens
+        const capabilities = await handleGetCapabilitiesRequest(
+          { method: 'wallet_getCapabilities', params: [] },
+          apiKey || '',
+          true // showTestnets
+        );
+
+        const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+
+        if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
+          if (isMounted) setFeeTokensLoading(false);
+          return;
+        }
+
+        // Get RPC URL for balance fetching
+        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+
+        // Fetch balances in parallel
+        const tokensWithBalances = await Promise.all(
+          feeTokenCap.tokens.map(async (token) => {
+            try {
+              const balance = await fetchTokenBalance(token.address, request.data.address as Address, rpcUrl);
+              const balanceFormatted = formatUnits(balance, token.decimals);
+              const tokenIsNative = isNativeToken(token.address);
+              // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
+              // For ERC-20 tokens: require at least 0.5 units
+              const isSelectable = tokenIsNative
+                ? balance > 0n
+                : parseFloat(balanceFormatted) >= 0.5;
+
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance,
+                balanceFormatted,
+                isNative: tokenIsNative,
+                isSelectable,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            } catch (error) {
+              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance: 0n,
+                balanceFormatted: '0',
+                isNative: isNativeToken(token.address),
+                isSelectable: false,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            }
+          })
+        );
+
+        if (isMounted) {
+          setFeeTokens(tokensWithBalances);
+          // Note: Initial token selection is handled by useGasEstimation hook
+        }
+      } catch (error) {
+        console.warn('[RevokePermissionDialogWrapper] Failed to fetch fee tokens:', error);
+      } finally {
+        if (isMounted) setFeeTokensLoading(false);
+      }
+    };
+
+    fetchFeeTokensData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chainId, apiKey, request.data.address, effectivePaymasterUrl, viemChain]);
+
+  // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeAccount = async () => {
+      try {
+        const restoredAccount = await getAccountForSigning(
+          apiKey,
+          chainId,
+          effectivePaymasterUrl
+        );
+        if (isMounted) {
+          setAccount(restoredAccount);
+        }
+      } catch (error) {
+        console.error('[RevokePermissionDialogWrapper] Error initializing account:', error);
+      }
+    };
+
+    initializeAccount();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Format spends for display
   const formattedSpends = useMemo(() => {
@@ -2509,7 +2762,10 @@ function RevokePermissionDialogWrapper({
 
     return fetchedPermissionData.spends.map((spend: any) => {
       const tokenAddress = spend.token;
-      const tokenInfo = tokenInfoMap[tokenAddress] || { decimals: 18, symbol: 'ETH' };
+      const tokenInfo = tokenInfoMap[tokenAddress] || {
+        decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+        symbol: nativeSymbol
+      };
       const allowance = BigInt(spend.allowance);
       const amount = formatUnits(allowance, tokenInfo.decimals);
       const limit = `${amount} ${tokenInfo.symbol}`;
@@ -2520,14 +2776,14 @@ function RevokePermissionDialogWrapper({
       return {
         amount,
         token: isNativeToken(tokenAddress)
-          ? 'Native (ETH)'
+          ? `Native (${nativeSymbol})`
           : tokenInfo.symbol,
         tokenAddress,
         duration,
         limit,
       };
     });
-  }, [fetchedPermissionData, tokenInfoMap]);
+  }, [fetchedPermissionData, tokenInfoMap, viemChain, nativeSymbol]);
 
   // Format call permissions from fetched data
   const formattedCalls = useMemo(() => {
@@ -2551,18 +2807,20 @@ function RevokePermissionDialogWrapper({
   const spenderAddress = fetchedPermissionData?.spender || '0x...';
 
   const handleConfirm = async () => {
+    if (!account) {
+      console.error('[RevokePermissionDialogWrapper] Account not initialized');
+      return;
+    }
+
     setIsProcessing(true);
     setStatus('Revoking permission...');
     try {
-      // Restore account for revoking
-      const account = await getAccountForSigning(
-        apiKey,
-        chainId,
-        effectivePaymasterUrl
+      // Revoke permission using Account class with paymaster context
+      await account.revokePermission(
+        request.data.permissionId as `0x${string}`,
+        computedPaymasterUrl,
+        computedPaymasterContext
       );
-
-      // Revoke permission using Account class
-      await account.revokePermission(request.data.permissionId as `0x${string}`);
 
       console.log('Permission revoked');
       setStatus('Permission revoked successfully!');
@@ -2591,7 +2849,10 @@ function RevokePermissionDialogWrapper({
   return (
     <PermissionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       mode="revoke"
       permissionId={request.data.permissionId}
       spenderAddress={spenderAddress}
@@ -2601,13 +2862,26 @@ function RevokePermissionDialogWrapper({
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
-      chainIconKey={chainIconKey}
+      apiKey={apiKey}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingPermissionDetails}
       timestamp={new Date(request.timestamp)}
+      mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
+      // Gas estimation props
+      gasFee={gasFee}
+      gasFeeLoading={gasFeeLoading}
+      gasEstimationError={gasEstimationError}
+      sponsored={isSponsored}
+      // Fee token props for ERC-20 paymaster
+      feeTokens={feeTokens}
+      feeTokensLoading={feeTokensLoading}
+      selectedFeeToken={selectedFeeToken}
+      onFeeTokenSelect={setSelectedFeeToken}
+      showFeeTokenSelector={!isSponsored && feeTokens.some(t => !t.isNative)}
+      isPayingWithErc20={isPayingWithErc20}
     />
   );
 }
@@ -2638,7 +2912,10 @@ function UnsupportedMethodDialogWrapper({
   return (
     <DefaultDialogComponent
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleClose();
+        else setOpen(newOpen);
+      }}
       handleClose={handleClose}
       contentStyle={{
         width: 'fit-content',

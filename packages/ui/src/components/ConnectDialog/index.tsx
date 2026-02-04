@@ -20,6 +20,7 @@ export const ConnectDialog = ({
   chainName,
   chainId,
   chainIcon,
+  mainnetRpcUrl,
   onConnect,
   onCancel,
   isProcessing,
@@ -30,7 +31,7 @@ export const ConnectDialog = ({
   // Resolve wallet address to human-readable name
   useEffect(() => {
     if (walletAddress && chainId) {
-      const justaName = getJustaNameInstance();
+      const justaName = getJustaNameInstance(mainnetRpcUrl);
       justaName.subnames.reverseResolve({
         address: walletAddress as `0x${string}`,
         chainId: chainId,

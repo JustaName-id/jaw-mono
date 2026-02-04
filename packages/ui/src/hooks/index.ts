@@ -1,4 +1,4 @@
 export * from './useIsMobile';
-export * from './useChainIcon';
-export * from './useEthPrice';
+export * from './useChainIconURI';
+export * from './useFeeTokenPrice';
 export * from './useGasEstimation';

@@ -2,6 +2,7 @@ import { store } from '../store/index.js';
 import { getBundlerClient } from '../store/chain-clients/utils.js';
 import type { BundlerClient } from 'viem/account-abstraction';
 import { numberToHex } from 'viem';
+import { notifyReceiptReceived } from '../analytics/index.js';
 
 /**
  * Receipt in EIP-5792 format
@@ -41,11 +42,13 @@ export interface CallStatusResponse {
  * Stores a call status as pending when wallet_sendCalls is called
  * @param userOpHash - The user operation hash returned from sendUserOperation
  * @param chainId - The chain ID where the operation was submitted
+ * @param apiKey - Optional API key for notifying the proxy when receipt is received
  */
-export function storeCallStatus(userOpHash: string, chainId: number): void {
+export function storeCallStatus(userOpHash: string, chainId: number, apiKey?: string): void {
     store.callStatuses.set(userOpHash, {
         status: 'pending',
         chainId,
+        apiKey,
     });
 }
 
@@ -199,8 +202,9 @@ export function getCallStatusEIP5792(batchId: string): CallStatusResponse | unde
  * This function does NOT await - it runs in the background
  * @param userOpHash - The user operation hash to wait for
  * @param chainId - The chain ID where the operation was submitted
+ * @param apiKey - Optional API key for notifying the proxy when receipt is received
  */
-export async function waitForReceiptInBackground(userOpHash: string, chainId: number): Promise<void> {
+export async function waitForReceiptInBackground(userOpHash: string, chainId: number, apiKey?: string): Promise<void> {
     try {
         // Get bundler client for the chain
         const bundlerClient = getBundlerClient(chainId);
@@ -218,14 +222,24 @@ export async function waitForReceiptInBackground(userOpHash: string, chainId: nu
         // The receipt from waitForUserOperationReceipt has a receipt field with status
         const actualReceipt = (receipt as any).receipt || receipt;
         const receiptStatus = actualReceipt.status;
-        
+
         // Determine if transaction succeeded:
         // - status === '0x1' or 1 means success
         // - status === '0x0' or 0 means failure (reverted)
         // - If status is undefined but receipt exists, assume success (included on-chain)
-        const isSuccess = receiptStatus === '0x1' || 
-                         receiptStatus === 1 || 
-                         (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
+        const isSuccess = receiptStatus === '0x1' ||
+            receiptStatus === 1 ||
+            (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
+
+        // Fire-and-forget notification to proxy
+        if (apiKey) {
+            notifyReceiptReceived({
+                userOpHash: userOpHash as `0x${string}`,
+                transactionHash: actualReceipt.transactionHash,
+                success: isSuccess,
+                apiKey,
+            });
+        }
 
         if (isSuccess) {
             // Transaction succeeded - mark as completed

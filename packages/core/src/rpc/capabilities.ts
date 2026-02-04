@@ -5,6 +5,15 @@ import { buildHandleJawRpcUrl, fetchRPCRequest, hexStringFromNumber } from '../u
 import { MAINNET_CHAINS } from '../account/smartAccount.js';
 
 /**
+ * Chain metadata capability returned by wallet_getCapabilities
+ * Contains chain-specific information including the icon as a data URI
+ */
+export interface ChainMetadataCapability {
+    /** Chain icon as a data URI (e.g., data:image/svg+xml;base64,...) */
+    icon?: string;
+}
+
+/**
  * Handle wallet_getCapabilities request (EIP-5792)
  *
  * Returns the wallet's capabilities for all supported chains or filtered by chain IDs.

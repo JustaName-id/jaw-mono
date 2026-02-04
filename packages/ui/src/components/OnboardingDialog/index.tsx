@@ -8,7 +8,7 @@ import { WalletIcon } from '../../icons';
 import { ChevronRight } from 'lucide-react';
 import { OrSeparator } from '../OrSeparator';
 import { OnboardingDialogProps } from './types';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
 import {toCoinType} from "viem";
 
@@ -23,10 +23,14 @@ export function OnboardingDialog({
   isCreating,
   ensDomain,
   chainId,
+  mainnetRpcUrl,
   apiKey,
   supportedChains,
   subnameTextRecords,
 }: OnboardingDialogProps) {
+  // Ref for scrollable container
+  const scrollableRef = useRef<HTMLDivElement>(null);
+
   // Validation state
   const [isValid, setIsValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -88,7 +92,7 @@ export function OnboardingDialog({
         setMessage('Checking availability...');
 
         try {
-          const justaName = getJustaNameInstance();
+          const justaName = getJustaNameInstance(mainnetRpcUrl);
           const result = await justaName.subnames.isSubnameAvailable({
             subname: debouncedUsername + '.' + ensDomain,
             chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
@@ -114,19 +118,40 @@ export function OnboardingDialog({
     validateUsername();
   }, [debouncedUsername, username, ensDomain, chainId]);
 
+  // Handle wheel events for smooth scrolling over buttons
+  useEffect(() => {
+    const scrollable = scrollableRef.current;
+    if (!scrollable) return;
+
+    const handleWheel = (e: WheelEvent) => {
+      // Prevent default to handle scroll manually
+      e.preventDefault();
+      // Smooth scroll
+      scrollable.scrollTop += e.deltaY;
+    };
+
+    // Add event listener with passive: false to allow preventDefault
+    scrollable.addEventListener('wheel', handleWheel, { passive: false });
+
+    return () => {
+      scrollable.removeEventListener('wheel', handleWheel);
+    };
+  }, []);
+
   const handleCreateAccountClick = async () => {
     // Clear any previous errors
     setError(null);
 
     try {
-      const address = await onCreateAccount(username);
+      // onCreateAccount now returns full account data (not just address)
+      const accountData = await onCreateAccount(username);
 
-      if (ensDomain && chainId && apiKey && supportedChains && address) {
+      if (ensDomain && chainId && apiKey && supportedChains && accountData.address) {
         try {
-          const justaName = getJustaNameInstance();
+          const justaName = getJustaNameInstance(mainnetRpcUrl);
 
           const addresses = supportedChains.map(chain => ({
-            address: address,
+            address: accountData.address,
             coinType: toCoinType(chain.id).toString(),
           }));
 
@@ -146,7 +171,7 @@ export function OnboardingDialog({
             },
             {
               xApiKey: apiKey,
-              xAddress: address,
+              xAddress: accountData.address,
               xMessage: "",
             }
           );
@@ -159,7 +184,8 @@ export function OnboardingDialog({
         }
       }
 
-      await onAccountCreationComplete();
+      // Pass account data through to completion handler
+      await onAccountCreationComplete(accountData);
     } catch (error) {
       const errorMessage = `Account creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
       console.error('❌ ACCOUNT CREATION ERROR:', errorMessage, error);
@@ -183,7 +209,7 @@ export function OnboardingDialog({
 
       <CardContent className="flex flex-col gap-5">
         {/* Existing Accounts */}
-        <div className="flex flex-col gap-1 max-h-[40vh] overflow-y-auto">
+        <div ref={scrollableRef} className="flex flex-col gap-1 max-h-[40vh] overflow-y-auto overscroll-contain">
           {accounts.map((account) => (
             <Button
               key={account.credentialId || account.username || Math.random().toString()}

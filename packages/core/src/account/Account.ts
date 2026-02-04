@@ -263,6 +263,68 @@ export class Account {
     throw new Error('Not authenticated. Please provide a credentialId to login, or create an account first.');
   }
 
+  /**
+   * Restore an Account from existing credential info WITHOUT triggering WebAuthn
+   *
+   * Use this method when the user has already authenticated (e.g., during connection)
+   * and you just need to restore the Account instance for signing operations.
+   * The actual signing will trigger its own WebAuthn prompt.
+   *
+   * @param config - Account configuration
+   * @param credentialId - The credential ID of the passkey
+   * @param publicKey - The public key of the passkey
+   * @returns Promise resolving to the Account instance
+   *
+   * @example
+   * ```typescript
+   * // Restore account from session data (no WebAuthn prompt)
+   * const account = await Account.restore(
+   *   { chainId: 1, apiKey: 'your-api-key' },
+   *   session.authState.credentialId,
+   *   session.authState.publicKey
+   * );
+   *
+   * // Signing will trigger WebAuthn
+   * const signature = await account.signMessage('Hello');
+   * ```
+   */
+  static async restore(
+    config: AccountConfig,
+    credentialId: string,
+    publicKey: `0x${string}`
+  ): Promise<Account> {
+    const { chainId, apiKey, paymasterUrl } = config;
+
+    if (!credentialId || !publicKey) {
+      throw new Error('credentialId and publicKey are required to restore an account');
+    }
+
+    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    const passkeyAccount = passkeyManager.getAccountByCredentialId(credentialId);
+
+    // Create WebAuthn account from credential info (no WebAuthn prompt)
+    const webAuthnAccount = toWebAuthnAccount({
+      credential: {
+        id: credentialId,
+        publicKey: publicKey,
+      },
+    });
+
+    const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+    const bundlerClient = getBundlerClient(chain);
+    const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
+
+    // Use passkeyAccount if found, otherwise create minimal metadata
+    const accountMetadata = passkeyAccount ?? {
+      username: '',
+      credentialId,
+      publicKey,
+      creationDate: new Date().toISOString(),
+      isImported: false,
+    };
+
+    return new Account(smartAccount, chain, apiKey, accountMetadata);
+  }
 
   /**
    * Create a new account with a passkey
@@ -472,6 +534,25 @@ export class Account {
   }
 
   /**
+   * Get the currently authenticated account data
+   *
+   * @param apiKey - Optional API key
+   * @returns The current account data if authenticated, null otherwise
+   *
+   * @example
+   * ```typescript
+   * const account = Account.getCurrentAccount('your-api-key');
+   * if (account) {
+   *   console.log(`Authenticated as: ${account.username}`);
+   * }
+   * ```
+   */
+  static getCurrentAccount(apiKey?: string): PasskeyAccount | null {
+    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    return passkeyManager.getCurrentAccount() || null;
+  }
+
+  /**
    * Clear authentication state (logout)
    *
    * @param apiKey - Optional API key
@@ -662,7 +743,8 @@ export class Account {
       finalCalls,
       this._chain,
       paymasterUrlOverride,
-      Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined
+      Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined,
+      this._apiKey
     );
   }
 
@@ -733,8 +815,8 @@ export class Account {
     }
 
     // Store call status as pending and start background receipt waiting
-    storeCallStatus(result.id, result.chainId);
-    waitForReceiptInBackground(result.id, result.chainId);
+    storeCallStatus(result.id, result.chainId, this._apiKey);
+    waitForReceiptInBackground(result.id, result.chainId, this._apiKey);
 
     return result;
   }
@@ -885,6 +967,8 @@ export class Account {
    * Revoke a previously granted permission
    *
    * @param permissionId - The permission ID (hash) to revoke
+   * @param paymasterUrlOverride - Optional paymaster URL for ERC-20 payment
+   * @param paymasterContextOverride - Optional paymaster context (e.g., token address for ERC-20 payment)
    * @returns Promise resolving to the revoke response
    *
    * @example
@@ -893,12 +977,26 @@ export class Account {
    * console.log('Revoked:', response.success);
    * ```
    */
-  async revokePermission(permissionId: Hex): Promise<RevokePermissionApiResponse> {
+  async revokePermission(
+    permissionId: Hex,
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>
+  ): Promise<RevokePermissionApiResponse> {
+    // Check if we need an ERC-20 approval for the paymaster
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+
+    // Remove gas field from context (only used for approval logic)
+    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+
     return await revokeSmartAccountPermission(
       this._smartAccount,
       permissionId,
       this._chain,
-      this._apiKey
+      this._apiKey,
+      paymasterUrlOverride,
+      cleanedContext,
+      approvalCall || undefined
     );
   }
 
@@ -1044,7 +1142,6 @@ export class Account {
     if (currentAllowance >= requiredAmount) {
       return null;
     }
-
     // Encode ERC-20 approve call for the required amount
     const approveData = encodeFunctionData({
       abi: erc20Abi,

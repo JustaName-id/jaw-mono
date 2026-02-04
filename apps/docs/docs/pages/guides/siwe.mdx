@@ -1,0 +1,222 @@
+# Sign-In With Ethereum (SIWE)
+
+Authenticate users with their signature. When users connect, your frontend knows their account, but your backend doesn't - SIWE bridges that gap by providing cryptographic proof of account ownership.
+
+**What you can do:**
+
+- **Wallet Login** - Users sign in with their JAW account
+- **Backend Auth** - Verify signatures server-side
+- **Secure Sessions** - Issue JWTs or session cookies
+- **Link Accounts** - Associate wallets with existing user accounts
+
+
+## 1. Integration Path
+
+| Approach | Best For |
+|----------|----------|
+| **Wagmi** | React apps using wagmi connectors |
+| **Core SDK** | Custom implementations or non-React apps |
+
+
+## 2. Backend Endpoints
+
+Set up three endpoints on your server to handle the SIWE flow:
+
+| Endpoint | Purpose |
+|----------|---------|
+| `GET /api/siwe/nonce` | Generate a fresh nonce to prevent replay attacks |
+| `POST /api/siwe/verify` | Validate signature and issue session token |
+| `POST /api/siwe/logout` | Clear user session |
+
+### Nonce Endpoint
+
+```typescript
+// Server: GET /api/siwe/nonce
+import { generateSiweNonce } from 'viem/siwe';
+
+export async function GET() {
+  const nonce = generateSiweNonce();
+
+  // Store nonce in session/cache for verification
+  // (e.g., Redis, memory cache, or database)
+
+  return Response.json({ nonce });
+}
+```
+
+### Verify Endpoint
+
+```typescript
+// Server: POST /api/siwe/verify
+import { parseSiweMessage, verifySiweMessage } from 'viem/siwe';
+import { createPublicClient, http } from 'viem';
+import { mainnet } from 'viem/chains';
+
+const client = createPublicClient({
+  chain: mainnet,
+  transport: http(),
+});
+
+export async function POST(request: Request) {
+  const { message, signature } = await request.json();
+
+  // Parse the SIWE message
+  const siweMessage = parseSiweMessage(message);
+
+  // Verify the signature
+  const isValid = await verifySiweMessage(client, {
+    message,
+    signature,
+  });
+
+  if (!isValid) {
+    return Response.json({ error: 'Invalid signature' }, { status: 401 });
+  }
+
+  // Create session/JWT for the verified address
+  const token = await createSessionToken(siweMessage.address);
+
+  // Set HTTP-only cookie for security
+  return new Response(JSON.stringify({ success: true }), {
+    headers: {
+      'Set-Cookie': `auth_token=${token}; HttpOnly; Secure; SameSite=Strict; Path=/`,
+    },
+  });
+}
+```
+
+### Logout Endpoint
+
+```typescript
+// Server: POST /api/siwe/logout
+export async function POST() {
+  return new Response(JSON.stringify({ success: true }), {
+    headers: {
+      'Set-Cookie': 'auth_token=; HttpOnly; Secure; SameSite=Strict; Path=/; Max-Age=0',
+    },
+  });
+}
+```
+
+
+## 3. Client-Side Sign-In
+
+Request a SIWE signature during connection using the `signInWithEthereum` capability in `wallet_connect`.
+
+:::code-group
+
+```tsx [Wagmi]
+import { useConnect } from '@jaw.id/wagmi';
+
+function SignInButton() {
+  const { mutate: connect } = useConnect();
+
+  const handleSignIn = async () => {
+    // 1. Fetch nonce from your backend
+    const nonceRes = await fetch('/api/siwe/nonce');
+    const { nonce } = await nonceRes.json();
+
+    // 2. Connect with SIWE capability
+    connect({
+      connector: config.connectors[0],
+      capabilities: {
+        signInWithEthereum: {
+          nonce,
+          chainId: '0x1',
+          domain: window.location.host,
+          uri: window.location.origin,
+          statement: 'Sign in to My App',
+          expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+        },
+      },
+    }, {
+      onSuccess: async (data) => {
+        const siweResponse = data.accounts[0].capabilities?.signInWithEthereum;
+
+        if (siweResponse && 'message' in siweResponse) {
+          // 3. Send to backend for verification
+          await fetch('/api/siwe/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              message: siweResponse.message,
+              signature: siweResponse.signature,
+            }),
+          });
+        }
+      },
+    });
+  };
+
+  return <button onClick={handleSignIn}>Sign In</button>;
+}
+```
+
+```typescript [Core SDK]
+// 1. Fetch nonce from your backend
+const nonceRes = await fetch('/api/siwe/nonce');
+const { nonce } = await nonceRes.json();
+
+// 2. Connect with SIWE capability
+const result = await jaw.provider.request({
+  method: 'wallet_connect',
+  params: [{
+    capabilities: {
+      signInWithEthereum: {
+        nonce,
+        chainId: '0x1',
+        domain: window.location.host,
+        uri: window.location.origin,
+        statement: 'Sign in to My App',
+        expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+      },
+    },
+  }],
+});
+
+// 3. Extract SIWE response
+const siweResponse = result.accounts[0].capabilities?.signInWithEthereum;
+
+if (siweResponse && 'message' in siweResponse) {
+  // 4. Send to backend for verification
+  await fetch('/api/siwe/verify', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      message: siweResponse.message,
+      signature: siweResponse.signature,
+    }),
+  });
+}
+```
+
+:::
+
+
+## 4. SIWE Parameters
+
+| Parameter | Required | Description |
+|-----------|----------|-------------|
+| `nonce` | Yes | Random string from your backend to prevent replay attacks |
+| `chainId` | Yes | Chain ID in hex format (e.g., `'0x1'` for mainnet) |
+| `domain` | No | Your app's domain (e.g., `'myapp.com'`) |
+| `uri` | No | Your app's full URI (e.g., `'https://myapp.com'`) |
+| `statement` | No | Human-readable message the user is signing |
+| `expirationTime` | No | ISO 8601 timestamp when signature expires |
+| `issuedAt` | No | ISO 8601 timestamp when signature was issued |
+| `resources` | No | Array of resource URIs the user is authorizing |
+
+
+## 5. Security Best Practices
+
+- **Always verify signatures on your backend** - Never trust client-side verification alone
+- **Use nonces** - Generate a fresh nonce for each sign-in attempt to prevent replay attacks
+- **Set expiration times** - Limit signature validity to a reasonable window (e.g., 1 hour)
+- **Store sessions securely** - Use HTTP-only cookies or encrypted tokens
+- **Validate the domain** - Ensure the signed domain matches your application
+
+
+## Related
+
+- [wallet_connect](/api-reference/wallet_connect) - Full API reference for SIWE capability
+- [Quickstart](/guides/quickstart) - Initial JAW setup

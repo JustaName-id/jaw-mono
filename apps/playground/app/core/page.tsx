@@ -34,14 +34,13 @@ function CorePageContent({ mode }: { mode: ModeType }) {
     JAW.create({
       appName: 'JAW Playground',
       appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
-      defaultChainId: 10,
+      defaultChainId: 84532,
       preference: {
         keysUrl: 'http://localhost:3001',
         showTestnets: true,
         mode: mode,
         uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
       },
-      ens: "justan.id",
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
     })
   );

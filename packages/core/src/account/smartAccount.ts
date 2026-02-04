@@ -23,13 +23,14 @@ import {
     WebAuthnAccount
 } from "viem/account-abstraction";
 import {Chain} from "../store/index.js";
-import {arbitrum, arbitrumSepolia, base, baseSepolia, linea, lineaSepolia, mainnet, optimism, optimismSepolia, sepolia} from "viem/chains";
+import {arbitrum, arbitrumSepolia, base, baseSepolia, linea, lineaSepolia, mainnet, optimism, optimismSepolia, sepolia , avalanche, avalancheFuji, bsc, bscTestnet} from "viem/chains";
 import {PERMISSIONS_MANAGER_ADDRESS} from "../constants.js";
 import {
     getPermissionFromRelay,
     relayPermissionToPermission,
     encodeExecuteBatchWithPermission,
 } from "../rpc/permissions.js";
+import { notifyReceiptReceived } from "../analytics/index.js";
 
 export type FindOwnerIndexParams = {
     /**
@@ -63,6 +64,8 @@ export const MAINNET_CHAINS = [
     optimism,
     arbitrum,
     linea,
+    avalanche,
+    bsc
 ]
 
 export const TESTNET_CHAINS = [
@@ -71,6 +74,8 @@ export const TESTNET_CHAINS = [
     optimismSepolia,
     arbitrumSepolia,
     lineaSepolia,
+    avalancheFuji,
+    bscTestnet
 ]
 
 export const SUPPORTED_CHAINS = [
@@ -145,7 +150,8 @@ export async function sendTransaction(
     }>,
     chain: Chain,
     paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
+    paymasterContextOverride?: Record<string, unknown>,
+    apiKey?: string
 ): Promise<Hash> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
@@ -162,6 +168,27 @@ export async function sendTransaction(
     const receipt = await bundlerClient.waitForUserOperationReceipt({
         hash: userOpHash
     })
+
+    // Fire-and-forget notification to proxy
+    if (apiKey) {
+        // Extract the actual receipt - same logic as wallet_sendCalls.ts
+        const actualReceipt = (receipt as any).receipt || receipt;
+        const receiptStatus = actualReceipt.status;
+
+        // Determine if transaction succeeded:
+        // - status === '0x1' or 1 means success
+        // - If status is undefined but transactionHash exists, assume success (included on-chain)
+        const isSuccess = receiptStatus === '0x1' ||
+            receiptStatus === 1 ||
+            (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
+
+        notifyReceiptReceived({
+            userOpHash,
+            transactionHash: actualReceipt.transactionHash,
+            success: isSuccess,
+            apiKey,
+        });
+    }
 
     return receipt.receipt.transactionHash
 }

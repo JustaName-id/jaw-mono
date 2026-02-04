@@ -1,0 +1,117 @@
+# Account.getCurrentAccount()
+
+Get the currently authenticated account data.
+
+**Type:** `static`
+
+
+## Signature
+
+```typescript
+static getCurrentAccount(apiKey?: string): PasskeyAccount | null
+```
+
+
+## Parameters
+
+### apiKey
+
+Type: `string | undefined`
+
+Optional API key for JAW services.
+
+
+## Returns
+
+`PasskeyAccount | null` - The current account data if authenticated, `null` otherwise.
+
+### PasskeyAccount
+
+```typescript
+interface PasskeyAccount {
+  /** Smart account address */
+  address: `0x${string}`;
+  /** Credential ID of the passkey */
+  credentialId: string;
+  /** Public key of the passkey (hex encoded) */
+  publicKey: `0x${string}`;
+  /** Username/display name */
+  username: string;
+  /** ISO date string when created */
+  creationDate: string;
+}
+```
+
+
+## Behavior
+
+Returns the full account data for the currently authenticated session. Unlike `getAuthenticatedAddress()` which only returns the address, this method returns all account metadata including credential information.
+
+Returns `null` if:
+- No authenticated session exists
+- The session has expired
+
+
+## Examples
+
+### Check Authentication Status
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const account = Account.getCurrentAccount('your-api-key');
+
+if (account) {
+  console.log(`Authenticated as: ${account.username}`);
+  console.log(`Address: ${account.address}`);
+  console.log(`Created: ${account.creationDate}`);
+} else {
+  console.log('Not authenticated');
+}
+```
+
+### Restore Account from Current Session
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+const currentAccount = Account.getCurrentAccount('your-api-key');
+
+if (currentAccount) {
+  // Use credential data to restore Account instance
+  const account = await Account.restore(
+    { chainId: 1, apiKey: 'your-api-key' },
+    currentAccount.credentialId,
+    currentAccount.publicKey
+  );
+}
+```
+
+### Conditional UI Rendering
+
+```typescript
+import { Account } from '@jaw.id/core';
+
+function AuthStatus() {
+  const account = Account.getCurrentAccount('your-api-key');
+
+  if (!account) {
+    return <LoginButton />;
+  }
+
+  return (
+    <div>
+      <p>Welcome, {account.username}</p>
+      <p>{account.address}</p>
+    </div>
+  );
+}
+```
+
+
+## Related
+
+- [Account.getAuthenticatedAddress()](/account/getAuthenticatedAddress) - Get only the address
+- [Account.getStoredAccounts()](/account/getStoredAccounts) - List all stored accounts
+- [Account.restore()](/account/restore) - Restore account from credential data
+- [Account.logout()](/account/logout) - Clear authentication state

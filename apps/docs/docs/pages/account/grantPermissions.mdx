@@ -11,7 +11,9 @@ Grant permissions to a spender.
 async grantPermissions(
   expiry: number,
   spender: Address,
-  permissions: PermissionsDetail
+  permissions: PermissionsDetail,
+  paymasterUrlOverride?: string,
+  paymasterContextOverride?: Record<string, unknown>
 ): Promise<WalletGrantPermissionsResponse>
 ```
 
@@ -47,18 +49,38 @@ interface PermissionsDetail {
 interface CallPermissionDetail {
   /** Target contract address */
   target: Address;
-  /** Function selector (4 bytes) */
-  selector: Hex;
+  /** Function selector (4 bytes) - computed from functionSignature if not provided */
+  selector?: Hex;
+  /** Human-readable function signature (e.g., "transfer(address,uint256)") */
+  functionSignature?: string;
 }
 
 interface SpendPermissionDetail {
   /** Token address (use 0xEee...EEeE for native ETH) */
   token: Address;
-  /** Maximum amount that can be spent per period */
-  limit: string;
-  /** Time period for the limit */
-  period: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year';
+  /** Spending allowance in wei (hex format) */
+  allowance: string;
+  /** Period unit of the spend limit */
+  unit: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
+  /** Multiplier for the period (1-255), defaults to 1 */
+  multiplier?: number;
 }
+```
+
+### paymasterUrlOverride (optional)
+
+Type: `string`
+
+Custom paymaster URL for gas sponsorship or ERC-20 token payment. Overrides the paymaster URL configured in `AccountConfig`.
+
+### paymasterContextOverride (optional)
+
+Type: `Record<string, unknown>`
+
+Custom paymaster context. For ERC-20 payment, include the token address:
+
+```typescript
+{ token: '0xUSDC_ADDRESS...' }
 ```
 
 

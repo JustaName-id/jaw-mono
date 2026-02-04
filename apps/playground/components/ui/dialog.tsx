@@ -8,6 +8,7 @@ import { cn } from "../../lib/utils"
 
 function Dialog({
   open,
+  onOpenChange,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   const prevOpenRef = React.useRef(open);
@@ -37,7 +38,26 @@ function Dialog({
     };
   }, [open]);
 
-  return <DialogPrimitive.Root data-slot="dialog" open={open} {...props} />
+  // Wrap onOpenChange to prevent closing when higher z-index dialogs are open
+  const handleOpenChange = React.useCallback((newOpen: boolean) => {
+    if (!newOpen) {
+      // Check if there's a higher z-index dialog (SDK dialog with z-100) open
+      const overlays = document.querySelectorAll('[data-slot="dialog-overlay"]');
+      const hasHigherZIndexDialog = Array.from(overlays).some((overlay) => {
+        const zIndex = window.getComputedStyle(overlay).zIndex;
+        return zIndex && parseInt(zIndex) > 50;
+      });
+
+      // Don't close playground dialog if SDK dialog (z-100) is open
+      if (hasHigherZIndexDialog) {
+        return;
+      }
+    }
+
+    onOpenChange?.(newOpen);
+  }, [onOpenChange]);
+
+  return <DialogPrimitive.Root data-slot="dialog" open={open} onOpenChange={handleOpenChange} {...props} />
 }
 
 function DialogTrigger({

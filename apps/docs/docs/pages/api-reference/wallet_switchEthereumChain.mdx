@@ -10,7 +10,7 @@ Switch to a different chain.
 ```typescript
 await jaw.provider.request({
   method: 'wallet_switchEthereumChain',
-  params: [{ chainId: '0x89' }],
+  params: [{ chainId: '0x2105' }], // Base
 });
 ```
 
@@ -23,7 +23,7 @@ await jaw.provider.request({
 ### Example
 
 ```json
-[{ "chainId": "0x89" }]
+[{ "chainId": "0x2105" }]
 ```
 
 
@@ -59,13 +59,13 @@ Returns `null` on success.
 try {
   await jaw.provider.request({
     method: 'wallet_switchEthereumChain',
-    params: [{ chainId: '0x89' }], // Polygon
+    params: [{ chainId: '0x2105' }], // Base
   });
 
-  console.log('Switched to Polygon');
+  console.log('Switched to Base');
 } catch (error) {
   if (error.code === 4902) {
-    console.error('Polygon is not supported');
+    console.error('Base is not supported');
   }
 }
 ```
