@@ -1,0 +1,44 @@
+{
+  "expo": {
+    "name": "JAW Demo Native",
+    "slug": "jaw-demo-native",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "newArchEnabled": true,
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#ffffff"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "id.jaw.demo.native",
+      "developmentTeam": "9234ZPYS2R",
+      "_comment_associatedDomains": "TODO: Change to webcredentials:keys.jaw.id for production",
+      "associatedDomains": [
+        "webcredentials:7d6e58d21602.ngrok-free.app"
+      ]
+    },
+    "android": {
+      "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.jaw.demo"
+    },
+    "web": {
+      "favicon": "./assets/favicon.png",
+      "bundler": "metro"
+    },
+    "scheme": "jaw-demo",
+    "experiments": {
+      "typedRoutes": true
+    },
+    "plugins": [
+      "expo-router",
+      "expo-web-browser"
+    ]
+  }
+}

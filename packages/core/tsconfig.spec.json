@@ -5,6 +5,7 @@
     "types": ["vitest/globals", "node"],
     "lib": ["es2022", "DOM"]
   },
+  "files": ["src/sdk-info.ts"],
   "include": [
     "src/**/*.test.ts",
     "src/**/*.spec.ts",

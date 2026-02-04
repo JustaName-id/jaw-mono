@@ -10,9 +10,24 @@ const nextConfig = {
   // Use this to set Nx-specific options
   // See: https://nx.dev/recipes/next/next-config-setup
   nx: {},
-  transpilePackages: ['@jaw.id/ui'],
-  experimental: {
+    transpilePackages: ['@jaw.id/ui', '@jaw.id/core'],
+    experimental: {
     optimizePackageImports: ['lucide-react'],
+  },
+
+  // Serve AASA file with correct content-type for iOS passkeys
+  async headers() {
+    return [
+      {
+        source: '/.well-known/apple-app-site-association',
+        headers: [
+          {
+            key: 'Content-Type',
+            value: 'application/json',
+          },
+        ],
+      },
+    ];
   },
 };
 
