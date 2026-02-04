@@ -889,7 +889,7 @@ export class Account {
    *     spends: [{ token: '0xEee...', limit: '1000000000000000000', period: 'day' }]
    *   }
    * );
-   * console.log('Permission ID:', response.id);
+   * console.log('Permission ID:', response.permissionId);
    * ```
    */
   async grantPermissions(
