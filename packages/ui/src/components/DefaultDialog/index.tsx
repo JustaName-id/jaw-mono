@@ -31,7 +31,13 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
 
       <DialogContent
         fullScreen={fullScreen}
-        onInteractOutside={(e) => e.preventDefault()}
+        onInteractOutside={(e) => {
+          // Only stop propagation for click/pointer events, NOT wheel events
+          // This allows scrolling to work inside the dialog
+          if (e.type !== 'wheel') {
+            e.stopPropagation();
+          }
+        }}
         aria-describedby={undefined}
         showCloseButton={false}
         style={{
@@ -46,7 +52,7 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
       >
         <DialogTitle style={{ display: 'none' }}></DialogTitle>
 
-        <div className={`flex p-2.5 ${fullScreen ? 'rounded-none' : 'rounded-3xl'} gap-5 flex-col md:max-h-[calc(100%-45px)] flex-1 box-border overflow-hidden`}
+        <div className={`flex p-2.5 ${fullScreen ? 'rounded-none' : 'rounded-3xl'} gap-5 flex-col md:max-h-[calc(100%-45px)] flex-1 box-border overflow-auto`}
           style={{
             ...innerStyle,
           }}

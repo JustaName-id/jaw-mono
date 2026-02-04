@@ -5,8 +5,9 @@ Passkey operations redirect to `keys.jaw.id` in a popup, enabling wallet reuse a
 
 ## Usage
 
+### With Wagmi (Recommended)
+
 ```typescript
-// Wagmi
 import { jaw } from '@jaw.id/wagmi';
 import { Mode } from '@jaw.id/core';
 
@@ -18,8 +19,9 @@ const connector = jaw({
 });
 ```
 
+### With Provider Directly
+
 ```typescript
-// EIP-1193 Provider
 import { JAW, Mode } from '@jaw.id/core';
 
 const jaw = JAW.create({

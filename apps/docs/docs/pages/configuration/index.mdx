@@ -18,7 +18,6 @@ const connector = jaw({
   ens: 'myapp.eth',
   preference: {
     showTestnets: true,
-    authTTL: 86400, // 24 hours (default)
   },
   paymasters: {
     1: { url: 'https://paymaster.example.com/mainnet' },
@@ -39,7 +38,6 @@ const jaw = JAW.create({
   ens: 'myapp.eth',
   preference: {
     showTestnets: true,
-    authTTL: 86400, // 24 hours (default)
   },
   paymasters: {
     1: { url: 'https://paymaster.example.com/mainnet' },
@@ -70,6 +68,7 @@ The `preference` object contains advanced configuration:
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | [mode](/configuration/mode) | `Mode.CrossPlatform` \| `Mode.AppSpecific` | `Mode.CrossPlatform` | Authentication mode |
+| [uiHandler](/configuration/mode/app-specific#uihandler) | `UIHandler` | `undefined` | UI handler for rendering dialogs (required when mode is `Mode.AppSpecific`) |
 | showTestnets | `boolean` | `false` | Include testnet networks (see [Supported Networks](/supported-networks)) |
 | authTTL | `number` | `86400` | Session cache TTL in seconds. Set to `0` to disable caching (require auth on every page load). |
 

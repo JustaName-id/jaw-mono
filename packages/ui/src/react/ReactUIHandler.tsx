@@ -25,6 +25,7 @@ import {
   getPermissionFromRelay,
   handleGetCapabilitiesRequest,
   buildGrantPermissionCall,
+  buildRevokePermissionCall,
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   type PaymasterConfig,
@@ -901,7 +902,10 @@ function OnboardingDialogWrapper({
   return (
     <DefaultDialogComponent
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       handleClose={handleCancel}
       contentStyle={{
         width: 'fit-content',
@@ -992,7 +996,10 @@ function SignatureDialogWrapper({
   return (
     <SignatureDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       message={request.data.message}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
@@ -1082,7 +1089,10 @@ function Eip712DialogWrapper({
   return (
     <Eip712Dialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       typedDataJson={request.data.typedData}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
@@ -1317,6 +1327,9 @@ function TransactionDialogWrapper({
   }, [chainId, apiKey, request.data.from, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -1325,7 +1338,7 @@ function TransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1340,7 +1353,7 @@ function TransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -1403,7 +1416,10 @@ function TransactionDialogWrapper({
   return (
     <TransactionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       transactions={transactions}
       walletAddress={request.data.from}
       gasFee={gasFee}
@@ -1643,6 +1659,9 @@ function SendTransactionDialogWrapper({
   }, [chainId, apiKey, request.data.from, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -1651,7 +1670,7 @@ function SendTransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -1666,7 +1685,7 @@ function SendTransactionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -1718,7 +1737,10 @@ function SendTransactionDialogWrapper({
   return (
     <TransactionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       transactions={transactions}
       walletAddress={request.data.from}
       gasFee={gasFee}
@@ -2090,6 +2112,9 @@ function PermissionDialogWrapper({
   }, [chainId, apiKey, request.data.address, effectivePaymasterUrl, viemChain]);
 
   // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
   useEffect(() => {
     let isMounted = true;
 
@@ -2098,7 +2123,7 @@ function PermissionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          computedPaymasterUrl
+          effectivePaymasterUrl
         );
         if (isMounted) {
           setAccount(restoredAccount);
@@ -2113,7 +2138,7 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [apiKey, chainId, computedPaymasterUrl]);
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Note: Gas estimation is now handled by useGasEstimation hook
 
@@ -2248,7 +2273,10 @@ function PermissionDialogWrapper({
   return (
     <PermissionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       mode="grant"
       spenderAddress={request.data.spender}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
@@ -2386,7 +2414,10 @@ function SiweDialogWrapper({
   return (
     <SiweDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       message={decodedMessage}
       origin={origin}
       timestamp={new Date(request.timestamp)}
@@ -2428,8 +2459,20 @@ function RevokePermissionDialogWrapper({
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState(true);
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
+  const [account, setAccount] = useState<Account | null>(null);
+  const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
+  const [feeTokensLoading, setFeeTokensLoading] = useState(true);
 
   const chainId = request.data.chainId || defaultChainId || 1;
+  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
+  const networkName = viemChain?.name || 'Unknown Network';
+
+  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -2438,10 +2481,94 @@ function RevokePermissionDialogWrapper({
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
-  const chain = buildChainConfigFromApiKey(chainId, apiKey, effectivePaymasterUrl);
-  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
-  const networkName = viemChain?.name || 'Unknown Network';
-  const nativeSymbol = viemChain?.nativeCurrency?.symbol || 'ETH';
+  // Extract paymasterContext from capabilities (EIP-5792 paymasterService capability)
+  // Priority: capabilities.paymasterService.context > paymasters[chainId].context
+  const effectivePaymasterContext = useMemo(() => {
+    const capabilitiesPaymasterContext = (request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
+  }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
+
+  // Check if this is a sponsored transaction (paymaster provided)
+  const isSponsored = !!effectivePaymasterUrl;
+
+  // Build the actual permission revoke call for gas estimation
+  const transactionCalls = useMemo(() => {
+    if (!fetchedPermissionData) return [];
+
+    try {
+      const revokeCall = buildRevokePermissionCall(fetchedPermissionData);
+      return [revokeCall];
+    } catch (error) {
+      console.warn('[RevokePermissionDialogWrapper] Failed to build permission revoke call:', error);
+      return [];
+    }
+  }, [fetchedPermissionData]);
+
+  // Use the gas estimation hook for both ETH and ERC-20 cost estimation
+  const {
+    gasFee,
+    gasFeeLoading,
+    gasEstimationError,
+    tokenEstimates,
+    selectedFeeToken,
+    setSelectedFeeToken,
+    isPayingWithErc20,
+  } = useGasEstimation({
+    account,
+    transactionCalls,
+    chainId,
+    apiKey,
+    feeTokens,
+    isSponsored,
+    onFeeTokensUpdate: setFeeTokens,
+  });
+
+  // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
+  const computedPaymasterUrl = useMemo(() => {
+    // If already sponsored via capabilities or config, use that
+    if (effectivePaymasterUrl) return effectivePaymasterUrl;
+
+    // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
+    }
+
+    // Native ETH - no paymaster needed
+    return undefined;
+  }, [effectivePaymasterUrl, selectedFeeToken, chainId, apiKey]);
+
+  // Compute paymaster context based on fee token selection
+  const computedPaymasterContext = useMemo(() => {
+    // If using ERC-20 paymaster, include token address and gas amount in context
+    if (selectedFeeToken && !selectedFeeToken.isNative) {
+      // Use the actual estimate from tokenEstimates if available
+      const estimate = tokenEstimates.find(
+        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+      );
+
+      if (estimate) {
+        // Use the actual token cost from paymaster quote
+        return {
+          token: selectedFeeToken.address,
+          gas: estimate.tokenCost.toString(),
+        };
+      }
+
+      // Fallback to client-side calculation if no estimate yet
+      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
+      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      return {
+        token: selectedFeeToken.address,
+        gas: gasInTokenUnits.toString(),
+      };
+    }
+    return effectivePaymasterContext;
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
+
+  const chain = useMemo(
+    () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
+    [chainId, apiKey, computedPaymasterUrl]
+  );
 
   // Fetch permission details from relay
   useEffect(() => {
@@ -2509,7 +2636,125 @@ function RevokePermissionDialogWrapper({
     };
 
     fetchPermissionDetails();
-  }, [request.data.permissionId, apiKey, chainId, networkName, chain.rpcUrl]);
+  }, [request.data.permissionId, apiKey, chainId, networkName, chain.rpcUrl, viemChain]);
+
+  // Fetch fee tokens for ERC-20 paymaster support
+  useEffect(() => {
+    // Skip if already sponsored via capabilities/config
+    if (effectivePaymasterUrl) {
+      setFeeTokensLoading(false);
+      return;
+    }
+
+    let isMounted = true;
+
+    const fetchFeeTokensData = async () => {
+      try {
+        // Fetch capabilities to get available fee tokens
+        const capabilities = await handleGetCapabilitiesRequest(
+          { method: 'wallet_getCapabilities', params: [] },
+          apiKey || '',
+          true // showTestnets
+        );
+
+        const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+
+        if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
+          if (isMounted) setFeeTokensLoading(false);
+          return;
+        }
+
+        // Get RPC URL for balance fetching
+        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+
+        // Fetch balances in parallel
+        const tokensWithBalances = await Promise.all(
+          feeTokenCap.tokens.map(async (token) => {
+            try {
+              const balance = await fetchTokenBalance(token.address, request.data.address as Address, rpcUrl);
+              const balanceFormatted = formatUnits(balance, token.decimals);
+              const tokenIsNative = isNativeToken(token.address);
+              // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
+              // For ERC-20 tokens: require at least 0.5 units
+              const isSelectable = tokenIsNative
+                ? balance > 0n
+                : parseFloat(balanceFormatted) >= 0.5;
+
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance,
+                balanceFormatted,
+                isNative: tokenIsNative,
+                isSelectable,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            } catch (error) {
+              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              return {
+                uid: token.uid,
+                symbol: token.symbol,
+                address: token.address,
+                decimals: token.decimals,
+                balance: 0n,
+                balanceFormatted: '0',
+                isNative: isNativeToken(token.address),
+                isSelectable: false,
+                logoURI: token.logoURI,
+              } as FeeTokenOption;
+            }
+          })
+        );
+
+        if (isMounted) {
+          setFeeTokens(tokensWithBalances);
+          // Note: Initial token selection is handled by useGasEstimation hook
+        }
+      } catch (error) {
+        console.warn('[RevokePermissionDialogWrapper] Failed to fetch fee tokens:', error);
+      } finally {
+        if (isMounted) setFeeTokensLoading(false);
+      }
+    };
+
+    fetchFeeTokensData();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [chainId, apiKey, request.data.address, effectivePaymasterUrl, viemChain]);
+
+  // Initialize account
+  // Note: Use effectivePaymasterUrl (stable) instead of computedPaymasterUrl to avoid
+  // re-initializing account when user changes fee token selection (which would cause
+  // gas estimation to run multiple times in a dependency cycle)
+  useEffect(() => {
+    let isMounted = true;
+
+    const initializeAccount = async () => {
+      try {
+        const restoredAccount = await getAccountForSigning(
+          apiKey,
+          chainId,
+          effectivePaymasterUrl
+        );
+        if (isMounted) {
+          setAccount(restoredAccount);
+        }
+      } catch (error) {
+        console.error('[RevokePermissionDialogWrapper] Error initializing account:', error);
+      }
+    };
+
+    initializeAccount();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [apiKey, chainId, effectivePaymasterUrl]);
 
   // Format spends for display
   const formattedSpends = useMemo(() => {
@@ -2562,18 +2807,20 @@ function RevokePermissionDialogWrapper({
   const spenderAddress = fetchedPermissionData?.spender || '0x...';
 
   const handleConfirm = async () => {
+    if (!account) {
+      console.error('[RevokePermissionDialogWrapper] Account not initialized');
+      return;
+    }
+
     setIsProcessing(true);
     setStatus('Revoking permission...');
     try {
-      // Restore account for revoking
-      const account = await getAccountForSigning(
-        apiKey,
-        chainId,
-        effectivePaymasterUrl
+      // Revoke permission using Account class with paymaster context
+      await account.revokePermission(
+        request.data.permissionId as `0x${string}`,
+        computedPaymasterUrl,
+        computedPaymasterContext
       );
-
-      // Revoke permission using Account class
-      await account.revokePermission(request.data.permissionId as `0x${string}`);
 
       console.log('Permission revoked');
       setStatus('Permission revoked successfully!');
@@ -2602,7 +2849,10 @@ function RevokePermissionDialogWrapper({
   return (
     <PermissionDialog
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleCancel();
+        else setOpen(newOpen);
+      }}
       mode="revoke"
       permissionId={request.data.permissionId}
       spenderAddress={spenderAddress}
@@ -2620,6 +2870,18 @@ function RevokePermissionDialogWrapper({
       isLoadingTokenInfo={isLoadingPermissionDetails}
       timestamp={new Date(request.timestamp)}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
+      // Gas estimation props
+      gasFee={gasFee}
+      gasFeeLoading={gasFeeLoading}
+      gasEstimationError={gasEstimationError}
+      sponsored={isSponsored}
+      // Fee token props for ERC-20 paymaster
+      feeTokens={feeTokens}
+      feeTokensLoading={feeTokensLoading}
+      selectedFeeToken={selectedFeeToken}
+      onFeeTokenSelect={setSelectedFeeToken}
+      showFeeTokenSelector={!isSponsored && feeTokens.some(t => !t.isNative)}
+      isPayingWithErc20={isPayingWithErc20}
     />
   );
 }
@@ -2650,7 +2912,10 @@ function UnsupportedMethodDialogWrapper({
   return (
     <DefaultDialogComponent
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(newOpen) => {
+        if (!newOpen) handleClose();
+        else setOpen(newOpen);
+      }}
       handleClose={handleClose}
       contentStyle={{
         width: 'fit-content',

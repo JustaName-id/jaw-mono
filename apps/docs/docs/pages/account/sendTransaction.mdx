@@ -8,7 +8,11 @@ Send a transaction and wait for the receipt.
 ## Signature
 
 ```typescript
-async sendTransaction(calls: TransactionCall[]): Promise<Hash>
+async sendTransaction(
+  calls: TransactionCall[],
+  paymasterUrlOverride?: string,
+  paymasterContextOverride?: Record<string, unknown>
+): Promise<Hash>
 ```
 
 
@@ -29,6 +33,22 @@ interface TransactionCall {
   /** Call data */
   data?: Hex;
 }
+```
+
+### paymasterUrlOverride (optional)
+
+Type: `string`
+
+Custom paymaster URL for gas sponsorship or ERC-20 token payment. Overrides the paymaster URL configured in `AccountConfig`.
+
+### paymasterContextOverride (optional)
+
+Type: `Record<string, unknown>`
+
+Custom paymaster context. For ERC-20 payment, include the token address:
+
+```typescript
+{ token: '0xUSDC_ADDRESS...' }
 ```
 
 

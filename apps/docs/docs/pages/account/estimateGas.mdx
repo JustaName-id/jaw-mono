@@ -8,7 +8,10 @@ Estimate gas for a transaction.
 ## Signature
 
 ```typescript
-async estimateGas(calls: TransactionCall[]): Promise<bigint>
+async estimateGas(
+  calls: TransactionCall[],
+  options?: { permissionId?: Hex }
+): Promise<bigint>
 ```
 
 
@@ -30,6 +33,18 @@ interface TransactionCall {
   data?: Hex;
 }
 ```
+
+### options (optional)
+
+Type: `{ permissionId?: Hex }`
+
+Optional settings for gas estimation.
+
+| Property | Type | Description |
+|----------|------|-------------|
+| `permissionId` | `Hex` | Permission ID for estimating permission-based execution |
+
+When `permissionId` is provided, estimates gas for execution through the JustaPermissionManager contract.
 
 
 ## Returns

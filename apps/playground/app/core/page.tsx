@@ -34,7 +34,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
     JAW.create({
       appName: 'JAW Playground',
       appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
-      defaultChainId: 10,
+      defaultChainId: 84532,
       preference: {
         keysUrl: 'http://localhost:3001',
         showTestnets: true,

@@ -9,8 +9,9 @@ The default blockchain network to connect to when the SDK initializes.
 
 ## Usage
 
+### With Wagmi (Recommended)
+
 ```typescript
-// Wagmi
 import { jaw } from '@jaw.id/wagmi';
 
 const connector = jaw({
@@ -19,8 +20,9 @@ const connector = jaw({
 });
 ```
 
+### With Provider Directly
+
 ```typescript
-// EIP-1193 Provider
 import { JAW } from '@jaw.id/core';
 
 const jaw = JAW.create({
@@ -34,8 +36,9 @@ const jaw = JAW.create({
 
 To use a testnet as the default chain, enable `showTestnets` in preferences:
 
+### With Wagmi (Recommended)
+
 ```typescript
-// Wagmi
 import { jaw } from '@jaw.id/wagmi';
 
 const connector = jaw({
@@ -47,8 +50,9 @@ const connector = jaw({
 });
 ```
 
+### With Provider Directly
+
 ```typescript
-// EIP-1193 Provider
 import { JAW } from '@jaw.id/core';
 
 const jaw = JAW.create({

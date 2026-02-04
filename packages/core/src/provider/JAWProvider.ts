@@ -23,7 +23,7 @@ import { correlationIds } from '../store/index.js';
 
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
-import { handleGetPermissionsRequest, handleGetCapabilitiesRequest } from '../rpc/index.js';
+import { handleGetPermissionsRequest, handleGetCapabilitiesRequest, handleGetCallsHistoryRequest } from '../rpc/index.js';
 import { Signer } from '../signer/index.js';
 
 import {
@@ -182,9 +182,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         return result as T;
                     }
                     case 'wallet_getCallsStatus': {
-
                         const result = await handleGetCallsStatusRequest(args);
-
+                        return result as T;
+                    }
+                    case 'wallet_getCallsHistory': {
+                        const result = await handleGetCallsHistoryRequest(args, this.apiKey);
                         return result as T;
                     }
                     case 'wallet_getPermissions': {

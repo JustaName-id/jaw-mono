@@ -9,8 +9,9 @@ URL to your application's logo image. Displayed alongside your app name in the a
 
 ## Usage
 
+### With Wagmi (Recommended)
+
 ```typescript
-// Wagmi
 import { jaw } from '@jaw.id/wagmi';
 
 const connector = jaw({
@@ -20,8 +21,9 @@ const connector = jaw({
 });
 ```
 
+### With Provider Directly
+
 ```typescript
-// EIP-1193 Provider
 import { JAW } from '@jaw.id/core';
 
 const jaw = JAW.create({
