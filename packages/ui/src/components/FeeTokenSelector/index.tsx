@@ -153,7 +153,7 @@ export const FeeTokenSelector = ({
       const tokenCost = parseFloat(token.gasCostFormatted.replace(/[^0-9.]/g, ''));
       return {
         formatted: token.gasCostFormatted,
-        usd: ['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase())
+        usd: ['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase()) && !isNaN(tokenCost)
           ? formatUsd(tokenCost)
           : '',
       };

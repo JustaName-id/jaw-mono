@@ -153,7 +153,8 @@ export const PermissionDialog = ({
     }
   };
 
-  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses && !gasFeeLoading;
+  const hasGasPaymentOption = !gasEstimationError || sponsored;
+  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses && !gasFeeLoading && hasGasPaymentOption;
 
   // Count total permissions
   const totalSpends = spends.length;
@@ -439,9 +440,24 @@ export const PermissionDialog = ({
                   {gasFeeLoading && !isPayingWithErc20 ? (
                     <p className="text-base font-normal text-muted-foreground">Estimating...</p>
                   ) : gasEstimationError && !sponsored ? (
-                    <div className="flex flex-col">
-                      <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
-                      <p className="text-xs text-red-500">{gasEstimationError}</p>
+                    <div className="flex flex-col gap-0.5 w-full">
+                      <div className="flex items-center justify-between w-full">
+                        <div className="flex flex-col">
+                          <p className="text-sm text-red-600 font-medium">Gas Estimation Failed</p>
+                          <p className="text-xs text-red-500">{gasEstimationError}</p>
+                        </div>
+                        {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
+                          <FeeTokenSelector
+                            tokens={feeTokens}
+                            selectedToken={selectedFeeToken ?? null}
+                            onSelect={onFeeTokenSelect}
+                            isLoading={feeTokensLoading ?? false}
+                            disabled={isProcessing}
+                            nativeTokenPrice={nativeTokenPrice}
+                            estimatedGasEth={gasFee || '0'}
+                          />
+                        )}
+                      </div>
                     </div>
                   ) : sponsored || gasFee === 'sponsored' ? (
                     <div className="flex flex-col">
