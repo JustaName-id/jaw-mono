@@ -24,6 +24,8 @@ import {
   grantPermissions as grantSmartAccountPermissions,
   revokePermission as revokeSmartAccountPermission,
   getPermissionFromRelay,
+  buildGrantPermissionCall,
+  buildRevokePermissionCall,
   type PermissionsDetail,
   type WalletGrantPermissionsResponse,
   type RevokePermissionApiResponse,
@@ -691,7 +693,7 @@ export class Account {
     }));
 
     // If using JAW ERC-20 paymaster, prepend approval call if needed
-    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
     const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
     // Remove gas field from context (only used for approval logic)
@@ -742,7 +744,7 @@ export class Account {
     }));
 
     // If using JAW ERC-20 paymaster, prepend approval call if needed
-    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
     const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
     // Remove gas field from context (only used for approval logic)
@@ -902,8 +904,20 @@ export class Account {
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>
   ): Promise<WalletGrantPermissionsResponse> {
+    // Build the permission call for gas estimation
+    const permissionCall = buildGrantPermissionCall(
+      this._smartAccount.address,
+      spender,
+      expiry,
+      permissions
+    );
+
     // Check if we need an ERC-20 approval for the paymaster
-    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    const approvalCall = await this.createErc20ApprovalCall(
+      paymasterUrlOverride,
+      paymasterContextOverride,
+      [permissionCall]
+    );
 
     // Remove gas field from context (only used for approval logic)
     const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
@@ -941,8 +955,23 @@ export class Account {
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>
   ): Promise<RevokePermissionApiResponse> {
+    // Build the revoke call for gas estimation (requires fetching permission from relay)
+    let revokeCalls: Array<{ to: Address; data: Hex }> = [];
+    try {
+      const relayPermission = await getPermissionFromRelay(permissionId, this._apiKey);
+      const revokeCall = buildRevokePermissionCall(relayPermission);
+      revokeCalls = [revokeCall];
+    } catch (error) {
+      // If we can't fetch the permission, skip gas estimation
+      console.warn('Could not fetch permission for gas estimation:', error);
+    }
+
     // Check if we need an ERC-20 approval for the paymaster
-    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride);
+    const approvalCall = await this.createErc20ApprovalCall(
+      paymasterUrlOverride,
+      paymasterContextOverride,
+      revokeCalls
+    );
 
     // Remove gas field from context (only used for approval logic)
     const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
@@ -1066,7 +1095,8 @@ export class Account {
    */
   private async createErc20ApprovalCall(
     paymasterUrl?: string,
-    paymasterContext?: Record<string, unknown>
+    paymasterContext?: Record<string, unknown>,
+    calls?: Array<{ to: Address; value?: bigint; data?: Hex }>
   ): Promise<{ to: Address; value?: bigint; data: Hex } | null> {
     // Only add approval if using JAW ERC-20 paymaster
     if (!Account.isJawErc20Paymaster(paymasterUrl)) {
@@ -1075,9 +1105,61 @@ export class Account {
 
     // Extract token address and gas amount from context
     const tokenAddress = paymasterContext?.token as string | undefined;
-    const gasAmount = paymasterContext?.gas as string | bigint | undefined;
+    let gasAmount = paymasterContext?.gas as string | bigint | undefined;
 
-    if (!tokenAddress || gasAmount === undefined) {
+    if (!tokenAddress) {
+      return null;
+    }
+
+    // If gasAmount is undefined, estimate it using the paymaster
+    if (gasAmount === undefined && paymasterUrl && calls && calls.length > 0) {
+      try {
+        const { fetchTokenQuotes, calculateTokenCostFromGas } = await import('./erc20Paymaster.js');
+        const { getBundlerClient } = await import('./smartAccount.js');
+
+        // Get token quote for exchange rate
+        const quotes = await fetchTokenQuotes(paymasterUrl, this._chain.id, [tokenAddress as Address]);
+
+        if (quotes.length > 0) {
+          // Prepare a UserOp to get gas estimates
+          const bundlerClient = getBundlerClient(
+            this._chain,
+            paymasterUrl,
+            { token: tokenAddress }
+          );
+
+          const userOp = await bundlerClient.prepareUserOperation({
+            account: this._smartAccount,
+            calls: calls,
+          });
+
+          // Extract gas fields
+          const gas = {
+            preVerificationGas: userOp.preVerificationGas,
+            verificationGasLimit: userOp.verificationGasLimit,
+            callGasLimit: userOp.callGasLimit,
+            paymasterVerificationGasLimit: 'paymasterVerificationGasLimit' in userOp
+              ? (userOp as { paymasterVerificationGasLimit?: bigint }).paymasterVerificationGasLimit
+              : undefined,
+            paymasterPostOpGasLimit: 'paymasterPostOpGasLimit' in userOp
+              ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit
+              : undefined,
+            maxFeePerGas: userOp.maxFeePerGas,
+          };
+
+          // Calculate token cost
+          const tokenCost = calculateTokenCostFromGas(gas, quotes[0]);
+          gasAmount = tokenCost;
+        }
+      } catch (error) {
+        console.warn('Failed to estimate gas amount for ERC-20 paymaster:', error);
+        // If estimation fails, return null (no approval call)
+        return null;
+      }
+    }
+
+    if (gasAmount === undefined) {
+      // If we still don't have gasAmount after estimation attempt, skip approval
       return null;
     }
 
