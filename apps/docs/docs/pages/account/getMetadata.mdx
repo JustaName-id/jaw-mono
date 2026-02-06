@@ -31,6 +31,8 @@ interface AccountMetadata {
   creationDate: string;
   /** Whether the account was imported from cloud backup */
   isImported: boolean;
+  /** The credential ID of the passkey */
+  credentialId: string;
 }
 ```
 
@@ -58,6 +60,10 @@ if (metadata) {
   console.log('Username:', metadata.username);
   console.log('Created:', metadata.creationDate);
   console.log('Imported:', metadata.isImported);
+  console.log('Credential ID:', metadata.credentialId);
+
+  // Store credentialId in your backend for future sign-ins
+  await yourBackend.storeCredentialId(metadata.username, metadata.credentialId);
 } else {
   console.log('Local account - no metadata available');
 }

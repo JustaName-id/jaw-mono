@@ -90,6 +90,8 @@ export interface AccountMetadata {
   creationDate: string;
   /** Whether the account was imported from cloud backup */
   isImported: boolean;
+  /** The credential ID of the passkey */
+  credentialId: string;
 }
 
 /**
@@ -570,6 +572,7 @@ export class Account {
       username: this._passkeyAccount.username,
       creationDate: this._passkeyAccount.creationDate,
       isImported: this._passkeyAccount.isImported,
+      credentialId: this._passkeyAccount.credentialId,
     };
   }
 
