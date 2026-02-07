@@ -335,13 +335,16 @@ This file is a **routing index only**. To help users with JAW:
 **URL:** ${BASE_URL}/llms-core.txt
 
 ### llms-account.txt — Account API & Direct Operations
-**Use this when:** User wants to perform operations directly on the smart account (signing, transactions, permissions)
+**Use this when:** User wants headless integration (No UI) or needs to issue smart wallets for AI Agents
 **Example questions:**
+- "How do I create smart wallets for AI agents?"
+- "How do I use JAW without any UI?"
 - "How do I send a transaction from the account?"
 - "How do I sign a message?"
 - "How do I sign typed data (EIP-712)?"
 - "How do I get the account address?"
 - "How do I send multiple transactions in one call?"
+- "How do I create wallets programmatically for agents?"
 **Package:** \`@jaw.id/core\` (Account class)
 **URL:** ${BASE_URL}/llms-account.txt
 
