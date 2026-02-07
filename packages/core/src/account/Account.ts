@@ -1121,6 +1121,25 @@ export class Account {
         const quotes = await fetchTokenQuotes(paymasterUrl, this._chain.id, [tokenAddress as Address]);
 
         if (quotes.length > 0) {
+          // Get paymaster address from quote
+          const paymasterAddress = quotes[0].paymasterAddress;
+
+          // Create a dummy approval call for estimation
+          // Use MaxUint256 for approval - amount doesn't affect gas estimation
+          const MaxUint256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+          const dummyApprovalCall = {
+            to: tokenAddress as Address,
+            value: 0n,
+            data: encodeFunctionData({
+              abi: erc20Abi,
+              functionName: 'approve',
+              args: [paymasterAddress, MaxUint256]
+            })
+          };
+
+          // Include dummy approval in estimation to get accurate gas limits
+          const callsWithApproval = [dummyApprovalCall, ...calls];
+
           // Prepare a UserOp to get gas estimates
           const bundlerClient = getBundlerClient(
             this._chain,
@@ -1130,7 +1149,7 @@ export class Account {
 
           const userOp = await bundlerClient.prepareUserOperation({
             account: this._smartAccount,
-            calls: calls,
+            calls: callsWithApproval,
           });
 
           // Extract gas fields
