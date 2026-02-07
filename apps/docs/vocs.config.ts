@@ -79,7 +79,7 @@ export default defineConfig({
       collapsed: false,
       items: [
         { text: 'Quickstart', link: '/guides/quickstart' },
-        { text: 'Embed Stablecoin Payments', link: '/guides/embed-stablecoin-payments' },
+        { text: '[Headless] Embed Stablecoin Payments', link: '/guides/embed-stablecoin-payments' },
         { text: 'Onchain Identity', link: '/guides/onchain-identity' },
         { text: 'Gas Sponsoring', link: '/guides/gas-sponsoring' },
         { text: 'Sign-In With Ethereum', link: '/guides/siwe' },
