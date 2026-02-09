@@ -58,14 +58,15 @@ const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Ba
 const config = {
   chainId: 8453, // Base
   apiKey: 'YOUR_API_KEY',
-  paymasterUrl: `${JAW_PAYMASTER_URL}?chainId=8453&api-key=YOUR_API_KEY`
 };
+
+const paymasterUrl = `${JAW_PAYMASTER_URL}?chainId=8453&api-key=YOUR_API_KEY`;
 ```
 
 
 ## Account Management
 
-Users create accounts with passkeys - the only prompt is the native browser/OS passkey dialog. No JAW UI is shown.
+Since you're using the `Account` class directly (headless mode), no JAW UI is rendered. The only prompt users see is the native browser/OS passkey dialog.
 
 :::code-group
 
@@ -77,11 +78,12 @@ const account = await Account.create(config, {
 
 // Store the credentialId for future sign-ins
 const { credentialId } = account.getMetadata();
+// Save credentialId in your own backend/database (not an SDK function)
 await storeCredentialId('user@yourapp.com', credentialId);
 ```
 
 ```typescript [Sign In]
-// Returning user: sign in with stored credentialId
+// Returning user: look up the stored credentialId from your backend/database
 const credentialId = await getCredentialId('user@yourapp.com');
 
 const account = await Account.get(config, credentialId);
@@ -90,9 +92,7 @@ const account = await Account.get(config, credentialId);
 :::
 
 :::info
-Your application manages the `username → credentialId` mapping. When a user creates an account, store their `credentialId`. On subsequent sign-ins, look up the `credentialId` by username and pass it to `Account.get()`.
-
-Note: `storeCredentialId()` and `getCredentialId()` are not provided by the SDK - implement these in your application if needed.
+Your application manages the `username → credentialId` mapping. When a user creates an account, store their `credentialId` in your backend. On subsequent sign-ins, look up the `credentialId` by username and pass it to `Account.get()`.
 :::
 
 
@@ -102,8 +102,6 @@ Send USDC with gas fees paid in USDC - users don't need ETH:
 
 ```typescript
 import { encodeFunctionData, erc20Abi, parseUnits } from 'viem';
-
-const USDC_ADDRESS = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
 // Send 10 USDC to a recipient
 const { id, chainId } = await account.sendCalls(
@@ -119,7 +117,7 @@ const { id, chainId } = await account.sendCalls(
     })
   }],
   undefined,              // options
-  config.paymasterUrl,    // ERC-20 paymaster
+  paymasterUrl,           // ERC-20 paymaster
   { token: USDC_ADDRESS } // Pay gas in USDC
 );
 
@@ -178,7 +176,7 @@ const calls = recipients.map(({ address, amount }) => ({
 const { id } = await account.sendCalls(
   calls,
   undefined,
-  config.paymasterUrl,
+  paymasterUrl,
   { token: USDC_ADDRESS }
 );
 ```
