@@ -5,10 +5,14 @@ The `Account` class provides a low-level API for smart account operations. It's 
 
 ## When to Use Account
 
+Use this for headless integration (No UI) + use this to issue smart wallets for AI Agents.
+
 The `Account` class is ideal for:
 
-- **Custom UI Handlers** - When implementing your own `UIHandler` for app-specific mode
+- **AI Agents** - Issue programmable smart wallets for AI agents
+- **Headless Integration** - No UI required, direct programmatic access
 - **Server-side Applications** - Using `fromLocalAccount()` with embedded wallets (Privy, Dynamic, Turnkey)
+- **Custom UI Handlers** - When implementing your own `UIHandler` for app-specific mode
 - **Direct Integration** - When you need fine-grained control over account operations
 
 For standard client-side usage with the built-in UI, use the provider-based API instead.
