@@ -1,0 +1,73 @@
+# Passkeys & WebAuthn
+
+How JAW uses hardware-bound credentials to eliminate key management entirely.
+
+## What Passkeys Are
+
+Passkeys (WebAuthn / FIDO2) are cryptographic credentials built into modern devices. When you create a passkey, your device generates a key pair inside its **secure enclave** — the same hardware that protects Face ID, fingerprint data, and device encryption.
+
+The critical property: **the private key never leaves the secure enclave.** It cannot be exported, copied, read by the operating system, or accessed by any software. Authentication happens through biometrics (fingerprint, face scan) or device PIN, and the secure enclave produces a signature directly.
+
+## Why Passkeys Matter for Onchain Accounts
+
+Traditional approaches to securing onchain private keys all share a common problem: the secret material must be accessible at some point.
+
+| Approach | Where the secret lives | Exposure risk |
+|----------|----------------------|---------------|
+| **Seed phrase** | Paper, metal plate, password manager | Physical theft, digital compromise, human error |
+| **Browser extension** | Encrypted in browser storage | Malware, phishing, XSS |
+| **KMS / MPC** | Split across servers, iframes, TEEs | Auth token hijack, reconstitution window, provider dependency |
+| **Passkey** | Device secure enclave | None — key cannot be extracted |
+
+Passkeys eliminate the entire category of problems that embedded wallet infrastructure was built to solve:
+
+- **No key to split.** The private key is generated and stored in hardware. There are no shares to distribute across iframes, TEEs, or MPC nodes.
+- **No auth token as root of trust.** The user authenticates directly with biometrics on their device. There is no session token that, if stolen, grants signing access.
+- **No reconstitution window.** The key never exists outside the secure enclave. There is no momentary exposure during signing, however brief.
+- **No provider dependency for custody.** The user's device is the signer. No third party holds shares, operates escrow services, or runs MPC nodes on your behalf.
+
+## How Passkeys Work with Smart Accounts
+
+In JAW, a passkey is _a signer_ on a smart account — not _the account itself_. This is the key distinction from EOAs where the key and the account are fused.
+
+The flow:
+
+1. **User creates or connects** — a passkey credential is created in the device's secure enclave
+2. **User signs a transaction** — biometric prompt appears, the secure enclave produces a signature
+3. **Smart account validates** — the onchain contract verifies the signature and enforces its permission rules
+4. **Transaction executes** — within the bounds defined by the account's rules
+
+Because the passkey is just one signer on a programmable account, losing a device doesn't mean losing the account. You add a backup signer, register a passkey on another device, or set up social recovery — all at the account level.
+
+## Cross-Device Sync
+
+Passkeys sync across devices via platform credential managers:
+
+- **Apple devices** — iCloud Keychain syncs passkeys across iPhone, iPad, and Mac
+- **Android devices** — Google Password Manager syncs passkeys across Android devices
+- **Cross-platform** — Hybrid transport allows using a phone as an authenticator for a desktop session
+
+:::info
+When passkeys sync via iCloud Keychain or Google Password Manager, they travel **end-to-end encrypted** with keys that neither Apple nor Google can access. The platform is a transport layer for encrypted blobs, not a custodian.
+:::
+
+## JAW Authentication Modes
+
+JAW supports two modes for passkey operations, depending on whether you want portability or full control:
+
+| | CrossPlatform | AppSpecific |
+|---|---|---|
+| **Passkey bound to** | `keys.jaw.id` | Your domain |
+| **Reusable across apps** | Yes | No |
+| **UI control** | JAW-managed popup | Your custom UI |
+| **Best for** | Multi-app ecosystems | White-label products |
+
+Both modes use the same passkey security model — the difference is where the WebAuthn ceremony happens and whether the credential is portable.
+
+## Related
+
+- [Why JAW](/why-jaw) — The full picture: smart accounts + passkeys + permissions
+- [Smart Accounts vs EOAs](/concepts/smart-accounts) — Why the account is decoupled from the key
+- [The Permission Layer](/concepts/permissions) — What signers are allowed to do
+- [CrossPlatform Mode](/configuration/mode/cross-platform) — Portable passkey setup
+- [AppSpecific Mode](/configuration/mode/app-specific) — Embedded passkey setup

@@ -1,0 +1,54 @@
+# Why JAW
+
+## The Problem
+
+Ethereum's original account model (EOAs) fuses identity to a single private key. Your address is derived from your key. Your authority _is_ your key. Lose it, lose everything. Compromise it, compromise everything.
+
+This created two unsatisfying options for developers building onchain products:
+
+**Seed phrases** give users full sovereignty but terrible UX. Writing down 24 words, understanding irreversible loss, and adopting security practices that most professionals struggle with. Mainstream adoption stalled because the front door was locked with a combination most people couldn't memorize.
+
+**Embedded wallet providers (KMS)** solved the UX by abstracting key management away entirely — users sign in with email or Google, and the private key is handled behind the scenes via key splitting, MPC nodes, and auth tokens. Millions of users onboarded in seconds. But the architecture introduces structural tradeoffs:
+
+- The **auth token becomes the root of trust** — compromise the session, gain signing capability
+- The **key must exist or be computed to sign** — creating an exposure window no matter how short
+- The **system is agnostic to what it signs** — if the app layer is compromised, the signing infrastructure will produce a valid signature for a malicious transaction
+- The user traded one dependency (managing their own seed phrase) for another (a provider managing key shares, running MPC nodes, operating recovery escrow)
+
+Neither approach gives you both UX and sovereignty.
+
+## JAW's Approach
+
+JAW takes a different path: **smart accounts authenticated by passkeys, with programmable permissions at the account layer.**
+
+Three architectural decisions make this work:
+
+### Smart accounts decouple the account from the key
+
+Your account is an onchain smart contract — not a derivation of a private key. Signers become replaceable, constrainable, and revocable components. A compromised signer can be rotated without losing your address, your assets, or your identity. The security question shifts from _"how do we protect the key?"_ to _"what is this key allowed to do?"_
+
+### Passkeys eliminate key management entirely
+
+Passkeys (WebAuthn/FIDO2) are cryptographic credentials bound to the user's hardware. The private key lives in the device's secure enclave — it cannot be exported, copied, or accessed by any software. There is no key to split, no auth token as root of trust, no reconstitution window, and no provider holding shares on your behalf. The user authenticates with biometrics. The secure enclave signs. That's it.
+
+### The permission layer controls what signers can do
+
+Instead of all-or-nothing authority, JAW's permission system (ERC-7715) lets you define exactly what each signer is allowed to do: spending limits, whitelisted contracts, time-bounded sessions, required cosignatures. This is what makes AI agents, automated strategies, and delegated access safe — not by protecting the key harder, but by constraining what the key can do.
+
+## Who JAW Is For
+
+- **Dapp developers** who want smart account UX without building wallet infrastructure from scratch
+- **Teams building agent workflows** that need constrained, revocable authority for AI or automated signers
+- **Projects that need portable identity** — users authenticate once and carry their account across apps via cross-platform passkeys
+- **Subscription and recurring payment products** that need scoped, time-limited permissions without per-transaction user approval
+
+## EIP-1193 Compatible
+
+JAW exposes a standard EIP-1193 provider. If your app works with MetaMask, it works with JAW. Drop it into wagmi, viem, or any EIP-1193 compatible stack with minimal changes.
+
+## Learn More
+
+- [Smart Accounts vs EOAs](/concepts/smart-accounts) — Why decoupling the account from the key matters
+- [Passkeys & WebAuthn](/concepts/passkeys) — How hardware-bound signing works
+- [The Permission Layer](/concepts/permissions) — Scoped authority for signers, agents, and sessions
+- [Getting Started](/) — Install and integrate in minutes

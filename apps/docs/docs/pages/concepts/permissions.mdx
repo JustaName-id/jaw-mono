@@ -1,0 +1,98 @@
+# The Permission Layer
+
+Why programmable authority at the account level is the real frontier — not better key management.
+
+## The Core Insight
+
+The embedded wallet industry has spent years optimizing how to split, store, distribute, and reconstitute a 32-byte private key. That complexity exists because EOAs give every key unlimited authority. Compromise the key, compromise everything.
+
+Smart accounts change the question. Instead of _"how do we protect the key?"_, the question becomes _"what is this key allowed to do?"_ — and the answer is enforced onchain, at the account level, regardless of which signing primitive is used.
+
+This is the permission layer: programmable, scoped, revocable rules that govern what any given signer can do on behalf of an account.
+
+## What Permissions Enable
+
+JAW implements permissions based on ERC-7715, giving you fine-grained control over signer authority:
+
+### Spending Limits
+
+Cap how much a signer can spend, per token, per time period.
+
+```typescript
+permissions: {
+  spends: [{
+    token: USDC_ADDRESS,
+    allowance: parseUnits('100', 6).toString(), // 100 USDC
+    unit: 'month',
+    multiplier: 1,
+  }],
+}
+```
+
+A compromised signer can't drain the account — it can only spend within its budget.
+
+### Contract Restrictions
+
+Limit which contracts and functions a signer can call.
+
+```typescript
+permissions: {
+  calls: [{
+    target: USDC_ADDRESS,
+    functionSignature: 'transfer(address,uint256)',
+  }],
+}
+```
+
+Even with valid signing capability, the signer can't interact with contracts outside its scope.
+
+### Time-Bounded Sessions
+
+Permissions expire automatically. A session key granted for a gaming session doesn't persist after the user closes the app.
+
+```typescript
+expiry: Math.floor(Date.now() / 1000) + 60 * 60, // 1 hour
+```
+
+### Revocation
+
+Any permission can be revoked instantly, cutting off access without affecting other signers or the account itself.
+
+## Use Cases
+
+The permission layer is what makes JAW useful beyond basic wallet functionality:
+
+### AI Agents
+
+Grant an AI agent constrained authority to transact on behalf of a user — scoped to specific contracts, capped spending, time-limited. If the agent misbehaves, revoke the permission. The account and its assets remain untouched.
+
+### Session Keys
+
+A dapp grants itself temporary signing authority for a user session. The user approves once (with clear scope), and subsequent interactions don't require individual biometric prompts. The session expires automatically.
+
+### Subscription Payments
+
+A service provider receives a permission to charge a user monthly — capped amount, specific token, specific function. The user can cancel anytime by revoking the permission. No intermediary payment processor needed.
+
+### Delegated Treasury Management
+
+A DAO or team grants a manager permission to execute trades or payroll within defined limits. Authority is transparent, onchain, and auditable.
+
+:::info
+Permissions are enforced at the smart account level. This means the rules apply regardless of _how_ the signer authenticates — whether it's a passkey, a server-side key, or a delegated agent. The account is the policy enforcer.
+:::
+
+## Why This Matters
+
+As onchain accounts are used by more than just humans — AI agents, automated strategies, cross-app sessions — the question of _who holds the key_ matters less than _what the key is allowed to do_.
+
+Permission problems are best solved at the account layer, where rules are transparent, onchain, and enforceable. Not at the infrastructure layer, where security depends on trusting providers, protocols, and implementation details.
+
+## Related
+
+- [Why JAW](/why-jaw) — The full picture: smart accounts + passkeys + permissions
+- [Smart Accounts vs EOAs](/concepts/smart-accounts) — Why the account is decoupled from the key
+- [Passkeys & WebAuthn](/concepts/passkeys) — How the signer layer works
+- [Subscription Payments Guide](/guides/subscription) — Permissions in practice
+- [wallet_grantPermissions](/api-reference/wallet_grantPermissions) — RPC method reference
+- [useGrantPermissions](/wagmi/useGrantPermissions) — Wagmi hook reference
