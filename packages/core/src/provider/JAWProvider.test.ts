@@ -2,7 +2,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock } from 'vitest';
 import { JAWProvider } from './JAWProvider.js';
 import { createJAWProvider } from './createJAWProvider.js';
-import { Communicator } from '../communicator/index.js';
 import { standardErrorCodes } from '../errors/index.js';
 import { correlationIds } from '../store/index.js';
 import { fetchRPCRequest, checkErrorForInvalidRequestArgs, buildHandleJawRpcUrl } from '../utils/index.js';
@@ -156,13 +155,10 @@ describe('JAWProvider', () => {
       provider = new JAWProvider(mockConstructorOptions);
 
       // Assert
-      expect(Communicator).toHaveBeenCalledWith({
-        metadata: mockMetadata,
-        preference: {
-          keysUrl: 'https://keys.test.com',
-          mode: 'CrossPlatform',
-        },
-      });
+      // Note: Communicator is now created inside CrossPlatformSigner via WebCommunicationAdapter,
+      // not directly in JAWProvider constructor, so we just verify provider was created
+      expect(provider).toBeDefined();
+      expect((provider as any).metadata).toEqual(mockMetadata);
     });
 
     it('should initialize signer if signerType is stored', () => {
@@ -337,11 +333,14 @@ describe('JAWProvider', () => {
       expect(createSigner).toHaveBeenCalledWith({
         signerType: 'crossPlatform',
         metadata: mockMetadata,
-        communicator: (provider as any).communicator,
+        adapter: expect.any(Object), // WebCommunicationAdapter instance
         uiHandler: undefined,
         callback: expect.any(Function),
         apiKey: 'test-api-key',
         paymasters: undefined,
+        keysUrl: 'https://keys.test.com',
+        ens: undefined,
+        showTestnets: undefined,
       });
       expect(mockSigner.handshake).toHaveBeenCalledWith(request);
       expect(mockSigner.request).toHaveBeenCalledWith(request);

@@ -38,6 +38,24 @@ bunx nx run-many -t typecheck
 # Run the playground Next.js app
 bunx nx dev @jaw-mono/playground
 
+# Run the React Native playground
+bunx nx start @jaw-mono/playground-native
+
+# Run on iOS simulator
+bunx nx run-ios @jaw-mono/playground-native
+
+# Run on iOS device
+bunx nx run-ios @jaw-mono/playground-native --configuration=device
+
+# Run on Android emulator
+bunx nx run-android @jaw-mono/playground-native
+
+# Run on Android device
+bunx nx run-android @jaw-mono/playground-native --configuration=device
+
+# Prebuild native projects (after config changes)
+bunx nx prebuild @jaw-mono/playground-native
+
 # Run the docs site (uses Vocs)
 bunx nx dev docs
 
@@ -59,6 +77,7 @@ bunx nx release
 ### Applications (`apps/`)
 
 - **playground** - Next.js demo app using @jaw.id/wagmi with Privy authentication
+- **playground-native** - React Native/Expo demo app showcasing both CrossPlatform and AppSpecific authentication modes
 - **keys-jaw-id** - Next.js keys management application (keys.jaw.id)
 - **docs** - Documentation site built with Vocs
 

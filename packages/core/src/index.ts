@@ -86,6 +86,7 @@ export {
 
 /** Passkey types (used with Account class) **/
 export {
+    PasskeyManager,
     type PasskeyAccount,
 } from './passkey-manager/index.js';
 

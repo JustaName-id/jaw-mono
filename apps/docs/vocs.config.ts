@@ -72,6 +72,7 @@ export default defineConfig({
           ],
         },
         { text: 'paymasters', link: '/configuration/paymasters' },
+        { text: 'React Native', link: '/configuration/react-native' },
       ],
     },
     {

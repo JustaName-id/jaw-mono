@@ -1,4 +1,4 @@
-import { Communicator } from '../communicator/index.js';
+import { CommunicationAdapter, WebCommunicationAdapter } from '../communicator/index.js';
 import { standardErrorCodes, serializeError, standardErrors } from '../errors/index.js';
 
 import { SignerType } from '../messages/index.js';
@@ -37,7 +37,7 @@ import { PasskeyManager } from '../passkey-manager/index.js';
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
     private readonly metadata: AppMetadata;
     private readonly preference: JawProviderPreference;
-    private readonly communicator: Communicator;
+    private readonly adapter: CommunicationAdapter;
     private readonly apiKey: string;
     private readonly paymasters?: Record<number, PaymasterConfig>;
 
@@ -49,7 +49,9 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         this.preference = preference;
         this.apiKey = apiKey;
         this.paymasters = paymasters;
-        this.communicator = new Communicator({
+
+        // Use custom adapter if provided, otherwise create default WebCommunicationAdapter
+        this.adapter = preference.communicationAdapter || new WebCommunicationAdapter({
             metadata,
             preference,
         });
@@ -241,12 +243,14 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         return createSigner({
             signerType,
             metadata: this.metadata,
-            communicator: signerType === 'crossPlatform' ? this.communicator : undefined,
+            adapter: signerType === 'crossPlatform' ? this.adapter : undefined,
             uiHandler: signerType === 'appSpecific' ? this.preference.uiHandler : undefined,
             callback: this.emit.bind(this),
             apiKey: this.apiKey,
             paymasters: signerType === 'appSpecific' ? this.paymasters : undefined,
             ens: signerType === 'appSpecific' ? this.preference.ens : undefined,
+            keysUrl: this.preference.keysUrl,
+            showTestnets: this.preference.showTestnets,
         });
     }
 

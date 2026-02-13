@@ -1,20 +1,17 @@
 {
-  "name": "@jaw/demo-native",
-  "version": "1.0.0",
+  "name": "@jaw-mono/playground-native",
+  "version": "0.1.0",
   "private": true,
   "main": "./index.js",
-  "scripts": {
-    "start": "expo start",
-    "android": "expo run:android",
-    "ios": "expo run:ios",
-    "web": "expo start --web"
-  },
   "dependencies": {
     "@expo/metro-runtime": "~6.1.2",
     "@hookform/resolvers": "^5.2.2",
-    "@jaw.id/core": "file:../../packages/core",
-    "@jaw/ui-native": "file:../../packages/ui-native",
+    "@jaw.id/core": "workspace:*",
+    "@jaw/ui-native": "workspace:*",
+    "@react-native-async-storage/async-storage": "^2.0.0",
     "@react-native/virtualized-lists": "^0.81.5",
+    "axios": "1.12.2",
+    "@craftzdog/react-native-buffer": "^6.1.1",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "eventemitter3": "^5.0.1",
@@ -27,7 +24,9 @@
     "expo-status-bar": "~3.0.9",
     "expo-web-browser": "~15.0.10",
     "isows": "^1.0.7",
+    "mipd": "^0.0.7",
     "nativewind": "^4.1.23",
+    "react-native-css-interop": "~0.1.22",
     "ox": "^0.10.5",
     "qs": "^6.14.0",
     "react": "19.1.0",
@@ -35,9 +34,11 @@
     "react-hook-form": "^7.68.0",
     "react-native": "0.81.5",
     "react-native-gesture-handler": "~2.28.0",
+    "fast-base64-decode": "^1.0.0",
     "react-native-get-random-values": "^2.0.0",
     "react-native-nitro-modules": "^0.32.1",
     "react-native-passkey": "^3.3.2",
+    "react-native-quick-base64": "^2.2.2",
     "react-native-quick-crypto": "^1.0.6",
     "react-native-reanimated": "~4.1.1",
     "react-native-safe-area-context": "~5.6.0",
@@ -50,14 +51,24 @@
     "side-channel": "^1.1.0",
     "tailwind-merge": "^3.4.0",
     "tailwindcss": "^3.4.17",
+    "tslib": "2.8.1",
     "viem": "^2.43.1",
-    "zod": "^4.2.1"
+    "zod": "^4.2.1",
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
     "@babel/plugin-transform-class-static-block": "^7.28.3",
     "@types/react": "~19.1.10",
+    "babel-preset-expo": "~13.2.0",
     "typescript": "^5.3.3",
     "@react-native-community/cli": "latest"
+  },
+  "scripts": {
+    "start": "expo start",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
+    "prebuild": "expo prebuild",
+    "prebuild:clean": "expo prebuild --clean"
   }
 }

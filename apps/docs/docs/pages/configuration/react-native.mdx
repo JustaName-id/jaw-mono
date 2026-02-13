@@ -1,0 +1,388 @@
+# React Native
+
+Configuration guide for JAW SDK in React Native applications with native passkey support.
+
+## Overview
+
+JAW SDK provides two authentication modes for React Native:
+
+| Mode | Best For | Expo Go | Development Build | Setup Complexity |
+|------|----------|---------|-------------------|------------------|
+| **Cross-Platform** | Quick testing, development | ✅ Works | ✅ Works | Low - No certificates needed |
+| **App-Specific** | Production apps | ❌ Fails | ✅ Works | Medium - Requires domain + certificates |
+
+### Cross-Platform Mode
+- Opens Safari View Controller (iOS) or Chrome Custom Tab (Android) for authentication
+- Passkeys stored in browser, portable across apps
+- Works in Expo Go without additional configuration
+- **Recommended for getting started**
+
+### App-Specific Mode
+- Native passkeys via Face ID / Touch ID
+- Credentials tied to your app
+- Requires domain configuration and certificates
+- Better UX for production apps
+
+---
+
+## Installation
+
+Install the required packages:
+
+```bash
+bun add @jaw.id/core @jaw/ui-native
+```
+
+Add required Expo plugins to your `app.json`:
+
+```json
+{
+  "expo": {
+    "plugins": [
+      "expo-router",
+      "expo-web-browser"
+    ]
+  }
+}
+```
+
+---
+
+## Cross-Platform Mode
+
+### Basic Configuration
+
+```typescript
+import { JAW, Mode } from '@jaw.id/core';
+import { MobileCommunicationAdapter } from '@jaw/ui-native';
+import { useState, useEffect } from 'react';
+
+export function YourComponent() {
+  const [sdk, setSdk] = useState<JAW | null>(null);
+
+  useEffect(() => {
+    const instance = JAW.create({
+      apiKey: 'your-jaw-api-key',
+      appName: 'Your App Name',
+      defaultChainId: 84532,  // Base Sepolia
+      preference: {
+        mode: Mode.CrossPlatform,
+        communicationAdapter: new MobileCommunicationAdapter(),
+        keysUrl: 'https://keys.jaw.id',
+        showTestnets: true,
+      },
+    });
+
+    setSdk(instance);
+
+    return () => {
+      instance.disconnect();
+    };
+  }, []);
+
+  const connect = async () => {
+    if (!sdk) return;
+
+    const accounts = await sdk.provider.request({
+      method: 'eth_requestAccounts',
+      params: []
+    });
+
+    console.log('Connected:', accounts[0]);
+  };
+
+  return (
+    <Button onPress={connect}>
+      Connect Wallet
+    </Button>
+  );
+}
+```
+
+### Configuration Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `apiKey` | `string` | Yes | Your JAW API key |
+| `appName` | `string` | Yes | Display name shown in authentication UI |
+| `defaultChainId` | `number` | Yes | Default blockchain network ID |
+| `preference.mode` | `Mode.CrossPlatform` | Yes | Authentication mode |
+| `preference.communicationAdapter` | `MobileCommunicationAdapter` | Yes | Mobile communication adapter instance |
+| `preference.keysUrl` | `string` | No | Keys management URL (default: `https://keys.jaw.id`) |
+| `preference.showTestnets` | `boolean` | No | Show testnet networks (default: `false`) |
+
+### Deep Linking Setup
+
+Add a custom URL scheme to `app.json` for authentication callbacks:
+
+```json
+{
+  "expo": {
+    "scheme": "your-app-scheme",
+    "ios": {
+      "bundleIdentifier": "com.yourcompany.yourapp",
+      "associatedDomains": [
+        "webcredentials:keys.jaw.id"
+      ]
+    },
+    "android": {
+      "package": "com.yourcompany.yourapp"
+    }
+  }
+}
+```
+
+The `scheme` enables deep linking - after authentication in Safari/Chrome, the app receives credentials via `{scheme}://auth`.
+
+### Testing in Expo Go
+
+```bash
+npx expo start
+```
+
+Scan the QR code with Expo Go. Cross-platform mode works immediately without additional setup!
+
+---
+
+## App-Specific Mode
+
+### Basic Configuration
+
+```typescript
+import { JAW, Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw/ui';
+import { useState, useEffect } from 'react';
+
+export function YourComponent() {
+  const [sdk, setSdk] = useState<JAW | null>(null);
+
+  useEffect(() => {
+    const instance = JAW.create({
+      apiKey: 'your-jaw-api-key',
+      appName: 'Your App Name',
+      defaultChainId: 1,  // Ethereum Mainnet
+      preference: {
+        mode: Mode.AppSpecific,
+        uiHandler: new ReactUIHandler(),
+      },
+    });
+
+    setSdk(instance);
+
+    return () => {
+      instance.disconnect();
+    };
+  }, []);
+
+  return (
+    // Your UI
+  );
+}
+```
+
+### Configuration Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `apiKey` | `string` | Yes | Your JAW API key |
+| `appName` | `string` | Yes | Display name shown in passkey prompts |
+| `defaultChainId` | `number` | Yes | Default blockchain network ID |
+| `preference.mode` | `Mode.AppSpecific` | Yes | Authentication mode |
+| `preference.uiHandler` | `UIHandler` | Yes | Custom UI handler for modals |
+
+### app.json Configuration
+
+Configure your app identifier and associated domains:
+
+```json
+{
+  "expo": {
+    "scheme": "your-app-scheme",
+    "ios": {
+      "bundleIdentifier": "com.yourcompany.yourapp",
+      "developmentTeam": "YOUR_TEAM_ID",
+      "associatedDomains": [
+        "webcredentials:keys.jaw.id"
+      ]
+    },
+    "android": {
+      "package": "com.yourcompany.yourapp"
+    }
+  }
+}
+```
+
+**Key Fields:**
+
+- `bundleIdentifier` / `package`: Your app's unique identifier
+- `developmentTeam`: Your Apple Developer Team ID (iOS only)
+- `associatedDomains`: Domain for passkey authentication (must match certificate setup)
+- `scheme`: Custom URL scheme for deep linking
+
+### Certificate Setup
+
+#### iOS: Associated Domains & AASA File
+
+**1. Find Your Team ID:**
+
+```bash
+# Option 1: Apple Developer Portal
+# Visit: developer.apple.com → Membership → Team ID
+
+# Option 2: Command line
+security find-certificate -c "Apple Development" -p | openssl x509 -text | grep "OU="
+```
+
+**2. Deploy AASA File:**
+
+Host this JSON at `https://keys.jaw.id/.well-known/apple-app-site-association`:
+
+```json
+{
+  "webcredentials": {
+    "apps": [
+      "YOUR_TEAM_ID.com.yourcompany.yourapp"
+    ]
+  }
+}
+```
+
+**AASA File Requirements:**
+- Must be served over HTTPS
+- Content-Type: `application/json`
+- No file extension in URL path
+- Must return 200 status code
+- Must be publicly accessible (no authentication)
+
+**3. Verify Deployment:**
+
+```bash
+curl https://keys.jaw.id/.well-known/apple-app-site-association
+```
+
+#### Android: Digital Asset Links
+
+**1. Get SHA256 Fingerprint:**
+
+```bash
+# For debug builds
+keytool -list -v -keystore ~/.android/debug.keystore -alias androiddebugkey -storepass android
+
+# For release builds
+keytool -list -v -keystore /path/to/release.keystore -alias your-alias
+```
+
+**2. Deploy Asset Links:**
+
+Host this JSON at `https://keys.jaw.id/.well-known/assetlinks.json`:
+
+```json
+[{
+  "relation": ["delegate_permission/common.get_login_creds"],
+  "target": {
+    "namespace": "android_app",
+    "package_name": "com.yourcompany.yourapp",
+    "sha256_cert_fingerprints": [
+      "YOUR_SHA256_FINGERPRINT_HERE"
+    ]
+  }
+}]
+```
+
+**3. Verify Deployment:**
+
+```bash
+curl https://keys.jaw.id/.well-known/assetlinks.json
+```
+
+### Development Build
+
+App-specific mode requires a development build (won't work in Expo Go):
+
+```bash
+# iOS
+npx expo prebuild --clean
+npx expo run:ios --device
+
+# Android
+npx expo prebuild --clean
+npx expo run:android
+```
+
+---
+
+## Production Deployment Checklist
+
+### iOS Configuration
+- [ ] Add correct Team ID to AASA file
+- [ ] Deploy AASA file to `https://keys.jaw.id/.well-known/apple-app-site-association`
+- [ ] Verify AASA is accessible (returns 200, valid JSON)
+- [ ] Update `app.json` with production `bundleIdentifier` and `associatedDomains`
+- [ ] Test deep linking on physical device
+
+### Android Configuration
+- [ ] Generate production SHA256 fingerprint from release keystore
+- [ ] Deploy Asset Links to `https://keys.jaw.id/.well-known/assetlinks.json`
+- [ ] Verify Asset Links is accessible
+- [ ] Update `app.json` with production `package` name
+- [ ] Test with production build on physical device
+
+### SDK Configuration
+- [ ] Set `apiKey` to production JAW API key
+- [ ] Set `defaultChainId` to production network
+- [ ] Set `keysUrl` to `https://keys.jaw.id` (production)
+- [ ] Verify all certificate files match production domain
+
+---
+
+## Common Issues
+
+### "Passkey creation failed" on iOS
+
+**Cause**: AASA file not properly configured or inaccessible.
+
+**Solutions**:
+1. Verify AASA file is accessible: `curl https://keys.jaw.id/.well-known/apple-app-site-association`
+2. Check Team ID matches your Apple Developer account
+3. Ensure Bundle Identifier matches exactly (case-sensitive)
+4. Wait a few minutes for iOS to cache AASA updates
+5. Restart device and try again
+
+### "Deep linking not working"
+
+**Cause**: URL scheme not properly configured or conflicts with another app.
+
+**Solutions**:
+1. Verify `scheme` in `app.json` is unique
+2. Check `associatedDomains` matches the domain in your certificate setup
+3. Rebuild app after changing `app.json`
+4. Test deep link manually: `npx uri-scheme open your-scheme://auth --ios`
+
+### "Works in development but not production"
+
+**Cause**: Different certificates for development vs production.
+
+**Solutions**:
+1. Ensure production domain has AASA/Asset Links deployed
+2. Use correct production SHA256 fingerprint (not debug keystore)
+3. Verify production bundle identifier matches AASA
+4. Double-check `keysUrl` points to production domain
+
+---
+
+## Example Implementation
+
+For a complete working example, see the [demo-native app](https://github.com/JustaName-id/jaw-mono/tree/main/playground/demo-native):
+
+- **Source Code**: [`playground/demo-native/app/connect.tsx`](https://github.com/JustaName-id/jaw-mono/blob/main/playground/demo-native/app/connect.tsx)
+- **Configuration**: [`app.json`](https://github.com/JustaName-id/jaw-mono/blob/main/playground/demo-native/app.json)
+- **Full Documentation**: [README](https://github.com/JustaName-id/jaw-mono/blob/main/playground/demo-native/README.md)
+
+---
+
+## Additional Resources
+
+- [Core SDK Configuration](/configuration)
+- [API Reference](/api-reference)
+- [Supported Networks](/supported-networks)
+- [Custom UI Handler](/advanced/custom-ui-handler)

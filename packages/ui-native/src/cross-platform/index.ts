@@ -6,10 +6,6 @@
  */
 
 export {
-  BrowserAuthenticator,
-  type BrowserAuthConfig,
-  type BrowserAuthResult,
-  type SignMessageParams,
-  type SignTypedDataParams,
-  type TransactionParams,
-} from './BrowserAuthenticator';
+  MobileCommunicationAdapter,
+  type MobileCommunicationConfig,
+} from './MobileCommunicationAdapter';

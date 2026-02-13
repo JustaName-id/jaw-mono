@@ -3,7 +3,7 @@ import { UUID } from 'crypto';
 import { JAWSigner } from '../JAWSigner.js';
 import { decodePersonalSignRequest } from '../SignerUtils.js';
 
-import { Communicator } from '../../communicator/index.js';
+import { CommunicationAdapter } from '../../communicator/index.js';
 import { getPermissionFromRelay } from '../../rpc/index.js';
 import { standardErrors } from '../../errors/index.js';
 import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../../messages/index.js';
@@ -17,23 +17,39 @@ import {
     importKeyFromHexString,
 } from '../../utils/index.js';
 
-type ConstructorOptions = {
+export type ConstructorOptions = {
     metadata: AppMetadata;
-    communicator: Communicator;
+    adapter: CommunicationAdapter;
     callback: ProviderEventCallback | null;
+    apiKey: string;
+    keysUrl?: string;
+    showTestnets?: boolean;
 };
 
 export class CrossPlatformSigner extends JAWSigner {
-    private readonly communicator: Communicator;
+    private readonly adapter: CommunicationAdapter;
     private readonly keyManager: KeyManager;
+    private isBrowserMode = false;
 
     constructor(params: ConstructorOptions) {
         super({
             metadata: params.metadata,
             callback: params.callback,
         });
-        this.communicator = params.communicator;
+        this.adapter = params.adapter;
         this.keyManager = new KeyManager();
+
+        // Initialize adapter if it supports init()
+        if (this.adapter.init) {
+            this.adapter.init({
+                apiKey: params.apiKey,
+                appName: params.metadata.appName,
+                appLogoUrl: params.metadata.appLogoUrl ?? undefined,
+                defaultChainId: params.metadata.defaultChainId,
+                keysUrl: params.keysUrl,
+                showTestnets: params.showTestnets,
+            });
+        }
     }
 
     override async handshake(args: RequestArguments): Promise<void> {
@@ -41,7 +57,7 @@ export class CrossPlatformSigner extends JAWSigner {
 
         // Open the popup before constructing the request message.
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
-        await this.communicator.waitForPopupLoaded?.();
+        await this.adapter.waitForReady();
 
         const chains = store.getState().chains;
         const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
@@ -57,19 +73,31 @@ export class CrossPlatformSigner extends JAWSigner {
             correlationId
         );
         const response: RPCResponseMessage =
-            await this.communicator.postRequestAndWaitForResponse(handshakeMessage);
+            await this.adapter.postRequestAndWaitForResponse(handshakeMessage);
 
-        // store peer's public key
+        // Check for browser mode (unencrypted response from mobile adapter)
+        if ('unencrypted' in response.content) {
+            console.log('[CrossPlatformSigner] Browser mode detected, bypassing encryption for all future requests');
+            this.isBrowserMode = true; // Store flag for future requests
+            await this.handleResponse(args, response.content.unencrypted);
+            return;
+        }
+
+        // Normal encrypted flow for popup/web mode
+        // throw protocol level error
         if ('failure' in response.content) {
             throw response.content.failure;
         }
 
-        const peerPublicKey = await importKeyFromHexString('public', response.sender);
-        await this.keyManager.setPeerPublicKey(peerPublicKey);
+        // Store peer's public key for encryption (encrypted mode only)
+        if ('encrypted' in response.content) {
+            const peerPublicKey = await importKeyFromHexString('public', response.sender);
+            await this.keyManager.setPeerPublicKey(peerPublicKey);
 
-        const decrypted = await this.decryptResponseMessage(response);
+            const decrypted = await this.decryptResponseMessage(response);
 
-        await this.handleResponse(args, decrypted);
+            await this.handleResponse(args, decrypted);
+        }
     }
 
     protected override async handleWalletConnect(request: RequestArguments): Promise<unknown> {
@@ -80,7 +108,7 @@ export class CrossPlatformSigner extends JAWSigner {
         }
 
         // Wait for the popup to be loaded before making async calls
-        await this.communicator.waitForPopupLoaded?.();
+        await this.adapter.waitForReady();
 
         // Validate and inject capabilities using base class method
         const modifiedRequest = this.validateAndInjectCapabilities(request);
@@ -91,7 +119,7 @@ export class CrossPlatformSigner extends JAWSigner {
 
     protected override async handleWalletConnectUnauthenticated(request: RequestArguments): Promise<unknown> {
         // Wait for the popup to be loaded before making async calls
-        await this.communicator.waitForPopupLoaded?.();
+        await this.adapter.waitForReady();
 
         // Validate and inject capabilities using base class method
         const modifiedRequest = this.validateAndInjectCapabilities(request);
@@ -184,8 +212,35 @@ export class CrossPlatformSigner extends JAWSigner {
     ): Promise<unknown> {
         // Open the popup before constructing the request message.
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
-        await this.communicator.waitForPopupLoaded?.();
+        await this.adapter.waitForReady();
 
+        // Browser mode: Send request without encryption
+        if (this.isBrowserMode) {
+            const chains = store.getState().chains;
+            const chain = overrideChain ?? chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+
+            const requestMessage = await this.createRequestMessage(
+                {
+                    handshake: {
+                        method: request.method,
+                        params: request.params ?? [],
+                    },
+                    chain
+                },
+                this.getCorrelationId(request)
+            );
+
+            const response: RPCResponseMessage = await this.adapter.postRequestAndWaitForResponse(requestMessage);
+
+            // Browser mode response has unencrypted content
+            if ('unencrypted' in response.content) {
+                return this.handleResponse(request, response.content.unencrypted);
+            }
+
+            throw new Error('Invalid browser mode response: expected unencrypted content');
+        }
+
+        // Normal encrypted flow for popup/web mode
         const response = await this.sendEncryptedRequest(request, overrideChain);
         const decrypted = await this.decryptResponseMessage(response);
 
@@ -220,7 +275,7 @@ export class CrossPlatformSigner extends JAWSigner {
         const correlationId = this.getCorrelationId(request);
         const message = await this.createRequestMessage({ encrypted }, correlationId);
 
-        return this.communicator.postRequestAndWaitForResponse(message);
+        return this.adapter.postRequestAndWaitForResponse(message);
     }
 
     private async createRequestMessage(
@@ -244,6 +299,14 @@ export class CrossPlatformSigner extends JAWSigner {
         // throw protocol level error
         if ('failure' in content) {
             throw content.failure;
+        }
+
+        if ('unencrypted' in content) {
+            throw standardErrors.rpc.internal('Unexpected unencrypted response in decryptResponseMessage');
+        }
+
+        if (!('encrypted' in content)) {
+            throw standardErrors.rpc.internal('Invalid response format: expected encrypted content');
         }
 
         const sharedSecret = await this.keyManager.getSharedSecret();

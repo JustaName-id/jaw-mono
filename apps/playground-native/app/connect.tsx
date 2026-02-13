@@ -11,15 +11,14 @@ import {
   Label,
   createNativePasskeyCredential,
   getCredentialAdapter,
-  JAWNativeProvider,
-  useJAWNative,
+  MobileCommunicationAdapter,
   NativePasskeyUnavailableError,
   SignatureModal,
   TransactionModal,
   type TransactionData,
 } from '@jaw/ui-native';
 import { WalletIcon } from '@jaw/ui-native';
-import { Account, type PasskeyAccount, type TransactionCall } from '@jaw.id/core';
+import { JAW, Account, Mode, type PasskeyAccount, type TransactionCall } from '@jaw.id/core';
 import type { Address } from 'viem';
 import { parseEther } from 'viem';
 
@@ -90,7 +89,7 @@ function ModeHeader({ mode, onModeChange }: {
         <View className="mt-3 p-3 bg-secondary rounded-lg">
           {mode === 'cross-platform' ? (
             <Text className="text-sm text-muted-foreground">
-              <Text className="font-semibold">Cross-Platform Mode:</Text> Opens WebView to keys.jaw.id for authentication. No per-app configuration needed. Works in Expo Go.
+              <Text className="font-semibold">Cross-Platform Mode:</Text> Opens Safari View Controller (iOS) / Chrome Custom Tab (Android) to keys.jaw.id for authentication. Full WebAuthn support. No per-app configuration needed. Works in Expo Go.
             </Text>
           ) : (
             <Text className="text-sm text-muted-foreground">
@@ -105,7 +104,13 @@ function ModeHeader({ mode, onModeChange }: {
 
 // Cross-platform mode content
 function CrossPlatformContent() {
-  const { isConnected, address, username, connect, disconnect, signMessage, sendTransaction, grantPermissions, chainId: currentChainId } = useJAWNative();
+  // SDK state
+  const [sdk, setSdk] = useState<ReturnType<typeof JAW.create> | null>(null);
+  const [isConnected, setIsConnected] = useState(false);
+  const [address, setAddress] = useState<string | null>(null);
+  const [username, setUsername] = useState<string | null>(null);
+
+  // Operation states
   const [isConnecting, setIsConnecting] = useState(false);
   const [isSigning, setIsSigning] = useState(false);
   const [isSending, setIsSending] = useState(false);
@@ -118,27 +123,103 @@ function CrossPlatformContent() {
   const [isGranting, setIsGranting] = useState(false);
   const [isRevoking, setIsRevoking] = useState(false);
 
+  // Initialize SDK on mount
+  useEffect(() => {
+    console.log('🚀 Initializing JAW SDK with MobileCommunicationAdapter...');
+
+    const jawSdk = JAW.create({
+      apiKey: API_KEY,
+      appName: 'JAW Demo Native',
+      defaultChainId: CHAIN_ID,
+      preference: {
+        mode: Mode.CrossPlatform,
+        communicationAdapter: new MobileCommunicationAdapter(),
+        keysUrl: KEYS_URL,
+        showTestnets: true,
+      },
+    });
+
+    // Listen to provider events
+    jawSdk.provider.on('accountsChanged', (accounts: string[]) => {
+      console.log('📡 accountsChanged event:', accounts);
+      if (accounts.length > 0) {
+        setAddress(accounts[0]);
+        setIsConnected(true);
+        // Note: Username would need to be stored separately or retrieved from backend
+      } else {
+        setAddress(null);
+        setUsername(null);
+        setIsConnected(false);
+      }
+    });
+
+    jawSdk.provider.on('disconnect', () => {
+      console.log('📡 disconnect event');
+      setIsConnected(false);
+      setAddress(null);
+      setUsername(null);
+    });
+
+    jawSdk.provider.on('connect', (info: { chainId: string }) => {
+      console.log('📡 connect event:', info);
+      setIsConnected(true);
+    });
+
+    setSdk(jawSdk);
+    console.log('✅ SDK initialized successfully');
+
+    return () => {
+      console.log('🧹 Cleaning up SDK...');
+      jawSdk.disconnect();
+    };
+  }, []);
+
   const handleConnect = async () => {
+    if (!sdk) {
+      Alert.alert('Error', 'SDK not initialized');
+      return;
+    }
+
     setIsConnecting(true);
     try {
-      await connect();
+      const accounts = await sdk.provider.request({
+        method: 'eth_requestAccounts',
+        params: [],
+      }) as string[];
+
+
+      if (accounts.length > 0) {
+        setAddress(accounts[0]);
+        setIsConnected(true);
+        // Note: In production, you'd fetch username from your backend or local storage
+        setUsername('user'); // Placeholder
+      }
+    } catch (error) {
+      console.error('❌ Connection failed:', error);
+      Alert.alert('Error', error instanceof Error ? error.message : 'Failed to connect');
     } finally {
       setIsConnecting(false);
     }
   };
 
   const handleSignMessage = async () => {
+    if (!sdk || !address) {
+      Alert.alert('Error', 'Please connect your wallet first');
+      return;
+    }
+
     setIsSigning(true);
     setSignature(null);
     try {
-      const sig = await signMessage(messageToSign);
-      if (sig) {
-        setSignature(sig);
-        Alert.alert('Success', 'Message signed successfully!');
-      } else {
-        Alert.alert('Error', 'Failed to sign message');
-      }
+      const sig = await sdk.provider.request({
+        method: 'personal_sign',
+        params: [messageToSign, address],
+      }) as string;
+
+      setSignature(sig);
+      Alert.alert('Success', 'Message signed successfully!');
     } catch (error) {
+      console.error('❌ Sign message failed:', error);
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to sign message');
     } finally {
       setIsSigning(false);
@@ -146,22 +227,33 @@ function CrossPlatformContent() {
   };
 
   const handleSendTransaction = async () => {
+    if (!sdk || !address) {
+      Alert.alert('Error', 'Please connect your wallet first');
+      return;
+    }
+
     setIsSending(true);
     setTxHash(null);
     try {
-      // Example: Send 0 ETH to self (just for testing)
-      const hash = await sendTransaction({
-        to: address || '0x0000000000000000000000000000000000000000',
-        value: '0x0',
-        data: '0x',
-      });
-      if (hash) {
-        setTxHash(hash);
-        Alert.alert('Success', `Transaction sent!\n\nHash: ${hash.slice(0, 20)}...`);
-      } else {
-        Alert.alert('Error', 'Failed to send transaction');
-      }
+      // Use wallet_sendCalls for EIP-5792 compliant transaction
+      const result = await sdk.provider.request({
+        method: 'wallet_sendCalls',
+        params: [{
+          version: '1.0',
+          chainId: `0x${CHAIN_ID.toString(16)}`,
+          from: address,
+          calls: [{
+            to: address, // Send to self for testing
+            value: '0x0',
+            data: '0x',
+          }],
+        }],
+      }) as string;
+
+      setTxHash(result);
+      Alert.alert('Success', `Transaction sent!\n\nHash: ${result.slice(0, 20)}...`);
     } catch (error) {
+      console.error('❌ Send transaction failed:', error);
       Alert.alert('Error', error instanceof Error ? error.message : 'Failed to send transaction');
     } finally {
       setIsSending(false);
@@ -169,7 +261,7 @@ function CrossPlatformContent() {
   };
 
   const handleGrantPermissions = async () => {
-    if (!address) {
+    if (!sdk || !address) {
       Alert.alert('Error', 'Please connect your wallet first');
       return;
     }
@@ -180,26 +272,32 @@ function CrossPlatformContent() {
       const ethLimit = parseEther('0.0001');
       const expiryTimestamp = Math.floor(Date.now() / 1000) + (30 * 24 * 60 * 60); // 30 days
 
-      const permissionsData = {
-        address: address,
-        chainId: currentChainId || CHAIN_ID,
-        expiry: expiryTimestamp,
-        spender: spenderAddress,
-        permissions: {
-          spends: [{
-            allowance: `0x${ethLimit.toString(16)}`,
-            unit: 'day',
-            token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-            multiplier: 2
+      // Use wallet_grantPermissions with EIP-7715 format
+      const result = await sdk.provider.request({
+        method: 'wallet_grantPermissions',
+        params: [{
+          expiry: expiryTimestamp,
+          signer: {
+            type: 'account',
+            data: {
+              id: address,
+            },
+          },
+          permissions: [{
+            type: 'native-token-recurring-allowance',
+            data: {
+              allowance: `0x${ethLimit.toString(16)}`,
+              start: Math.floor(Date.now() / 1000),
+              period: 2 * 24 * 60 * 60, // 2 days in seconds
+              spender: spenderAddress,
+            },
+            required: true,
           }],
-          calls: [{
-            target: spenderAddress,
-            functionSignature: 'transfer(address,uint256)'
-          }]
-        }
-      };
+          chainId: `0x${CHAIN_ID.toString(16)}`,
+        }],
+      }) as any;
 
-      const permissionId = await grantPermissions(permissionsData);
+      const permissionId = result?.permissionId || result?.grantedPermissions?.[0]?.context;
 
       if (permissionId) {
         setLastPermissionId(permissionId);
@@ -212,6 +310,7 @@ function CrossPlatformContent() {
         Alert.alert('Error', 'Failed to grant permissions');
       }
     } catch (error) {
+      console.error('❌ Grant permissions failed:', error);
       if (error instanceof Error) {
         Alert.alert('Error', error.message);
       }
@@ -221,24 +320,53 @@ function CrossPlatformContent() {
   };
 
   const handleRevokePermissions = async () => {
-    if (!address || !lastPermissionId) {
+    if (!sdk || !address || !lastPermissionId) {
       Alert.alert('Error', 'No permission to revoke');
       return;
     }
 
     setIsRevoking(true);
     try {
-      // TODO: Implement revokePermissions in BrowserAuthenticator and JAWNativeProvider
-      Alert.alert('Not Implemented', 'Revoke permissions is not yet implemented for cross-platform mode');
-      // Once implemented, the call would be:
-      // await revokePermissions({ id: lastPermissionId });
-      // setLastPermissionId(undefined);
+      await sdk.provider.request({
+        method: 'wallet_revokePermissions',
+        params: [{
+          id: lastPermissionId,
+        }],
+      });
+
+      Alert.alert('Success', 'Permission revoked successfully');
+      setLastPermissionId(undefined);
     } catch (error) {
+      console.error('❌ Revoke permissions failed:', error);
       if (error instanceof Error) {
         Alert.alert('Error', error.message);
       }
     } finally {
       setIsRevoking(false);
+    }
+  };
+
+  const handleDisconnect = async () => {
+    if (!sdk) return;
+
+    try {
+      await sdk.provider.request({
+        method: 'wallet_disconnect',
+        params: [],
+      });
+
+      setIsConnected(false);
+      setAddress(null);
+      setUsername(null);
+      setSignature(null);
+      setTxHash(null);
+      setLastPermissionId(undefined);
+    } catch (error) {
+      console.error('❌ Disconnect failed:', error);
+      // Still reset local state even if disconnect fails
+      setIsConnected(false);
+      setAddress(null);
+      setUsername(null);
     }
   };
 
@@ -276,7 +404,7 @@ function CrossPlatformContent() {
                   {address}
                 </Text>
               </View>
-              <Button variant="outline" onPress={disconnect}>
+              <Button variant="outline" onPress={handleDisconnect}>
                 Disconnect
               </Button>
             </View>
@@ -1111,15 +1239,7 @@ export default function ConnectScreen() {
         <ModeHeader mode={mode} onModeChange={setMode} />
 
         {mode === 'cross-platform' ? (
-          <JAWNativeProvider
-            apiKey={API_KEY}
-            appName="JAW Demo Native"
-            defaultChainId={CHAIN_ID}
-            keysUrl={KEYS_URL}
-            showTestnets={true}
-          >
-            <CrossPlatformContent />
-          </JAWNativeProvider>
+          <CrossPlatformContent />
         ) : (
           <AppSpecificContent />
         )}
@@ -1136,7 +1256,7 @@ export default function ConnectScreen() {
               <View className="flex-1">
                 <Text className="text-foreground font-medium">Choose Mode</Text>
                 <Text className="text-muted-foreground text-sm">
-                  Cross-Platform (WebView) or App-Specific (native passkeys)
+                  Cross-Platform (Safari/Chrome) or App-Specific (native passkeys)
                 </Text>
               </View>
             </View>

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach, Mock, Mocked } from 'vitest';
 import { CrossPlatformSigner } from './CrossPlatformSigner.js';
-import { Communicator } from '../../communicator/index.js';
+import { CommunicationAdapter } from '../../communicator/index.js';
 import { KeyManager } from '../../key-manager/index.js';
 import { store } from '../../store/index.js';
 import type { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/interface.js';
@@ -15,14 +15,8 @@ import { fetchRPCRequest } from '../../utils/index.js';
 import { correlationIds } from '../../store/correlation-ids/store.js';
 import { getCallStatus, getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
 
-// Mock dependencies
-vi.mock('../../communicator/index.js', () => ({
-  Communicator: vi.fn(() => ({
-    waitForPopupLoaded: vi.fn(),
-    postRequestAndWaitForResponse: vi.fn(),
-    disconnect: vi.fn(),
-  })),
-}));
+// Mock dependencies - no longer needed, we'll create manual mocks
+// vi.mock('../../communicator/index.js');
 
 vi.mock('../../key-manager/index.js', () => ({
   KeyManager: vi.fn(() => ({
@@ -66,7 +60,7 @@ const mockMessageId = '12345678-1234-1234-1234-123456789012' as const;
 
 describe('CrossPlatformSigner', () => {
   let signer: CrossPlatformSigner;
-  let mockCommunicator: Mocked<Communicator>;
+  let mockCommunicator: Mocked<CommunicationAdapter>;
   let mockKeyManager: Mocked<KeyManager>;
   let mockCallback: ProviderEventCallback;
   let mockMetadata: AppMetadata;
@@ -80,12 +74,15 @@ describe('CrossPlatformSigner', () => {
     };
 
     // Setup mock communicator
-    mockCommunicator = new Communicator({
-      metadata: mockMetadata,
-      preference: { keysUrl: 'https://test.com' },
-    }) as Mocked<Communicator>;
+    mockCommunicator = {
+      init: vi.fn(),
+      waitForReady: vi.fn().mockResolvedValue(undefined),
+      postRequestAndWaitForResponse: vi.fn(),
+      postMessage: vi.fn(),
+      onMessage: vi.fn(),
+      disconnect: vi.fn(),
+    } as Mocked<CommunicationAdapter>;
 
-    mockCommunicator.waitForPopupLoaded.mockResolvedValue({} as Window);
     mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue({
       id: mockMessageId,
       requestId: mockMessageId,
@@ -150,7 +147,10 @@ describe('CrossPlatformSigner', () => {
     // Create signer instance
     signer = new CrossPlatformSigner({
       metadata: mockMetadata,
-      communicator: mockCommunicator,
+      adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
       callback: mockCallback,
     });
   });
@@ -204,7 +204,7 @@ describe('CrossPlatformSigner', () => {
       await signer.handshake(handshakeRequest);
 
       // Assert
-      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+      expect(mockCommunicator.waitForReady).toHaveBeenCalled();
       expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
       
       const sentMessage = mockCommunicator.postRequestAndWaitForResponse.mock.calls[0][0] as any;
@@ -385,7 +385,7 @@ describe('CrossPlatformSigner', () => {
 
       // Assert
       expect(result).toBe('0xsignature...');
-      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+      expect(mockCommunicator.waitForReady).toHaveBeenCalled();
       expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
     });
 
@@ -615,7 +615,10 @@ describe('CrossPlatformSigner', () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -733,7 +736,10 @@ describe('CrossPlatformSigner', () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -772,7 +778,7 @@ describe('CrossPlatformSigner', () => {
 
       // Assert
       expect(result).toEqual(['0x1234567890123456789012345678901234567890']);
-      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+      expect(mockCommunicator.waitForReady).toHaveBeenCalled();
       expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
     });
 
@@ -780,7 +786,10 @@ describe('CrossPlatformSigner', () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -937,7 +946,10 @@ describe('CrossPlatformSigner', () => {
       // Arrange - Create new signer with chain that has no rpcUrl
       const signerWithNoRpc = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -1140,7 +1152,10 @@ describe('CrossPlatformSigner', () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -1176,7 +1191,10 @@ describe('CrossPlatformSigner', () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -1209,14 +1227,17 @@ describe('CrossPlatformSigner', () => {
 
       // Assert
       expect(result).toBe('0xbatchId');
-      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+      expect(mockCommunicator.waitForReady).toHaveBeenCalled();
     });
 
     it('should allow wallet_sign when unauthenticated', async () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -1250,14 +1271,17 @@ describe('CrossPlatformSigner', () => {
 
       // Assert
       expect(result).toBe('0xsignature');
-      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+      expect(mockCommunicator.waitForReady).toHaveBeenCalled();
     });
 
     it('should allow wallet_connect when unauthenticated', async () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -1303,7 +1327,7 @@ describe('CrossPlatformSigner', () => {
           { address: '0x1234567890123456789012345678901234567890' },
         ],
       });
-      expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalled();
+      expect(mockCommunicator.waitForReady).toHaveBeenCalled();
     });
   });
 
@@ -1312,7 +1336,10 @@ describe('CrossPlatformSigner', () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -1369,7 +1396,10 @@ describe('CrossPlatformSigner', () => {
       // Arrange - Create new signer without handshake
       const unauthenticatedSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -1876,7 +1906,10 @@ describe('CrossPlatformSigner', () => {
       // Act
       const newSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -1911,7 +1944,10 @@ describe('CrossPlatformSigner', () => {
       // Act
       const newSigner = new CrossPlatformSigner({
         metadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -1943,7 +1979,10 @@ describe('CrossPlatformSigner', () => {
       // Act
       const newSigner = new CrossPlatformSigner({
         metadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 
@@ -2039,7 +2078,10 @@ describe('CrossPlatformSigner', () => {
       // Arrange
       const newSigner = new CrossPlatformSigner({
         metadata: mockMetadata,
-        communicator: mockCommunicator,
+        adapter: mockCommunicator,
+      apiKey: 'test-api-key',
+      keysUrl: 'https://keys.jaw.id',
+      showTestnets: true,
         callback: mockCallback,
       });
 

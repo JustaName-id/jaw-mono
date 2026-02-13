@@ -153,7 +153,24 @@ export const PermissionDialog = ({
     }
   };
 
-  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses && !gasFeeLoading;
+  // Check if there are any selectable payment options
+  // If feeTokens is not loaded yet (null/undefined/empty), assume there are selectable options
+  const hasSelectablePaymentOption = !feeTokens || feeTokens.length === 0
+    ? true
+    : feeTokens.some(t => t.isSelectable);
+
+  // Determine if user has insufficient funds:
+  // - No selectable payment options at all, OR
+  // - Gas estimation error exists AND not sponsored AND not paying with ERC-20
+  const hasInsufficientFunds = !hasSelectablePaymentOption || (gasEstimationError && !sponsored && !isPayingWithErc20);
+
+  // Only enable confirmation button if:
+  // - Not processing
+  // - Token info loaded
+  // - Addresses resolved
+  // - Gas estimation not loading
+  // - No insufficient funds condition
+  const canConfirm = !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses && !gasFeeLoading && !hasInsufficientFunds;
 
   // Count total permissions
   const totalSpends = spends.length;
