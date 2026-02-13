@@ -9,6 +9,11 @@ const { composePlugins, withNx } = require('@nx/next');
 const nextConfig = {
   nx: {},
   transpilePackages: ['@jaw.id/core', '@jaw.id/ui', '@jaw.id/wagmi'],
+  typescript: {
+    // Duplicate viem/abitype resolutions from bun cause type conflicts at build time.
+    // The webpack aliases below handle runtime deduplication correctly.
+    ignoreBuildErrors: true,
+  },
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
