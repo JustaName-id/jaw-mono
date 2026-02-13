@@ -18,19 +18,21 @@ React Native demo app showcasing JAW SDK integration with native passkeys.
 ## Quick Start
 
 ```bash
-# Install dependencies
-npm install
+# Install dependencies (from monorepo root)
+cd /Users/anthonykhoury/repo/jaw-mono
+bun install
 
 # Copy environment file
+cd apps/playground-native
 cp .env.example .env
 # Edit .env with your values
 
 # For Cross-Platform mode (works in Expo Go)
-npx expo start
+bunx nx start @jaw-mono/playground-native
 
 # For App-Specific mode (requires development build)
-npx expo prebuild --clean
-npx expo run:ios --device
+bunx nx prebuild @jaw-mono/playground-native
+bunx nx run-ios @jaw-mono/playground-native --configuration=device
 ```
 
 ---
@@ -171,16 +173,16 @@ Edit `app.json` and update the `associatedDomains` array:
 **This step is required every time you change the ngrok domain or associatedDomains.**
 
 ```bash
-cd playground/demo-native
+cd apps/playground-native
 
 # Remove old native builds
 rm -rf ios android
 
 # Generate fresh native projects
-npx expo prebuild
+bunx nx prebuild @jaw-mono/playground-native
 
 # Build and run on physical iOS device
-npx expo run:ios --device
+bunx nx run-ios @jaw-mono/playground-native --configuration=device
 ```
 
 > **Why rebuild?** The `associatedDomains` entitlement is baked into the iOS build. Changing it in `app.json` requires regenerating the native project.
@@ -239,11 +241,11 @@ The `ios/` directory should have been created/modified just now (after prebuild)
 
 **When starting a new development session:**
 
-1. Start keys.jaw.id backend
+1. Start keys.jaw.id backend: `bunx nx dev @jaw-mono/keys-jaw-id`
 2. Start ngrok (you'll get a new URL)
 3. Update `.env` with new ngrok domain
 4. Update `app.json` with new ngrok domain
-5. **Rebuild:** `rm -rf ios android && npx expo prebuild && npx expo run:ios --device`
+5. **Rebuild:** `cd apps/playground-native && rm -rf ios android && bunx nx prebuild @jaw-mono/playground-native && bunx nx run-ios @jaw-mono/playground-native --configuration=device`
 
 **Tip:** Use ngrok's reserved domains feature (paid plan) to avoid rebuilding on every restart.
 
@@ -278,9 +280,10 @@ ls -la ios/
 # If the date is before your last domain change, rebuild:
 
 # 3. Clean rebuild
+cd apps/playground-native
 rm -rf ios android
-npx expo prebuild
-npx expo run:ios --device
+bunx nx prebuild @jaw-mono/playground-native
+bunx nx run-ios @jaw-mono/playground-native --configuration=device
 ```
 
 **Prevention:**
@@ -290,7 +293,7 @@ npx expo run:ios --device
 
 ### Error: `NativePasskeyUnavailableError`
 **Cause:** Running in Expo Go (native modules not available)
-**Fix:** Use Cross-Platform mode, or create a development build with `npx expo prebuild && npx expo run:ios`
+**Fix:** Use Cross-Platform mode, or create a development build with `bunx nx prebuild @jaw-mono/playground-native && bunx nx run-ios @jaw-mono/playground-native`
 
 ### Error: `Code=1004` or Associated Domains failure
 **Cause:** AASA file not accessible or misconfigured
@@ -298,7 +301,7 @@ npx expo run:ios --device
 1. Verify AASA is served at `https://your-domain/.well-known/apple-app-site-association`
 2. Check Team ID matches your Apple Developer account
 3. Check bundle ID matches exactly
-4. Rebuild after any domain changes: `npx expo prebuild --clean`
+4. Rebuild after any domain changes: `bunx nx prebuild @jaw-mono/playground-native`
 
 ### Error: `Property 'crypto' doesn't exist`
 **Cause:** Crypto polyfill not loaded first

@@ -31,7 +31,7 @@
         "  - AASA must include: TEAM_ID.bundleIdentifier (e.g., 9234ZPYS2R.id.jaw.demo.native)"
       ],
       "associatedDomains": [
-        "webcredentials:keys.jaw.id"
+        "webcredentials:932a-185-206-200-227.ngrok-free.app"
       ]
     },
     "android": {
