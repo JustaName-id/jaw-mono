@@ -56,6 +56,12 @@
       "executor": "@nx/expo:install",
       "options": {}
     },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo 'Skipping build for React Native app (use run-ios/run-android instead)'"
+      }
+    },
     "typecheck": {
       "executor": "nx:run-commands",
       "options": {
