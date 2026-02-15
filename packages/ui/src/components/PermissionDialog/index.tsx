@@ -1,5 +1,7 @@
 'use client'
 
+import { ANY_TARGET, ANY_FN_SEL } from "@jaw.id/core";
+import { isNativeToken } from "../../utils/tokenBalance";
 import { Button } from "../ui/button";
 import { DefaultDialog } from "../DefaultDialog";
 import { FeeTokenSelector } from "../FeeTokenSelector";
@@ -75,7 +77,8 @@ export const PermissionDialog = ({
     }
 
     calls.forEach((call) => {
-      if (call.target && !addressesToResolve.includes(call.target)) {
+      if (call.target && !addressesToResolve.includes(call.target)
+          && call.target.toLowerCase() !== ANY_TARGET.toLowerCase()) {
         addressesToResolve.push(call.target);
       }
     });
@@ -137,6 +140,21 @@ export const PermissionDialog = ({
   // Get chain icon using the hook - fetch from capabilities chainMetadata
   const defaultChainIcon = useChainIconURI(chainId || 1, apiKey, 24);
   const displayChainIcon = chainIcon || defaultChainIcon;
+
+  // Map known sentinel addresses to friendly labels
+  const getContractDisplayName = (target: string): string | null => {
+    if (target.toLowerCase() === ANY_TARGET.toLowerCase()) {
+      return 'Any Contract';
+    }
+    return null;
+  };
+
+  const getFunctionDisplayName = (signature: string, selector: string): string => {
+    if (selector.toLowerCase() === ANY_FN_SEL.toLowerCase()) {
+      return 'Any Function';
+    }
+    return signature;
+  };
 
   // Truncate address for display (e.g., 0x43e...ead3)
   const truncateAddress = (address: string) => {
@@ -294,7 +312,7 @@ export const PermissionDialog = ({
                       <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[40px]" />
                       <div className="flex flex-col gap-0.5 flex-1">
                         <p className="text-xs font-bold leading-[133%] text-muted-foreground">Token</p>
-                        <p className="text-base font-normal leading-[150%] text-foreground">{spend.token}</p>
+                        <p className="text-base font-normal leading-[150%] text-foreground">{isNativeToken(spend.tokenAddress) ? `Native (${nativeSymbol})` : spend.token}</p>
                       </div>
                     </div>
                   </div>
@@ -318,13 +336,13 @@ export const PermissionDialog = ({
                     <div className="flex flex-col gap-0.5">
                       <p className="text-xs font-bold leading-[133%] text-muted-foreground">Function</p>
                       <code className="text-sm font-mono leading-[150%] text-foreground break-all">
-                        {call.functionSignature}
+                        {getFunctionDisplayName(call.functionSignature, call.selector)}
                       </code>
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <p className="text-xs font-bold leading-[133%] text-muted-foreground">Contract</p>
                       <p className="text-sm font-mono leading-[150%] text-foreground break-all">
-                        {resolvedAddresses[call.target] || call.target}
+                        {getContractDisplayName(call.target) || resolvedAddresses[call.target] || call.target}
                       </p>
                     </div>
                   </div>
