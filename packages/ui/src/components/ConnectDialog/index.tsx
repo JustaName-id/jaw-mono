@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from "react";
-import { BadgeDollarIcon, EyeIcon } from "../../icons";
+import { BadgeDollarIcon, EyeIcon, CopyIcon, CopiedIcon } from "../../icons";
 import { useIsMobile } from "../../hooks";
 import { DefaultDialog } from "../DefaultDialog";
 import { Button } from "../ui/button";
@@ -27,6 +27,7 @@ export const ConnectDialog = ({
 }: ConnectDialogProps) => {
   const isMobile = useIsMobile();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const [isAddressCopied, setIsAddressCopied] = useState(false);
 
   // Resolve wallet address to human-readable name
   useEffect(() => {
@@ -58,6 +59,14 @@ export const ConnectDialog = ({
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    if (typeof window !== 'undefined' && navigator?.clipboard) {
+      navigator.clipboard.writeText(text);
+      setIsAddressCopied(true);
+      setTimeout(() => setIsAddressCopied(false), 3000);
+    }
+  };
+
   // Format wallet address for display
   const formatAddress = (address: string) => {
     if (!address || address.length < 10) return address;
@@ -84,13 +93,39 @@ export const ConnectDialog = ({
             })}
           </p>
           <div className="flex flex-col gap-1">
-            <p className="text-sm leading-none text-muted-foreground">
-              Sign in as {displayName || formatAddress(walletAddress)}
-            </p>
-            {displayName && (
+            <div className="flex flex-row items-center gap-1">
               <p className="text-sm leading-none text-muted-foreground">
-                {formatAddress(walletAddress)}
+                Sign in as {displayName || formatAddress(walletAddress)}
               </p>
+              {!displayName && (
+                isAddressCopied ? (
+                  <CopiedIcon width={10} height={10} className="flex-shrink-0" />
+                ) : (
+                  <CopyIcon
+                    width={10}
+                    height={10}
+                    onClick={() => copyToClipboard(walletAddress)}
+                    className="cursor-pointer flex-shrink-0"
+                  />
+                )
+              )}
+            </div>
+            {displayName && (
+              <div className="flex flex-row items-center gap-1">
+                <p className="text-sm leading-none text-muted-foreground">
+                  {formatAddress(walletAddress)}
+                </p>
+                {isAddressCopied ? (
+                  <CopiedIcon width={10} height={10} className="flex-shrink-0" />
+                ) : (
+                  <CopyIcon
+                    width={10}
+                    height={10}
+                    onClick={() => copyToClipboard(walletAddress)}
+                    className="cursor-pointer flex-shrink-0"
+                  />
+                )}
+              </div>
             )}
           </div>
         </div>
