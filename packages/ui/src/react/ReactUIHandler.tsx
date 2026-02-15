@@ -894,6 +894,7 @@ function OnboardingDialogWrapper({
         mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         onConnect={async () => handleConnectConfirm()}
         onCancel={handleConnectCancel}
+        showPermissions={false}
         isProcessing={isConnecting}
       />
     );

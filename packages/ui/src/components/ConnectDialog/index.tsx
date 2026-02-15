@@ -23,6 +23,7 @@ export const ConnectDialog = ({
   mainnetRpcUrl,
   onConnect,
   onCancel,
+  showPermissions = true,
   isProcessing,
 }: ConnectDialogProps) => {
   const isMobile = useIsMobile();
@@ -187,26 +188,28 @@ export const ConnectDialog = ({
         </div> */}
 
         {/* Permissions Section */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
-            <EyeIcon className="w-4 h-4 flex-shrink-0" />
-            <p className="text-foreground text-xs font-normal leading-[150%]">
-              Allow the app to see your addresses
-            </p>
+        {showPermissions && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
+              <EyeIcon className="w-4 h-4 flex-shrink-0" />
+              <p className="text-foreground text-xs font-normal leading-[150%]">
+                Allow the app to see your addresses
+              </p>
+            </div>
+            <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
+              <BadgeDollarIcon className="w-4 h-4 flex-shrink-0" />
+              <p className="text-foreground text-xs font-normal leading-[150%]">
+                Allow the app to propose transactions
+              </p>
+            </div>
+            <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
+              <BadgeDollarIcon className="w-4 h-4 flex-shrink-0" />
+              <p className="text-foreground text-xs font-normal leading-[150%]">
+                The app cannot move funds without your permission
+              </p>
+            </div>
           </div>
-          <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
-            <BadgeDollarIcon className="w-4 h-4 flex-shrink-0" />
-            <p className="text-foreground text-xs font-normal leading-[150%]">
-              Allow the app to propose transactions
-            </p>
-          </div>
-          <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
-            <BadgeDollarIcon className="w-4 h-4 flex-shrink-0" />
-            <p className="text-foreground text-xs font-normal leading-[150%]">
-              The app cannot move funds without your permission
-            </p>
-          </div>
-        </div>
+        )}
 
         {/* Network and URL Information */}
         <div className="flex flex-row gap-4 border border-border rounded-[6px] p-2">
