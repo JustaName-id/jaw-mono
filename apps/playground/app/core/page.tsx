@@ -42,6 +42,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
       },
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
+      ens: process.env.NEXT_PUBLIC_ENS_NAME
     })
   );
 

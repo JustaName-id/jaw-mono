@@ -46,6 +46,7 @@
     "react-hook-form": "^7.65.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
+    "@shazow/whatsabi": "^0.26.0",
     "viem": "^2.38.2",
     "zod": "^4.1.12"
   },
