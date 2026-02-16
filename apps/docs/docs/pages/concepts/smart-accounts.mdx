@@ -1,0 +1,61 @@
+# Smart Accounts vs EOAs
+
+Understanding why smart accounts exist and what they change about onchain identity and access control.
+
+## Externally Owned Accounts (EOAs)
+
+An EOA is Ethereum's original account type. Your address is derived from your public key, and your authority is your private key. Identity and access are cryptographically fused — there is no separation between _who you are_ and _what you can do_.
+
+This has direct consequences:
+
+| Property | EOA Behavior |
+|----------|-------------|
+| **Key loss** | Account is permanently inaccessible |
+| **Key compromise** | Attacker has full, unrestricted control |
+| **Key rotation** | Impossible — the key _is_ the address |
+| **Multi-signer** | Not supported natively |
+| **Spending limits** | Not possible at the account level |
+| **Recovery** | Only through the seed phrase |
+
+Every embedded wallet provider, KMS solution, and MPC protocol is ultimately building infrastructure to manage this single point of failure. The key still has unlimited authority. The architecture just makes sure you never have to see it.
+
+## Smart Accounts
+
+A smart account is an onchain smart contract that acts as your account. Your address is determined by the contract, not by any private key. Signers become modular components that the account validates against programmable rules.
+
+This unlinking changes the security model fundamentally:
+
+| Property | Smart Account Behavior |
+|----------|----------------------|
+| **Signer loss** | Replace it — account address doesn't change |
+| **Signer compromise** | Revoke it — attacker is locked out, assets stay safe |
+| **Signer rotation** | Swap signers freely, identity is preserved |
+| **Multi-signer** | Multiple signers with different scopes |
+| **Spending limits** | Enforced at the account level per signer |
+| **Recovery** | Programmable: backup signers, guardians, social recovery |
+
+The account is no longer a function of the key. The key is a replaceable, constrainable input to the account.
+
+## What This Means in Practice
+
+With an EOA, if an attacker obtains signing capability, they have unconditional access to everything. The only defense is preventing the compromise in the first place.
+
+With a smart account, even a compromised signer can only operate within its defined boundaries. You can:
+
+- **Rotate** a compromised passkey to a new device without changing your onchain address
+- **Revoke** a session key instantly, cutting off access without affecting other signers
+- **Scope** an AI agent's authority to specific contracts and spending limits
+- **Require** multiple signers above certain thresholds
+
+The security question shifts from _"how do we protect the key?"_ to _"what is this key allowed to do?"_ — and that question is answered by onchain rules, not by trusting infrastructure providers.
+
+:::info
+JAW smart accounts are ERC-4337 compatible and work with standard bundlers and paymasters. Your users get gasless transactions, batched operations, and programmable permissions out of the box.
+:::
+
+## Related
+
+- [Why JAW](/why-jaw) — The full picture: smart accounts + passkeys + permissions
+- [Passkeys & WebAuthn](/concepts/passkeys) — How the signer layer works
+- [The Permission Layer](/concepts/permissions) — Scoped authority for signers and agents
+- [Configuration](/configuration) — Set up your JAW instance

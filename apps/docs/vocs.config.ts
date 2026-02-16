@@ -45,8 +45,21 @@ export default defineConfig({
   ],
   sidebar: [
     {
+      text: 'Why JAW',
+      link: '/why-jaw',
+    },
+    {
       text: 'Getting Started',
       link: '/',
+    },
+    {
+      text: 'Core Concepts',
+      collapsed: false,
+      items: [
+        { text: 'Smart Accounts vs EOAs', link: '/concepts/smart-accounts' },
+        { text: 'Passkeys & WebAuthn', link: '/concepts/passkeys' },
+        { text: 'The Permission Layer', link: '/concepts/permissions' },
+      ],
     },
     {
       text: 'Supported Networks',
