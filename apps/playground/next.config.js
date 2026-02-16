@@ -15,9 +15,9 @@ const nextConfig = {
   webpack: (config) => {
     config.resolve.alias = {
       ...config.resolve.alias,
-      wagmi: path.resolve(__dirname, 'node_modules/wagmi'),
-      '@wagmi/core': path.resolve(__dirname, '../../node_modules/@wagmi/core'),
-      '@tanstack/react-query': path.resolve(__dirname, 'node_modules/@tanstack/react-query'),
+      wagmi: path.dirname(require.resolve('wagmi/package.json')),
+      '@wagmi/core': path.dirname(require.resolve('@wagmi/core/package.json')),
+      '@tanstack/react-query': path.dirname(require.resolve('@tanstack/react-query/package.json')),
     };
     return config;
   },
