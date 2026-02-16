@@ -353,11 +353,11 @@ console.log('History:', history);`,
 
 const { signMessage, data: signature } = useSignMessage();
 
-signMessage({ message: '${params.message || 'Hello, World!'}' });
+signMessage({ message: '${params.message ?? 'Hello, World!'}' });
 
 console.log('Signature:', signature);`,
     buildParams: (params) => ({
-      message: params.message || 'Hello, World!',
+      message: params.message ?? 'Hello, World!',
     }),
   },
   {

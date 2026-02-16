@@ -620,10 +620,18 @@ function OnboardingDialogWrapper({
         return;
       }
 
-      // Show ConnectDialog for confirmation instead of immediately approving
-      setAuthenticatedAccountName(account.username);
-      setAuthenticatedWalletAddress(accountInstance.address);
-      setShowConnectDialog(true);
+      // If SIWE is requested, show ConnectDialog for confirmation
+      if (signInWithEthereumCapability) {
+        setAuthenticatedAccountName(account.username);
+        setAuthenticatedWalletAddress(accountInstance.address);
+        setShowConnectDialog(true);
+        return;
+      }
+
+      // No SIWE: skip ConnectDialog and approve immediately in app-specific mode
+      onApprove({
+        accounts: [{ address: accountInstance.address }],
+      });
     } catch (error) {
       console.error('Login failed:', error);
       setLoggingInAccount(null);
@@ -657,11 +665,20 @@ function OnboardingDialogWrapper({
         return;
       }
 
-      // Show ConnectDialog for confirmation instead of immediately approving
-      setAuthenticatedAccountName(metadata?.username || 'Imported Account');
-      setAuthenticatedWalletAddress(accountInstance.address);
-      setShowConnectDialog(true);
+      // If SIWE is requested, show ConnectDialog for confirmation
+      if (signInWithEthereumCapability) {
+        setAuthenticatedAccountName(metadata?.username || 'Imported Account');
+        setAuthenticatedWalletAddress(accountInstance.address);
+        setShowConnectDialog(true);
+        setIsImporting(false);
+        return;
+      }
+
+      // No SIWE: skip ConnectDialog and approve immediately in app-specific mode
       setIsImporting(false);
+      onApprove({
+        accounts: [{ address: accountInstance.address }],
+      });
     } catch (error) {
       console.error('Import failed:', error);
       setIsImporting(false);
@@ -731,11 +748,20 @@ function OnboardingDialogWrapper({
       return;
     }
 
-    // Show ConnectDialog for confirmation instead of immediately approving
-    setAuthenticatedAccountName(accountData.username || 'New Account');
-    setAuthenticatedWalletAddress(accountData.address);
-    setShowConnectDialog(true);
+    // If SIWE is requested, show ConnectDialog for confirmation
+    if (signInWithEthereumCapability) {
+      setAuthenticatedAccountName(accountData.username || 'New Account');
+      setAuthenticatedWalletAddress(accountData.address);
+      setShowConnectDialog(true);
+      setIsCreating(false);
+      return;
+    }
+
+    // No SIWE: skip ConnectDialog and approve immediately in app-specific mode
     setIsCreating(false);
+    onApprove({
+      accounts: [{ address: accountData.address }],
+    });
   };
 
   // Get config from request - capabilities is Record<string, unknown>
@@ -894,6 +920,7 @@ function OnboardingDialogWrapper({
         mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         onConnect={async () => handleConnectConfirm()}
         onCancel={handleConnectCancel}
+        showPermissions={false}
         isProcessing={isConnecting}
       />
     );
@@ -1012,7 +1039,7 @@ function SignatureDialogWrapper({
       onCancel={handleCancel}
       isProcessing={isProcessing}
       signatureStatus={signatureStatus}
-      canSign={true}
+      canSign={!isProcessing && !!request.data.message}
     />
   );
 }

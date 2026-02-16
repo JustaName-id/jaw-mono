@@ -275,7 +275,8 @@ export abstract class JAWSigner implements Signer {
 
         switch (request.method) {
             case 'eth_requestAccounts': {
-                const accounts = result.value as Address[];
+                const walletResponse = result.value as WalletConnectResponse;
+                const accounts = walletResponse.accounts.map((account) => account.address);
                 this.accounts = accounts;
                 store.account.set({
                     accounts,

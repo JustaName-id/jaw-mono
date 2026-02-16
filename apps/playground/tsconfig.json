@@ -27,6 +27,12 @@
     "paths": {
       "@/*": [
         "./app/*"
+      ],
+      "viem": [
+        "node_modules/viem"
+      ],
+      "viem/*": [
+        "node_modules/viem/*"
       ]
     },
     "outDir": "dist",

@@ -361,7 +361,7 @@ console.log('History:', history);`,
         defaultValue: 'Hello, World!',
       },
     ],
-    getCodeSnippet: (params) => `const message = '${params.message || 'Hello, World!'}';
+    getCodeSnippet: (params) => `const message = '${params.message ?? 'Hello, World!'}';
 
 const signature = await jaw.provider.request({
   method: 'personal_sign',
@@ -370,7 +370,7 @@ const signature = await jaw.provider.request({
 
 console.log('Signature:', signature);`,
     buildParams: (params, context) => {
-      const message = params.message || 'Hello, World!';
+      const message = params.message ?? 'Hello, World!';
       return [message, context.address];
     },
   },

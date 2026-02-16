@@ -26,6 +26,9 @@ export interface ConnectDialogProps {
   onConnect: () => Promise<void>;
   onCancel: () => void;
 
+  // Whether to show the permission info messages (default: true)
+  showPermissions?: boolean;
+
   // Status
   isProcessing: boolean;
 }
