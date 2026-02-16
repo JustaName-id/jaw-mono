@@ -34,6 +34,7 @@ function createEIP1193Wrapper(provider: ProviderInterface): EIP1193Provider {
     off: provider.off?.bind(provider) ?? undefined,
     once: provider.once?.bind(provider) ?? undefined,
     addListener: provider.addListener?.bind(provider) ?? undefined,
+    removeAllListeners: provider.removeAllListeners?.bind(provider) ?? undefined,
   } as unknown as EIP1193Provider;
 }
 

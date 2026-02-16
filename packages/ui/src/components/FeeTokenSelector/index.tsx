@@ -146,11 +146,23 @@ export const FeeTokenSelector = ({
 
   // Get gas cost for a token
   // For ERC-20 tokens, use pre-computed gasCostFormatted if available (from paymaster quote)
-  const getGasCost = (token: FeeTokenOption): { formatted: string; usd: string } => {
+  const getGasCost = (token: FeeTokenOption): { formatted: string; usd: string } | null => {
+    // Tokens with 0 balance - no gas cost to show
+    if (token.balance === 0n) {
+      return null;
+    }
+
     // If token has pre-computed gas cost (from paymaster quote), use that
     if (token.gasCostFormatted) {
-      // For stablecoins, the token cost ≈ USD cost
-      const tokenCost = parseFloat(token.gasCostFormatted.replace(/[^0-9.]/g, ''));
+      // Check if it's a valid numeric value (not "Insufficient" or "Estimation failed")
+      const numericPart = token.gasCostFormatted.replace(/[^0-9.]/g, '');
+      const tokenCost = parseFloat(numericPart);
+
+      // If not a valid number, don't show gas cost
+      if (isNaN(tokenCost) || numericPart === '') {
+        return null;
+      }
+
       return {
         formatted: token.gasCostFormatted,
         usd: ['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase()) && !isNaN(tokenCost)
@@ -161,10 +173,14 @@ export const FeeTokenSelector = ({
 
     // Fallback: calculate from ETH gas estimate
     if (!estimatedGasEth || !nativeTokenPrice) {
-      return { formatted: '', usd: '' };
+      return null;
     }
 
     const gasEth = parseFloat(estimatedGasEth);
+    if (isNaN(gasEth)) {
+      return null;
+    }
+
     const gasUsd = gasEth * nativeTokenPrice;
 
     if (token.isNative) {
@@ -214,17 +230,18 @@ export const FeeTokenSelector = ({
           </div>
         </div>
 
-        {/* Gas Cost / Amount - only show for native tokens */}
+        {/* Gas Cost / Status */}
         <div className="text-right shrink-0">
-          {gasCost?.usd && (
+          {gasCost?.usd ? (
             <>
               <div className="font-semibold text-xs">{gasCost.usd}</div>
               <div className="text-[10px] text-muted-foreground">Up to {gasCost.formatted}</div>
             </>
-          )}
-          {!token.isSelectable && (
-            <span className="text-[10px] text-destructive">(insufficient)</span>
-          )}
+          ) : !token.isSelectable ? (
+            <span className="text-[10px] text-destructive">
+              {token.balance === 0n ? '0' : 'Insufficient'}
+            </span>
+          ) : null}
         </div>
       </button>
     );
