@@ -1,0 +1,262 @@
+name: Release & Deploy
+
+on:
+  push:
+    branches:
+      - main
+
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  # ─── Gate: CI Validation ───
+  ci:
+    if: >
+      !startsWith(github.event.head_commit.message, 'chore(release): publish') &&
+      !contains(github.event.head_commit.message, '[skip ci]')
+    uses: ./.github/workflows/ci.yml
+
+  # ─── npm Release ───
+  release:
+    needs: ci
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Generate GitHub App Token
+        id: app-token
+        uses: actions/create-github-app-token@v1
+        with:
+          app-id: ${{ vars.VERSION_BUMPER_APPID }}
+          private-key: ${{ secrets.VERSION_BUMPER_SECRET }}
+
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+          token: ${{ steps.app-token.outputs.token }}
+
+      - name: Configure git identity
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          registry-url: https://registry.npmjs.org
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Pull latest changes
+        run: git pull origin main --rebase
+
+      - name: Release and publish
+        run: |
+          if [ -z "$(git tag -l)" ]; then
+            echo "No tags found — running first release (0.0.1)"
+            bunx nx release --first-release --yes
+          else
+            bunx nx release --yes
+          fi
+        env:
+          GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+          NPM_CONFIG_PROVENANCE: true
+
+  # ─── Determine Affected Apps ───
+  check-affected:
+    needs: ci
+    runs-on: ubuntu-latest
+    outputs:
+      playground: ${{ steps.check.outputs.playground }}
+      keys: ${{ steps.check.outputs.keys }}
+      docs: ${{ steps.check.outputs.docs }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      - uses: nrwl/nx-set-shas@v4
+
+      - name: Check affected projects
+        id: check
+        run: |
+          AFFECTED=$(bunx nx show projects --affected 2>/dev/null || echo '')
+          echo "Affected: $AFFECTED"
+          echo "playground=$([[ "$AFFECTED" == *"@jaw-mono/playground"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "keys=$([[ "$AFFECTED" == *"@jaw-mono/keys-jaw-id"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "docs=$([[ "$AFFECTED" == *"docs"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+
+  # ─── Deploy Playground ───
+  deploy-playground:
+    needs: check-affected
+    if: needs.check-affected.outputs.playground == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Pull Vercel environment
+        run: bunx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: apps/playground
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_PLAYGROUND }}
+
+      - name: Build for Vercel
+        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: apps/playground
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_PLAYGROUND }}
+
+      - name: Deploy to Vercel
+        run: bunx vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: apps/playground
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_PLAYGROUND }}
+
+  # ─── Deploy Keys ───
+  deploy-keys:
+    needs: check-affected
+    if: needs.check-affected.outputs.keys == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Pull Vercel environment
+        run: bunx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: apps/keys-jaw-id
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_KEYS }}
+
+      - name: Build for Vercel
+        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: apps/keys-jaw-id
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_KEYS }}
+
+      - name: Deploy to Vercel
+        run: bunx vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: apps/keys-jaw-id
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_KEYS }}
+
+  # ─── Deploy Docs ───
+  deploy-docs:
+    needs: check-affected
+    if: needs.check-affected.outputs.docs == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Pull Vercel environment
+        run: bunx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: apps/docs
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_DOCS }}
+
+      - name: Build for Vercel
+        run: bunx vercel build --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: apps/docs
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_DOCS }}
+
+      - name: Deploy to Vercel
+        run: bunx vercel deploy --prebuilt --prod --token=${{ secrets.VERCEL_TOKEN }}
+        working-directory: apps/docs
+        env:
+          VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
+          VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_DOCS }}

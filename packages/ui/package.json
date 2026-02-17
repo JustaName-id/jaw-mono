@@ -7,6 +7,14 @@
     "./src/styles.css",
     "./dist/index.css"
   ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JustaName-id/jaw-mono.git",
+    "directory": "packages/ui"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
