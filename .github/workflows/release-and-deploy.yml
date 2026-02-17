@@ -60,6 +60,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      - name: Configure npm auth
+        run: echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+
       - name: Pull latest changes
         run: git pull origin main --rebase
 
@@ -79,7 +82,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ steps.app-token.outputs.token }}
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-          NPM_CONFIG_PROVENANCE: true
 
   # ─── Determine Affected Apps ───
   check-affected:
@@ -149,6 +151,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      - name: Build workspace packages
+        run: bunx nx run-many -t build --projects=@jaw.id/core,@jaw.id/wagmi,@jaw.id/ui
+
       - name: Pull Vercel environment
         run: bunx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
         env:
@@ -194,6 +199,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      - name: Build workspace packages
+        run: bunx nx run-many -t build --projects=@jaw.id/core,@jaw.id/wagmi,@jaw.id/ui
+
       - name: Pull Vercel environment
         run: bunx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}
         env:
@@ -238,6 +246,9 @@ jobs:
           restore-keys: bun-${{ runner.os }}-
 
       - run: bun install --frozen-lockfile
+
+      - name: Build workspace packages
+        run: bunx nx run-many -t build --projects=@jaw.id/core,@jaw.id/wagmi,@jaw.id/ui
 
       - name: Pull Vercel environment
         run: bunx vercel pull --yes --environment=production --token=${{ secrets.VERCEL_TOKEN }}

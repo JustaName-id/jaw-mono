@@ -886,6 +886,7 @@ export default function KeysJawIdApp() {
                     creationDate: new Date().toISOString(),
                     isImported: false,
                   });
+
                   // Update session auth state for per-origin isolation
                   if (currentOrigin) {
                     const authState: SessionAuthState = {
