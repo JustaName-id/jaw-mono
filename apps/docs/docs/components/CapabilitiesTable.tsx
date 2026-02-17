@@ -11,6 +11,7 @@ interface ChainInfo {
   hexId: string;
 }
 
+
 // Generate chain info from core's SUPPORTED_CHAINS
 const MAINNET_CHAINS: ChainInfo[] = CORE_MAINNET_CHAINS.map(chain => ({
   name: chain.name,
