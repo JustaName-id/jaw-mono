@@ -52,7 +52,7 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
       >
         <DialogTitle style={{ display: 'none' }}></DialogTitle>
 
-        <div className={`flex p-2.5 ${fullScreen ? 'rounded-none' : 'rounded-3xl'} gap-5 flex-col md:max-h-[calc(100%-45px)] flex-1 box-border overflow-auto`}
+        <div onWheel={(e) => e.nativeEvent.stopPropagation()} className={`flex p-2.5 ${fullScreen ? 'rounded-none' : 'rounded-3xl'} gap-5 flex-col md:max-h-[calc(100%-45px)] flex-1 box-border overflow-auto`}
           style={{
             ...innerStyle,
           }}
