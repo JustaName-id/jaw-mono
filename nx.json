@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/nx/schemas/nx-schema.json",
-  "defaultBase": "master",
+  "defaultBase": "main",
   "namedInputs": {
     "default": [
       "{projectRoot}/**/*",
@@ -75,8 +75,23 @@
     }
   ],
   "release": {
+    "projectsRelationship": "independent",
+    "projects": ["packages/*"],
     "version": {
+      "conventionalCommits": true,
+      "generatorOptions": {
+        "fallbackCurrentVersionResolver": "disk"
+      },
       "preVersionCommand": "bunx nx run-many -t build"
+    },
+    "changelog": {
+      "projectChangelogs": {
+        "createRelease": "github"
+      },
+      "automaticFromRef": true
+    },
+    "git": {
+      "commitMessage": "chore(release): publish [skip ci]"
     }
   },
   "generators": {
