@@ -1,0 +1,11 @@
+/* Intentionally empty.
+ *
+ * This file replaces the UI package's styles.css via webpack alias in next.config.js.
+ * The UI package's CSS conflicts with this app because:
+ *   - It defines oklch CSS variables on :root that clash with this app's HSL variables
+ *   - It generates duplicate Tailwind utility classes using var(--color) directly,
+ *     while this app uses hsl(var(--color) / <alpha-value>) for opacity modifier support
+ *
+ * This app's own Tailwind config scans the UI package's source files and generates
+ * all needed utility classes with the correct hsl() format.
+ */

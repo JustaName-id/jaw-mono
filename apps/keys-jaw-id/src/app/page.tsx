@@ -133,9 +133,8 @@ export default function KeysJawIdApp() {
       }
     });
 
-    // Send PopupUnload on unmount
+    // Cleanup message listener on unmount (PopupUnload is handled by communicator's beforeunload)
     return () => {
-      communicator.sendPopupUnload();
       cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -842,7 +841,10 @@ export default function KeysJawIdApp() {
                 Try Again
               </button>
               <button
-                onClick={() => window.close()}
+                onClick={() => {
+                  communicator.sendPopupUnload();
+                  window.close();
+                }}
                 className="w-full py-2 px-6 bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold rounded-lg transition-colors"
               >
                 Close
@@ -926,7 +928,10 @@ export default function KeysJawIdApp() {
             />
 
             <button
-              onClick={() => window.close()}
+              onClick={() => {
+                communicator.sendPopupUnload();
+                window.close();
+              }}
               className="w-full mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
             >
               Cancel

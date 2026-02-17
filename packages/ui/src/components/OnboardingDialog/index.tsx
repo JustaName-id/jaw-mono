@@ -295,8 +295,8 @@ export function OnboardingDialog({
             </div>
           )}
           {error && (
-            <div className="flex flex-col gap-2 px-1 py-2 bg-red-50 border border-red-200 rounded-md">
-              <span className="text-xs font-medium text-red-600">
+            <div className="flex flex-col gap-2 px-1 py-2 bg-red-50 border border-red-200 rounded-md overflow-hidden">
+              <span className="text-xs font-medium text-red-600 break-all">
                 {error}
               </span>
               <Button

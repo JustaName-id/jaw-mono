@@ -83,7 +83,7 @@
       box-sizing: border-box;
       border-width: 0;
       border-style: solid;
-      border-color: currentColor;
+      border-color: hsl(var(--border));
     }
     h1,
     h2 {

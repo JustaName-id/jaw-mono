@@ -49,6 +49,7 @@ export function ParameterField({ param, value, onChange, context }: ParameterFie
   }
 
   if (param.type === 'json') {
+    const jsonValue = value !== undefined ? displayValue : (param.defaultValue || '');
     return (
       <div className="space-y-2">
         <Label htmlFor={param.name}>
@@ -57,7 +58,7 @@ export function ParameterField({ param, value, onChange, context }: ParameterFie
         </Label>
         <textarea
           id={param.name}
-          value={displayValue || param.defaultValue || ''}
+          value={jsonValue}
           onChange={(e) => onChange(e.target.value)}
           placeholder={param.description}
           className="flex min-h-[120px] w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50 font-mono"
@@ -69,6 +70,10 @@ export function ParameterField({ param, value, onChange, context }: ParameterFie
     );
   }
 
+  // Only use defaultValue if value has never been set (undefined)
+  // This allows empty strings to be entered for testing
+  const inputValue = value !== undefined ? displayValue : (param.defaultValue || '');
+
   return (
     <div className="space-y-2">
       <Label htmlFor={param.name}>
@@ -78,7 +83,7 @@ export function ParameterField({ param, value, onChange, context }: ParameterFie
       <Input
         id={param.name}
         type={param.type === 'number' ? 'text' : 'text'}
-        value={displayValue || param.defaultValue || ''}
+        value={inputValue}
         onChange={(e) => onChange(e.target.value)}
         placeholder={
           param.type === 'address'

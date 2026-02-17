@@ -12,6 +12,7 @@ import { Info } from "lucide-react";
 import { TransactionDialogProps } from "./types";
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from "../../hooks";
 import { getJustaNameInstance, getDisplayAddress } from "../../utils";
+import { DecodedCalldata } from "./DecodedCalldata";
 
 export const TransactionDialog = ({
   // open,
@@ -363,11 +364,12 @@ export const TransactionDialog = ({
                       }} className="cursor-pointer" />
                     )}
                   </div>
-                  <div className="p-2.5 bg-secondary rounded-[6px] max-h-[40vh] overflow-y-auto">
-                    <p className="text-xs font-semibold leading-[150%] break-all text-foreground font-mono">
-                      {currentTransaction.data}
-                    </p>
-                  </div>
+                  <DecodedCalldata
+                    to={currentTransaction.to}
+                    data={currentTransaction.data!}
+                    chainId={currentTransaction.chainId}
+                    apiKey={apiKey}
+                  />
                 </div>
               )}
 
@@ -481,11 +483,12 @@ export const TransactionDialog = ({
                                   />
                                 )}
                               </div>
-                              <div className="p-2 bg-secondary rounded-[6px] max-h-[300px] overflow-y-auto">
-                                <p className="text-xs font-mono leading-[150%] break-all text-foreground">
-                                  {transaction.data}
-                                </p>
-                              </div>
+                              <DecodedCalldata
+                                to={transaction.to}
+                                data={transaction.data!}
+                                chainId={transaction.chainId}
+                                apiKey={apiKey}
+                              />
                             </div>
                           )}
                         </div>

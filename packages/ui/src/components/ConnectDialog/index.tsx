@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, useEffect } from "react";
-import { BadgeDollarIcon, EyeIcon } from "../../icons";
+import { BadgeDollarIcon, EyeIcon, CopyIcon, CopiedIcon } from "../../icons";
 import { useIsMobile } from "../../hooks";
 import { DefaultDialog } from "../DefaultDialog";
 import { Button } from "../ui/button";
@@ -23,10 +23,12 @@ export const ConnectDialog = ({
   mainnetRpcUrl,
   onConnect,
   onCancel,
+  showPermissions = true,
   isProcessing,
 }: ConnectDialogProps) => {
   const isMobile = useIsMobile();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const [isAddressCopied, setIsAddressCopied] = useState(false);
 
   // Resolve wallet address to human-readable name
   useEffect(() => {
@@ -58,6 +60,14 @@ export const ConnectDialog = ({
     }
   };
 
+  const copyToClipboard = (text: string) => {
+    if (typeof window !== 'undefined' && navigator?.clipboard) {
+      navigator.clipboard.writeText(text);
+      setIsAddressCopied(true);
+      setTimeout(() => setIsAddressCopied(false), 3000);
+    }
+  };
+
   // Format wallet address for display
   const formatAddress = (address: string) => {
     if (!address || address.length < 10) return address;
@@ -84,13 +94,39 @@ export const ConnectDialog = ({
             })}
           </p>
           <div className="flex flex-col gap-1">
-            <p className="text-sm leading-none text-muted-foreground">
-              Sign in as {displayName || formatAddress(walletAddress)}
-            </p>
-            {displayName && (
+            <div className="flex flex-row items-center gap-1">
               <p className="text-sm leading-none text-muted-foreground">
-                {formatAddress(walletAddress)}
+                Sign in as {displayName || formatAddress(walletAddress)}
               </p>
+              {!displayName && (
+                isAddressCopied ? (
+                  <CopiedIcon width={10} height={10} className="flex-shrink-0" />
+                ) : (
+                  <CopyIcon
+                    width={10}
+                    height={10}
+                    onClick={() => copyToClipboard(walletAddress)}
+                    className="cursor-pointer flex-shrink-0"
+                  />
+                )
+              )}
+            </div>
+            {displayName && (
+              <div className="flex flex-row items-center gap-1">
+                <p className="text-sm leading-none text-muted-foreground">
+                  {formatAddress(walletAddress)}
+                </p>
+                {isAddressCopied ? (
+                  <CopiedIcon width={10} height={10} className="flex-shrink-0" />
+                ) : (
+                  <CopyIcon
+                    width={10}
+                    height={10}
+                    onClick={() => copyToClipboard(walletAddress)}
+                    className="cursor-pointer flex-shrink-0"
+                  />
+                )}
+              </div>
             )}
           </div>
         </div>
@@ -105,7 +141,7 @@ export const ConnectDialog = ({
         maxWidth: '500px',
       }}
     >
-      <div className="flex flex-col h-full gap-3 max-h-[60vh] overflow-y-auto min-h-0">
+      <div className="flex flex-col h-full gap-3 overflow-y-auto min-h-0">
         {/* App Logo and Title */}
         <div className="flex flex-1 flex-col p-3.5 items-center justify-center">
           {appLogoUrl && (
@@ -152,26 +188,28 @@ export const ConnectDialog = ({
         </div> */}
 
         {/* Permissions Section */}
-        <div className="flex flex-col gap-2">
-          <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
-            <EyeIcon className="w-4 h-4 flex-shrink-0" />
-            <p className="text-foreground text-xs font-normal leading-[150%]">
-              Allow the app to see your addresses
-            </p>
+        {showPermissions && (
+          <div className="flex flex-col gap-2">
+            <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
+              <EyeIcon className="w-4 h-4 flex-shrink-0" />
+              <p className="text-foreground text-xs font-normal leading-[150%]">
+                Allow the app to see your addresses
+              </p>
+            </div>
+            <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
+              <BadgeDollarIcon className="w-4 h-4 flex-shrink-0" />
+              <p className="text-foreground text-xs font-normal leading-[150%]">
+                Allow the app to propose transactions
+              </p>
+            </div>
+            <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
+              <BadgeDollarIcon className="w-4 h-4 flex-shrink-0" />
+              <p className="text-foreground text-xs font-normal leading-[150%]">
+                The app cannot move funds without your permission
+              </p>
+            </div>
           </div>
-          <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
-            <BadgeDollarIcon className="w-4 h-4 flex-shrink-0" />
-            <p className="text-foreground text-xs font-normal leading-[150%]">
-              Allow the app to propose transactions
-            </p>
-          </div>
-          <div className="flex items-center flex-row gap-2.5 p-3.5 border border-border rounded-[6px]">
-            <BadgeDollarIcon className="w-4 h-4 flex-shrink-0" />
-            <p className="text-foreground text-xs font-normal leading-[150%]">
-              The app cannot move funds without your permission
-            </p>
-          </div>
-        </div>
+        )}
 
         {/* Network and URL Information */}
         <div className="flex flex-row gap-4 border border-border rounded-[6px] p-2">

@@ -1,0 +1,79 @@
+import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
+import { Spinner } from '../ui/spinner';
+
+interface DecodedCalldataProps {
+  to: string;
+  data: string;
+  chainId: number;
+  apiKey?: string;
+}
+
+export const DecodedCalldata = ({ to, data, chainId, apiKey }: DecodedCalldataProps) => {
+  const { decoded, isLoading } = useDecodedCalldata(to, data, chainId, apiKey);
+
+  if (isLoading) {
+    return (
+      <div className="flex flex-col gap-2">
+        <div className="flex items-center gap-2">
+          <Spinner className="size-3" />
+          <span className="text-xs text-muted-foreground">Decoding calldata...</span>
+        </div>
+        <div className="p-2.5 bg-secondary rounded-[6px] max-h-[40vh] overflow-y-auto opacity-50">
+          <p className="text-xs font-semibold leading-[150%] break-all text-foreground font-mono">
+            {data}
+          </p>
+        </div>
+      </div>
+    );
+  }
+
+  if (!decoded) {
+    return (
+      <div className="p-2.5 bg-secondary rounded-[6px] max-h-[40vh] overflow-y-auto">
+        <p className="text-xs font-semibold leading-[150%] break-all text-foreground font-mono">
+          {data}
+        </p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      <div className="flex items-center gap-2">
+        <span className="text-xs font-semibold text-foreground bg-primary/10 px-2 py-0.5 rounded">
+          {decoded.functionName}
+        </span>
+        <span className="text-xs text-muted-foreground font-mono">
+          {decoded.signature}
+        </span>
+      </div>
+
+      {decoded.params.length > 0 && (
+        <div className="flex flex-col gap-1 p-2 bg-secondary rounded-[6px]">
+          {decoded.params.map((param, i) => (
+            <div key={i} className="flex flex-col gap-0.5">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-xs font-semibold text-muted-foreground">{param.name}</span>
+                <span className="text-[10px] text-muted-foreground/60 font-mono">{param.type}</span>
+              </div>
+              <p className="text-xs font-mono break-all text-foreground leading-[150%]">
+                {param.value}
+              </p>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <details className="text-xs">
+        <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
+          Raw calldata
+        </summary>
+        <div className="p-2 bg-secondary rounded-[6px] mt-1 max-h-[20vh] overflow-y-auto">
+          <p className="text-xs font-mono leading-[150%] break-all text-foreground">
+            {data}
+          </p>
+        </div>
+      </details>
+    </div>
+  );
+};
