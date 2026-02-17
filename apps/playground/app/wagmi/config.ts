@@ -16,7 +16,7 @@ export function createWagmiConfig(mode: ModeType): Config {
         appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
         defaultChainId: 84532, // Base Sepolia
         preference: {
-          keysUrl: 'http://localhost:3001',
+          ...(process.env.NEXT_PUBLIC_KEYS_URL && { keysUrl: process.env.NEXT_PUBLIC_KEYS_URL }),
           showTestnets: true,
           mode: mode,
           uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
