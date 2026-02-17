@@ -36,7 +36,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
       appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
       defaultChainId: 84532,
       preference: {
-        keysUrl: 'http://localhost:3001',
+        ...(process.env.NEXT_PUBLIC_KEYS_URL && { keysUrl: process.env.NEXT_PUBLIC_KEYS_URL }),
         showTestnets: true,
         mode: mode,
         uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
