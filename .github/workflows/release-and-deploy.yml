@@ -66,8 +66,13 @@ jobs:
       - name: Release and publish
         run: |
           if [ -z "$(git tag -l)" ]; then
-            echo "No tags found — running first release (0.0.1)"
-            bunx nx release --first-release --yes
+            echo "No tags found — publishing initial 0.0.1 release"
+            bunx nx run-many -t build
+            git tag @jaw.id/core@0.0.1
+            git tag @jaw.id/wagmi@0.0.1
+            git tag @jaw.id/ui@0.0.1
+            git push origin --tags
+            bunx nx release publish
           else
             bunx nx release --yes
           fi
