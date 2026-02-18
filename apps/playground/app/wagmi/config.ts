@@ -7,6 +7,10 @@ import { ReactUIHandler } from '@jaw.id/ui';
 export type ModeType = typeof Mode[keyof typeof Mode];
 
 export function createWagmiConfig(mode: ModeType): Config {
+  const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
+    ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
+    : 84532; // Base Sepolia
+
   return createConfig({
     chains: [mainnet, sepolia, baseSepolia],
     connectors: [
@@ -14,7 +18,7 @@ export function createWagmiConfig(mode: ModeType): Config {
         apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
         appName: 'JAW Wagmi Demo',
         appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
-        defaultChainId: 84532, // Base Sepolia
+        defaultChainId,
         preference: {
           ...(process.env.NEXT_PUBLIC_KEYS_URL && { keysUrl: process.env.NEXT_PUBLIC_KEYS_URL }),
           showTestnets: true,

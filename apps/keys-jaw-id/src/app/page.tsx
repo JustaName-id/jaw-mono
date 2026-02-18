@@ -758,7 +758,7 @@ export default function KeysJawIdApp() {
     // Show loading while initializing or checking passkeys
     if (state === 'initializing' || state === 'passkey-check') {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-gray-600">
@@ -778,7 +778,7 @@ export default function KeysJawIdApp() {
     // Show processing spinner
     if (state === 'processing') {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center max-w-md p-6">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
@@ -803,7 +803,7 @@ export default function KeysJawIdApp() {
     // Show success state
     if (state === 'success') {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -820,7 +820,7 @@ export default function KeysJawIdApp() {
     // Show error state
     if (state === 'error') {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <div className="min-h-screen flex items-center justify-center">
           <div className="text-center max-w-md p-6">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -858,17 +858,8 @@ export default function KeysJawIdApp() {
     // Show passkey creation screen
     if (state === 'passkey-create') {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="min-h-screen flex items-center justify-center p-4">
           <div className="w-full max-w-md">
-            <div className="text-center mb-6">
-              <h2 className="text-2xl font-bold text-gray-900 mb-2">
-                Create Your Passkey
-              </h2>
-              <p className="text-gray-600">
-                Create a passkey to securely access your wallet
-              </p>
-            </div>
-
             <SignInScreen
               ensConfig={ensConfig}
               chainId={effectiveChainId}
@@ -925,16 +916,6 @@ export default function KeysJawIdApp() {
                 }
               }}
             />
-
-            <button
-              onClick={() => {
-                communicator.sendPopupUnload();
-                window.close();
-              }}
-              className="w-full mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
           </div>
         </div>
       );
@@ -943,7 +924,7 @@ export default function KeysJawIdApp() {
     // Show passkey authentication screen
     if (state === 'passkey-auth') {
       return (
-        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
+        <div className="min-h-screen flex items-center justify-center p-4">
           <div className="w-full max-w-md">
             <SignInScreen
               ensConfig={ensConfig}
@@ -1155,7 +1136,7 @@ export default function KeysJawIdApp() {
 
     // No pending request yet - should not normally be seen
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+      <div className="min-h-screen flex items-center justify-center">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Waiting for request...</p>
