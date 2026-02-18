@@ -24,17 +24,22 @@ type ModeType = (typeof Mode)[keyof typeof Mode];
 function CorePageContent({ mode }: { mode: ModeType }) {
   const [isConnected, setIsConnected] = useState(false);
   const [accounts, setAccounts] = useState<string[]>([]);
-  const [chainId, setChainId] = useState<string | null>(null);
+  const defaultChainId = String(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || 84532);
+  const [chainId, setChainId] = useState<string>(defaultChainId);
   const [selectedMethod, setSelectedMethod] = useState<RpcMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
 
-  const [sdk] = useState(() =>
-    JAW.create({
+  const [sdk] = useState(() => {
+    const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
+      ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
+      : 84532; // Base Sepolia
+
+    return JAW.create({
       appName: 'JAW Playground',
       appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
-      defaultChainId: 84532,
+      defaultChainId,
       preference: {
         ...(process.env.NEXT_PUBLIC_KEYS_URL && { keysUrl: process.env.NEXT_PUBLIC_KEYS_URL }),
         showTestnets: true,
@@ -43,8 +48,8 @@ function CorePageContent({ mode }: { mode: ModeType }) {
       },
       apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
       ens: process.env.NEXT_PUBLIC_ENS_NAME
-    })
-  );
+    });
+  });
 
   const addLog = useCallback((type: LogEntry['type'], method: string, data: unknown) => {
     setLogs((prev) => [...prev, { timestamp: new Date(), type, method, data }]);
@@ -84,7 +89,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         } else if (method === 'wallet_disconnect') {
           setIsConnected(false);
           setAccounts([]);
-          setChainId(null);
+          setChainId(defaultChainId);
         } else if (method === 'wallet_switchEthereumChain') {
           // Update chain ID after switch
           const chainIdResult = await sdk.provider.request({
@@ -213,23 +218,21 @@ function CorePageContent({ mode }: { mode: ModeType }) {
                     </button>
                   </div>
                 )}
-                {chainId && (
-                  <div className="flex items-center gap-2">
-                    <span className="text-muted-foreground">Chain:</span>
-                    <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(chainId || '');
-                      }}
-                      className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
-                      title="Click to copy"
-                    >
-                      {chainId}
-                      <svg className="w-3 h-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                      </svg>
-                    </button>
-                  </div>
-                )}
+                <div className="flex items-center gap-2">
+                  <span className="text-muted-foreground">Chain:</span>
+                  <button
+                    onClick={() => {
+                      navigator.clipboard.writeText(String(chainId));
+                    }}
+                    className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
+                    title="Click to copy"
+                  >
+                    {chainId}
+                    <svg className="w-3 h-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    </svg>
+                  </button>
+                </div>
               </div>
             </div>
             <div className="flex gap-2">
