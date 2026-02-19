@@ -12,7 +12,7 @@ export interface SpendPermission {
 
 export interface CallPermission {
   target: string;
-  selector: string;
+  selector?: string;
   functionSignature: string;
 }
 
