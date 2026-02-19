@@ -2,7 +2,7 @@
   "name": "@jaw.id/core",
   "version": "0.0.1",
   "type": "module",
-  "main": "./dist/index.js",
+  "main": "./dist/cjs/index.cjs",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -11,6 +11,7 @@
       "@jaw-mono/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
+      "require": "./dist/cjs/index.cjs",
       "default": "./dist/index.js"
     }
   },
@@ -32,7 +33,19 @@
   "nx": {
     "targets": {
       "build": {
-        "dependsOn": ["generate-sdk-info"]
+        "dependsOn": ["generate-sdk-info"],
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "{projectRoot}",
+          "commands": [
+            "tsc --build tsconfig.lib.json",
+            "bunx tsup"
+          ],
+          "parallel": false
+        },
+        "cache": true,
+        "inputs": ["production", "^production"],
+        "outputs": ["{projectRoot}/dist"]
       },
       "typecheck": {
         "dependsOn": ["generate-sdk-info"]

@@ -15,6 +15,11 @@
   "publishConfig": {
     "access": "public"
   },
+  "files": [
+    "dist",
+    "cjs-error.cjs",
+    "!**/*.tsbuildinfo"
+  ],
   "main": "./dist/index.js",
   "module": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -24,6 +29,7 @@
       "@jaw-mono/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
+      "require": "./cjs-error.cjs",
       "default": "./dist/index.js"
     }
   },
