@@ -2195,8 +2195,8 @@ function PermissionDialogWrapper({
   // Format call permissions
   const calls = useMemo(() => callsData.map(call => ({
     target: call.target,
-    selector: call.selector || '',
-    functionSignature: call.functionSignature || resolveFunctionSelector(call.selector || ''),
+    selector: call.selector,
+    functionSignature: call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
   })), [callsData]);
 
   // Format expiry date
@@ -2818,8 +2818,8 @@ function RevokePermissionDialogWrapper({
 
     return fetchedPermissionData.calls.map((call: any) => ({
       target: call.target,
-      selector: call.selector || '',
-      functionSignature: call.functionSignature || resolveFunctionSelector(call.selector || ''),
+      selector: call.selector,
+      functionSignature: call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
     }));
   }, [fetchedPermissionData]);
 

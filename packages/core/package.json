@@ -1,6 +1,7 @@
 {
   "name": "@jaw.id/core",
-  "version": "0.0.1",
+  "description": "Core SDK - EIP-1193 provider, smart account operations, passkey management",
+  "version": "0.0.2",
   "type": "module",
   "main": "./dist/cjs/index.cjs",
   "module": "./dist/index.js",
@@ -33,7 +34,9 @@
   "nx": {
     "targets": {
       "build": {
-        "dependsOn": ["generate-sdk-info"],
+        "dependsOn": [
+          "generate-sdk-info"
+        ],
         "executor": "nx:run-commands",
         "options": {
           "cwd": "{projectRoot}",
@@ -48,7 +51,9 @@
         "outputs": ["{projectRoot}/dist"]
       },
       "typecheck": {
-        "dependsOn": ["generate-sdk-info"]
+        "dependsOn": [
+          "generate-sdk-info"
+        ]
       },
       "test": {
         "cache": true,
@@ -57,7 +62,9 @@
           "^production",
           "{projectRoot}/vitest.config.ts"
         ],
-        "outputs": ["{workspaceRoot}/coverage/{projectRoot}"],
+        "outputs": [
+          "{workspaceRoot}/coverage/{projectRoot}"
+        ],
         "executor": "nx:run-commands",
         "options": {
           "cwd": "{projectRoot}",

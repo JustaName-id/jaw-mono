@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Overview
 
-JAW (JustaName Account Wallet) is an Nx monorepo for building smart account wallet infrastructure. It provides an EIP-1193 compliant provider for interacting with smart accounts, supporting both cross-platform (popup) and app-specific (embedded) authentication modes via passkeys.
+JAW.id is an Nx monorepo for building smart account wallet infrastructure. It provides an EIP-1193 compliant provider for interacting with smart accounts, supporting both cross-platform (popup) and app-specific (embedded) authentication modes via passkeys.
 
 ## Common Commands
 

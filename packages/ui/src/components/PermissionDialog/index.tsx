@@ -149,8 +149,8 @@ export const PermissionDialog = ({
     return null;
   };
 
-  const getFunctionDisplayName = (signature: string, selector: string): string => {
-    if (selector.toLowerCase() === ANY_FN_SEL.toLowerCase()) {
+  const getFunctionDisplayName = (signature: string, selector?: string): string => {
+    if (selector?.toLowerCase() === ANY_FN_SEL.toLowerCase()) {
       return 'Any Function';
     }
     return signature;

@@ -58,7 +58,7 @@ const DOMAINS: Record<string, DomainConfig> = {
     dirs: ['wagmi'],
     includes: [],
     packageName: '@jaw.id/wagmi',
-    installCommand: 'npm install @jaw.id/wagmi wagmi viem @tanstack/react-query',
+    installCommand: 'npm install @jaw.id/wagmi wagmi @tanstack/react-query',
     quickExample: `import { jaw } from '@jaw.id/wagmi';
 import { createConfig, http } from 'wagmi';
 import { base } from 'wagmi/chains';
@@ -80,7 +80,7 @@ const config = createConfig({
     dirs: ['api-reference'],
     includes: [],
     packageName: '@jaw.id/core',
-    installCommand: 'npm install @jaw.id/core viem',
+    installCommand: 'npm install @jaw.id/core',
     quickExample: `import { JAW } from '@jaw.id/core';
 
 const provider = await JAW.create({
@@ -98,7 +98,7 @@ const accounts = await provider.request({ method: 'eth_requestAccounts' });`,
     dirs: ['account'],
     includes: [],
     packageName: '@jaw.id/core',
-    installCommand: 'npm install @jaw.id/core viem',
+    installCommand: 'npm install @jaw.id/core',
     quickExample: `import { JAW } from '@jaw.id/core';
 
 const provider = await JAW.create({ apiKey: 'KEY', appName: 'App', chains: [...] });
@@ -116,7 +116,7 @@ const hash = await account.sendTransaction({
     dirs: ['guides'],
     includes: ['index.mdx', 'supported-networks.mdx'],
     packageName: '@jaw.id/wagmi (React) or @jaw.id/core (vanilla JS)',
-    installCommand: 'npm install @jaw.id/wagmi wagmi viem @tanstack/react-query',
+    installCommand: 'npm install @jaw.id/wagmi wagmi @tanstack/react-query',
     quickExample: `// 1. Get API key at https://dashboard.jaw.id
 // 2. Install packages
 // 3. Configure connector (see full docs below)`,
@@ -141,7 +141,7 @@ const hash = await account.sendTransaction({
     dirs: ['advanced'],
     includes: [],
     packageName: '@jaw.id/core + @jaw.id/ui',
-    installCommand: 'npm install @jaw.id/core @jaw.id/ui viem',
+    installCommand: 'npm install @jaw.id/core @jaw.id/ui',
     quickExample: `// App-specific mode with custom UI
 import { JAW } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
@@ -387,8 +387,8 @@ This file is a **routing index only**. To help users with JAW:
 
 | Package | Use Case | Install |
 |---------|----------|---------|
-| \`@jaw.id/wagmi\` | React/Next.js apps with Wagmi | \`npm install @jaw.id/wagmi wagmi viem @tanstack/react-query\` |
-| \`@jaw.id/core\` | Non-React or custom provider setups | \`npm install @jaw.id/core viem\` |
+| \`@jaw.id/wagmi\` | React/Next.js apps with Wagmi | \`npm install @jaw.id/wagmi wagmi @tanstack/react-query\` |
+| \`@jaw.id/core\` | Non-React or custom provider setups | \`npm install @jaw.id/core\` |
 | \`@jaw.id/ui\` | Custom UI for app-specific mode | \`npm install @jaw.id/ui\` |
 
 ## Quick Links
