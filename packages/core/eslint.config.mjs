@@ -15,7 +15,9 @@ export default [
                     ],
                     "ignoredDependencies": [
                         "vitest",
-                        "viem"
+                        "viem",
+                        "tsup",
+                        "tslib"
                     ]
                 }
             ]
