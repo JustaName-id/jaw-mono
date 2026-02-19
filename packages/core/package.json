@@ -1,5 +1,6 @@
 {
   "name": "@jaw.id/core",
+  "description": "Core SDK - EIP-1193 provider, smart account operations, passkey management",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",

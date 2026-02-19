@@ -1,5 +1,6 @@
 {
   "name": "@jaw.id/wagmi",
+  "description": "Wagmi connector and React hooks for JAW.id.",
   "version": "0.0.1",
   "type": "module",
   "main": "./dist/index.js",

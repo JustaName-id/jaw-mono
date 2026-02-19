@@ -1,54 +1,44 @@
 # @jaw.id/ui
 
-React UI components for JAW (JustaName Account Wallet) - pre-built dialogs for wallet interactions.
+Pre-built React dialogs for [JAW.id](https://jaw.id) wallet interactions: onboarding, transaction signing, permissions, and more.
+
+## Documentation
+
+For documentation and guides, visit [docs.jaw.id](https://docs.jaw.id).
 
 ## Installation
 
 ```bash
-npm install @jaw.id/ui
-```
-
-Import styles in your app entry point:
-
-```typescript
-import '@jaw.id/ui/style.css';
+npm install @jaw.id/ui @jaw.id/core
+# or
+bun add @jaw.id/ui @jaw.id/core
 ```
 
 ## Quick Start
 
-Use `ReactUIHandler` with app-specific passkey mode:
-
 ```tsx
 import { JAW } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
-import '@jaw.id/ui/style.css';
 
-const uiHandler = new ReactUIHandler({
-  container: document.getElementById('jaw-ui-root')!,
-});
+const uiHandler = new ReactUIHandler();
 
-const jaw = await JAW.create({
+const jaw = JAW.create({
   apiKey: 'your-api-key',
   appName: 'My App',
-  mode: 'appSpecific',
-  uiHandler,
+  preference: {
+    mode: 'AppSpecific',
+    uiHandler,
+  },
 });
 ```
 
-## Exports
+## AI-Assisted Development
 
-**Dialog Components:** `OnboardingDialog`, `ConnectDialog`, `TransactionDialog`, `SignatureDialog`, `Eip712Dialog`, `SiweDialog`, `PermissionDialog`, `DefaultDialog`
+Add JAW.id skills to your AI coding agent:
 
-**React Integration:** `ReactUIHandler` - Complete UIHandler implementation for app-specific mode
-
-## Peer Dependencies
-
-- `react` >= 18.0.0
-- `react-dom` >= 18.0.0
-
-## Documentation
-
-For detailed guides and examples, visit **[docs.jaw.id](https://docs.jaw.id)**.
+```bash
+npx skills add @jaw.id/skills
+```
 
 ## License
 
