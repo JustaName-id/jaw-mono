@@ -1,5 +1,6 @@
 {
   "name": "@jaw.id/ui",
+  "description": "Pre-built React dialogs for JAW.id",
   "version": "0.0.2",
   "type": "module",
   "sideEffects": [
