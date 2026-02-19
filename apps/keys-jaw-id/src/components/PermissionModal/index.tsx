@@ -401,7 +401,7 @@ export const PermissionModal = ({
     return callsData.map((call: any) => ({
       target: call.target,
       selector: call.selector,
-      functionSignature: call.functionSignature || resolveFunctionSelector(call.selector),
+      functionSignature: call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
     }));
   }, [callsData]);
 
