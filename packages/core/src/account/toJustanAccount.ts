@@ -530,6 +530,11 @@ export const abi = [
                 type: 'address',
                 internalType: 'address',
             },
+            {
+                name: 'factory',
+                type: 'address',
+                internalType: 'address',
+            },
         ],
         stateMutability: 'nonpayable',
     },
@@ -540,6 +545,19 @@ export const abi = [
     {
         type: 'receive',
         stateMutability: 'payable',
+    },
+    {
+        type: 'function',
+        name: 'REPLAYABLE_NONCE_KEY',
+        inputs: [],
+        outputs: [
+            {
+                name: '',
+                type: 'uint256',
+                internalType: 'uint256',
+            },
+        ],
+        stateMutability: 'view',
     },
     {
         type: 'function',
@@ -571,6 +589,25 @@ export const abi = [
         ],
         outputs: [],
         stateMutability: 'nonpayable',
+    },
+    {
+        type: 'function',
+        name: 'canSkipChainIdValidation',
+        inputs: [
+            {
+                name: 'functionSelector',
+                type: 'bytes4',
+                internalType: 'bytes4',
+            },
+        ],
+        outputs: [
+            {
+                name: '',
+                type: 'bool',
+                internalType: 'bool',
+            },
+        ],
+        stateMutability: 'pure',
     },
     {
         type: 'function',
@@ -683,6 +720,19 @@ export const abi = [
     },
     {
         type: 'function',
+        name: 'executeWithoutChainIdValidation',
+        inputs: [
+            {
+                name: 'calls',
+                type: 'bytes[]',
+                internalType: 'bytes[]',
+            },
+        ],
+        outputs: [],
+        stateMutability: 'payable',
+    },
+    {
+        type: 'function',
         name: 'getNonce',
         inputs: [],
         outputs: [
@@ -690,6 +740,72 @@ export const abi = [
                 name: '',
                 type: 'uint256',
                 internalType: 'uint256',
+            },
+        ],
+        stateMutability: 'view',
+    },
+    {
+        type: 'function',
+        name: 'getUserOpHashWithoutChainId',
+        inputs: [
+            {
+                name: 'userOp',
+                type: 'tuple',
+                internalType: 'struct PackedUserOperation',
+                components: [
+                    {
+                        name: 'sender',
+                        type: 'address',
+                        internalType: 'address',
+                    },
+                    {
+                        name: 'nonce',
+                        type: 'uint256',
+                        internalType: 'uint256',
+                    },
+                    {
+                        name: 'initCode',
+                        type: 'bytes',
+                        internalType: 'bytes',
+                    },
+                    {
+                        name: 'callData',
+                        type: 'bytes',
+                        internalType: 'bytes',
+                    },
+                    {
+                        name: 'accountGasLimits',
+                        type: 'bytes32',
+                        internalType: 'bytes32',
+                    },
+                    {
+                        name: 'preVerificationGas',
+                        type: 'uint256',
+                        internalType: 'uint256',
+                    },
+                    {
+                        name: 'gasFees',
+                        type: 'bytes32',
+                        internalType: 'bytes32',
+                    },
+                    {
+                        name: 'paymasterAndData',
+                        type: 'bytes',
+                        internalType: 'bytes',
+                    },
+                    {
+                        name: 'signature',
+                        type: 'bytes',
+                        internalType: 'bytes',
+                    },
+                ],
+            },
+        ],
+        outputs: [
+            {
+                name: '',
+                type: 'bytes32',
+                internalType: 'bytes32',
             },
         ],
         stateMutability: 'view',
@@ -1048,6 +1164,33 @@ export const abi = [
     },
     {
         type: 'error',
+        name: 'JustanAccount_InvalidNonceKey',
+        inputs: [
+            {
+                name: 'key',
+                type: 'uint256',
+                internalType: 'uint256',
+            },
+        ],
+    },
+    {
+        type: 'error',
+        name: 'JustanAccount_SelectorNotAllowed',
+        inputs: [
+            {
+                name: 'selector',
+                type: 'bytes4',
+                internalType: 'bytes4',
+            },
+        ],
+    },
+    {
+        type: 'error',
+        name: 'JustanAccount_UnauthorizedInitialization',
+        inputs: [],
+    },
+    {
+        type: 'error',
         name: 'MultiOwnable_AlreadyOwner',
         inputs: [
             {
@@ -1139,7 +1282,7 @@ export const factoryAbi = [
         type: 'constructor',
         inputs: [
             {
-                name: 'implementation',
+                name: 'entryPointAddress',
                 type: 'address',
                 internalType: 'address',
             },
@@ -1222,7 +1365,12 @@ export const factoryAbi = [
     },
     {
         type: 'error',
-        name: 'OwnerRequired',
+        name: 'JustanAccountFactory_AlreadyDeployed',
+        inputs: [],
+    },
+    {
+        type: 'error',
+        name: 'JustanAccountFactory_OwnerRequired',
         inputs: [],
     },
 ] as const
