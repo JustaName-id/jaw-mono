@@ -65,7 +65,7 @@ export type SpendLimit = {
     allowance: bigint;
     /** Period unit (minute, hour, day, week, month, year, forever) */
     unit: SpendPeriod;
-    /** Multiplier for the period unit (1-255) */
+    /** Multiplier for the period unit (1-65535, uint16) */
     multiplier: number;
 };
 
