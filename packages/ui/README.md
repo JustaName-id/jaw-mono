@@ -9,9 +9,9 @@ For documentation and guides, visit [docs.jaw.id](https://docs.jaw.id).
 ## Installation
 
 ```bash
-npm install @jaw.id/ui @jaw.id/core
+npm install @jaw.id/ui
 # or
-bun add @jaw.id/ui @jaw.id/core
+bun add @jaw.id/ui
 ```
 
 ## Quick Start
@@ -37,7 +37,7 @@ const jaw = JAW.create({
 Add JAW.id skills to your AI coding agent:
 
 ```bash
-npx skills add @jaw.id/skills
+npx skills add JustaName-id/jaw-skills
 ```
 
 ## License
