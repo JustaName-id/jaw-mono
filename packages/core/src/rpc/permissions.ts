@@ -682,12 +682,17 @@ async function extractPermissionHashFromTransaction(
 function permissionToContractFormat(permission: Permission) {
     return {
         ...permission,
-        spends: permission.spends.map(spend => ({
-            token: spend.token,
-            allowance: spend.allowance,
-            unit: periodToEnum(spend.unit),
-            multiplier: spend.multiplier,
-        })),
+        spends: permission.spends.map(spend => {
+            // Convert 'year' to 'month' with multiplier * 12 (contract has no Year unit)
+            const unit = spend.unit === 'year' ? 'month' as const : spend.unit;
+            const multiplier = spend.unit === 'year' ? spend.multiplier * 12 : spend.multiplier;
+            return {
+                token: spend.token,
+                allowance: spend.allowance,
+                unit: periodToEnum(unit),
+                multiplier,
+            };
+        }),
     };
 }
 
@@ -792,15 +797,14 @@ export function encodeExecuteBatchWithPermission(
  * Convert period string to enum value (0-6)
  * Matches the SpendPeriod enum in JustaPermissionManager contract
  */
-function periodToEnum(period: SpendPeriod): number {
-    const periods: Record<SpendPeriod, number> = {
+function periodToEnum(period: Exclude<SpendPeriod, 'year'>): number {
+    const periods: Record<Exclude<SpendPeriod, 'year'>, number> = {
         minute: 0,
         hour: 1,
         day: 2,
         week: 3,
         month: 4,
-        year: 5,
-        forever: 6,
+        forever: 5,
     };
     return periods[period];
 }
@@ -841,7 +845,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                             { name: 'token', type: 'address' },
                             { name: 'allowance', type: 'uint160' },
                             { name: 'unit', type: 'uint8' },
-                            { name: 'multiplier', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint16' },
                         ],
                     },
                 ],
@@ -878,7 +882,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                             { name: 'token', type: 'address' },
                             { name: 'allowance', type: 'uint160' },
                             { name: 'unit', type: 'uint8' },
-                            { name: 'multiplier', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint16' },
                         ],
                     },
                 ],
@@ -916,7 +920,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                             { name: 'token', type: 'address' },
                             { name: 'allowance', type: 'uint160' },
                             { name: 'unit', type: 'uint8' },
-                            { name: 'multiplier', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint16' },
                         ],
                     },
                 ],
@@ -954,7 +958,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                             { name: 'token', type: 'address' },
                             { name: 'allowance', type: 'uint160' },
                             { name: 'unit', type: 'uint8' },
-                            { name: 'multiplier', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint16' },
                         ],
                     },
                 ],
@@ -1001,7 +1005,7 @@ export const SPEND_PERMISSIONS_MANAGER_ABI = [
                             { name: 'token', type: 'address' },
                             { name: 'allowance', type: 'uint160' },
                             { name: 'unit', type: 'uint8' },
-                            { name: 'multiplier', type: 'uint8' },
+                            { name: 'multiplier', type: 'uint16' },
                         ],
                     },
                 ],
