@@ -18,7 +18,8 @@ const config = [
     {
         ignores: [
             ".next/**/*",
-            "**/out-tsc"
+            "**/out-tsc",
+            "next-env.d.ts"
         ]
     }
 ];
