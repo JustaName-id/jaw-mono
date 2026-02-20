@@ -1,6 +1,6 @@
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 
-export type ParameterType = 'address' | 'hex' | 'number' | 'string' | 'json' | 'select';
+export type ParameterType = 'address' | 'hex' | 'number' | 'string' | 'json' | 'select' | 'toggle';
 
 export type ParameterDefinition = {
   name: string;
@@ -11,6 +11,8 @@ export type ParameterDefinition = {
   defaultValue?: string;
   options?: { label: string; value: string }[];
   autoFill?: 'address' | 'chainId'; // Auto-fill from connected state
+  /** Only show this field when another param has a specific value */
+  showWhen?: { param: string; value: string };
 };
 
 export type MethodCategory = 'account' | 'chain' | 'transaction' | 'signing' | 'wallet' | 'capability' | 'permission' | 'asset' | 'utility';
@@ -563,14 +565,10 @@ console.log('Signature:', signature);`;
     parameters: [
       {
         name: 'enableSiwe',
-        type: 'select',
+        type: 'toggle',
         label: 'Enable SIWE',
         description: 'Request Sign-In with Ethereum capability',
         required: false,
-        options: [
-          { label: 'No', value: 'false' },
-          { label: 'Yes', value: 'true' },
-        ],
         defaultValue: 'false',
       },
       {
@@ -580,17 +578,14 @@ console.log('Signature:', signature);`;
         description: 'Human-readable statement for SIWE',
         required: false,
         defaultValue: 'Sign in with your JAW account',
+        showWhen: { param: 'enableSiwe', value: 'true' },
       },
       {
         name: 'enableSubnameTextRecords',
-        type: 'select',
+        type: 'toggle',
         label: 'Enable Subname Text Records',
         description: 'Request subname with text records (requires ENS configured)',
         required: false,
-        options: [
-          { label: 'No', value: 'false' },
-          { label: 'Yes', value: 'true' },
-        ],
         defaultValue: 'false',
       },
       {
@@ -603,6 +598,40 @@ console.log('Signature:', signature);`;
           { key: 'com.twitter', value: '@myhandle' },
           { key: 'com.github', value: 'myusername' },
         ], null, 2),
+        showWhen: { param: 'enableSubnameTextRecords', value: 'true' },
+      },
+      {
+        name: 'enablePaymaster',
+        type: 'toggle',
+        label: 'Enable Paymaster',
+        description: 'Sponsor gas fees via a paymaster for this connection',
+        required: false,
+        defaultValue: 'false',
+      },
+      {
+        name: 'paymasterChainId',
+        type: 'number',
+        label: 'Chain ID',
+        description: 'Chain ID the paymaster applies to (required)',
+        required: true,
+        defaultValue: '84532',
+        showWhen: { param: 'enablePaymaster', value: 'true' },
+      },
+      {
+        name: 'paymasterUrl',
+        type: 'string',
+        label: 'Paymaster URL',
+        description: 'RPC URL of the paymaster service (required)',
+        required: true,
+        showWhen: { param: 'enablePaymaster', value: 'true' },
+      },
+      {
+        name: 'paymasterContextJson',
+        type: 'json',
+        label: 'Context (optional)',
+        description: 'Optional JSON context, e.g. { "sponsorshipPolicyId": "..." }',
+        required: false,
+        showWhen: { param: 'enablePaymaster', value: 'true' },
       },
     ],
     getCodeSnippet: (params) => {
@@ -650,10 +679,7 @@ console.log('Connected accounts:', result.accounts);`;
     buildParams: (params) => {
       const enableSiwe = params.enableSiwe === 'true';
       const enableSubnameTextRecords = params.enableSubnameTextRecords === 'true';
-
-      if (!enableSiwe && !enableSubnameTextRecords) {
-        return [{}];
-      }
+      const enablePaymaster = params.enablePaymaster === 'true';
 
       const capabilities: Record<string, unknown> = {};
 
@@ -674,7 +700,24 @@ console.log('Connected accounts:', result.accounts);`;
         }
       }
 
-      return [{ capabilities }];
+      const requestParam: Record<string, unknown> = Object.keys(capabilities).length > 0
+        ? { capabilities }
+        : {};
+
+      // Attach paymaster config as metadata for the execute handler to consume
+      if (enablePaymaster && params.paymasterUrl?.trim()) {
+        let context: Record<string, unknown> | undefined;
+        try {
+          if (params.paymasterContextJson?.trim()) context = JSON.parse(params.paymasterContextJson);
+        } catch { /* ignore */ }
+        requestParam._paymasterConfig = {
+          chainId: parseInt(params.paymasterChainId || '84532'),
+          url: params.paymasterUrl.trim(),
+          ...(context && { context }),
+        };
+      }
+
+      return [requestParam];
     },
   },
   {

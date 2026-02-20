@@ -22,6 +22,35 @@ export function ParameterField({ param, value, onChange, context }: ParameterFie
   // Auto-fill from context if specified
   const displayValue = value || (param.autoFill === 'address' ? context?.address : param.autoFill === 'chainId' ? context?.chainId : '') || '';
 
+  if (param.type === 'toggle') {
+    const isOn = (value !== undefined ? value : param.defaultValue) === 'true';
+    return (
+      <div className="flex items-center justify-between py-1">
+        <div className="space-y-0.5">
+          <Label className="text-sm font-medium leading-none">{param.label}</Label>
+          {param.description && (
+            <p className="text-xs text-muted-foreground">{param.description}</p>
+          )}
+        </div>
+        <button
+          type="button"
+          role="switch"
+          aria-checked={isOn}
+          onClick={() => onChange(isOn ? 'false' : 'true')}
+          className={`relative inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background ${
+            isOn ? 'bg-primary' : 'bg-input'
+          }`}
+        >
+          <span
+            className={`pointer-events-none block h-4 w-4 rounded-full bg-background shadow-lg ring-0 transition-transform ${
+              isOn ? 'translate-x-4' : 'translate-x-0'
+            }`}
+          />
+        </button>
+      </div>
+    );
+  }
+
   if (param.type === 'select' && param.options) {
     return (
       <div className="space-y-2">

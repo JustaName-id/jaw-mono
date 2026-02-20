@@ -3,7 +3,7 @@
 import { useState, useCallback, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
-import { Mode } from '@jaw.id/core';
+import { Mode, type PaymasterConfig } from '@jaw.id/core';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { parseEther, formatUnits, type Address } from 'viem';
@@ -48,7 +48,12 @@ import {
   type MethodCategory,
 } from '../../lib/wagmi-methods';
 
-function WagmiPageContent({ mode }: { mode: ModeType }) {
+interface WagmiPageContentProps {
+  mode: ModeType;
+  onSetPaymasters: (paymasters: Record<number, PaymasterConfig> | undefined) => void;
+}
+
+function WagmiPageContent({ mode, onSetPaymasters }: WagmiPageContentProps) {
   const { address, isConnected, connector } = useAccount();
   const chainId = useChainId();
   const { data: balance } = useBalance({ address });
@@ -114,6 +119,11 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
 
         switch (method.hookType) {
           case 'jawConnect': {
+            // Apply paymaster config if provided before connecting
+            if (params._paymasterConfig && typeof params._paymasterConfig === 'object') {
+              const pm = params._paymasterConfig as { chainId: number; url: string; context?: Record<string, unknown> };
+              onSetPaymasters({ [pm.chainId]: { url: pm.url, ...(pm.context && { context: pm.context }) } });
+            }
             if (jawConnector) {
               result = await jawConnect({ connector: jawConnector });
             }
@@ -249,6 +259,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
       connectors,
       jawConnect,
       jawDisconnect,
+      onSetPaymasters,
       connector,
       switchChainAsync,
       sendTransactionAsync,
@@ -520,9 +531,15 @@ function WagmiPageInner() {
   const mode: ModeType =
     modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
 
+  const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
+
   return (
-    <WagmiProviders mode={mode}>
-      <WagmiPageContent key={mode} mode={mode} />
+    <WagmiProviders mode={mode} paymasters={paymasters}>
+      <WagmiPageContent
+        key={mode}
+        mode={mode}
+        onSetPaymasters={setPaymasters}
+      />
     </WagmiProviders>
   );
 }

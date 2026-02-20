@@ -22,6 +22,27 @@ import {
 
 type ModeType = (typeof Mode)[keyof typeof Mode];
 
+const DEFAULT_CHAIN_ID_NUM = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
+  ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
+  : 84532;
+
+function buildSdk(mode: ModeType, paymasters?: Record<number, { url: string; context?: Record<string, unknown> }>) {
+  return JAW.create({
+    appName: 'JAW Playground',
+    appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
+    defaultChainId: DEFAULT_CHAIN_ID_NUM,
+    preference: {
+      ...(process.env.NEXT_PUBLIC_KEYS_URL && { keysUrl: process.env.NEXT_PUBLIC_KEYS_URL }),
+      showTestnets: true,
+      mode,
+      uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
+    },
+    apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
+    ens: process.env.NEXT_PUBLIC_ENS_NAME,
+    paymasters,
+  });
+}
+
 function CorePageContent({ mode }: { mode: ModeType }) {
   const [isConnected, setIsConnected] = useState(false);
   const [accounts, setAccounts] = useState<string[]>([]);
@@ -33,25 +54,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
 
-  const [sdk] = useState(() => {
-    const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
-      ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
-      : 84532; // Base Sepolia
-
-    return JAW.create({
-      appName: 'JAW Playground',
-      appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
-      defaultChainId,
-      preference: {
-        ...(process.env.NEXT_PUBLIC_KEYS_URL && { keysUrl: process.env.NEXT_PUBLIC_KEYS_URL }),
-        showTestnets: true,
-        mode: mode,
-        uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
-      },
-      apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
-      ens: process.env.NEXT_PUBLIC_ENS_NAME
-    });
-  });
+  const [sdk, setSdk] = useState(() => buildSdk(mode));
 
   const addLog = useCallback((type: LogEntry['type'], method: string, data: unknown) => {
     setLogs((prev) => [...prev, { timestamp: new Date(), type, method, data }]);
@@ -62,14 +65,24 @@ function CorePageContent({ mode }: { mode: ModeType }) {
       addLog('request', method, params);
 
       try {
-        const result = await sdk.provider.request({
-          method,
-          params,
-        });
+        // For wallet_connect: extract _paymasterConfig from params and rebuild SDK before connecting
+        let activeSdk = sdk;
+        if (method === 'wallet_connect' && Array.isArray(params) && params.length > 0) {
+          const firstParam = params[0] as Record<string, unknown>;
+          if (firstParam._paymasterConfig && typeof firstParam._paymasterConfig === 'object') {
+            const pm = firstParam._paymasterConfig as { chainId: number; url: string; context?: Record<string, unknown> };
+            const paymasters = { [pm.chainId]: { url: pm.url, ...(pm.context && { context: pm.context }) } };
+            activeSdk = buildSdk(mode, paymasters);
+            setSdk(activeSdk);
+            // Strip the meta field before sending to provider
+            params = [{ ...firstParam, _paymasterConfig: undefined }];
+          }
+        }
+
+        const result = await activeSdk.provider.request({ method, params });
 
         addLog('response', method, result);
 
-        // Handle connection state updates
         if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
           let connectedAccounts: string[] = [];
           if (Array.isArray(result)) {
@@ -81,11 +94,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
           if (connectedAccounts.length > 0) {
             setAccounts(connectedAccounts);
             setIsConnected(true);
-            // Get chain ID after connect
-            const chainIdResult = await sdk.provider.request({
-              method: 'eth_chainId',
-              params: [],
-            });
+            const chainIdResult = await sdk.provider.request({ method: 'eth_chainId', params: [] });
             setChainId(chainIdResult as string);
           }
         } else if (method === 'wallet_disconnect') {
@@ -93,11 +102,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
           setAccounts([]);
           setChainId(defaultChainId);
         } else if (method === 'wallet_switchEthereumChain') {
-          // Update chain ID after switch
-          const chainIdResult = await sdk.provider.request({
-            method: 'eth_chainId',
-            params: [],
-          });
+          const chainIdResult = await sdk.provider.request({ method: 'eth_chainId', params: [] });
           setChainId(chainIdResult as string);
         }
 
@@ -113,7 +118,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         throw error;
       }
     },
-    [sdk, addLog]
+    [sdk, setSdk, mode, addLog, defaultChainId]
   );
 
   const handleMethodClick = (method: RpcMethod) => {
@@ -199,11 +204,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">Status:</span>
-                  <span
-                    className={`font-medium ${
-                      isConnected ? 'text-green-600' : 'text-red-600'
-                    }`}
-                  >
+                  <span className={`font-medium ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
                     {isConnected ? 'Connected' : 'Disconnected'}
                   </span>
                 </div>
@@ -211,9 +212,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Account:</span>
                     <button
-                      onClick={() => {
-                        navigator.clipboard.writeText(accounts[0] || '');
-                      }}
+                      onClick={() => navigator.clipboard.writeText(accounts[0] || '')}
                       className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
                       title="Click to copy"
                     >
@@ -227,9 +226,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">Chain:</span>
                   <button
-                    onClick={() => {
-                      navigator.clipboard.writeText(String(chainId));
-                    }}
+                    onClick={() => navigator.clipboard.writeText(String(chainId))}
                     className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
                     title="Click to copy"
                   >
@@ -245,8 +242,8 @@ function CorePageContent({ mode }: { mode: ModeType }) {
               {!isConnected ? (
                 <Button
                   onClick={() => {
-                    const connectMethod = RPC_METHODS.find((m) => m.id === 'wallet_connect');
-                    if (connectMethod) handleMethodClick(connectMethod);
+                    const m = RPC_METHODS.find((m) => m.id === 'wallet_connect');
+                    if (m) handleMethodClick(m);
                   }}
                 >
                   Connect
@@ -255,8 +252,8 @@ function CorePageContent({ mode }: { mode: ModeType }) {
                 <Button
                   variant="outline"
                   onClick={() => {
-                    const disconnectMethod = RPC_METHODS.find((m) => m.id === 'wallet_disconnect');
-                    if (disconnectMethod) handleMethodClick(disconnectMethod);
+                    const m = RPC_METHODS.find((m) => m.id === 'wallet_disconnect');
+                    if (m) handleMethodClick(m);
                   }}
                 >
                   Disconnect

@@ -1,12 +1,12 @@
 import { http, createConfig, type Config } from 'wagmi';
 import { mainnet, sepolia, baseSepolia } from 'wagmi/chains';
 import { jaw } from '@jaw.id/wagmi';
-import { Mode } from '@jaw.id/core';
+import { Mode, type PaymasterConfig } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
 
 export type ModeType = typeof Mode[keyof typeof Mode];
 
-export function createWagmiConfig(mode: ModeType): Config {
+export function createWagmiConfig(mode: ModeType, paymasters?: Record<number, PaymasterConfig>): Config {
   const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
     ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
     : 84532; // Base Sepolia
@@ -25,7 +25,8 @@ export function createWagmiConfig(mode: ModeType): Config {
           mode: mode,
           uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
         },
-        ens: "justan.id"
+        ens: "justan.id",
+        paymasters,
       }),
     ],
     transports: {

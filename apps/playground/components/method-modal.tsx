@@ -121,8 +121,15 @@ export function MethodModal({
   const canExecute = !method.requiresConnection || isConnected;
   const codeSnippet = method.getCodeSnippet(params);
 
-  // Filter parameters based on method-specific logic (e.g., wallet_sign type selection)
+  // Filter parameters: generic showWhen + method-specific wallet_sign logic
   const filteredParameters = method.parameters?.filter((param) => {
+    // Generic showWhen: only show when another param has a specific value
+    if (param.showWhen) {
+      const currentValue = params[param.showWhen.param] ?? (
+        method.parameters?.find(p => p.name === param.showWhen!.param)?.defaultValue ?? ''
+      );
+      return currentValue === param.showWhen.value;
+    }
     // For wallet_sign, show message field only for 0x45, and typedData field only for 0x01
     if (method.id === 'wallet_sign') {
       const selectedType = params.type || '0x45';
