@@ -168,8 +168,6 @@ const SERVICE_SPENDER: Address = '0x...'; // Your backend wallet
 const USDC_ADDRESS: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // USDC on Base
 
 async function subscribe(userAddress: Address, planPrice: string) {
-  const allowance = parseUnits(planPrice, 6);
-
   const result = await jaw.provider.request({
     method: 'wallet_grantPermissions',
     params: [{
@@ -179,7 +177,7 @@ async function subscribe(userAddress: Address, planPrice: string) {
       permissions: {
         spends: [{
           token: USDC_ADDRESS,
-          allowance: `0x${allowance.toString(16)}`,
+          allowance: parseUnits(planPrice, 6).toString(),
           unit: 'month',
           multiplier: 1,
         }],

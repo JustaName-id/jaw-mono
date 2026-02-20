@@ -2,6 +2,11 @@
 
 Embed onchain stablecoin payments directly into your telecom, neobank, or fintech application. No wallet UI, no seed phrases - just passkey authentication and instant USDC transfers.
 
+:::info[Using Provider or Wagmi?]
+This guide is for **headless mode** using the `Account` class directly. If you're using the JAW Provider or Wagmi connector, stablecoin gas payments are handled automatically — the built-in UI modals let users select fee tokens across all supported chains with no configuration needed.
+:::
+
+
 ## Why Stablecoin Payments?
 
 Traditional cross-border payments are slow and expensive. When you send $1,000 to a contractor in Brazil using traditional rails, the costs add up quickly: payment processor fees ($10–$40), intermediary bank cuts (0.1%–4.0% FX spread), and 3-5 days of settlement time. By the time the payment clears, the recipient has lost $80 to fees.
