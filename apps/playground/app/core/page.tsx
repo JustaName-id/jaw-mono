@@ -11,8 +11,7 @@ import { MethodCard } from '../../components/method-card';
 import { MethodModal } from '../../components/method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
-import { ConfigSnippet } from '../../components/config-snippet';
-import { PaymasterConfigButton, type PaymasterApplyConfig } from '../../components/paymaster-config-button';
+import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import {
   RPC_METHODS,
   CATEGORIES,
@@ -56,16 +55,19 @@ function CorePageContent({ mode }: { mode: ModeType }) {
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
 
   const [sdk, setSdk] = useState(() => buildSdk(mode));
-  const [pmActive, setPmActive] = useState(false);
+  const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
 
   const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
     if (config) {
-      const newSdk = buildSdk(mode, { [config.chainId]: { url: config.url, ...(config.context && { context: config.context }) } });
-      setSdk(newSdk);
-      setPmActive(true);
+      const paymasters: Record<number, { url: string; context?: Record<string, unknown> }> = {};
+      for (const chain of config.chains) {
+        paymasters[chain.chainId] = { url: chain.url, ...(chain.context && { context: chain.context }) };
+      }
+      setSdk(buildSdk(mode, paymasters));
+      setPmConfig(config);
     } else {
       setSdk(buildSdk(mode));
-      setPmActive(false);
+      setPmConfig(undefined);
     }
   };
 
@@ -165,8 +167,12 @@ function CorePageContent({ mode }: { mode: ModeType }) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <ConfigSnippet type="core" mode={mode} />
-              <PaymasterConfigButton onApply={handlePaymasterApply} isActive={pmActive} />
+              <ConfigSnippet
+                type="core"
+                mode={mode}
+                paymasters={pmConfig}
+                onPaymasterApply={handlePaymasterApply}
+              />
               <a
                 href="/core"
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
