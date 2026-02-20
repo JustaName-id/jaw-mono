@@ -1,3 +1,17 @@
+## 0.0.4 (2026-02-20)
+
+### 🩹 Fixes
+
+- **repo:** fixed commonjs warning ([#113](https://github.com/JustaName-id/jaw-mono/pull/113))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.0.3
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.0.3 (2026-02-19)
 
 ### 🩹 Fixes

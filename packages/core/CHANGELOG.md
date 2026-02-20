@@ -1,3 +1,13 @@
+## 0.0.3 (2026-02-20)
+
+### 🩹 Fixes
+
+- **repo:** fixed commonjs warning ([#113](https://github.com/JustaName-id/jaw-mono/pull/113))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.0.2 (2026-02-19)
 
 ### 🩹 Fixes
