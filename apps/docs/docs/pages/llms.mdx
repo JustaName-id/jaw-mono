@@ -1,0 +1,47 @@
+# LLMs
+
+JAW documentation is available in LLM-friendly formats following the [llms.txt](https://llmstxt.org/) standard, plus agent skills for AI-assisted development.
+
+## llms.txt Files
+
+These files are designed to be fetched by AI assistants and coding tools to provide accurate, up-to-date JAW documentation as context.
+
+### Routing Index
+
+Start here. This file routes AI assistants to the right domain-specific file based on the user's question.
+
+| File | Description |
+|------|-------------|
+| [`/llms.txt`](https://docs.jaw.id/llms.txt) | Master routing index — directs AI assistants to the correct domain file |
+
+### Domain Files
+
+Each file is self-contained with everything an AI needs to answer questions in that area. Fetch only the one that matches your question.
+
+| File | Contents |
+|------|----------|
+| [`/llms-wagmi.txt`](https://docs.jaw.id/llms-wagmi.txt) | Wagmi connector and React hooks for Next.js/React integration |
+| [`/llms-core.txt`](https://docs.jaw.id/llms-core.txt) | EIP-1193 provider and full RPC method reference |
+| [`/llms-account.txt`](https://docs.jaw.id/llms-account.txt) | Account API for headless integration and AI agent wallets |
+| [`/llms-quickstart.txt`](https://docs.jaw.id/llms-quickstart.txt) | Getting started guides and common use cases |
+| [`/llms-configuration.txt`](https://docs.jaw.id/llms-configuration.txt) | Configuration options including gas sponsoring and ENS |
+| [`/llms-advanced.txt`](https://docs.jaw.id/llms-advanced.txt) | Custom UI handlers, passkey server setup, and white-label integration |
+| [`/llms-full.txt`](https://docs.jaw.id/llms-full.txt) | Redirects to the routing index (for tools that look for this file) |
+
+:::info
+AI assistants should fetch `/llms.txt` first, then follow its routing table to fetch exactly one domain file. Each domain file is self-contained — there's no need to load multiple files at once.
+:::
+
+## Agent Skills
+
+There's an official [agent skill](https://skills.sh/justaname-id/jaw-skills/jaw-sdk-best-practices) that gives AI coding assistants deep knowledge of the JAW SDK and best practices for building with it.
+
+**Repository:** [github.com/JustaName-id/jaw-skills](https://github.com/JustaName-id/jaw-skills)
+
+### Install
+
+```bash
+npx skills add JustaName-id/jaw-skills
+```
+
+Once installed, your AI coding assistant will automatically apply JAW-specific guidance when you're working on integration code — covering connector setup, smart account operations, permission flows, and common patterns.

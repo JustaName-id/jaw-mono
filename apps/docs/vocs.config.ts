@@ -53,6 +53,10 @@ export default defineConfig({
       link: '/',
     },
     {
+      text: 'LLMs',
+      link: '/llms',
+    },
+    {
       text: 'Core Concepts',
       collapsed: false,
       items: [
