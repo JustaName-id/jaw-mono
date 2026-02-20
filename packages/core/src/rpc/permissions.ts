@@ -95,7 +95,7 @@ export type Permission = {
 export type SpendPermissionDetail = {
     /** Token address */
     token: Address;
-    /** Spending allowance in wei (hex format) */
+    /** Spending allowance in wei (decimal or hex string) */
     allowance: string;
     /** Period unit of the spend limit */
     unit: SpendPeriod;

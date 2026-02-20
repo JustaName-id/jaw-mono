@@ -8,6 +8,8 @@ Grant granular permissions to a spender address for delegated transaction execut
 ## Request
 
 ```typescript
+import { parseEther } from 'viem';
+
 await jaw.provider.request({
   method: 'wallet_grantPermissions',
   params: [{
@@ -20,7 +22,7 @@ await jaw.provider.request({
       }],
       spends: [{
         token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-        allowance: '0x16345785d8a0000', // 0.1 ETH
+        allowance: parseEther('0.1').toString(), // 0.1 ETH
         unit: 'day',
       }],
     },
@@ -72,7 +74,7 @@ Array of spend limits. Each limit:
 | Name | Type | Required | Description |
 |------|------|----------|-------------|
 | `token` | `0x${string}` | Yes | Token address (`0xEeee...` for native token) |
-| `allowance` | `0x${string}` | Yes | Spending allowance in wei (hex) |
+| `allowance` | `string` | Yes | Spending allowance in wei (decimal or hex string) |
 | `unit` | `string` | Yes | Time unit for allowance reset |
 | `multiplier` | `number` | No | Multiplier for the time unit (default: 1) |
 
@@ -135,6 +137,8 @@ Returns permission grant result with generated permission ID.
 ## Example
 
 ```typescript
+import { parseUnits } from 'viem';
+
 // Allow DeFi protocol to swap USDC with daily limit
 const permission = await jaw.provider.request({
   method: 'wallet_grantPermissions',
@@ -151,7 +155,7 @@ const permission = await jaw.provider.request({
       }],
       spends: [{
         token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-        allowance: '0x' + (1000n * 10n**6n).toString(16),
+        allowance: parseUnits('1000', 6).toString(), // 1000 USDC per day
         unit: 'day',
       }],
     },
