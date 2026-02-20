@@ -134,6 +134,3 @@ export type {
 } from './ui/interface.js';
 
 export { UIError, UIErrorCode } from './ui/interface.js';
-
-/** Default export **/
-export { create as default } from './sdk/createJAWSDK.js';
