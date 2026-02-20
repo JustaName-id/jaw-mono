@@ -6,7 +6,7 @@
     "@jaw.id/core": "workspace:*",
     "@jaw.id/ui": "workspace:*",
     "@tanstack/react-query": "^5.62.16",
-    "next": "~15.2.6",
+    "next": "~15.5.10",
     "react": "19.0.1",
     "react-dom": "19.0.1",
     "tailwindcss-animate": "^1.0.7",
