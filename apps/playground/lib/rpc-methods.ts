@@ -13,7 +13,7 @@ export type ParameterDefinition = {
   autoFill?: 'address' | 'chainId'; // Auto-fill from connected state
 };
 
-export type MethodCategory = 'account' | 'chain' | 'transaction' | 'signing' | 'wallet' | 'capability' | 'permission' | 'asset';
+export type MethodCategory = 'account' | 'chain' | 'transaction' | 'signing' | 'wallet' | 'capability' | 'permission' | 'asset' | 'utility';
 
 export type RpcMethod = {
   id: string;
@@ -36,6 +36,7 @@ export const CATEGORY_COLORS: Record<MethodCategory, string> = {
   capability: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
   permission: 'bg-yellow-100 text-yellow-800 dark:bg-yellow-900 dark:text-yellow-200',
   asset: 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200',
+  utility: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
 };
 
 export const CATEGORY_LABELS: Record<MethodCategory, string> = {
@@ -47,6 +48,7 @@ export const CATEGORY_LABELS: Record<MethodCategory, string> = {
   capability: 'Capability',
   permission: 'Permission',
   asset: 'Asset',
+  utility: 'Utility',
 };
 
 // Generate chain options dynamically from SUPPORTED_CHAINS
@@ -895,6 +897,24 @@ console.log('Assets:', assets);`,
       account: params.address || context.address,
     }],
   },
+
+  // ===== Utility Tools =====
+  {
+    id: 'encode_function_data',
+    name: 'encodeFunctionData',
+    method: 'encode_function_data',
+    category: 'utility',
+    description: 'Generate ABI-encoded calldata from a Solidity function signature and arguments.',
+    requiresConnection: false,
+    getCodeSnippet: () => `import { encodeFunctionData, parseAbiItem } from 'viem';
+
+const data = encodeFunctionData({
+  abi: [parseAbiItem('function transfer(address to, uint256 amount)')],
+  functionName: 'transfer',
+  args: ['0xRecipient...', 1000000000000000000n],
+});`,
+    buildParams: () => [],
+  },
 ];
 
 // Group methods by category
@@ -916,4 +936,5 @@ export const CATEGORIES: MethodCategory[] = [
   'capability',
   'permission',
   'asset',
+  'utility',
 ];

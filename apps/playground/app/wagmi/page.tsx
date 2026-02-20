@@ -37,6 +37,7 @@ import { WagmiProviders } from './providers';
 import { type ModeType } from './config';
 import { MethodCard } from '../../components/method-card';
 import { WagmiMethodModal } from '../../components/wagmi-method-modal';
+import { EncodeDataModal } from '../../components/encode-data-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet } from '../../components/config-snippet';
 import {
@@ -93,6 +94,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
 
   const [selectedMethod, setSelectedMethod] = useState<WagmiMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
   const [isExecuting, setIsExecuting] = useState(false);
@@ -275,6 +277,10 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
   );
 
   const handleMethodClick = (method: WagmiMethod) => {
+    if (method.category === 'utility') {
+      setIsEncodeModalOpen(true);
+      return;
+    }
     setSelectedMethod(method);
     setIsModalOpen(true);
   };
@@ -485,6 +491,12 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
 
         {/* Activity Log */}
         <ExecutionLog logs={logs} onClear={() => setLogs([])} />
+
+        {/* Encode Data Modal */}
+        <EncodeDataModal
+          isOpen={isEncodeModalOpen}
+          onClose={() => setIsEncodeModalOpen(false)}
+        />
 
         {/* Method Modal */}
         <WagmiMethodModal

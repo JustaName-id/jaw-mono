@@ -9,6 +9,7 @@ import { Button } from '../../components/ui/button';
 
 import { MethodCard } from '../../components/method-card';
 import { MethodModal } from '../../components/method-modal';
+import { EncodeDataModal } from '../../components/encode-data-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet } from '../../components/config-snippet';
 import {
@@ -28,6 +29,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
   const [chainId, setChainId] = useState<string>(defaultChainId);
   const [selectedMethod, setSelectedMethod] = useState<RpcMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
 
@@ -115,6 +117,10 @@ function CorePageContent({ mode }: { mode: ModeType }) {
   );
 
   const handleMethodClick = (method: RpcMethod) => {
+    if (method.category === 'utility') {
+      setIsEncodeModalOpen(true);
+      return;
+    }
     setSelectedMethod(method);
     setIsModalOpen(true);
   };
@@ -307,6 +313,12 @@ function CorePageContent({ mode }: { mode: ModeType }) {
           onExecute={handleExecute}
           context={{ address: accounts[0], chainId: chainId || undefined }}
           isConnected={isConnected}
+        />
+
+        {/* Encode Data Modal */}
+        <EncodeDataModal
+          isOpen={isEncodeModalOpen}
+          onClose={() => setIsEncodeModalOpen(false)}
         />
       </div>
     </div>

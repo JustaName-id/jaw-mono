@@ -11,7 +11,8 @@ export type MethodCategory =
   | 'wallet'
   | 'capability'
   | 'permission'
-  | 'asset';
+  | 'asset'
+  | 'utility';
 
 export const CATEGORIES: MethodCategory[] = [
   'account',
@@ -22,6 +23,7 @@ export const CATEGORIES: MethodCategory[] = [
   'capability',
   'permission',
   'asset',
+  'utility',
 ];
 
 export const CATEGORY_LABELS: Record<MethodCategory, string> = {
@@ -33,6 +35,7 @@ export const CATEGORY_LABELS: Record<MethodCategory, string> = {
   capability: 'Capability',
   permission: 'Permission',
   asset: 'Asset',
+  utility: 'Utility',
 };
 
 export const CATEGORY_COLORS: Record<MethodCategory, string> = {
@@ -44,6 +47,7 @@ export const CATEGORY_COLORS: Record<MethodCategory, string> = {
   capability: 'bg-cyan-100 text-cyan-800 dark:bg-cyan-900 dark:text-cyan-200',
   permission: 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200',
   asset: 'bg-teal-100 text-teal-800 dark:bg-teal-900 dark:text-teal-200',
+  utility: 'bg-rose-100 text-rose-800 dark:bg-rose-900 dark:text-rose-200',
 };
 
 export type ParameterDefinition = {
@@ -73,7 +77,8 @@ export type WagmiHookType =
   | 'usePermissions'
   | 'useGetAssets'
   | 'useCapabilities'
-  | 'useGetCallsHistory';
+  | 'useGetCallsHistory'
+  | 'utility';
 
 export type WagmiMethod = {
   id: string;
@@ -746,5 +751,24 @@ console.log('Assets:', assets);`,
     buildParams: (params) => ({
       address: params.address || undefined,
     }),
+  },
+
+  // ===== Utility Tools =====
+  {
+    id: 'encode_function_data',
+    name: 'encodeFunctionData',
+    method: 'encode_function_data',
+    hookType: 'utility' as const,
+    category: 'utility',
+    description: 'Generate ABI-encoded calldata from a Solidity function signature and arguments.',
+    requiresConnection: false,
+    getCodeSnippet: () => `import { encodeFunctionData, parseAbiItem } from 'viem';
+
+const data = encodeFunctionData({
+  abi: [parseAbiItem('function transfer(address to, uint256 amount)')],
+  functionName: 'transfer',
+  args: ['0xRecipient...', 1000000000000000000n],
+});`,
+    buildParams: () => ({}),
   },
 ];
