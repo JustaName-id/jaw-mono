@@ -131,6 +131,17 @@ export function WagmiMethodModal({
   const codeSnippet = method.getCodeSnippet(params);
   const executing = isExecuting || externalIsExecuting;
 
+  // Filter parameters by showWhen
+  const filteredParameters = method.parameters?.filter((param) => {
+    if (param.showWhen) {
+      const currentValue = params[param.showWhen.param] ?? (
+        method.parameters?.find(p => p.name === param.showWhen!.param)?.defaultValue ?? ''
+      );
+      return currentValue === param.showWhen.value;
+    }
+    return true;
+  });
+
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
       <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
@@ -160,7 +171,7 @@ export function WagmiMethodModal({
                 {/* Parameters */}
                 {method.parameters && method.parameters.length > 0 ? (
                   <div className="space-y-4">
-                    {method.parameters.map((param) => (
+                    {filteredParameters?.map((param) => (
                       <ParameterField
                         key={param.name}
                         param={param}

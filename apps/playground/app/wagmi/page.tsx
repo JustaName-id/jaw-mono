@@ -3,7 +3,7 @@
 import { useState, useCallback, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
-import { Mode } from '@jaw.id/core';
+import { Mode, type PaymasterConfig } from '@jaw.id/core';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { parseEther, formatUnits, type Address } from 'viem';
@@ -37,8 +37,9 @@ import { WagmiProviders } from './providers';
 import { type ModeType } from './config';
 import { MethodCard } from '../../components/method-card';
 import { WagmiMethodModal } from '../../components/wagmi-method-modal';
+import { EncodeDataModal } from '../../components/encode-data-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
-import { ConfigSnippet } from '../../components/config-snippet';
+import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import {
   WAGMI_METHODS,
   CATEGORIES,
@@ -47,7 +48,13 @@ import {
   type MethodCategory,
 } from '../../lib/wagmi-methods';
 
-function WagmiPageContent({ mode }: { mode: ModeType }) {
+interface WagmiPageContentProps {
+  mode: ModeType;
+  pmConfig: PaymasterApplyConfig | undefined;
+  onPaymasterApply: (config: PaymasterApplyConfig | null) => void;
+}
+
+function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContentProps) {
   const { address, isConnected, connector } = useAccount();
   const chainId = useChainId();
   const { data: balance } = useBalance({ address });
@@ -93,6 +100,7 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
 
   const [selectedMethod, setSelectedMethod] = useState<WagmiMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
   const [isExecuting, setIsExecuting] = useState(false);
@@ -275,6 +283,10 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
   );
 
   const handleMethodClick = (method: WagmiMethod) => {
+    if (method.category === 'utility') {
+      setIsEncodeModalOpen(true);
+      return;
+    }
     setSelectedMethod(method);
     setIsModalOpen(true);
   };
@@ -328,7 +340,12 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <ConfigSnippet type="wagmi" mode={mode} />
+              <ConfigSnippet
+                type="wagmi"
+                mode={mode}
+                paymasters={pmConfig}
+                onPaymasterApply={onPaymasterApply}
+              />
               <a
                 href="/wagmi"
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
@@ -486,6 +503,12 @@ function WagmiPageContent({ mode }: { mode: ModeType }) {
         {/* Activity Log */}
         <ExecutionLog logs={logs} onClear={() => setLogs([])} />
 
+        {/* Encode Data Modal */}
+        <EncodeDataModal
+          isOpen={isEncodeModalOpen}
+          onClose={() => setIsEncodeModalOpen(false)}
+        />
+
         {/* Method Modal */}
         <WagmiMethodModal
           method={selectedMethod}
@@ -508,9 +531,31 @@ function WagmiPageInner() {
   const mode: ModeType =
     modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
 
+  const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
+  const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
+
+  const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
+    if (config) {
+      const record: Record<number, PaymasterConfig> = {};
+      for (const chain of config.chains) {
+        record[chain.chainId] = { url: chain.url, ...(chain.context && { context: chain.context }) };
+      }
+      setPaymasters(record);
+      setPmConfig(config);
+    } else {
+      setPaymasters(undefined);
+      setPmConfig(undefined);
+    }
+  };
+
   return (
-    <WagmiProviders mode={mode}>
-      <WagmiPageContent key={mode} mode={mode} />
+    <WagmiProviders mode={mode} paymasters={paymasters}>
+      <WagmiPageContent
+        key={mode}
+        mode={mode}
+        pmConfig={pmConfig}
+        onPaymasterApply={handlePaymasterApply}
+      />
     </WagmiProviders>
   );
 }
