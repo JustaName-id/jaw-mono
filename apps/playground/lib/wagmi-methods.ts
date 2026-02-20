@@ -105,41 +105,7 @@ export const WAGMI_METHODS: WagmiMethod[] = [
     category: 'wallet',
     description: 'Connect with JAW wallet using wallet_connect',
     requiresConnection: false,
-    parameters: [
-      {
-        name: 'enablePaymaster',
-        type: 'toggle',
-        label: 'Enable Paymaster',
-        description: 'Sponsor gas fees via a paymaster for future calls',
-        required: false,
-        defaultValue: 'false',
-      },
-      {
-        name: 'paymasterChainId',
-        type: 'number',
-        label: 'Chain ID',
-        description: 'Chain ID the paymaster applies to (required)',
-        required: true,
-        defaultValue: '84532',
-        showWhen: { param: 'enablePaymaster', value: 'true' },
-      },
-      {
-        name: 'paymasterUrl',
-        type: 'string',
-        label: 'Paymaster URL',
-        description: 'RPC URL of the paymaster service (required)',
-        required: true,
-        showWhen: { param: 'enablePaymaster', value: 'true' },
-      },
-      {
-        name: 'paymasterContextJson',
-        type: 'json',
-        label: 'Context (optional)',
-        description: 'Optional JSON context, e.g. { "sponsorshipPolicyId": "..." }',
-        required: false,
-        showWhen: { param: 'enablePaymaster', value: 'true' },
-      },
-    ],
+    parameters: [],
     getCodeSnippet: () => `import { useConnect } from '@jaw.id/wagmi';
 import { useConnect as useWagmiConnect } from 'wagmi';
 
@@ -148,23 +114,7 @@ const { mutate: connect } = useConnect();
 
 const jawConnector = connectors.find(c => c.id === 'jaw');
 connect({ connector: jawConnector });`,
-    buildParams: (params) => {
-      const enablePaymaster = params.enablePaymaster === 'true';
-      if (enablePaymaster && params.paymasterUrl?.trim()) {
-        let context: Record<string, unknown> | undefined;
-        try {
-          if (params.paymasterContextJson?.trim()) context = JSON.parse(params.paymasterContextJson);
-        } catch { /* ignore */ }
-        return {
-          _paymasterConfig: {
-            chainId: parseInt(params.paymasterChainId || '84532'),
-            url: params.paymasterUrl.trim(),
-            ...(context && { context }),
-          },
-        };
-      }
-      return {};
-    },
+    buildParams: () => ({}),
   },
   {
     id: 'jaw_disconnect',

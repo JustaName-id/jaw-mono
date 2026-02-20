@@ -47,13 +47,15 @@ import {
   type WagmiMethod,
   type MethodCategory,
 } from '../../lib/wagmi-methods';
+import { PaymasterConfigButton, type PaymasterApplyConfig } from '../../components/paymaster-config-button';
 
 interface WagmiPageContentProps {
   mode: ModeType;
-  onSetPaymasters: (paymasters: Record<number, PaymasterConfig> | undefined) => void;
+  pmActive: boolean;
+  onPaymasterApply: (config: PaymasterApplyConfig | null) => void;
 }
 
-function WagmiPageContent({ mode, onSetPaymasters }: WagmiPageContentProps) {
+function WagmiPageContent({ mode, pmActive, onPaymasterApply }: WagmiPageContentProps) {
   const { address, isConnected, connector } = useAccount();
   const chainId = useChainId();
   const { data: balance } = useBalance({ address });
@@ -119,11 +121,6 @@ function WagmiPageContent({ mode, onSetPaymasters }: WagmiPageContentProps) {
 
         switch (method.hookType) {
           case 'jawConnect': {
-            // Apply paymaster config if provided before connecting
-            if (params._paymasterConfig && typeof params._paymasterConfig === 'object') {
-              const pm = params._paymasterConfig as { chainId: number; url: string; context?: Record<string, unknown> };
-              onSetPaymasters({ [pm.chainId]: { url: pm.url, ...(pm.context && { context: pm.context }) } });
-            }
             if (jawConnector) {
               result = await jawConnect({ connector: jawConnector });
             }
@@ -259,7 +256,6 @@ function WagmiPageContent({ mode, onSetPaymasters }: WagmiPageContentProps) {
       connectors,
       jawConnect,
       jawDisconnect,
-      onSetPaymasters,
       connector,
       switchChainAsync,
       sendTransactionAsync,
@@ -346,6 +342,7 @@ function WagmiPageContent({ mode, onSetPaymasters }: WagmiPageContentProps) {
             </div>
             <div className="flex items-center gap-2">
               <ConfigSnippet type="wagmi" mode={mode} />
+              <PaymasterConfigButton onApply={onPaymasterApply} isActive={pmActive} />
               <a
                 href="/wagmi"
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
@@ -532,13 +529,25 @@ function WagmiPageInner() {
     modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
 
   const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
+  const [pmActive, setPmActive] = useState(false);
+
+  const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
+    if (config) {
+      setPaymasters({ [config.chainId]: { url: config.url, ...(config.context && { context: config.context }) } });
+      setPmActive(true);
+    } else {
+      setPaymasters(undefined);
+      setPmActive(false);
+    }
+  };
 
   return (
     <WagmiProviders mode={mode} paymasters={paymasters}>
       <WagmiPageContent
         key={mode}
         mode={mode}
-        onSetPaymasters={setPaymasters}
+        pmActive={pmActive}
+        onPaymasterApply={handlePaymasterApply}
       />
     </WagmiProviders>
   );

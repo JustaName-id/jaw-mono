@@ -12,6 +12,7 @@ import { MethodModal } from '../../components/method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet } from '../../components/config-snippet';
+import { PaymasterConfigButton, type PaymasterApplyConfig } from '../../components/paymaster-config-button';
 import {
   RPC_METHODS,
   CATEGORIES,
@@ -55,6 +56,18 @@ function CorePageContent({ mode }: { mode: ModeType }) {
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
 
   const [sdk, setSdk] = useState(() => buildSdk(mode));
+  const [pmActive, setPmActive] = useState(false);
+
+  const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
+    if (config) {
+      const newSdk = buildSdk(mode, { [config.chainId]: { url: config.url, ...(config.context && { context: config.context }) } });
+      setSdk(newSdk);
+      setPmActive(true);
+    } else {
+      setSdk(buildSdk(mode));
+      setPmActive(false);
+    }
+  };
 
   const addLog = useCallback((type: LogEntry['type'], method: string, data: unknown) => {
     setLogs((prev) => [...prev, { timestamp: new Date(), type, method, data }]);
@@ -65,21 +78,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
       addLog('request', method, params);
 
       try {
-        // For wallet_connect: extract _paymasterConfig from params and rebuild SDK before connecting
-        let activeSdk = sdk;
-        if (method === 'wallet_connect' && Array.isArray(params) && params.length > 0) {
-          const firstParam = params[0] as Record<string, unknown>;
-          if (firstParam._paymasterConfig && typeof firstParam._paymasterConfig === 'object') {
-            const pm = firstParam._paymasterConfig as { chainId: number; url: string; context?: Record<string, unknown> };
-            const paymasters = { [pm.chainId]: { url: pm.url, ...(pm.context && { context: pm.context }) } };
-            activeSdk = buildSdk(mode, paymasters);
-            setSdk(activeSdk);
-            // Strip the meta field before sending to provider
-            params = [{ ...firstParam, _paymasterConfig: undefined }];
-          }
-        }
-
-        const result = await activeSdk.provider.request({ method, params });
+        const result = await sdk.provider.request({ method, params });
 
         addLog('response', method, result);
 
@@ -118,7 +117,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         throw error;
       }
     },
-    [sdk, setSdk, mode, addLog, defaultChainId]
+    [sdk, addLog, defaultChainId]
   );
 
   const handleMethodClick = (method: RpcMethod) => {
@@ -167,6 +166,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
             </div>
             <div className="flex items-center gap-2">
               <ConfigSnippet type="core" mode={mode} />
+              <PaymasterConfigButton onApply={handlePaymasterApply} isActive={pmActive} />
               <a
                 href="/core"
                 className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
