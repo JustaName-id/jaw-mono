@@ -295,7 +295,7 @@ function generateRoutingIndex(): string {
 
 > TypeScript SDK for identity-first smart accounts with passkey authentication and programmable permissions.
 
-JAW provides an EIP-1193 compliant provider for creating and managing smart accounts on EVM chains. Supports cross-platform (popup) and embedded (app-specific) authentication modes, with extensible permission delegation for apps and AI agents.
+JAW provides an EIP-1193 compliant provider for creating and managing smart accounts on EVM chains. Supports cross-platform (popup) and app-specific (embedded) authentication modes, with extensible permission delegation for apps and AI agents.
 
 ## Instructions for AI Assistants
 
