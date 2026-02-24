@@ -1,3 +1,13 @@
+## 0.0.5 (2026-02-24)
+
+### 🩹 Fixes
+
+- **core:** revert to hash signing ([#122](https://github.com/JustaName-id/jaw-mono/pull/122))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.0.4 (2026-02-24)
 
 ### 🩹 Fixes
