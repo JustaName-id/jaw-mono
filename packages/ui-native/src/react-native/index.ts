@@ -1,13 +1,12 @@
 export {
   ReactNativeUIHandler,
-  UIHandlerProvider,
-  ModalRenderer,
-  useUIHandler,
   hexToUtf8,
   isSiweMessage,
   getChainNameFromId,
   getChainIconKeyFromId,
 } from './ReactNativeUIHandler';
+
+export { JAWModalRoot } from './JAWModalRoot';
 
 export type {
   UIHandler,

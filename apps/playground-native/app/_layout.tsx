@@ -1,7 +1,7 @@
 import { Stack } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { useMemo } from 'react';
-import { ReactNativeUIHandler, UIHandlerProvider, ModalRenderer } from '@jaw/ui-native';
+import { ReactNativeUIHandler, JAWModalRoot } from '@jaw/ui-native';
 import '../global.css';
 
 export default function RootLayout() {
@@ -9,7 +9,7 @@ export default function RootLayout() {
   const uiHandler = useMemo(() => new ReactNativeUIHandler(), []);
 
   return (
-    <UIHandlerProvider handler={uiHandler}>
+    <>
       <StatusBar style="auto" />
       <Stack
         screenOptions={{
@@ -26,7 +26,7 @@ export default function RootLayout() {
         <Stack.Screen name="components" options={{ title: 'UI Components' }} />
         <Stack.Screen name="connect" options={{ title: 'Connect Wallet' }} />
       </Stack>
-      <ModalRenderer />
-    </UIHandlerProvider>
+      <JAWModalRoot />
+    </>
   );
 }
