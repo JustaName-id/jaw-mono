@@ -55,7 +55,6 @@ const MOCK_WEBAUTHN = {
 };
 const MOCK_R = 123n;
 const MOCK_S = 456n;
-const MOCK_HASH = '0xhash123' as Hex;
 const MOCK_WEBAUTHN_ENCODED = '0xwebauthnencoded' as Hex;
 const MOCK_ADDRESS = '0x1234567890123456789012345678901234567890' as const;
 const MOCK_FACTORY_ADDRESS = '0xfactory1234567890123456789012345678901234' as const;
