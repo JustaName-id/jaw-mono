@@ -13,7 +13,7 @@
   },
   "scripts": {
     "dev": "vocs dev",
-    "build": "vocs build",
+    "build": "vocs build && tsx scripts/generate-llms.ts",
     "preview": "vocs preview"
   },
   "dependencies": {
