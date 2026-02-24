@@ -19,6 +19,7 @@ import {
     isAddressEqual,
     type Client,
     type Account,
+    toPrefixedMessage,
 } from "viem";
 import { readContract, getChainId, signAuthorization as signAuthorizationAction } from "viem/actions";
 import {
@@ -34,8 +35,6 @@ import type { SignAuthorizationReturnType } from "viem/accounts";
 import * as Signature from "ox/Signature";
 import type * as WebAuthnP256 from "ox/WebAuthnP256";
 import {
-    hashMessage as erc7739HashMessage,
-    hashTypedData as erc7739HashTypedData,
     wrapTypedDataSignature,
 } from 'viem/experimental/erc7739'
 import {CONTRACT_NAME, CONTRACT_VERSION, FACTORY_ADDRESS} from "../constants.js";
@@ -215,19 +214,28 @@ export async function toJustanAccount(
 
             const address = await this.getAddress();
 
-            const hash = erc7739HashMessage({
-                message: message,
-                verifierDomain: {
-                    name: CONTRACT_NAME,
-                    version: CONTRACT_VERSION,
-                    verifyingContract: address,
-                    chainId: client.chain!.id,
-                },
-            })
-
             if (owner.type === 'address') throw new Error('owner cannot sign')
 
-            const signature = await sign({ owner, hash })
+            const verifierDomain = {
+                name: CONTRACT_NAME,
+                version: CONTRACT_VERSION,
+                verifyingContract: address,
+                chainId: client.chain!.id,
+            };
+
+            const signature = await signTypedData({
+                typedData: {
+                    domain: verifierDomain,
+                    types: {
+                        PersonalSign: [{ name: 'prefixed', type: 'bytes' }],
+                    },
+                    primaryType: 'PersonalSign' as const,
+                    message: {
+                        prefixed: toPrefixedMessage(message),
+                    },
+                },
+                owner,
+            });
 
             if (isEip7702) {
                 return signature;
@@ -248,23 +256,38 @@ export async function toJustanAccount(
 
             const address = await this.getAddress();
 
-            const nestedHash = erc7739HashTypedData({
-                domain,
-                types,
-                primaryType,
-                message,
-                verifierDomain: {
-                    chainId: client.chain!.id,
-                    name: CONTRACT_NAME,
-                    version: CONTRACT_VERSION,
-                    verifyingContract: address,
-                    salt: '0x0000000000000000000000000000000000000000000000000000000000000000' as Hash,
-                },
-            })
-
             if (owner.type === 'address') throw new Error('owner cannot sign')
 
-            const signature = await sign({ owner, hash: nestedHash })
+            const verifierDomain = {
+                chainId: client.chain!.id,
+                name: CONTRACT_NAME,
+                version: CONTRACT_VERSION,
+                verifyingContract: address,
+                salt: '0x0000000000000000000000000000000000000000000000000000000000000000' as Hash,
+            };
+
+            const signature = await signTypedData({
+                typedData: {
+                    domain,
+                    types: {
+                        ...types,
+                        TypedDataSign: [
+                            { name: 'contents', type: primaryType },
+                            { name: 'name', type: 'string' },
+                            { name: 'version', type: 'string' },
+                            { name: 'chainId', type: 'uint256' },
+                            { name: 'verifyingContract', type: 'address' },
+                            { name: 'salt', type: 'bytes32' },
+                        ],
+                    },
+                    primaryType: 'TypedDataSign' as const,
+                    message: {
+                        contents: message,
+                        ...verifierDomain,
+                    },
+                } as unknown as TypedDataDefinition,
+                owner,
+            });
 
             if (isEip7702) {
                 return signature;
@@ -348,35 +371,6 @@ async function getDelegationContract(
         abi: factoryAbi,
         functionName: "getImplementation",
     });
-}
-
-/** @internal */
-export async function sign({
-                               hash,
-                               owner,
-                           }: {
-    hash: Hash
-    owner: LocalAccount | WebAuthnAccount
-}) {
-    if (owner.type === 'webAuthn') {
-        const { signature, webauthn } = await owner.sign({
-            hash,
-        })
-        return toWebAuthnSignature({
-            signature,
-            webauthn: {
-                authenticatorData: webauthn.authenticatorData,
-                clientDataJSON: webauthn.clientDataJSON,
-                challengeIndex: webauthn.challengeIndex ?? 23,
-                typeIndex: webauthn.typeIndex ?? 1,
-                userVerificationRequired: webauthn.userVerificationRequired ?? true,
-            },
-        })
-    }
-
-    if (owner.sign) return owner.sign({ hash })
-
-    throw new BaseError('`owner` does not support raw sign.')
 }
 
 /**

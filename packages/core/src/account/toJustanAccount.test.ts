@@ -1,7 +1,7 @@
 import * as viem from 'viem';
 import { type Hex } from 'viem';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { wrapSignature, toWebAuthnSignature, sign, signTypedData, toJustanAccount } from './toJustanAccount.js';
+import { wrapSignature, toWebAuthnSignature, signTypedData, toJustanAccount } from './toJustanAccount.js';
 import * as Signature from 'ox/Signature';
 
 vi.mock('viem', async () => {
@@ -55,7 +55,6 @@ const MOCK_WEBAUTHN = {
 };
 const MOCK_R = 123n;
 const MOCK_S = 456n;
-const MOCK_HASH = '0xhash123' as Hex;
 const MOCK_WEBAUTHN_ENCODED = '0xwebauthnencoded' as Hex;
 const MOCK_ADDRESS = '0x1234567890123456789012345678901234567890' as const;
 const MOCK_FACTORY_ADDRESS = '0xfactory1234567890123456789012345678901234' as const;
@@ -185,61 +184,6 @@ describe('toJustanAccount unit tests', () => {
             expect(viem.padHex).toHaveBeenCalledWith(mockSHex, { size: 32 });
             expect(viem.stringToHex).toHaveBeenCalledWith(MOCK_WEBAUTHN.clientDataJSON);
             expect(result).toBe(mockEncodedResult);
-        });
-    });
-
-    describe('sign unit tests', () => {
-        it('should sign with webAuthn owner', async () => {
-            const mockWebAuthnOwner = {
-                type: 'webAuthn' as const,
-                sign: vi.fn().mockResolvedValue({
-                    signature: MOCK_SIGNATURE,
-                    webauthn: MOCK_WEBAUTHN,
-                }),
-            } as any;
-
-            vi.mocked(viem.encodeAbiParameters).mockReturnValue(MOCK_WEBAUTHN_ENCODED);
-            vi.mocked(Signature.fromHex).mockReturnValue({ r: MOCK_R, s: MOCK_S, yParity: 0 });
-            vi.mocked(viem.numberToHex).mockReturnValue('0x1' as Hex);
-            vi.mocked(viem.padHex).mockReturnValue('0xpadded' as Hex);
-            vi.mocked(viem.stringToHex).mockReturnValue('0xstr' as Hex);
-
-            const result = await sign({
-                hash: MOCK_HASH,
-                owner: mockWebAuthnOwner,
-            });
-
-            expect(mockWebAuthnOwner.sign).toHaveBeenCalledWith({ hash: MOCK_HASH });
-            expect(result).toBeDefined();
-        });
-
-        it('should call owner.sign for local account', async () => {
-            const mockLocalOwner = {
-                type: 'local' as const,
-                address: '0x1234567890123456789012345678901234567890' as const,
-                sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
-            } as any;
-
-            const result = await sign({
-                hash: MOCK_HASH,
-                owner: mockLocalOwner,
-            });
-
-            expect(mockLocalOwner.sign).toHaveBeenCalledWith({ hash: MOCK_HASH });
-            expect(result).toBe(MOCK_SIGNATURE);
-        });
-
-        it('should throw error when owner does not support signing', async () => {
-            const mockInvalidOwner = {
-                type: 'local' as const,
-            };
-
-            await expect(
-                sign({
-                    hash: MOCK_HASH,
-                    owner: mockInvalidOwner as any,
-                })
-            ).rejects.toThrow('`owner` does not support raw sign.');
         });
     });
 
@@ -853,12 +797,12 @@ describe('toJustanAccount unit tests', () => {
                 const mockEOA = {
                     type: 'local' as const,
                     address: MOCK_ADDRESS,
-                    sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                    signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
                 } as any;
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockImplementation((params: any) => ({
                     ...params,
@@ -872,8 +816,8 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const signature = await account.signMessage({ message: MOCK_MESSAGE });
-                
-                expect(mockEOA.sign).toHaveBeenCalled();
+
+                expect(mockEOA.signTypedData).toHaveBeenCalled();
                 expect(signature).toBe(MOCK_SIGNATURE);
             });
 
@@ -881,12 +825,12 @@ describe('toJustanAccount unit tests', () => {
                 const mockOwner = {
                     type: 'local' as const,
                     address: MOCK_ADDRESS,
-                    sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                    signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
                 } as any;
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(viem.encodeAbiParameters).mockReturnValue(MOCK_WRAPPED_SIGNATURE);
@@ -901,8 +845,8 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const signature = await account.signMessage({ message: MOCK_MESSAGE });
-                
-                expect(mockOwner.sign).toHaveBeenCalled();
+
+                expect(mockOwner.signTypedData).toHaveBeenCalled();
                 expect(viem.encodeAbiParameters).toHaveBeenCalled();
                 expect(signature).toBe(MOCK_WRAPPED_SIGNATURE);
             });
@@ -937,7 +881,7 @@ describe('toJustanAccount unit tests', () => {
                 const mockEOA = {
                     type: 'local' as const,
                     address: MOCK_ADDRESS,
-                    sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                    signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
                 } as any;
 
                 const { readContract } = await import('viem/actions');
@@ -956,8 +900,8 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const signature = await account.signTypedData(MOCK_TYPED_DATA);
-                
-                expect(mockEOA.sign).toHaveBeenCalled();
+
+                expect(mockEOA.signTypedData).toHaveBeenCalled();
                 expect(signature).toBe(MOCK_SIGNATURE);
             });
 
@@ -965,7 +909,7 @@ describe('toJustanAccount unit tests', () => {
                 const mockOwner = {
                     type: 'local' as const,
                     address: MOCK_ADDRESS,
-                    sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                    signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
                 } as any;
 
                 const { readContract } = await import('viem/actions');
@@ -987,8 +931,8 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const signature = await account.signTypedData(MOCK_TYPED_DATA);
-                
-                expect(mockOwner.sign).toHaveBeenCalled();
+
+                expect(mockOwner.signTypedData).toHaveBeenCalled();
                 expect(wrapTypedDataSignature).toHaveBeenCalled();
                 expect(signature).toBe(MOCK_WRAPPED_TYPED_DATA_SIGNATURE);
             });
