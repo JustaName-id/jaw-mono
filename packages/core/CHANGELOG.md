@@ -1,3 +1,13 @@
+## 0.0.4 (2026-02-24)
+
+### 🩹 Fixes
+
+- **core:** sign typed data instead of hash ([#121](https://github.com/JustaName-id/jaw-mono/pull/121))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.0.3 (2026-02-20)
 
 ### 🩹 Fixes
