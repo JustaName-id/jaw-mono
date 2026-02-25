@@ -18,7 +18,7 @@ import {
   exportKeyToHexString,
   importKeyFromHexString,
   deriveSharedSecret,
-} from '@jaw.id/core';
+} from "@jaw.id/core";
 
 // ============================================================================
 // Types
@@ -89,8 +89,13 @@ export interface SessionResult<T> {
 // Constants
 // ============================================================================
 
-const STORAGE_KEY = 'jaw:sessions:apps';
-const LOG_PREFIX = '[SessionManager]';
+const STORAGE_KEY = "jaw:sessions:apps";
+const LOG_PREFIX = "[SessionManager]";
+
+/** Maximum session age: 30 days (milliseconds) */
+const SESSION_MAX_AGE_MS = 30 * 24 * 60 * 60 * 1000;
+/** Maximum inactivity before session expires: 7 days (milliseconds) */
+const SESSION_INACTIVITY_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 
 // In-memory cache for hashed origins to avoid re-computing
 const originHashCache = new Map<string, string>();
@@ -116,9 +121,9 @@ async function hashOrigin(origin: string): Promise<string> {
   // Compute hash
   const encoder = new TextEncoder();
   const data = encoder.encode(origin);
-  const hashBuffer = await crypto.subtle.digest('SHA-256', data);
+  const hashBuffer = await crypto.subtle.digest("SHA-256", data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const hash = hashArray.map((b) => b.toString(16).padStart(2, "0")).join("");
 
   // Cache and return
   originHashCache.set(origin, hash);
@@ -133,7 +138,7 @@ async function hashOrigin(origin: string): Promise<string> {
  * Safe localStorage getter with SSR support.
  */
 function getFromStorage<T>(key: string): T | null {
-  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
     return null;
   }
 
@@ -151,7 +156,7 @@ function getFromStorage<T>(key: string): T | null {
  * Safe localStorage setter with SSR support.
  */
 function setToStorage<T>(key: string, value: T): boolean {
-  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
     return false;
   }
 
@@ -168,7 +173,7 @@ function setToStorage<T>(key: string, value: T): boolean {
  * Safe localStorage remover with SSR support.
  */
 function removeFromStorage(key: string): boolean {
-  if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
+  if (typeof window === "undefined" || typeof localStorage === "undefined") {
     return false;
   }
 
@@ -189,7 +194,7 @@ function removeFromStorage(key: string): boolean {
  * Validates that a string is a valid origin URL.
  */
 function isValidOrigin(origin: string): boolean {
-  if (!origin || typeof origin !== 'string') return false;
+  if (!origin || typeof origin !== "string") return false;
 
   try {
     const url = new URL(origin);
@@ -204,7 +209,7 @@ function isValidOrigin(origin: string): boolean {
  * Validates that a string looks like a hex-encoded key.
  */
 function isValidHexKey(key: string): boolean {
-  if (!key || typeof key !== 'string') return false;
+  if (!key || typeof key !== "string") return false;
   // Basic hex validation - should be even length and only hex chars
   return /^[0-9a-fA-F]+$/.test(key) && key.length > 0 && key.length % 2 === 0;
 }
@@ -213,25 +218,27 @@ function isValidHexKey(key: string): boolean {
  * Validates that an address is a valid Ethereum address.
  */
 function isValidAddress(address: string): address is `0x${string}` {
-  if (!address || typeof address !== 'string') return false;
+  if (!address || typeof address !== "string") return false;
   return /^0x[0-9a-fA-F]{40}$/i.test(address);
 }
 
 /**
  * Validates a SessionAuthState object.
  */
-function isValidSessionAuthState(account: unknown): account is SessionAuthState {
-  if (!account || typeof account !== 'object') return false;
+function isValidSessionAuthState(
+  account: unknown,
+): account is SessionAuthState {
+  if (!account || typeof account !== "object") return false;
 
   const acc = account as Record<string, unknown>;
 
   return (
     isValidAddress(acc.address as string) &&
-    typeof acc.credentialId === 'string' &&
+    typeof acc.credentialId === "string" &&
     acc.credentialId.length > 0 &&
-    typeof acc.username === 'string' &&
-    typeof acc.publicKey === 'string' &&
-    (acc.publicKey as string).startsWith('0x')
+    typeof acc.username === "string" &&
+    typeof acc.publicKey === "string" &&
+    (acc.publicKey as string).startsWith("0x")
   );
 }
 
@@ -239,18 +246,32 @@ function isValidSessionAuthState(account: unknown): account is SessionAuthState 
  * Validates an AppSession object from storage.
  */
 function isValidSession(session: unknown): session is AppSession {
-  if (!session || typeof session !== 'object') return false;
+  if (!session || typeof session !== "object") return false;
 
   const s = session as Record<string, unknown>;
 
   return (
-    typeof s.popupPrivateKey === 'string' &&
-    typeof s.popupPublicKey === 'string' &&
-    typeof s.peerPublicKey === 'string' &&
+    typeof s.popupPrivateKey === "string" &&
+    typeof s.popupPublicKey === "string" &&
+    typeof s.peerPublicKey === "string" &&
     (s.authState === null || isValidSessionAuthState(s.authState)) &&
-    typeof s.createdAt === 'number' &&
-    typeof s.lastUsedAt === 'number'
+    typeof s.createdAt === "number" &&
+    typeof s.lastUsedAt === "number"
   );
+}
+
+/**
+ * Checks whether a session has expired.
+ * A session expires if:
+ * - It was created more than SESSION_MAX_AGE_MS ago (30 days), OR
+ * - It has been inactive for more than SESSION_INACTIVITY_TTL_MS (7 days)
+ */
+function isSessionExpired(session: AppSession): boolean {
+  const now = Date.now();
+  const age = now - session.createdAt;
+  const inactivity = now - session.lastUsedAt;
+
+  return age > SESSION_MAX_AGE_MS || inactivity > SESSION_INACTIVITY_TTL_MS;
 }
 
 // ============================================================================
@@ -304,22 +325,31 @@ export class SessionManager {
     const stored = getFromStorage<StoredSessions>(STORAGE_KEY);
     this.cache = stored || {};
 
-    // Validate and clean up invalid sessions
+    // Validate and clean up invalid or expired sessions
     if (this.cache) {
-      const validSessions: StoredSessions = {};
-      let hasInvalid = false;
+      const activeSessions: StoredSessions = {};
+      let hasRemoved = false;
 
       for (const [hashedOrigin, session] of Object.entries(this.cache)) {
-        if (isValidSession(session)) {
-          validSessions[hashedOrigin] = session;
+        if (!isValidSession(session)) {
+          console.warn(
+            `${LOG_PREFIX} Removing invalid session for hash:`,
+            hashedOrigin.slice(0, 8) + "...",
+          );
+          hasRemoved = true;
+        } else if (isSessionExpired(session)) {
+          console.warn(
+            `${LOG_PREFIX} Removing expired session for hash:`,
+            hashedOrigin.slice(0, 8) + "...",
+          );
+          hasRemoved = true;
         } else {
-          console.warn(`${LOG_PREFIX} Removing invalid session for hash:`, hashedOrigin.slice(0, 8) + '...');
-          hasInvalid = true;
+          activeSessions[hashedOrigin] = session;
         }
       }
 
-      if (hasInvalid) {
-        this.cache = validSessions;
+      if (hasRemoved) {
+        this.cache = activeSessions;
         this.saveToStorage();
       }
     }
@@ -373,6 +403,13 @@ export class SessionManager {
     const session = sessions[hashedOrigin];
 
     if (session && isValidSession(session)) {
+      // Evict expired sessions on access
+      if (isSessionExpired(session)) {
+        delete sessions[hashedOrigin];
+        this.cache = sessions;
+        this.saveToStorage();
+        return null;
+      }
       return { ...session };
     }
 
@@ -398,23 +435,33 @@ export class SessionManager {
     }
 
     if (!isValidHexKey(peerPublicKey)) {
-      throw new Error('Invalid peer public key');
+      throw new Error("Invalid peer public key");
     }
 
     // Account is optional - validate only if provided
     if (account && !isValidSessionAuthState(account)) {
-      throw new Error('Invalid account data');
+      throw new Error("Invalid account data");
     }
 
-    console.log(`${LOG_PREFIX} Creating session for:`, origin, account ? `with account ${account.address}` : '(pending account)');
+    console.log(
+      `${LOG_PREFIX} Creating session for:`,
+      origin,
+      account ? `with account ${account.address}` : "(pending account)",
+    );
 
     // Hash the origin for storage
     const hashedOrigin = await hashOrigin(origin);
 
     // Generate unique key pair for this session
     const keyPair = await generateKeyPair();
-    const popupPrivateKey = await exportKeyToHexString('private', keyPair.privateKey);
-    const popupPublicKey = await exportKeyToHexString('public', keyPair.publicKey);
+    const popupPrivateKey = await exportKeyToHexString(
+      "private",
+      keyPair.privateKey,
+    );
+    const popupPublicKey = await exportKeyToHexString(
+      "public",
+      keyPair.publicKey,
+    );
 
     const now = Date.now();
     const session: AppSession = {
@@ -432,7 +479,7 @@ export class SessionManager {
     this.cache = sessions;
 
     if (!this.saveToStorage()) {
-      throw new Error('Failed to persist session');
+      throw new Error("Failed to persist session");
     }
 
     console.log(`${LOG_PREFIX} Session created for:`, origin);
@@ -446,7 +493,10 @@ export class SessionManager {
    * @param updates - Partial session data to update
    * @returns The updated session, or null if session doesn't exist
    */
-  async updateSession(origin: string, updates: Partial<Omit<AppSession, 'createdAt'>>): Promise<AppSession | null> {
+  async updateSession(
+    origin: string,
+    updates: Partial<Omit<AppSession, "createdAt">>,
+  ): Promise<AppSession | null> {
     const session = await this.getSession(origin);
     if (!session) {
       console.warn(`${LOG_PREFIX} Cannot update non-existent session:`, origin);
@@ -526,10 +576,16 @@ export class SessionManager {
    * @param newPeerPublicKey - The app's new public key
    * @returns The updated session, or null if session doesn't exist
    */
-  async updatePeerKey(origin: string, newPeerPublicKey: string): Promise<AppSession | null> {
+  async updatePeerKey(
+    origin: string,
+    newPeerPublicKey: string,
+  ): Promise<AppSession | null> {
     const session = await this.getSession(origin);
     if (!session) {
-      console.warn(`${LOG_PREFIX} Cannot update peer key for non-existent session:`, origin);
+      console.warn(
+        `${LOG_PREFIX} Cannot update peer key for non-existent session:`,
+        origin,
+      );
       return null;
     }
 
@@ -542,8 +598,14 @@ export class SessionManager {
 
     // Generate new popup key pair for security
     const keyPair = await generateKeyPair();
-    const popupPrivateKey = await exportKeyToHexString('private', keyPair.privateKey);
-    const popupPublicKey = await exportKeyToHexString('public', keyPair.publicKey);
+    const popupPrivateKey = await exportKeyToHexString(
+      "private",
+      keyPair.privateKey,
+    );
+    const popupPublicKey = await exportKeyToHexString(
+      "public",
+      keyPair.publicKey,
+    );
 
     return this.updateSession(origin, {
       peerPublicKey: newPeerPublicKey,
@@ -561,13 +623,21 @@ export class SessionManager {
    * @param account - The new account data
    * @returns The updated session, or null if session doesn't exist
    */
-  async updateSessionAuthState(origin: string, authState: SessionAuthState): Promise<AppSession | null> {
+  async updateSessionAuthState(
+    origin: string,
+    authState: SessionAuthState,
+  ): Promise<AppSession | null> {
     if (!isValidSessionAuthState(authState)) {
       console.error(`${LOG_PREFIX} Invalid authState data`);
       return null;
     }
 
-    console.log(`${LOG_PREFIX} Updating authState for:`, origin, '→', authState.address);
+    console.log(
+      `${LOG_PREFIX} Updating authState for:`,
+      origin,
+      "→",
+      authState.address,
+    );
     return this.updateSession(origin, { authState });
   }
 
@@ -606,7 +676,9 @@ export class SessionManager {
    * @param origin - The app origin
    * @returns The authState if session exists, null otherwise
    */
-  async getAuthStateForOrigin(origin: string): Promise<SessionAuthState | null> {
+  async getAuthStateForOrigin(
+    origin: string,
+  ): Promise<SessionAuthState | null> {
     const session = await this.getSession(origin);
     return session?.authState || null;
   }
@@ -645,13 +717,22 @@ export class SessionManager {
   async deriveSharedSecret(origin: string): Promise<CryptoKey | null> {
     const session = await this.getSession(origin);
     if (!session) {
-      console.warn(`${LOG_PREFIX} Cannot derive secret for non-existent session:`, origin);
+      console.warn(
+        `${LOG_PREFIX} Cannot derive secret for non-existent session:`,
+        origin,
+      );
       return null;
     }
 
     try {
-      const privateKey = await importKeyFromHexString('private', session.popupPrivateKey);
-      const peerPublicKey = await importKeyFromHexString('public', session.peerPublicKey);
+      const privateKey = await importKeyFromHexString(
+        "private",
+        session.popupPrivateKey,
+      );
+      const peerPublicKey = await importKeyFromHexString(
+        "public",
+        session.peerPublicKey,
+      );
       return deriveSharedSecret(privateKey, peerPublicKey);
     } catch (error) {
       console.error(`${LOG_PREFIX} Failed to derive shared secret:`, error);
