@@ -2,9 +2,13 @@ import {
   announceProvider as mipdAnnounceProvider,
   type EIP1193Provider,
   type EIP6963ProviderInfo,
-} from 'mipd';
-import type { ProviderInterface } from './interface.js';
-import {JAW_WALLET_ICON, JAW_WALLET_NAME, JAW_WALLET_RDNS} from "../constants.js";
+} from "mipd";
+import type { ProviderInterface } from "./interface.js";
+import {
+  JAW_WALLET_ICON,
+  JAW_WALLET_NAME,
+  JAW_WALLET_RDNS,
+} from "../constants.js";
 
 /**
  * Return type of the announce function - cleanup function
@@ -34,7 +38,8 @@ function createEIP1193Wrapper(provider: ProviderInterface): EIP1193Provider {
     off: provider.off?.bind(provider) ?? undefined,
     once: provider.once?.bind(provider) ?? undefined,
     addListener: provider.addListener?.bind(provider) ?? undefined,
-    removeAllListeners: provider.removeAllListeners?.bind(provider) ?? undefined,
+    removeAllListeners:
+      provider.removeAllListeners?.bind(provider) ?? undefined,
   } as unknown as EIP1193Provider;
 }
 
@@ -47,6 +52,14 @@ function createProviderInfo(): EIP6963ProviderInfo {
   };
 }
 
+function isBrowserEnvironment(): boolean {
+  if (typeof window === "undefined") return false;
+  if (typeof CustomEvent === "undefined") return false;
+  if (typeof navigator !== "undefined" && navigator.product === "ReactNative")
+    return false;
+  return true;
+}
+
 /**
  * Announces the JAW Provider via EIP-6963 using mipd.
  *
@@ -54,9 +67,9 @@ function createProviderInfo(): EIP6963ProviderInfo {
  * @returns A cleanup function to stop announcing, or null if not in browser
  */
 export function announceProvider(
-  provider: ProviderInterface
+  provider: ProviderInterface,
 ): AnnounceProviderCleanup | null {
-  if (typeof window === 'undefined') {
+  if (!isBrowserEnvironment()) {
     return null;
   }
 
