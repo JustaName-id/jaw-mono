@@ -66,12 +66,7 @@ export function middleware(request: NextRequest) {
     ...(isDev ? [] : ['upgrade-insecure-requests']),
   ].join('; ');
 
-  const requestHeaders = new Headers(request.headers);
-  requestHeaders.set('x-nonce', nonce);
-
-  const response = NextResponse.next({
-    request: { headers: requestHeaders },
-  });
+  const response = NextResponse.next();
 
   response.headers.set('Content-Security-Policy', csp);
   response.headers.set(
