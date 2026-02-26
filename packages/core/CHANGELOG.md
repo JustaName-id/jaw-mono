@@ -1,3 +1,13 @@
+## 0.0.6 (2026-02-26)
+
+### 🩹 Fixes
+
+- **core:** update signTypedData to use hash signing ([#125](https://github.com/JustaName-id/jaw-mono/pull/125))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.0.5 (2026-02-24)
 
 ### 🩹 Fixes
