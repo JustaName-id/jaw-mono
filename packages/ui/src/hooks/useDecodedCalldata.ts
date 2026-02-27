@@ -7,6 +7,7 @@ export interface DecodedParam {
   name: string;
   type: string;
   value: string;
+  rawValue?: string; // raw address hex for type === 'address'
 }
 
 export interface DecodedCalldata {
@@ -100,6 +101,7 @@ export function useDecodedCalldata(
           name: inputs[i]?.name || `param${i}`,
           type: inputs[i]?.type || 'unknown',
           value: formatParamValue(arg),
+          ...(inputs[i]?.type === 'address' && typeof arg === 'string' ? { rawValue: arg } : {}),
         }));
 
         const signature = `${functionName}(${inputs.map((inp) => inp.type).join(', ')})`;

@@ -1,15 +1,60 @@
+import { useState, useEffect, useMemo } from 'react';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
+import { getJustaNameInstance, formatAddress } from '../../utils';
+
+const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 interface DecodedCalldataProps {
   to: string;
   data: string;
   chainId: number;
   apiKey?: string;
+  resolvedAddresses?: Record<string, string>;
+  mainnetRpcUrl?: string;
 }
 
-export const DecodedCalldata = ({ to, data, chainId, apiKey }: DecodedCalldataProps) => {
+export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, mainnetRpcUrl }: DecodedCalldataProps) => {
   const { decoded, isLoading } = useDecodedCalldata(to, data, chainId, apiKey);
+  const [localResolved, setLocalResolved] = useState<Record<string, string>>({});
+
+  // Merge parent-resolved addresses with locally resolved ones
+  const allResolved = useMemo(
+    () => ({ ...resolvedAddresses, ...localResolved }),
+    [resolvedAddresses, localResolved]
+  );
+
+  // Resolve address params that aren't already resolved
+  useEffect(() => {
+    if (!decoded || !mainnetRpcUrl) return;
+
+    const addressParams = decoded.params
+      .filter((p) => p.type === 'address' && p.rawValue)
+      .map((p) => p.rawValue!)
+      .filter((addr) => addr.toLowerCase() !== ZERO_ADDRESS && !allResolved[addr]);
+
+    // Deduplicate
+    const unique = [...new Set(addressParams)];
+    if (unique.length === 0) return;
+
+    const justaName = getJustaNameInstance(mainnetRpcUrl);
+
+    unique.forEach((address) => {
+      justaName.subnames
+        .reverseResolve({
+          address: address as `0x${string}`,
+          chainId,
+        })
+        .then((result) => {
+          if (result) {
+            setLocalResolved((prev) => ({ ...prev, [address]: result }));
+          }
+        })
+        .catch(() => {
+          // Silently fail - will show raw address
+        });
+    });
+  }, [decoded, mainnetRpcUrl, chainId, allResolved]);
 
   if (isLoading) {
     return (
@@ -50,17 +95,22 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey }: DecodedCalldataPr
 
       {decoded.params.length > 0 && (
         <div className="flex flex-col gap-1 p-2 bg-secondary rounded-[6px]">
-          {decoded.params.map((param, i) => (
-            <div key={i} className="flex flex-col gap-0.5">
-              <div className="flex items-baseline gap-1.5">
-                <span className="text-xs font-semibold text-muted-foreground">{param.name}</span>
-                <span className="text-[10px] text-muted-foreground/60 font-mono">{param.type}</span>
+          {decoded.params.map((param, i) => {
+            const resolvedName = param.rawValue ? allResolved[param.rawValue] : undefined;
+            return (
+              <div key={i} className="flex flex-col gap-0.5">
+                <div className="flex items-baseline gap-1.5">
+                  <span className="text-xs font-semibold text-muted-foreground">{param.name}</span>
+                  <span className="text-[10px] text-muted-foreground/60 font-mono">{param.type}</span>
+                </div>
+                <p className="text-xs font-mono break-all text-foreground leading-[150%]">
+                  {resolvedName
+                    ? `${resolvedName} (${formatAddress(param.rawValue!)})`
+                    : param.value}
+                </p>
               </div>
-              <p className="text-xs font-mono break-all text-foreground leading-[150%]">
-                {param.value}
-              </p>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
 
