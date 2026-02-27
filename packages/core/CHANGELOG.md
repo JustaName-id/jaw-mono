@@ -1,3 +1,13 @@
+## 0.0.7 (2026-02-27)
+
+### 🩹 Fixes
+
+- **core:** add celo mainnet + sepolia ([#126](https://github.com/JustaName-id/jaw-mono/pull/126))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.0.6 (2026-02-26)
 
 ### 🩹 Fixes
