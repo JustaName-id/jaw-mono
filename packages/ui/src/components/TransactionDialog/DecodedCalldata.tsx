@@ -43,16 +43,21 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, 
     return normalized;
   }, [resolvedAddresses, localResolved]);
 
+  // Keep a ref to allResolved so the effect can read it without re-triggering
+  const allResolvedRef = useRef(allResolved);
+  allResolvedRef.current = allResolved;
+
   // Resolve address params that aren't already resolved
   useEffect(() => {
     if (!decoded || !mainnetRpcUrl) return;
 
+    const currentResolved = allResolvedRef.current;
     const addressParams = decoded.params
       .filter((p) => p.type === 'address' && p.rawValue)
       .map((p) => p.rawValue!)
       .filter((addr) => {
         const lower = addr.toLowerCase();
-        return lower !== ZERO_ADDRESS && !allResolved[lower] && !attemptedRef.current.has(lower);
+        return lower !== ZERO_ADDRESS && !currentResolved[lower] && !attemptedRef.current.has(lower);
       });
 
     // Deduplicate
@@ -79,7 +84,7 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, 
           // Silently fail - will show raw address
         });
     });
-  }, [decoded, mainnetRpcUrl, chainId, allResolved]);
+  }, [decoded, mainnetRpcUrl, chainId]);
 
   if (isLoading) {
     return (
