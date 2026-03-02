@@ -1,3 +1,13 @@
+## 0.0.9 (2026-03-02)
+
+### 🩹 Fixes
+
+- **ui:** reverse resolve addresses in decoded calldata screens ([#127](https://github.com/JustaName-id/jaw-mono/pull/127))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.0.8 (2026-02-27)
 
 ### 🧱 Updated Dependencies
