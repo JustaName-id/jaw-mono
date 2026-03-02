@@ -41,6 +41,7 @@ export const TransactionDialog = ({
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
+  const [isAddressCopied, setIsAddressCopied] = useState<{ [key: string]: boolean }>({});
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
 
   const totalTransactions = transactions.length;
@@ -73,7 +74,6 @@ export const TransactionDialog = ({
         address: walletAddress as `0x${string}`,
         chainId: currentTransaction.chainId,
       }).then((result) => {
-        console.log('result', result);
         if (result) {
           setResolvedAddresses(prev => ({ ...prev, [walletAddress]: result }));
         }
@@ -211,6 +211,19 @@ export const TransactionDialog = ({
                     <p className="text-base font-normal leading-[150%]">
                       {displayToAddress}
                     </p>
+                    {currentTransaction?.to && (
+                      isAddressCopied['single-to'] ? (
+                        <CopiedIcon width={14} height={14} className="flex-shrink-0" />
+                      ) : (
+                        <CopyIcon width={14} height={14} onClick={() => {
+                          if (typeof window !== 'undefined' && navigator?.clipboard) {
+                            navigator.clipboard.writeText(currentTransaction.to);
+                            setIsAddressCopied(prev => ({ ...prev, 'single-to': true }));
+                            setTimeout(() => setIsAddressCopied(prev => ({ ...prev, 'single-to': false })), 3000);
+                          }
+                        }} className="cursor-pointer flex-shrink-0" />
+                      )
+                    )}
                   </div>
                 </div>
               </div>
@@ -369,6 +382,8 @@ export const TransactionDialog = ({
                     data={currentTransaction.data!}
                     chainId={currentTransaction.chainId}
                     apiKey={apiKey}
+                    resolvedAddresses={resolvedAddresses}
+                    mainnetRpcUrl={mainnetRpcUrl}
                   />
                 </div>
               )}
@@ -429,7 +444,20 @@ export const TransactionDialog = ({
                         <div className="flex flex-col gap-3">
                           {/* Interacting with (To) */}
                           <div className="flex flex-col gap-1 border border-border rounded-[6px] p-2">
-                            <p className="text-xs font-bold leading-[133%] text-black">Interacting with (to)</p>
+                            <div className="flex items-center justify-between">
+                              <p className="text-xs font-bold leading-[133%] text-black">Interacting with (to)</p>
+                              {isAddressCopied[`to-${index}`] ? (
+                                <CopiedIcon width={14} height={14} />
+                              ) : (
+                                <CopyIcon width={14} height={14} onClick={() => {
+                                  if (typeof window !== 'undefined' && navigator?.clipboard) {
+                                    navigator.clipboard.writeText(transaction.to);
+                                    setIsAddressCopied(prev => ({ ...prev, [`to-${index}`]: true }));
+                                    setTimeout(() => setIsAddressCopied(prev => ({ ...prev, [`to-${index}`]: false })), 3000);
+                                  }
+                                }} className="cursor-pointer" />
+                              )}
+                            </div>
                             <div className="flex flex-row items-center gap-1">
                               <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
                               <p className="text-sm font-normal leading-[150%]">
@@ -488,6 +516,8 @@ export const TransactionDialog = ({
                                 data={transaction.data!}
                                 chainId={transaction.chainId}
                                 apiKey={apiKey}
+                                resolvedAddresses={resolvedAddresses}
+                                mainnetRpcUrl={mainnetRpcUrl}
                               />
                             </div>
                           )}
