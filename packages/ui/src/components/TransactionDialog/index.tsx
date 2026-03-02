@@ -74,7 +74,6 @@ export const TransactionDialog = ({
         address: walletAddress as `0x${string}`,
         chainId: currentTransaction.chainId,
       }).then((result) => {
-        console.log('result', result);
         if (result) {
           setResolvedAddresses(prev => ({ ...prev, [walletAddress]: result }));
         }

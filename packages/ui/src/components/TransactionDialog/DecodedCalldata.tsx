@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
 import { getJustaNameInstance, formatAddress } from '../../utils';
@@ -17,12 +17,31 @@ interface DecodedCalldataProps {
 export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, mainnetRpcUrl }: DecodedCalldataProps) => {
   const { decoded, isLoading } = useDecodedCalldata(to, data, chainId, apiKey);
   const [localResolved, setLocalResolved] = useState<Record<string, string>>({});
+  const attemptedRef = useRef<Set<string>>(new Set());
 
-  // Merge parent-resolved addresses with locally resolved ones
-  const allResolved = useMemo(
-    () => ({ ...resolvedAddresses, ...localResolved }),
-    [resolvedAddresses, localResolved]
-  );
+  // Reset local state when decoded data changes identity (new transaction)
+  const decodedIdRef = useRef(decoded);
+  useEffect(() => {
+    if (decodedIdRef.current !== decoded) {
+      decodedIdRef.current = decoded;
+      setLocalResolved({});
+      attemptedRef.current = new Set();
+    }
+  }, [decoded]);
+
+  // Normalize parent-resolved addresses to lowercase keys, then merge with local
+  const allResolved = useMemo(() => {
+    const normalized: Record<string, string> = {};
+    if (resolvedAddresses) {
+      for (const [key, value] of Object.entries(resolvedAddresses)) {
+        normalized[key.toLowerCase()] = value;
+      }
+    }
+    for (const [key, value] of Object.entries(localResolved)) {
+      normalized[key.toLowerCase()] = value;
+    }
+    return normalized;
+  }, [resolvedAddresses, localResolved]);
 
   // Resolve address params that aren't already resolved
   useEffect(() => {
@@ -31,11 +50,17 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, 
     const addressParams = decoded.params
       .filter((p) => p.type === 'address' && p.rawValue)
       .map((p) => p.rawValue!)
-      .filter((addr) => addr.toLowerCase() !== ZERO_ADDRESS && !allResolved[addr]);
+      .filter((addr) => {
+        const lower = addr.toLowerCase();
+        return lower !== ZERO_ADDRESS && !allResolved[lower] && !attemptedRef.current.has(lower);
+      });
 
     // Deduplicate
     const unique = [...new Set(addressParams)];
     if (unique.length === 0) return;
+
+    // Mark as attempted immediately to prevent re-fetching
+    unique.forEach((addr) => attemptedRef.current.add(addr.toLowerCase()));
 
     const justaName = getJustaNameInstance(mainnetRpcUrl);
 
@@ -47,7 +72,7 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, 
         })
         .then((result) => {
           if (result) {
-            setLocalResolved((prev) => ({ ...prev, [address]: result }));
+            setLocalResolved((prev) => ({ ...prev, [address.toLowerCase()]: result }));
           }
         })
         .catch(() => {
@@ -96,7 +121,7 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, 
       {decoded.params.length > 0 && (
         <div className="flex flex-col gap-1 p-2 bg-secondary rounded-[6px]">
           {decoded.params.map((param, i) => {
-            const resolvedName = param.rawValue ? allResolved[param.rawValue] : undefined;
+            const resolvedName = param.rawValue ? allResolved[param.rawValue.toLowerCase()] : undefined;
             return (
               <div key={i} className="flex flex-col gap-0.5">
                 <div className="flex items-baseline gap-1.5">
