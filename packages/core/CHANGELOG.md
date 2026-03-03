@@ -1,3 +1,13 @@
+## 0.1.0 (2026-03-03)
+
+### 🚀 Features
+
+- beta release ([#128](https://github.com/JustaName-id/jaw-mono/pull/128))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.0.7 (2026-02-27)
 
 ### 🩹 Fixes
