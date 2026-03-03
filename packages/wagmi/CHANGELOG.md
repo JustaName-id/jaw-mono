@@ -1,3 +1,13 @@
+## 0.1.0 (2026-03-03)
+
+### 🚀 Features
+
+- removed x from dialog ([#130](https://github.com/JustaName-id/jaw-mono/pull/130))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.0.8 (2026-03-03)
 
 ### 🧱 Updated Dependencies
