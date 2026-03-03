@@ -67,7 +67,6 @@ export const SiweDialog = ({
   return (
     <DefaultDialog
       open={open}
-      handleClose={onCancel}
       onOpenChange={!isProcessing ? onOpenChange : undefined}
       header={
         <div className="flex flex-col gap-2.5 p-3.5">

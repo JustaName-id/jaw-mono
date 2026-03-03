@@ -1,10 +1,8 @@
-import { CloseIcon } from '../../icons';
-import { Dialog, DialogClose, DialogContent, DialogTitle, DialogTrigger } from '../ui/dialog';
+import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '../ui/dialog';
 import { FC, ReactNode } from 'react';
 
 export interface DefaultDialogProps {
   open?: boolean;
-  handleClose?: () => void;
   onOpenChange?: (open: boolean) => void;
   children: ReactNode;
   header?: ReactNode;
@@ -18,7 +16,6 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
   onOpenChange,
   trigger,
   open,
-  handleClose,
   children,
   header,
   fullScreen,
@@ -57,40 +54,11 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
             ...innerStyle,
           }}
         >
-          <div className="flex flex-row justify-between">
-            {header}
-
-            <div
-              className="flex flex-col items-center justify-center w-[24px]">
-              {handleClose ? (
-                <CloseIcon
-                  style={{
-                    cursor: 'pointer',
-                  }}
-                  onClick={handleClose}
-                  width={24}
-                />
-              ) : (
-                <DialogClose
-                  style={{
-                    border: '0px',
-                    background: 'none',
-                    padding: 0,
-                    height: '24px',
-                    display: 'flex',
-                    placeContent: 'center',
-                  }}
-                >
-                  <CloseIcon
-                    style={{
-                      cursor: 'pointer',
-                    }}
-                    width={24}
-                  />
-                </DialogClose>
-              )}
+          {header && (
+            <div className="flex flex-row justify-between">
+              {header}
             </div>
-          </div>
+          )}
           {children}
         </div>
       </DialogContent>
