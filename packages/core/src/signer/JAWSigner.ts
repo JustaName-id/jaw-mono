@@ -47,6 +47,7 @@ export abstract class JAWSigner implements Signer {
 
     protected accounts: Address[];
     protected chain: SDKChain;
+    protected pendingWalletConnectResponse: WalletConnectResponse | null = null;
 
     constructor(params: ConstructorOptions) {
         this.callback = params.callback;
@@ -299,6 +300,9 @@ export abstract class JAWSigner implements Signer {
                     chain: this.chain,
                     ...(walletCapabilities && { capabilities: walletCapabilities }),
                 });
+                // Store the full response so handleWalletConnect can return it
+                // with capabilities on fresh connections (before falling through to cached path)
+                this.pendingWalletConnectResponse = walletResponse;
 
                 const accounts_ = [this.accounts[0]];
                 this.callback?.('accountsChanged', accounts_);
@@ -447,10 +451,15 @@ export abstract class JAWSigner implements Signer {
     }
 
     /**
-     * Gets cached wallet_connect response if user is already authenticated.
-     * Returns null if no cached response is available.
+     * Gets wallet_connect response. Returns the pending fresh response (with capabilities)
+     * if available, otherwise falls back to the cached response (address only).
      */
     protected async getCachedWalletConnectResponse(): Promise<WalletConnectResponse | null> {
+        if (this.pendingWalletConnectResponse) {
+            const response = this.pendingWalletConnectResponse;
+            this.pendingWalletConnectResponse = null;
+            return response;
+        }
         return getCachedWalletConnectResponse();
     }
 
