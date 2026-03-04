@@ -453,12 +453,19 @@ export abstract class JAWSigner implements Signer {
     /**
      * Gets wallet_connect response. Returns the pending fresh response (with capabilities)
      * if available, otherwise falls back to the cached response (address only).
+     * Skips cache when capabilities are requested since they require a fresh connection.
      */
-    protected async getCachedWalletConnectResponse(): Promise<WalletConnectResponse | null> {
+    protected async getCachedWalletConnectResponse(request?: RequestArguments): Promise<WalletConnectResponse | null> {
         if (this.pendingWalletConnectResponse) {
             const response = this.pendingWalletConnectResponse;
             this.pendingWalletConnectResponse = null;
             return response;
+        }
+        // Capabilities require a fresh connection — skip cache
+        const params = request?.params as WalletConnectRequest['params'] | undefined;
+        const capabilities = params?.[0]?.capabilities;
+        if (capabilities && Object.keys(capabilities).length > 0) {
+            return null;
         }
         return getCachedWalletConnectResponse();
     }
