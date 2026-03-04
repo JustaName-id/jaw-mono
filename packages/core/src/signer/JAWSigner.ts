@@ -350,6 +350,7 @@ export abstract class JAWSigner implements Signer {
         clearSignerType();
 
         this.accounts = [];
+        this.pendingWalletConnectResponse = null;
         this.chain = {
             id: this.metadata.defaultChainId ?? 1,
         };
