@@ -1050,6 +1050,10 @@ describe('CrossPlatformSigner', () => {
 
       await signer.handshake(handshakeRequest);
 
+      // Consume the pending wallet_connect response from handshake
+      // so subsequent tests exercise the cached path
+      await signer.request({ method: 'wallet_connect', params: [{ version: '1.0', capabilities: {} }] });
+
       // Reset mock call history
       vi.clearAllMocks();
     });
@@ -1070,12 +1074,11 @@ describe('CrossPlatformSigner', () => {
       // Act
       const result = await signer.request(request);
 
-      // Assert
+      // Assert - cached response returns address only, no capabilities
       expect(result).toEqual({
         accounts: [
           {
             address: '0x1234567890123456789012345678901234567890',
-            capabilities: {},
           },
         ],
       });

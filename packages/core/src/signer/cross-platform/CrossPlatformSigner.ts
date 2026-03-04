@@ -74,7 +74,7 @@ export class CrossPlatformSigner extends JAWSigner {
 
     protected override async handleWalletConnect(request: RequestArguments): Promise<unknown> {
         // Return cached wallet connect response if available
-        const cachedResponse = await this.getCachedWalletConnectResponse();
+        const cachedResponse = await this.getCachedWalletConnectResponse(request);
         if (cachedResponse) {
             return cachedResponse;
         }
