@@ -1,3 +1,13 @@
+## 0.1.1 (2026-03-04)
+
+### 🩹 Fixes
+
+- cached wallet response ([#131](https://github.com/JustaName-id/jaw-mono/pull/131))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.1.0 (2026-03-03)
 
 ### 🚀 Features
