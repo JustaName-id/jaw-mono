@@ -112,6 +112,16 @@ export interface ImportAccountOptions {
 }
 
 /**
+ * Options for restoring an account from known credentials
+ */
+export interface RestoreAccountOptions {
+  /** Custom WebAuthn get function (React Native adapter) */
+  getFn?: PasskeyGetFn;
+  /** Relying party identifier (required in React Native where window.location is unavailable) */
+  rpId?: string;
+}
+
+/**
  * Transaction call structure
  */
 export interface TransactionCall {
@@ -345,6 +355,7 @@ export class Account {
     config: AccountConfig,
     credentialId: string,
     publicKey: `0x${string}`,
+    options?: RestoreAccountOptions,
   ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
 
@@ -364,6 +375,8 @@ export class Account {
         id: credentialId,
         publicKey: publicKey,
       },
+      ...(options?.getFn && { getFn: options.getFn }),
+      ...(options?.rpId && { rpId: options.rpId }),
     });
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);

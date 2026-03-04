@@ -30,16 +30,17 @@ function hasLocalStorage(): boolean {
  * Create localStorage-based storage with in-memory fallback
  * Falls back to in-memory storage when localStorage is unavailable (e.g., React Native, SSR)
  */
+const globalMemoryStore = new Map<string, string>();
+
 export function createLocalStorage(scope: string, name: string): SyncStorage {
   const prefix = `${scope}:${name}`;
-  const memoryStore = new Map<string, string>();
 
   return {
     getItem: <T>(key: string): T | null => {
       const fullKey = `${prefix}:${key}`;
       const value = hasLocalStorage()
         ? localStorage.getItem(fullKey)
-        : (memoryStore.get(fullKey) ?? null);
+        : (globalMemoryStore.get(fullKey) ?? null);
       if (!value) return null;
       try {
         return JSON.parse(value) as T;
@@ -52,7 +53,7 @@ export function createLocalStorage(scope: string, name: string): SyncStorage {
       if (hasLocalStorage()) {
         localStorage.removeItem(fullKey);
       } else {
-        memoryStore.delete(fullKey);
+        globalMemoryStore.delete(fullKey);
       }
     },
     setItem: (key: string, value: unknown): void => {
@@ -62,7 +63,7 @@ export function createLocalStorage(scope: string, name: string): SyncStorage {
       if (hasLocalStorage()) {
         localStorage.setItem(fullKey, serialized);
       } else {
-        memoryStore.set(fullKey, serialized);
+        globalMemoryStore.set(fullKey, serialized);
       }
     },
   };
