@@ -181,6 +181,15 @@ export interface AccountMetadata {
  * ]);
  * ```
  */
+
+function resolveRpId(rpId?: string): string {
+  if (rpId) return rpId;
+  if (typeof window !== "undefined") return window.location.hostname;
+  throw new Error(
+    "rpId is required in non-browser environments (e.g., React Native). Pass rpId in options.",
+  );
+}
+
 export class Account {
   private readonly _smartAccount: SmartAccount;
   private readonly _chain: Chain;
@@ -253,11 +262,7 @@ export class Account {
         throw new Error(`No account found for credential ID: ${credentialId}`);
       }
 
-      const rpId =
-        rpIdOption ??
-        (typeof window !== "undefined"
-          ? window.location.hostname
-          : "localhost");
+      const rpId = resolveRpId(rpIdOption);
 
       // Authenticate with WebAuthn
       await passkeyManager.authenticateWithWebAuthn(
@@ -294,11 +299,7 @@ export class Account {
     if (authResult.isAuthenticated && authResult.address) {
       const currentAccount = passkeyManager.getCurrentAccount();
       if (currentAccount) {
-        const rpId =
-          rpIdOption ??
-          (typeof window !== "undefined"
-            ? window.location.hostname
-            : "localhost");
+        const rpId = resolveRpId(rpIdOption);
 
         const webAuthnAccount = toWebAuthnAccount({
           credential: {
@@ -375,8 +376,8 @@ export class Account {
         id: credentialId,
         publicKey: publicKey,
       },
-      ...(options?.getFn && { getFn: options.getFn }),
-      ...(options?.rpId && { rpId: options.rpId }),
+      getFn: options?.getFn,
+      rpId: options?.rpId,
     });
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
@@ -420,9 +421,7 @@ export class Account {
     const { chainId, apiKey, paymasterUrl } = config;
     const { username, rpId, rpName, createFn, nativeCreateFn, getFn } = options;
 
-    const resolvedRpId =
-      rpId ??
-      (typeof window !== "undefined" ? window.location.hostname : "localhost");
+    const resolvedRpId = resolveRpId(rpId);
     const resolvedRpName = rpName ?? "JAW";
 
     const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);

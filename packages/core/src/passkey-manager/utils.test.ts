@@ -87,9 +87,8 @@ describe("passkey-manager/utils — React Native adapter support", () => {
     });
 
     it("should use createFn path when provided (custom WebAuthn create)", async () => {
-      const { createWebAuthnCredential, toWebAuthnAccount } = await import(
-        "viem/account-abstraction"
-      );
+      const { createWebAuthnCredential, toWebAuthnAccount } =
+        await import("viem/account-abstraction");
 
       await createPasskeyUtils(
         "bob",
@@ -126,12 +125,7 @@ describe("passkey-manager/utils — React Native adapter support", () => {
       const mockCreateFn = vi.fn();
       // Should not throw even without window.PublicKeyCredential
       await expect(
-        createPasskeyUtils(
-          "charlie",
-          "example.com",
-          "MyApp",
-          mockCreateFn,
-        ),
+        createPasskeyUtils("charlie", "example.com", "MyApp", mockCreateFn),
       ).resolves.toBeDefined();
     });
   });
@@ -182,7 +176,12 @@ describe("passkey-manager/utils — React Native adapter support", () => {
       });
 
       await expect(
-        authenticateWithWebAuthnUtils("example.com", "dGVzdA", undefined, mockGetFn),
+        authenticateWithWebAuthnUtils(
+          "example.com",
+          "dGVzdA",
+          undefined,
+          mockGetFn,
+        ),
       ).resolves.toBeDefined();
     });
 
@@ -199,18 +198,35 @@ describe("passkey-manager/utils — React Native adapter support", () => {
       const mockGetFn = vi.fn().mockResolvedValue(null);
 
       await expect(
-        authenticateWithWebAuthnUtils("example.com", "dGVzdA", undefined, mockGetFn),
+        authenticateWithWebAuthnUtils(
+          "example.com",
+          "dGVzdA",
+          undefined,
+          mockGetFn,
+        ),
       ).rejects.toThrow("Failed to authenticate with specified passkey");
     });
 
     it("should wrap getFn errors in WebAuthnAuthenticationError", async () => {
-      const mockGetFn = vi.fn().mockRejectedValue(new Error("RN passkey error"));
+      const mockGetFn = vi
+        .fn()
+        .mockRejectedValue(new Error("RN passkey error"));
 
       await expect(
-        authenticateWithWebAuthnUtils("example.com", "dGVzdA", undefined, mockGetFn),
+        authenticateWithWebAuthnUtils(
+          "example.com",
+          "dGVzdA",
+          undefined,
+          mockGetFn,
+        ),
       ).rejects.toThrow(WebAuthnAuthenticationError);
       await expect(
-        authenticateWithWebAuthnUtils("example.com", "dGVzdA", undefined, mockGetFn),
+        authenticateWithWebAuthnUtils(
+          "example.com",
+          "dGVzdA",
+          undefined,
+          mockGetFn,
+        ),
       ).rejects.toThrow("RN passkey error");
     });
 
@@ -238,7 +254,9 @@ describe("passkey-manager/utils — React Native adapter support", () => {
       const callArgs = mockGetFn.mock.calls[0][0];
       expect(callArgs.publicKey.userVerification).toBe("required");
       expect(callArgs.publicKey.timeout).toBe(30000);
-      expect(callArgs.publicKey.allowCredentials[0].transports).toEqual(["ble"]);
+      expect(callArgs.publicKey.allowCredentials[0].transports).toEqual([
+        "ble",
+      ]);
     });
   });
 
@@ -287,17 +305,32 @@ describe("passkey-manager/utils — React Native adapter support", () => {
     it("should throw when getFn returns null", async () => {
       const mockGetFn = vi.fn().mockResolvedValue(null);
 
-      await expect(importPasskeyUtils(mockGetFn, "example.com")).rejects.toThrow(
-        PasskeyLookupError,
-      );
+      await expect(
+        importPasskeyUtils(mockGetFn, "example.com"),
+      ).rejects.toThrow(PasskeyLookupError);
     });
 
     it("should throw when getFn rejects", async () => {
       const mockGetFn = vi.fn().mockRejectedValue(new Error("RN error"));
 
-      await expect(importPasskeyUtils(mockGetFn)).rejects.toThrow(
-        PasskeyLookupError,
-      );
+      await expect(
+        importPasskeyUtils(mockGetFn, "example.com"),
+      ).rejects.toThrow(PasskeyLookupError);
+    });
+
+    it("should throw when rpId is missing in non-browser environment", async () => {
+      const originalWindow = globalThis.window;
+      // @ts-expect-error - simulating non-browser environment
+      delete globalThis.window;
+
+      try {
+        const mockGetFn = vi.fn();
+        await expect(importPasskeyUtils(mockGetFn)).rejects.toThrow(
+          "rpId is required in non-browser environments",
+        );
+      } finally {
+        globalThis.window = originalWindow;
+      }
     });
   });
 

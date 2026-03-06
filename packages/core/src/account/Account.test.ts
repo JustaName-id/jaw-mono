@@ -288,6 +288,58 @@ describe("Account", () => {
         "Not authenticated",
       );
     });
+
+    it("get should throw when rpId is missing in non-browser environment", async () => {
+      const { PasskeyManager } = await import("../passkey-manager/index.js");
+      const originalWindow = globalThis.window;
+      // @ts-expect-error - simulating non-browser environment
+      delete globalThis.window;
+
+      vi.mocked(PasskeyManager).mockImplementation(
+        () =>
+          ({
+            checkAuth: vi.fn().mockReturnValue({ isAuthenticated: false }),
+            fetchActiveCredentialId: vi.fn().mockReturnValue(null),
+            getAccountByCredentialId: vi.fn().mockReturnValue({
+              username: "test",
+              credentialId: "cred-123",
+              publicKey: "0x04abc",
+              creationDate: new Date().toISOString(),
+              isImported: false,
+            }),
+            fetchAccounts: vi.fn().mockReturnValue([]),
+            logout: vi.fn(),
+            createPasskey: vi.fn(),
+            authenticateWithWebAuthn: vi.fn(),
+            importPasskeyAccount: vi.fn(),
+            storePasskeyAccount: vi.fn(),
+            storePasskeyAccountForLogin: vi.fn(),
+            storeAuthState: vi.fn(),
+          }) as never,
+      );
+
+      try {
+        await expect(
+          Account.get({ chainId: 1, apiKey: "test" }, "cred-123"),
+        ).rejects.toThrow("rpId is required in non-browser environments");
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
+
+    it("create should throw when rpId is missing in non-browser environment", async () => {
+      const originalWindow = globalThis.window;
+      // @ts-expect-error - simulating non-browser environment
+      delete globalThis.window;
+
+      try {
+        await expect(
+          Account.create({ chainId: 1, apiKey: "test" }, { username: "alice" }),
+        ).rejects.toThrow("rpId is required in non-browser environments");
+      } finally {
+        globalThis.window = originalWindow;
+      }
+    });
   });
 
   describe("sendCalls and getCallStatus", () => {
@@ -852,6 +904,8 @@ describe("Account", () => {
           id: "cred-123",
           publicKey: "0x04abc123",
         },
+        getFn: undefined,
+        rpId: undefined,
       });
     });
 
@@ -918,6 +972,7 @@ describe("Account", () => {
           publicKey: "0x04ghi012",
         },
         getFn: mockGetFn,
+        rpId: undefined,
       });
     });
 
@@ -948,6 +1003,7 @@ describe("Account", () => {
           id: "cred-xyz",
           publicKey: "0x04jkl345",
         },
+        getFn: undefined,
         rpId: "myapp.com",
       });
     });

@@ -245,6 +245,11 @@ export async function importPasskeyUtils(
   rpId?: string,
 ): Promise<ImportWebAuthnAuthenticationResult> {
   try {
+    if (!rpId && typeof window === "undefined") {
+      throw new Error(
+        "rpId is required in non-browser environments (e.g., React Native). Pass rpId explicitly.",
+      );
+    }
     const challenge = crypto.getRandomValues(new Uint8Array(32));
     const resolvedRpId =
       rpId ??
