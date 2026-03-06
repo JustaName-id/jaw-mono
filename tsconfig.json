@@ -20,6 +20,9 @@
     },
     {
       "path": "./apps/playground"
+    },
+    {
+      "path": "./packages/cli"
     }
   ]
 }

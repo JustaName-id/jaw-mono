@@ -23,6 +23,12 @@
     ],
     "baseUrl": ".",
     "paths": {
+      "@jaw.id/cli": [
+        "packages/cli/src/index.ts"
+      ],
+      "@jaw.id/cli/*": [
+        "packages/cli/src/*"
+      ],
       "@jaw.id/core": [
         "packages/core/src/index.ts"
       ],
@@ -34,12 +40,6 @@
       ],
       "@jaw.id/ui/*": [
         "packages/ui/src/*"
-      ],
-      "@jaw.id/cli": [
-        "packages/cli/src/index.ts"
-      ],
-      "@jaw.id/cli/*": [
-        "packages/cli/src/*"
       ]
     }
   }

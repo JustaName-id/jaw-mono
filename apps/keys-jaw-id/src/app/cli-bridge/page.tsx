@@ -187,7 +187,13 @@ function CLIBridgeContent() {
       setState("popup-open");
 
       // 3. Run the postMessage protocol with proper ECDH keys
-      const params = paramsRaw ? JSON.parse(paramsRaw) : undefined;
+      const rawParams = paramsRaw ? JSON.parse(paramsRaw) : undefined;
+      // Normalize to array — personal_sign expects [message, address], etc.
+      const params = Array.isArray(rawParams)
+        ? rawParams
+        : rawParams !== undefined
+          ? [rawParams]
+          : [];
       const isConnect = CONNECT_METHODS.includes(method);
 
       const result = isConnect
@@ -381,9 +387,7 @@ function setupPopup(
     const popupCheck = setInterval(() => {
       if (popup.closed) {
         cleanup();
-        rejectSetup(
-          new Error("Popup was closed before completing the action"),
-        );
+        rejectSetup(new Error("Popup was closed before completing the action"));
       }
     }, 500);
 
@@ -566,9 +570,7 @@ function doKeyExchangeHandshake(
 
         if (msg?.content?.failure) {
           ctx.cleanup();
-          reject(
-            new Error(msg.content.failure.message || "Handshake failed"),
-          );
+          reject(new Error(msg.content.failure.message || "Handshake failed"));
           return;
         }
 
