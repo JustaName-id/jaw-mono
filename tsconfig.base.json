@@ -34,6 +34,12 @@
       ],
       "@jaw.id/ui/*": [
         "packages/ui/src/*"
+      ],
+      "@jaw.id/cli": [
+        "packages/cli/src/index.ts"
+      ],
+      "@jaw.id/cli/*": [
+        "packages/cli/src/*"
       ]
     }
   }

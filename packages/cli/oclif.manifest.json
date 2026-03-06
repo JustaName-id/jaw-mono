@@ -1,0 +1,360 @@
+{
+  "commands": {
+    "config:init": {
+      "aliases": [],
+      "args": {},
+      "description": "Initialize JAW CLI configuration",
+      "examples": [
+        "<%= config.bin %> config init",
+        "<%= config.bin %> config init --api-key your-key --chain 8453"
+      ],
+      "flags": {
+        "output": {
+          "char": "o",
+          "description": "Output format",
+          "env": "JAW_OUTPUT",
+          "name": "output",
+          "default": "human",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "options": [
+            "json",
+            "human"
+          ],
+          "type": "option"
+        },
+        "chain": {
+          "char": "c",
+          "description": "Default chain ID",
+          "env": "JAW_CHAIN_ID",
+          "name": "chain",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "type": "option"
+        },
+        "api-key": {
+          "description": "JAW API key",
+          "env": "JAW_API_KEY",
+          "name": "api-key",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "type": "option"
+        },
+        "yes": {
+          "char": "y",
+          "description": "Skip confirmations (for AI agents)",
+          "name": "yes",
+          "allowNo": false,
+          "type": "boolean"
+        },
+        "quiet": {
+          "char": "q",
+          "description": "Suppress non-essential output",
+          "name": "quiet",
+          "allowNo": false,
+          "type": "boolean"
+        }
+      },
+      "hasDynamicHelp": false,
+      "hiddenAliases": [],
+      "id": "config:init",
+      "pluginAlias": "@jaw.id/cli",
+      "pluginName": "@jaw.id/cli",
+      "pluginType": "core",
+      "strict": true,
+      "enableJsonFlag": false,
+      "isESM": true,
+      "relativePath": [
+        "dist",
+        "commands",
+        "config",
+        "init.js"
+      ]
+    },
+    "config:set": {
+      "aliases": [],
+      "args": {
+        "key": {
+          "description": "Config key (apiKey, defaultChain, keysUrl, paymasterUrl)",
+          "name": "key",
+          "options": [
+            "apiKey",
+            "defaultChain",
+            "keysUrl",
+            "paymasterUrl"
+          ],
+          "required": true
+        },
+        "value": {
+          "description": "Config value",
+          "name": "value",
+          "required": true
+        }
+      },
+      "description": "Set a configuration value",
+      "examples": [
+        "<%= config.bin %> config set apiKey your-api-key",
+        "<%= config.bin %> config set defaultChain 8453",
+        "<%= config.bin %> config set keysUrl https://keys.jaw.id"
+      ],
+      "flags": {
+        "output": {
+          "char": "o",
+          "description": "Output format",
+          "env": "JAW_OUTPUT",
+          "name": "output",
+          "default": "human",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "options": [
+            "json",
+            "human"
+          ],
+          "type": "option"
+        },
+        "chain": {
+          "char": "c",
+          "description": "Chain ID",
+          "env": "JAW_CHAIN_ID",
+          "name": "chain",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "type": "option"
+        },
+        "api-key": {
+          "description": "JAW API key",
+          "env": "JAW_API_KEY",
+          "name": "api-key",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "type": "option"
+        },
+        "yes": {
+          "char": "y",
+          "description": "Skip confirmations (for AI agents)",
+          "name": "yes",
+          "allowNo": false,
+          "type": "boolean"
+        },
+        "quiet": {
+          "char": "q",
+          "description": "Suppress non-essential output",
+          "name": "quiet",
+          "allowNo": false,
+          "type": "boolean"
+        }
+      },
+      "hasDynamicHelp": false,
+      "hiddenAliases": [],
+      "id": "config:set",
+      "pluginAlias": "@jaw.id/cli",
+      "pluginName": "@jaw.id/cli",
+      "pluginType": "core",
+      "strict": true,
+      "enableJsonFlag": false,
+      "isESM": true,
+      "relativePath": [
+        "dist",
+        "commands",
+        "config",
+        "set.js"
+      ]
+    },
+    "config:show": {
+      "aliases": [],
+      "args": {},
+      "description": "Show current CLI configuration",
+      "examples": [
+        "<%= config.bin %> config show",
+        "<%= config.bin %> config show --output json"
+      ],
+      "flags": {
+        "output": {
+          "char": "o",
+          "description": "Output format",
+          "env": "JAW_OUTPUT",
+          "name": "output",
+          "default": "human",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "options": [
+            "json",
+            "human"
+          ],
+          "type": "option"
+        },
+        "chain": {
+          "char": "c",
+          "description": "Chain ID",
+          "env": "JAW_CHAIN_ID",
+          "name": "chain",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "type": "option"
+        },
+        "api-key": {
+          "description": "JAW API key",
+          "env": "JAW_API_KEY",
+          "name": "api-key",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "type": "option"
+        },
+        "yes": {
+          "char": "y",
+          "description": "Skip confirmations (for AI agents)",
+          "name": "yes",
+          "allowNo": false,
+          "type": "boolean"
+        },
+        "quiet": {
+          "char": "q",
+          "description": "Suppress non-essential output",
+          "name": "quiet",
+          "allowNo": false,
+          "type": "boolean"
+        }
+      },
+      "hasDynamicHelp": false,
+      "hiddenAliases": [],
+      "id": "config:show",
+      "pluginAlias": "@jaw.id/cli",
+      "pluginName": "@jaw.id/cli",
+      "pluginType": "core",
+      "strict": true,
+      "enableJsonFlag": false,
+      "isESM": true,
+      "relativePath": [
+        "dist",
+        "commands",
+        "config",
+        "show.js"
+      ]
+    },
+    "mcp": {
+      "aliases": [],
+      "args": {},
+      "description": "Start the MCP server for AI agents (stdio transport)",
+      "examples": [
+        "<%= config.bin %> mcp"
+      ],
+      "flags": {},
+      "hasDynamicHelp": false,
+      "hiddenAliases": [],
+      "id": "mcp",
+      "pluginAlias": "@jaw.id/cli",
+      "pluginName": "@jaw.id/cli",
+      "pluginType": "core",
+      "strict": true,
+      "enableJsonFlag": false,
+      "isESM": true,
+      "relativePath": [
+        "dist",
+        "commands",
+        "mcp",
+        "index.js"
+      ]
+    },
+    "rpc:call": {
+      "aliases": [],
+      "args": {
+        "method": {
+          "description": "EIP-1193 RPC method name",
+          "name": "method",
+          "required": true
+        },
+        "params": {
+          "description": "Method parameters as JSON string",
+          "name": "params",
+          "required": false
+        }
+      },
+      "description": "Execute any JAW.id RPC method. Opens browser for signing methods.",
+      "examples": [
+        "<%= config.bin %> rpc call wallet_sendCalls '{\"calls\":[{\"to\":\"0x...\",\"value\":\"0x0\"}]}'",
+        "<%= config.bin %> rpc call personal_sign '\"Hello World\"'",
+        "<%= config.bin %> rpc call wallet_getAssets",
+        "<%= config.bin %> rpc call eth_requestAccounts",
+        "<%= config.bin %> rpc call wallet_getCallsStatus '{\"id\":\"0x...\"}'"
+      ],
+      "flags": {
+        "output": {
+          "char": "o",
+          "description": "Output format",
+          "env": "JAW_OUTPUT",
+          "name": "output",
+          "default": "human",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "options": [
+            "json",
+            "human"
+          ],
+          "type": "option"
+        },
+        "chain": {
+          "char": "c",
+          "description": "Chain ID",
+          "env": "JAW_CHAIN_ID",
+          "name": "chain",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "type": "option"
+        },
+        "api-key": {
+          "description": "JAW API key",
+          "env": "JAW_API_KEY",
+          "name": "api-key",
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "type": "option"
+        },
+        "yes": {
+          "char": "y",
+          "description": "Skip confirmations (for AI agents)",
+          "name": "yes",
+          "allowNo": false,
+          "type": "boolean"
+        },
+        "quiet": {
+          "char": "q",
+          "description": "Suppress non-essential output",
+          "name": "quiet",
+          "allowNo": false,
+          "type": "boolean"
+        },
+        "timeout": {
+          "char": "t",
+          "description": "Browser callback timeout in seconds",
+          "name": "timeout",
+          "default": 120,
+          "hasDynamicHelp": false,
+          "multiple": false,
+          "type": "option"
+        },
+        "headless": {
+          "description": "Use device code flow instead of browser (for SSH/headless environments)",
+          "name": "headless",
+          "allowNo": false,
+          "type": "boolean"
+        }
+      },
+      "hasDynamicHelp": false,
+      "hiddenAliases": [],
+      "id": "rpc:call",
+      "pluginAlias": "@jaw.id/cli",
+      "pluginName": "@jaw.id/cli",
+      "pluginType": "core",
+      "strict": true,
+      "enableJsonFlag": false,
+      "isESM": true,
+      "relativePath": [
+        "dist",
+        "commands",
+        "rpc",
+        "call.js"
+      ]
+    }
+  },
+  "version": "0.1.0"
+}

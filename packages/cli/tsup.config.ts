@@ -1,0 +1,46 @@
+import { defineConfig } from "tsup";
+
+export default defineConfig({
+  entry: {
+    index: "src/index.ts",
+    "base-command": "src/base-command.ts",
+    // lib
+    "lib/cli-communicator": "src/lib/cli-communicator.ts",
+    "lib/config": "src/lib/config.ts",
+    "lib/device-code": "src/lib/device-code.ts",
+    "lib/output": "src/lib/output.ts",
+    "lib/paths": "src/lib/paths.ts",
+    "lib/rpc-classifier": "src/lib/rpc-classifier.ts",
+    "lib/session-helpers": "src/lib/session-helpers.ts",
+    "lib/session-store": "src/lib/session-store.ts",
+    "lib/types": "src/lib/types.ts",
+    "lib/validation": "src/lib/validation.ts",
+    // commands
+    "commands/config/init": "src/commands/config/init.ts",
+    "commands/config/set": "src/commands/config/set.ts",
+    "commands/config/show": "src/commands/config/show.ts",
+    "commands/mcp/index": "src/commands/mcp/index.ts",
+    "commands/rpc/call": "src/commands/rpc/call.ts",
+    // mcp
+    "mcp/server": "src/mcp/server.ts",
+    "mcp/tools": "src/mcp/tools.ts",
+    "mcp/handlers/rpc": "src/mcp/handlers/rpc.ts",
+    "mcp/handlers/config": "src/mcp/handlers/config.ts",
+  },
+  format: ["esm"],
+  outDir: "dist",
+  dts: false,
+  splitting: false,
+  sourcemap: true,
+  clean: true,
+  treeshake: true,
+  target: "node20",
+  external: [
+    "@modelcontextprotocol/sdk",
+    "@modelcontextprotocol/sdk/server/mcp.js",
+    "@modelcontextprotocol/sdk/server/stdio.js",
+    "@oclif/core",
+    "open",
+    "zod",
+  ],
+});
