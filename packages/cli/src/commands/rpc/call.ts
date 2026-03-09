@@ -45,11 +45,6 @@ export default class RpcCall extends BaseCommand {
       description: "Browser callback timeout in seconds",
       default: 120,
     }),
-    headless: Flags.boolean({
-      description:
-        "Use device code flow instead of browser (for SSH/headless environments)",
-      default: false,
-    }),
   };
 
   async run(): Promise<void> {
@@ -92,35 +87,19 @@ export default class RpcCall extends BaseCommand {
       return;
     }
 
-    // Signing/session methods — open browser (or device code for headless)
+    // Signing/session methods — open browser
     const apiKey = this.resolveApiKey(flags);
     const config = loadConfig();
 
-    const { isHeadlessEnvironment } = await import("../../lib/device-code.js");
-    const useHeadless = flags.headless || isHeadlessEnvironment();
-
-    if (useHeadless) {
-      if (!flags.quiet) {
-        this.log(`Using device code flow for ${method}...`);
-      }
-    } else if (!flags.quiet) {
+    if (!flags.quiet) {
       this.log(`Opening browser for ${method}...`);
     }
 
-    const log = this.log.bind(this);
     const communicator = new CLICommunicator({
       keysUrl: config.keysUrl,
       apiKey,
       chainId: flags.chain ?? config.defaultChain,
       timeout: flags.timeout * 1000,
-      headless: useHeadless,
-      onDisplayCode: (userCode, verificationUrl) => {
-        log("");
-        log(`  Go to: ${verificationUrl}`);
-        log(`  Enter code: ${userCode}`);
-        log("");
-        log("  Waiting for authentication...");
-      },
     });
 
     const result = await communicator.request(method, params);
