@@ -2,21 +2,26 @@ import { describe, it, expect, vi, beforeEach } from "vitest";
 import { Account } from "./Account.js";
 
 // Mock dependencies
-vi.mock("../passkey-manager/index.js", () => ({
-  PasskeyManager: vi.fn().mockImplementation(() => ({
-    checkAuth: vi.fn().mockReturnValue({ isAuthenticated: false }),
-    fetchActiveCredentialId: vi.fn().mockReturnValue(null),
-    getAccountByCredentialId: vi.fn().mockReturnValue(undefined),
-    fetchAccounts: vi.fn().mockReturnValue([]),
-    logout: vi.fn(),
-    createPasskey: vi.fn(),
-    authenticateWithWebAuthn: vi.fn(),
-    importPasskeyAccount: vi.fn(),
-    storePasskeyAccount: vi.fn(),
-    storePasskeyAccountForLogin: vi.fn(),
-    storeAuthState: vi.fn(),
-  })),
-}));
+vi.mock("../passkey-manager/index.js", async (importOriginal) => {
+  const original =
+    await importOriginal<typeof import("../passkey-manager/index.js")>();
+  return {
+    ...original,
+    PasskeyManager: vi.fn().mockImplementation(() => ({
+      checkAuth: vi.fn().mockReturnValue({ isAuthenticated: false }),
+      fetchActiveCredentialId: vi.fn().mockReturnValue(null),
+      getAccountByCredentialId: vi.fn().mockReturnValue(undefined),
+      fetchAccounts: vi.fn().mockReturnValue([]),
+      logout: vi.fn(),
+      createPasskey: vi.fn(),
+      authenticateWithWebAuthn: vi.fn(),
+      importPasskeyAccount: vi.fn(),
+      storePasskeyAccount: vi.fn(),
+      storePasskeyAccountForLogin: vi.fn(),
+      storeAuthState: vi.fn(),
+    })),
+  };
+});
 
 vi.mock("./smartAccount.js", () => ({
   createSmartAccount: vi.fn(),
@@ -61,8 +66,27 @@ vi.mock("viem/account-abstraction", () => ({
 }));
 
 describe("Account", () => {
-  beforeEach(() => {
+  beforeEach(async () => {
     vi.clearAllMocks();
+    // Re-apply default PasskeyManager mock (clearAllMocks doesn't reset implementations)
+    const { PasskeyManager } = await import("../passkey-manager/index.js");
+    vi.mocked(PasskeyManager).mockImplementation(
+      () =>
+        ({
+          checkAuth: vi.fn().mockReturnValue({ isAuthenticated: false }),
+          fetchActiveCredentialId: vi.fn().mockReturnValue(null),
+          getAccountByCredentialId: vi.fn().mockReturnValue(undefined),
+          fetchAccounts: vi.fn().mockReturnValue([]),
+          logout: vi.fn(),
+          createPasskey: vi.fn(),
+          authenticateWithWebAuthn: vi.fn(),
+          importPasskeyAccount: vi.fn(),
+          storePasskeyAccount: vi.fn(),
+          storePasskeyAccountForLogin: vi.fn(),
+          storeAuthState: vi.fn(),
+          getCurrentAccount: vi.fn().mockReturnValue(undefined),
+        }) as never,
+    );
   });
 
   describe("Static method signatures", () => {
@@ -877,7 +901,40 @@ describe("Account", () => {
       ).rejects.toThrow("credentialId and publicKey are required");
     });
 
-    it("should restore account without options", async () => {
+    it("should restore account with rpId option", async () => {
+      const { toWebAuthnAccount } = await import("viem/account-abstraction");
+      const { createSmartAccount } = await import("./smartAccount.js");
+      const mockSmartAccount = {
+        address: "0x1234567890123456789012345678901234567890",
+        signMessage: vi.fn(),
+        signTypedData: vi.fn(),
+        getAddress: vi
+          .fn()
+          .mockResolvedValue("0x1234567890123456789012345678901234567890"),
+      };
+      vi.mocked(createSmartAccount).mockResolvedValue(
+        mockSmartAccount as never,
+      );
+
+      const account = await Account.restore(
+        { chainId: 1, apiKey: "test-api-key" },
+        "cred-123",
+        "0x04abc123",
+        { rpId: "example.com" },
+      );
+
+      expect(account).toBeDefined();
+      expect(toWebAuthnAccount).toHaveBeenCalledWith({
+        credential: {
+          id: "cred-123",
+          publicKey: "0x04abc123",
+        },
+        getFn: undefined,
+        rpId: "example.com",
+      });
+    });
+
+    it("should restore without rpId (passes undefined through for deferred signing)", async () => {
       const { toWebAuthnAccount } = await import("viem/account-abstraction");
       const { createSmartAccount } = await import("./smartAccount.js");
       const mockSmartAccount = {
@@ -943,7 +1000,7 @@ describe("Account", () => {
       });
     });
 
-    it("should forward only getFn when rpId is not provided", async () => {
+    it("should forward getFn without rpId (rpId deferred to signing)", async () => {
       const { toWebAuthnAccount } = await import("viem/account-abstraction");
       const { createSmartAccount } = await import("./smartAccount.js");
       const mockSmartAccount = {
@@ -1006,6 +1063,36 @@ describe("Account", () => {
         getFn: undefined,
         rpId: "myapp.com",
       });
+    });
+
+    it("should throw when publicKey does not match stored account", async () => {
+      const { PasskeyManager } = await import("../passkey-manager/index.js");
+      vi.mocked(PasskeyManager).mockImplementationOnce(
+        () =>
+          ({
+            checkAuth: vi.fn().mockReturnValue({ isAuthenticated: false }),
+            getAccountByCredentialId: vi.fn().mockReturnValue({
+              username: "alice",
+              credentialId: "cred-mismatch",
+              publicKey: "0x04realkey",
+              creationDate: new Date().toISOString(),
+              isImported: false,
+            }),
+            fetchAccounts: vi.fn().mockReturnValue([]),
+            logout: vi.fn(),
+          }) as never,
+      );
+
+      await expect(
+        Account.restore(
+          { chainId: 1, apiKey: "test-api-key" },
+          "cred-mismatch",
+          "0x04forgedkey",
+          { rpId: "example.com" },
+        ),
+      ).rejects.toThrow(
+        "Provided publicKey does not match the stored publicKey",
+      );
     });
   });
 

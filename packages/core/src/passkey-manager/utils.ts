@@ -45,7 +45,8 @@ export type NativePasskeyCreateFn = (
  * WebAuthn authentication result
  */
 export interface WebAuthnAuthenticationResult {
-  credential: PublicKeyCredential;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  credential: any;
   challenge: Uint8Array;
 }
 
@@ -164,6 +165,12 @@ export async function authenticateWithWebAuthnUtils(
   }
 }
 
+/**
+ * Create a passkey credential and WebAuthn account.
+ * NOTE: This does NOT register the passkey with the backend.
+ * Callers must separately call `registerPasskeyInBackend()` or use
+ * `PasskeyManager.storePasskeyAccount()` to complete registration.
+ */
 export async function createPasskeyUtils(
   username: string,
   rpId: string,
@@ -187,12 +194,6 @@ export async function createPasskeyUtils(
       },
       getFn,
       rpId,
-    });
-
-    await registerPasskeyInBackend({
-      credentialId: nativeResult.id,
-      publicKey: nativeResult.publicKey,
-      displayName: username,
     });
 
     return {
@@ -227,12 +228,6 @@ export async function createPasskeyUtils(
     rpId,
   });
 
-  await registerPasskeyInBackend({
-    credentialId: credential.id,
-    publicKey: credential.publicKey,
-    displayName: username,
-  });
-
   return {
     credentialId: credential.id,
     publicKey: credential.publicKey,
@@ -240,26 +235,33 @@ export async function createPasskeyUtils(
   };
 }
 
+/**
+ * Resolve rpId: uses the explicit value, falls back to window.location.hostname,
+ * or throws in non-browser environments (e.g., React Native).
+ */
+export function resolveRpId(rpId?: string): string {
+  if (rpId) return rpId;
+  if (typeof window !== "undefined") return window.location.hostname;
+  throw new Error(
+    "rpId is required in non-browser environments (e.g., React Native). Pass rpId explicitly.",
+  );
+}
+
 export async function importPasskeyUtils(
   getFn?: PasskeyGetFn,
   rpId?: string,
 ): Promise<ImportWebAuthnAuthenticationResult> {
+  // Early guard: surface a clear error before the try/catch wraps it as PasskeyLookupError
+  const resolvedRpId = resolveRpId(rpId);
+
   try {
-    if (!rpId && typeof window === "undefined") {
-      throw new Error(
-        "rpId is required in non-browser environments (e.g., React Native). Pass rpId explicitly.",
-      );
-    }
     const challenge = crypto.getRandomValues(new Uint8Array(32));
-    const resolvedRpId =
-      rpId ??
-      (typeof window !== "undefined" ? window.location.hostname : undefined);
 
     const publicKeyOptions = {
       challenge: challenge,
       userVerification: "preferred" as const,
       timeout: 60000,
-      ...(resolvedRpId && { rpId: resolvedRpId }),
+      rpId: resolvedRpId,
     };
 
     const credential = getFn

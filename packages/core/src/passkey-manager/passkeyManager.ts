@@ -136,17 +136,17 @@ export class PasskeyManager {
     );
 
     if (existingIndex === -1) {
-      console.log("Adding account to list:", account);
-      existingAccounts.push(account);
-      this.storage.setItem("accounts", existingAccounts);
+      const updated = [...existingAccounts, account];
+      this.storage.setItem("accounts", updated);
     } else if (
       account.isImported &&
       !existingAccounts[existingIndex].isImported
     ) {
       // Update existing account's isImported flag if importing an existing local account
-      console.log("Updating account isImported flag:", account.credentialId);
-      existingAccounts[existingIndex].isImported = true;
-      this.storage.setItem("accounts", existingAccounts);
+      const updated = existingAccounts.map((acc, i) =>
+        i === existingIndex ? { ...acc, isImported: true } : acc,
+      );
+      this.storage.setItem("accounts", updated);
     }
   }
 
@@ -188,7 +188,6 @@ export class PasskeyManager {
       isImported: false,
     };
     this.addAccountToList(passkeyAccount);
-    console.log("Accounts list:", this.fetchAccounts());
     return { credentialId, publicKey, webAuthnAccount, passkeyAccount };
   }
 

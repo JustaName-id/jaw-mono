@@ -38,7 +38,9 @@ import {
   type PasskeyCreateFn,
   type PasskeyGetFn,
   type NativePasskeyCreateFn,
+  resolveRpId,
 } from "../passkey-manager/index.js";
+import type { SyncStorage } from "../storage-manager/index.js";
 import {
   grantPermissions as grantSmartAccountPermissions,
   revokePermission as revokeSmartAccountPermission,
@@ -71,6 +73,8 @@ export interface AccountConfig {
   paymasterUrl?: string;
   /** Custom paymaster context for gas sponsorship */
   paymasterContext?: Record<string, unknown>;
+  /** Custom storage implementation (defaults to localStorage on web, in-memory in RN) */
+  storage?: SyncStorage;
 }
 
 /**
@@ -182,14 +186,6 @@ export interface AccountMetadata {
  * ```
  */
 
-function resolveRpId(rpId?: string): string {
-  if (rpId) return rpId;
-  if (typeof window !== "undefined") return window.location.hostname;
-  throw new Error(
-    "rpId is required in non-browser environments (e.g., React Native). Pass rpId in options.",
-  );
-}
-
 export class Account {
   private readonly _smartAccount: SmartAccount;
   private readonly _chain: Chain;
@@ -250,7 +246,11 @@ export class Account {
     const getFn = options?.getFn;
     const rpIdOption = options?.rpId;
 
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    const passkeyManager = new PasskeyManager(
+      config.storage,
+      undefined,
+      apiKey,
+    );
     const authResult = passkeyManager.checkAuth();
 
     // If credentialId is explicitly provided, always require WebAuthn authentication
@@ -366,11 +366,24 @@ export class Account {
       );
     }
 
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    const passkeyManager = new PasskeyManager(
+      config.storage,
+      undefined,
+      apiKey,
+    );
     const passkeyAccount =
       passkeyManager.getAccountByCredentialId(credentialId);
 
-    // Create WebAuthn account from credential info (no WebAuthn prompt)
+    // Validate publicKey against stored value when available (prevents forged key injection)
+    if (passkeyAccount && passkeyAccount.publicKey !== publicKey) {
+      throw new Error(
+        "Provided publicKey does not match the stored publicKey for this credential. " +
+          "Use the publicKey from Account.getStoredAccounts() or Account.getCurrentAccount().",
+      );
+    }
+
+    // Create WebAuthn account from credential info (no WebAuthn prompt).
+    // rpId is passed through as-is — signing operations will enforce it when needed.
     const webAuthnAccount = toWebAuthnAccount({
       credential: {
         id: credentialId,
@@ -424,7 +437,11 @@ export class Account {
     const resolvedRpId = resolveRpId(rpId);
     const resolvedRpName = rpName ?? "JAW";
 
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    const passkeyManager = new PasskeyManager(
+      config.storage,
+      undefined,
+      apiKey,
+    );
 
     // Create the passkey
     const { credentialId, publicKey, webAuthnAccount, passkeyAccount } =
@@ -479,18 +496,23 @@ export class Account {
     const getFn = options?.getFn;
     const rpId = options?.rpId;
 
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    const passkeyManager = new PasskeyManager(
+      config.storage,
+      undefined,
+      apiKey,
+    );
 
     // Import passkey from cloud backup
     const importResult = await passkeyManager.importPasskeyAccount(getFn, rpId);
 
+    const resolvedRpId = resolveRpId(rpId);
     const webAuthnAccount = toWebAuthnAccount({
       credential: {
         id: importResult.credential.id,
         publicKey: importResult.credential.publicKey,
       },
       getFn,
-      rpId,
+      rpId: resolvedRpId,
     });
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
@@ -598,8 +620,11 @@ export class Account {
    * }
    * ```
    */
-  static getAuthenticatedAddress(apiKey?: string): Address | null {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+  static getAuthenticatedAddress(
+    apiKey?: string,
+    storage?: SyncStorage,
+  ): Address | null {
+    const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
     const authResult = passkeyManager.checkAuth();
     return authResult.isAuthenticated && authResult.address
       ? (authResult.address as Address)
@@ -618,8 +643,11 @@ export class Account {
    * console.log(`Found ${accounts.length} stored accounts`);
    * ```
    */
-  static getStoredAccounts(apiKey?: string): PasskeyAccount[] {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+  static getStoredAccounts(
+    apiKey?: string,
+    storage?: SyncStorage,
+  ): PasskeyAccount[] {
+    const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
     return passkeyManager.fetchAccounts();
   }
 
@@ -637,8 +665,11 @@ export class Account {
    * }
    * ```
    */
-  static getCurrentAccount(apiKey?: string): PasskeyAccount | null {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+  static getCurrentAccount(
+    apiKey?: string,
+    storage?: SyncStorage,
+  ): PasskeyAccount | null {
+    const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
     return passkeyManager.getCurrentAccount() || null;
   }
 
@@ -652,8 +683,8 @@ export class Account {
    * Account.logout('your-api-key');
    * ```
    */
-  static logout(apiKey?: string): void {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+  static logout(apiKey?: string, storage?: SyncStorage): void {
+    const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
     passkeyManager.logout();
   }
 

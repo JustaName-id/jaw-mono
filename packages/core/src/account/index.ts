@@ -5,6 +5,7 @@ export {
   type CreateAccountOptions,
   type GetAccountOptions,
   type ImportAccountOptions,
+  type RestoreAccountOptions,
   type TransactionCall,
   type SendCallsOptions,
   type AccountMetadata,

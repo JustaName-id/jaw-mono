@@ -101,6 +101,9 @@ export {
   type NativeCredentialResult,
 } from "./passkey-manager/index.js";
 
+/** Storage exports (used with AccountConfig.storage for React Native) **/
+export { type SyncStorage } from "./storage-manager/index.js";
+
 /** Key Manager exports **/
 export { KeyManager } from "./key-manager/index.js";
 

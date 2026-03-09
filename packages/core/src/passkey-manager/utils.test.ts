@@ -70,20 +70,8 @@ describe("passkey-manager/utils — React Native adapter support", () => {
         getFn: mockGetFn,
         rpId: "example.com",
       });
-      // Should register with backend
-      expect(restCall).toHaveBeenCalledWith(
-        "REGISTER_PASSKEY",
-        "POST",
-        {
-          credentialId: "native-cred-id",
-          publicKey: "0x04nativepub",
-          displayName: "alice",
-        },
-        {},
-        undefined,
-        undefined,
-        undefined,
-      );
+      // Should NOT register with backend — registration is handled by PasskeyManager.storePasskeyAccount()
+      expect(restCall).not.toHaveBeenCalled();
     });
 
     it("should use createFn path when provided (custom WebAuthn create)", async () => {
