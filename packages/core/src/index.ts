@@ -95,8 +95,7 @@ export {
 export {
   PasskeyManager,
   type PasskeyAccount,
-  type PasskeyCreateFn,
-  type PasskeyGetFn,
+  type NativePasskeyGetFn,
   type NativePasskeyCreateFn,
   type NativeCredentialResult,
 } from "./passkey-manager/index.js";

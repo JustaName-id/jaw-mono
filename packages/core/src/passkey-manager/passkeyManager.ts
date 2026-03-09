@@ -15,7 +15,7 @@ import {
   importPasskeyUtils,
   type PasskeyCreateFn,
   type PasskeyGetFn,
-  type NativePasskeyCreateFn,
+  type InternalNativeCreateFn,
 } from "./utils.js";
 import { JAW_BASE_URL } from "../constants.js";
 import type { WebAuthnAccount } from "viem/account-abstraction";
@@ -163,7 +163,7 @@ export class PasskeyManager {
     rpId: string,
     rpName: string,
     createFn?: PasskeyCreateFn,
-    nativeCreateFn?: NativePasskeyCreateFn,
+    nativeCreateFn?: InternalNativeCreateFn,
     getFn?: PasskeyGetFn,
   ): Promise<{
     credentialId: string;
@@ -224,7 +224,8 @@ export class PasskeyManager {
     getFn?: PasskeyGetFn,
     rpId?: string,
   ): Promise<ImportWebAuthnAuthenticationResult> {
-    return importPasskeyUtils(getFn, rpId);
+    const serverUrl = this.preference.serverUrl ?? JAW_BASE_URL;
+    return importPasskeyUtils(getFn, rpId, this.apiKey, serverUrl);
   }
 
   /**

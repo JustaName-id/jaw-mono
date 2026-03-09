@@ -676,7 +676,7 @@ describe("Account", () => {
   });
 
   describe("React Native adapter options forwarding", () => {
-    it("Account.create should forward createFn, nativeCreateFn, and getFn", async () => {
+    it("Account.create should forward nativeCreateFn and nativeGetFn", async () => {
       const { createSmartAccount } = await import("./smartAccount.js");
       const { PasskeyManager } = await import("../passkey-manager/index.js");
       const mockSmartAccount = {
@@ -691,9 +691,8 @@ describe("Account", () => {
         mockSmartAccount as never,
       );
 
-      const mockCreateFn = vi.fn();
       const mockNativeCreateFn = vi.fn();
-      const mockGetFn = vi.fn();
+      const mockNativeGetFn = vi.fn();
 
       // Mock PasskeyManager to return proper createPasskey result
       const mockCreatePasskey = vi.fn().mockResolvedValue({
@@ -732,24 +731,24 @@ describe("Account", () => {
           username: "alice",
           rpId: "example.com",
           rpName: "MyApp",
-          createFn: mockCreateFn,
           nativeCreateFn: mockNativeCreateFn,
-          getFn: mockGetFn,
+          nativeGetFn: mockNativeGetFn,
         },
       );
 
-      // PasskeyManager.createPasskey should have been called with RN adapter fns
+      // PasskeyManager.createPasskey should have been called with wrapped native fns
+      // nativeCreateFn gets wrapped into internalNativeCreateFn, nativeGetFn into getFn
       expect(mockCreatePasskey).toHaveBeenCalledWith(
         "alice",
         "example.com",
         "MyApp",
-        mockCreateFn,
-        mockNativeCreateFn,
-        mockGetFn,
+        undefined, // createFn (browser path)
+        expect.any(Function), // internalNativeCreateFn (wrapped from nativeCreateFn)
+        expect.any(Function), // getFn (wrapped from nativeGetFn)
       );
     });
 
-    it("Account.get with options should forward getFn and rpId", async () => {
+    it("Account.get with nativeGetFn should forward wrapped getFn and rpId", async () => {
       const { PasskeyManager } = await import("../passkey-manager/index.js");
       const { toWebAuthnAccount } = await import("viem/account-abstraction");
       const { createSmartAccount } = await import("./smartAccount.js");
@@ -800,22 +799,22 @@ describe("Account", () => {
         () => mockManagerInstance as never,
       );
 
-      const mockGetFn = vi.fn();
+      const mockNativeGetFn = vi.fn();
       await Account.get({ chainId: 1, apiKey: "test-api-key" }, undefined, {
-        getFn: mockGetFn,
+        nativeGetFn: mockNativeGetFn,
         rpId: "example.com",
       });
 
-      // toWebAuthnAccount should have been called with getFn and rpId
+      // toWebAuthnAccount should have been called with a wrapped getFn and rpId
       expect(toWebAuthnAccount).toHaveBeenCalledWith(
         expect.objectContaining({
-          getFn: mockGetFn,
+          getFn: expect.any(Function),
           rpId: "example.com",
         }),
       );
     });
 
-    it("Account.import should forward getFn and rpId", async () => {
+    it("Account.import should forward nativeGetFn (wrapped) and rpId", async () => {
       const { PasskeyManager } = await import("../passkey-manager/index.js");
       const { toWebAuthnAccount } = await import("viem/account-abstraction");
       const { createSmartAccount } = await import("./smartAccount.js");
@@ -859,21 +858,21 @@ describe("Account", () => {
         () => mockManagerInstance as never,
       );
 
-      const mockGetFn = vi.fn();
+      const mockNativeGetFn = vi.fn();
       await Account.import(
         { chainId: 1, apiKey: "test-api-key" },
-        { getFn: mockGetFn, rpId: "myapp.com" },
+        { nativeGetFn: mockNativeGetFn, rpId: "myapp.com" },
       );
 
-      // importPasskeyAccount should have been called with getFn and rpId
+      // importPasskeyAccount should have been called with a wrapped getFn and rpId
       expect(mockManagerInstance.importPasskeyAccount).toHaveBeenCalledWith(
-        mockGetFn,
+        expect.any(Function),
         "myapp.com",
       );
-      // toWebAuthnAccount should have been called with getFn and rpId
+      // toWebAuthnAccount should have been called with wrapped getFn and rpId
       expect(toWebAuthnAccount).toHaveBeenCalledWith(
         expect.objectContaining({
-          getFn: mockGetFn,
+          getFn: expect.any(Function),
           rpId: "myapp.com",
         }),
       );
@@ -966,7 +965,7 @@ describe("Account", () => {
       });
     });
 
-    it("should forward getFn and rpId options to toWebAuthnAccount", async () => {
+    it("should forward nativeGetFn (wrapped) and rpId options to toWebAuthnAccount", async () => {
       const { toWebAuthnAccount } = await import("viem/account-abstraction");
       const { createSmartAccount } = await import("./smartAccount.js");
       const mockSmartAccount = {
@@ -981,12 +980,12 @@ describe("Account", () => {
         mockSmartAccount as never,
       );
 
-      const mockGetFn = vi.fn();
+      const mockNativeGetFn = vi.fn();
       const account = await Account.restore(
         { chainId: 1, apiKey: "test-api-key" },
         "cred-456",
         "0x04def789",
-        { getFn: mockGetFn, rpId: "example.com" },
+        { nativeGetFn: mockNativeGetFn, rpId: "example.com" },
       );
 
       expect(account).toBeDefined();
@@ -995,45 +994,12 @@ describe("Account", () => {
           id: "cred-456",
           publicKey: "0x04def789",
         },
-        getFn: mockGetFn,
+        getFn: expect.any(Function),
         rpId: "example.com",
       });
     });
 
-    it("should forward getFn without rpId (rpId deferred to signing)", async () => {
-      const { toWebAuthnAccount } = await import("viem/account-abstraction");
-      const { createSmartAccount } = await import("./smartAccount.js");
-      const mockSmartAccount = {
-        address: "0x1234567890123456789012345678901234567890",
-        signMessage: vi.fn(),
-        signTypedData: vi.fn(),
-        getAddress: vi
-          .fn()
-          .mockResolvedValue("0x1234567890123456789012345678901234567890"),
-      };
-      vi.mocked(createSmartAccount).mockResolvedValue(
-        mockSmartAccount as never,
-      );
-
-      const mockGetFn = vi.fn();
-      await Account.restore(
-        { chainId: 1, apiKey: "test-api-key" },
-        "cred-789",
-        "0x04ghi012",
-        { getFn: mockGetFn },
-      );
-
-      expect(toWebAuthnAccount).toHaveBeenCalledWith({
-        credential: {
-          id: "cred-789",
-          publicKey: "0x04ghi012",
-        },
-        getFn: mockGetFn,
-        rpId: undefined,
-      });
-    });
-
-    it("should forward only rpId when getFn is not provided", async () => {
+    it("should forward only rpId when nativeGetFn is not provided", async () => {
       const { toWebAuthnAccount } = await import("viem/account-abstraction");
       const { createSmartAccount } = await import("./smartAccount.js");
       const mockSmartAccount = {

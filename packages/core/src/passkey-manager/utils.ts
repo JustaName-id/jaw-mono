@@ -3,6 +3,7 @@ import {
   toWebAuthnAccount,
 } from "viem/account-abstraction";
 import type * as WebAuthnP256 from "ox/WebAuthnP256";
+import * as PublicKey from "ox/PublicKey";
 import { restCall } from "../api/index.js";
 import type {
   PasskeyRegistrationRequest,
@@ -11,21 +12,24 @@ import type {
 import type { WebAuthnAccount } from "viem/account-abstraction";
 
 /**
- * Custom function for WebAuthn credential creation (React Native adapter).
+ * Low-level WebAuthn credential creation function (viem-compatible).
  * Type derived from ox's WebAuthnP256.createCredential.Options['createFn'].
+ * For React Native, use NativePasskeyCreateFn instead.
  */
 export type PasskeyCreateFn = NonNullable<
   WebAuthnP256.createCredential.Options["createFn"]
 >;
 
 /**
- * Custom function for WebAuthn credential retrieval (React Native adapter).
+ * Low-level WebAuthn credential retrieval function (viem-compatible).
  * Type derived from ox's WebAuthnP256.sign.Options['getFn'].
+ * For React Native, use NativePasskeyGetFn instead.
  */
 export type PasskeyGetFn = NonNullable<WebAuthnP256.sign.Options["getFn"]>;
 
 /**
- * Result from a native passkey creation (bypasses viem's createWebAuthnCredential entirely)
+ * Result from a native passkey creation (bypasses viem's createWebAuthnCredential entirely).
+ * Used internally after wrapping a NativePasskeyCreateFn.
  */
 export interface NativeCredentialResult {
   id: string;
@@ -33,14 +37,88 @@ export interface NativeCredentialResult {
 }
 
 /**
- * Native passkey creation function that bypasses crypto.subtle
- * Returns credential data directly without going through viem's WebAuthn flow
+ * Internal create function shape used by createPasskeyUtils.
+ * Returns credential data directly without going through viem's WebAuthn flow.
  */
-export type NativePasskeyCreateFn = (
+export type InternalNativeCreateFn = (
   username: string,
   rpId: string,
   rpName: string,
 ) => Promise<NativeCredentialResult>;
+
+/**
+ * Response shape for native passkey get operations.
+ * Matches what react-native-passkey's Passkey.get() returns (base64url strings).
+ */
+export interface NativePasskeyGetResponse {
+  id: string;
+  type?: string;
+  response: {
+    authenticatorData: string; // base64url
+    clientDataJSON: string; // base64url
+    signature: string; // base64url
+  };
+}
+
+/**
+ * Options shape for native passkey get operations.
+ * All binary fields are base64url-encoded strings (matching RN passkey libraries).
+ */
+export interface NativePasskeyGetOptions {
+  challenge: string; // base64url
+  rpId: string;
+  allowCredentials?: Array<{
+    type: string;
+    id: string; // base64url
+    transports?: string[];
+  }>;
+  userVerification?: string;
+  timeout?: number;
+}
+
+/**
+ * Response shape for native passkey create operations.
+ * Matches what react-native-passkey's Passkey.create() returns (base64url strings).
+ */
+export interface NativePasskeyCreateResponse {
+  id: string;
+  rawId?: string;
+  type?: string;
+  response: {
+    attestationObject: string; // base64url
+    clientDataJSON: string; // base64url
+  };
+}
+
+/**
+ * Options shape for native passkey create operations.
+ * Matches what react-native-passkey's Passkey.create() accepts (base64url strings).
+ */
+export interface NativePasskeyCreateOptions {
+  challenge: string; // base64url
+  rp: { id: string; name: string };
+  user: { id: string; name: string; displayName: string };
+  pubKeyCredParams: Array<{ type: string; alg: number }>;
+}
+
+/**
+ * Native passkey get function for React Native.
+ * Pass `Passkey.get` from react-native-passkey directly.
+ * JAW handles base64url ↔ ArrayBuffer conversion internally.
+ */
+export type NativePasskeyGetFn = (
+  options: NativePasskeyGetOptions,
+) => Promise<NativePasskeyGetResponse>;
+
+/**
+ * Native passkey create function for React Native.
+ * Pass `Passkey.create` from react-native-passkey directly.
+ * JAW handles challenge generation, user ID encoding, and public key extraction
+ * from the attestationObject internally.
+ */
+export type NativePasskeyCreateFn = (
+  options: NativePasskeyCreateOptions,
+) => Promise<NativePasskeyCreateResponse>;
 
 /**
  * Minimal credential shape returned by both browser WebAuthn and React Native adapters.
@@ -81,6 +159,161 @@ function credentialIdToArrayBuffer(credentialId: string): ArrayBuffer {
     bytes[i] = binary.charCodeAt(i);
   }
   return bytes.buffer;
+}
+
+/**
+ * Convert an ArrayBuffer or Uint8Array to a base64url-encoded string.
+ * Accepts both because viem/ox may pass either type for challenge and credential IDs.
+ */
+function toBase64Url(buffer: ArrayBuffer | Uint8Array): string {
+  const bytes = buffer instanceof Uint8Array ? buffer : new Uint8Array(buffer);
+  let binary = "";
+  for (const byte of bytes) binary += String.fromCharCode(byte);
+  return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=/g, "");
+}
+
+/**
+ * Convert a base64url-encoded string to an ArrayBuffer
+ */
+function toBuffer(base64url: string): ArrayBuffer {
+  const base64 = base64url.replace(/-/g, "+").replace(/_/g, "/");
+  const padded = base64 + "=".repeat((4 - (base64.length % 4)) % 4);
+  const binary = atob(padded);
+  const bytes = new Uint8Array(binary.length);
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+  return bytes.buffer;
+}
+
+/**
+ * Convert a base64url-encoded string to a Uint8Array
+ */
+function toBytes(base64url: string): Uint8Array {
+  return new Uint8Array(toBuffer(base64url));
+}
+
+/**
+ * Extract the P-256 public key from a CBOR-encoded attestationObject.
+ *
+ * Uses the same byte-level COSE key extraction pattern as ox's internal fallback
+ * (ox/core/internal/webauthn.ts). Searches for COSE key markers 0x21 (x) and
+ * 0x22 (y) with CBOR byte-string prefix [key, 0x58, 0x20] and extracts the
+ * 32-byte coordinates to construct the uncompressed P-256 point (0x04 + x + y).
+ */
+function extractPublicKeyFromAttestation(
+  attestationObjectBase64url: string,
+): `0x${string}` {
+  const data = toBytes(attestationObjectBase64url);
+  const coordinateLength = 0x20; // 32 bytes per coordinate
+  const cborPrefix = 0x58; // CBOR byte string prefix
+
+  const findStart = (key: number): number => {
+    const marker = new Uint8Array([key, cborPrefix, coordinateLength]);
+    for (let i = 0; i < data.length - marker.length; i++) {
+      if (marker.every((byte, j) => data[i + j] === byte)) {
+        return i + marker.length;
+      }
+    }
+    throw new PasskeyRegistrationError(
+      `Failed to extract public key from attestationObject: COSE key marker 0x${key.toString(16)} not found`,
+    );
+  };
+
+  const xStart = findStart(0x21);
+  const yStart = findStart(0x22);
+
+  const publicKey = PublicKey.from(
+    new Uint8Array([
+      0x04,
+      ...data.slice(xStart, xStart + coordinateLength),
+      ...data.slice(yStart, yStart + coordinateLength),
+    ]),
+  );
+
+  return PublicKey.toHex(publicKey);
+}
+
+/**
+ * Wrap a native get function (e.g. Passkey.get) into a viem-compatible PasskeyGetFn.
+ * Bridges base64url strings (native) to ArrayBuffers (viem/ox).
+ */
+export function wrapNativeGetFn(nativeGetFn: NativePasskeyGetFn): PasskeyGetFn {
+  return (async (options?: CredentialRequestOptions) => {
+    const pk = options?.publicKey;
+    if (!pk) {
+      throw new Error("publicKey options are required for native passkey get");
+    }
+
+    const result = await nativeGetFn({
+      challenge: toBase64Url(pk.challenge as ArrayBuffer | Uint8Array),
+      rpId: pk.rpId ?? "",
+      allowCredentials: pk.allowCredentials?.map((c) => ({
+        type: c.type,
+        id: toBase64Url(c.id as ArrayBuffer | Uint8Array),
+        transports: c.transports as string[] | undefined,
+      })),
+      userVerification: pk.userVerification,
+      timeout: pk.timeout,
+    });
+
+    return {
+      id: result.id,
+      type: result.type ?? "public-key",
+      response: {
+        authenticatorData: toBuffer(result.response.authenticatorData),
+        clientDataJSON: toBuffer(result.response.clientDataJSON),
+        signature: toBuffer(result.response.signature),
+      },
+    };
+  }) as PasskeyGetFn;
+}
+
+/**
+ * Wrap a native create function (e.g. Passkey.create) into an InternalNativeCreateFn.
+ * Handles challenge generation, user ID encoding, and public key extraction
+ * from the attestationObject internally.
+ */
+export function wrapNativeCreateFn(
+  nativeCreateFn: NativePasskeyCreateFn,
+): InternalNativeCreateFn {
+  return async (
+    username: string,
+    rpId: string,
+    rpName: string,
+  ): Promise<NativeCredentialResult> => {
+    const result = await nativeCreateFn({
+      challenge: toBase64Url(crypto.getRandomValues(new Uint8Array(32))),
+      rp: { id: rpId, name: rpName },
+      user: {
+        id: toBase64Url(new TextEncoder().encode(username)),
+        name: username,
+        displayName: username,
+      },
+      pubKeyCredParams: [{ type: "public-key", alg: -7 }],
+    });
+
+    const publicKey = extractPublicKeyFromAttestation(
+      result.response.attestationObject,
+    );
+
+    return { id: result.id, publicKey };
+  };
+}
+
+/**
+ * Resolve native passkey functions into viem-compatible getFn and internalNativeCreateFn.
+ * nativeGetFn and nativeCreateFn accept the raw RN library functions (base64url-based)
+ * and JAW wraps them internally.
+ */
+export function resolvePasskeyOptions(options: {
+  nativeGetFn?: NativePasskeyGetFn;
+  nativeCreateFn?: NativePasskeyCreateFn;
+}): { getFn?: PasskeyGetFn; internalNativeCreateFn?: InternalNativeCreateFn } {
+  const { nativeGetFn, nativeCreateFn } = options;
+
+  return {
+    getFn: nativeGetFn ? wrapNativeGetFn(nativeGetFn) : undefined,
+    internalNativeCreateFn: nativeCreateFn ? wrapNativeCreateFn(nativeCreateFn) : undefined,
+  };
 }
 
 /**
@@ -186,7 +419,7 @@ export async function createPasskeyUtils(
   rpId: string,
   rpName: string,
   createFn?: PasskeyCreateFn,
-  nativeCreateFn?: NativePasskeyCreateFn,
+  nativeCreateFn?: InternalNativeCreateFn,
   getFn?: PasskeyGetFn,
 ): Promise<{
   credentialId: string;
@@ -260,6 +493,8 @@ export function resolveRpId(rpId?: string): string {
 export async function importPasskeyUtils(
   getFn?: PasskeyGetFn,
   rpId?: string,
+  apiKey?: string,
+  serverUrl?: string,
 ): Promise<ImportWebAuthnAuthenticationResult> {
   // Early guard: surface a clear error before the try/catch wraps it as PasskeyLookupError
   const resolvedRpId = resolveRpId(rpId);
@@ -285,7 +520,7 @@ export async function importPasskeyUtils(
     }
 
     // credential.id is already the base64url-encoded version of rawId
-    const passkeyData = await lookupPasskeyFromBackend(credential.id);
+    const passkeyData = await lookupPasskeyFromBackend(credential.id, apiKey, undefined, serverUrl);
 
     return {
       name: passkeyData.displayName || "Passkey",
