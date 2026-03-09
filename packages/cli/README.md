@@ -59,10 +59,10 @@ jaw rpc call wallet_sendCalls '{"calls":[{"to":"0x...","value":"0x0","data":"0x.
 jaw rpc call personal_sign '"Hello World"'
 
 # Sign typed data (EIP-712)
-jaw rpc call eth_signTypedData_v4 '{"domain":{...},"types":{...},"primaryType":"...","message":{...}}'
+jaw rpc call eth_signTypedData_v4 '["0xYOUR_ADDRESS", "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"}],\"Person\":[{\"name\":\"name\",\"type\":\"string\"}]},\"primaryType\":\"Person\",\"domain\":{\"name\":\"Test\"},\"message\":{\"name\":\"Alice\"}}"]'
 
 # Grant permissions
-jaw rpc call wallet_grantPermissions '{"expiry":1700000000,"spender":"0x...","calls":[...]}'
+jaw rpc call wallet_grantPermissions '{"expiry":1750000000,"spender":"0x...","permissions":{"calls":[{"target":"0x3232323232323232323232323232323232323232","selector":"0xe0e0e0e0"}],"spends":[{"token":"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE","allowance":"0x2386F26FC10000","unit":"day","multiplier":1}]}}'
 
 # Get assets
 jaw rpc call wallet_getAssets
@@ -77,6 +77,7 @@ jaw rpc call eth_chainId
 | `-c, --chain` | Chain ID | config default |
 | `--api-key` | JAW API key | config/env |
 | `-t, --timeout` | Browser callback timeout (seconds) | `120` |
+| `--headless` | Use device code flow (SSH/headless) | `false` |
 | `-y, --yes` | Skip confirmations | `false` |
 | `-q, --quiet` | Suppress non-essential output | `false` |
 
@@ -114,8 +115,8 @@ jaw config set paymasterUrl https://paymaster.example.com
 |--------|----------|-----------------|
 | `eth_requestAccounts` | Session | Yes |
 | `wallet_connect` | Session | Yes |
-| `wallet_disconnect` | Session | Yes |
-| `wallet_switchEthereumChain` | Session | Yes |
+| `wallet_disconnect` | Local | No |
+| `wallet_switchEthereumChain` | Local | No |
 | `wallet_sendCalls` | Signing | Yes |
 | `eth_sendTransaction` | Signing | Yes |
 | `personal_sign` | Signing | Yes |
@@ -125,13 +126,61 @@ jaw config set paymasterUrl https://paymaster.example.com
 | `wallet_revokePermissions` | Signing | Yes |
 | `eth_accounts` | Read-only | No |
 | `eth_chainId` | Read-only | No |
+| `net_version` | Read-only | No |
 | `wallet_getCallsStatus` | Read-only | No |
 | `wallet_getCallsHistory` | Read-only | No |
 | `wallet_getAssets` | Read-only | No |
 | `wallet_getCapabilities` | Read-only | No |
 | `wallet_getPermissions` | Read-only | No |
 
-Full reference: https://docs.jaw.id/api-reference
+## Testing Guide
+
+Full end-to-end testing sequence:
+
+```bash
+# 0. Setup
+jaw config init --api-key YOUR_API_KEY --chain 1
+
+# 1. Connect wallet (opens browser)
+jaw rpc call wallet_connect
+
+# 2. Verify connection (local, no browser)
+jaw rpc call eth_accounts
+jaw rpc call eth_chainId
+jaw rpc call net_version
+
+# 3. Read-only API calls (no browser, direct API)
+jaw rpc call wallet_getAssets
+jaw rpc call wallet_getCapabilities
+jaw rpc call wallet_getPermissions
+jaw rpc call wallet_getCallsHistory
+
+# 4. Sign a message (opens browser)
+jaw rpc call personal_sign '"Hello from JAW CLI"'
+
+# 5. Sign typed data (opens browser)
+jaw rpc call eth_signTypedData_v4 '["0xYOUR_ADDRESS", "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"}],\"Person\":[{\"name\":\"name\",\"type\":\"string\"}]},\"primaryType\":\"Person\",\"domain\":{\"name\":\"Test\"},\"message\":{\"name\":\"Alice\"}}"]'
+
+# 6. Send transaction (opens browser)
+jaw rpc call wallet_sendCalls '{"calls":[{"to":"0x0000000000000000000000000000000000000000","value":"0x0","data":"0x"}]}'
+
+# 7. Switch chain (local, no browser)
+jaw rpc call wallet_switchEthereumChain '[{"chainId":"0x2105"}]'
+jaw rpc call eth_chainId  # verify: should return 0x2105
+
+# 8. Grant permissions (opens browser)
+jaw rpc call wallet_grantPermissions '{"expiry":1750000000,"spender":"0x0000000000000000000000000000000000000001","permissions":{"calls":[{"target":"0x3232323232323232323232323232323232323232","selector":"0xe0e0e0e0"}],"spends":[{"token":"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE","allowance":"0x2386F26FC10000","unit":"day","multiplier":1}]}}'
+
+# 9. Verify permissions (no browser)
+jaw rpc call wallet_getPermissions
+
+# 10. Revoke permissions (opens browser, use permissionId from step 9)
+jaw rpc call wallet_revokePermissions '{"id":"0xPERMISSION_ID_FROM_STEP_9"}'
+
+# 11. Disconnect (local)
+jaw rpc call wallet_disconnect
+jaw rpc call eth_accounts  # should return []
+```
 
 ## MCP Server (for AI Agents)
 
@@ -171,7 +220,7 @@ jaw mcp
 
 ```
 Agent: jaw_rpc({ method: "wallet_sendCalls", params: { calls: [{ to: "0x...", value: "0x0" }] } })
-  → CLI opens browser → user signs with passkey → result returned to agent
+  -> CLI opens browser -> user signs with passkey -> result returned to agent
 ```
 
 ## Environment Variables
@@ -206,18 +255,18 @@ AI Agent / User
        v
   CLI classifies method
        |
-  +----+----+
-  |         |
-  v         v
-Read-only   Signing
-(direct)    (browser)
-  |         |
-  v         v
-Return    CLICommunicator
-result    1. Start HTTP server on 127.0.0.1
-          2. Open browser → keys.jaw.id/cli-bridge
-          3. Bridge opens popup (standard flow)
-          4. User signs with passkey
-          5. Bridge POSTs result to localhost
-          6. CLI returns result
+  +----+----+----+
+  |         |    |
+  v         v    v
+Read-only  Local  Signing/Session
+(API)     (disk)  (browser)
+  |         |    |
+  v         v    v
+Direct    Update  CLICommunicator
+fetch     config  1. Start HTTP server on 127.0.0.1
+to API    /session 2. Open browser -> keys.jaw.id/cli-bridge
+           |      3. Bridge opens popup (standard flow)
+           v      4. User signs with passkey
+         Return   5. Bridge POSTs result to localhost
+         result   6. CLI returns result
 ```

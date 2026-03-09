@@ -1,16 +1,47 @@
 import { loadConfig } from "./config.js";
-import { clearSession, createSession, saveSession } from "./session-store.js";
+import {
+  clearSession,
+  createSession,
+  loadSession,
+  saveSession,
+} from "./session-store.js";
 import { isValidAddress } from "./validation.js";
 
-export function handleLocalOnly(method: string): unknown {
+export function handleLocalOnly(method: string, params?: unknown): unknown {
   switch (method) {
     case "wallet_disconnect": {
       clearSession();
       return { success: true };
     }
+    case "wallet_switchEthereumChain": {
+      const chainIdHex = extractChainId(params);
+      if (!chainIdHex) {
+        throw new Error(
+          'wallet_switchEthereumChain requires params: [{ chainId: "0x..." }]',
+        );
+      }
+      const chainId = Number(chainIdHex);
+      if (Number.isNaN(chainId) || chainId <= 0) {
+        throw new Error(`Invalid chainId: ${chainIdHex}`);
+      }
+      const session = loadSession();
+      if (session) {
+        saveSession({ ...session, chainId });
+      }
+      return null;
+    }
     default:
       throw new Error(`Unhandled local-only method: ${method}`);
   }
+}
+
+function extractChainId(params: unknown): string | undefined {
+  if (!Array.isArray(params) || params.length === 0) return undefined;
+  const first = params[0];
+  if (first && typeof first === "object" && "chainId" in first) {
+    return (first as Record<string, unknown>).chainId as string;
+  }
+  return undefined;
 }
 
 export function maybeSaveSession(
@@ -27,8 +58,10 @@ export function maybeSaveSession(
       const chainId = chainIdOverride ?? config.defaultChain ?? 1;
       saveSession(createSession(address, chainId));
     }
-  } catch {
-    // Non-fatal: session save failure shouldn't break the flow
+  } catch (err) {
+    process.stderr.write(
+      `Warning: failed to save session: ${err instanceof Error ? err.message : err}\n`,
+    );
   }
 }
 

@@ -24,6 +24,7 @@ const CALLBACK_PATH = "/callback";
 export interface CLICommunicatorOptions {
   keysUrl?: string;
   apiKey: string;
+  chainId?: number;
   timeout?: number;
   headless?: boolean;
   onDisplayCode?: (userCode: string, verificationUrl: string) => void;
@@ -41,6 +42,7 @@ interface CallbackResult {
 export class CLICommunicator {
   private readonly keysUrl: string;
   private readonly apiKey: string;
+  private readonly chainId: number;
   private readonly timeout: number;
   private readonly headless: boolean;
   private readonly onDisplayCode?: (
@@ -51,6 +53,7 @@ export class CLICommunicator {
   constructor(options: CLICommunicatorOptions) {
     this.keysUrl = options.keysUrl ?? loadConfig().keysUrl ?? JAW_KEYS_URL;
     this.apiKey = options.apiKey;
+    this.chainId = options.chainId ?? loadConfig().defaultChain ?? 1;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
     this.headless = options.headless ?? false;
     this.onDisplayCode = options.onDisplayCode;
@@ -137,6 +140,7 @@ export class CLICommunicator {
     url.searchParams.set("callback", opts.callbackUrl);
     url.searchParams.set("requestId", opts.requestId);
     url.searchParams.set("method", opts.method);
+    url.searchParams.set("chainId", String(this.chainId));
     // API key sent via fragment to avoid browser history/server logs
     if (opts.params !== undefined) {
       url.searchParams.set("params", JSON.stringify(opts.params));

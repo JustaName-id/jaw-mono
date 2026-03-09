@@ -105,6 +105,40 @@ describe("handleLocalOnly", () => {
       "Unhandled local-only method",
     );
   });
+
+  it("wallet_switchEthereumChain updates session chainId", () => {
+    const session = {
+      address: VALID_ADDRESS,
+      chainId: 1,
+      connectedAt: new Date().toISOString(),
+      expiresAt: new Date(Date.now() + 86400000).toISOString(),
+    };
+    fs.writeFileSync(
+      path.join(TEST_ROOT, "session.json"),
+      JSON.stringify(session),
+    );
+
+    const result = handleLocalOnly("wallet_switchEthereumChain", [
+      { chainId: "0x2105" },
+    ]);
+    expect(result).toBeNull();
+    const updated = loadSession();
+    expect(updated?.chainId).toBe(0x2105);
+    expect(updated?.address).toBe(VALID_ADDRESS);
+  });
+
+  it("wallet_switchEthereumChain throws without params", () => {
+    expect(() => handleLocalOnly("wallet_switchEthereumChain")).toThrow(
+      "requires params",
+    );
+  });
+
+  it("wallet_switchEthereumChain works with no active session", () => {
+    const result = handleLocalOnly("wallet_switchEthereumChain", [
+      { chainId: "0x1" },
+    ]);
+    expect(result).toBeNull();
+  });
 });
 
 describe("maybeSaveSession", () => {

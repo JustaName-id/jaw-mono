@@ -132,6 +132,7 @@ function CLIBridgeContent() {
   const requestId = searchParams.get("requestId");
   const method = searchParams.get("method");
   const paramsRaw = searchParams.get("params");
+  const chainIdParam = searchParams.get("chainId");
 
   // API key is in the URL fragment (hash) to avoid browser history/server logs
   const [apiKey, setApiKey] = useState<string | null>(null);
@@ -195,6 +196,7 @@ function CLIBridgeContent() {
           ? [rawParams]
           : [];
       const isConnect = CONNECT_METHODS.includes(method);
+      const chainId = chainIdParam ? Number(chainIdParam) : 1;
 
       const result = isConnect
         ? await runConnectProtocol(
@@ -204,6 +206,7 @@ function CLIBridgeContent() {
             ownPublicKeyHex,
             keyPair.privateKey,
             apiKey,
+            chainId,
           )
         : await runSigningProtocol(
             popup,
@@ -212,6 +215,7 @@ function CLIBridgeContent() {
             ownPublicKeyHex,
             keyPair.privateKey,
             apiKey,
+            chainId,
           );
 
       setState("sending-callback");
@@ -247,7 +251,15 @@ function CLIBridgeContent() {
       setState("error");
       setError(errMsg);
     }
-  }, [validationError, callbackUrl, requestId, method, paramsRaw, apiKey]);
+  }, [
+    validationError,
+    callbackUrl,
+    requestId,
+    method,
+    paramsRaw,
+    apiKey,
+    chainIdParam,
+  ]);
 
   if (validationError) {
     return (
@@ -357,8 +369,7 @@ interface PopupContext {
   reject: (err: Error) => void;
 }
 
-function buildChain(apiKey: string | null) {
-  const chainId = 1;
+function buildChain(apiKey: string | null, chainId = 1) {
   const rpcUrl = apiKey
     ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`
     : undefined;
@@ -460,6 +471,7 @@ async function runConnectProtocol(
   ownPublicKeyHex: string,
   ownPrivateKey: CryptoKey,
   apiKey: string | null,
+  chainId: number,
 ): Promise<unknown> {
   const ctx = await setupPopup(popup, ownPublicKeyHex, ownPrivateKey, apiKey);
 
@@ -510,7 +522,7 @@ async function runConnectProtocol(
         sender: ownPublicKeyHex,
         content: {
           handshake: { method, params: params ?? [] },
-          chain: buildChain(apiKey),
+          chain: buildChain(apiKey, chainId),
         },
         timestamp: new Date(),
       },
@@ -530,9 +542,10 @@ async function runSigningProtocol(
   ownPublicKeyHex: string,
   ownPrivateKey: CryptoKey,
   apiKey: string | null,
+  chainId: number,
 ): Promise<unknown> {
   const ctx = await setupPopup(popup, ownPublicKeyHex, ownPrivateKey, apiKey);
-  const chain = buildChain(apiKey);
+  const chain = buildChain(apiKey, chainId);
 
   // Phase 1: Key exchange handshake (method: "handshake")
   const peerPublicKeyHex = await doKeyExchangeHandshake(ctx, chain);
@@ -709,6 +722,9 @@ const styles: Record<string, React.CSSProperties> = {
     width: "48px",
     height: "48px",
     marginBottom: "1rem",
+    marginLeft: "auto",
+    marginRight: "auto",
+    display: "block",
     opacity: 0.8,
   },
   title: {

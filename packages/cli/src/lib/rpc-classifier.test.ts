@@ -25,12 +25,10 @@ describe("rpc-classifier", () => {
   it("classifies session-management methods", () => {
     expect(classifyMethod("eth_requestAccounts")).toBe("session-management");
     expect(classifyMethod("wallet_connect")).toBe("session-management");
-    expect(classifyMethod("wallet_switchEthereumChain")).toBe(
-      "session-management",
-    );
   });
 
-  it("classifies wallet_disconnect as local-only", () => {
+  it("classifies wallet_switchEthereumChain and wallet_disconnect as local-only", () => {
+    expect(classifyMethod("wallet_switchEthereumChain")).toBe("local-only");
     expect(classifyMethod("wallet_disconnect")).toBe("local-only");
     expect(needsBrowser("wallet_disconnect")).toBe(false);
   });

@@ -1,6 +1,7 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
 import { CLICommunicator } from "../../lib/cli-communicator.js";
+import { fetchJawRpc } from "../../lib/rpc-client.js";
 import {
   classifyMethod,
   needsBrowser,
@@ -75,7 +76,12 @@ export default class RpcCall extends BaseCommand {
 
     // Local-only methods (no browser needed)
     if (category === "local-only") {
-      const result = handleLocalOnly(method);
+      const normalizedParams = Array.isArray(params)
+        ? params
+        : params !== undefined
+          ? [params]
+          : undefined;
+      const result = handleLocalOnly(method, normalizedParams);
       this.outputResult(result, format);
       return;
     }
@@ -105,6 +111,7 @@ export default class RpcCall extends BaseCommand {
     const communicator = new CLICommunicator({
       keysUrl: config.keysUrl,
       apiKey,
+      chainId: flags.chain ?? config.defaultChain,
       timeout: flags.timeout * 1000,
       headless: useHeadless,
       onDisplayCode: (userCode, verificationUrl) => {
@@ -146,16 +153,47 @@ export default class RpcCall extends BaseCommand {
       case "wallet_getAssets":
       case "wallet_getCapabilities":
       case "wallet_getPermissions": {
-        // These read-only methods still need API access
+        // Direct API call — no browser needed
         const apiKey = this.resolveApiKey(flags as Record<string, unknown>);
-        const communicator = new CLICommunicator({
-          keysUrl: config.keysUrl,
-          apiKey,
-        });
-        return communicator.request(method, params);
+        const session = loadSession();
+        const rpcParams = this.buildReadOnlyParams(
+          method,
+          params,
+          session?.address,
+        );
+        return fetchJawRpc(method, rpcParams, apiKey);
       }
       default:
         throw new Error(`Unhandled read-only method: ${method}`);
+    }
+  }
+
+  /**
+   * Build params array for read-only API methods, injecting session address
+   * where needed (matching how the playground/core SDK builds params).
+   */
+  private buildReadOnlyParams(
+    method: string,
+    params: unknown,
+    address?: string,
+  ): unknown[] {
+    // If user provided params, normalize to array
+    if (params !== undefined) {
+      return Array.isArray(params) ? params : [params];
+    }
+
+    // Auto-inject session address for methods that need it
+    switch (method) {
+      case "wallet_getAssets":
+        return address ? [{ account: address }] : [];
+      case "wallet_getCapabilities":
+        return address ? [address] : [];
+      case "wallet_getPermissions":
+        return address ? [{ address }] : [];
+      case "wallet_getCallsHistory":
+        return address ? [{ address }] : [];
+      default:
+        return [];
     }
   }
 }

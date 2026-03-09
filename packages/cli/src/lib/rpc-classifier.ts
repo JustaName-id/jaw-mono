@@ -32,7 +32,7 @@ const METHOD_MAP: Record<string, MethodCategory> = {
   eth_requestAccounts: "session-management",
   wallet_connect: "session-management",
   wallet_disconnect: "local-only",
-  wallet_switchEthereumChain: "session-management",
+  wallet_switchEthereumChain: "local-only",
 };
 
 export function classifyMethod(method: string): MethodCategory {

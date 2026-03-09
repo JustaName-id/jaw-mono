@@ -1,6 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { rpcMethodSchema } from "../tools.js";
 import { CLICommunicator } from "../../lib/cli-communicator.js";
+import { fetchJawRpc } from "../../lib/rpc-client.js";
 import { classifyMethod, SUPPORTED_METHODS } from "../../lib/rpc-classifier.js";
 import { loadConfig } from "../../lib/config.js";
 import { loadSession } from "../../lib/session-store.js";
@@ -69,7 +70,12 @@ export function registerRpcTool(server: McpServer): void {
         const category = classifyMethod(method);
 
         if (category === "local-only") {
-          return mcpResult(handleLocalOnly(method));
+          const normalized = rpcParams
+            ? Array.isArray(rpcParams)
+              ? rpcParams
+              : [rpcParams]
+            : undefined;
+          return mcpResult(handleLocalOnly(method, normalized));
         }
 
         if (category === "read-only") {
@@ -120,13 +126,34 @@ async function handleReadOnlyMethod(
     case "wallet_getCapabilities":
     case "wallet_getPermissions": {
       const apiKey = resolveApiKey();
-      const communicator = new CLICommunicator({
-        keysUrl: config.keysUrl,
-        apiKey,
-      });
-      return communicator.request(method, params);
+      const session = loadSession();
+      const rpcParams = buildReadOnlyParams(method, params, session?.address);
+      return fetchJawRpc(method, rpcParams, apiKey);
     }
     default:
       throw new Error(`Unhandled read-only method: ${method}`);
+  }
+}
+
+function buildReadOnlyParams(
+  method: string,
+  params: unknown,
+  address?: string,
+): unknown[] {
+  if (params !== undefined) {
+    return Array.isArray(params) ? params : [params];
+  }
+
+  switch (method) {
+    case "wallet_getAssets":
+      return address ? [{ account: address }] : [];
+    case "wallet_getCapabilities":
+      return address ? [address] : [];
+    case "wallet_getPermissions":
+      return address ? [{ address }] : [];
+    case "wallet_getCallsHistory":
+      return address ? [{ address }] : [];
+    default:
+      return [];
   }
 }
