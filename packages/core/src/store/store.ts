@@ -74,7 +74,8 @@ const createChainSlice: StateCreator<StoreState, [], [], ChainSlice> = () => {
         storage: createJSONStorage(() => {
           if (typeof localStorage !== 'undefined') return localStorage;
           // No-op storage for non-browser environments (CLI, Node.js)
-          return { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+          // eslint-disable-next-line @typescript-eslint/no-empty-function
+          return { getItem: () => null, setItem() { /* noop */ }, removeItem() { /* noop */ } };
         }),
         partialize: (state) => {
           // Explicitly select only the data properties we want to persist
