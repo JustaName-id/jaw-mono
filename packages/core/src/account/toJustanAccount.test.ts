@@ -15,6 +15,7 @@ vi.mock('viem', async () => {
         padHex: vi.fn(),
         numberToHex: vi.fn(),
         stringToHex: vi.fn(),
+        hashTypedData: vi.fn(),
         pad: vi.fn(),
         isAddressEqual: vi.fn(),
         encodeFunctionData: vi.fn(),
@@ -128,7 +129,7 @@ describe('toJustanAccount unit tests', () => {
             };
             const mockPacked = '0xccc' as Hex;
             const mockEncodedResult = '0xddd' as Hex;
-            
+
             vi.mocked(viem.size).mockReturnValue(65);
             vi.mocked(viem.parseSignature).mockReturnValue(mockParsed);
             vi.mocked(viem.encodePacked).mockReturnValue(mockPacked);
@@ -164,10 +165,10 @@ describe('toJustanAccount unit tests', () => {
             const mockEncodedResult = '0xencoded' as Hex;
 
             vi.mocked(Signature.fromHex).mockReturnValue({ r: MOCK_R, s: MOCK_S, yParity: 0 });
-            vi.mocked(viem.numberToHex).mockImplementation((n) => 
+            vi.mocked(viem.numberToHex).mockImplementation((n) =>
                 n === MOCK_R ? mockRHex : mockSHex
             );
-            vi.mocked(viem.padHex).mockImplementation((hex) => 
+            vi.mocked(viem.padHex).mockImplementation((hex) =>
                 hex === mockRHex ? mockRPadded : mockSPadded
             );
             vi.mocked(viem.stringToHex).mockReturnValue(mockClientDataHex);
@@ -269,24 +270,27 @@ describe('toJustanAccount unit tests', () => {
             expect(result).toBeDefined();
         });
 
-        it('should call owner.signTypedData for local account', async () => {
+        it('should hash locally and call owner.sign for local account', async () => {
             const mockTypedData = { domain: {}, types: {}, primaryType: 'Test', message: {} };
             const mockLocalOwner = {
                 type: 'local' as const,
                 address: '0x1234567890123456789012345678901234567890' as const,
-                signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
             } as any;
+
+            vi.mocked(viem.hashTypedData).mockReturnValue('0xmockhash' as `0x${string}`);
 
             const result = await signTypedData({
                 typedData: mockTypedData,
                 owner: mockLocalOwner,
             });
 
-            expect(mockLocalOwner.signTypedData).toHaveBeenCalledWith(mockTypedData);
+            expect(viem.hashTypedData).toHaveBeenCalledWith(mockTypedData);
+            expect(mockLocalOwner.sign).toHaveBeenCalledWith({ hash: '0xmockhash' });
             expect(result).toBe(MOCK_SIGNATURE);
         });
 
-        it('should throw error when owner does not support signTypedData', async () => {
+        it('should throw error when owner does not support sign', async () => {
             const mockTypedData = { domain: {}, types: {}, primaryType: 'Test', message: {} };
             const mockInvalidOwner = {
                 type: 'local' as const,
@@ -311,7 +315,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockReturnValue({} as any);
 
@@ -345,7 +349,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(viem.isAddressEqual).mockReturnValue(true);
                 vi.mocked(toSmartAccount).mockReturnValue({} as any);
@@ -374,7 +378,7 @@ describe('toJustanAccount unit tests', () => {
                 } as any;
 
                 const { readContract } = await import('viem/actions');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(viem.isAddressEqual).mockReturnValue(false);
 
@@ -397,7 +401,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue(mockPaddedBytes);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(toSmartAccount).mockReturnValue({} as any);
@@ -420,7 +424,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(toSmartAccount).mockReturnValue({} as any);
 
@@ -447,7 +451,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue(mockPaddedBytes);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(toSmartAccount).mockReturnValue({} as any);
@@ -486,7 +490,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockImplementation((params: any) => {
                     expect(params).toBeDefined();
@@ -515,7 +519,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(toSmartAccount).mockReturnValue({} as any);
@@ -538,7 +542,7 @@ describe('toJustanAccount unit tests', () => {
                 } as any;
 
                 const { readContract } = await import('viem/actions');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(viem.isAddressEqual).mockReturnValue(true);
 
@@ -562,7 +566,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockImplementation((params: any) => {
                     expect(params.getAddress).toBeDefined();
@@ -587,7 +591,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(toSmartAccount).mockReturnValue({} as any);
@@ -619,7 +623,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockReturnValue({
                     getAddress: vi.fn().mockResolvedValue(MOCK_ADDRESS),
@@ -644,7 +648,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(toSmartAccount).mockReturnValue({
@@ -671,7 +675,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockReturnValue({
                     getStubSignature: vi.fn().mockResolvedValue('0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c'),
@@ -696,7 +700,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 const longSig = "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000170000000000000000000000000000000000000000000000000000000000000001949fc7c88032b9fcb5f6efc7a7b8c63668eae9871b765e23123bb473ff57aa831a7c0d9276168ebcc29f2875a0239cffdf2a9cd1c2007c5c77c071db9264df1d000000000000000000000000000000000000000000000000000000000000002549960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d9763050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000847b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2273496a396e6164474850596759334b7156384f7a4a666c726275504b474f716d59576f4d57516869467773222c226f726967696e223a2268747470733a2f2f6b6579732e6a61772e6964222c2263726f73734f726967696e223a66616c73657d00000000000000000000000000000000000000000000000000000000";
@@ -724,7 +728,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockReturnValue({
                     getFactoryArgs: vi.fn().mockResolvedValue({
@@ -754,7 +758,7 @@ describe('toJustanAccount unit tests', () => {
                 const mockEncodedData = '0xencodeddata' as Hex;
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(viem.encodeFunctionData).mockReturnValue(mockEncodedData);
@@ -787,7 +791,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(toSmartAccount).mockReturnValue({
                     userOperation: {
@@ -805,11 +809,11 @@ describe('toJustanAccount unit tests', () => {
 
                 expect(account.userOperation).toBeDefined();
                 expect(account.userOperation!.estimateGas).toBeDefined();
-                
+
                 const gasEstimate = await account.userOperation!.estimateGas!({
                     verificationGasLimit: 500_000n,
                 } as any);
-                
+
                 expect(gasEstimate).toBeDefined();
                 expect(gasEstimate?.verificationGasLimit).toBeGreaterThanOrEqual(800_000n);
             });
@@ -822,7 +826,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(toSmartAccount).mockReturnValue({
@@ -843,7 +847,7 @@ describe('toJustanAccount unit tests', () => {
                 const gasEstimate = await account.userOperation!.estimateGas!({
                     verificationGasLimit: 500_000n,
                 } as any);
-                
+
                 expect(gasEstimate).toBeUndefined();
             });
         });
@@ -858,7 +862,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockImplementation((params: any) => ({
                     ...params,
@@ -872,7 +876,7 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const signature = await account.signMessage({ message: MOCK_MESSAGE });
-                
+
                 expect(mockEOA.sign).toHaveBeenCalled();
                 expect(signature).toBe(MOCK_SIGNATURE);
             });
@@ -886,7 +890,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(viem.encodeAbiParameters).mockReturnValue(MOCK_WRAPPED_SIGNATURE);
@@ -901,7 +905,7 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const signature = await account.signMessage({ message: MOCK_MESSAGE });
-                
+
                 expect(mockOwner.sign).toHaveBeenCalled();
                 expect(viem.encodeAbiParameters).toHaveBeenCalled();
                 expect(signature).toBe(MOCK_WRAPPED_SIGNATURE);
@@ -912,10 +916,10 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
-                
+
                 const mockSignMessage = vi.fn().mockRejectedValue(new Error('owner cannot sign'));
                 vi.mocked(toSmartAccount).mockReturnValue({
                     signMessage: mockSignMessage,
@@ -942,7 +946,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockImplementation((params: any) => ({
                     ...params,
@@ -956,7 +960,7 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const signature = await account.signTypedData(MOCK_TYPED_DATA);
-                
+
                 expect(mockEOA.sign).toHaveBeenCalled();
                 expect(signature).toBe(MOCK_SIGNATURE);
             });
@@ -971,7 +975,7 @@ describe('toJustanAccount unit tests', () => {
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
                 const { wrapTypedDataSignature } = await import('viem/experimental/erc7739');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(viem.encodeAbiParameters).mockReturnValue(MOCK_WRAPPED_SIGNATURE);
@@ -987,7 +991,7 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const signature = await account.signTypedData(MOCK_TYPED_DATA);
-                
+
                 expect(mockOwner.sign).toHaveBeenCalled();
                 expect(wrapTypedDataSignature).toHaveBeenCalled();
                 expect(signature).toBe(MOCK_WRAPPED_TYPED_DATA_SIGNATURE);
@@ -998,10 +1002,10 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
-                
+
                 const mockSignTypedData = vi.fn().mockRejectedValue(new Error('owner cannot sign'));
                 vi.mocked(toSmartAccount).mockReturnValue({
                     signTypedData: mockSignTypedData,
@@ -1023,15 +1027,15 @@ describe('toJustanAccount unit tests', () => {
                 const mockEOA = {
                     type: 'local' as const,
                     address: MOCK_ADDRESS,
-                    signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                    sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
                 } as any;
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount, getUserOperationTypedData } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(getUserOperationTypedData).mockReturnValue(MOCK_TYPED_DATA as any);
-                
+
                 const mockSignUserOperation = vi.fn().mockResolvedValue(MOCK_SIGNATURE);
                 vi.mocked(toSmartAccount).mockReturnValue({
                     signUserOperation: mockSignUserOperation,
@@ -1053,7 +1057,7 @@ describe('toJustanAccount unit tests', () => {
                     maxFeePerGas: 1n,
                     maxPriorityFeePerGas: 1n,
                 } as any);
-                
+
                 expect(signature).toBe(MOCK_SIGNATURE);
             });
 
@@ -1061,17 +1065,17 @@ describe('toJustanAccount unit tests', () => {
                 const mockOwner = {
                     type: 'local' as const,
                     address: MOCK_ADDRESS,
-                    signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                    sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
                 } as any;
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount, getUserOperationTypedData } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
                 vi.mocked(getUserOperationTypedData).mockReturnValue(MOCK_TYPED_DATA as any);
                 vi.mocked(viem.encodeAbiParameters).mockReturnValue(MOCK_WRAPPED_SIGNATURE);
-                
+
                 const mockSignUserOperation = vi.fn().mockResolvedValue(MOCK_WRAPPED_SIGNATURE);
                 vi.mocked(toSmartAccount).mockReturnValue({
                     signUserOperation: mockSignUserOperation,
@@ -1092,7 +1096,7 @@ describe('toJustanAccount unit tests', () => {
                     maxFeePerGas: 1n,
                     maxPriorityFeePerGas: 1n,
                 } as any);
-                
+
                 expect(signature).toBe(MOCK_WRAPPED_SIGNATURE);
             });
 
@@ -1101,10 +1105,10 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
-                
+
                 const mockSignUserOperation = vi.fn().mockRejectedValue(new Error('owner cannot sign'));
                 vi.mocked(toSmartAccount).mockReturnValue({
                     signUserOperation: mockSignUserOperation,
@@ -1142,10 +1146,10 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(viem.isAddressEqual).mockReturnValue(true);
-                
+
                 const mockSignAuthorization = vi.fn().mockResolvedValue(mockAuth);
                 vi.mocked(toSmartAccount).mockReturnValue({
                     signAuthorization: mockSignAuthorization,
@@ -1160,7 +1164,7 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const auth = await account.signAuthorization();
-                
+
                 expect(auth).toBe(mockAuth);
             });
 
@@ -1178,7 +1182,7 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract, signAuthorization, getChainId } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(getChainId).mockResolvedValue(1);
                 vi.mocked(signAuthorization).mockResolvedValue(mockAuth);
@@ -1194,7 +1198,7 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const auth = await account.signAuthorization();
-                
+
                 expect(getChainId).toHaveBeenCalled();
                 expect(auth).toEqual(mockAuth);
             });
@@ -1207,10 +1211,10 @@ describe('toJustanAccount unit tests', () => {
 
                 const { readContract } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
-                
+
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
-                
+
                 const mockSignAuthorization = vi.fn().mockRejectedValue(new Error('signAuthorization can only be called for EIP-7702 accounts'));
                 vi.mocked(toSmartAccount).mockReturnValue({
                     signAuthorization: mockSignAuthorization,
@@ -1228,4 +1232,3 @@ describe('toJustanAccount unit tests', () => {
         });
     });
 });
-

@@ -61,7 +61,6 @@ export const SignatureDialog = ({
   return (
     <DefaultDialog
       open={open}
-      handleClose={onCancel}
       onOpenChange={!isProcessing ? onOpenChange : undefined}
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
@@ -99,7 +98,7 @@ export const SignatureDialog = ({
         minWidth: '500px',
       }}
     >
-      <div className="flex flex-col h-full min-h-0">
+      <div className="flex flex-col h-full min-h-0 max-md:pb-2">
         {/* Main Content Area - Large scrollable message box */}
         <div className="flex-1 p-4 bg-white border border-border rounded-[6px] min-h-[300px] max-h-[50vh] overflow-y-auto">
           <p className="text-sm font-normal text-foreground whitespace-pre-wrap break-words leading-relaxed">
@@ -152,25 +151,23 @@ export const SignatureDialog = ({
           </div>
         )}
 
-        {/* Action Buttons Section */}
-        <div className="flex mt-3 flex-shrink-0">
-          <div className="flex gap-2 w-full justify-between">
-            <Button
-              variant="outline"
-              onClick={onCancel}
-              disabled={isProcessing}
-              className="h-9"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={onSign}
-              disabled={!canSign}
-              className="h-9"
-            >
-              {isProcessing ? 'Signing...' : 'Sign'}
-            </Button>
-          </div>
+        {/* Action Buttons */}
+        <div className="flex gap-3 p-3.5 flex-shrink-0">
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            disabled={isProcessing}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={onSign}
+            disabled={!canSign}
+            className="flex-1"
+          >
+            {isProcessing ? 'Signing...' : 'Sign'}
+          </Button>
         </div>
       </div>
     </DefaultDialog>

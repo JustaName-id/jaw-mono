@@ -140,19 +140,8 @@ export async function getCachedWalletConnectResponse(): Promise<WalletConnectRes
         }
     }
 
-    // Get stored capabilities (e.g., signInWithEthereum response)
-    const storedCapabilities = accountState.capabilities;
-
-    const walletConnectAccounts = accounts?.map<WalletConnectResponse['accounts'][number]>(
-        (account, index) => ({
-            address: account,
-            // Only include capabilities for the first account (where they're typically stored)
-            capabilities: index === 0 && storedCapabilities ? storedCapabilities : {},
-        })
-    );
-
     return {
-        accounts: walletConnectAccounts,
+        accounts: accounts.map((account) => ({ address: account })),
     };
 }
 
