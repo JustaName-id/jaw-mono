@@ -264,8 +264,8 @@ Read-only  Local  Signing/Session
 Direct    Update  CLICommunicator
 fetch     config  1. Start HTTP server on 127.0.0.1
 to API    /session 2. Open browser -> keys.jaw.id/cli-bridge
-           |      3. Bridge opens popup (standard flow)
-           v      4. User signs with passkey
+           |      3. Bridge runs JAW SDK (AppSpecific mode)
+           v      4. User signs with passkey inline
          Return   5. Bridge POSTs result to localhost
          result   6. CLI returns result
 ```
