@@ -22,8 +22,8 @@ export function middleware(request: NextRequest) {
     "https://eth.llamarpc.com",
     "https:",
     "wss:",
-    // Allow CLI bridge pages to POST results to the local CLI callback server
-    ...(isCLIBridge ? ["http://127.0.0.1:*", "http://localhost:*"] : []),
+    // Allow CLI bridge pages to connect to the local CLI server (HTTP + WebSocket)
+    ...(isCLIBridge ? ["http://127.0.0.1:*", "http://localhost:*", "ws://127.0.0.1:*", "ws://localhost:*"] : []),
   ].join(" ");
 
   // --- img-src ---
@@ -67,7 +67,8 @@ export function middleware(request: NextRequest) {
     //     max_age: 10886400,
     //     endpoints: [{ url: 'https://your-domain.report-uri.com/r/d/csp/enforce' }],
     //   }));
-    ...(isDev ? [] : ["upgrade-insecure-requests"]),
+    // Skip upgrade-insecure-requests for CLI bridge (needs ws:// to local CLI server)
+    ...(isDev || isCLIBridge ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
 
   const response = NextResponse.next();

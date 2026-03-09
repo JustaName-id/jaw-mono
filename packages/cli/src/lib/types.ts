@@ -3,6 +3,7 @@ export interface JawConfig {
   defaultChain?: number;
   keysUrl?: string;
   paymasterUrl?: string;
+  ens?: string;
 }
 
 export type OutputFormat = "json" | "human";

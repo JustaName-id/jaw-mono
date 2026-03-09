@@ -38,9 +38,15 @@
     },
     "topicSeparator": " ",
     "topics": {
-      "rpc": { "description": "Execute JAW.id RPC methods (wallet_sendCalls, personal_sign, etc.)" },
-      "config": { "description": "Configure CLI settings (API key, chain, keys URL)" },
-      "mcp": { "description": "Start the MCP server for AI agents" }
+      "rpc": {
+        "description": "Execute JAW.id RPC methods (wallet_sendCalls, personal_sign, etc.)"
+      },
+      "config": {
+        "description": "Configure CLI settings (API key, chain, keys URL)"
+      },
+      "mcp": {
+        "description": "Start the MCP server for AI agents"
+      }
     }
   },
   "nx": {
@@ -79,14 +85,17 @@
     }
   },
   "dependencies": {
+    "@jaw.id/core": "workspace:*",
     "@modelcontextprotocol/sdk": "^1.12.1",
     "@oclif/core": "^4.3.0",
     "open": "^10.1.0",
+    "ws": "^8.19.0",
     "zod": "^3.24.0"
   },
   "devDependencies": {
     "@oclif/test": "^4.1.0",
     "@types/node": "^20.19.9",
+    "@types/ws": "^8.18.1",
     "vitest": "^3.0.0"
   }
 }

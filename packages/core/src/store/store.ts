@@ -71,7 +71,11 @@ const createChainSlice: StateCreator<StoreState, [], [], ChainSlice> = () => {
       }),
       {
         name: 'jawsdk.store',
-        storage: createJSONStorage(() => localStorage),
+        storage: createJSONStorage(() => {
+          if (typeof localStorage !== 'undefined') return localStorage;
+          // No-op storage for non-browser environments (CLI, Node.js)
+          return { getItem: () => null, setItem: () => {}, removeItem: () => {} };
+        }),
         partialize: (state) => {
           // Explicitly select only the data properties we want to persist
           // (not the methods)

@@ -1,4 +1,3 @@
-import { Args } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
 import { setConfigValue } from "../../lib/config.js";
 
@@ -7,55 +6,110 @@ const VALID_KEYS = [
   "defaultChain",
   "keysUrl",
   "paymasterUrl",
+  "ens",
 ] as const;
 
+type ValidKey = (typeof VALID_KEYS)[number];
+
+function isValidKey(key: string): key is ValidKey {
+  return VALID_KEYS.includes(key as ValidKey);
+}
+
 export default class ConfigSet extends BaseCommand {
-  static override description = "Set a configuration value";
+  static override description =
+    "Set one or more configuration values. Accepts key=value pairs or a single key value.";
 
   static override examples = [
+    "<%= config.bin %> config set apiKey=your-api-key defaultChain=8453",
+    "<%= config.bin %> config set ens=yourdomain.eth paymasterUrl=https://your-paymaster.com",
     "<%= config.bin %> config set apiKey your-api-key",
-    "<%= config.bin %> config set defaultChain 8453",
-    "<%= config.bin %> config set keysUrl https://keys.jaw.id",
   ];
 
-  static override args = {
-    key: Args.string({
-      description: `Config key (${VALID_KEYS.join(", ")})`,
-      required: true,
-      options: [...VALID_KEYS],
-    }),
-    value: Args.string({
-      description: "Config value",
-      required: true,
-    }),
-  };
+  static override strict = false;
+
+  static override args = {};
 
   static override flags = {
     ...BaseCommand.baseFlags,
   };
 
   async run(): Promise<void> {
-    const { args, flags } = await this.parse(ConfigSet);
+    const { argv, flags } = await this.parse(ConfigSet);
+    const rawArgs = argv as string[];
 
-    const key = args.key as (typeof VALID_KEYS)[number];
-    const value =
-      key === "defaultChain" ? parseInt(args.value, 10) : args.value;
+    // Parse key=value pairs from all args
+    const entries = this.parseEntries(rawArgs);
 
-    if (key === "defaultChain" && isNaN(value as number)) {
-      this.error(`Invalid chain ID: ${args.value}`);
+    if (entries.length === 0) {
+      this.error(
+        `No valid key=value pairs provided.\nValid keys: ${VALID_KEYS.join(", ")}\nUsage: jaw config set key=value [key=value ...]`,
+      );
     }
 
-    setConfigValue(key, value as string | number);
+    const results: { key: string; value: string | number }[] = [];
 
-    const displayValue =
-      key === "apiKey" && typeof value === "string"
-        ? `${value.slice(0, 8)}...`
-        : value;
+    for (const { key, value } of entries) {
+      const parsed = key === "defaultChain" ? parseInt(value, 10) : value;
+
+      if (key === "defaultChain" && isNaN(parsed as number)) {
+        this.error(`Invalid chain ID: ${value}`);
+      }
+
+      setConfigValue(key, parsed as string | number);
+
+      const displayValue =
+        key === "apiKey" && typeof value === "string"
+          ? `${value.slice(0, 8)}...`
+          : parsed;
+
+      results.push({ key, value: displayValue });
+    }
 
     if (flags.output === "json") {
-      this.outputResult({ key, value: displayValue }, "json");
+      this.outputResult(
+        results.length === 1 ? results[0] : results,
+        "json",
+      );
     } else {
-      this.log(`Set ${key} = ${displayValue}`);
+      for (const { key, value } of results) {
+        this.log(`Set ${key} = ${value}`);
+      }
     }
+  }
+
+  private parseEntries(
+    rawArgs: string[],
+  ): { key: ValidKey; value: string }[] {
+    const entries: { key: ValidKey; value: string }[] = [];
+
+    let i = 0;
+    while (i < rawArgs.length) {
+      const arg = rawArgs[i];
+
+      if (arg.includes("=")) {
+        // key=value syntax
+        const eqIndex = arg.indexOf("=");
+        const key = arg.slice(0, eqIndex);
+        const value = arg.slice(eqIndex + 1);
+
+        if (!isValidKey(key)) {
+          this.error(
+            `Invalid config key: ${key}\nValid keys: ${VALID_KEYS.join(", ")}`,
+          );
+        }
+        entries.push({ key, value });
+        i++;
+      } else if (isValidKey(arg) && i + 1 < rawArgs.length) {
+        // key value syntax (legacy)
+        entries.push({ key: arg, value: rawArgs[i + 1] });
+        i += 2;
+      } else {
+        this.error(
+          `Unexpected argument: ${arg}\nUsage: jaw config set key=value [key=value ...]`,
+        );
+      }
+    }
+
+    return entries;
   }
 }

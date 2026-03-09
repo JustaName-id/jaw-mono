@@ -1,151 +1,200 @@
 "use client";
 
 import { useSearchParams } from "next/navigation";
-import { useEffect, useState, Suspense, useRef } from "react";
+import { useEffect, useState, Suspense, useRef, useCallback } from "react";
 import { JAW, Mode } from "@jaw.id/core";
 import { ReactUIHandler } from "@jaw.id/ui";
 
 /**
- * CLI Bridge Page
+ * CLI Bridge Page — WebSocket Mode
  *
- * Runs the JAW SDK in AppSpecific mode directly on keys.jaw.id.
- * Since this page shares the same origin as the CrossPlatform popup,
- * passkeys and accounts are identical — no popup or ECDH needed.
+ * Runs the JAW SDK in AppSpecific mode on keys.jaw.id and connects to the
+ * CLI via a persistent WebSocket. All RPC requests from the CLI flow through
+ * this page's SDK instance.
  *
  * Flow:
- * 1. CLI opens this page with callback URL + RPC method/params
- * 2. Page initializes JAW SDK with AppSpecific mode + ReactUIHandler
- * 3. ReactUIHandler renders signing UI inline
- * 4. User authenticates with passkey
- * 5. Result POSTs back to CLI's localhost callback
+ * 1. CLI starts a WebSocket server on 127.0.0.1:{port}
+ * 2. CLI opens this page with wsPort + config params
+ * 3. Page initializes JAW SDK and connects WebSocket
+ * 4. CLI sends RPC requests over WebSocket
+ * 5. Page executes them via provider.request() and sends results back
  */
 
-type BridgeState = "processing" | "success" | "error";
+type BridgeState = "connecting" | "connected" | "disconnected" | "error";
 
 function CLIBridgeContent() {
   const searchParams = useSearchParams();
-  const [state, setState] = useState<BridgeState>("processing");
+  const [state, setState] = useState<BridgeState>("connecting");
   const [error, setError] = useState("");
+  const [lastMethod, setLastMethod] = useState<string | null>(null);
   const sdkRef = useRef<ReturnType<typeof JAW.create> | null>(null);
+  const wsRef = useRef<WebSocket | null>(null);
   const startedRef = useRef(false);
 
-  const callbackUrl = searchParams.get("callback");
-  const requestId = searchParams.get("requestId");
-  const method = searchParams.get("method");
-  const paramsRaw = searchParams.get("params");
+  const wsPort = searchParams.get("wsPort");
   const chainIdParam = searchParams.get("chainId");
+  const ens = searchParams.get("ens");
+  const paymasterUrl = searchParams.get("paymasterUrl");
 
-  // API key is in the URL fragment (hash) to avoid browser history/server logs
-  const [apiKey, setApiKey] = useState<string | null>(null);
+  // Read sensitive params from URL fragment
+  const [fragmentParams, setFragmentParams] = useState<{
+    apiKey: string | null;
+    token: string | null;
+  }>({ apiKey: null, token: null });
+
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     const hashParams = new URLSearchParams(hash);
-    setApiKey(hashParams.get("apiKey"));
+    setFragmentParams({
+      apiKey: hashParams.get("apiKey"),
+      token: hashParams.get("token"),
+    });
   }, []);
 
-  // Validate params on mount
-  const validationError =
-    !callbackUrl || !requestId || !method
-      ? "Missing required parameters: callback, requestId, method"
-      : (() => {
-          try {
-            const cbUrl = new URL(callbackUrl);
-            if (
-              cbUrl.hostname !== "127.0.0.1" &&
-              cbUrl.hostname !== "localhost"
-            ) {
-              return "Callback URL must be localhost (127.0.0.1)";
-            }
-          } catch {
-            return "Invalid callback URL";
-          }
-          return null;
-        })();
+  const handleRpcRequest = useCallback(
+    async (
+      id: string,
+      method: string,
+      params: unknown,
+    ) => {
+      if (!sdkRef.current) return;
 
-  // Auto-start the bridge flow once apiKey is loaded
+      setLastMethod(method);
+
+      try {
+        const normalizedParams = Array.isArray(params)
+          ? params
+          : params !== undefined
+            ? [params]
+            : [];
+
+        const result = await sdkRef.current.provider.request({
+          method,
+          params: normalizedParams,
+        });
+
+        // Extract address from connect responses for the CLI
+        const address = extractAddress(method, result);
+
+        wsRef.current?.send(
+          JSON.stringify({
+            id,
+            type: "rpc_response",
+            success: true,
+            data: result,
+            ...(address ? { address } : {}),
+          }),
+        );
+      } catch (err) {
+        // Core SDK's provider.request() rejects with serialized error objects
+        // { code, message, data } or standard Error instances
+        const errObj = err as { code?: number; message?: string };
+        const errCode = errObj?.code ?? -32000;
+        const errMsg =
+          errObj?.message ??
+          (err instanceof Error ? err.message : String(err));
+        wsRef.current?.send(
+          JSON.stringify({
+            id,
+            type: "rpc_response",
+            success: false,
+            error: { code: errCode, message: errMsg },
+          }),
+        );
+      }
+    },
+    [],
+  );
+
   useEffect(() => {
-    if (
-      startedRef.current ||
-      validationError ||
-      !callbackUrl ||
-      !requestId ||
-      !method ||
-      !apiKey
-    )
+    if (startedRef.current || !wsPort || !fragmentParams.apiKey || !fragmentParams.token)
       return;
     startedRef.current = true;
 
-    (async () => {
+    const chainId = chainIdParam ? Number(chainIdParam) : 1;
+    const apiKey = fragmentParams.apiKey;
+    const token = fragmentParams.token;
+
+    // Initialize JAW SDK
+    if (!sdkRef.current) {
+      sdkRef.current = JAW.create({
+        appName: "JAW CLI",
+        defaultChainId: chainId,
+        preference: {
+          mode: Mode.AppSpecific,
+          uiHandler: new ReactUIHandler(),
+          showTestnets: true,
+        },
+        apiKey,
+        ...(ens ? { ens } : {}),
+        ...(paymasterUrl
+          ? { paymasters: { [chainId]: { url: paymasterUrl } } }
+          : {}),
+      });
+    }
+
+    // Connect WebSocket to CLI
+    const wsUrl = `ws://127.0.0.1:${wsPort}?token=${encodeURIComponent(token)}&role=browser`;
+    const ws = new WebSocket(wsUrl);
+    wsRef.current = ws;
+
+    ws.onopen = () => {
+      setState("connected");
+      // Notify CLI that SDK is ready
+      ws.send(
+        JSON.stringify({
+          type: "ready",
+          chainId,
+        }),
+      );
+    };
+
+    ws.onmessage = (event) => {
+      let msg: Record<string, unknown>;
       try {
-        const chainId = chainIdParam ? Number(chainIdParam) : 1;
-
-        // Initialize JAW SDK with AppSpecific mode — ReactUIHandler renders inline
-        if (!sdkRef.current) {
-          sdkRef.current = JAW.create({
-            appName: "JAW CLI",
-            defaultChainId: chainId,
-            preference: {
-              mode: Mode.AppSpecific,
-              uiHandler: new ReactUIHandler(),
-            },
-            apiKey,
-          });
-        }
-
-        // Parse and normalize params
-        const rawParams = paramsRaw ? JSON.parse(paramsRaw) : undefined;
-        const params = Array.isArray(rawParams)
-          ? rawParams
-          : rawParams !== undefined
-            ? [rawParams]
-            : [];
-
-        // Execute the RPC method — ReactUIHandler shows signing UI automatically
-        const result = await sdkRef.current.provider.request({
-          method,
-          params,
-        });
-
-        // POST result to CLI callback
-        await fetch(callbackUrl, {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ requestId, success: true, data: result }),
-        });
-
-        setState("success");
-      } catch (err) {
-        const errMsg = err instanceof Error ? err.message : String(err);
-
-        // Try to send error to CLI
-        try {
-          await fetch(callbackUrl, {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify({
-              requestId,
-              success: false,
-              error: { code: -32000, message: errMsg },
-            }),
-          });
-        } catch {
-          // CLI callback may have timed out
-        }
-
-        setState("error");
-        setError(errMsg);
+        msg = JSON.parse(event.data as string) as Record<string, unknown>;
+      } catch {
+        return;
       }
-    })();
-  }, [apiKey, validationError, callbackUrl, requestId, method, paramsRaw, chainIdParam]);
 
-  if (validationError) {
+      switch (msg.type) {
+        case "rpc_request":
+          handleRpcRequest(
+            msg.id as string,
+            msg.method as string,
+            msg.params,
+          );
+          break;
+
+        case "ping":
+          ws.send(JSON.stringify({ type: "pong" }));
+          break;
+      }
+    };
+
+    ws.onclose = () => {
+      setState("disconnected");
+    };
+
+    ws.onerror = () => {
+      setState("error");
+      setError("WebSocket connection failed");
+    };
+
+    return () => {
+      ws.close();
+    };
+  }, [wsPort, chainIdParam, ens, paymasterUrl, fragmentParams, handleRpcRequest]);
+
+  // Validation
+  if (!wsPort) {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
           <img src="/jaw-logo.png" alt="JAW" style={styles.logo} />
           <h1 style={styles.title}>JAW CLI</h1>
           <p style={styles.error}>Error</p>
-          <p style={styles.subtext}>{validationError}</p>
+          <p style={styles.subtext}>Missing required parameter: wsPort</p>
         </div>
       </div>
     );
@@ -157,16 +206,27 @@ function CLIBridgeContent() {
         <img src="/jaw-logo.png" alt="JAW" style={styles.logo} />
         <h1 style={styles.title}>JAW CLI</h1>
 
-        {state === "processing" && (
-          <p style={styles.text}>Complete the action to continue...</p>
+        {state === "connecting" && (
+          <p style={styles.text}>Connecting to CLI...</p>
         )}
 
-        {state === "success" && (
+        {state === "connected" && (
           <>
-            <p style={styles.success}>Success!</p>
+            <p style={styles.success}>Connected</p>
             <p style={styles.subtext}>
-              You can close this tab and return to your terminal.
+              This tab is your CLI&apos;s signing backend.
+              <br />
+              Keep it open while using the CLI.
             </p>
+            {lastMethod && (
+              <p style={styles.method}>Last request: {lastMethod}</p>
+            )}
+          </>
+        )}
+
+        {state === "disconnected" && (
+          <>
+            <p style={styles.subtext}>CLI disconnected. You can close this tab.</p>
           </>
         )}
 
@@ -179,6 +239,25 @@ function CLIBridgeContent() {
       </div>
     </div>
   );
+}
+
+function extractAddress(method: string, result: unknown): string | undefined {
+  if (method !== "wallet_connect" && method !== "eth_requestAccounts") return;
+
+  if (Array.isArray(result) && typeof result[0] === "string") {
+    return result[0];
+  }
+  if (result && typeof result === "object" && "accounts" in result) {
+    const accounts = (result as Record<string, unknown>).accounts;
+    if (Array.isArray(accounts) && accounts.length > 0) {
+      const first = accounts[0];
+      if (typeof first === "string") return first;
+      if (first && typeof first === "object" && "address" in first) {
+        return (first as Record<string, unknown>).address as string;
+      }
+    }
+  }
+  return undefined;
 }
 
 export default function CLIBridgePage() {
@@ -237,16 +316,14 @@ const styles: Record<string, React.CSSProperties> = {
     lineHeight: 1.5,
     marginTop: "0.5rem",
   },
-  button: {
-    padding: "0.75rem 2rem",
-    fontSize: "0.95rem",
-    fontWeight: 600,
-    backgroundColor: "#111",
-    color: "#fff",
-    border: "none",
-    borderRadius: "8px",
-    cursor: "pointer",
-    marginTop: "0.5rem",
+  method: {
+    color: "#666",
+    fontSize: "0.8rem",
+    fontFamily: "monospace",
+    marginTop: "1rem",
+    padding: "0.5rem",
+    backgroundColor: "#f5f5f5",
+    borderRadius: "4px",
   },
   success: {
     color: "#16a34a",

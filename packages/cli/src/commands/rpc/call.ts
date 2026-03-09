@@ -1,30 +1,20 @@
 import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
-import { CLICommunicator } from "../../lib/cli-communicator.js";
-import { fetchJawRpc } from "../../lib/rpc-client.js";
-import {
-  classifyMethod,
-  needsBrowser,
-  SUPPORTED_METHODS,
-} from "../../lib/rpc-classifier.js";
-import { loadSession } from "../../lib/session-store.js";
+import { getBridge } from "../../lib/bridge-singleton.js";
 import { loadConfig } from "../../lib/config.js";
-import {
-  handleLocalOnly,
-  maybeSaveSession,
-} from "../../lib/session-helpers.js";
 import type { OutputFormat } from "../../lib/types.js";
 
 export default class RpcCall extends BaseCommand {
   static override description =
-    "Execute any JAW.id RPC method. Opens browser for signing methods.";
+    "Execute any JAW.id RPC method via the browser bridge.";
 
   static override examples = [
     '<%= config.bin %> rpc call wallet_sendCalls \'{"calls":[{"to":"0x...","value":"0x0"}]}\'',
     "<%= config.bin %> rpc call personal_sign '\"Hello World\"'",
-    "<%= config.bin %> rpc call wallet_getAssets",
+    "<%= config.bin %> rp" +
+    "c call wallet_getAssets",
     "<%= config.bin %> rpc call eth_requestAccounts",
-    '<%= config.bin %> rpc call wallet_getCallsStatus \'{"id":"0x..."}\'',
+    '<%= config.bin %> rpc call wallet_getCallsStatus \'"0x..."\'',
   ];
 
   static override args = {
@@ -42,7 +32,7 @@ export default class RpcCall extends BaseCommand {
     ...BaseCommand.baseFlags,
     timeout: Flags.integer({
       char: "t",
-      description: "Browser callback timeout in seconds",
+      description: "Request timeout in seconds",
       default: 120,
     }),
   };
@@ -50,12 +40,6 @@ export default class RpcCall extends BaseCommand {
   async run(): Promise<void> {
     const { args, flags } = await this.parse(RpcCall);
     const { method } = args;
-
-    if (!SUPPORTED_METHODS.includes(method)) {
-      this.error(
-        `Unsupported method: ${method}\nSupported: ${SUPPORTED_METHODS.join(", ")}`,
-      );
-    }
 
     let params: unknown;
     if (args.params) {
@@ -67,112 +51,27 @@ export default class RpcCall extends BaseCommand {
     }
 
     const format = flags.output as OutputFormat;
-    const category = classifyMethod(method);
-
-    // Local-only methods (no browser needed)
-    if (category === "local-only") {
-      const normalizedParams = Array.isArray(params)
-        ? params
-        : params !== undefined
-          ? [params]
-          : undefined;
-      const result = handleLocalOnly(method, normalizedParams);
-      this.outputResult(result, format);
-      return;
-    }
-
-    if (!needsBrowser(method)) {
-      const result = await this.handleReadOnly(method, params, flags);
-      this.outputResult(result, format);
-      return;
-    }
-
-    // Signing/session methods — open browser
-    const apiKey = this.resolveApiKey(flags);
     const config = loadConfig();
+    const apiKey = this.resolveApiKey(flags);
 
-    if (!flags.quiet) {
-      this.log(`Opening browser for ${method}...`);
-    }
-
-    const communicator = new CLICommunicator({
+    const bridge = await getBridge({
       keysUrl: config.keysUrl,
       apiKey,
       chainId: flags.chain ?? config.defaultChain,
+      ens: config.ens,
+      paymasterUrl: config.paymasterUrl,
       timeout: flags.timeout * 1000,
     });
 
-    const result = await communicator.request(method, params);
-
-    // Save session after successful connect
-    maybeSaveSession(method, result, flags.chain);
-
-    this.outputResult(result, format);
-  }
-
-  private async handleReadOnly(
-    method: string,
-    params: unknown,
-    flags: { chain?: number },
-  ): Promise<unknown> {
-    const config = loadConfig();
-    const chainId = flags.chain ?? config.defaultChain ?? 1;
-
-    switch (method) {
-      case "eth_accounts": {
-        const session = loadSession();
-        return session ? [session.address] : [];
-      }
-      case "eth_chainId":
-        return `0x${chainId.toString(16)}`;
-      case "net_version":
-        return String(chainId);
-      case "wallet_getCallsStatus":
-      case "wallet_getCallsHistory":
-      case "wallet_getAssets":
-      case "wallet_getCapabilities":
-      case "wallet_getPermissions": {
-        // Direct API call — no browser needed
-        const apiKey = this.resolveApiKey(flags as Record<string, unknown>);
-        const session = loadSession();
-        const rpcParams = this.buildReadOnlyParams(
-          method,
-          params,
-          session?.address,
-        );
-        return fetchJawRpc(method, rpcParams, apiKey);
-      }
-      default:
-        throw new Error(`Unhandled read-only method: ${method}`);
-    }
-  }
-
-  /**
-   * Build params array for read-only API methods, injecting session address
-   * where needed (matching how the playground/core SDK builds params).
-   */
-  private buildReadOnlyParams(
-    method: string,
-    params: unknown,
-    address?: string,
-  ): unknown[] {
-    // If user provided params, normalize to array
-    if (params !== undefined) {
-      return Array.isArray(params) ? params : [params];
+    if (!flags.quiet) {
+      this.log(`Sending ${method}...`);
     }
 
-    // Auto-inject session address for methods that need it
-    switch (method) {
-      case "wallet_getAssets":
-        return address ? [{ account: address }] : [];
-      case "wallet_getCapabilities":
-        return address ? [address] : [];
-      case "wallet_getPermissions":
-        return address ? [{ address }] : [];
-      case "wallet_getCallsHistory":
-        return address ? [{ address }] : [];
-      default:
-        return [];
+    try {
+      const result = await bridge.request(method, params);
+      this.outputResult(result, format);
+    } finally {
+      bridge.close();
     }
   }
 }

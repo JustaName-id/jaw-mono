@@ -32,7 +32,7 @@ export const rpcMethodSchema = {
 
 export const configSetSchema = {
   key: z
-    .enum(["apiKey", "defaultChain", "keysUrl", "paymasterUrl"])
+    .enum(["apiKey", "defaultChain", "keysUrl", "paymasterUrl", "ens"])
     .describe("Config key"),
   value: z.string().describe("Config value"),
 };
