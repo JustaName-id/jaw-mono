@@ -169,6 +169,10 @@ function CLIBridgeContent() {
         case "ping":
           ws.send(JSON.stringify({ type: "pong" }));
           break;
+
+        case "shutdown":
+          window.close();
+          break;
       }
     };
 

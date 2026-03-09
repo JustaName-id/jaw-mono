@@ -79,6 +79,10 @@ function resetIdleTimer(): void {
 
 function cleanup(): void {
   if (heartbeat) clearInterval(heartbeat);
+  // Notify browser to close the tab
+  if (browserWs?.readyState === WebSocket.OPEN) {
+    browserWs.send(JSON.stringify({ type: "shutdown" }));
+  }
   try {
     if (fs.existsSync(BRIDGE_PATH)) fs.unlinkSync(BRIDGE_PATH);
   } catch {
