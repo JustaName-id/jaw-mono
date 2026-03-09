@@ -26,8 +26,6 @@ export interface CLICommunicatorOptions {
   apiKey: string;
   chainId?: number;
   timeout?: number;
-  headless?: boolean;
-  onDisplayCode?: (userCode: string, verificationUrl: string) => void;
 }
 
 interface CallbackResult {
@@ -44,19 +42,11 @@ export class CLICommunicator {
   private readonly apiKey: string;
   private readonly chainId: number;
   private readonly timeout: number;
-  private readonly headless: boolean;
-  private readonly onDisplayCode?: (
-    userCode: string,
-    verificationUrl: string,
-  ) => void;
-
   constructor(options: CLICommunicatorOptions) {
     this.keysUrl = options.keysUrl ?? loadConfig().keysUrl ?? JAW_KEYS_URL;
     this.apiKey = options.apiKey;
     this.chainId = options.chainId ?? loadConfig().defaultChain ?? 1;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
-    this.headless = options.headless ?? false;
-    this.onDisplayCode = options.onDisplayCode;
   }
 
   /**
@@ -64,11 +54,6 @@ export class CLICommunicator {
    * Opens browser → user signs → result comes back via HTTP callback.
    */
   async request(method: string, params?: unknown): Promise<unknown> {
-    // Use device code flow for headless environments
-    if (this.headless) {
-      return this.requestViaDeviceCode(method, params);
-    }
-
     const requestId = crypto.randomUUID();
     const { port, resultPromise, close } =
       await this.startCallbackServer(requestId);
@@ -100,21 +85,6 @@ export class CLICommunicator {
     } finally {
       close();
     }
-  }
-
-  private async requestViaDeviceCode(
-    method: string,
-    params?: unknown,
-  ): Promise<unknown> {
-    const { deviceCodeFlow } = await import("./device-code.js");
-    return deviceCodeFlow({
-      keysUrl: this.keysUrl,
-      method,
-      params,
-      apiKey: this.apiKey,
-      timeout: this.timeout,
-      onDisplayCode: this.onDisplayCode,
-    });
   }
 
   private buildBridgeUrl(opts: {

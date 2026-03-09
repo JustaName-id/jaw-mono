@@ -332,12 +332,6 @@
           "multiple": false,
           "type": "option"
         },
-        "headless": {
-          "description": "Use device code flow instead of browser (for SSH/headless environments)",
-          "name": "headless",
-          "allowNo": false,
-          "type": "boolean"
-        }
       },
       "hasDynamicHelp": false,
       "hiddenAliases": [],

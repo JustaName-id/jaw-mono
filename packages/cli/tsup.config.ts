@@ -7,8 +7,7 @@ export default defineConfig({
     // lib
     "lib/cli-communicator": "src/lib/cli-communicator.ts",
     "lib/config": "src/lib/config.ts",
-    "lib/device-code": "src/lib/device-code.ts",
-    "lib/output": "src/lib/output.ts",
+"lib/output": "src/lib/output.ts",
     "lib/paths": "src/lib/paths.ts",
     "lib/rpc-classifier": "src/lib/rpc-classifier.ts",
     "lib/session-helpers": "src/lib/session-helpers.ts",

@@ -77,7 +77,6 @@ jaw rpc call eth_chainId
 | `-c, --chain` | Chain ID | config default |
 | `--api-key` | JAW API key | config/env |
 | `-t, --timeout` | Browser callback timeout (seconds) | `120` |
-| `--headless` | Use device code flow (SSH/headless) | `false` |
 | `-y, --yes` | Skip confirmations | `false` |
 | `-q, --quiet` | Suppress non-essential output | `false` |
 
