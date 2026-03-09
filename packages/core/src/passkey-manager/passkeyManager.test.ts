@@ -867,7 +867,7 @@ describe("PasskeyManager", () => {
     it("authenticateWithWebAuthn should forward getFn to utils", async () => {
       const mockGetFn = vi.fn();
       const mockResult = {
-        credential: {} as PublicKeyCredential,
+        credential: { id: "cred-123", type: "public-key" },
         challenge: new Uint8Array(32),
       };
 

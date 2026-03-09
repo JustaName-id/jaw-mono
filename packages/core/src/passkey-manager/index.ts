@@ -22,5 +22,6 @@ export {
   type NativePasskeyCreateFn,
   type NativeCredentialResult,
   type ImportWebAuthnAuthenticationResult,
+  type WebAuthnCredentialResult,
   resolveRpId,
 } from "./utils.js";

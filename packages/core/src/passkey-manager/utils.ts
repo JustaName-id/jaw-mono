@@ -2,6 +2,7 @@ import {
   createWebAuthnCredential,
   toWebAuthnAccount,
 } from "viem/account-abstraction";
+import type * as WebAuthnP256 from "ox/WebAuthnP256";
 import { restCall } from "../api/index.js";
 import type {
   PasskeyRegistrationRequest,
@@ -10,18 +11,18 @@ import type {
 import type { WebAuthnAccount } from "viem/account-abstraction";
 
 /**
- * Custom function for WebAuthn credential creation (React Native adapter)
- * Uses `any` to avoid type conflicts between viem/ox internals and RN passkey libraries
+ * Custom function for WebAuthn credential creation (React Native adapter).
+ * Type derived from ox's WebAuthnP256.createCredential.Options['createFn'].
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type PasskeyCreateFn = (options: any) => Promise<any>;
+export type PasskeyCreateFn = NonNullable<
+  WebAuthnP256.createCredential.Options["createFn"]
+>;
 
 /**
- * Custom function for WebAuthn credential retrieval (React Native adapter)
- * Uses `any` to avoid type conflicts between viem/ox internals and RN passkey libraries
+ * Custom function for WebAuthn credential retrieval (React Native adapter).
+ * Type derived from ox's WebAuthnP256.sign.Options['getFn'].
  */
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
-export type PasskeyGetFn = (options: any) => Promise<any>;
+export type PasskeyGetFn = NonNullable<WebAuthnP256.sign.Options["getFn"]>;
 
 /**
  * Result from a native passkey creation (bypasses viem's createWebAuthnCredential entirely)
@@ -42,11 +43,20 @@ export type NativePasskeyCreateFn = (
 ) => Promise<NativeCredentialResult>;
 
 /**
+ * Minimal credential shape returned by both browser WebAuthn and React Native adapters.
+ * Matches ox's internal Credential type ({ id, type }) — the minimal contract that
+ * both navigator.credentials.get() and custom getFn adapters satisfy.
+ */
+export interface WebAuthnCredentialResult {
+  readonly id: string;
+  readonly type: string;
+}
+
+/**
  * WebAuthn authentication result
  */
 export interface WebAuthnAuthenticationResult {
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  credential: any;
+  credential: WebAuthnCredentialResult;
   challenge: Uint8Array;
 }
 
@@ -142,7 +152,7 @@ export async function authenticateWithWebAuthnUtils(
       ? await getFn({ publicKey: publicKeyOptions })
       : ((await navigator.credentials.get({
           publicKey: publicKeyOptions,
-        })) as PublicKeyCredential | null);
+        })) as WebAuthnCredentialResult | null);
 
     if (!credential) {
       throw new WebAuthnAuthenticationError(
@@ -268,7 +278,7 @@ export async function importPasskeyUtils(
       ? await getFn({ publicKey: publicKeyOptions })
       : ((await navigator.credentials.get({
           publicKey: publicKeyOptions,
-        })) as PublicKeyCredential);
+        })) as WebAuthnCredentialResult);
 
     if (!credential) {
       throw new Error("No credential selected");
