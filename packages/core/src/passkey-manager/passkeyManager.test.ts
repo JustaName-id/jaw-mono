@@ -905,6 +905,8 @@ describe("PasskeyManager", () => {
       expect(utils.importPasskeyUtils).toHaveBeenCalledWith(
         mockGetFn,
         "myapp.com",
+        undefined,
+        "https://api.justaname.id",
       );
       expect(result).toBe(mockResult);
     });
