@@ -20,6 +20,9 @@
     "url": "https://github.com/JustaName-id/jaw-mono.git",
     "directory": "packages/cli"
   },
+  "scripts": {
+    "prepack": "oclif manifest"
+  },
   "publishConfig": {
     "access": "public"
   },
