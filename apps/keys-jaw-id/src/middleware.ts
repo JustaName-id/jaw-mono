@@ -15,7 +15,7 @@ export function middleware(request: NextRequest) {
   // These URLs are not known at build time and vary per connecting dApp.
   // If dApp RPC proxying is ever routed through api.justaname.id exclusively,
   // the wildcards can be removed.
-  const isCLIBridge = request.nextUrl.pathname.startsWith("/cli-");
+  const isCLIBridge = request.nextUrl.pathname === "/cli-bridge";
   const connectSrc = [
     "'self'",
     "https://api.justaname.id",

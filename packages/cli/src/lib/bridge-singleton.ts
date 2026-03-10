@@ -34,6 +34,7 @@ function findDistDir(): string {
 }
 
 const JAW_KEYS_URL = "https://keys.jaw.id";
+const LOCK_PATH = path.join(PATHS.root, "daemon.lock");
 
 interface BridgeInfo {
   port: number;
@@ -141,58 +142,123 @@ export async function shutdownDaemon(): Promise<void> {
   }
 }
 
+/**
+ * Acquire an exclusive lockfile to prevent concurrent daemon spawning.
+ * Returns the file descriptor on success, or null if another process holds the lock.
+ */
+function acquireLock(): number | null {
+  ensureDir(PATHS.root);
+  try {
+    // O_CREAT | O_EXCL — fails atomically if file already exists
+    const fd = fs.openSync(LOCK_PATH, "wx");
+    fs.writeFileSync(LOCK_PATH, String(process.pid), { mode: 0o600 });
+    return fd;
+  } catch (err: unknown) {
+    if ((err as NodeJS.ErrnoException).code === "EEXIST") {
+      // Check if the lock holder is still alive (stale lock recovery)
+      try {
+        const lockPid = parseInt(fs.readFileSync(LOCK_PATH, "utf-8").trim(), 10);
+        if (Number.isInteger(lockPid) && lockPid > 0) {
+          try {
+            process.kill(lockPid, 0);
+            return null; // Process alive — lock is held
+          } catch {
+            // Process dead — stale lock, remove and retry once
+            try { fs.unlinkSync(LOCK_PATH); } catch { /* ignore */ }
+            return acquireLock();
+          }
+        }
+      } catch {
+        // Can't read lock — try removing stale file
+        try { fs.unlinkSync(LOCK_PATH); } catch { /* ignore */ }
+      }
+      return null;
+    }
+    throw err;
+  }
+}
+
+function releaseLock(fd: number): void {
+  try { fs.closeSync(fd); } catch { /* ignore */ }
+  try { fs.unlinkSync(LOCK_PATH); } catch { /* ignore */ }
+}
+
 async function spawnDaemon(options: BridgeOptions): Promise<BridgeInfo> {
   ensureDir(PATHS.root);
-  const config = loadConfig();
 
-  const keysUrl = options.keysUrl ?? config.keysUrl ?? JAW_KEYS_URL;
-  if (!isValidKeysUrl(keysUrl)) {
+  // Acquire lock to prevent concurrent daemon spawning (TOCTOU guard)
+  const lockFd = acquireLock();
+  if (lockFd === null) {
+    // Another process is spawning — wait for bridge.json to appear
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 300));
+      const info = loadBridgeInfo();
+      if (info) return info;
+    }
     throw new Error(
-      `Untrusted keysUrl: ${keysUrl}. Must be a *.jaw.id domain (HTTPS) or localhost.`,
+      "Another process is starting the daemon. Timed out waiting for it.",
     );
   }
 
-  const daemonArgs = {
-    keysUrl,
-    chainId: options.chainId ?? config.defaultChain ?? 1,
-    ens: options.ens ?? config.ens,
-    paymasterUrl: options.paymasterUrl ?? config.paymasterUrl,
-    timeout: options.timeout ?? 120_000,
-  };
-
-  const daemonScript = path.join(findDistDir(), "lib", "ws-daemon.js");
-
-  // Remove stale bridge file before spawning
   try {
-    if (fs.existsSync(PATHS.bridge)) fs.unlinkSync(PATHS.bridge);
-  } catch {
-    // ignore
+    // Re-check after acquiring lock — another process may have just finished
+    const existing = loadBridgeInfo();
+    if (existing) return existing;
+
+    const config = loadConfig();
+
+    const keysUrl = options.keysUrl ?? config.keysUrl ?? JAW_KEYS_URL;
+    if (!isValidKeysUrl(keysUrl)) {
+      throw new Error(
+        `Untrusted keysUrl: ${keysUrl}. Must be a *.jaw.id domain (HTTPS) or localhost.`,
+      );
+    }
+
+    const daemonArgs = {
+      keysUrl,
+      chainId: options.chainId ?? config.defaultChain ?? 1,
+      ens: options.ens ?? config.ens,
+      paymasterUrl: options.paymasterUrl ?? config.paymasterUrl,
+      timeout: options.timeout ?? 120_000,
+    };
+
+    const daemonScript = path.join(findDistDir(), "lib", "ws-daemon.js");
+
+    // Remove stale bridge file before spawning
+    try {
+      if (fs.existsSync(PATHS.bridge)) fs.unlinkSync(PATHS.bridge);
+    } catch {
+      // ignore
+    }
+
+    // Truncate log to prevent unbounded growth from previous sessions
+    const logFd = fs.openSync(PATHS.daemonLog, "w", 0o600);
+    const child = spawn(
+      process.execPath,
+      [daemonScript, JSON.stringify(daemonArgs)],
+      {
+        detached: true,
+        stdio: ["ignore", logFd, logFd],
+        // Pass API key via env var instead of process args to avoid ps aux exposure
+        env: { ...process.env, JAW_DAEMON_API_KEY: options.apiKey },
+      },
+    );
+    child.unref();
+    fs.closeSync(logFd);
+
+    // Poll for bridge.json to appear (daemon writes it once WS server is ready)
+    const deadline = Date.now() + 15_000;
+    while (Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 200));
+      const info = loadBridgeInfo();
+      if (info) return info;
+    }
+
+    throw new Error(
+      `Daemon failed to start within 15s. Check ${PATHS.daemonLog} for details.`,
+    );
+  } finally {
+    releaseLock(lockFd);
   }
-
-  // Truncate log to prevent unbounded growth from previous sessions
-  const logFd = fs.openSync(PATHS.daemonLog, "w", 0o600);
-  const child = spawn(
-    process.execPath,
-    [daemonScript, JSON.stringify(daemonArgs)],
-    {
-      detached: true,
-      stdio: ["ignore", logFd, logFd],
-      // Pass API key via env var instead of process args to avoid ps aux exposure
-      env: { ...process.env, JAW_DAEMON_API_KEY: options.apiKey },
-    },
-  );
-  child.unref();
-  fs.closeSync(logFd);
-
-  // Poll for bridge.json to appear (daemon writes it once WS server is ready)
-  const deadline = Date.now() + 15_000;
-  while (Date.now() < deadline) {
-    await new Promise((r) => setTimeout(r, 200));
-    const info = loadBridgeInfo();
-    if (info) return info;
-  }
-
-  throw new Error(
-    `Daemon failed to start within 15s. Check ${PATHS.daemonLog} for details.`,
-  );
 }
