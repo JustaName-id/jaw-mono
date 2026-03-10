@@ -104,6 +104,11 @@ let browserReady = false;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeat: ReturnType<typeof setInterval> | null = null;
 
+// Browser reopen state
+let lastBrowserOpenTime = 0;
+const BROWSER_REOPEN_COOLDOWN_MS = 5_000; // Min 5s between reopen attempts
+let serverPort: number | null = null; // Stored after server starts listening
+
 // Track connected CLI clients (to notify when browser connects)
 const cliClients = new Set<WebSocket>();
 
@@ -131,6 +136,25 @@ function isRateLimited(ws: WebSocket): boolean {
 
   entry.timestamps.push(now);
   return false;
+}
+
+// ── Browser reopen ────────────────────────────────────────────────
+
+async function reopenBrowser(): Promise<void> {
+  if (!serverPort) return;
+  if (browserReady || browserWs?.readyState === WebSocket.OPEN) return;
+
+  const now = Date.now();
+  if (now - lastBrowserOpenTime < BROWSER_REOPEN_COOLDOWN_MS) return;
+
+  lastBrowserOpenTime = now;
+  const bridgeUrl = buildBridgeUrl(serverPort);
+  try {
+    const { default: open } = await import("open");
+    await open(bridgeUrl);
+  } catch {
+    // Best-effort; CLI will time out if browser never connects
+  }
 }
 
 // ── Idle management ────────────────────────────────────────────────
@@ -180,6 +204,7 @@ wss.on("listening", async () => {
   }
 
   const port = addr.port;
+  serverPort = port;
 
   // Write bridge info
   fs.mkdirSync(JAW_DIR, { recursive: true, mode: 0o700 });
@@ -195,6 +220,7 @@ wss.on("listening", async () => {
   });
 
   // Open browser
+  lastBrowserOpenTime = Date.now();
   const bridgeUrl = buildBridgeUrl(port);
   const { default: open } = await import("open");
   await open(bridgeUrl);
@@ -314,6 +340,11 @@ function handleCliConnection(ws: WebSocket): void {
     }),
   );
 
+  // Auto-reopen browser if it's disconnected
+  if (!browserReady) {
+    reopenBrowser();
+  }
+
   ws.on("close", () => {
     cliClients.delete(ws);
   });
@@ -375,14 +406,16 @@ function handleCliRpcRequest(
   }
 
   if (!browserReady || !browserWs || browserWs.readyState !== WebSocket.OPEN) {
+    // Attempt to reopen browser and tell CLI to wait
+    reopenBrowser();
     clientWs.send(
       JSON.stringify({
         id: clientId,
         type: "rpc_response",
         success: false,
         error: {
-          code: -32000,
-          message: "Browser SDK not connected. The browser tab may have been closed.",
+          code: -32001,
+          message: "Browser tab was closed. Reopening — please retry in a few seconds.",
         },
       }),
     );

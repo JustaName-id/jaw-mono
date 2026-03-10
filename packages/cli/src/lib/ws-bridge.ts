@@ -41,8 +41,8 @@ export class WSBridge {
         ws.close();
         reject(
           new Error(
-            "Browser SDK not connected. The browser tab may have been closed.\n" +
-              "Run `jaw disconnect` then try again to open a new browser session.",
+            "Browser SDK did not connect in time.\n" +
+              "If the browser tab failed to open, run `jaw disconnect` then try again.",
           ),
         );
       }, 30_000);
