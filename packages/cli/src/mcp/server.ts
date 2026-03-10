@@ -6,7 +6,7 @@ import { registerConfigTools } from "./handlers/config.js";
 export function createMcpServer(): McpServer {
   const server = new McpServer({
     name: "jaw",
-    version: "0.1.0",
+    version: "0.0.1",
   });
 
   registerRpcTool(server);

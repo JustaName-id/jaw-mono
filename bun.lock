@@ -1,5 +1,6 @@
 {
   "lockfileVersion": 1,
+  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "@jaw-mono/source",
@@ -107,10 +108,10 @@
         "jaw": "./bin/run.js",
       },
       "dependencies": {
-        "@jaw.id/core": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.12.1",
         "@oclif/core": "^4.3.0",
         "open": "^10.1.0",
+        "ws": "^8.18.0",
         "zod": "^3.24.0",
       },
       "devDependencies": {
@@ -118,7 +119,6 @@
         "@types/node": "^20.19.9",
         "@types/ws": "^8.18.1",
         "vitest": "^3.0.0",
-        "ws": "^8.19.0",
       },
     },
     "packages/core": {

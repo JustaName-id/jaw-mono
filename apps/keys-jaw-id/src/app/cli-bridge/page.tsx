@@ -188,7 +188,16 @@ function CLIBridgeContent() {
       setError("WebSocket connection failed");
     };
 
+    // Send a clean close when the user closes/refreshes the tab
+    const handleBeforeUnload = () => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.close(1000, "Browser tab closed");
+      }
+    };
+    window.addEventListener("beforeunload", handleBeforeUnload);
+
     return () => {
+      window.removeEventListener("beforeunload", handleBeforeUnload);
       ws.close();
     };
   }, [wsPort, chainIdParam, ens, paymasterUrl, token, handleRpcRequest]);

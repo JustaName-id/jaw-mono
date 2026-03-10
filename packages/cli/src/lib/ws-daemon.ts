@@ -195,7 +195,11 @@ process.on("exit", cleanup);
 // ── Start WebSocket server ─────────────────────────────────────────
 
 const MAX_PAYLOAD_BYTES = 1_048_576; // 1 MB – plenty for any RPC payload
-const wss = new WebSocketServer({ host: "127.0.0.1", port: 0, maxPayload: MAX_PAYLOAD_BYTES });
+const wss = new WebSocketServer({
+  host: "127.0.0.1",
+  port: 0,
+  maxPayload: MAX_PAYLOAD_BYTES,
+});
 
 wss.on("listening", async () => {
   const addr = wss.address();
@@ -316,6 +320,27 @@ function handleBrowserConnection(ws: WebSocket): void {
     if (browserWs === ws) {
       browserReady = false;
       browserWs = null;
+
+      // Fail in-flight requests immediately — they can't complete without a browser.
+      // The next CLI request will trigger reopenBrowser() automatically.
+      for (const [, pending] of pendingRequests) {
+        clearTimeout(pending.timer);
+        if (pending.clientWs.readyState === WebSocket.OPEN) {
+          pending.clientWs.send(
+            JSON.stringify({
+              id: pending.clientId,
+              type: "rpc_response",
+              success: false,
+              error: {
+                code: -32001,
+                message:
+                  "Browser tab was closed. Reopening — please retry in a few seconds.",
+              },
+            }),
+          );
+        }
+      }
+      pendingRequests.clear();
     }
   });
 }
@@ -398,7 +423,8 @@ function handleCliRpcRequest(
         success: false,
         error: {
           code: -32006,
-          message: "Too many pending requests. Wait for current requests to complete.",
+          message:
+            "Too many pending requests. Wait for current requests to complete.",
         },
       }),
     );
@@ -415,7 +441,8 @@ function handleCliRpcRequest(
         success: false,
         error: {
           code: -32001,
-          message: "Browser tab was closed. Reopening — please retry in a few seconds.",
+          message:
+            "Browser tab was closed. Reopening — please retry in a few seconds.",
         },
       }),
     );
