@@ -8,19 +8,15 @@ export const rpcMethodSchema = {
   method: z
     .string()
     .describe(
-      "EIP-1193 RPC method name. Supported methods: " +
-        "eth_requestAccounts, eth_accounts, eth_chainId, net_version, " +
-        "wallet_connect, wallet_disconnect, wallet_switchEthereumChain, " +
-        "wallet_sendCalls, eth_sendTransaction, wallet_getCallsStatus, wallet_getCallsHistory, " +
-        "personal_sign, eth_signTypedData_v4, wallet_sign, " +
-        "wallet_grantPermissions, wallet_revokePermissions, wallet_getPermissions, " +
-        "wallet_getCapabilities, wallet_getAssets",
+      "EIP-1193 RPC method name (e.g. wallet_connect, wallet_sendCalls, personal_sign). " +
+        "Read the jaw://api-reference resource for the full list and jaw://api-reference/{method} for parameter details.",
     ),
   params: z
     .any()
     .optional()
     .describe(
-      "Method parameters — structure varies by method. See https://docs.jaw.id/api-reference",
+      "Method parameters — structure varies by method. " +
+        "Read the jaw://api-reference/{method} resource for the expected format.",
     ),
   chainId: z
     .number()

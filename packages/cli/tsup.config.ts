@@ -23,8 +23,11 @@ export default defineConfig({
     // mcp
     "mcp/server": "src/mcp/server.ts",
     "mcp/tools": "src/mcp/tools.ts",
+    "mcp/helpers": "src/mcp/helpers.ts",
     "mcp/handlers/rpc": "src/mcp/handlers/rpc.ts",
     "mcp/handlers/config": "src/mcp/handlers/config.ts",
+    "mcp/handlers/daemon": "src/mcp/handlers/daemon.ts",
+    "mcp/handlers/resources": "src/mcp/handlers/resources.ts",
   },
   format: ["esm"],
   outDir: "dist",

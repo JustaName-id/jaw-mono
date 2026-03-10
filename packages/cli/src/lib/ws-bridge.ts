@@ -146,6 +146,13 @@ export class WSBridge {
   }
 
   /**
+   * Check if the WebSocket connection is open.
+   */
+  isOpen(): boolean {
+    return this.ws?.readyState === WebSocket.OPEN;
+  }
+
+  /**
    * Send a shutdown signal to the daemon.
    */
   shutdown(): void {
