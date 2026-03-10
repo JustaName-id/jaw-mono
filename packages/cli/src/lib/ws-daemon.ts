@@ -43,12 +43,16 @@ interface PendingRequest {
 
 const args = JSON.parse(process.argv[2] ?? "{}") as {
   keysUrl: string;
-  apiKey: string;
   chainId: number;
   ens?: string;
   paymasterUrl?: string;
   timeout?: number;
 };
+
+// API key is passed via env var to avoid exposure in `ps aux` output
+const apiKey = process.env.JAW_DAEMON_API_KEY ?? "";
+// Clear from environment immediately after reading
+delete process.env.JAW_DAEMON_API_KEY;
 
 const token = crypto.randomUUID();
 const timeout = args.timeout ?? 120_000;
@@ -102,7 +106,8 @@ process.on("exit", cleanup);
 
 // ── Start WebSocket server ─────────────────────────────────────────
 
-const wss = new WebSocketServer({ host: "127.0.0.1", port: 0 });
+const MAX_PAYLOAD_BYTES = 1_048_576; // 1 MB – plenty for any RPC payload
+const wss = new WebSocketServer({ host: "127.0.0.1", port: 0, maxPayload: MAX_PAYLOAD_BYTES });
 
 wss.on("listening", async () => {
   const addr = wss.address();
@@ -158,6 +163,9 @@ function handleBrowserConnection(ws: WebSocket): void {
   }
   browserWs = ws;
   browserReady = false;
+
+  // Send API key over the authenticated WebSocket rather than via URL
+  ws.send(JSON.stringify({ type: "init", apiKey }));
 
   ws.on("message", (data) => {
     let msg: Record<string, unknown>;
@@ -323,6 +331,7 @@ function buildBridgeUrl(port: number): string {
   if (args.paymasterUrl) {
     url.searchParams.set("paymasterUrl", args.paymasterUrl);
   }
-  url.hash = `apiKey=${encodeURIComponent(args.apiKey)}&token=${encodeURIComponent(token)}`;
+  // Only token in fragment — apiKey is sent over WebSocket after connection
+  url.hash = `token=${encodeURIComponent(token)}`;
   return url.toString();
 }

@@ -9,7 +9,7 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
-import { spawn } from "node:child_process";
+import { spawn, execSync } from "node:child_process";
 import { PATHS } from "./paths.js";
 import { ensureDir } from "./config.js";
 import { WSBridge } from "./ws-bridge.js";
@@ -50,20 +50,39 @@ export interface BridgeOptions {
   timeout?: number;
 }
 
+/**
+ * Verify that the process at `pid` is actually our ws-daemon, not an
+ * impersonator that killed the real daemon and took over the port.
+ */
+function isDaemonProcess(pid: number): boolean {
+  try {
+    // Signal 0 checks if process exists
+    process.kill(pid, 0);
+  } catch {
+    return false;
+  }
+
+  try {
+    // Verify the process command line contains ws-daemon
+    const cmd = execSync(`ps -p ${pid} -o command=`, { encoding: "utf-8", timeout: 3000 }).trim();
+    return cmd.includes("ws-daemon");
+  } catch {
+    // If ps fails (process just died), treat as invalid
+    return false;
+  }
+}
+
 function loadBridgeInfo(): BridgeInfo | null {
   try {
     if (!fs.existsSync(PATHS.bridge)) return null;
     const raw = fs.readFileSync(PATHS.bridge, "utf-8");
     const info = JSON.parse(raw) as BridgeInfo;
-    // Check if daemon process is still alive
-    try {
-      process.kill(info.pid, 0);
-      return info;
-    } catch {
-      // Process is dead, clean up stale file
-      fs.unlinkSync(PATHS.bridge);
+    if (!isDaemonProcess(info.pid)) {
+      // Process is dead or not our daemon — clean up stale file
+      try { fs.unlinkSync(PATHS.bridge); } catch { /* ignore */ }
       return null;
     }
+    return info;
   } catch {
     return null;
   }
@@ -117,7 +136,6 @@ async function spawnDaemon(options: BridgeOptions): Promise<BridgeInfo> {
 
   const daemonArgs = {
     keysUrl: options.keysUrl ?? config.keysUrl ?? JAW_KEYS_URL,
-    apiKey: options.apiKey,
     chainId: options.chainId ?? config.defaultChain ?? 1,
     ens: options.ens ?? config.ens,
     paymasterUrl: options.paymasterUrl ?? config.paymasterUrl,
@@ -133,10 +151,13 @@ async function spawnDaemon(options: BridgeOptions): Promise<BridgeInfo> {
     // ignore
   }
 
+  // Truncate log to prevent unbounded growth from previous sessions
   const logFd = fs.openSync(PATHS.daemonLog, "w");
   const child = spawn(process.execPath, [daemonScript, JSON.stringify(daemonArgs)], {
     detached: true,
     stdio: ["ignore", logFd, logFd],
+    // Pass API key via env var instead of process args to avoid ps aux exposure
+    env: { ...process.env, JAW_DAEMON_API_KEY: options.apiKey },
   });
   child.unref();
   fs.closeSync(logFd);

@@ -14,10 +14,12 @@ import { ReactUIHandler } from "@jaw.id/ui";
  *
  * Flow:
  * 1. CLI starts a WebSocket server on 127.0.0.1:{port}
- * 2. CLI opens this page with wsPort + config params
- * 3. Page initializes JAW SDK and connects WebSocket
- * 4. CLI sends RPC requests over WebSocket
- * 5. Page executes them via provider.request() and sends results back
+ * 2. CLI opens this page with wsPort + config params, token in fragment
+ * 3. Page connects WebSocket using the token
+ * 4. Daemon sends API key over the authenticated WebSocket (never in URL)
+ * 5. Page initializes JAW SDK with the received API key
+ * 6. CLI sends RPC requests over WebSocket
+ * 7. Page executes them via provider.request() and sends results back
  */
 
 type BridgeState = "connecting" | "connected" | "disconnected" | "error";
@@ -36,19 +38,17 @@ function CLIBridgeContent() {
   const ens = searchParams.get("ens");
   const paymasterUrl = searchParams.get("paymasterUrl");
 
-  // Read sensitive params from URL fragment
-  const [fragmentParams, setFragmentParams] = useState<{
-    apiKey: string | null;
-    token: string | null;
-  }>({ apiKey: null, token: null });
+  // Read only the token from the URL fragment — API key comes over WebSocket
+  const [token, setToken] = useState<string | null>(null);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     const hashParams = new URLSearchParams(hash);
-    setFragmentParams({
-      apiKey: hashParams.get("apiKey"),
-      token: hashParams.get("token"),
-    });
+    setToken(hashParams.get("token"));
+    // Clear the fragment from the URL to avoid any leakage
+    if (window.location.hash) {
+      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    }
   }, []);
 
   const handleRpcRequest = useCallback(
@@ -107,46 +107,19 @@ function CLIBridgeContent() {
   );
 
   useEffect(() => {
-    if (startedRef.current || !wsPort || !fragmentParams.apiKey || !fragmentParams.token)
+    if (startedRef.current || !wsPort || !token)
       return;
     startedRef.current = true;
 
     const chainId = chainIdParam ? Number(chainIdParam) : 1;
-    const apiKey = fragmentParams.apiKey;
-    const token = fragmentParams.token;
 
-    // Initialize JAW SDK
-    if (!sdkRef.current) {
-      sdkRef.current = JAW.create({
-        appName: "JAW CLI",
-        defaultChainId: chainId,
-        preference: {
-          mode: Mode.AppSpecific,
-          uiHandler: new ReactUIHandler(),
-          showTestnets: true,
-        },
-        apiKey,
-        ...(ens ? { ens } : {}),
-        ...(paymasterUrl
-          ? { paymasters: { [chainId]: { url: paymasterUrl } } }
-          : {}),
-      });
-    }
-
-    // Connect WebSocket to CLI
+    // Connect WebSocket to daemon first — SDK init happens after receiving apiKey
     const wsUrl = `ws://127.0.0.1:${wsPort}?token=${encodeURIComponent(token)}&role=browser`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
       setState("connected");
-      // Notify CLI that SDK is ready
-      ws.send(
-        JSON.stringify({
-          type: "ready",
-          chainId,
-        }),
-      );
     };
 
     ws.onmessage = (event) => {
@@ -158,6 +131,42 @@ function CLIBridgeContent() {
       }
 
       switch (msg.type) {
+        case "init": {
+          // Daemon sends API key over the authenticated WebSocket
+          const apiKey = msg.apiKey as string;
+          if (!apiKey) {
+            setState("error");
+            setError("Daemon sent empty API key");
+            return;
+          }
+
+          if (!sdkRef.current) {
+            sdkRef.current = JAW.create({
+              appName: "JAW CLI",
+              defaultChainId: chainId,
+              preference: {
+                mode: Mode.AppSpecific,
+                uiHandler: new ReactUIHandler(),
+                showTestnets: true,
+              },
+              apiKey,
+              ...(ens ? { ens } : {}),
+              ...(paymasterUrl
+                ? { paymasters: { [chainId]: { url: paymasterUrl } } }
+                : {}),
+            });
+          }
+
+          // SDK initialized — notify daemon we're ready
+          ws.send(
+            JSON.stringify({
+              type: "ready",
+              chainId,
+            }),
+          );
+          break;
+        }
+
         case "rpc_request":
           handleRpcRequest(
             msg.id as string,
@@ -188,7 +197,7 @@ function CLIBridgeContent() {
     return () => {
       ws.close();
     };
-  }, [wsPort, chainIdParam, ens, paymasterUrl, fragmentParams, handleRpcRequest]);
+  }, [wsPort, chainIdParam, ens, paymasterUrl, token, handleRpcRequest]);
 
   // Validation
   if (!wsPort) {
