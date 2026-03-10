@@ -1,18 +1,7 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { configSetSchema } from "../tools.js";
+import { mcpError } from "../helpers.js";
 import { loadConfig, setConfigValue, redactConfig } from "../../lib/config.js";
-
-function mcpError(err: unknown) {
-  return {
-    isError: true as const,
-    content: [
-      {
-        type: "text" as const,
-        text: `Error: ${err instanceof Error ? err.message : String(err)}`,
-      },
-    ],
-  };
-}
 
 export function registerConfigTools(server: McpServer): void {
   server.tool(

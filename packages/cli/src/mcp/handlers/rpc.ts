@@ -1,30 +1,9 @@
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { rpcMethodSchema } from "../tools.js";
+import { mcpError, mcpResult } from "../helpers.js";
 import { getBridge } from "../../lib/bridge-singleton.js";
 import { loadConfig } from "../../lib/config.js";
-
-function mcpError(err: unknown) {
-  return {
-    isError: true as const,
-    content: [
-      {
-        type: "text" as const,
-        text: `Error: ${err instanceof Error ? err.message : String(err)}`,
-      },
-    ],
-  };
-}
-
-function mcpResult(data: unknown) {
-  return {
-    content: [
-      {
-        type: "text" as const,
-        text: JSON.stringify(data),
-      },
-    ],
-  };
-}
+import type { WSBridge } from "../../lib/ws-bridge.js";
 
 function resolveApiKey(): string {
   const apiKey = process.env["JAW_API_KEY"] ?? loadConfig().apiKey;
@@ -36,37 +15,60 @@ function resolveApiKey(): string {
   return apiKey;
 }
 
+/** Cached bridge connection — reused across sequential MCP tool calls. */
+let cachedBridge: WSBridge | null = null;
+
+async function getOrCreateBridge(chainId?: number): Promise<WSBridge> {
+  // Reuse if the connection is still open
+  if (cachedBridge && cachedBridge.isOpen()) {
+    return cachedBridge;
+  }
+
+  const config = loadConfig();
+  const apiKey = resolveApiKey();
+
+  cachedBridge = await getBridge({
+    keysUrl: config.keysUrl,
+    apiKey,
+    chainId: chainId ?? config.defaultChain,
+    ens: config.ens,
+    paymasterUrl: config.paymasterUrl,
+  });
+
+  return cachedBridge;
+}
+
+export function closeCachedBridge(): void {
+  if (cachedBridge) {
+    cachedBridge.close();
+    cachedBridge = null;
+  }
+}
+
+export function isBridgeCached(): boolean {
+  return cachedBridge !== null && cachedBridge.isOpen();
+}
+
 export function registerRpcTool(server: McpServer): void {
   // @ts-expect-error — MCP SDK deep type inference with z.any() in schema
   server.tool(
     "jaw_rpc",
-    "Execute any JAW.id wallet RPC method. Supports all EIP-1193 methods including " +
-      "transactions (wallet_sendCalls), signing (personal_sign, eth_signTypedData_v4), " +
-      "permissions (wallet_grantPermissions), account management (wallet_connect), and queries " +
-      "(wallet_getAssets, wallet_getCallsStatus). Methods that require signing will open " +
-      "the browser for passkey authentication via keys.jaw.id. " +
-      "Full reference: https://docs.jaw.id/api-reference",
+    "Execute any JAW.id wallet RPC method via the browser bridge. " +
+      "Supports transactions, signing, permissions, and queries. " +
+      "Methods that require signing will open the browser for passkey authentication. " +
+      "IMPORTANT: Read the jaw://api-reference resource for the full list of methods, " +
+      "and jaw://api-reference/{method} for detailed parameter formats and examples.",
     rpcMethodSchema,
     async (params) => {
       try {
-        const config = loadConfig();
-        const apiKey = resolveApiKey();
-
-        const bridge = await getBridge({
-          keysUrl: config.keysUrl,
-          apiKey,
-          chainId: params.chainId ?? config.defaultChain,
-          ens: config.ens,
-          paymasterUrl: config.paymasterUrl,
-        });
-
-        try {
-          const result = await bridge.request(params.method, params.params);
-          return mcpResult(result);
-        } finally {
-          bridge.close();
-        }
+        const bridge = await getOrCreateBridge(params.chainId);
+        const result = await bridge.request(params.method, params.params);
+        return mcpResult(result);
       } catch (err) {
+        // If the connection broke, clear the cache so the next call reconnects
+        if (cachedBridge && !cachedBridge.isOpen()) {
+          cachedBridge = null;
+        }
         return mcpError(err);
       }
     },

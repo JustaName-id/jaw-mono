@@ -2,6 +2,8 @@ import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
 import { registerRpcTool } from "./handlers/rpc.js";
 import { registerConfigTools } from "./handlers/config.js";
+import { registerDaemonTools } from "./handlers/daemon.js";
+import { registerResources } from "./handlers/resources.js";
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
@@ -11,6 +13,8 @@ export function createMcpServer(): McpServer {
 
   registerRpcTool(server);
   registerConfigTools(server);
+  registerDaemonTools(server);
+  registerResources(server);
 
   return server;
 }
