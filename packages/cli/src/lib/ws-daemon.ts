@@ -15,6 +15,7 @@
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
+import * as http from "node:http";
 import * as path from "node:path";
 import * as os from "node:os";
 import { WebSocketServer, WebSocket } from "ws";
@@ -193,16 +194,74 @@ process.on("SIGINT", () => {
 process.on("exit", cleanup);
 
 // ── Start WebSocket server ─────────────────────────────────────────
+//
+// We create an HTTP server manually so we can respond to Private Network
+// Access (PNA) preflight requests. Modern Chrome (130+) sends an OPTIONS
+// preflight with Access-Control-Request-Private-Network before allowing
+// WebSocket connections from public HTTPS origins (keys.jaw.id) to
+// private network addresses (127.0.0.1). Without a proper preflight
+// response the browser refuses the WebSocket handshake entirely.
 
 const MAX_PAYLOAD_BYTES = 1_048_576; // 1 MB – plenty for any RPC payload
+
+// Derive the trusted origin from the configured keysUrl so we only allow
+// PNA preflight from the expected browser page (e.g. https://keys.jaw.id),
+// not from arbitrary websites scanning localhost.
+const trustedOrigin = new URL(args.keysUrl).origin;
+
+function isTrustedOrigin(origin: string): boolean {
+  if (origin === trustedOrigin) return true;
+  // Allow localhost/loopback for development
+  try {
+    const parsed = new URL(origin);
+    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+  } catch {
+    return false;
+  }
+}
+
+const httpServer = http.createServer((req, res) => {
+  // Handle PNA preflight (OPTIONS) requests
+  if (req.method === "OPTIONS") {
+    const origin = req.headers.origin ?? "";
+    if (!isTrustedOrigin(origin)) {
+      res.writeHead(403, { "Content-Type": "text/plain" });
+      res.end("Forbidden");
+      return;
+    }
+    res.writeHead(204, {
+      "Access-Control-Allow-Origin": origin,
+      "Access-Control-Allow-Methods": "GET, OPTIONS",
+      "Access-Control-Allow-Headers": "Content-Type",
+      "Access-Control-Allow-Private-Network": "true",
+      "Access-Control-Max-Age": "86400",
+    });
+    res.end();
+    return;
+  }
+  // Reject all other HTTP requests
+  res.writeHead(426, { "Content-Type": "text/plain" });
+  res.end("Upgrade required");
+});
+
 const wss = new WebSocketServer({
-  host: "127.0.0.1",
-  port: 0,
+  server: httpServer,
   maxPayload: MAX_PAYLOAD_BYTES,
 });
 
-wss.on("listening", async () => {
-  const addr = wss.address();
+// Inject PNA + CORS headers into the WebSocket 101 upgrade response.
+// Chrome's PNA enforcement checks these headers on the upgrade response
+// in addition to the preflight.
+wss.on("headers", (headers, req) => {
+  const origin = req.headers.origin;
+  if (origin && isTrustedOrigin(origin)) {
+    headers.push(`Access-Control-Allow-Origin: ${origin}`);
+    headers.push("Access-Control-Allow-Private-Network: true");
+  }
+});
+
+httpServer.listen(0, "127.0.0.1", async () => {
+  const addr = httpServer.address();
   if (typeof addr === "string" || !addr) {
     process.exit(1);
   }
