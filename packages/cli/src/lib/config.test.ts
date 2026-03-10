@@ -17,8 +17,7 @@ vi.mock("./paths.js", () => {
     },
   };
 });
-
-const { loadConfig, saveConfig, initConfig, getConfigValue, setConfigValue } =
+const { loadConfig, saveConfig, getConfigValue, setConfigValue } =
   await import("./config.js");
 const { PATHS } = await import("./paths.js");
 
@@ -46,17 +45,13 @@ describe("config", () => {
     expect(saved.defaultChain).toBe(8453);
   });
 
-  it("initConfig creates directories and merges config", () => {
-    const config = initConfig({ apiKey: "init-key" });
-    expect(config.apiKey).toBe("init-key");
-    expect(fs.existsSync(PATHS.root)).toBe(true);
-  });
-
-  it("initConfig merges with existing config", () => {
-    initConfig({ apiKey: "first" });
-    const config = initConfig({ defaultChain: 1 });
+  it("setConfigValue creates directory and merges with existing config", () => {
+    setConfigValue("apiKey", "first");
+    setConfigValue("defaultChain", 1);
+    const config = loadConfig();
     expect(config.apiKey).toBe("first");
     expect(config.defaultChain).toBe(1);
+    expect(fs.existsSync(PATHS.root)).toBe(true);
   });
 
   it("getConfigValue returns specific value", () => {

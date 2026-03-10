@@ -17,7 +17,7 @@ export function loadConfig(): JawConfig {
     return JSON.parse(raw) as JawConfig;
   } catch {
     throw new Error(
-      `Config file at ${PATHS.config} is not valid JSON. Run \`jaw config init\` to reset it.`,
+      `Config file at ${PATHS.config} is not valid JSON. Run \`jaw config set apiKey=<key>\` to reset it.`,
     );
   }
 }
@@ -35,15 +35,6 @@ export function redactConfig(config: JawConfig): Record<string, unknown> {
     ...config,
     apiKey: config.apiKey ? `${config.apiKey.slice(0, 8)}...` : undefined,
   };
-}
-
-export function initConfig(overrides: Partial<JawConfig> = {}): JawConfig {
-  ensureDir(PATHS.root);
-
-  const existing = loadConfig();
-  const merged: JawConfig = { ...existing, ...overrides };
-  saveConfig(merged);
-  return merged;
 }
 
 export function getConfigValue(

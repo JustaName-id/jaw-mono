@@ -16,7 +16,6 @@ export default defineConfig({
     "lib/validation": "src/lib/validation.ts",
     // commands
     "commands/disconnect": "src/commands/disconnect.ts",
-    "commands/config/init": "src/commands/config/init.ts",
     "commands/config/set": "src/commands/config/set.ts",
     "commands/config/show": "src/commands/config/show.ts",
     "commands/mcp/index": "src/commands/mcp/index.ts",

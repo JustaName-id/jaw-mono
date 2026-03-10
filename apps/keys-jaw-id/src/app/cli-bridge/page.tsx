@@ -13,11 +13,12 @@ import { ReactUIHandler } from "@jaw.id/ui";
  * this page's SDK instance.
  *
  * Flow:
- * 1. CLI starts a WebSocket server on 127.0.0.1:{port}
- * 2. CLI opens this page with wsPort + config params, token in fragment
+ * 1. CLI starts a WebSocket daemon on 127.0.0.1:{port}
+ * 2. CLI opens this page with wsPort in query params, token in fragment
  * 3. Page connects WebSocket using the token
- * 4. Daemon sends API key over the authenticated WebSocket (never in URL)
- * 5. Page initializes JAW SDK with the received API key
+ * 4. Daemon sends all config (apiKey, chainId, ens, paymasterUrl) over the
+ *    authenticated WebSocket — nothing sensitive in the URL
+ * 5. Page initializes JAW SDK with the received config
  * 6. CLI sends RPC requests over WebSocket
  * 7. Page executes them via provider.request() and sends results back
  */
@@ -34,9 +35,6 @@ function CLIBridgeContent() {
   const startedRef = useRef(false);
 
   const wsPort = searchParams.get("wsPort");
-  const chainIdParam = searchParams.get("chainId");
-  const ens = searchParams.get("ens");
-  const paymasterUrl = searchParams.get("paymasterUrl");
 
   // Read only the token from the URL fragment — API key comes over WebSocket
   const [token, setToken] = useState<string | null>(null);
@@ -109,9 +107,7 @@ function CLIBridgeContent() {
     if (startedRef.current || !wsPort || !token) return;
     startedRef.current = true;
 
-    const chainId = chainIdParam ? Number(chainIdParam) : 1;
-
-    // Connect WebSocket to daemon first — SDK init happens after receiving apiKey
+    // Connect WebSocket to daemon first — all config comes over the authenticated WebSocket
     const wsUrl = `ws://127.0.0.1:${wsPort}?token=${encodeURIComponent(token)}&role=browser`;
     const ws = new WebSocket(wsUrl);
     wsRef.current = ws;
@@ -130,8 +126,12 @@ function CLIBridgeContent() {
 
       switch (msg.type) {
         case "init": {
-          // Daemon sends API key over the authenticated WebSocket
+          // Daemon sends all config over the authenticated WebSocket
           const apiKey = msg.apiKey as string;
+          const chainId = (msg.chainId as number) ?? 1;
+          const ens = msg.ens as string | undefined;
+          const paymasterUrl = msg.paymasterUrl as string | undefined;
+
           if (!apiKey) {
             setState("error");
             setError("Daemon sent empty API key");
@@ -200,7 +200,7 @@ function CLIBridgeContent() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       ws.close();
     };
-  }, [wsPort, chainIdParam, ens, paymasterUrl, token, handleRpcRequest]);
+  }, [wsPort, token, handleRpcRequest]);
 
   // Validation
   const wsPortNum = wsPort ? Number(wsPort) : NaN;

@@ -18,35 +18,39 @@ npm install -g @jaw.id/cli
 
 ```bash
 # 1. Configure API key and default chain
-jaw config init --api-key YOUR_API_KEY --chain 8453
+jaw config set apiKey=YOUR_API_KEY defaultChain=8453
 
 # 2. Connect your wallet (opens browser for passkey auth)
 jaw rpc call wallet_connect
 
-# 3. Send a transaction (opens browser for signing)
+# 3. Send a transaction
 jaw rpc call wallet_sendCalls '{"calls":[{"to":"0x...","value":"0x0"}]}'
 
 # 4. Check transaction status
 jaw rpc call wallet_getCallsStatus '{"id":"0xBatchId"}'
+
+# 5. When done, stop the background daemon
+jaw disconnect
 ```
 
 ## How It Works
 
-When you call an RPC method that requires signing, the CLI:
+The CLI uses a persistent background daemon with a WebSocket bridge to the browser. All RPC methods are routed through the same path:
 
-1. Starts a local HTTP server on `127.0.0.1`
-2. Opens your browser to `keys.jaw.id/cli-bridge`
-3. You authenticate with your passkey in the browser
-4. The result is sent back to the CLI via localhost callback
-5. CLI returns the result
+1. CLI spawns a background WebSocket daemon on `127.0.0.1` (if not already running)
+2. Daemon opens your browser to `keys.jaw.id/cli-bridge`
+3. Browser page runs the JAW SDK and connects back to the daemon via WebSocket
+4. CLI sends RPC requests to the daemon, which forwards them to the browser SDK
+5. Browser SDK executes the request (prompting for passkey signing when needed)
+6. Response is routed back through the daemon to the CLI
 
-Read-only methods (like `eth_accounts`, `wallet_getAssets`) are handled directly without opening a browser.
+The daemon stays alive across CLI commands so you only authenticate once. It auto-shuts down after 30 minutes of inactivity, or you can stop it manually with `jaw disconnect`.
 
 ## CLI Commands
 
 ### `jaw rpc call <method> [params]`
 
-Execute any JAW.id RPC method.
+Execute any JAW.id RPC method via the browser bridge.
 
 ```bash
 # Connect wallet
@@ -59,10 +63,10 @@ jaw rpc call wallet_sendCalls '{"calls":[{"to":"0x...","value":"0x0","data":"0x.
 jaw rpc call personal_sign '"Hello World"'
 
 # Sign typed data (EIP-712)
-jaw rpc call eth_signTypedData_v4 '["0xYOUR_ADDRESS", "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"}],\"Person\":[{\"name\":\"name\",\"type\":\"string\"}]},\"primaryType\":\"Person\",\"domain\":{\"name\":\"Test\"},\"message\":{\"name\":\"Alice\"}}"]'
+jaw rpc call eth_signTypedData_v4 '["0xYOUR_ADDRESS", "{\"types\":{...},\"primaryType\":\"...\",\"domain\":{...},\"message\":{...}}"]'
 
 # Grant permissions
-jaw rpc call wallet_grantPermissions '{"expiry":1750000000,"spender":"0x...","permissions":{"calls":[{"target":"0x3232323232323232323232323232323232323232","selector":"0xe0e0e0e0"}],"spends":[{"token":"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE","allowance":"0x2386F26FC10000","unit":"day","multiplier":1}]}}'
+jaw rpc call wallet_grantPermissions '{"expiry":1750000000,"spender":"0x...","permissions":{...}}'
 
 # Get assets
 jaw rpc call wallet_getAssets
@@ -76,17 +80,9 @@ jaw rpc call eth_chainId
 | `-o, --output` | Output format: `json` or `human` | `human` |
 | `-c, --chain` | Chain ID | config default |
 | `--api-key` | JAW API key | config/env |
-| `-t, --timeout` | Browser callback timeout (seconds) | `120` |
+| `-t, --timeout` | Request timeout (seconds) | `120` |
 | `-y, --yes` | Skip confirmations | `false` |
 | `-q, --quiet` | Suppress non-essential output | `false` |
-
-### `jaw config init`
-
-Initialize CLI configuration.
-
-```bash
-jaw config init --api-key YOUR_KEY --chain 8453
-```
 
 ### `jaw config show`
 
@@ -97,40 +93,26 @@ jaw config show
 jaw config show --output json
 ```
 
-### `jaw config set <key> <value>`
+### `jaw config set`
 
-Set a configuration value.
+Set one or more configuration values.
 
 ```bash
+jaw config set apiKey=your-api-key defaultChain=8453
+jaw config set ens=yourdomain.eth paymasterUrl=https://paymaster.example.com
+jaw config set keysUrl=https://keys.jaw.id
+
+# Legacy syntax also supported
 jaw config set apiKey your-api-key
-jaw config set defaultChain 8453
-jaw config set keysUrl https://keys.jaw.id
-jaw config set paymasterUrl https://paymaster.example.com
 ```
 
-## Supported RPC Methods
+### `jaw disconnect`
 
-| Method | Category | Browser Required |
-|--------|----------|-----------------|
-| `eth_requestAccounts` | Session | Yes |
-| `wallet_connect` | Session | Yes |
-| `wallet_disconnect` | Local | No |
-| `wallet_switchEthereumChain` | Local | No |
-| `wallet_sendCalls` | Signing | Yes |
-| `eth_sendTransaction` | Signing | Yes |
-| `personal_sign` | Signing | Yes |
-| `eth_signTypedData_v4` | Signing | Yes |
-| `wallet_sign` | Signing | Yes |
-| `wallet_grantPermissions` | Signing | Yes |
-| `wallet_revokePermissions` | Signing | Yes |
-| `eth_accounts` | Read-only | No |
-| `eth_chainId` | Read-only | No |
-| `net_version` | Read-only | No |
-| `wallet_getCallsStatus` | Read-only | No |
-| `wallet_getCallsHistory` | Read-only | No |
-| `wallet_getAssets` | Read-only | No |
-| `wallet_getCapabilities` | Read-only | No |
-| `wallet_getPermissions` | Read-only | No |
+Stop the background bridge daemon and close the browser session.
+
+```bash
+jaw disconnect
+```
 
 ## Testing Guide
 
@@ -138,47 +120,50 @@ Full end-to-end testing sequence:
 
 ```bash
 # 0. Setup
-jaw config init --api-key YOUR_API_KEY --chain 1
+jaw config set apiKey=YOUR_API_KEY defaultChain=1
 
-# 1. Connect wallet (opens browser)
+# 1. Connect wallet (opens browser, daemon starts)
 jaw rpc call wallet_connect
 
-# 2. Verify connection (local, no browser)
+# 2. Verify connection
 jaw rpc call eth_accounts
 jaw rpc call eth_chainId
 jaw rpc call net_version
 
-# 3. Read-only API calls (no browser, direct API)
+# 3. Read-only calls
 jaw rpc call wallet_getAssets
 jaw rpc call wallet_getCapabilities
 jaw rpc call wallet_getPermissions
 jaw rpc call wallet_getCallsHistory
 
-# 4. Sign a message (opens browser)
+# 4. Sign a message
 jaw rpc call personal_sign '"Hello from JAW CLI"'
 
-# 5. Sign typed data (opens browser)
+# 5. Sign typed data
 jaw rpc call eth_signTypedData_v4 '["0xYOUR_ADDRESS", "{\"types\":{\"EIP712Domain\":[{\"name\":\"name\",\"type\":\"string\"}],\"Person\":[{\"name\":\"name\",\"type\":\"string\"}]},\"primaryType\":\"Person\",\"domain\":{\"name\":\"Test\"},\"message\":{\"name\":\"Alice\"}}"]'
 
-# 6. Send transaction (opens browser)
+# 6. Send transaction
 jaw rpc call wallet_sendCalls '{"calls":[{"to":"0x0000000000000000000000000000000000000000","value":"0x0","data":"0x"}]}'
 
-# 7. Switch chain (local, no browser)
+# 7. Switch chain
 jaw rpc call wallet_switchEthereumChain '[{"chainId":"0x2105"}]'
 jaw rpc call eth_chainId  # verify: should return 0x2105
 
-# 8. Grant permissions (opens browser)
+# 8. Grant permissions
 jaw rpc call wallet_grantPermissions '{"expiry":1750000000,"spender":"0x0000000000000000000000000000000000000001","permissions":{"calls":[{"target":"0x3232323232323232323232323232323232323232","selector":"0xe0e0e0e0"}],"spends":[{"token":"0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE","allowance":"0x2386F26FC10000","unit":"day","multiplier":1}]}}'
 
-# 9. Verify permissions (no browser)
+# 9. Verify permissions
 jaw rpc call wallet_getPermissions
 
-# 10. Revoke permissions (opens browser, use permissionId from step 9)
+# 10. Revoke permissions (use permissionId from step 9)
 jaw rpc call wallet_revokePermissions '{"id":"0xPERMISSION_ID_FROM_STEP_9"}'
 
-# 11. Disconnect (local)
+# 11. Disconnect
 jaw rpc call wallet_disconnect
 jaw rpc call eth_accounts  # should return []
+
+# 12. Stop daemon
+jaw disconnect
 ```
 
 ## MCP Server (for AI Agents)
@@ -219,7 +204,7 @@ jaw mcp
 
 ```
 Agent: jaw_rpc({ method: "wallet_sendCalls", params: { calls: [{ to: "0x...", value: "0x0" }] } })
-  -> CLI opens browser -> user signs with passkey -> result returned to agent
+  -> Daemon forwards to browser -> user signs with passkey -> result returned to agent
 ```
 
 ## Environment Variables
@@ -239,33 +224,16 @@ Config file: `~/.jaw/config.json`
   "apiKey": "your-api-key",
   "defaultChain": 8453,
   "keysUrl": "https://keys.jaw.id",
-  "paymasterUrl": "https://paymaster.example.com"
+  "paymasterUrl": "https://paymaster.example.com",
+  "ens": "yourdomain.eth"
 }
 ```
 
-## Architecture
+The daemon also writes runtime state to `~/.jaw/`:
 
-```
-AI Agent / User
-       |
-       v
-  jaw_rpc({ method, params })
-       |
-       v
-  CLI classifies method
-       |
-  +----+----+----+
-  |         |    |
-  v         v    v
-Read-only  Local  Signing/Session
-(API)     (disk)  (browser)
-  |         |    |
-  v         v    v
-Direct    Update  CLICommunicator
-fetch     config  1. Start HTTP server on 127.0.0.1
-to API    /session 2. Open browser -> keys.jaw.id/cli-bridge
-           |      3. Bridge runs JAW SDK (AppSpecific mode)
-           v      4. User signs with passkey inline
-         Return   5. Bridge POSTs result to localhost
-         result   6. CLI returns result
-```
+| File | Purpose |
+|------|---------|
+| `config.json` | User configuration (mode 0600) |
+| `bridge.json` | Active daemon connection info (port, token, pid) |
+| `session.json` | Cached session state |
+| `daemon.log` | Daemon stdout/stderr for debugging |

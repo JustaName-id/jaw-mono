@@ -258,8 +258,16 @@ function handleBrowserConnection(ws: WebSocket): void {
   browserWs = ws;
   browserReady = false;
 
-  // Send API key over the authenticated WebSocket rather than via URL
-  ws.send(JSON.stringify({ type: "init", apiKey }));
+  // Send config over the authenticated WebSocket rather than via URL
+  ws.send(
+    JSON.stringify({
+      type: "init",
+      apiKey,
+      chainId: args.chainId,
+      ens: args.ens,
+      paymasterUrl: args.paymasterUrl,
+    }),
+  );
 
   ws.on("message", (data) => {
     let msg: Record<string, unknown>;
@@ -486,14 +494,8 @@ function handleCliRpcRequest(
 function buildBridgeUrl(port: number): string {
   const url = new URL("/cli-bridge", args.keysUrl);
   url.searchParams.set("wsPort", String(port));
-  url.searchParams.set("chainId", String(args.chainId));
-  if (args.ens) {
-    url.searchParams.set("ens", args.ens);
-  }
-  if (args.paymasterUrl) {
-    url.searchParams.set("paymasterUrl", args.paymasterUrl);
-  }
-  // Only token in fragment — apiKey is sent over WebSocket after connection
+  // Only wsPort in query params — all config (apiKey, chainId, ens, paymasterUrl)
+  // is sent over the authenticated WebSocket after connection
   url.hash = `token=${encodeURIComponent(token)}`;
   return url.toString();
 }
