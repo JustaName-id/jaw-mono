@@ -20,10 +20,12 @@ export function middleware(request: NextRequest) {
     "'self'",
     "https://api.justaname.id",
     "https://eth.llamarpc.com",
-    "https:",
-    "wss:",
-    // Allow CLI bridge pages to connect to the local CLI server (HTTP + WebSocket)
-    ...(isCLIBridge ? ["http://127.0.0.1:*", "http://localhost:*", "ws://127.0.0.1:*", "ws://localhost:*"] : []),
+    // CLI bridge: only loopback (HTTP + WebSocket) — no wildcard https:/wss: needed
+    // Other pages: dApps pass arbitrary chain.rpcUrl values (Alchemy, Infura, etc.)
+    // so https:/wss: wildcards are required until RPC proxying is centralised.
+    ...(isCLIBridge
+      ? ["http://127.0.0.1:*", "http://localhost:*", "ws://127.0.0.1:*", "ws://localhost:*"]
+      : ["https:", "wss:"]),
   ].join(" ");
 
   // --- img-src ---

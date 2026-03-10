@@ -59,6 +59,14 @@ export function registerResources(server: McpServer): void {
     },
     async (uri, params) => {
       const method = params.method as string;
+
+      // Validate method name to prevent path traversal (e.g. ../../admin)
+      if (!/^[\w_]+$/.test(method)) {
+        throw new Error(
+          `Invalid method name: "${method}". Expected an RPC method like wallet_sendCalls.`,
+        );
+      }
+
       return {
         contents: [
           {
