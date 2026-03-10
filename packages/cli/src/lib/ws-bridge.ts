@@ -87,7 +87,8 @@ export class WSBridge {
    * Send an RPC request through the daemon to the browser SDK.
    */
   async request(method: string, params?: unknown): Promise<unknown> {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+    const ws = this.ws;
+    if (!ws || ws.readyState !== WebSocket.OPEN) {
       throw new Error("Not connected to bridge daemon");
     }
 
@@ -114,7 +115,7 @@ export class WSBridge {
 
         if (msg.type === "rpc_response" && msg.id === id) {
           clearTimeout(timer);
-          this.ws?.off("message", onMessage);
+          ws.off("message", onMessage);
 
           if (msg.success) {
             resolve(msg.data);
@@ -131,9 +132,9 @@ export class WSBridge {
         }
       };
 
-      this.ws!.on("message", onMessage);
+      ws.on("message", onMessage);
 
-      this.ws!.send(
+      ws.send(
         JSON.stringify({
           id,
           type: "rpc_request",
