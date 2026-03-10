@@ -83,10 +83,6 @@ function CLIBridgeContent() {
             ...(address ? { address } : {}),
           }),
         );
-
-        // Close the tab after completing the request —
-        // daemon will reopen it on the next CLI command
-        window.close();
       } catch (err) {
         // Core SDK's provider.request() rejects with serialized error objects
         // { code, message, data } or standard Error instances
@@ -102,9 +98,6 @@ function CLIBridgeContent() {
             error: { code: errCode, message: errMsg },
           }),
         );
-
-        // Also close on error
-        window.close();
       }
     },
     [],
