@@ -17,8 +17,6 @@ const BROWSER_REQUIRED_METHODS = new Set([
   // Permissions
   "wallet_grantPermissions",
   "wallet_revokePermissions",
-  // Chain switching (may trigger UI)
-  "wallet_switchEthereumChain",
 ]);
 
 export function requiresBrowser(method: string): boolean {
