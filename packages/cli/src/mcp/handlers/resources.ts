@@ -1,4 +1,4 @@
-import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
+import { type McpServer, ResourceTemplate } from "@modelcontextprotocol/sdk/server/mcp.js";
 
 const DOCS_BASE = "https://docs.jaw.id/api-reference";
 
@@ -47,9 +47,9 @@ export function registerResources(server: McpServer): void {
   );
 
   // Per-method documentation with parameter details
-  server.resourceTemplate(
+  server.resource(
     "api-reference-method",
-    "jaw://api-reference/{method}",
+    new ResourceTemplate("jaw://api-reference/{method}", { list: undefined }),
     {
       description:
         "Detailed documentation for a specific RPC method including parameters, " +
@@ -57,8 +57,8 @@ export function registerResources(server: McpServer): void {
         "api-reference overview (e.g. wallet_sendCalls, personal_sign).",
       mimeType: "text/plain",
     },
-    async (uri, params) => {
-      const method = params.method as string;
+    async (uri, variables) => {
+      const method = String(variables.method);
 
       // Validate method name to prevent path traversal (e.g. ../../admin)
       if (!/^[\w_]+$/.test(method)) {
