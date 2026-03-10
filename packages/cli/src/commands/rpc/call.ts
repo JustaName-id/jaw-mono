@@ -2,6 +2,7 @@ import { Args, Flags } from "@oclif/core";
 import { BaseCommand } from "../../base-command.js";
 import { getBridge } from "../../lib/bridge-singleton.js";
 import { loadConfig } from "../../lib/config.js";
+import { requiresBrowser } from "../../lib/rpc-classifier.js";
 import type { OutputFormat } from "../../lib/types.js";
 
 export default class RpcCall extends BaseCommand {
@@ -11,10 +12,9 @@ export default class RpcCall extends BaseCommand {
   static override examples = [
     '<%= config.bin %> rpc call wallet_sendCalls \'{"calls":[{"to":"0x...","value":"0x0"}]}\'',
     "<%= config.bin %> rpc call personal_sign '\"Hello World\"'",
-    "<%= config.bin %> rp" +
-    "c call wallet_getAssets",
+    "<%= config.bin %> rp" + "c call wallet_getAssets",
     "<%= config.bin %> rpc call eth_requestAccounts",
-    '<%= config.bin %> rpc call wallet_getCallsStatus \'"0x..."\'',
+    "<%= config.bin %> rpc call wallet_getCallsStatus '\"0x...\"'",
   ];
 
   static override args = {
@@ -64,7 +64,13 @@ export default class RpcCall extends BaseCommand {
     });
 
     if (!flags.quiet) {
-      this.log(`Sending ${method}...`);
+      if (requiresBrowser(method)) {
+        this.log(
+          `Sending ${method}... Check your browser to approve the request.`,
+        );
+      } else {
+        this.log(`Sending ${method}...`);
+      }
     }
 
     try {

@@ -24,6 +24,12 @@ const BRIDGE_PATH = path.join(JAW_DIR, "bridge.json");
 const HEARTBEAT_INTERVAL_MS = 30_000;
 const IDLE_TIMEOUT_MS = 30 * 60 * 1000; // 30 min idle → auto-shutdown
 
+// ── Limits ────────────────────────────────────────────────────────
+const MAX_PENDING_REQUESTS = 100;
+const MAX_CLI_CLIENTS = 50;
+const RATE_LIMIT_WINDOW_MS = 60_000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 60; // 60 requests per minute per client
+
 // ── Types ──────────────────────────────────────────────────────────
 
 interface BridgeInfo {
@@ -39,6 +45,30 @@ interface PendingRequest {
   timer: ReturnType<typeof setTimeout>;
 }
 
+interface RateLimitEntry {
+  timestamps: number[];
+}
+
+// ── keysUrl validation (duplicated from validation.ts for standalone daemon) ─
+
+function isValidKeysUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const isTrustedHost =
+      parsed.hostname.endsWith(".jaw.id") ||
+      parsed.hostname === "jaw.id" ||
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1";
+    const isSecure =
+      parsed.protocol === "https:" ||
+      parsed.hostname === "localhost" ||
+      parsed.hostname === "127.0.0.1";
+    return isTrustedHost && isSecure;
+  } catch {
+    return false;
+  }
+}
+
 // ── Parse args from parent process ─────────────────────────────────
 
 const args = JSON.parse(process.argv[2] ?? "{}") as {
@@ -48,6 +78,14 @@ const args = JSON.parse(process.argv[2] ?? "{}") as {
   paymasterUrl?: string;
   timeout?: number;
 };
+
+// Validate keysUrl before proceeding
+if (!isValidKeysUrl(args.keysUrl)) {
+  process.stderr.write(
+    `Untrusted keysUrl: ${args.keysUrl}. Must be a *.jaw.id domain (HTTPS) or localhost.\n`,
+  );
+  process.exit(1);
+}
 
 // API key is passed via env var to avoid exposure in `ps aux` output
 const apiKey = process.env.JAW_DAEMON_API_KEY ?? "";
@@ -68,6 +106,32 @@ let heartbeat: ReturnType<typeof setInterval> | null = null;
 
 // Track connected CLI clients (to notify when browser connects)
 const cliClients = new Set<WebSocket>();
+
+// Per-client rate limiting
+const rateLimits = new WeakMap<WebSocket, RateLimitEntry>();
+
+// ── Rate limiting ─────────────────────────────────────────────────
+
+function isRateLimited(ws: WebSocket): boolean {
+  const now = Date.now();
+  let entry = rateLimits.get(ws);
+  if (!entry) {
+    entry = { timestamps: [] };
+    rateLimits.set(ws, entry);
+  }
+
+  // Remove timestamps outside the window
+  entry.timestamps = entry.timestamps.filter(
+    (t) => now - t < RATE_LIMIT_WINDOW_MS,
+  );
+
+  if (entry.timestamps.length >= RATE_LIMIT_MAX_REQUESTS) {
+    return true;
+  }
+
+  entry.timestamps.push(now);
+  return false;
+}
 
 // ── Idle management ────────────────────────────────────────────────
 
@@ -233,6 +297,12 @@ function handleBrowserConnection(ws: WebSocket): void {
 // ── CLI client connection ──────────────────────────────────────────
 
 function handleCliConnection(ws: WebSocket): void {
+  // Enforce max CLI client connections
+  if (cliClients.size >= MAX_CLI_CLIENTS) {
+    ws.close(4002, "Too many CLI connections");
+    return;
+  }
+
   resetIdleTimer();
   cliClients.add(ws);
 
@@ -271,6 +341,38 @@ function handleCliRpcRequest(
   msg: Record<string, unknown>,
 ): void {
   const clientId = msg.id as string;
+
+  // Rate limit per client
+  if (isRateLimited(clientWs)) {
+    clientWs.send(
+      JSON.stringify({
+        id: clientId,
+        type: "rpc_response",
+        success: false,
+        error: {
+          code: -32005,
+          message: "Rate limited. Too many requests — try again shortly.",
+        },
+      }),
+    );
+    return;
+  }
+
+  // Cap pending requests to prevent memory exhaustion
+  if (pendingRequests.size >= MAX_PENDING_REQUESTS) {
+    clientWs.send(
+      JSON.stringify({
+        id: clientId,
+        type: "rpc_response",
+        success: false,
+        error: {
+          code: -32006,
+          message: "Too many pending requests. Wait for current requests to complete.",
+        },
+      }),
+    );
+    return;
+  }
 
   if (!browserReady || !browserWs || browserWs.readyState !== WebSocket.OPEN) {
     clientWs.send(

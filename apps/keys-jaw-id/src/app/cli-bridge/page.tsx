@@ -47,16 +47,16 @@ function CLIBridgeContent() {
     setToken(hashParams.get("token"));
     // Clear the fragment from the URL to avoid any leakage
     if (window.location.hash) {
-      window.history.replaceState(null, "", window.location.pathname + window.location.search);
+      window.history.replaceState(
+        null,
+        "",
+        window.location.pathname + window.location.search,
+      );
     }
   }, []);
 
   const handleRpcRequest = useCallback(
-    async (
-      id: string,
-      method: string,
-      params: unknown,
-    ) => {
+    async (id: string, method: string, params: unknown) => {
       if (!sdkRef.current) return;
 
       setLastMethod(method);
@@ -91,8 +91,7 @@ function CLIBridgeContent() {
         const errObj = err as { code?: number; message?: string };
         const errCode = errObj?.code ?? -32000;
         const errMsg =
-          errObj?.message ??
-          (err instanceof Error ? err.message : String(err));
+          errObj?.message ?? (err instanceof Error ? err.message : String(err));
         wsRef.current?.send(
           JSON.stringify({
             id,
@@ -107,8 +106,7 @@ function CLIBridgeContent() {
   );
 
   useEffect(() => {
-    if (startedRef.current || !wsPort || !token)
-      return;
+    if (startedRef.current || !wsPort || !token) return;
     startedRef.current = true;
 
     const chainId = chainIdParam ? Number(chainIdParam) : 1;
@@ -168,11 +166,7 @@ function CLIBridgeContent() {
         }
 
         case "rpc_request":
-          handleRpcRequest(
-            msg.id as string,
-            msg.method as string,
-            msg.params,
-          );
+          handleRpcRequest(msg.id as string, msg.method as string, msg.params);
           break;
 
         case "ping":
@@ -200,14 +194,20 @@ function CLIBridgeContent() {
   }, [wsPort, chainIdParam, ens, paymasterUrl, token, handleRpcRequest]);
 
   // Validation
-  if (!wsPort) {
+  const wsPortNum = wsPort ? Number(wsPort) : NaN;
+  if (
+    !wsPort ||
+    !Number.isInteger(wsPortNum) ||
+    wsPortNum <= 0 ||
+    wsPortNum > 65535
+  ) {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
           <img src="/jaw-logo.png" alt="JAW" style={styles.logo} />
           <h1 style={styles.title}>JAW CLI</h1>
           <p style={styles.error}>Error</p>
-          <p style={styles.subtext}>Missing required parameter: wsPort</p>
+          <p style={styles.subtext}>Missing or invalid parameter: wsPort</p>
         </div>
       </div>
     );
@@ -239,7 +239,9 @@ function CLIBridgeContent() {
 
         {state === "disconnected" && (
           <>
-            <p style={styles.subtext}>CLI disconnected. You can close this tab.</p>
+            <p style={styles.subtext}>
+              CLI disconnected. You can close this tab.
+            </p>
           </>
         )}
 
