@@ -68,3 +68,4 @@ ios/
 .expo/
 .expo-shared/
 expo-env.d.ts
+*.tsbuildinfo

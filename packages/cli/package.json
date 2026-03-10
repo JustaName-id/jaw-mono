@@ -1,0 +1,100 @@
+{
+  "name": "@jaw.id/cli",
+  "description": "CLI + MCP Server for JAW.id smart accounts — for humans and AI agents",
+  "version": "0.0.1",
+  "type": "module",
+  "bin": {
+    "jaw": "./bin/run.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "@jaw-mono/source": "./src/index.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JustaName-id/jaw-mono.git",
+    "directory": "packages/cli"
+  },
+  "publishConfig": {
+    "access": "public"
+  },
+  "files": [
+    "dist",
+    "bin/run.js",
+    "oclif.manifest.json",
+    "!**/*.tsbuildinfo"
+  ],
+  "oclif": {
+    "bin": "jaw",
+    "dirname": "jaw",
+    "commands": {
+      "strategy": "pattern",
+      "target": "./dist/commands"
+    },
+    "topicSeparator": " ",
+    "topics": {
+      "rpc": {
+        "description": "Execute JAW.id RPC methods (wallet_sendCalls, personal_sign, etc.)"
+      },
+      "config": {
+        "description": "Configure CLI settings (API key, chain, keys URL)"
+      },
+      "mcp": {
+        "description": "Start the MCP server for AI agents"
+      }
+    }
+  },
+  "nx": {
+    "targets": {
+      "build": {
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "bunx tsup"
+        },
+        "cache": true,
+        "inputs": [
+          "production",
+          "^production"
+        ],
+        "outputs": [
+          "{projectRoot}/dist"
+        ]
+      },
+      "test": {
+        "cache": true,
+        "inputs": [
+          "default",
+          "^production",
+          "{projectRoot}/vitest.config.ts"
+        ],
+        "outputs": [
+          "{workspaceRoot}/coverage/{projectRoot}"
+        ],
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "bunx vitest run"
+        }
+      }
+    }
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "^1.12.1",
+    "@oclif/core": "^4.3.0",
+    "open": "^10.1.0",
+    "ws": "^8.18.0",
+    "zod": "^3.24.0"
+  },
+  "devDependencies": {
+    "@oclif/test": "^4.1.0",
+    "@types/node": "^20.19.9",
+    "@types/ws": "^8.18.1",
+    "vitest": "^3.0.0"
+  }
+}

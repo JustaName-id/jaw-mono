@@ -39,7 +39,10 @@ export {
     // Permission call builders (for gas estimation)
     buildGrantPermissionCall,
     buildRevokePermissionCall,
-    // Capability utilities
+    // RPC handlers
+    handleGetAssetsRequest,
+    handleGetCallsHistoryRequest,
+    handleGetPermissionsRequest,
     handleGetCapabilitiesRequest,
     type ChainMetadataCapability,
     // Permission selector constants
