@@ -7,6 +7,7 @@ export default defineConfig({
     // lib
     "lib/ws-bridge": "src/lib/ws-bridge.ts",
     "lib/ws-daemon": "src/lib/ws-daemon.ts",
+    "lib/relay-client": "src/lib/relay-client.ts",
     "lib/bridge-singleton": "src/lib/bridge-singleton.ts",
     "lib/config": "src/lib/config.ts",
     "lib/output": "src/lib/output.ts",

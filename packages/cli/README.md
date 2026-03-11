@@ -35,16 +35,26 @@ jaw disconnect
 
 ## How It Works
 
-The CLI uses a persistent background daemon with a WebSocket bridge to the browser. All RPC methods are routed through the same path:
+The CLI uses a persistent background daemon that communicates with the browser via a cloud relay (`wss://relay.jaw.id`). This avoids mixed-content issues — both sides connect outbound over secure WebSockets.
 
-1. CLI spawns a background WebSocket daemon on `127.0.0.1` (if not already running)
-2. Daemon opens your browser to `keys.jaw.id/cli-bridge`
-3. Browser page runs the JAW SDK and connects back to the daemon via WebSocket
-4. CLI sends RPC requests to the daemon, which forwards them to the browser SDK
-5. Browser SDK executes the request (prompting for passkey signing when needed)
-6. Response is routed back through the daemon to the CLI
+```
+CLI ──ws://localhost──▸ Daemon ──wss://relay.jaw.id/{session}──▸ Relay ◂──wss://relay.jaw.id/{session}── Browser (keys.jaw.id)
+```
+
+1. CLI spawns a background daemon on `127.0.0.1` (if not already running)
+2. Daemon connects outbound to `wss://relay.jaw.id` as the "daemon" peer
+3. Daemon opens your browser to `keys.jaw.id/cli-bridge?session={id}`
+4. Browser page connects outbound to `wss://relay.jaw.id` as the "browser" peer
+5. The relay pairs both peers by session ID and forwards messages bidirectionally
+6. CLI sends RPC requests to the daemon (local WebSocket), which forwards them through the relay to the browser SDK
+7. Browser SDK executes the request (prompting for passkey signing when needed)
+8. Response flows back: browser → relay → daemon → CLI
 
 The daemon stays alive across CLI commands so you only authenticate once. It auto-shuts down after 30 minutes of inactivity, or you can stop it manually with `jaw disconnect`.
+
+### Why a Cloud Relay?
+
+Browser security policies block HTTPS pages from connecting to `ws://localhost` (mixed content). Brave and Safari enforce this strictly. The relay ensures both sides use `wss://` — no certificates, no browser extensions, no workarounds needed.
 
 ## CLI Commands
 
@@ -214,6 +224,7 @@ Agent: jaw_rpc({ method: "wallet_sendCalls", params: { calls: [{ to: "0x...", va
 | `JAW_API_KEY` | JAW API key |
 | `JAW_CHAIN_ID` | Default chain ID |
 | `JAW_OUTPUT` | Output format (`json` or `human`) |
+| `JAW_RELAY_URL` | Override relay URL (default: `wss://relay.jaw.id`) |
 
 ## Configuration
 
@@ -234,6 +245,6 @@ The daemon also writes runtime state to `~/.jaw/`:
 | File | Purpose |
 |------|---------|
 | `config.json` | User configuration (mode 0600) |
-| `bridge.json` | Active daemon connection info (port, token, pid) |
+| `bridge.json` | Active daemon connection info (port, token, pid, sessionId) |
 | `session.json` | Cached session state |
 | `daemon.log` | Daemon stdout/stderr for debugging |

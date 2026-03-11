@@ -6,6 +6,7 @@
  * - Provides shutdown to kill the daemon
  */
 
+import * as crypto from "node:crypto";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import { fileURLToPath } from "node:url";
@@ -34,6 +35,7 @@ function findDistDir(): string {
 }
 
 const JAW_KEYS_URL = "https://keys.jaw.id";
+const DEFAULT_RELAY_URL = "wss://relay.jaw.id";
 const LOCK_PATH = path.join(PATHS.root, "daemon.lock");
 
 interface BridgeInfo {
@@ -41,6 +43,7 @@ interface BridgeInfo {
   token: string;
   pid: number;
   startedAt: string;
+  sessionId: string;
 }
 
 export interface BridgeOptions {
@@ -146,7 +149,7 @@ export async function shutdownDaemon(): Promise<void> {
  * Acquire an exclusive lockfile to prevent concurrent daemon spawning.
  * Returns the file descriptor on success, or null if another process holds the lock.
  */
-function acquireLock(): number | null {
+function acquireLock(depth = 0): number | null {
   ensureDir(PATHS.root);
   try {
     // O_CREAT | O_EXCL — fails atomically if file already exists
@@ -157,20 +160,32 @@ function acquireLock(): number | null {
     if ((err as NodeJS.ErrnoException).code === "EEXIST") {
       // Check if the lock holder is still alive (stale lock recovery)
       try {
-        const lockPid = parseInt(fs.readFileSync(LOCK_PATH, "utf-8").trim(), 10);
+        const lockPid = parseInt(
+          fs.readFileSync(LOCK_PATH, "utf-8").trim(),
+          10,
+        );
         if (Number.isInteger(lockPid) && lockPid > 0) {
           try {
             process.kill(lockPid, 0);
             return null; // Process alive — lock is held
           } catch {
-            // Process dead — stale lock, remove and retry once
-            try { fs.unlinkSync(LOCK_PATH); } catch { /* ignore */ }
-            return acquireLock();
+            // Process dead — stale lock, remove and retry once (max 1 retry)
+            if (depth >= 1) return null;
+            try {
+              fs.unlinkSync(LOCK_PATH);
+            } catch {
+              /* ignore */
+            }
+            return acquireLock(depth + 1);
           }
         }
       } catch {
         // Can't read lock — try removing stale file
-        try { fs.unlinkSync(LOCK_PATH); } catch { /* ignore */ }
+        try {
+          fs.unlinkSync(LOCK_PATH);
+        } catch {
+          /* ignore */
+        }
       }
       return null;
     }
@@ -179,8 +194,16 @@ function acquireLock(): number | null {
 }
 
 function releaseLock(fd: number): void {
-  try { fs.closeSync(fd); } catch { /* ignore */ }
-  try { fs.unlinkSync(LOCK_PATH); } catch { /* ignore */ }
+  try {
+    fs.closeSync(fd);
+  } catch {
+    /* ignore */
+  }
+  try {
+    fs.unlinkSync(LOCK_PATH);
+  } catch {
+    /* ignore */
+  }
 }
 
 async function spawnDaemon(options: BridgeOptions): Promise<BridgeInfo> {
@@ -215,12 +238,27 @@ async function spawnDaemon(options: BridgeOptions): Promise<BridgeInfo> {
       );
     }
 
+    const relayUrl = process.env.JAW_RELAY_URL ?? DEFAULT_RELAY_URL;
+    // Validate relay URL against trusted origins
+    const isRelayTrusted =
+      relayUrl.startsWith("wss://relay.jaw.id") ||
+      relayUrl.startsWith("ws://localhost") ||
+      relayUrl.startsWith("ws://127.0.0.1");
+    if (!isRelayTrusted) {
+      throw new Error(
+        `Untrusted relay URL: ${relayUrl}. Must be wss://relay.jaw.id or localhost.`,
+      );
+    }
+    const sessionId = crypto.randomUUID();
+
     const daemonArgs = {
       keysUrl,
       chainId: options.chainId ?? config.defaultChain ?? 1,
       ens: options.ens ?? config.ens,
       paymasterUrl: options.paymasterUrl ?? config.paymasterUrl,
       timeout: options.timeout ?? 120_000,
+      relayUrl,
+      sessionId,
     };
 
     const daemonScript = path.join(findDistDir(), "lib", "ws-daemon.js");

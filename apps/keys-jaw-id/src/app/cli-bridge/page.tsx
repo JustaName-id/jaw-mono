@@ -6,22 +6,38 @@ import { JAW, Mode } from "@jaw.id/core";
 import { ReactUIHandler } from "@jaw.id/ui";
 
 /**
- * CLI Bridge Page — WebSocket Mode
+ * CLI Bridge Page — Relay Mode
  *
  * Runs the JAW SDK in AppSpecific mode on keys.jaw.id and connects to the
- * CLI via a persistent WebSocket. All RPC requests from the CLI flow through
- * this page's SDK instance.
+ * cloud relay at wss://relay.jaw.id/v1/{session}. All RPC requests from the
+ * CLI flow through the relay to this page's SDK instance.
+ *
+ * This eliminates mixed-content issues (no ws:// from HTTPS) and works
+ * in Brave, Safari, and all browsers.
  *
  * Flow:
- * 1. CLI starts a WebSocket daemon on 127.0.0.1:{port}
- * 2. CLI opens this page with wsPort in query params, token in fragment
- * 3. Page connects WebSocket using the token
- * 4. Daemon sends all config (apiKey, chainId, ens, paymasterUrl) over the
- *    authenticated WebSocket — nothing sensitive in the URL
- * 5. Page initializes JAW SDK with the received config
- * 6. CLI sends RPC requests over WebSocket
- * 7. Page executes them via provider.request() and sends results back
+ * 1. CLI daemon connects to relay as "daemon" role
+ * 2. CLI opens this page with session in query params, token in fragment
+ * 3. Page connects to relay as "browser" role
+ * 4. Relay pairs daemon + browser, forwards messages bidirectionally
+ * 5. Daemon sends config (apiKey, chainId, etc.) through the relay
+ * 6. Page initializes JAW SDK with the received config
+ * 7. CLI sends RPC requests → relay → this page → SDK → response → relay → CLI
  */
+
+const DEFAULT_RELAY_URL = "wss://relay.jaw.id";
+
+// Allowlist of trusted relay origins to prevent open redirect attacks.
+// An attacker-controlled relay= param would receive the API key via the init message.
+const ALLOWED_RELAY_ORIGINS = [
+  "wss://relay.jaw.id",
+  "ws://localhost",
+  "ws://127.0.0.1",
+];
+
+function isAllowedRelayUrl(url: string): boolean {
+  return ALLOWED_RELAY_ORIGINS.some((origin) => url.startsWith(origin));
+}
 
 type BridgeState = "connecting" | "connected" | "disconnected" | "error";
 
@@ -34,15 +50,34 @@ function CLIBridgeContent() {
   const wsRef = useRef<WebSocket | null>(null);
   const startedRef = useRef(false);
 
-  const wsPort = searchParams.get("wsPort");
+  const session = searchParams.get("session");
+  const relayUrl = searchParams.get("relay") ?? DEFAULT_RELAY_URL;
 
-  // Read only the token from the URL fragment — API key comes over WebSocket
+  // Read token + config from the URL fragment (never sent to server or relay)
   const [token, setToken] = useState<string | null>(null);
+  const [fragmentConfig, setFragmentConfig] = useState<{
+    apiKey: string;
+    chainId: number;
+    ens?: string;
+    paymasterUrl?: string;
+  } | null>(null);
 
   useEffect(() => {
     const hash = window.location.hash.slice(1);
     const hashParams = new URLSearchParams(hash);
     setToken(hashParams.get("token"));
+
+    const fApiKey = hashParams.get("apiKey");
+    const fChainId = hashParams.get("chainId");
+    if (fApiKey && fChainId) {
+      setFragmentConfig({
+        apiKey: fApiKey,
+        chainId: Number(fChainId) || 1,
+        ens: hashParams.get("ens") ?? undefined,
+        paymasterUrl: hashParams.get("paymasterUrl") ?? undefined,
+      });
+    }
+
     // Clear the fragment from the URL to avoid any leakage
     if (window.location.hash) {
       window.history.replaceState(
@@ -84,8 +119,6 @@ function CLIBridgeContent() {
           }),
         );
       } catch (err) {
-        // Core SDK's provider.request() rejects with serialized error objects
-        // { code, message, data } or standard Error instances
         const errObj = err as { code?: number; message?: string };
         const errCode = errObj?.code ?? -32000;
         const errMsg =
@@ -104,15 +137,26 @@ function CLIBridgeContent() {
   );
 
   useEffect(() => {
-    if (startedRef.current || !wsPort || !token) return;
+    if (
+      startedRef.current ||
+      !session ||
+      !token ||
+      !relayUrl ||
+      !fragmentConfig
+    )
+      return;
     startedRef.current = true;
 
-    // Connect WebSocket to daemon first — all config comes over the authenticated WebSocket
-    const wsUrl = `ws://127.0.0.1:${wsPort}?token=${encodeURIComponent(token)}&role=browser`;
-    const ws = new WebSocket(wsUrl);
+    // Connect to the relay as the browser peer.
+    // Token is sent as the first message after connect — browser WebSocket API
+    // does not support custom headers, and query params are logged by CF.
+    const relayWsUrl = `${relayUrl}/v1/${encodeURIComponent(session)}?role=browser`;
+    const ws = new WebSocket(relayWsUrl);
     wsRef.current = ws;
 
     ws.onopen = () => {
+      // Authenticate via first message (browser WS API has no header support)
+      ws.send(JSON.stringify({ type: "auth", token }));
       setState("connected");
     };
 
@@ -126,36 +170,47 @@ function CLIBridgeContent() {
 
       switch (msg.type) {
         case "init": {
-          // Daemon sends all config over the authenticated WebSocket
-          const apiKey = msg.apiKey as string;
-          const chainId = (msg.chainId as number) ?? 1;
-          const ens = msg.ens as string | undefined;
-          const paymasterUrl = msg.paymasterUrl as string | undefined;
-
-          if (!apiKey) {
+          // Daemon signals to initialize. Config comes from URL fragment (not relay).
+          if (!fragmentConfig) {
             setState("error");
-            setError("Daemon sent empty API key");
+            setError("Missing config — API key not found in URL");
             return;
           }
 
+          const { apiKey, chainId, ens, paymasterUrl } = fragmentConfig;
+
           if (!sdkRef.current) {
-            sdkRef.current = JAW.create({
-              appName: "JAW CLI",
-              defaultChainId: chainId,
-              preference: {
-                mode: Mode.AppSpecific,
-                uiHandler: new ReactUIHandler(),
-                showTestnets: true,
-              },
-              apiKey,
-              ...(ens ? { ens } : {}),
-              ...(paymasterUrl
-                ? { paymasters: { [chainId]: { url: paymasterUrl } } }
-                : {}),
-            });
+            try {
+              sdkRef.current = JAW.create({
+                appName: "JAW CLI",
+                defaultChainId: chainId,
+                preference: {
+                  mode: Mode.AppSpecific,
+                  uiHandler: new ReactUIHandler(),
+                  showTestnets: true,
+                },
+                apiKey,
+                ...(ens ? { ens } : {}),
+                ...(paymasterUrl
+                  ? { paymasters: { [chainId]: { url: paymasterUrl } } }
+                  : {}),
+              });
+            } catch (err) {
+              setState("error");
+              setError(
+                `SDK init failed: ${err instanceof Error ? err.message : String(err)}`,
+              );
+              ws.send(
+                JSON.stringify({
+                  type: "error",
+                  message: `SDK init failed: ${err instanceof Error ? err.message : String(err)}`,
+                }),
+              );
+              return;
+            }
           }
 
-          // SDK initialized — notify daemon we're ready
+          // SDK initialized — notify daemon we're ready (via relay)
           ws.send(
             JSON.stringify({
               type: "ready",
@@ -176,6 +231,11 @@ function CLIBridgeContent() {
         case "shutdown":
           window.close();
           break;
+
+        case "peer_connected":
+        case "peer_disconnected":
+          // Relay control messages — handled by daemon side
+          break;
       }
     };
 
@@ -185,10 +245,10 @@ function CLIBridgeContent() {
 
     ws.onerror = () => {
       setState("error");
-      setError("WebSocket connection failed");
+      setError("Failed to connect to relay");
     };
 
-    // Send a clean close when the user closes/refreshes the tab
+    // Clean close on tab close/refresh
     const handleBeforeUnload = () => {
       if (ws.readyState === WebSocket.OPEN) {
         ws.close(1000, "Browser tab closed");
@@ -200,23 +260,19 @@ function CLIBridgeContent() {
       window.removeEventListener("beforeunload", handleBeforeUnload);
       ws.close();
     };
-  }, [wsPort, token, handleRpcRequest]);
+  }, [session, token, relayUrl, fragmentConfig, handleRpcRequest]);
 
   // Validation
-  const wsPortNum = wsPort ? Number(wsPort) : NaN;
-  if (
-    !wsPort ||
-    !Number.isInteger(wsPortNum) ||
-    wsPortNum <= 0 ||
-    wsPortNum > 65535
-  ) {
+  if (!session || !isAllowedRelayUrl(relayUrl)) {
     return (
       <div style={styles.container}>
         <div style={styles.card}>
           <img src="/jaw-logo.png" alt="JAW" style={styles.logo} />
           <h1 style={styles.title}>JAW CLI</h1>
           <p style={styles.error}>Error</p>
-          <p style={styles.subtext}>Missing or invalid parameter: wsPort</p>
+          <p style={styles.subtext}>
+            {!session ? "Missing parameter: session" : "Invalid relay URL"}
+          </p>
         </div>
       </div>
     );
@@ -229,7 +285,7 @@ function CLIBridgeContent() {
         <h1 style={styles.title}>JAW CLI</h1>
 
         {state === "connecting" && (
-          <p style={styles.text}>Connecting to CLI...</p>
+          <p style={styles.text}>Connecting to relay...</p>
         )}
 
         {state === "connected" && (

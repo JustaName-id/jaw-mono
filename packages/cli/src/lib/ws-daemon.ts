@@ -3,22 +3,22 @@
  * WS Bridge Daemon
  *
  * Long-lived background process that:
- * 1. Starts a WebSocket server on 127.0.0.1:{random_port}
- * 2. Opens browser to keys.jaw.id/cli-bridge
- * 3. Accepts WebSocket connections from the browser (SDK) and CLI clients
- * 4. Routes RPC requests from CLI clients to the browser SDK
+ * 1. Starts a WebSocket server on 127.0.0.1:{random_port} for CLI clients
+ * 2. Connects outbound to wss://relay.jaw.id/{session} as the daemon peer
+ * 3. Opens browser to keys.jaw.id/cli-bridge?session={id}
+ * 4. Routes RPC requests from CLI clients → relay → browser SDK
  * 5. Writes connection info to ~/.jaw/bridge.json
  *
- * The daemon stays alive across CLI commands so the browser SDK instance
- * (and its in-memory state) persists.
+ * The relay solves mixed-content blocking: both daemon and browser connect
+ * outbound to WSS (no ws:// from an HTTPS page).
  */
 
 import * as crypto from "node:crypto";
 import * as fs from "node:fs";
-import * as http from "node:http";
 import * as path from "node:path";
 import * as os from "node:os";
 import { WebSocketServer, WebSocket } from "ws";
+import { RelayConnection } from "./relay-client.js";
 
 const JAW_DIR = path.join(os.homedir(), ".jaw");
 const BRIDGE_PATH = path.join(JAW_DIR, "bridge.json");
@@ -38,6 +38,7 @@ interface BridgeInfo {
   token: string;
   pid: number;
   startedAt: string;
+  sessionId: string;
 }
 
 interface PendingRequest {
@@ -78,6 +79,8 @@ const args = JSON.parse(process.argv[2] ?? "{}") as {
   ens?: string;
   paymasterUrl?: string;
   timeout?: number;
+  relayUrl: string;
+  sessionId: string;
 };
 
 // Validate keysUrl before proceeding
@@ -99,22 +102,23 @@ const timeout = args.timeout ?? 120_000;
 // Track pending requests: daemonRequestId -> { clientWs, clientId }
 const pendingRequests = new Map<string, PendingRequest>();
 
-// Browser SDK connection
-let browserWs: WebSocket | null = null;
+// Browser SDK connection state (tracked via relay control messages)
 let browserReady = false;
 let idleTimer: ReturnType<typeof setTimeout> | null = null;
 let heartbeat: ReturnType<typeof setInterval> | null = null;
 
 // Browser reopen state
 let lastBrowserOpenTime = 0;
-const BROWSER_REOPEN_COOLDOWN_MS = 5_000; // Min 5s between reopen attempts
-let serverPort: number | null = null; // Stored after server starts listening
+const BROWSER_REOPEN_COOLDOWN_MS = 5_000;
 
-// Track connected CLI clients (to notify when browser connects)
+// Track connected CLI clients
 const cliClients = new Set<WebSocket>();
 
 // Per-client rate limiting
 const rateLimits = new WeakMap<WebSocket, RateLimitEntry>();
+
+// Relay connection
+let relay: RelayConnection | null = null;
 
 // ── Rate limiting ─────────────────────────────────────────────────
 
@@ -126,7 +130,6 @@ function isRateLimited(ws: WebSocket): boolean {
     rateLimits.set(ws, entry);
   }
 
-  // Remove timestamps outside the window
   entry.timestamps = entry.timestamps.filter(
     (t) => now - t < RATE_LIMIT_WINDOW_MS,
   );
@@ -142,14 +145,13 @@ function isRateLimited(ws: WebSocket): boolean {
 // ── Browser reopen ────────────────────────────────────────────────
 
 async function reopenBrowser(): Promise<void> {
-  if (!serverPort) return;
-  if (browserReady || browserWs?.readyState === WebSocket.OPEN) return;
+  if (browserReady) return;
 
   const now = Date.now();
   if (now - lastBrowserOpenTime < BROWSER_REOPEN_COOLDOWN_MS) return;
 
   lastBrowserOpenTime = now;
-  const bridgeUrl = buildBridgeUrl(serverPort);
+  const bridgeUrl = buildBridgeUrl();
   try {
     const { default: open } = await import("open");
     await open(bridgeUrl);
@@ -170,12 +172,18 @@ function resetIdleTimer(): void {
 
 // ── Cleanup ────────────────────────────────────────────────────────
 
+let cleaned = false;
+
 function cleanup(): void {
+  if (cleaned) return;
+  cleaned = true;
+
   if (heartbeat) clearInterval(heartbeat);
-  // Notify browser to close the tab
-  if (browserWs?.readyState === WebSocket.OPEN) {
-    browserWs.send(JSON.stringify({ type: "shutdown" }));
+  // Send shutdown through relay so browser closes the tab
+  if (relay?.isOpen()) {
+    relay.send(JSON.stringify({ type: "shutdown" }));
   }
+  relay?.close();
   try {
     if (fs.existsSync(BRIDGE_PATH)) fs.unlinkSync(BRIDGE_PATH);
   } catch {
@@ -193,81 +201,137 @@ process.on("SIGINT", () => {
 });
 process.on("exit", cleanup);
 
-// ── Start WebSocket server ─────────────────────────────────────────
-//
-// We create an HTTP server manually so we can respond to Private Network
-// Access (PNA) preflight requests. Modern Chrome (130+) sends an OPTIONS
-// preflight with Access-Control-Request-Private-Network before allowing
-// WebSocket connections from public HTTPS origins (keys.jaw.id) to
-// private network addresses (127.0.0.1). Without a proper preflight
-// response the browser refuses the WebSocket handshake entirely.
+// ── Relay message handler (messages from browser via relay) ────────
 
-const MAX_PAYLOAD_BYTES = 1_048_576; // 1 MB – plenty for any RPC payload
-
-// Derive the trusted origin from the configured keysUrl so we only allow
-// PNA preflight from the expected browser page (e.g. https://keys.jaw.id),
-// not from arbitrary websites scanning localhost.
-const trustedOrigin = new URL(args.keysUrl).origin;
-
-function isTrustedOrigin(origin: string): boolean {
-  if (origin === trustedOrigin) return true;
-  // Allow localhost/loopback for development
+function handleRelayMessage(data: string): void {
+  let msg: Record<string, unknown>;
   try {
-    const parsed = new URL(origin);
-    return parsed.hostname === "localhost" || parsed.hostname === "127.0.0.1";
+    msg = JSON.parse(data) as Record<string, unknown>;
   } catch {
-    return false;
+    return;
+  }
+
+  switch (msg.type) {
+    case "ready":
+      browserReady = true;
+      // Start heartbeat
+      if (heartbeat) clearInterval(heartbeat);
+      heartbeat = setInterval(() => {
+        if (relay?.isOpen()) {
+          relay.send(JSON.stringify({ type: "ping" }));
+        }
+      }, HEARTBEAT_INTERVAL_MS);
+      // Notify any waiting CLI clients
+      for (const cli of cliClients) {
+        if (cli.readyState === WebSocket.OPEN) {
+          cli.send(JSON.stringify({ type: "browser_connected" }));
+        }
+      }
+      break;
+
+    case "rpc_response": {
+      const id = msg.id as string;
+      const pending = pendingRequests.get(id);
+      if (!pending) return;
+
+      clearTimeout(pending.timer);
+      pendingRequests.delete(id);
+
+      if (pending.clientWs.readyState === WebSocket.OPEN) {
+        pending.clientWs.send(
+          JSON.stringify({
+            id: pending.clientId,
+            type: "rpc_response",
+            success: msg.success,
+            data: msg.data,
+            error: msg.error,
+            address: msg.address,
+          }),
+        );
+      }
+      break;
+    }
+
+    case "pong":
+      break;
   }
 }
 
-const httpServer = http.createServer((req, res) => {
-  // Handle PNA preflight (OPTIONS) requests
-  if (req.method === "OPTIONS") {
-    const origin = req.headers.origin ?? "";
-    if (!isTrustedOrigin(origin)) {
-      res.writeHead(403, { "Content-Type": "text/plain" });
-      res.end("Forbidden");
-      return;
+function handleBrowserDisconnected(): void {
+  browserReady = false;
+
+  // Fail in-flight requests — they can't complete without a browser.
+  for (const [, pending] of pendingRequests) {
+    clearTimeout(pending.timer);
+    if (pending.clientWs.readyState === WebSocket.OPEN) {
+      pending.clientWs.send(
+        JSON.stringify({
+          id: pending.clientId,
+          type: "rpc_response",
+          success: false,
+          error: {
+            code: -32001,
+            message:
+              "Browser tab was closed. Reopening — please retry in a few seconds.",
+          },
+        }),
+      );
     }
-    res.writeHead(204, {
-      "Access-Control-Allow-Origin": origin,
-      "Access-Control-Allow-Methods": "GET, OPTIONS",
-      "Access-Control-Allow-Headers": "Content-Type",
-      "Access-Control-Allow-Private-Network": "true",
-      "Access-Control-Max-Age": "86400",
-    });
-    res.end();
-    return;
   }
-  // Reject all other HTTP requests
-  res.writeHead(426, { "Content-Type": "text/plain" });
-  res.end("Upgrade required");
-});
+  pendingRequests.clear();
+}
+
+// ── Start local WebSocket server (CLI clients only) ────────────────
+
+const MAX_PAYLOAD_BYTES = 1_048_576;
 
 const wss = new WebSocketServer({
-  server: httpServer,
+  host: "127.0.0.1",
+  port: 0,
   maxPayload: MAX_PAYLOAD_BYTES,
 });
 
-// Inject PNA + CORS headers into the WebSocket 101 upgrade response.
-// Chrome's PNA enforcement checks these headers on the upgrade response
-// in addition to the preflight.
-wss.on("headers", (headers, req) => {
-  const origin = req.headers.origin;
-  if (origin && isTrustedOrigin(origin)) {
-    headers.push(`Access-Control-Allow-Origin: ${origin}`);
-    headers.push("Access-Control-Allow-Private-Network: true");
-  }
-});
-
-httpServer.listen(0, "127.0.0.1", async () => {
-  const addr = httpServer.address();
+wss.on("listening", async () => {
+  const addr = wss.address();
   if (typeof addr === "string" || !addr) {
     process.exit(1);
   }
 
   const port = addr.port;
-  serverPort = port;
+
+  // Connect to relay
+  relay = new RelayConnection({
+    relayUrl: args.relayUrl,
+    sessionId: args.sessionId,
+    token,
+    onMessage: handleRelayMessage,
+    onPeerConnected: () => {
+      // Browser connected to relay — signal it to initialize.
+      // API key + config are passed via URL fragment (never through relay).
+      if (relay?.isOpen()) {
+        relay.send(JSON.stringify({ type: "init" }));
+      }
+    },
+    onPeerDisconnected: handleBrowserDisconnected,
+    onClose: () => {
+      // Relay connection lost — browser effectively disconnected
+      if (browserReady) {
+        handleBrowserDisconnected();
+      }
+    },
+    onError: () => {
+      // Logged for debugging via daemon.log stderr
+    },
+  });
+
+  try {
+    await relay.connect();
+  } catch (err) {
+    process.stderr.write(
+      `Failed to connect to relay: ${err instanceof Error ? err.message : String(err)}\n`,
+    );
+    process.exit(1);
+  }
 
   // Write bridge info
   fs.mkdirSync(JAW_DIR, { recursive: true, mode: 0o700 });
@@ -276,6 +340,7 @@ httpServer.listen(0, "127.0.0.1", async () => {
     token,
     pid: process.pid,
     startedAt: new Date().toISOString(),
+    sessionId: args.sessionId,
   };
   fs.writeFileSync(BRIDGE_PATH, JSON.stringify(info, null, 2) + "\n", {
     encoding: "utf-8",
@@ -284,7 +349,7 @@ httpServer.listen(0, "127.0.0.1", async () => {
 
   // Open browser
   lastBrowserOpenTime = Date.now();
-  const bridgeUrl = buildBridgeUrl(port);
+  const bridgeUrl = buildBridgeUrl();
   const { default: open } = await import("open");
   await open(bridgeUrl);
 
@@ -294,128 +359,19 @@ httpServer.listen(0, "127.0.0.1", async () => {
 wss.on("connection", (ws, req) => {
   const url = new URL(req.url ?? "", "http://127.0.0.1");
   const urlToken = url.searchParams.get("token");
-  const role = url.searchParams.get("role"); // "browser" or "cli"
 
   if (urlToken !== token) {
     ws.close(4001, "Invalid token");
     return;
   }
 
-  if (role === "browser") {
-    handleBrowserConnection(ws);
-  } else {
-    handleCliConnection(ws);
-  }
+  // All local connections are CLI clients — browser goes through relay
+  handleCliConnection(ws);
 });
-
-// ── Browser connection ─────────────────────────────────────────────
-
-function handleBrowserConnection(ws: WebSocket): void {
-  if (browserWs) {
-    browserWs.close(4000, "Replaced by new browser connection");
-  }
-  browserWs = ws;
-  browserReady = false;
-
-  // Send config over the authenticated WebSocket rather than via URL
-  ws.send(
-    JSON.stringify({
-      type: "init",
-      apiKey,
-      chainId: args.chainId,
-      ens: args.ens,
-      paymasterUrl: args.paymasterUrl,
-    }),
-  );
-
-  ws.on("message", (data) => {
-    let msg: Record<string, unknown>;
-    try {
-      msg = JSON.parse(data.toString()) as Record<string, unknown>;
-    } catch {
-      return;
-    }
-
-    switch (msg.type) {
-      case "ready":
-        browserReady = true;
-        // Start heartbeat
-        if (heartbeat) clearInterval(heartbeat);
-        heartbeat = setInterval(() => {
-          if (browserWs?.readyState === WebSocket.OPEN) {
-            browserWs.send(JSON.stringify({ type: "ping" }));
-          }
-        }, HEARTBEAT_INTERVAL_MS);
-        // Notify any waiting CLI clients that browser is now connected
-        for (const cli of cliClients) {
-          if (cli.readyState === WebSocket.OPEN) {
-            cli.send(JSON.stringify({ type: "browser_connected" }));
-          }
-        }
-        break;
-
-      case "rpc_response": {
-        const id = msg.id as string;
-        const pending = pendingRequests.get(id);
-        if (!pending) return;
-
-        clearTimeout(pending.timer);
-        pendingRequests.delete(id);
-
-        // Forward response to the CLI client using its original request ID
-        if (pending.clientWs.readyState === WebSocket.OPEN) {
-          pending.clientWs.send(
-            JSON.stringify({
-              id: pending.clientId,
-              type: "rpc_response",
-              success: msg.success,
-              data: msg.data,
-              error: msg.error,
-              address: msg.address,
-            }),
-          );
-        }
-        break;
-      }
-
-      case "pong":
-        break;
-    }
-  });
-
-  ws.on("close", () => {
-    if (browserWs === ws) {
-      browserReady = false;
-      browserWs = null;
-
-      // Fail in-flight requests immediately — they can't complete without a browser.
-      // The next CLI request will trigger reopenBrowser() automatically.
-      for (const [, pending] of pendingRequests) {
-        clearTimeout(pending.timer);
-        if (pending.clientWs.readyState === WebSocket.OPEN) {
-          pending.clientWs.send(
-            JSON.stringify({
-              id: pending.clientId,
-              type: "rpc_response",
-              success: false,
-              error: {
-                code: -32001,
-                message:
-                  "Browser tab was closed. Reopening — please retry in a few seconds.",
-              },
-            }),
-          );
-        }
-      }
-      pendingRequests.clear();
-    }
-  });
-}
 
 // ── CLI client connection ──────────────────────────────────────────
 
 function handleCliConnection(ws: WebSocket): void {
-  // Enforce max CLI client connections
   if (cliClients.size >= MAX_CLI_CLIENTS) {
     ws.close(4002, "Too many CLI connections");
     return;
@@ -432,7 +388,7 @@ function handleCliConnection(ws: WebSocket): void {
     }),
   );
 
-  // Auto-reopen browser if it's disconnected
+  // Auto-reopen browser if disconnected
   if (!browserReady) {
     reopenBrowser();
   }
@@ -481,7 +437,7 @@ function handleCliRpcRequest(
     return;
   }
 
-  // Cap pending requests to prevent memory exhaustion
+  // Cap pending requests
   if (pendingRequests.size >= MAX_PENDING_REQUESTS) {
     clientWs.send(
       JSON.stringify({
@@ -498,8 +454,7 @@ function handleCliRpcRequest(
     return;
   }
 
-  if (!browserReady || !browserWs || browserWs.readyState !== WebSocket.OPEN) {
-    // Attempt to reopen browser and tell CLI to wait
+  if (!browserReady || !relay?.isOpen()) {
     reopenBrowser();
     clientWs.send(
       JSON.stringify({
@@ -516,7 +471,7 @@ function handleCliRpcRequest(
     return;
   }
 
-  // Generate a daemon-internal ID and forward to browser
+  // Generate a daemon-internal ID and forward to browser via relay
   const daemonId = crypto.randomUUID();
 
   const timer = setTimeout(() => {
@@ -538,7 +493,7 @@ function handleCliRpcRequest(
 
   pendingRequests.set(daemonId, { clientWs, clientId, timer });
 
-  browserWs.send(
+  relay.send(
     JSON.stringify({
       id: daemonId,
       type: "rpc_request",
@@ -550,11 +505,18 @@ function handleCliRpcRequest(
 
 // ── Build bridge URL ───────────────────────────────────────────────
 
-function buildBridgeUrl(port: number): string {
+function buildBridgeUrl(): string {
   const url = new URL("/cli-bridge", args.keysUrl);
-  url.searchParams.set("wsPort", String(port));
-  // Only wsPort in query params — all config (apiKey, chainId, ens, paymasterUrl)
-  // is sent over the authenticated WebSocket after connection
-  url.hash = `token=${encodeURIComponent(token)}`;
+  url.searchParams.set("session", args.sessionId);
+  url.searchParams.set("relay", args.relayUrl);
+  // Token + API key in fragment — never sent to server or relay
+  const fragment = new URLSearchParams({
+    token,
+    apiKey,
+    chainId: String(args.chainId),
+    ...(args.ens ? { ens: args.ens } : {}),
+    ...(args.paymasterUrl ? { paymasterUrl: args.paymasterUrl } : {}),
+  });
+  url.hash = fragment.toString();
   return url.toString();
 }

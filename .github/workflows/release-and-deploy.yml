@@ -91,6 +91,7 @@ jobs:
       playground: ${{ steps.check.outputs.playground }}
       keys: ${{ steps.check.outputs.keys }}
       docs: ${{ steps.check.outputs.docs }}
+      relay: ${{ steps.check.outputs.relay }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -123,6 +124,7 @@ jobs:
           echo "playground=$([[ "$AFFECTED" == *"@jaw-mono/playground"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "keys=$([[ "$AFFECTED" == *"@jaw-mono/keys-jaw-id"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
           echo "docs=$([[ "$AFFECTED" == *"docs"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
+          echo "relay=$([[ "$AFFECTED" == *"@jaw.id/relay"* ]] && echo true || echo false)" >> "$GITHUB_OUTPUT"
 
   # ─── Deploy Playground ───
   deploy-playground:
@@ -267,3 +269,34 @@ jobs:
         env:
           VERCEL_ORG_ID: ${{ secrets.VERCEL_ORG_ID }}
           VERCEL_PROJECT_ID: ${{ secrets.VERCEL_PROJECT_ID_DOCS }}
+
+  # ─── Deploy Relay (Cloudflare Worker) ───
+  deploy-relay:
+    needs: check-affected
+    if: needs.check-affected.outputs.relay == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      - name: Deploy relay to Cloudflare
+        run: bunx wrangler deploy
+        working-directory: services/relay
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}

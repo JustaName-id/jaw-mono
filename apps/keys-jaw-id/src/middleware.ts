@@ -8,7 +8,7 @@ export function middleware(request: NextRequest) {
   // --- connect-src ---
   // api.justaname.id: JAW RPC proxy, paymaster, passkey endpoints
   // eth.llamarpc.com: Fallback RPC used when no chain.rpcUrl is provided
-  // http://127.0.0.1:* http://localhost:*: CLI bridge callback (loopback only)
+  // wss://relay.jaw.id: CLI bridge relay (daemon ↔ browser via cloud relay)
   //
   // NOTE: https: and wss: wildcards are required because dApps pass arbitrary
   // chain.rpcUrl values via postMessage (Alchemy, Infura, Ankr, QuickNode, etc.).
@@ -20,13 +20,14 @@ export function middleware(request: NextRequest) {
     "'self'",
     "https://api.justaname.id",
     "https://eth.llamarpc.com",
-    // CLI bridge: loopback (HTTP + WebSocket) for CLI server communication,
-    // plus https:/wss: wildcards because the SDK makes RPC calls (e.g. sepolia.base.org)
-    // and signature lookups (api.openchain.xyz) when rendering transaction dialogs.
+    // CLI bridge: tighten to only the relay origin + SDK RPC calls
     // Other pages: dApps pass arbitrary chain.rpcUrl values (Alchemy, Infura, etc.)
-    // so https:/wss: wildcards are required until RPC proxying is centralised.
     ...(isCLIBridge
-      ? ["http://127.0.0.1:*", "http://localhost:*", "ws://127.0.0.1:*", "ws://localhost:*", "https:", "wss:"]
+      ? [
+          "wss://relay.jaw.id",
+          "https:", // SDK RPC calls (e.g. sepolia.base.org, api.openchain.xyz)
+          ...(isDev ? ["ws://localhost:*", "ws://127.0.0.1:*"] : []),
+        ]
       : ["https:", "wss:"]),
   ].join(" ");
 
@@ -71,8 +72,7 @@ export function middleware(request: NextRequest) {
     //     max_age: 10886400,
     //     endpoints: [{ url: 'https://your-domain.report-uri.com/r/d/csp/enforce' }],
     //   }));
-    // Skip upgrade-insecure-requests for CLI bridge (needs ws:// to local CLI server)
-    ...(isDev || isCLIBridge ? [] : ["upgrade-insecure-requests"]),
+    ...(isDev ? [] : ["upgrade-insecure-requests"]),
   ].join("; ");
 
   const response = NextResponse.next();
