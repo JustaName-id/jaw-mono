@@ -1,3 +1,13 @@
+## 0.0.6 (2026-03-11)
+
+### 🩹 Fixes
+
+- **cli:** dependency ([#143](https://github.com/JustaName-id/jaw-mono/pull/143))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.0.5 (2026-03-11)
 
 ### 🩹 Fixes
