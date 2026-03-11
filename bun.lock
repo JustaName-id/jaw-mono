@@ -107,7 +107,6 @@
         "jaw": "./bin/run.js",
       },
       "dependencies": {
-        "@jaw.id/core": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.12.1",
         "@oclif/core": "^4.3.0",
         "open": "^10.1.0",

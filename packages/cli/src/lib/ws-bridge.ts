@@ -6,6 +6,7 @@
  */
 
 import * as crypto from "node:crypto";
+import type { webcrypto } from "node:crypto";
 import WebSocket from "ws";
 import {
   deriveSharedSecret,
@@ -14,6 +15,8 @@ import {
   importKeyFromHex,
   type EncryptedEnvelope,
 } from "./crypto.js";
+
+type CKey = webcrypto.CryptoKey;
 
 export interface WSBridgeConfig {
   apiKey: string;
@@ -45,7 +48,7 @@ export class WSBridge {
   private readonly privateKeyHex: string;
   readonly publicKeyHex: string;
   private peerPublicKeyHex: string | null;
-  private sharedSecret: CryptoKey | null = null;
+  private sharedSecret: CKey | null = null;
   private ws: WebSocket | null = null;
 
   /** Updated after key exchange — caller should persist this. */

@@ -1,26 +1,42 @@
 /**
- * E2E encryption for CLI ↔ browser communication.
+ * E2E encryption primitives for CLI ↔ browser communication.
  *
- * Re-exports key generation/import/export from @jaw.id/core and provides
- * encryptMessage / decryptMessage wrappers that handle base64 serialization
- * for the relay wire format.
+ * Uses ECDH P-256 for key exchange and AES-256-GCM for message encryption.
+ * Mirrors the same crypto operations in @jaw.id/core but uses only
+ * Node.js built-in crypto.subtle — no external dependencies.
  */
 
-import {
-  generateKeyPair,
-  deriveSharedSecret,
-  encrypt,
-  decrypt,
-  exportKeyToHexString,
-  importKeyFromHexString,
-} from "@jaw.id/core";
+import type { webcrypto } from "node:crypto";
 
-// Re-export core crypto primitives (renamed for CLI ergonomics)
-export { generateKeyPair, deriveSharedSecret };
-export { exportKeyToHexString as exportKeyToHex };
-export { importKeyFromHexString as importKeyFromHex };
+type CKey = webcrypto.CryptoKey;
+type CKeyPair = webcrypto.CryptoKeyPair;
 
-// ── Wire-format envelope (base64 strings) ───────────────────────
+const subtle = globalThis.crypto.subtle;
+
+// ── Key generation ───────────────────────────────────────────────
+
+export async function generateKeyPair(): Promise<CKeyPair> {
+  return subtle.generateKey(
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    ["deriveKey"],
+  ) as Promise<CKeyPair>;
+}
+
+export async function deriveSharedSecret(
+  privateKey: CKey,
+  peerPublicKey: CKey,
+): Promise<CKey> {
+  return subtle.deriveKey(
+    { name: "ECDH", public: peerPublicKey },
+    privateKey,
+    { name: "AES-GCM", length: 256 },
+    false,
+    ["encrypt", "decrypt"],
+  );
+}
+
+// ── Encrypt / Decrypt ────────────────────────────────────────────
 
 export interface EncryptedEnvelope {
   iv: string; // base64
@@ -28,33 +44,78 @@ export interface EncryptedEnvelope {
 }
 
 export async function encryptMessage(
-  sharedSecret: CryptoKey,
+  sharedSecret: CKey,
   payload: Record<string, unknown>,
 ): Promise<EncryptedEnvelope> {
-  const { iv, cipherText } = await encrypt(sharedSecret, JSON.stringify(payload));
+  const iv = globalThis.crypto.getRandomValues(new Uint8Array(12));
+  const plaintext = new TextEncoder().encode(JSON.stringify(payload));
+  const cipherBuf = await subtle.encrypt(
+    { name: "AES-GCM", iv },
+    sharedSecret,
+    plaintext,
+  );
   return {
     iv: bufferToBase64(iv),
-    ciphertext: bufferToBase64(cipherText),
+    ciphertext: bufferToBase64(new Uint8Array(cipherBuf)),
   };
 }
 
 export async function decryptMessage(
-  sharedSecret: CryptoKey,
+  sharedSecret: CKey,
   envelope: EncryptedEnvelope,
 ): Promise<Record<string, unknown>> {
-  const iv = base64ToBuffer(envelope.iv);
-  const cipherText = base64ToBuffer(envelope.ciphertext);
-  const plaintext = await decrypt(sharedSecret, { iv, cipherText });
-  return JSON.parse(plaintext);
+  const iv = Buffer.from(envelope.iv, "base64");
+  const ciphertext = Buffer.from(envelope.ciphertext, "base64");
+  const plainBuf = await subtle.decrypt(
+    { name: "AES-GCM", iv },
+    sharedSecret,
+    ciphertext,
+  );
+  return JSON.parse(new TextDecoder().decode(plainBuf));
+}
+
+// ── Key import / export (hex) ────────────────────────────────────
+
+export async function exportKeyToHex(
+  type: "private" | "public",
+  key: CKey,
+): Promise<string> {
+  const format = type === "private" ? "pkcs8" : "spki";
+  const buf = await subtle.exportKey(format, key);
+  return bytesToHex(new Uint8Array(buf));
+}
+
+export async function importKeyFromHex(
+  type: "private" | "public",
+  hex: string,
+): Promise<CKey> {
+  const format = type === "private" ? "pkcs8" : "spki";
+  return subtle.importKey(
+    format,
+    Buffer.from(hexToBytes(hex)),
+    { name: "ECDH", namedCurve: "P-256" },
+    true,
+    type === "private" ? ["deriveKey"] : [],
+  );
 }
 
 // ── Encoding helpers ─────────────────────────────────────────────
 
-function bufferToBase64(buf: Uint8Array | ArrayBuffer): string {
-  const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  return Buffer.from(bytes).toString("base64");
+function bytesToHex(bytes: Uint8Array): string {
+  return Array.from(bytes)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }
 
-function base64ToBuffer(b64: string): Uint8Array {
-  return new Uint8Array(Buffer.from(b64, "base64"));
+function hexToBytes(hex: string): Uint8Array {
+  if (hex.length % 2 !== 0) throw new Error("Invalid hex: odd length");
+  const bytes = new Uint8Array(hex.length / 2);
+  for (let i = 0; i < hex.length; i += 2) {
+    bytes[i / 2] = parseInt(hex.substring(i, i + 2), 16);
+  }
+  return bytes;
+}
+
+function bufferToBase64(buf: Uint8Array): string {
+  return Buffer.from(buf).toString("base64");
 }
