@@ -1,3 +1,13 @@
+## 0.0.5 (2026-03-11)
+
+### 🩹 Fixes
+
+- **cli:** new cli architecture using a relay as blind pipe ([#141](https://github.com/JustaName-id/jaw-mono/pull/141), [#142](https://github.com/JustaName-id/jaw-mono/issues/142))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.0.4 (2026-03-11)
 
 ### 🩹 Fixes
