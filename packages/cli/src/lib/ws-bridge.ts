@@ -381,6 +381,7 @@ export class WSBridge {
   }
 
   close(): void {
+    this.disposed = true;
     if (this.ws) {
       try {
         this.ws.close();
