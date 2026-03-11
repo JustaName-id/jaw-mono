@@ -15,6 +15,7 @@ export default defineConfig({
     "lib/types": "src/lib/types.ts",
     "lib/validation": "src/lib/validation.ts",
     // commands
+    "commands/version": "src/commands/version.ts",
     "commands/disconnect": "src/commands/disconnect.ts",
     "commands/config/set": "src/commands/config/set.ts",
     "commands/config/show": "src/commands/config/show.ts",
