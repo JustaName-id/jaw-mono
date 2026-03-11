@@ -1,3 +1,13 @@
+## 0.0.4 (2026-03-11)
+
+### 🩹 Fixes
+
+- **cli:** oclif error ([#139](https://github.com/JustaName-id/jaw-mono/pull/139))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.0.3 (2026-03-10)
 
 ### 🩹 Fixes
