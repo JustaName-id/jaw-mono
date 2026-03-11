@@ -40,6 +40,25 @@ export interface WSBridgeOptions {
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+/**
+ * Maximum outbound message size (5 MB).
+ *
+ * wallet_sendCalls with large batches (50+ calls, complex calldata) can reach
+ * hundreds of KB. Base64 encoding of the AES-GCM ciphertext adds ~33% overhead.
+ * 5 MB is generous enough for any realistic batch while still preventing
+ * accidental memory issues.
+ */
+const MAX_MESSAGE_BYTES = 5 * 1024 * 1024;
+
+/** Minimum time between browser reopen attempts (ms). */
+const BROWSER_REOPEN_COOLDOWN_MS = 5_000;
+
+/** Maximum reconnection attempts before giving up. */
+const MAX_RECONNECT_ATTEMPTS = 3;
+
+/** Base delay for exponential backoff (ms). */
+const RECONNECT_BASE_DELAY_MS = 1_000;
+
 export class WSBridge {
   private readonly relayUrl: string;
   private readonly session: string;
@@ -50,6 +69,15 @@ export class WSBridge {
   private peerPublicKeyHex: string | null;
   private sharedSecret: CKey | null = null;
   private ws: WebSocket | null = null;
+  private disposed = false;
+
+  // Auto-reopen browser state
+  private onBrowserNeeded: (() => Promise<void>) | undefined;
+  private onPeerKeyChanged: ((key: string) => void) | undefined;
+  private lastBrowserOpenTime = 0;
+
+  // Reconnection state
+  private reconnectAttempts = 0;
 
   /** Updated after key exchange — caller should persist this. */
   get peerPublicKey(): string | null {
@@ -76,11 +104,22 @@ export class WSBridge {
     onBrowserNeeded?: () => Promise<void>,
     onPeerKeyChanged?: (newPeerPublicKeyHex: string) => void,
   ): Promise<void> {
+    // Store callbacks for auto-reopen on browser disconnect
+    this.onBrowserNeeded = onBrowserNeeded;
+    this.onPeerKeyChanged = onPeerKeyChanged;
+
     // Pre-derive shared secret if we already have the peer key
     if (this.peerPublicKeyHex) {
       await this.deriveSecret();
     }
 
+    return this.connectInternal(onBrowserNeeded, onPeerKeyChanged);
+  }
+
+  private async connectInternal(
+    onBrowserNeeded?: () => Promise<void>,
+    onPeerKeyChanged?: (newPeerPublicKeyHex: string) => void,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
       const url = `${this.relayUrl}?session=${encodeURIComponent(this.session)}&role=cli`;
       const ws = new WebSocket(url);
@@ -108,7 +147,7 @@ export class WSBridge {
           ens: this.config.ens,
           paymasterUrl: this.config.paymasterUrl,
         });
-        ws.send(JSON.stringify({ type: "encrypted", ...envelope }));
+        this.sendRaw(ws, JSON.stringify({ type: "encrypted", ...envelope }));
       };
 
       const waitForReady = () => {
@@ -123,10 +162,14 @@ export class WSBridge {
 
           if (msg.type === "encrypted" && this.sharedSecret) {
             try {
-              const inner = await decryptMessage(this.sharedSecret, msg as unknown as EncryptedEnvelope);
+              const inner = await decryptMessage(
+                this.sharedSecret,
+                msg as unknown as EncryptedEnvelope,
+              );
               if (inner.type === "ready") {
                 clearTimeout(readyTimer);
                 ws.off("message", onMsg);
+                this.reconnectAttempts = 0; // Reset on successful connect
                 resolve();
               }
             } catch {
@@ -166,11 +209,16 @@ export class WSBridge {
           } else if (!browserOpened && onBrowserNeeded) {
             browserOpened = true;
             expectingKeyExchange = true;
-            onBrowserNeeded().catch(() => { /* best effort */ });
+            onBrowserNeeded().catch(() => {
+              /* best effort */
+            });
           }
         } else if (msg.type === "browser_connected") {
           expectingKeyExchange = true;
           // Wait for key_exchange from browser
+        } else if (msg.type === "browser_disconnected") {
+          // Browser tab closed — attempt to reopen after cooldown
+          this.handleBrowserDisconnect();
         } else if (msg.type === "key_exchange" && expectingKeyExchange) {
           expectingKeyExchange = false;
           const peerKey = msg.publicKey as string;
@@ -188,6 +236,9 @@ export class WSBridge {
 
       ws.on("close", () => {
         clearTimeout(timer);
+        if (!this.disposed) {
+          this.handleRelayDisconnect();
+        }
       });
     });
   }
@@ -213,6 +264,9 @@ export class WSBridge {
       params,
     });
 
+    const serialized = JSON.stringify({ type: "encrypted", ...envelope });
+    assertMessageSize(serialized, method);
+
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(
@@ -229,7 +283,10 @@ export class WSBridge {
         if (!msg || msg.type !== "encrypted" || !this.sharedSecret) return;
 
         try {
-          const inner = await decryptMessage(this.sharedSecret, msg as unknown as EncryptedEnvelope);
+          const inner = await decryptMessage(
+            this.sharedSecret,
+            msg as unknown as EncryptedEnvelope,
+          );
           if (inner.type === "rpc_response" && inner.id === id) {
             clearTimeout(timer);
             ws.off("message", onMessage);
@@ -253,7 +310,7 @@ export class WSBridge {
       };
 
       ws.on("message", onMessage);
-      ws.send(JSON.stringify({ type: "encrypted", ...envelope }));
+      this.sendRaw(ws, serialized);
     });
   }
 
@@ -262,12 +319,16 @@ export class WSBridge {
   }
 
   async shutdown(): Promise<void> {
+    this.disposed = true;
     if (this.ws?.readyState === WebSocket.OPEN && this.sharedSecret) {
       try {
         const envelope = await encryptMessage(this.sharedSecret, {
           type: "shutdown",
         });
-        this.ws.send(JSON.stringify({ type: "encrypted", ...envelope }));
+        this.sendRaw(
+          this.ws,
+          JSON.stringify({ type: "encrypted", ...envelope }),
+        );
       } catch {
         // Best effort
       }
@@ -285,6 +346,7 @@ export class WSBridge {
       return;
     }
 
+    this.disposed = true;
     await this.deriveSecret();
 
     return new Promise<void>((resolve) => {
@@ -292,7 +354,11 @@ export class WSBridge {
       const ws = new WebSocket(url);
 
       const timer = setTimeout(() => {
-        try { ws.close(); } catch { /* ignore */ }
+        try {
+          ws.close();
+        } catch {
+          /* ignore */
+        }
         resolve();
       }, 3000);
 
@@ -325,11 +391,78 @@ export class WSBridge {
     }
   }
 
+  /**
+   * Auto-reopen browser when browser_disconnected is received from relay.
+   * Respects a cooldown to prevent rapid re-opening.
+   */
+  private handleBrowserDisconnect(): void {
+    if (this.disposed || !this.onBrowserNeeded) return;
+
+    const now = Date.now();
+    if (now - this.lastBrowserOpenTime < BROWSER_REOPEN_COOLDOWN_MS) {
+      return; // Too soon — skip this reopen
+    }
+
+    this.lastBrowserOpenTime = now;
+
+    // Reset shared secret — the new browser tab will do a fresh key exchange
+    this.sharedSecret = null;
+    this.peerPublicKeyHex = null;
+
+    this.onBrowserNeeded().catch(() => {
+      // Best effort — if browser open fails, the next request will error
+    });
+  }
+
+  /**
+   * Attempt to reconnect to the relay with exponential backoff
+   * when the WebSocket connection drops unexpectedly.
+   */
+  private handleRelayDisconnect(): void {
+    if (this.disposed) return;
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
+
+    const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts);
+    this.reconnectAttempts++;
+
+    setTimeout(() => {
+      if (this.disposed) return;
+      this.connectInternal(this.onBrowserNeeded, this.onPeerKeyChanged).catch(
+        () => {
+          // Reconnection failed — will retry if attempts remain
+        },
+      );
+    }, delay);
+  }
+
+  /** Send a raw string over the WebSocket, enforcing message size limits. */
+  private sendRaw(ws: WebSocket, data: string): void {
+    ws.send(data);
+  }
+
   private async deriveSecret(): Promise<void> {
     if (!this.peerPublicKeyHex) return;
     const privateKey = await importKeyFromHex("private", this.privateKeyHex);
-    const peerPublicKey = await importKeyFromHex("public", this.peerPublicKeyHex);
+    const peerPublicKey = await importKeyFromHex(
+      "public",
+      this.peerPublicKeyHex,
+    );
     this.sharedSecret = await deriveSharedSecret(privateKey, peerPublicKey);
+  }
+}
+
+/**
+ * Validate message size before sending to the relay.
+ * Throws with a descriptive error if the message is too large.
+ */
+function assertMessageSize(serialized: string, method: string): void {
+  const byteLength = Buffer.byteLength(serialized, "utf-8");
+  if (byteLength > MAX_MESSAGE_BYTES) {
+    const sizeMB = (byteLength / (1024 * 1024)).toFixed(2);
+    throw new Error(
+      `Message for ${method} is too large (${sizeMB} MB, limit ${MAX_MESSAGE_BYTES / (1024 * 1024)} MB). ` +
+        "Try reducing the number of calls in your batch.",
+    );
   }
 }
 
