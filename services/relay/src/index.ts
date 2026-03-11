@@ -64,6 +64,7 @@ export class RelaySession implements DurableObject {
   private peers: Map<string, Peer> = new Map();
   private sessionToken: string | null = null;
 
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
   constructor(state: DurableObjectState, _env: Env) {
     this.state = state;
 
