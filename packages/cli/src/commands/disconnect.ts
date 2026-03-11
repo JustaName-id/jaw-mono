@@ -3,7 +3,7 @@ import { shutdownDaemon } from "../lib/bridge-singleton.js";
 
 export default class Disconnect extends BaseCommand {
   static override description =
-    "Stop the background bridge daemon and close the browser session.";
+    "Close the relay session and browser tab.";
 
   static override examples = ["<%= config.bin %> disconnect"];
 
@@ -19,7 +19,7 @@ export default class Disconnect extends BaseCommand {
     if (flags.output === "json") {
       this.outputResult({ success: true }, "json");
     } else {
-      this.log("Bridge daemon stopped.");
+      this.log("Relay session closed.");
     }
   }
 }

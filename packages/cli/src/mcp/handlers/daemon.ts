@@ -9,32 +9,28 @@ import { loadConfig, redactConfig } from "../../lib/config.js";
 export function registerDaemonTools(server: McpServer): void {
   server.tool(
     "jaw_status",
-    "Check the current status of the JAW.id bridge — whether the daemon is running, " +
-      "the bridge connection is active, and what configuration is in use.",
+    "Check the current status of the JAW.id relay bridge — whether a relay session " +
+      "exists, the bridge connection is active, and what configuration is in use.",
     {},
     async () => {
       try {
-        let daemonRunning = false;
-        let daemonPid: number | null = null;
+        let relaySession = false;
 
         try {
-          if (fs.existsSync(PATHS.bridge)) {
-            const info = JSON.parse(fs.readFileSync(PATHS.bridge, "utf-8"));
-            daemonPid = info.pid;
-            // Check if process is alive
-            process.kill(info.pid, 0);
-            daemonRunning = true;
+          if (fs.existsSync(PATHS.relay)) {
+            JSON.parse(fs.readFileSync(PATHS.relay, "utf-8"));
+            relaySession = true;
           }
         } catch {
-          daemonRunning = false;
+          relaySession = false;
         }
 
         const config = redactConfig(loadConfig());
 
         const status = {
-          daemon: daemonRunning
-            ? { running: true, pid: daemonPid }
-            : { running: false },
+          relay: relaySession
+            ? { session: true }
+            : { session: false },
           bridgeConnection: isBridgeCached() ? "connected" : "disconnected",
           config,
         };
@@ -52,7 +48,7 @@ export function registerDaemonTools(server: McpServer): void {
 
   server.tool(
     "jaw_disconnect",
-    "Stop the background bridge daemon and close the browser session. " +
+    "Close the relay session and browser tab. " +
       "Call this when you are done making wallet requests to clean up resources.",
     {},
     async () => {
@@ -63,7 +59,7 @@ export function registerDaemonTools(server: McpServer): void {
           content: [
             {
               type: "text" as const,
-              text: "Bridge daemon stopped and browser session closed.",
+              text: "Relay session closed and browser tab dismissed.",
             },
           ],
         };

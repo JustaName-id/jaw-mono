@@ -6,8 +6,8 @@ export default defineConfig({
     "base-command": "src/base-command.ts",
     // lib
     "lib/ws-bridge": "src/lib/ws-bridge.ts",
-    "lib/ws-daemon": "src/lib/ws-daemon.ts",
     "lib/bridge-singleton": "src/lib/bridge-singleton.ts",
+    "lib/crypto": "src/lib/crypto.ts",
     "lib/config": "src/lib/config.ts",
     "lib/output": "src/lib/output.ts",
     "lib/paths": "src/lib/paths.ts",

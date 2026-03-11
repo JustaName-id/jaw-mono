@@ -1,7 +1,7 @@
 import * as fs from "node:fs";
 import { PATHS } from "./paths.js";
 import type { JawConfig } from "./types.js";
-import { isValidKeysUrl } from "./validation.js";
+import { isValidKeysUrl, isValidRelayUrl } from "./validation.js";
 
 export function ensureDir(dir: string): void {
   fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
@@ -55,6 +55,15 @@ export function setConfigValue(
   ) {
     throw new Error(
       `Untrusted keysUrl: ${value}. Must be a *.jaw.id domain (HTTPS) or localhost.`,
+    );
+  }
+  if (
+    key === "relayUrl" &&
+    typeof value === "string" &&
+    !isValidRelayUrl(value)
+  ) {
+    throw new Error(
+      `Untrusted relayUrl: ${value}. Must be wss://*.jaw.id or ws://localhost.`,
     );
   }
   const config = loadConfig();

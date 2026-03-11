@@ -6,6 +6,7 @@ import {
   parseChainId,
   assertAddress,
   isValidKeysUrl,
+  isValidRelayUrl,
 } from "./validation.js";
 
 describe("validation", () => {
@@ -91,6 +92,31 @@ describe("validation", () => {
     });
     it("rejects invalid URL", () => {
       expect(isValidKeysUrl("not-a-url")).toBe(false);
+    });
+  });
+
+  describe("isValidRelayUrl", () => {
+    it("accepts wss *.jaw.id", () => {
+      expect(isValidRelayUrl("wss://relay.jaw.id")).toBe(true);
+      expect(isValidRelayUrl("wss://staging.relay.jaw.id")).toBe(true);
+    });
+    it("accepts ws localhost", () => {
+      expect(isValidRelayUrl("ws://localhost:8080")).toBe(true);
+    });
+    it("accepts ws 127.0.0.1", () => {
+      expect(isValidRelayUrl("ws://127.0.0.1:8080")).toBe(true);
+    });
+    it("rejects ws for non-localhost", () => {
+      expect(isValidRelayUrl("ws://relay.jaw.id")).toBe(false);
+    });
+    it("rejects untrusted domain", () => {
+      expect(isValidRelayUrl("wss://evil.com")).toBe(false);
+    });
+    it("rejects http/https scheme", () => {
+      expect(isValidRelayUrl("https://relay.jaw.id")).toBe(false);
+    });
+    it("rejects invalid URL", () => {
+      expect(isValidRelayUrl("not-a-url")).toBe(false);
     });
   });
 });

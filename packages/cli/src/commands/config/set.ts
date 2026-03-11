@@ -7,6 +7,7 @@ const VALID_KEYS = [
   "keysUrl",
   "paymasterUrl",
   "ens",
+  "relayUrl",
 ] as const;
 
 type ValidKey = (typeof VALID_KEYS)[number];

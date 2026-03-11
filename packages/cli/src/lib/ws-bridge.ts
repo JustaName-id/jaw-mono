@@ -1,74 +1,231 @@
 /**
- * WSBridge — CLI-side client
+ * WSBridge — CLI-side relay client
  *
- * Lightweight WebSocket client that connects to the background daemon.
- * Each CLI command creates a WSBridge, sends one request, and exits.
- * The daemon (and browser SDK) stay alive across commands.
+ * Connects to the cloud relay (wss://relay.jaw.id) instead of a local daemon.
+ * All messages (except key_exchange) are E2E encrypted via ECDH + AES-256-GCM.
  */
 
 import * as crypto from "node:crypto";
+import type { webcrypto } from "node:crypto";
 import WebSocket from "ws";
+import {
+  deriveSharedSecret,
+  encryptMessage,
+  decryptMessage,
+  importKeyFromHex,
+  type EncryptedEnvelope,
+} from "./crypto.js";
+
+type CKey = webcrypto.CryptoKey;
+
+export interface WSBridgeConfig {
+  apiKey: string;
+  chainId: number;
+  ens?: string;
+  paymasterUrl?: string;
+}
 
 export interface WSBridgeOptions {
-  port: number;
-  token: string;
+  relayUrl: string;
+  session: string;
   timeout?: number;
+  config: WSBridgeConfig;
+  /** CLI's ECDH private key (hex). Loaded from relay.json for existing sessions. */
+  privateKeyHex: string;
+  /** CLI's ECDH public key (hex). Sent to browser for key derivation. */
+  publicKeyHex: string;
+  /** Browser's ECDH public key (hex). Null if new session (key exchange needed). */
+  peerPublicKeyHex: string | null;
 }
 
 const DEFAULT_TIMEOUT_MS = 120_000;
 
+/**
+ * Maximum outbound message size (5 MB).
+ *
+ * wallet_sendCalls with large batches (50+ calls, complex calldata) can reach
+ * hundreds of KB. Base64 encoding of the AES-GCM ciphertext adds ~33% overhead.
+ * 5 MB is generous enough for any realistic batch while still preventing
+ * accidental memory issues.
+ */
+const MAX_MESSAGE_BYTES = 5 * 1024 * 1024;
+
+/** Minimum time between browser reopen attempts (ms). */
+const BROWSER_REOPEN_COOLDOWN_MS = 5_000;
+
+/** Maximum reconnection attempts before giving up. */
+const MAX_RECONNECT_ATTEMPTS = 3;
+
+/** Base delay for exponential backoff (ms). */
+const RECONNECT_BASE_DELAY_MS = 1_000;
+
 export class WSBridge {
-  private readonly port: number;
-  private readonly token: string;
+  private readonly relayUrl: string;
+  private readonly session: string;
   private readonly timeout: number;
+  private readonly config: WSBridgeConfig;
+  private readonly privateKeyHex: string;
+  readonly publicKeyHex: string;
+  private peerPublicKeyHex: string | null;
+  private sharedSecret: CKey | null = null;
   private ws: WebSocket | null = null;
+  private disposed = false;
+
+  // Auto-reopen browser state
+  private onBrowserNeeded: (() => Promise<void>) | undefined;
+  private onPeerKeyChanged: ((key: string) => void) | undefined;
+  private lastBrowserOpenTime = 0;
+
+  // Reconnection state
+  private reconnectAttempts = 0;
+
+  /** Updated after key exchange — caller should persist this. */
+  get peerPublicKey(): string | null {
+    return this.peerPublicKeyHex;
+  }
 
   constructor(options: WSBridgeOptions) {
-    this.port = options.port;
-    this.token = options.token;
+    this.relayUrl = options.relayUrl;
+    this.session = options.session;
     this.timeout = options.timeout ?? DEFAULT_TIMEOUT_MS;
+    this.config = options.config;
+    this.privateKeyHex = options.privateKeyHex;
+    this.publicKeyHex = options.publicKeyHex;
+    this.peerPublicKeyHex = options.peerPublicKeyHex;
   }
 
   /**
-   * Connect to the daemon's WebSocket server.
+   * Connect to the relay and wait for the browser to be ready.
+   *
+   * @param onBrowserNeeded — called when the relay reports no browser connected.
+   * @param onPeerKeyChanged — called when a key_exchange updates the peer key.
    */
-  async connect(): Promise<void> {
+  async connect(
+    onBrowserNeeded?: () => Promise<void>,
+    onPeerKeyChanged?: (newPeerPublicKeyHex: string) => void,
+  ): Promise<void> {
+    // Store callbacks for auto-reopen on browser disconnect
+    this.onBrowserNeeded = onBrowserNeeded;
+    this.onPeerKeyChanged = onPeerKeyChanged;
+
+    // Pre-derive shared secret if we already have the peer key
+    if (this.peerPublicKeyHex) {
+      await this.deriveSecret();
+    }
+
+    return this.connectInternal(onBrowserNeeded, onPeerKeyChanged);
+  }
+
+  private async connectInternal(
+    onBrowserNeeded?: () => Promise<void>,
+    onPeerKeyChanged?: (newPeerPublicKeyHex: string) => void,
+  ): Promise<void> {
     return new Promise((resolve, reject) => {
-      const url = `ws://127.0.0.1:${this.port}?token=${encodeURIComponent(this.token)}&role=cli`;
+      const url = `${this.relayUrl}?session=${encodeURIComponent(this.session)}&role=cli`;
       const ws = new WebSocket(url);
+
+      let browserOpened = false;
+      let resolved = false;
+      let expectingKeyExchange = !this.peerPublicKeyHex;
 
       const timer = setTimeout(() => {
         ws.close();
         reject(
           new Error(
-            "Browser SDK did not connect in time.\n" +
-              "If the browser tab failed to open, run `jaw disconnect` then try again.",
+            "Browser did not connect in time.\n" +
+              "Run `jaw disconnect` then try again.",
           ),
         );
       }, 30_000);
 
-      ws.on("open", () => {
+      const sendEncryptedInit = async () => {
+        if (!this.sharedSecret) return;
+        const envelope = await encryptMessage(this.sharedSecret, {
+          type: "init",
+          apiKey: this.config.apiKey,
+          chainId: this.config.chainId,
+          ens: this.config.ens,
+          paymasterUrl: this.config.paymasterUrl,
+        });
+        this.sendRaw(ws, JSON.stringify({ type: "encrypted", ...envelope }));
+      };
+
+      const waitForReady = () => {
+        const readyTimer = setTimeout(() => {
+          ws.close();
+          reject(new Error("Browser SDK did not become ready in time."));
+        }, 15_000);
+
+        const onMsg = async (data: WebSocket.Data) => {
+          const msg = safeParse(data);
+          if (!msg) return;
+
+          if (msg.type === "encrypted" && this.sharedSecret) {
+            try {
+              const inner = await decryptMessage(
+                this.sharedSecret,
+                msg as unknown as EncryptedEnvelope,
+              );
+              if (inner.type === "ready") {
+                clearTimeout(readyTimer);
+                ws.off("message", onMsg);
+                this.reconnectAttempts = 0; // Reset on successful connect
+                resolve();
+              }
+            } catch {
+              // Not a valid encrypted message for us, ignore
+            }
+          }
+        };
+        ws.on("message", onMsg);
+      };
+
+      const onBrowserReady = async () => {
+        if (resolved) return;
+        resolved = true;
         clearTimeout(timer);
+        // Set up listener BEFORE sending init to avoid missing the ready response
+        waitForReady();
+        await sendEncryptedInit();
+      };
+
+      ws.on("open", () => {
         this.ws = ws;
       });
 
-      ws.on("message", (data) => {
-        let msg: Record<string, unknown>;
-        try {
-          msg = JSON.parse(data.toString()) as Record<string, unknown>;
-        } catch {
-          return;
-        }
-        // Wait for the status message confirming daemon is ready.
-        // If browser isn't connected yet, stay connected and wait for
-        // a "browser_connected" event (the daemon notifies CLI clients
-        // when the browser joins).
-        if (msg.type === "status" && msg.browserConnected) {
-          clearTimeout(timer);
-          resolve();
+      ws.on("message", async (data) => {
+        const msg = safeParse(data);
+        if (!msg) return;
+
+        if (msg.type === "status") {
+          if (msg.browserConnected) {
+            if (this.sharedSecret) {
+              // Already have shared secret — skip key exchange
+              await onBrowserReady();
+            } else {
+              // Browser is connected but we don't have its key yet.
+              expectingKeyExchange = true;
+            }
+          } else if (!browserOpened && onBrowserNeeded) {
+            browserOpened = true;
+            expectingKeyExchange = true;
+            onBrowserNeeded().catch(() => {
+              /* best effort */
+            });
+          }
         } else if (msg.type === "browser_connected") {
-          clearTimeout(timer);
-          resolve();
+          expectingKeyExchange = true;
+          // Wait for key_exchange from browser
+        } else if (msg.type === "browser_disconnected") {
+          // Browser tab closed — attempt to reopen after cooldown
+          this.handleBrowserDisconnect();
+        } else if (msg.type === "key_exchange" && expectingKeyExchange) {
+          expectingKeyExchange = false;
+          const peerKey = msg.publicKey as string;
+          this.peerPublicKeyHex = peerKey;
+          await this.deriveSecret();
+          onPeerKeyChanged?.(peerKey);
+          await onBrowserReady();
         }
       });
 
@@ -79,20 +236,36 @@ export class WSBridge {
 
       ws.on("close", () => {
         clearTimeout(timer);
+        if (!this.disposed) {
+          this.handleRelayDisconnect();
+        }
       });
     });
   }
 
   /**
-   * Send an RPC request through the daemon to the browser SDK.
+   * Send an encrypted RPC request through the relay to the browser SDK.
    */
   async request(method: string, params?: unknown): Promise<unknown> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      throw new Error("Not connected to bridge daemon");
+      throw new Error("Not connected to relay");
+    }
+    if (!this.sharedSecret) {
+      throw new Error("No shared secret — key exchange not completed");
     }
 
     const id = crypto.randomUUID();
+
+    const envelope = await encryptMessage(this.sharedSecret, {
+      type: "rpc_request",
+      id,
+      method,
+      params,
+    });
+
+    const serialized = JSON.stringify({ type: "encrypted", ...envelope });
+    assertMessageSize(serialized, method);
 
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -105,67 +278,110 @@ export class WSBridge {
         this.close();
       }, this.timeout);
 
-      const onMessage = (data: WebSocket.Data) => {
-        let msg: Record<string, unknown>;
+      const onMessage = async (data: WebSocket.Data) => {
+        const msg = safeParse(data);
+        if (!msg || msg.type !== "encrypted" || !this.sharedSecret) return;
+
         try {
-          msg = JSON.parse(data.toString()) as Record<string, unknown>;
-        } catch {
-          return;
-        }
+          const inner = await decryptMessage(
+            this.sharedSecret,
+            msg as unknown as EncryptedEnvelope,
+          );
+          if (inner.type === "rpc_response" && inner.id === id) {
+            clearTimeout(timer);
+            ws.off("message", onMessage);
 
-        if (msg.type === "rpc_response" && msg.id === id) {
-          clearTimeout(timer);
-          ws.off("message", onMessage);
-
-          if (msg.success) {
-            resolve(msg.data);
-          } else {
-            const err = msg.error as
-              | { code: number; message: string }
-              | undefined;
-            reject(
-              new Error(
-                err ? `[${err.code}] ${err.message}` : "Request failed",
-              ),
-            );
+            if (inner.success) {
+              resolve(inner.data);
+            } else {
+              const err = inner.error as
+                | { code: number; message: string }
+                | undefined;
+              reject(
+                new Error(
+                  err ? `[${err.code}] ${err.message}` : "Request failed",
+                ),
+              );
+            }
           }
+        } catch {
+          // Decryption failed — not our message or tampered, ignore
         }
       };
 
       ws.on("message", onMessage);
-
-      ws.send(
-        JSON.stringify({
-          id,
-          type: "rpc_request",
-          method,
-          params,
-        }),
-      );
+      this.sendRaw(ws, serialized);
     });
   }
 
-  /**
-   * Check if the WebSocket connection is open.
-   */
   isOpen(): boolean {
     return this.ws?.readyState === WebSocket.OPEN;
   }
 
-  /**
-   * Send a shutdown signal to the daemon.
-   */
-  shutdown(): void {
-    if (this.ws?.readyState === WebSocket.OPEN) {
-      this.ws.send(JSON.stringify({ type: "shutdown" }));
+  async shutdown(): Promise<void> {
+    this.disposed = true;
+    if (this.ws?.readyState === WebSocket.OPEN && this.sharedSecret) {
+      try {
+        const envelope = await encryptMessage(this.sharedSecret, {
+          type: "shutdown",
+        });
+        this.sendRaw(
+          this.ws,
+          JSON.stringify({ type: "encrypted", ...envelope }),
+        );
+      } catch {
+        // Best effort
+      }
     }
     this.close();
   }
 
   /**
-   * Close the client connection (daemon stays alive).
+   * Connect to relay and send shutdown directly — no init/ready handshake.
+   * Used by `jaw disconnect` when we just need to tell the browser to close.
    */
+  async connectAndShutdown(): Promise<void> {
+    if (!this.peerPublicKeyHex) {
+      // No peer key means browser never connected — nothing to shut down
+      return;
+    }
+
+    this.disposed = true;
+    await this.deriveSecret();
+
+    return new Promise<void>((resolve) => {
+      const url = `${this.relayUrl}?session=${encodeURIComponent(this.session)}&role=cli`;
+      const ws = new WebSocket(url);
+
+      const timer = setTimeout(() => {
+        try {
+          ws.close();
+        } catch {
+          /* ignore */
+        }
+        resolve();
+      }, 3000);
+
+      ws.on("open", async () => {
+        this.ws = ws;
+        try {
+          await this.shutdown();
+        } catch {
+          // Best effort
+        }
+        clearTimeout(timer);
+        resolve();
+      });
+
+      ws.on("error", () => {
+        clearTimeout(timer);
+        resolve();
+      });
+    });
+  }
+
   close(): void {
+    this.disposed = true;
     if (this.ws) {
       try {
         this.ws.close();
@@ -174,5 +390,87 @@ export class WSBridge {
       }
       this.ws = null;
     }
+  }
+
+  /**
+   * Auto-reopen browser when browser_disconnected is received from relay.
+   * Respects a cooldown to prevent rapid re-opening.
+   */
+  private handleBrowserDisconnect(): void {
+    if (this.disposed || !this.onBrowserNeeded) return;
+
+    const now = Date.now();
+    if (now - this.lastBrowserOpenTime < BROWSER_REOPEN_COOLDOWN_MS) {
+      return; // Too soon — skip this reopen
+    }
+
+    this.lastBrowserOpenTime = now;
+
+    // Reset shared secret — the new browser tab will do a fresh key exchange
+    this.sharedSecret = null;
+    this.peerPublicKeyHex = null;
+
+    this.onBrowserNeeded().catch(() => {
+      // Best effort — if browser open fails, the next request will error
+    });
+  }
+
+  /**
+   * Attempt to reconnect to the relay with exponential backoff
+   * when the WebSocket connection drops unexpectedly.
+   */
+  private handleRelayDisconnect(): void {
+    if (this.disposed) return;
+    if (this.reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) return;
+
+    const delay = RECONNECT_BASE_DELAY_MS * Math.pow(2, this.reconnectAttempts);
+    this.reconnectAttempts++;
+
+    setTimeout(() => {
+      if (this.disposed) return;
+      this.connectInternal(this.onBrowserNeeded, this.onPeerKeyChanged).catch(
+        () => {
+          // Reconnection failed — will retry if attempts remain
+        },
+      );
+    }, delay);
+  }
+
+  /** Send a raw string over the WebSocket, enforcing message size limits. */
+  private sendRaw(ws: WebSocket, data: string): void {
+    ws.send(data);
+  }
+
+  private async deriveSecret(): Promise<void> {
+    if (!this.peerPublicKeyHex) return;
+    const privateKey = await importKeyFromHex("private", this.privateKeyHex);
+    const peerPublicKey = await importKeyFromHex(
+      "public",
+      this.peerPublicKeyHex,
+    );
+    this.sharedSecret = await deriveSharedSecret(privateKey, peerPublicKey);
+  }
+}
+
+/**
+ * Validate message size before sending to the relay.
+ * Throws with a descriptive error if the message is too large.
+ */
+function assertMessageSize(serialized: string, method: string): void {
+  const byteLength = Buffer.byteLength(serialized, "utf-8");
+  if (byteLength > MAX_MESSAGE_BYTES) {
+    const sizeMB = (byteLength / (1024 * 1024)).toFixed(2);
+    throw new Error(
+      `Message for ${method} is too large (${sizeMB} MB, limit ${MAX_MESSAGE_BYTES / (1024 * 1024)} MB). ` +
+        "Try reducing the number of calls in your batch.",
+    );
+  }
+}
+
+function safeParse(data: WebSocket.Data): Record<string, unknown> | null {
+  try {
+    return JSON.parse(data.toString()) as Record<string, unknown>;
+  } catch {
+    return null;
   }
 }
