@@ -95,6 +95,7 @@
     "zod": "^3.24.0"
   },
   "devDependencies": {
+    "oclif": "^4.0.0",
     "@oclif/test": "^4.1.0",
     "@types/node": "^20.19.9",
     "@types/ws": "^8.18.1",
