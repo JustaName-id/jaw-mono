@@ -1,6 +1,5 @@
 {
   "lockfileVersion": 1,
-  "configVersion": 0,
   "workspaces": {
     "": {
       "name": "@jaw-mono/source",
@@ -103,11 +102,12 @@
     },
     "packages/cli": {
       "name": "@jaw.id/cli",
-      "version": "0.1.0",
+      "version": "0.0.3",
       "bin": {
         "jaw": "./bin/run.js",
       },
       "dependencies": {
+        "@jaw.id/core": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.12.1",
         "@oclif/core": "^4.3.0",
         "open": "^10.1.0",
@@ -123,7 +123,7 @@
     },
     "packages/core": {
       "name": "@jaw.id/core",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "axios": "1.13.5",
         "eventemitter3": "5.0.1",
@@ -141,7 +141,7 @@
     },
     "packages/ui": {
       "name": "@jaw.id/ui",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "@hookform/resolvers": "^5.2.2",
         "@jaw.id/core": "workspace:*",
@@ -182,7 +182,7 @@
     },
     "packages/wagmi": {
       "name": "@jaw.id/wagmi",
-      "version": "0.1.1",
+      "version": "0.1.2",
       "dependencies": {
         "@jaw.id/core": "workspace:*",
         "@wagmi/core": "^3.0.0",
