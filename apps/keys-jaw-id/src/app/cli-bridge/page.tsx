@@ -69,7 +69,7 @@ async function deserializeAndDecrypt(
 ): Promise<Record<string, unknown>> {
   const iv = fromBase64(msg.iv);
   const cipherText = fromBase64(msg.ciphertext);
-  const plaintext = await decrypt(sharedSecret, { iv, cipherText });
+  const plaintext = await decrypt(sharedSecret, { iv, cipherText: cipherText.buffer as ArrayBuffer });
   return JSON.parse(plaintext);
 }
 
