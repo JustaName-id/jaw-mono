@@ -1,0 +1,156 @@
+# RPC Reference
+
+All RPC methods supported by the JAW CLI via `jaw rpc call <method>`. Methods marked with **Browser** require passkey confirmation in the browser.
+
+## Account Methods
+
+| Method | Browser | Description |
+|--------|---------|-------------|
+| `wallet_connect` | Yes | Connect and authenticate with passkey |
+| `wallet_disconnect` | No | Disconnect the current session |
+| `eth_requestAccounts` | Yes | Request account access (alias for connect) |
+| `eth_accounts` | No | Get connected account addresses |
+| `eth_chainId` | No | Get current chain ID |
+| `wallet_switchEthereumChain` | No | Switch to a different chain |
+
+### wallet_connect
+
+```bash
+jaw rpc call wallet_connect
+```
+
+Returns the connected account address. Opens the browser for passkey authentication on first connection.
+
+### eth_accounts
+
+```bash
+jaw rpc call eth_accounts
+```
+
+Returns an array of connected addresses. Does not require browser approval.
+
+---
+
+## Transaction Methods
+
+| Method | Browser | Description |
+|--------|---------|-------------|
+| `wallet_sendCalls` | Yes | Send one or more calls (recommended) |
+| `eth_sendTransaction` | Yes | Send a single transaction (legacy) |
+| `wallet_getCallsStatus` | No | Check transaction bundle status |
+| `wallet_getCallsHistory` | No | Get transaction history |
+
+### wallet_sendCalls
+
+The preferred method for sending transactions. Supports batching, paymasters, and permission-based execution.
+
+```bash
+# Single call
+jaw rpc call wallet_sendCalls '{"calls":[{"to":"0xRecipient","value":"0xDE0B6B3A7640000"}]}'
+
+# Batch calls
+jaw rpc call wallet_sendCalls '{"calls":[{"to":"0xAddr1","value":"0x1"},{"to":"0xAddr2","value":"0x2"}]}'
+
+# With paymaster (gas sponsoring)
+jaw rpc call wallet_sendCalls '{"calls":[{"to":"0xRecipient","value":"0x1"}],"capabilities":{"paymasterService":true}}'
+```
+
+### wallet_getCallsStatus
+
+```bash
+jaw rpc call wallet_getCallsStatus '["0xBundleId"]'
+```
+
+Returns status (`pending`, `confirmed`) and receipts.
+
+---
+
+## Signing Methods
+
+| Method | Browser | Description |
+|--------|---------|-------------|
+| `personal_sign` | Yes | Sign a plaintext message |
+| `eth_signTypedData_v4` | Yes | Sign EIP-712 typed data |
+| `wallet_sign` | Yes | Sign using ERC-7871 |
+
+### personal_sign
+
+```bash
+# Message as hex-encoded string, followed by signer address
+jaw rpc call personal_sign '["0x48656c6c6f","0xYourAddress"]'
+```
+
+### eth_signTypedData_v4
+
+```bash
+# Address followed by JSON-encoded typed data
+jaw rpc call eth_signTypedData_v4 '["0xYourAddress","{\"types\":{\"EIP712Domain\":[...],\"Mail\":[...]},\"primaryType\":\"Mail\",\"domain\":{...},\"message\":{...}}"]'
+```
+
+:::info
+The typed data parameter must be a JSON string within the JSON array — double-encoded.
+:::
+
+---
+
+## Permission Methods
+
+| Method | Browser | Description |
+|--------|---------|-------------|
+| `wallet_grantPermissions` | Yes | Grant delegated permissions |
+| `wallet_revokePermissions` | Yes | Revoke a permission by hash |
+| `wallet_getPermissions` | No | List active permissions |
+
+### wallet_grantPermissions
+
+```bash
+jaw rpc call wallet_grantPermissions '{"permissions":[{"type":"call","data":{"to":"0xContractAddress"}},{"type":"spend","data":{"token":"0xUSDCAddress","limit":"1000000","period":"daily"}}],"expiry":1735689600}'
+```
+
+### wallet_revokePermissions
+
+```bash
+jaw rpc call wallet_revokePermissions '{"permissionHash":"0x..."}'
+```
+
+### wallet_getPermissions
+
+```bash
+jaw rpc call wallet_getPermissions
+```
+
+---
+
+## Query Methods
+
+| Method | Browser | Description |
+|--------|---------|-------------|
+| `wallet_getCapabilities` | No | Get supported capabilities per chain |
+| `wallet_getAssets` | No | Get token balances |
+
+### wallet_getCapabilities
+
+```bash
+jaw rpc call wallet_getCapabilities
+```
+
+Returns supported features (atomicBatch, paymasterService, permissions) per chain.
+
+### wallet_getAssets
+
+```bash
+jaw rpc call wallet_getAssets
+```
+
+Returns token balances for the connected account.
+
+---
+
+## Tips for AI Agents
+
+When using the CLI programmatically or via MCP:
+
+- Always pass `-o json` for machine-readable output
+- Use `-y` to skip confirmation prompts
+- Prefer `wallet_sendCalls` over `eth_sendTransaction` for batching and paymaster support
+- Check `wallet_getCapabilities` to discover supported features per chain
