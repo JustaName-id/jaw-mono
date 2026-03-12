@@ -1,0 +1,126 @@
+# JAW CLI
+
+The JAW CLI (`@jaw.id/cli`) is a command-line interface for interacting with JAW smart accounts from the terminal. It supports developers, shell scripts, and AI agents through both direct commands and an MCP server.
+
+## How It Works
+
+The CLI doesn't store private keys. Instead, it connects through a WebSocket relay to a browser tab where passkey signing happens. All messages between the CLI and browser are **end-to-end encrypted** (ECDH P-256 + AES-256-GCM) — the relay is a blind pipe that cannot read your data.
+
+```
+┌─────────┐      E2E Encrypted       ┌──────────────┐      E2E Encrypted       ┌─────────────┐
+│   CLI   │ ◄──────────────────────► │    Relay     │ ◄──────────────────────► │   Browser   │
+│  (jaw)  │      via WebSocket       │ relay.jaw.id │      via WebSocket       │ keys.jaw.id │
+└─────────┘                          └──────────────┘                          └─────────────┘
+                                                                                 Passkey Auth
+```
+
+1. You run a CLI command (e.g., `jaw rpc call wallet_connect`)
+2. The CLI connects to the relay and opens a browser tab to `keys.jaw.id`
+3. The browser authenticates with your passkey and connects to the same relay session
+4. Commands are encrypted end-to-end — the relay never sees your data
+5. The browser executes the request (signing, transactions) and returns the result
+
+Read-only methods like `eth_accounts` or `wallet_getAssets` don't require browser approval.
+
+## Installation
+
+:::code-group
+
+```bash [npm]
+npm install -g @jaw.id/cli
+```
+
+```bash [pnpm]
+pnpm add -g @jaw.id/cli
+```
+
+```bash [yarn]
+yarn global add @jaw.id/cli
+```
+
+```bash [bun]
+bun add -g @jaw.id/cli
+```
+
+:::
+
+**Requirements:** Node.js 18+
+
+## Configuration
+
+Set your API key and default chain before using the CLI:
+
+```bash
+jaw config set apiKey=YOUR_API_KEY defaultChain=8453
+```
+
+Get an API key from the [JAW Dashboard](https://dashboard.jaw.id).
+
+### Configuration Keys
+
+| Key | Description | Example |
+|-----|-------------|---------|
+| `apiKey` | Your JAW API key (required) | `jaw config set apiKey=sk_...` |
+| `defaultChain` | Default chain ID | `jaw config set defaultChain=8453` |
+| `ens` | ENS domain for subname resolution | `jaw config set ens=myapp.eth` |
+| `paymasterUrl` | Paymaster URL for gas sponsoring | `jaw config set paymasterUrl=https://...` |
+| `keysUrl` | Keys service URL | Default: `https://keys.jaw.id` |
+| `relayUrl` | Relay WebSocket URL | Default: `wss://relay.jaw.id` |
+
+### Resolution Order
+
+Configuration values are resolved in this order (first match wins):
+
+1. CLI flags (`--api-key`, `--chain`)
+2. Environment variables (`JAW_API_KEY`, `JAW_CHAIN_ID`, `JAW_OUTPUT`)
+3. Config file (`~/.jaw/config.json`)
+4. Built-in defaults
+
+### Quick Start
+
+```bash
+# Configure
+jaw config set apiKey=YOUR_KEY defaultChain=8453
+
+# Connect your wallet (opens browser for passkey)
+jaw rpc call wallet_connect
+
+# Check your address
+jaw rpc call eth_accounts
+
+# Send a transaction
+jaw rpc call wallet_sendCalls '{"calls":[{"to":"0xRecipient","value":"0xDE0B6B3A7640000"}]}'
+```
+
+## Self-Hosting the Relay
+
+The relay server is open-source and can be self-hosted. Since it's a blind pipe (all messages are E2E encrypted), self-hosting is mainly about availability and infrastructure control.
+
+**Repository:** [github.com/JustaName-id/jaw-relay](https://github.com/JustaName-id/jaw-relay)
+
+### Docker (Recommended)
+
+```bash
+docker build -t jaw-relay .
+docker run -p 8080:8080 jaw-relay
+```
+
+### Node.js
+
+```bash
+npm install
+npm run build
+PORT=8080 node dist/index.js
+```
+
+### Point CLI to Your Relay
+
+```bash
+jaw config set relayUrl=wss://your-relay-host.com
+```
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `PORT` | `8080` | Server listening port |
+
+Sessions auto-expire after 15 minutes of inactivity. The relay supports reconnection within the session lifetime.

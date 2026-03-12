@@ -26,7 +26,8 @@ export default defineConfig({
   },
   iconUrl: '/favicon.ico',
   topNav: [
-    { text: 'Guide', link: '/', match: '/' },
+    { text: 'SDK', link: '/', match: '/' },
+    { text: 'CLI', link: '/cli', match: '/cli' },
     { text: 'GitHub', link: 'https://github.com/JustaName-id/jaw-mono' },
   ],
   socials: [
@@ -43,7 +44,8 @@ export default defineConfig({
       link: 'https://t.me/+RsFLPfky7-YxZjVk',
     },
   ],
-  sidebar: [
+  sidebar: {
+    '/': [
     {
       text: 'Why JAW',
       link: '/why-jaw',
@@ -226,6 +228,25 @@ export default defineConfig({
       ],
     },
   ],
+    '/cli': [
+      {
+        text: 'Overview',
+        link: '/cli',
+      },
+      {
+        text: 'Commands',
+        link: '/cli/commands',
+      },
+      {
+        text: 'MCP Server',
+        link: '/cli/mcp',
+      },
+      {
+        text: 'RPC Reference',
+        link: '/cli/api-reference',
+      },
+    ],
+  },
   editLink: {
     pattern: 'https://github.com/JustaName-id/jaw-mono/edit/main/apps/docs/docs/pages/:path',
     text: 'Edit on GitHub',
