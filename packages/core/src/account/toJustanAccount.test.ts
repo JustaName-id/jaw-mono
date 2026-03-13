@@ -15,6 +15,7 @@ vi.mock('viem', async () => {
         padHex: vi.fn(),
         numberToHex: vi.fn(),
         stringToHex: vi.fn(),
+        hashTypedData: vi.fn(),
         pad: vi.fn(),
         isAddressEqual: vi.fn(),
         encodeFunctionData: vi.fn(),
@@ -269,24 +270,27 @@ describe('toJustanAccount unit tests', () => {
             expect(result).toBeDefined();
         });
 
-        it('should call owner.signTypedData for local account', async () => {
+        it('should hash locally and call owner.sign for local account', async () => {
             const mockTypedData = { domain: {}, types: {}, primaryType: 'Test', message: {} };
             const mockLocalOwner = {
                 type: 'local' as const,
                 address: '0x1234567890123456789012345678901234567890' as const,
-                signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
             } as any;
+
+            vi.mocked(viem.hashTypedData).mockReturnValue('0xmockhash' as `0x${string}`);
 
             const result = await signTypedData({
                 typedData: mockTypedData,
                 owner: mockLocalOwner,
             });
 
-            expect(mockLocalOwner.signTypedData).toHaveBeenCalledWith(mockTypedData);
+            expect(viem.hashTypedData).toHaveBeenCalledWith(mockTypedData);
+            expect(mockLocalOwner.sign).toHaveBeenCalledWith({ hash: '0xmockhash' });
             expect(result).toBe(MOCK_SIGNATURE);
         });
 
-        it('should throw error when owner does not support signTypedData', async () => {
+        it('should throw error when owner does not support sign', async () => {
             const mockTypedData = { domain: {}, types: {}, primaryType: 'Test', message: {} };
             const mockInvalidOwner = {
                 type: 'local' as const,
@@ -1023,7 +1027,7 @@ describe('toJustanAccount unit tests', () => {
                 const mockEOA = {
                     type: 'local' as const,
                     address: MOCK_ADDRESS,
-                    signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                    sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
                 } as any;
 
                 const { readContract } = await import('viem/actions');
@@ -1061,7 +1065,7 @@ describe('toJustanAccount unit tests', () => {
                 const mockOwner = {
                     type: 'local' as const,
                     address: MOCK_ADDRESS,
-                    signTypedData: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
+                    sign: vi.fn().mockResolvedValue(MOCK_SIGNATURE),
                 } as any;
 
                 const { readContract } = await import('viem/actions');

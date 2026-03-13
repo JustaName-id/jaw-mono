@@ -19,6 +19,7 @@ import {
   isAddressEqual,
   type Client,
   type Account,
+    hashTypedData,
 } from "viem";
 import {
   readContract,
@@ -448,15 +449,11 @@ export async function signTypedData({
     });
   }
 
-  if (owner.signTypedData) {
-    // For LocalAccount signers (like Privy), convert BigInt values to hex strings
-    // to avoid JSON.stringify errors when the signer displays the data
-    const safeTypedData = {
-      ...typedData,
-      message: convertBigIntToHex(typedData.message) as Record<string, unknown>,
-    } as TypedDataDefinition;
+  if (owner.sign) {
+    const hash = hashTypedData(typedData);
 
-    return owner.signTypedData(safeTypedData);
+
+    return owner.sign({ hash });
   }
 
   throw new BaseError("`owner` does not support signTypedData.");

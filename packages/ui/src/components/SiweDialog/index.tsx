@@ -67,7 +67,6 @@ export const SiweDialog = ({
   return (
     <DefaultDialog
       open={open}
-      handleClose={onCancel}
       onOpenChange={!isProcessing ? onOpenChange : undefined}
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
@@ -101,7 +100,7 @@ export const SiweDialog = ({
         minWidth: '500px',
       }}
     >
-      <div className="flex flex-col h-full gap-3 max-h-[60vh] overflow-y-auto min-h-0">
+      <div className="flex flex-col h-full min-h-0 gap-3 max-md:pb-2">
         <div className="flex flex-1 flex-col p-3.5 items-center justify-center">
           {appLogoUrl && (
             <img
@@ -202,25 +201,23 @@ export const SiweDialog = ({
           </div>
         )}
 
-        {/* Action Buttons Section */}
-        <div className="flex mt-3 flex-shrink-0">
-          <div className="flex gap-2 w-full justify-between">
-            <Button
-              variant="outline"
-              onClick={onCancel}
-              disabled={isProcessing}
-              className="h-9"
-            >
-              Cancel
-            </Button>
-            <Button
-              onClick={onSign}
-              disabled={!canSign}
-              className="h-9"
-            >
-              {isProcessing ? 'Signing...' : 'Sign'}
-            </Button>
-          </div>
+        {/* Action Buttons */}
+        <div className="flex gap-3 p-3.5 flex-shrink-0">
+          <Button
+            variant="outline"
+            onClick={onCancel}
+            disabled={isProcessing}
+            className="flex-1"
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={onSign}
+            disabled={!canSign}
+            className="flex-1"
+          >
+            {isProcessing ? 'Signing...' : 'Sign'}
+          </Button>
         </div>
       </div>
     </DefaultDialog>

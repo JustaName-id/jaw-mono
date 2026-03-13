@@ -933,7 +933,6 @@ function OnboardingDialogWrapper({
         if (!newOpen) handleCancel();
         else setOpen(newOpen);
       }}
-      handleClose={handleCancel}
       contentStyle={{
         width: 'fit-content',
         maxWidth: '450px',
@@ -2943,7 +2942,6 @@ function UnsupportedMethodDialogWrapper({
         if (!newOpen) handleClose();
         else setOpen(newOpen);
       }}
-      handleClose={handleClose}
       contentStyle={{
         width: 'fit-content',
         maxWidth: '450px',

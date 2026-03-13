@@ -291,7 +291,7 @@ describe('SignerUtils', () => {
     });
 
     describe('response structure', () => {
-      it('should return correct wallet connect response format', async () => {
+      it('should return correct wallet connect response format without capabilities', async () => {
         store.account.set({
           accounts: ['0x1234567890123456789012345678901234567890'],
           connectedAt: Date.now(),
@@ -303,13 +303,12 @@ describe('SignerUtils', () => {
           accounts: [
             {
               address: '0x1234567890123456789012345678901234567890',
-              capabilities: {},
             },
           ],
         });
       });
 
-      it('should include capabilities for first account', async () => {
+      it('should not include capabilities even when stored', async () => {
         const capabilities = {
           signInWithEthereum: { message: 'test', signature: '0x123' as `0x${string}` },
         };
@@ -322,10 +321,10 @@ describe('SignerUtils', () => {
 
         const result = await getCachedWalletConnectResponse();
 
-        expect(result?.accounts[0].capabilities).toEqual(capabilities);
+        expect(result?.accounts[0].capabilities).toBeUndefined();
       });
 
-      it('should return multiple accounts with capabilities only on first', async () => {
+      it('should return multiple accounts without capabilities', async () => {
         const capabilities = {
           signInWithEthereum: { message: 'test', signature: '0x123' as `0x${string}` },
         };
@@ -342,8 +341,8 @@ describe('SignerUtils', () => {
         const result = await getCachedWalletConnectResponse();
 
         expect(result?.accounts).toHaveLength(2);
-        expect(result?.accounts[0].capabilities).toEqual(capabilities);
-        expect(result?.accounts[1].capabilities).toEqual({});
+        expect(result?.accounts[0].capabilities).toBeUndefined();
+        expect(result?.accounts[1].capabilities).toBeUndefined();
       });
     });
   });

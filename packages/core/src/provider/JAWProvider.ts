@@ -235,11 +235,11 @@ export class JAWProvider
             return result as T;
           }
           case "net_version": {
-            const result = 1 as T; // default value
+            const result = (this.metadata.defaultChainId ?? 1) as T;
             return result;
           }
           case "eth_chainId": {
-            const result = hexStringFromNumber(1) as T; // default value
+            const result = hexStringFromNumber(this.metadata.defaultChainId ?? 1) as T;
             return result;
           }
           default: {

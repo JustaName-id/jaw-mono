@@ -1,3 +1,43 @@
+## 0.1.2 (2026-03-10)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.1.2
+
+## 0.1.1 (2026-03-04)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.1.1
+
+## 0.1.0 (2026-03-03)
+
+### 🚀 Features
+
+- removed x from dialog ([#130](https://github.com/JustaName-id/jaw-mono/pull/130))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 0.0.8 (2026-03-03)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.1.0
+
+## 0.0.7 (2026-02-27)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.0.7
+
+## 0.0.6 (2026-02-26)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.0.6
+
 ## 0.0.5 (2026-02-24)
 
 ### 🧱 Updated Dependencies
