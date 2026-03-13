@@ -1322,6 +1322,46 @@ describe("JAWProvider", () => {
       await expect(provider.disconnect()).resolves.toBeUndefined();
       expect(correlationIds.clear).toHaveBeenCalled();
     });
+
+    it("should disconnect the communication adapter", async () => {
+      // Arrange - inject a mock adapter
+      const mockAdapter = {
+        waitForReady: vi.fn(),
+        postRequestAndWaitForResponse: vi.fn(),
+        postMessage: vi.fn(),
+        onMessage: vi.fn(),
+        disconnect: vi.fn(),
+      };
+      (provider as any).adapter = mockAdapter;
+      (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
+
+      // Act
+      await provider.disconnect();
+
+      // Assert
+      expect(mockAdapter.disconnect).toHaveBeenCalledTimes(1);
+    });
+
+    it("should disconnect adapter even when signer cleanup fails", async () => {
+      // Arrange
+      const mockAdapter = {
+        waitForReady: vi.fn(),
+        postRequestAndWaitForResponse: vi.fn(),
+        postMessage: vi.fn(),
+        onMessage: vi.fn(),
+        disconnect: vi.fn(),
+      };
+      (provider as any).adapter = mockAdapter;
+      (mockSigner.cleanup as Mock).mockRejectedValue(
+        new Error("Cleanup failed"),
+      );
+
+      // Act
+      await provider.disconnect();
+
+      // Assert - adapter disconnect still called despite signer cleanup failure
+      expect(mockAdapter.disconnect).toHaveBeenCalledTimes(1);
+    });
   });
 
   describe("Event Emitter Functionality", () => {

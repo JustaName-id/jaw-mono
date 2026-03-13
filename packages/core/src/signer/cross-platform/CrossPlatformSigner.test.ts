@@ -706,7 +706,17 @@ describe("CrossPlatformSigner", () => {
       await signer.cleanup();
 
       // Assert
+      expect(mockKeyManager.clear).toHaveBeenCalled();
       expect(store.account.clear).toHaveBeenCalled();
+    });
+
+    it("should NOT disconnect the adapter (adapter lifecycle owned by JAWProvider)", async () => {
+      // Act
+      await signer.cleanup();
+
+      // Assert - adapter.disconnect must NOT be called by signer cleanup
+      // because the adapter is shared across ephemeral signers
+      expect(mockAdapter.disconnect).not.toHaveBeenCalled();
     });
   });
 

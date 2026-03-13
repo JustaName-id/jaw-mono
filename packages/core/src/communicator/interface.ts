@@ -32,6 +32,9 @@ export interface CommunicationAdapter {
    * Prepare the adapter to send/receive messages.
    * For web: Opens popup window and waits for it to load.
    * For mobile: Prepares deep link listeners or opens the signing app.
+   *
+   * MUST be idempotent — may be called multiple times per session.
+   * Subsequent calls should reuse the existing transport if already ready.
    */
   waitForReady(): Promise<void>;
 

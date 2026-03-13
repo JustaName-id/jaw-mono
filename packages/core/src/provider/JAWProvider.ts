@@ -122,6 +122,7 @@ export class JAWProvider
     );
     passkeyManager.logout();
 
+    this.adapter.disconnect();
     this.signer = null;
     correlationIds.clear();
     this.emit("accountsChanged", []);

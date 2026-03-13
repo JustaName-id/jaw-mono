@@ -137,6 +137,9 @@ export class CrossPlatformSigner extends JAWSigner {
   protected override async handleSigningRequest(
     request: RequestArguments,
   ): Promise<unknown> {
+    // Ensure adapter is ready (popup open / deep link prepared)
+    await this.adapter.waitForReady();
+
     let resolvedChain: SDKChain | undefined;
 
     // Decode hex-encoded messages for personal_sign before sending to popup
@@ -225,9 +228,6 @@ export class CrossPlatformSigner extends JAWSigner {
     request: RequestArguments,
     overrideChain?: SDKChain,
   ): Promise<unknown> {
-    // Wait for the adapter to be ready
-    await this.adapter.waitForReady();
-
     // Browser mode: send unencrypted request
     if (this.isBrowserMode) {
       return this.sendUnencryptedRequest(request, overrideChain);
