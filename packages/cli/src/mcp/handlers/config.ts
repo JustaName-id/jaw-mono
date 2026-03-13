@@ -24,7 +24,7 @@ export function registerConfigTools(server: McpServer): void {
 
   server.tool(
     "jaw_config_set",
-    "Set a CLI configuration value (apiKey, defaultChain, keysUrl, paymasterUrl, ens).",
+    "Set a CLI configuration value (apiKey, defaultChain, keysUrl, paymasterUrl, ens, relayUrl).",
     configSetSchema,
     async (params) => {
       try {
