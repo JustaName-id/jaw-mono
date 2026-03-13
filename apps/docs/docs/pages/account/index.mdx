@@ -11,6 +11,7 @@ The `Account` class is ideal for:
 
 - **AI Agents** - Issue programmable smart wallets for AI agents
 - **Headless Integration** - No UI required, direct programmatic access
+- **React Native** - Native mobile passkey support via `nativeGetFn` and `nativeCreateFn`
 - **Server-side Applications** - Using `fromLocalAccount()` with embedded wallets (Privy, Dynamic, Turnkey)
 - **Custom UI Handlers** - When implementing your own `UIHandler` for app-specific mode
 - **Direct Integration** - When you need fine-grained control over account operations
@@ -46,6 +47,9 @@ The `Account` class is exported from `@jaw.id/core`:
 
 ```typescript
 import { Account } from '@jaw.id/core';
+
+// React Native: also import adapter types
+import type { NativePasskeyGetFn, NativePasskeyCreateFn, SyncStorage } from '@jaw.id/core';
 ```
 
 
@@ -130,6 +134,8 @@ interface AccountConfig {
   paymasterUrl?: string;
   /** Custom paymaster context for gas sponsorship */
   paymasterContext?: Record<string, unknown>;
+  /** Custom storage implementation (defaults to localStorage on web, in-memory fallback in React Native) */
+  storage?: SyncStorage;
 }
 ```
 
@@ -141,10 +147,27 @@ Options for creating a new account:
 interface CreateAccountOptions {
   /** Username/display name for the passkey */
   username: string;
-  /** Relying party identifier (defaults to window.location.hostname) */
+  /** Relying party identifier (defaults to window.location.hostname). Required in React Native. */
   rpId?: string;
   /** Relying party name (defaults to 'JAW') */
   rpName?: string;
+  /** Native passkey get function for React Native (e.g. Passkey.get) */
+  nativeGetFn?: NativePasskeyGetFn;
+  /** Native passkey create function for React Native (e.g. Passkey.create) */
+  nativeCreateFn?: NativePasskeyCreateFn;
+}
+```
+
+### GetAccountOptions / ImportAccountOptions / RestoreAccountOptions
+
+Options for `get()`, `import()`, and `restore()`:
+
+```typescript
+interface GetAccountOptions {
+  /** Native passkey get function for React Native (e.g. Passkey.get) */
+  nativeGetFn?: NativePasskeyGetFn;
+  /** Relying party identifier. Required in React Native. */
+  rpId?: string;
 }
 ```
 
