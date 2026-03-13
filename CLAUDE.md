@@ -56,7 +56,6 @@ bunx nx release
 - **@jaw.id/wagmi** - Wagmi connector wrapping core SDK. Exports `jaw()` connector factory, React hooks (`useConnect`, `useGrantPermissions`, etc.), and TanStack Query utilities.
 - **@jaw.id/ui** - React UI components (Radix-based) for wallet dialogs: onboarding, transaction signing, permission management. Exports `ReactUIHandler` for app-specific mode integration.
 - **@jaw.id/cli** - CLI tool (`jaw` binary) and MCP server for terminal/AI agent interaction with smart accounts. Uses oclif framework. Connects to browser via WebSocket relay for passkey signing. All traffic E2E encrypted (ECDH P-256 + AES-256-GCM).
-- **@jaw.id/relay** - WebSocket relay server bridging CLI and browser. Acts as a blind pipe — all messages are E2E encrypted. Open-source and self-hostable ([jaw-relay](https://github.com/JustaName-id/jaw-relay)).
 
 ### Applications (`apps/`)
 
