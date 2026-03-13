@@ -55,7 +55,7 @@ bunx nx release
 - **@jaw.id/core** - Core SDK providing `JAWProvider` (EIP-1193 provider), `Account` class for smart account operations, passkey management, and RPC handling. Entry point is `JAW.create()` factory function.
 - **@jaw.id/wagmi** - Wagmi connector wrapping core SDK. Exports `jaw()` connector factory, React hooks (`useConnect`, `useGrantPermissions`, etc.), and TanStack Query utilities.
 - **@jaw.id/ui** - React UI components (Radix-based) for wallet dialogs: onboarding, transaction signing, permission management. Exports `ReactUIHandler` for app-specific mode integration.
-- **@jaw.id/cli** - CLI tool (`jaw` binary) and MCP server for terminal/AI agent interaction with smart accounts. Uses oclif framework. All traffic E2E encrypted (ECDH P-256 + AES-256-GCM).
+- **@jaw.id/cli** - CLI tool (`jaw` binary) and MCP server for terminal/AI agent interaction with smart accounts. Uses oclif framework. Connects to browser via WebSocket relay for passkey signing. All traffic E2E encrypted (ECDH P-256 + AES-256-GCM).
 
 ### Applications (`apps/`)
 
