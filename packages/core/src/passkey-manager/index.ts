@@ -1,4 +1,4 @@
-export { PasskeyManager } from './passkeyManager.js';
+export { PasskeyManager } from "./passkeyManager.js";
 export type {
   PasskeyCredential,
   PasskeyAccount,
@@ -9,7 +9,7 @@ export type {
   BackendResponse,
   PasskeysByCredIdsResponse,
   LookupPasskeysRequest,
-} from './types.js';
+} from "./types.js";
 export {
   registerPasskeyInBackend,
   lookupPasskeyFromBackend,
@@ -17,5 +17,20 @@ export {
   PasskeyLookupError,
   WebAuthnAuthenticationError,
   type WebAuthnAuthenticationResult,
-} from './utils.js';
-
+  type PasskeyCreateFn,
+  type PasskeyGetFn,
+  type NativeCredentialResult,
+  type InternalNativeCreateFn,
+  type NativePasskeyGetFn,
+  type NativePasskeyCreateFn,
+  type NativePasskeyGetOptions,
+  type NativePasskeyGetResponse,
+  type NativePasskeyCreateOptions,
+  type NativePasskeyCreateResponse,
+  type ImportWebAuthnAuthenticationResult,
+  type WebAuthnCredentialResult,
+  wrapNativeGetFn,
+  wrapNativeCreateFn,
+  resolvePasskeyOptions,
+  resolveRpId,
+} from "./utils.js";
