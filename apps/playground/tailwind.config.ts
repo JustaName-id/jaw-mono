@@ -1,11 +1,22 @@
 import type { Config } from "tailwindcss";
+import path from "path";
+import { fileURLToPath } from "url";
+
+// Resolve content from this config's directory so Tailwind finds classes when
+// the app is run from the monorepo root (e.g. nx dev) where cwd !== playground.
+const dirname =
+  typeof __dirname !== "undefined"
+    ? __dirname
+    : path.dirname(fileURLToPath(import.meta.url));
+const root = path.resolve(dirname, ".");
 
 const config: Config = {
   darkMode: ["class"],
   content: [
-    "./pages/**/*.{js,ts,jsx,tsx,mdx}",
-    "./components/**/*.{js,ts,jsx,tsx,mdx}",
-    "./app/**/*.{js,ts,jsx,tsx,mdx}",
+    path.join(root, "pages/**/*.{js,ts,jsx,tsx,mdx}"),
+    path.join(root, "components/**/*.{js,ts,jsx,tsx,mdx}"),
+    path.join(root, "app/**/*.{js,ts,jsx,tsx,mdx}"),
+    path.join(root, "lib/**/*.{js,ts,jsx,tsx,mdx}"),
   ],
   // Enable preflight for CSS resets (removes default margins, etc.)
   corePlugins: {

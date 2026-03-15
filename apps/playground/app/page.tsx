@@ -46,7 +46,7 @@ export default function Home() {
               alt="JAW.id"
               width={64}
               height={70}
-              className="mx-auto opacity-90"
+              className="mx-auto opacity-90 dark:invert dark:opacity-95"
               priority
             />
           </div>
