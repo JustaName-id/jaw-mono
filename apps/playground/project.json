@@ -3,5 +3,14 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/playground/app",
   "projectType": "application",
-  "tags": ["npm:private"]
+  "tags": ["npm:private"],
+  "targets": {
+    "dev": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "next dev --turbopack",
+        "cwd": "{projectRoot}"
+      }
+    }
+  }
 }

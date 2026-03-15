@@ -4,6 +4,7 @@
   "private": true,
   "dependencies": {
     "@jaw.id/core": "workspace:*",
+    "next-themes": "^0.4.4",
     "@jaw.id/ui": "workspace:*",
     "@jaw.id/wagmi": "workspace:*",
     "@tanstack/react-query": "^5.62.16",

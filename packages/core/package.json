@@ -9,7 +9,6 @@
   "exports": {
     "./package.json": "./package.json",
     ".": {
-      "@jaw-mono/source": "./src/index.ts",
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/cjs/index.cjs",
