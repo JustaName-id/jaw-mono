@@ -32,5 +32,9 @@
     "src/**/*.tsx",
     "nativewind-env.d.ts"
   ],
-  "references": []
+  "references": [
+    {
+      "path": "../core/tsconfig.lib.json"
+    }
+  ]
 }
