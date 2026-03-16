@@ -1,0 +1,30 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "baseUrl": ".",
+    "paths": {
+      "@/*": ["./app/*"],
+      "@jaw/ui-native": ["../../packages/ui-native/src/index.ts"],
+      "@jaw/ui-native/*": ["../../packages/ui-native/src/*"],
+      "@jaw.id/core": ["../../packages/core/src/index.ts"],
+      "@jaw.id/core/*": ["../../packages/core/src/*"]
+    }
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.tsx",
+    ".expo/types/**/*.ts",
+    "expo-env.d.ts",
+    "nativewind-env.d.ts"
+  ],
+  "exclude": ["node_modules"],
+  "references": [
+    {
+      "path": "../../packages/core"
+    },
+    {
+      "path": "../../packages/ui-native"
+    }
+  ]
+}

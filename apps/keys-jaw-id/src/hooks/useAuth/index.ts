@@ -58,14 +58,38 @@ export function useAuth(options: UseAuthOptions = {}): UseAuthReturn {
       const session = origin ? await sessionManager.getSession(origin) : null;
       const authState = session?.authState ?? null;
 
+      // Check global authentication as fallback
+      const globalAddress = Account.getAuthenticatedAddress(apiKey);
+      const hasGlobalAuth = globalAddress !== null;
+
+      // Prefer session-based auth if available, fallback to global auth
+      const isAuthenticated = authState !== null || hasGlobalAuth;
+      const effectiveAddress = authState?.address ?? globalAddress;
+      const effectiveUsername = authState?.username ?? (hasGlobalAuth ? allAccounts[0]?.username : null);
+
+      // Get credentialId and publicKey from stored accounts if no session but global auth exists
+      let effectiveCredentialId = authState?.credentialId ?? null;
+      let effectivePublicKey = authState?.publicKey ?? null;
+
+      if (!authState && hasGlobalAuth && allAccounts.length > 0) {
+        // Get the currently authenticated account (uses credentialId from auth state)
+        const authenticatedAccount = Account.getCurrentAccount(apiKey);
+
+        if (authenticatedAccount) {
+          effectiveCredentialId = authenticatedAccount.credentialId;
+          effectivePublicKey = authenticatedAccount.publicKey;
+        }
+      }
+
       return {
         // Session
-        isAuthenticated: authState !== null,
+        isAuthenticated,
         authState,
         session,
-        walletAddress: authState?.address ?? null,
-        credentialId: authState?.credentialId ?? null,
-        accountName: authState?.username ?? null,
+        walletAddress: effectiveAddress,
+        credentialId: effectiveCredentialId,
+        publicKey: effectivePublicKey,
+        accountName: effectiveUsername,
         // Global
         allAccounts,
         hasAccounts: allAccounts.length > 0,
@@ -86,7 +110,7 @@ export function useAuth(options: UseAuthOptions = {}): UseAuthReturn {
     session: query.data?.session ?? null,
     walletAddress: query.data?.walletAddress ?? null,
     credentialId: query.data?.credentialId ?? null,
-    publicKey: query.data?.authState?.publicKey ?? null,
+    publicKey: query.data?.publicKey ?? null,
     accountName: query.data?.accountName ?? null,
 
     allAccounts: query.data?.allAccounts ?? [],

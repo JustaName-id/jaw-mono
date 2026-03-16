@@ -1,6 +1,19 @@
-import type { Address, Hash, Hex, TypedDataDefinition, TypedData, LocalAccount } from 'viem';
-import { isHex, encodeFunctionData, erc20Abi, createPublicClient, http } from 'viem';
-import { toWebAuthnAccount, type SmartAccount } from 'viem/account-abstraction';
+import type {
+  Address,
+  Hash,
+  Hex,
+  TypedDataDefinition,
+  TypedData,
+  LocalAccount,
+} from "viem";
+import {
+  isHex,
+  encodeFunctionData,
+  erc20Abi,
+  createPublicClient,
+  http,
+} from "viem";
+import { toWebAuthnAccount, type SmartAccount } from "viem/account-abstraction";
 import {
   createSmartAccount,
   sendTransaction as sendSmartAccountTransaction,
@@ -11,15 +24,23 @@ import {
   calculateGas,
   getBundlerClient,
   type BundledTransactionResult,
-} from './smartAccount.js';
+} from "./smartAccount.js";
 import {
   storeCallStatus,
   waitForReceiptInBackground,
   getCallStatusEIP5792,
   type CallStatusResponse,
-} from '../rpc/wallet_sendCalls.js';
-import type { JustanAccountImplementation } from './toJustanAccount.js';
-import { PasskeyManager, type PasskeyAccount } from '../passkey-manager/index.js';
+} from "../rpc/wallet_sendCalls.js";
+import type { JustanAccountImplementation } from "./toJustanAccount.js";
+import {
+  PasskeyManager,
+  type PasskeyAccount,
+  type NativePasskeyGetFn,
+  type NativePasskeyCreateFn,
+  resolvePasskeyOptions,
+  resolveRpId,
+} from "../passkey-manager/index.js";
+import type { SyncStorage } from "../storage-manager/index.js";
 import {
   grantPermissions as grantSmartAccountPermissions,
   revokePermission as revokeSmartAccountPermission,
@@ -31,10 +52,14 @@ import {
   type RevokePermissionApiResponse,
   type CallPermissionDetail,
   type SpendPermissionDetail,
-} from '../rpc/permissions.js';
-import { JAW_RPC_URL, JAW_PAYMASTER_URL, ERC20_PAYMASTER_ADDRESS } from '../constants.js';
-import { type Chain, chains as chainStore } from '../store/index.js';
-import { logAccountIssuance } from '../analytics/index.js';
+} from "../rpc/permissions.js";
+import {
+  JAW_RPC_URL,
+  JAW_PAYMASTER_URL,
+  ERC20_PAYMASTER_ADDRESS,
+} from "../constants.js";
+import { type Chain, chains as chainStore } from "../store/index.js";
+import { logAccountIssuance } from "../analytics/index.js";
 
 /**
  * Configuration for creating or loading an Account
@@ -48,6 +73,8 @@ export interface AccountConfig {
   paymasterUrl?: string;
   /** Custom paymaster context for gas sponsorship */
   paymasterContext?: Record<string, unknown>;
+  /** Custom storage implementation (defaults to localStorage on web, in-memory in RN) */
+  storage?: SyncStorage;
 }
 
 /**
@@ -56,10 +83,44 @@ export interface AccountConfig {
 export interface CreateAccountOptions {
   /** Username/display name for the passkey */
   username: string;
-  /** Relying party identifier (defaults to window.location.hostname) */
+  /** Relying party identifier (defaults to window.location.hostname). Required in React Native. */
   rpId?: string;
   /** Relying party name (defaults to 'JAW') */
   rpName?: string;
+  /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
+  nativeGetFn?: NativePasskeyGetFn;
+  /** Native passkey create function for React Native (e.g. Passkey.create from react-native-passkey) */
+  nativeCreateFn?: NativePasskeyCreateFn;
+}
+
+/**
+ * Options for getting an existing account
+ */
+export interface GetAccountOptions {
+  /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
+  nativeGetFn?: NativePasskeyGetFn;
+  /** Relying party identifier. Required in React Native. */
+  rpId?: string;
+}
+
+/**
+ * Options for importing an account from cloud backup
+ */
+export interface ImportAccountOptions {
+  /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
+  nativeGetFn?: NativePasskeyGetFn;
+  /** Relying party identifier. Required in React Native. */
+  rpId?: string;
+}
+
+/**
+ * Options for restoring an account from known credentials
+ */
+export interface RestoreAccountOptions {
+  /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
+  nativeGetFn?: NativePasskeyGetFn;
+  /** Relying party identifier. Required in React Native. */
+  rpId?: string;
 }
 
 /**
@@ -122,6 +183,7 @@ export interface AccountMetadata {
  * ]);
  * ```
  */
+
 export class Account {
   private readonly _smartAccount: SmartAccount;
   private readonly _chain: Chain;
@@ -135,7 +197,7 @@ export class Account {
     smartAccount: SmartAccount,
     chain: Chain,
     apiKey: string,
-    passkeyAccount?: PasskeyAccount
+    passkeyAccount?: PasskeyAccount,
   ) {
     this._smartAccount = smartAccount;
     this._chain = chain;
@@ -173,35 +235,61 @@ export class Account {
    * );
    * ```
    */
-  static async get(config: AccountConfig, credentialId?: string): Promise<Account> {
+  static async get(
+    config: AccountConfig,
+    credentialId?: string,
+    options?: GetAccountOptions,
+  ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
 
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    // Resolve native passkey functions into viem-compatible getFn
+    const resolved = resolvePasskeyOptions({
+      nativeGetFn: options?.nativeGetFn,
+    });
+    const getFn = resolved.getFn;
+    const rpIdOption = options?.rpId;
+
+    const passkeyManager = new PasskeyManager(
+      config.storage,
+      undefined,
+      apiKey,
+    );
     const authResult = passkeyManager.checkAuth();
 
     // If credentialId is explicitly provided, always require WebAuthn authentication
     // This ensures user verification when selecting a specific account to login with
     if (credentialId) {
-      const passkeyAccount = passkeyManager.getAccountByCredentialId(credentialId);
+      const passkeyAccount =
+        passkeyManager.getAccountByCredentialId(credentialId);
       if (!passkeyAccount) {
         throw new Error(`No account found for credential ID: ${credentialId}`);
       }
 
-      const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+      const rpId = resolveRpId(rpIdOption);
 
       // Authenticate with WebAuthn
-      await passkeyManager.authenticateWithWebAuthn(rpId, credentialId);
+      await passkeyManager.authenticateWithWebAuthn(
+        rpId,
+        credentialId,
+        undefined,
+        getFn,
+      );
 
       const webAuthnAccount = toWebAuthnAccount({
         credential: {
           id: credentialId,
           publicKey: passkeyAccount.publicKey,
         },
+        getFn,
+        rpId,
       });
 
       const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
       const bundlerClient = getBundlerClient(chain);
-      const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
+      const smartAccount = await createSmartAccount(
+        webAuthnAccount,
+        bundlerClient as JustanAccountImplementation["client"],
+      );
       const address = await smartAccount.getAddress();
 
       // Store auth state
@@ -214,23 +302,32 @@ export class Account {
     if (authResult.isAuthenticated && authResult.address) {
       const currentAccount = passkeyManager.getCurrentAccount();
       if (currentAccount) {
+        const rpId = resolveRpId(rpIdOption);
+
         const webAuthnAccount = toWebAuthnAccount({
           credential: {
             id: currentAccount.credentialId,
             publicKey: currentAccount.publicKey,
           },
+          getFn,
+          rpId,
         });
 
         const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
         const bundlerClient = getBundlerClient(chain);
-        const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
+        const smartAccount = await createSmartAccount(
+          webAuthnAccount,
+          bundlerClient as JustanAccountImplementation["client"],
+        );
 
         return new Account(smartAccount, chain, apiKey, currentAccount);
       }
     }
 
     // Not authenticated and no credentialId provided
-    throw new Error('Not authenticated. Please provide a credentialId to login, or create an account first.');
+    throw new Error(
+      "Not authenticated. Please provide a credentialId to login, or create an account first.",
+    );
   }
 
   /**
@@ -261,32 +358,59 @@ export class Account {
   static async restore(
     config: AccountConfig,
     credentialId: string,
-    publicKey: `0x${string}`
+    publicKey: `0x${string}`,
+    options?: RestoreAccountOptions,
   ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
 
     if (!credentialId || !publicKey) {
-      throw new Error('credentialId and publicKey are required to restore an account');
+      throw new Error(
+        "credentialId and publicKey are required to restore an account",
+      );
     }
 
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
-    const passkeyAccount = passkeyManager.getAccountByCredentialId(credentialId);
+    // Resolve native passkey functions into viem-compatible getFn
+    const resolved = resolvePasskeyOptions({
+      nativeGetFn: options?.nativeGetFn,
+    });
 
-    // Create WebAuthn account from credential info (no WebAuthn prompt)
+    const passkeyManager = new PasskeyManager(
+      config.storage,
+      undefined,
+      apiKey,
+    );
+    const passkeyAccount =
+      passkeyManager.getAccountByCredentialId(credentialId);
+
+    // Validate publicKey against stored value when available (prevents forged key injection)
+    if (passkeyAccount && passkeyAccount.publicKey !== publicKey) {
+      throw new Error(
+        "Provided publicKey does not match the stored publicKey for this credential. " +
+          "Use the publicKey from Account.getStoredAccounts() or Account.getCurrentAccount().",
+      );
+    }
+
+    // Create WebAuthn account from credential info (no WebAuthn prompt).
+    // rpId is passed through as-is — signing operations will enforce it when needed.
     const webAuthnAccount = toWebAuthnAccount({
       credential: {
         id: credentialId,
         publicKey: publicKey,
       },
+      getFn: resolved.getFn,
+      rpId: options?.rpId,
     });
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
     const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
+    const smartAccount = await createSmartAccount(
+      webAuthnAccount,
+      bundlerClient as JustanAccountImplementation["client"],
+    );
 
     // Use passkeyAccount if found, otherwise create minimal metadata
     const accountMetadata = passkeyAccount ?? {
-      username: '',
+      username: "",
       credentialId,
       publicKey,
       creationDate: new Date().toISOString(),
@@ -311,26 +435,46 @@ export class Account {
    * );
    * ```
    */
-  static async create(config: AccountConfig, options: CreateAccountOptions): Promise<Account> {
+  static async create(
+    config: AccountConfig,
+    options: CreateAccountOptions,
+  ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
     const { username, rpId, rpName } = options;
 
-    const resolvedRpId = rpId ?? (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
-    const resolvedRpName = rpName ?? 'JAW';
+    // Resolve native passkey functions into viem-compatible getFn/createFn
+    const resolved = resolvePasskeyOptions({
+      nativeGetFn: options.nativeGetFn,
+      nativeCreateFn: options.nativeCreateFn,
+    });
 
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    const resolvedRpId = resolveRpId(rpId);
+    const resolvedRpName = rpName ?? "JAW";
+
+    const passkeyManager = new PasskeyManager(
+      config.storage,
+      undefined,
+      apiKey,
+    );
 
     // Create the passkey
-    const { credentialId, publicKey, webAuthnAccount, passkeyAccount } = await passkeyManager.createPasskey(
-      username,
-      resolvedRpId,
-      resolvedRpName
-    );
+    const { credentialId, publicKey, webAuthnAccount, passkeyAccount } =
+      await passkeyManager.createPasskey(
+        username,
+        resolvedRpId,
+        resolvedRpName,
+        undefined, // createFn — browser uses default, native path uses internalNativeCreateFn
+        resolved.internalNativeCreateFn,
+        resolved.getFn,
+      );
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
 
     const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
+    const smartAccount = await createSmartAccount(
+      webAuthnAccount,
+      bundlerClient as JustanAccountImplementation["client"],
+    );
     const address = await smartAccount.getAddress();
 
     // Store the passkey account with the smart account address
@@ -338,11 +482,11 @@ export class Account {
       username,
       credentialId,
       publicKey,
-      address
+      address,
     );
 
     // Log account issuance for analytics (fire-and-forget)
-    logAccountIssuance({ address, type: 'create', apiKey });
+    logAccountIssuance({ address, type: "create", apiKey });
 
     return new Account(smartAccount, chain, apiKey, passkeyAccount);
   }
@@ -358,41 +502,65 @@ export class Account {
    * const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
    * ```
    */
-  static async import(config: AccountConfig): Promise<Account> {
+  static async import(
+    config: AccountConfig,
+    options?: ImportAccountOptions,
+  ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
+    const rpId = options?.rpId;
 
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    // Resolve native passkey functions into viem-compatible getFn
+    const resolved = resolvePasskeyOptions({
+      nativeGetFn: options?.nativeGetFn,
+    });
+    const getFn = resolved.getFn;
+
+    const passkeyManager = new PasskeyManager(
+      config.storage,
+      undefined,
+      apiKey,
+    );
 
     // Import passkey from cloud backup
-    const importResult = await passkeyManager.importPasskeyAccount();
+    const importResult = await passkeyManager.importPasskeyAccount(getFn, rpId);
 
+    const resolvedRpId = resolveRpId(rpId);
     const webAuthnAccount = toWebAuthnAccount({
       credential: {
         id: importResult.credential.id,
         publicKey: importResult.credential.publicKey,
       },
+      getFn,
+      rpId: resolvedRpId,
     });
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
 
     const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(webAuthnAccount, bundlerClient as JustanAccountImplementation['client']);
+    const smartAccount = await createSmartAccount(
+      webAuthnAccount,
+      bundlerClient as JustanAccountImplementation["client"],
+    );
     const address = await smartAccount.getAddress();
 
     // Store for login (marks as imported)
-    await passkeyManager.storePasskeyAccountForLogin(importResult.credential.id, address);
+    await passkeyManager.storePasskeyAccountForLogin(
+      importResult.credential.id,
+      address,
+    );
 
-    const passkeyAccount = passkeyManager.getAccountByCredentialId(importResult.credential.id);
+    const passkeyAccount = passkeyManager.getAccountByCredentialId(
+      importResult.credential.id,
+    );
     if (!passkeyAccount) {
-      throw new Error('Failed to retrieve imported passkey account.');
+      throw new Error("Failed to retrieve imported passkey account.");
     }
 
     // Log account issuance for analytics (fire-and-forget)
-    logAccountIssuance({ address, type: 'import', apiKey });
+    logAccountIssuance({ address, type: "import", apiKey });
 
     return new Account(smartAccount, chain, apiKey, passkeyAccount);
   }
-
 
   /**
    * Create an account from a LocalAccount (e.g., from Privy, Dynamic, or private key)
@@ -425,7 +593,7 @@ export class Account {
    */
   static async fromLocalAccount(
     config: AccountConfig,
-    localAccount: LocalAccount
+    localAccount: LocalAccount,
   ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
 
@@ -433,16 +601,19 @@ export class Account {
 
     // Register chain in global store for background operations (e.g., waitForReceiptInBackground)
     const existingChains = chainStore.get() ?? [];
-    if (!existingChains.some(c => c.id === chain.id)) {
+    if (!existingChains.some((c) => c.id === chain.id)) {
       chainStore.set([...existingChains, chain]);
     }
 
     const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(localAccount, bundlerClient as JustanAccountImplementation['client']);
+    const smartAccount = await createSmartAccount(
+      localAccount,
+      bundlerClient as JustanAccountImplementation["client"],
+    );
     const address = await smartAccount.getAddress();
 
     // Log account issuance for analytics (fire-and-forget)
-    logAccountIssuance({ address, type: 'fromLocalAccount', apiKey });
+    logAccountIssuance({ address, type: "fromLocalAccount", apiKey });
 
     return new Account(smartAccount, chain, apiKey);
   }
@@ -468,8 +639,11 @@ export class Account {
    * }
    * ```
    */
-  static getAuthenticatedAddress(apiKey?: string): Address | null {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+  static getAuthenticatedAddress(
+    apiKey?: string,
+    storage?: SyncStorage,
+  ): Address | null {
+    const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
     const authResult = passkeyManager.checkAuth();
     return authResult.isAuthenticated && authResult.address
       ? (authResult.address as Address)
@@ -488,8 +662,11 @@ export class Account {
    * console.log(`Found ${accounts.length} stored accounts`);
    * ```
    */
-  static getStoredAccounts(apiKey?: string): PasskeyAccount[] {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+  static getStoredAccounts(
+    apiKey?: string,
+    storage?: SyncStorage,
+  ): PasskeyAccount[] {
+    const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
     return passkeyManager.fetchAccounts();
   }
 
@@ -507,8 +684,11 @@ export class Account {
    * }
    * ```
    */
-  static getCurrentAccount(apiKey?: string): PasskeyAccount | null {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+  static getCurrentAccount(
+    apiKey?: string,
+    storage?: SyncStorage,
+  ): PasskeyAccount | null {
+    const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
     return passkeyManager.getCurrentAccount() || null;
   }
 
@@ -522,8 +702,8 @@ export class Account {
    * Account.logout('your-api-key');
    * ```
    */
-  static logout(apiKey?: string): void {
-    const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+  static logout(apiKey?: string, storage?: SyncStorage): void {
+    const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
     passkeyManager.logout();
   }
 
@@ -661,7 +841,9 @@ export class Account {
    * });
    * ```
    */
-  async signTypedData(typedData: TypedDataDefinition<TypedData, string>): Promise<Hex> {
+  async signTypedData(
+    typedData: TypedDataDefinition<TypedData, string>,
+  ): Promise<Hex> {
     return await this._smartAccount.signTypedData(typedData);
   }
 
@@ -685,16 +867,26 @@ export class Account {
    * ]);
    * ```
    */
-  async sendTransaction(calls: TransactionCall[] , paymasterUrlOverride?: string, paymasterContextOverride?: Record<string, unknown>): Promise<Hash> {
-    const formattedCalls = calls.map(call => ({
+  async sendTransaction(
+    calls: TransactionCall[],
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>,
+  ): Promise<Hash> {
+    const formattedCalls = calls.map((call) => ({
       to: call.to,
       value: Account.parseValue(call.value),
       data: call.data,
     }));
 
     // If using JAW ERC-20 paymaster, prepend approval call if needed
-    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
-    const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
+    const approvalCall = await this.createErc20ApprovalCall(
+      paymasterUrlOverride,
+      paymasterContextOverride,
+      formattedCalls,
+    );
+    const finalCalls = approvalCall
+      ? [approvalCall, ...formattedCalls]
+      : formattedCalls;
 
     // Remove gas field from context (only used for approval logic)
     const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
@@ -705,7 +897,7 @@ export class Account {
       this._chain,
       paymasterUrlOverride,
       Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined,
-      this._apiKey
+      this._apiKey,
     );
   }
 
@@ -736,20 +928,32 @@ export class Account {
    * const status = account.getCallStatus(id);
    * ```
    */
-  async sendCalls(calls: TransactionCall[], options?: SendCallsOptions , paymasterUrlOverride?: string, paymasterContextOverride?: Record<string, unknown>): Promise<BundledTransactionResult> {
-    const formattedCalls = calls.map(call => ({
+  async sendCalls(
+    calls: TransactionCall[],
+    options?: SendCallsOptions,
+    paymasterUrlOverride?: string,
+    paymasterContextOverride?: Record<string, unknown>,
+  ): Promise<BundledTransactionResult> {
+    const formattedCalls = calls.map((call) => ({
       to: call.to,
       value: Account.parseValue(call.value),
       data: call.data,
     }));
 
     // If using JAW ERC-20 paymaster, prepend approval call if needed
-    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
-    const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
+    const approvalCall = await this.createErc20ApprovalCall(
+      paymasterUrlOverride,
+      paymasterContextOverride,
+      formattedCalls,
+    );
+    const finalCalls = approvalCall
+      ? [approvalCall, ...formattedCalls]
+      : formattedCalls;
 
     // Remove gas field from context (only used for approval logic)
     const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+    const cleanedContext =
+      Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
     let result: BundledTransactionResult;
 
@@ -762,7 +966,7 @@ export class Account {
         options.permissionId,
         this._apiKey,
         paymasterUrlOverride,
-        cleanedContext
+        cleanedContext,
       );
     } else {
       // Standard execution
@@ -771,7 +975,7 @@ export class Account {
         finalCalls,
         this._chain,
         paymasterUrlOverride,
-        cleanedContext
+        cleanedContext,
       );
     }
 
@@ -823,8 +1027,11 @@ export class Account {
    * console.log('Estimated gas:', gas.toString());
    * ```
    */
-  async estimateGas(calls: TransactionCall[], options?: { permissionId?: Hex }): Promise<bigint> {
-    const formattedCalls = calls.map(call => ({
+  async estimateGas(
+    calls: TransactionCall[],
+    options?: { permissionId?: Hex },
+  ): Promise<bigint> {
+    const formattedCalls = calls.map((call) => ({
       to: call.to,
       value: Account.parseValue(call.value),
       data: call.data,
@@ -837,14 +1044,14 @@ export class Account {
         formattedCalls,
         this._chain,
         options.permissionId,
-        this._apiKey
+        this._apiKey,
       );
     }
 
     return await estimateUserOpGas(
       this._smartAccount,
       formattedCalls,
-      this._chain
+      this._chain,
     );
   }
 
@@ -865,7 +1072,10 @@ export class Account {
    * console.log('Gas cost:', cost, 'ETH');
    * ```
    */
-  async calculateGasCost(calls: TransactionCall[], options?: { permissionId?: Hex }): Promise<string> {
+  async calculateGasCost(
+    calls: TransactionCall[],
+    options?: { permissionId?: Hex },
+  ): Promise<string> {
     const gas = await this.estimateGas(calls, options);
     return await calculateGas(this._chain, gas);
   }
@@ -902,26 +1112,27 @@ export class Account {
     spender: Address,
     permissions: PermissionsDetail,
     paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
+    paymasterContextOverride?: Record<string, unknown>,
   ): Promise<WalletGrantPermissionsResponse> {
     // Build the permission call for gas estimation
     const permissionCall = buildGrantPermissionCall(
       this._smartAccount.address,
       spender,
       expiry,
-      permissions
+      permissions,
     );
 
     // Check if we need an ERC-20 approval for the paymaster
     const approvalCall = await this.createErc20ApprovalCall(
       paymasterUrlOverride,
       paymasterContextOverride,
-      [permissionCall]
+      [permissionCall],
     );
 
     // Remove gas field from context (only used for approval logic)
     const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+    const cleanedContext =
+      Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
     return await grantSmartAccountPermissions(
       this._smartAccount,
@@ -932,7 +1143,7 @@ export class Account {
       this._apiKey,
       paymasterUrlOverride,
       cleanedContext,
-      approvalCall || undefined
+      approvalCall || undefined,
     );
   }
 
@@ -953,29 +1164,33 @@ export class Account {
   async revokePermission(
     permissionId: Hex,
     paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
+    paymasterContextOverride?: Record<string, unknown>,
   ): Promise<RevokePermissionApiResponse> {
     // Build the revoke call for gas estimation (requires fetching permission from relay)
     let revokeCalls: Array<{ to: Address; data: Hex }> = [];
     try {
-      const relayPermission = await getPermissionFromRelay(permissionId, this._apiKey);
+      const relayPermission = await getPermissionFromRelay(
+        permissionId,
+        this._apiKey,
+      );
       const revokeCall = buildRevokePermissionCall(relayPermission);
       revokeCalls = [revokeCall];
     } catch (error) {
       // If we can't fetch the permission, skip gas estimation
-      console.warn('Could not fetch permission for gas estimation:', error);
+      console.warn("Could not fetch permission for gas estimation:", error);
     }
 
     // Check if we need an ERC-20 approval for the paymaster
     const approvalCall = await this.createErc20ApprovalCall(
       paymasterUrlOverride,
       paymasterContextOverride,
-      revokeCalls
+      revokeCalls,
     );
 
     // Remove gas field from context (only used for approval logic)
     const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+    const cleanedContext =
+      Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
     return await revokeSmartAccountPermission(
       this._smartAccount,
@@ -984,7 +1199,7 @@ export class Account {
       this._apiKey,
       paymasterUrlOverride,
       cleanedContext,
-      approvalCall || undefined
+      approvalCall || undefined,
     );
   }
 
@@ -1003,21 +1218,28 @@ export class Account {
    * console.log('Spends:', details.spends);
    * ```
    */
-  async getPermission(permissionId: Hex): Promise<WalletGrantPermissionsResponse> {
-    const relayResponse = await getPermissionFromRelay(permissionId, this._apiKey);
+  async getPermission(
+    permissionId: Hex,
+  ): Promise<WalletGrantPermissionsResponse> {
+    const relayResponse = await getPermissionFromRelay(
+      permissionId,
+      this._apiKey,
+    );
 
     // Transform relay response to WalletGrantPermissionsResponse format
-    const calls: CallPermissionDetail[] = relayResponse.calls.map(call => ({
+    const calls: CallPermissionDetail[] = relayResponse.calls.map((call) => ({
       target: call.target as Address,
       selector: call.selector as Hex,
     }));
 
-    const spends: SpendPermissionDetail[] = relayResponse.spends.map(spend => ({
-      token: spend.token as Address,
-      allowance: spend.allowance,
-      unit: spend.unit,
-      multiplier: spend.multiplier,
-    }));
+    const spends: SpendPermissionDetail[] = relayResponse.spends.map(
+      (spend) => ({
+        token: spend.token as Address,
+        allowance: spend.allowance,
+        unit: spend.unit,
+        multiplier: spend.multiplier,
+      }),
+    );
 
     return {
       account: relayResponse.account as Address,
@@ -1043,7 +1265,7 @@ export class Account {
   private static buildChainConfig(
     chainId: number,
     apiKey?: string,
-    paymasterUrl?: string
+    paymasterUrl?: string,
   ): Chain {
     const rpcUrl = apiKey
       ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`
@@ -1060,12 +1282,14 @@ export class Account {
    * Parse value from bigint or hex string to bigint (wei)
    * @internal
    */
-  private static parseValue(value: bigint | string | undefined): bigint | undefined {
+  private static parseValue(
+    value: bigint | string | undefined,
+  ): bigint | undefined {
     if (value === undefined) {
       return undefined;
     }
 
-    if (typeof value === 'bigint') {
+    if (typeof value === "bigint") {
       return value;
     }
 
@@ -1074,7 +1298,9 @@ export class Account {
       return BigInt(value);
     }
 
-    throw new Error(`Invalid value format: ${value}. Use bigint or hex string (wei).`);
+    throw new Error(
+      `Invalid value format: ${value}. Use bigint or hex string (wei).`,
+    );
   }
 
   /**
@@ -1084,7 +1310,7 @@ export class Account {
   private static isJawErc20Paymaster(paymasterUrl?: string): boolean {
     if (!paymasterUrl) return false;
     // Remove query params and compare base URL
-    const baseUrl = paymasterUrl.split('?')[0];
+    const baseUrl = paymasterUrl.split("?")[0];
     return baseUrl === JAW_PAYMASTER_URL;
   }
 
@@ -1096,7 +1322,7 @@ export class Account {
   private async createErc20ApprovalCall(
     paymasterUrl?: string,
     paymasterContext?: Record<string, unknown>,
-    calls?: Array<{ to: Address; value?: bigint; data?: Hex }>
+    calls?: Array<{ to: Address; value?: bigint; data?: Hex }>,
   ): Promise<{ to: Address; value?: bigint; data: Hex } | null> {
     // Only add approval if using JAW ERC-20 paymaster
     if (!Account.isJawErc20Paymaster(paymasterUrl)) {
@@ -1114,11 +1340,14 @@ export class Account {
     // If gasAmount is undefined, estimate it using the paymaster
     if (gasAmount === undefined && paymasterUrl && calls && calls.length > 0) {
       try {
-        const { fetchTokenQuotes, calculateTokenCostFromGas } = await import('./erc20Paymaster.js');
-        const { getBundlerClient } = await import('./smartAccount.js');
+        const { fetchTokenQuotes, calculateTokenCostFromGas } =
+          await import("./erc20Paymaster.js");
+        const { getBundlerClient } = await import("./smartAccount.js");
 
         // Get token quote for exchange rate
-        const quotes = await fetchTokenQuotes(paymasterUrl, this._chain.id, [tokenAddress as Address]);
+        const quotes = await fetchTokenQuotes(paymasterUrl, this._chain.id, [
+          tokenAddress as Address,
+        ]);
 
         if (quotes.length > 0) {
           // Get paymaster address from quote
@@ -1126,26 +1355,26 @@ export class Account {
 
           // Create a dummy approval call for estimation
           // Use MaxUint256 for approval - amount doesn't affect gas estimation
-          const MaxUint256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+          const MaxUint256 = BigInt(
+            "0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff",
+          );
           const dummyApprovalCall = {
             to: tokenAddress as Address,
             value: 0n,
             data: encodeFunctionData({
               abi: erc20Abi,
-              functionName: 'approve',
-              args: [paymasterAddress, MaxUint256]
-            })
+              functionName: "approve",
+              args: [paymasterAddress, MaxUint256],
+            }),
           };
 
           // Include dummy approval in estimation to get accurate gas limits
           const callsWithApproval = [dummyApprovalCall, ...calls];
 
           // Prepare a UserOp to get gas estimates
-          const bundlerClient = getBundlerClient(
-            this._chain,
-            paymasterUrl,
-            { token: tokenAddress }
-          );
+          const bundlerClient = getBundlerClient(this._chain, paymasterUrl, {
+            token: tokenAddress,
+          });
 
           const userOp = await bundlerClient.prepareUserOperation({
             account: this._smartAccount,
@@ -1157,12 +1386,16 @@ export class Account {
             preVerificationGas: userOp.preVerificationGas,
             verificationGasLimit: userOp.verificationGasLimit,
             callGasLimit: userOp.callGasLimit,
-            paymasterVerificationGasLimit: 'paymasterVerificationGasLimit' in userOp
-              ? (userOp as { paymasterVerificationGasLimit?: bigint }).paymasterVerificationGasLimit
-              : undefined,
-            paymasterPostOpGasLimit: 'paymasterPostOpGasLimit' in userOp
-              ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit
-              : undefined,
+            paymasterVerificationGasLimit:
+              "paymasterVerificationGasLimit" in userOp
+                ? (userOp as { paymasterVerificationGasLimit?: bigint })
+                    .paymasterVerificationGasLimit
+                : undefined,
+            paymasterPostOpGasLimit:
+              "paymasterPostOpGasLimit" in userOp
+                ? (userOp as { paymasterPostOpGasLimit?: bigint })
+                    .paymasterPostOpGasLimit
+                : undefined,
             maxFeePerGas: userOp.maxFeePerGas,
           };
 
@@ -1171,7 +1404,10 @@ export class Account {
           gasAmount = tokenCost;
         }
       } catch (error) {
-        console.warn('Failed to estimate gas amount for ERC-20 paymaster:', error);
+        console.warn(
+          "Failed to estimate gas amount for ERC-20 paymaster:",
+          error,
+        );
         // If estimation fails, return null (no approval call)
         return null;
       }
@@ -1183,18 +1419,21 @@ export class Account {
     }
 
     // Parse the gas amount from context
-    const requiredAmount = typeof gasAmount === 'string' ? BigInt(gasAmount) : gasAmount;
+    const requiredAmount =
+      typeof gasAmount === "string" ? BigInt(gasAmount) : gasAmount;
 
     // Check current allowance
     const publicClient = createPublicClient({
-      chain: { id: this._chain.id } as Parameters<typeof createPublicClient>[0]['chain'],
+      chain: { id: this._chain.id } as Parameters<
+        typeof createPublicClient
+      >[0]["chain"],
       transport: http(this._chain.rpcUrl),
     });
 
     const currentAllowance = await publicClient.readContract({
       address: tokenAddress as Address,
       abi: erc20Abi,
-      functionName: 'allowance',
+      functionName: "allowance",
       args: [this._smartAccount.address, ERC20_PAYMASTER_ADDRESS as Address],
     });
 
@@ -1205,7 +1444,7 @@ export class Account {
     // Encode ERC-20 approve call for the required amount
     const approveData = encodeFunctionData({
       abi: erc20Abi,
-      functionName: 'approve',
+      functionName: "approve",
       args: [ERC20_PAYMASTER_ADDRESS as Address, requiredAmount],
     });
 
@@ -1218,4 +1457,4 @@ export class Account {
 }
 
 // Re-export for convenience
-export { type BundledTransactionResult } from './smartAccount.js';
+export { type BundledTransactionResult } from "./smartAccount.js";

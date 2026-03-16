@@ -47,9 +47,9 @@ export {
   buildGrantPermissionCall,
   buildRevokePermissionCall,
   // RPC handlers
-    handleGetAssetsRequest,
-    handleGetCallsHistoryRequest,
-    handleGetPermissionsRequest,
+  handleGetAssetsRequest,
+  handleGetCallsHistoryRequest,
+  handleGetPermissionsRequest,
   handleGetCapabilitiesRequest,
   type ChainMetadataCapability,
   // Permission selector constants
@@ -100,8 +100,17 @@ export {
   type CommunicationAdapterConfig,
 } from "./communicator/index.js";
 
-/** Passkey types (used with Account class) **/
-export { type PasskeyAccount } from "./passkey-manager/index.js";
+/** Passkey exports (used with Account class) **/
+export {
+  PasskeyManager,
+  type PasskeyAccount,
+  type NativePasskeyGetFn,
+  type NativePasskeyCreateFn,
+  type NativeCredentialResult,
+} from "./passkey-manager/index.js";
+
+/** Storage exports (used with AccountConfig.storage for React Native) **/
+export { type SyncStorage } from "./storage-manager/index.js";
 
 /** Key Manager exports **/
 export { KeyManager } from "./key-manager/index.js";
