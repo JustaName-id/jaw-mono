@@ -3,9 +3,13 @@ import {
   createPasskeyUtils,
   authenticateWithWebAuthnUtils,
   importPasskeyUtils,
+  wrapNativeGetFn,
+  wrapNativeCreateFn,
   WebAuthnAuthenticationError,
   PasskeyRegistrationError,
   PasskeyLookupError,
+  type NativePasskeyGetFn,
+  type NativePasskeyCreateFn,
 } from "./utils.js";
 
 // Mock viem/account-abstraction
@@ -319,6 +323,147 @@ describe("passkey-manager/utils — React Native adapter support", () => {
       } finally {
         globalThis.window = originalWindow;
       }
+    });
+  });
+
+  describe("wrapNativeGetFn", () => {
+    it("should convert ArrayBuffer options to base64url and base64url response back to ArrayBuffer", async () => {
+      const challenge = new Uint8Array([1, 2, 3, 4]);
+      const credId = new Uint8Array([10, 20, 30]);
+
+      const mockNativeGetFn: NativePasskeyGetFn = vi.fn().mockResolvedValue({
+        id: "native-cred-id",
+        type: "public-key",
+        response: {
+          authenticatorData: "AQID", // base64url for [1,2,3]
+          clientDataJSON: "BAUG",   // base64url for [4,5,6]
+          signature: "BwgJ",       // base64url for [7,8,9]
+        },
+      });
+
+      const wrappedGetFn = wrapNativeGetFn(mockNativeGetFn);
+
+      const result = (await wrappedGetFn({
+        publicKey: {
+          challenge: challenge.buffer,
+          rpId: "example.com",
+          allowCredentials: [
+            { type: "public-key", id: credId.buffer, transports: ["internal"] },
+          ],
+          userVerification: "preferred",
+          timeout: 60000,
+        },
+      })) as { id: string; type: string; response: Record<string, ArrayBuffer> };
+
+      // Verify the native fn received base64url strings
+      const nativeCall = vi.mocked(mockNativeGetFn).mock.calls[0][0];
+      expect(typeof nativeCall.challenge).toBe("string");
+      expect(nativeCall.rpId).toBe("example.com");
+      expect(typeof nativeCall.allowCredentials![0].id).toBe("string");
+      expect(nativeCall.userVerification).toBe("preferred");
+      expect(nativeCall.timeout).toBe(60000);
+
+      // Verify the response was converted back to ArrayBuffers
+      expect(result.id).toBe("native-cred-id");
+      expect(result.type).toBe("public-key");
+      expect(result.response.authenticatorData).toBeInstanceOf(ArrayBuffer);
+      expect(result.response.clientDataJSON).toBeInstanceOf(ArrayBuffer);
+      expect(result.response.signature).toBeInstanceOf(ArrayBuffer);
+
+      // Verify round-trip: base64url "AQID" should decode to [1,2,3]
+      expect(new Uint8Array(result.response.authenticatorData)).toEqual(
+        new Uint8Array([1, 2, 3]),
+      );
+    });
+
+    it("should default type to 'public-key' when not provided by native fn", async () => {
+      const mockNativeGetFn: NativePasskeyGetFn = vi.fn().mockResolvedValue({
+        id: "cred",
+        // type omitted
+        response: {
+          authenticatorData: "AA",
+          clientDataJSON: "AA",
+          signature: "AA",
+        },
+      });
+
+      const wrappedGetFn = wrapNativeGetFn(mockNativeGetFn);
+      const result = (await wrappedGetFn({
+        publicKey: {
+          challenge: new Uint8Array(1).buffer,
+          rpId: "example.com",
+        },
+      })) as { type: string };
+
+      expect(result.type).toBe("public-key");
+    });
+
+    it("should throw when publicKey options are missing", async () => {
+      const mockNativeGetFn: NativePasskeyGetFn = vi.fn();
+      const wrappedGetFn = wrapNativeGetFn(mockNativeGetFn);
+
+      await expect(wrappedGetFn({})).rejects.toThrow(
+        "publicKey options are required",
+      );
+      expect(mockNativeGetFn).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("wrapNativeCreateFn", () => {
+    // Minimal attestation object with COSE key markers:
+    // 0x21 0x58 0x20 <32-byte x> and 0x22 0x58 0x20 <32-byte y>
+    const ATTESTATION_B64URL =
+      "oKGiIVggAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAiWCAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4_QA";
+    const EXPECTED_PUBKEY =
+      "0x040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40";
+
+    it("should pass correct options to native create fn and extract public key from attestation", async () => {
+      const mockNativeCreateFn: NativePasskeyCreateFn = vi
+        .fn()
+        .mockResolvedValue({
+          id: "new-cred-id",
+          response: {
+            attestationObject: ATTESTATION_B64URL,
+            clientDataJSON: "e30", // "{}" in base64url
+          },
+        });
+
+      const wrappedCreateFn = wrapNativeCreateFn(mockNativeCreateFn);
+      const result = await wrappedCreateFn("alice", "example.com", "MyApp");
+
+      // Verify native fn received correct structure
+      const nativeCall = vi.mocked(mockNativeCreateFn).mock.calls[0][0];
+      expect(typeof nativeCall.challenge).toBe("string");
+      expect(nativeCall.challenge.length).toBeGreaterThan(0);
+      expect(nativeCall.rp).toEqual({ id: "example.com", name: "MyApp" });
+      expect(nativeCall.user.name).toBe("alice");
+      expect(nativeCall.user.displayName).toBe("alice");
+      expect(typeof nativeCall.user.id).toBe("string"); // base64url-encoded username
+      expect(nativeCall.pubKeyCredParams).toEqual([
+        { type: "public-key", alg: -7 },
+      ]);
+
+      // Verify extracted result
+      expect(result.id).toBe("new-cred-id");
+      expect(result.publicKey).toBe(EXPECTED_PUBKEY);
+    });
+
+    it("should throw PasskeyRegistrationError for invalid attestation (missing COSE markers)", async () => {
+      const mockNativeCreateFn: NativePasskeyCreateFn = vi
+        .fn()
+        .mockResolvedValue({
+          id: "bad-cred",
+          response: {
+            attestationObject: "AQIDBA", // garbage bytes, no COSE markers
+            clientDataJSON: "e30",
+          },
+        });
+
+      const wrappedCreateFn = wrapNativeCreateFn(mockNativeCreateFn);
+
+      await expect(
+        wrappedCreateFn("alice", "example.com", "MyApp"),
+      ).rejects.toThrow("Failed to extract public key from attestationObject");
     });
   });
 

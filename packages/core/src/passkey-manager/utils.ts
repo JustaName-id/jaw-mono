@@ -147,21 +147,6 @@ export interface ImportWebAuthnAuthenticationResult {
 }
 
 /**
- * Convert a base64url credential ID to an ArrayBuffer
- */
-function credentialIdToArrayBuffer(credentialId: string): ArrayBuffer {
-  const base64 = credentialId.replace(/-/g, "+").replace(/_/g, "/");
-  const paddedBase64 =
-    base64 + "==".substring(0, (4 - (base64.length % 4)) % 4);
-  const binary = atob(paddedBase64);
-  const bytes = new Uint8Array(binary.length);
-  for (let i = 0; i < binary.length; i++) {
-    bytes[i] = binary.charCodeAt(i);
-  }
-  return bytes.buffer;
-}
-
-/**
  * Convert an ArrayBuffer or Uint8Array to a base64url-encoded string.
  * Accepts both because viem/ox may pass either type for challenge and credential IDs.
  */
@@ -358,7 +343,7 @@ export async function authenticateWithWebAuthnUtils(
   }
   try {
     // Convert credentialId from base64url to binary format
-    const credentialIdBuffer = credentialIdToArrayBuffer(credentialId);
+    const credentialIdBuffer = toBuffer(credentialId);
 
     // Generate challenge
     const challenge = crypto.getRandomValues(new Uint8Array(32));

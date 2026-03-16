@@ -126,6 +126,10 @@ class MyUIHandler implements UIHandler {
 
 In React Native, `window` and `navigator.credentials` are unavailable. Pass `Passkey.get` and `Passkey.create` from [`react-native-passkey`](https://github.com/f-23/react-native-passkey) directly — JAW handles all format conversion, challenge generation, and public key extraction internally.
 
+:::warning[Storage in React Native]
+Without a custom `storage`, JAW falls back to an in-memory store that does **not** persist across app restarts. Pass a `SyncStorage` implementation backed by MMKV or similar for durable persistence.
+:::
+
 ```typescript
 import { Account } from '@jaw.id/core';
 import { Passkey } from 'react-native-passkey';
