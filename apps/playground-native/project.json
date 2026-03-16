@@ -1,0 +1,76 @@
+{
+  "name": "@jaw-mono/playground-native",
+  "$schema": "../../node_modules/nx/schemas/project-schema.json",
+  "sourceRoot": "apps/playground-native",
+  "projectType": "application",
+  "tags": ["npm:private", "platform:mobile"],
+  "targets": {
+    "start": {
+      "executor": "@nx/expo:start",
+      "options": {
+        "port": 8081
+      }
+    },
+    "serve": {
+      "executor": "@nx/expo:serve",
+      "options": {
+        "port": 8081
+      }
+    },
+    "run-ios": {
+      "executor": "@nx/expo:run",
+      "options": {
+        "platform": "ios"
+      },
+      "configurations": {
+        "device": {
+          "device": true
+        }
+      }
+    },
+    "run-android": {
+      "executor": "@nx/expo:run",
+      "options": {
+        "platform": "android"
+      },
+      "configurations": {
+        "device": {
+          "device": true
+        }
+      }
+    },
+    "export": {
+      "executor": "@nx/expo:export",
+      "options": {
+        "platform": "all",
+        "outputDir": "dist/apps/playground-native"
+      }
+    },
+    "prebuild": {
+      "executor": "@nx/expo:prebuild",
+      "options": {
+        "clean": true
+      }
+    },
+    "install": {
+      "executor": "@nx/expo:install",
+      "options": {}
+    },
+    "build": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "echo 'Skipping build for React Native app (use run-ios/run-android instead)'"
+      }
+    },
+    "typecheck": {
+      "executor": "nx:run-commands",
+      "options": {
+        "command": "tsc --noEmit",
+        "cwd": "apps/playground-native"
+      }
+    },
+    "lint": {
+      "executor": "@nx/eslint:lint"
+    }
+  }
+}

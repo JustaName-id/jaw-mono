@@ -1,53 +1,111 @@
-'use client';
+"use client";
 
-import { useEffect, useState, useRef } from 'react';
-import { useAuth, usePasskeys } from '../hooks';
-import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
-import { type PasskeyAccount } from '@jaw.id/core';
-import { SignatureModal } from '../components/SignatureModal';
-import { SiweModal } from '../components/SiweModal';
-import { Eip712Modal } from '../components/Eip712Modal';
-import { ensureIntNumber, type SignInWithEthereumCapabilityRequest } from '@jaw.id/core';
-import { ConnectModal } from '../components/ConnectModal';
-import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
-import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
-import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
-import { SDKRequestType } from '../lib/sdk-types';
-import { PopupCommunicator, type Message } from '../lib/popup-communicator';
-import { CryptoHandler } from '../lib/crypto-handler';
-import type { SessionAuthState } from '../lib/session-manager';
-import type { RPCRequestMessage } from '@jaw.id/core';
-import type { Chain as chain } from '@jaw.id/core';
-import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
-import { isSiweMessage } from '../lib/siwe-handler';
-import { createSiweMessage } from 'viem/siwe';
-import { ChainId } from '@justaname.id/sdk';
-import type { PopupConfig, PendingRequest } from '../utils/types';
-import { extractSubnameTextRecords } from '../lib/extractSubnameTexts';
-import { standardErrorCodes } from '@jaw.id/core';
-
+import { useEffect, useState, useRef } from "react";
+import { useAuth, usePasskeys } from "../hooks";
+import {
+  SignInScreen,
+  type AuthenticatedAccount,
+} from "../components/OnboardingSection";
+import { type PasskeyAccount } from "@jaw.id/core";
+import { SignatureModal } from "../components/SignatureModal";
+import { SiweModal } from "../components/SiweModal";
+import { Eip712Modal } from "../components/Eip712Modal";
+import {
+  Account,
+  PasskeyManager,
+  ensureIntNumber,
+  type SignInWithEthereumCapabilityRequest,
+  type WalletGrantPermissionsRequest,
+} from "@jaw.id/core";
+import { ConnectModal } from "../components/ConnectModal";
+import {
+  TransactionModal,
+  type TransactionResult,
+  type TransactionRequestData,
+} from "../components/TransactionModal";
+import {
+  PermissionModal,
+  type PermissionRequestData,
+} from "../components/PermissionModal";
+import { UnsupportedMethodModal } from "../components/UnsupportedMethodModal";
+import { SDKRequestType } from "../lib/sdk-types";
+import { PopupCommunicator, type Message } from "../lib/popup-communicator";
+import { CryptoHandler } from "../lib/crypto-handler";
+import type { SessionAuthState } from "../lib/session-manager";
+import type { RPCRequestMessage } from "@jaw.id/core";
+import type { Chain } from "@jaw.id/core";
+import {
+  extractTransactionData,
+  type WalletSendCallsReturn,
+  type EthSendTransactionReturn,
+} from "../lib/tx-handler";
+import { isSiweMessage } from "../lib/siwe-handler";
+import { createSiweMessage } from "viem/siwe";
+import { ChainId } from "@justaname.id/sdk";
+import type { PopupConfig, PendingRequest } from "../utils/types";
+import { extractSubnameTextRecords } from "../lib/extractSubnameTexts";
+import { standardErrorCodes } from "@jaw.id/core";
 
 // Note: TransactionRequestData is now imported from TransactionModal for consistency
 
 // Simple state types
 type PopupState =
-  | 'initializing'
-  | 'passkey-check'
-  | 'passkey-create'
-  | 'passkey-auth'
-  | 'account-selection'
-  | 'processing'
-  | 'success'
-  | 'error';
+  | "initializing"
+  | "passkey-check"
+  | "passkey-create"
+  | "passkey-auth"
+  | "account-selection"
+  | "processing"
+  | "success"
+  | "error";
 
+// Helper function to generate UUID (fallback for older environments)
+function generateUUID(): string {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  // Fallback using crypto.getRandomValues (CSPRNG)
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  // Set version 4 (bits 12-15 of time_hi_and_version)
+  bytes[6] = (bytes[6] & 0x0f) | 0x40;
+  // Set variant (bits 6-7 of clock_seq_hi_and_reserved)
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+  const hex = Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join(
+    "",
+  );
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
+}
+
+// Base64URL encoding/decoding helpers (URL-safe base64)
+// Must match the format used by MobileCommunicationAdapter in React Native
+function base64UrlEncode(str: string): string {
+  const base64 = btoa(str);
+  // Convert to base64url format (URL-safe)
+  return base64.replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+
+function base64UrlDecode(str: string): string {
+  // Convert from base64url to standard base64
+  let base64 = str.replace(/-/g, "+").replace(/_/g, "/");
+  // Restore padding
+  const pad = base64.length % 4;
+  if (pad > 0) {
+    base64 += "=".repeat(4 - pad);
+  }
+  return atob(base64);
+}
 
 export default function KeysJawIdApp() {
+  // State needs to be declared before hook calls
+  const [apiKey, setApiKey] = useState<string | undefined>(undefined);
+
   // Current origin for session-based auth
   const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
 
   // Use hooks for passkey operations (pass origin for session-based auth)
   const authQuery = useAuth({ origin: currentOrigin || undefined });
-  const passkeyQuery = usePasskeys();
+  const passkeyQuery = usePasskeys({ apiKey });
 
   // Service instances (created once)
   const [communicator] = useState(() => new PopupCommunicator());
@@ -55,49 +113,348 @@ export default function KeysJawIdApp() {
 
   // Simple state
   const [isSDKMode, setIsSDKMode] = useState(false);
-  const [state, setState] = useState<PopupState>('initializing');
+  const [state, setState] = useState<PopupState>("initializing");
   const [config, setConfig] = useState<PopupConfig | null>(null);
-  const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
-  const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(null);
+  const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(
+    null,
+  );
+  const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(
+    null,
+  );
   const [error, setError] = useState<string | null>(null);
   const [ensConfig, setEnsConfig] = useState<string | undefined>(undefined);
   const [chainId, setChainId] = useState<ChainId | undefined>(undefined);
-  const [apiKey, setApiKey] = useState<string | undefined>(undefined);
-  const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
+  const effectiveChainId = (chainId ??
+    pendingRequest?.chain?.id ??
+    1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
 
+  // === NEW: Browser mode state (for React Native Safari View Controller) ===
+  const [isBrowserMode, setIsBrowserMode] = useState(false);
+  const callbackUrlRef = useRef<string | null>(null);
+  const requestIdRef = useRef<string | undefined>(undefined);
+
+  // Browser action state for sign/send operations
+  interface BrowserAction {
+    type:
+      | "connect"
+      | "signMessage"
+      | "signTypedData"
+      | "sendTransaction"
+      | "grantPermissions"
+      | "revokePermissions";
+    message?: string;
+    typedData?: object;
+    tx?: { to: string; value?: string; data?: string; chainId?: number };
+    calls?: Array<{ to: string; value?: string; data?: string }>; // For wallet_sendCalls
+    permissions?: WalletGrantPermissionsRequest["params"][0];
+    chainId?: number;
+    chain?: Chain;
+    credentialId?: string;
+  }
+  const [browserAction, setBrowserAction] = useState<BrowserAction | null>(
+    null,
+  );
+
+  // === NEW: Browser mode redirect helpers ===
+  const redirectWithResult = (
+    callbackUrl: string,
+    result: unknown,
+    requestId?: string,
+  ) => {
+    const resultStr = base64UrlEncode(JSON.stringify(result));
+    const params = new URLSearchParams({
+      result: resultStr,
+      requestId: requestId || generateUUID(), // Echo requestId if provided
+    });
+    const redirectUrl = `${callbackUrl}?${params.toString()}`;
+    window.location.replace(redirectUrl);
+  };
+
+  const redirectWithError = (
+    callbackUrl: string,
+    errorMsg: string,
+    requestId?: string,
+  ) => {
+    const params = new URLSearchParams({
+      error: errorMsg,
+      requestId: requestId || generateUUID(), // Echo requestId if provided
+    });
+    const redirectUrl = `${callbackUrl}?${params.toString()}`;
+    window.location.replace(redirectUrl);
+  };
+
+  // === NEW: Handle browser mode (React Native Safari View Controller) ===
+  const handleBrowserMode = async (
+    callbackUrl: string,
+    configParam: string,
+    urlParams: URLSearchParams,
+  ) => {
+    try {
+      // Parse config from URL
+      const parsedConfig = JSON.parse(base64UrlDecode(configParam));
+
+      setConfig(parsedConfig);
+      configRef.current = parsedConfig;
+
+      // Extract API key from chain.rpcUrl (new secure method)
+      // The API key is no longer in parsedConfig for security reasons (Issue 1 fix)
+      // Instead, it's embedded in the chain's RPC URL
+      let extractedApiKey: string | undefined = parsedConfig.apiKey; // Backward compatibility fallback
+
+      const chainParam = urlParams.get("chain");
+
+      if (chainParam) {
+        try {
+          const chain = JSON.parse(base64UrlDecode(chainParam));
+
+          // Extract API key from rpcUrl query param (e.g., "https://rpc.jaw.id/1?api-key=xxx")
+          if (chain?.rpcUrl) {
+            const apiKeyFromChain = chain.rpcUrl
+              .split("api-key=")[1]
+              ?.split("&")[0];
+            if (apiKeyFromChain) {
+              extractedApiKey = apiKeyFromChain;
+            }
+          }
+        } catch (e) {
+          console.error("Failed to parse chain:", e);
+        }
+      }
+      setApiKey(extractedApiKey);
+      setChainId(parsedConfig.metadata?.defaultChainId as ChainId);
+      setEnsConfig(parsedConfig.preference?.ens);
+
+      // Extract origin from URL params for session-based auth
+      const originParam = urlParams.get("origin");
+      if (originParam) {
+        setCurrentOrigin(originParam);
+        // Also set origin on CryptoHandler so it can update auth state
+        cryptoHandler.setOrigin(originParam);
+      }
+
+      // Set browser mode flags
+      setIsBrowserMode(true);
+      setIsSDKMode(true);
+
+      // Store callback URL and requestId for later redirect
+      callbackUrlRef.current = callbackUrl;
+      requestIdRef.current = urlParams.get("requestId") || undefined;
+
+      // Parse action type and params
+      const action = urlParams.get("action") || "connect";
+      const credentialId = urlParams.get("credentialId") || undefined;
+      const requestId = requestIdRef.current;
+
+      switch (action) {
+        case "signMessage": {
+          const messageParam = urlParams.get("message");
+          if (!messageParam || !credentialId) {
+            redirectWithError(
+              callbackUrl,
+              "Missing message or credentialId",
+              requestId,
+            );
+            return;
+          }
+          const message = base64UrlDecode(messageParam);
+          setBrowserAction({ type: "signMessage", message, credentialId });
+          break;
+        }
+
+        case "signTypedData": {
+          const typedDataParam = urlParams.get("typedData");
+          if (!typedDataParam || !credentialId) {
+            redirectWithError(
+              callbackUrl,
+              "Missing typedData or credentialId",
+              requestId,
+            );
+            return;
+          }
+          const typedData = JSON.parse(base64UrlDecode(typedDataParam));
+          setBrowserAction({ type: "signTypedData", typedData, credentialId });
+          break;
+        }
+
+        case "sendTransaction": {
+          const callsParam = urlParams.get("calls");
+          const txParam = urlParams.get("tx");
+
+          if (!credentialId) {
+            redirectWithError(callbackUrl, "Missing credentialId", requestId);
+            return;
+          }
+
+          if (callsParam) {
+            // wallet_sendCalls: array of calls
+            const calls = JSON.parse(base64UrlDecode(callsParam));
+            setBrowserAction({ type: "sendTransaction", calls, credentialId });
+          } else if (txParam) {
+            // eth_sendTransaction: single tx
+            const tx = JSON.parse(base64UrlDecode(txParam));
+            setBrowserAction({ type: "sendTransaction", tx, credentialId });
+          } else {
+            redirectWithError(
+              callbackUrl,
+              "Missing tx or calls parameter",
+              requestId,
+            );
+            return;
+          }
+          break;
+        }
+
+        case "grantPermissions": {
+          const permissionsParam = urlParams.get("permissions");
+          const chainParam = urlParams.get("chain");
+          if (!permissionsParam || !credentialId) {
+            redirectWithError(
+              callbackUrl,
+              "Missing permissions or credentialId",
+              requestId,
+            );
+            return;
+          }
+          const permissionsData = JSON.parse(base64UrlDecode(permissionsParam));
+
+          let chain = undefined;
+          if (chainParam) {
+            try {
+              chain = JSON.parse(base64UrlDecode(chainParam));
+            } catch (e) {
+              console.warn("Failed to parse chain parameter:", e);
+            }
+          }
+
+          setBrowserAction({
+            type: "grantPermissions",
+            permissions: permissionsData,
+            chainId: permissionsData.chainId,
+            chain,
+            credentialId,
+          });
+          break;
+        }
+
+        case "revokePermissions": {
+          const permissionsParam = urlParams.get("permissions");
+          const chainParam = urlParams.get("chain");
+          if (!permissionsParam || !credentialId) {
+            redirectWithError(
+              callbackUrl,
+              "Missing permissions or credentialId",
+              requestId,
+            );
+            return;
+          }
+          const permissionsData = JSON.parse(base64UrlDecode(permissionsParam));
+
+          let chain = undefined;
+          if (chainParam) {
+            try {
+              chain = JSON.parse(base64UrlDecode(chainParam));
+            } catch (e) {
+              console.warn("Failed to parse chain parameter:", e);
+            }
+          }
+
+          setBrowserAction({
+            type: "revokePermissions",
+            permissions: permissionsData,
+            chainId: permissionsData.chainId,
+            chain,
+            credentialId,
+          });
+          break;
+        }
+
+        case "connect":
+        default:
+          setBrowserAction({ type: "connect" });
+          break;
+      }
+
+      // Conditionally authenticate based on action type
+      // For connect action or when no credentialId is provided, show passkey selection
+      // For sign/send operations with credentialId, auto-authenticate to skip auth screen
+      if (action === "connect" || !credentialId) {
+        await checkForPasskeys();
+      } else {
+        await autoAuthenticateFromCredential(credentialId, extractedApiKey);
+      }
+    } catch (err) {
+      console.error("Failed to parse browser mode config:", err);
+      redirectWithError(
+        callbackUrl,
+        "Invalid configuration",
+        urlParams.get("requestId") || undefined,
+      );
+    }
+  };
+
   // Single useEffect for all message handling
   useEffect(() => {
+    // === Browser mode check (for React Native Safari View Controller) ===
+    const urlParams = new URLSearchParams(window.location.search);
+    const mode = urlParams.get("mode");
+    const callbackUrl = urlParams.get("callback");
+    const configParam = urlParams.get("config");
+
+    if (mode === "browser" && callbackUrl && configParam) {
+      // Validate callback URL: only allow custom URL schemes (e.g., jaw-demo://auth)
+      // Reject http/https to prevent open redirect attacks
+      try {
+        const callbackScheme = new URL(callbackUrl).protocol;
+        if (callbackScheme === "http:" || callbackScheme === "https:") {
+          console.error(
+            "Rejected callback URL with http(s) scheme:",
+            callbackUrl,
+          );
+          return;
+        }
+      } catch {
+        // URL parsing failed — reject malformed callback
+        console.error("Rejected malformed callback URL:", callbackUrl);
+        return;
+      }
+      handleBrowserMode(callbackUrl, configParam, urlParams);
+      return; // Early exit - don't run popup/WebView logic
+    }
+
     // Check if running in popup mode
     if (!communicator.hasOpener()) {
-      console.log('📱 Running in normal mode (no opener)');
       setIsSDKMode(false);
       return;
     }
 
-    console.log('🚀 Running in SDK popup mode');
     setIsSDKMode(true);
 
     // Initialize crypto handler
-    cryptoHandler.initialize().then(() => {
-      console.log('✅ CryptoHandler initialized');
-      // Send PopupLoaded event
-      communicator.sendPopupLoaded();
-    }).catch(err => {
-      console.error('❌ Failed to initialize CryptoHandler:', err);
-      setError('Failed to initialize');
-      setState('error');
-    });
+    cryptoHandler
+      .initialize()
+      .then(() => {
+        communicator.sendPopupLoaded();
+      })
+      .catch((err) => {
+        console.error("Failed to initialize CryptoHandler:", err);
+        // In WebView mode over HTTP, crypto may fail - still send PopupLoaded
+        if (communicator.isWebView()) {
+          communicator.sendPopupLoaded();
+        } else {
+          setError("Failed to initialize");
+          setState("error");
+        }
+      });
 
     // Listen for messages
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cleanup = communicator.onMessage<PopupConfig>((message: any) => {
-      console.log('📥 Received message:', message);
+      console.log("📥 Received message:", message);
 
       // Handle config message
       if (message.data?.version) {
-
         setConfig(message.data);
         configRef.current = message.data;
 
@@ -113,8 +470,8 @@ export default function KeysJawIdApp() {
       }
 
       // Handle selectSignerType event
-      if (message.event === 'selectSignerType') {
-        communicator.sendResponse(message.id, 'scw');
+      if (message.event === "selectSignerType") {
+        communicator.sendResponse(message.id, "scw");
       }
 
       // Handle RPC requests
@@ -122,19 +479,20 @@ export default function KeysJawIdApp() {
         const rpcMessage = message as RPCRequestMessage;
 
         // Handle handshake (unencrypted initial request)
-        if ('handshake' in rpcMessage.content) {
+        if ("handshake" in rpcMessage.content) {
           handleHandshakeRequest(rpcMessage);
         }
 
         // Handle encrypted request
-        if ('encrypted' in rpcMessage.content) {
+        if ("encrypted" in rpcMessage.content) {
           handleEncryptedRequest(rpcMessage);
         }
       }
     });
 
-    // Cleanup message listener on unmount (PopupUnload is handled by communicator's beforeunload)
+    // Send PopupUnload on unmount
     return () => {
+      communicator.sendPopupUnload();
       cleanup();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -145,9 +503,11 @@ export default function KeysJawIdApp() {
     if (
       pendingRequest?.type === SDKRequestType.CONNECT &&
       currentAccount &&
-      (state === 'processing' || state === 'passkey-auth' || state === 'passkey-create')
+      (state === "processing" ||
+        state === "passkey-auth" ||
+        state === "passkey-create")
     ) {
-      setState('account-selection');
+      setState("account-selection");
     }
   }, [pendingRequest, state, currentAccount]);
 
@@ -161,10 +521,10 @@ export default function KeysJawIdApp() {
           await pendingRequest.onApprove(chainIdHex);
           setTimeout(() => window.close(), 100);
         } catch (error) {
-          console.error('❌ Failed to handle eth_chainId:', error);
+          console.error("❌ Failed to handle eth_chainId:", error);
           await pendingRequest.onReject(
-            error instanceof Error ? error.message : 'Failed to get chain ID',
-            standardErrorCodes.rpc.internal
+            error instanceof Error ? error.message : "Failed to get chain ID",
+            standardErrorCodes.rpc.internal,
           );
           setTimeout(() => window.close(), 100);
         }
@@ -173,9 +533,91 @@ export default function KeysJawIdApp() {
     }
   }, [pendingRequest, isSDKMode]);
 
+  /**
+   * Auto-authenticate user from credentialId in browser mode
+   * This allows sign/send operations to skip the passkey selection screen
+   */
+  const autoAuthenticateFromCredential = async (
+    credentialId: string,
+    apiKey?: string,
+  ) => {
+    try {
+      console.log(
+        "[AutoAuth] Attempting auto-authentication with credentialId:",
+        credentialId,
+      );
+
+      // API key is required for account restoration
+      if (!apiKey) {
+        console.warn(
+          "[AutoAuth] No API key available, falling back to passkey check",
+        );
+        await checkForPasskeys();
+        return;
+      }
+
+      // Find the stored account matching this credentialId
+      const allAccounts = Account.getStoredAccounts(apiKey);
+      const matchingAccount = allAccounts.find(
+        (acc) => acc.credentialId === credentialId,
+      );
+
+      if (!matchingAccount) {
+        console.warn(
+          "[AutoAuth] No stored account found for credentialId:",
+          credentialId,
+        );
+        // Fall back to passkey check
+        await checkForPasskeys();
+        return;
+      }
+
+      console.log(
+        "[AutoAuth] Found matching account for credentialId:",
+        credentialId,
+      );
+
+      // Restore account to compute smart account address (no WebAuthn prompt)
+      // This is necessary because the smart account address is not stored in PasskeyAccount
+      const account = await Account.restore(
+        {
+          chainId: effectiveChainId,
+          apiKey,
+        },
+        matchingAccount.credentialId,
+        matchingAccount.publicKey,
+      );
+
+      console.log("[AutoAuth] Restored account with address:", account.address);
+
+      // Set the account as authenticated by storing auth state
+      // This mimics what Account.get() does when credentialId is provided
+      const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+      passkeyManager.storeAuthState(
+        account.address,
+        matchingAccount.credentialId,
+      );
+
+      // Update current account state
+      setCurrentAccount(matchingAccount);
+
+      // Refetch auth query to update isAuthenticated
+      await authQuery.refetch();
+
+      console.log(
+        "✅ [AutoAuth] Auto-authenticated with credentialId:",
+        credentialId,
+      );
+    } catch (error) {
+      console.error("[AutoAuth] Failed to auto-authenticate:", error);
+      // Fall back to passkey check on error
+      await checkForPasskeys();
+    }
+  };
+
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
-    setState('passkey-check');
+    setState("passkey-check");
 
     try {
       // Refetch and use the returned fresh data (not the cached hook values)
@@ -185,28 +627,28 @@ export default function KeysJawIdApp() {
 
       if (accounts.length > 0) {
         // Has accounts - show account selection/auth screen
-        setState('passkey-auth');
+        setState("passkey-auth");
       } else {
         // No accounts - need to create
-        setState('passkey-create');
+        setState("passkey-create");
       }
     } catch (err) {
-      console.error('❌ Error checking passkeys:', err);
-      setError('Failed to check for passkeys');
-      setState('error');
+      console.error("❌ Error checking passkeys:", err);
+      setError("Failed to check for passkeys");
+      setState("error");
     }
   };
 
   // Handle handshake request (unencrypted)
   const handleHandshakeRequest = async (request: RPCRequestMessage) => {
     try {
-      if (!('handshake' in request.content) || !request.content.handshake) {
-        console.error('❌ Invalid handshake request');
+      if (!("handshake" in request.content) || !request.content.handshake) {
+        console.error("❌ Invalid handshake request");
         return;
       }
 
       // Get origin and set it as current context
-      const origin = communicator.getOrigin() || '';
+      const origin = communicator.getOrigin() || "";
       setCurrentOrigin(origin);
       cryptoHandler.setOrigin(origin);
 
@@ -215,13 +657,14 @@ export default function KeysJawIdApp() {
       const params = request.content.handshake.params;
       const chain = request.content.chain;
 
-      console.log('🔍 =========================');
-      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
-      console.log('🔍 Origin:', origin);
-      console.log('🔍 Method:', method);
-      console.log('🔍 =========================');
+      console.log("🔍 =========================");
+      console.log("🔍 HANDSHAKE REQUEST RECEIVED:");
+      console.log("🔍 Origin:", origin);
+      console.log("🔍 Method:", method);
+      console.log("🔍 =========================");
 
-      const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
+      const apiKeyFromProvider =
+        request.content?.chain?.rpcUrl?.split("api-key=")[1];
       if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
         setApiKey(apiKeyFromProvider);
       }
@@ -229,35 +672,42 @@ export default function KeysJawIdApp() {
       // Check for existing session
       const existingSession = await cryptoHandler.getSession(origin);
 
-      // For pure key exchange handshake (method: 'handshake') 
+      // For pure key exchange handshake (method: 'handshake')
       // This situation never happens because the wallet_connect/ eth_requestAccounts request is always sent first
-      if (method === 'handshake') {
+      if (method === "handshake") {
         if (!existingSession) {
           // No session yet - nothing to respond to, wait for wallet_connect
-          console.log('🔑 Handshake without session, waiting for wallet_connect');
+          console.log(
+            "🔑 Handshake without session, waiting for wallet_connect",
+          );
           return;
         }
         if (existingSession.peerPublicKey !== peerPublicKey) {
           // Update peer key if changed
-          await cryptoHandler.getSessionManager().updatePeerKey(origin, peerPublicKey);
+          await cryptoHandler
+            .getSessionManager()
+            .updatePeerKey(origin, peerPublicKey);
         }
         // Acknowledge the handshake
-        const response = await cryptoHandler.createHandshakeResponse(request.id, { accounts: [] });
+        const response = await cryptoHandler.createHandshakeResponse(
+          request.id,
+          { accounts: [] },
+        );
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         communicator.sendMessage(response as unknown as Message);
         return;
       }
 
       // For eth_requestAccounts and wallet_connect
-      if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
+      if (method === "eth_requestAccounts" || method === "wallet_connect") {
         // Always create a fresh session with new keys for each connection request
         if (existingSession) {
-          console.log('🗑️ Deleting old session for:', origin);
+          console.log("🗑️ Deleting old session for:", origin);
           await cryptoHandler.getSessionManager().deleteSession(origin);
         }
 
         // Create new session with fresh keys (account will be set when user approves)
-        console.log('🔐 Creating fresh session for:', origin);
+        console.log("🔐 Creating fresh session for:", origin);
         await cryptoHandler.getSessionManager().createSession({
           origin,
           peerPublicKey,
@@ -270,16 +720,27 @@ export default function KeysJawIdApp() {
         setPendingRequest({
           origin,
           type: SDKRequestType.CONNECT,
-          requestId: request.id || '',
-          correlationId: request.correlationId || '',
+          requestId: request.id || "",
+          correlationId: request.correlationId || "",
           metadata: configRef.current?.metadata || null,
           method,
           params: Array.isArray(params) ? params : [],
-          chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) } : undefined,
+          chain: chain
+            ? {
+                id: chain.id,
+                rpcUrl: chain.rpcUrl ?? "",
+                ...(chain.paymaster && { paymaster: chain.paymaster }),
+              }
+            : undefined,
           onApprove: async (result: unknown) => {
             const response = await cryptoHandler.createHandshakeResponse(
               request.id,
-              result as { accounts: Array<{ address: string; capabilities?: Record<string, unknown> }> }
+              result as {
+                accounts: Array<{
+                  address: string;
+                  capabilities?: Record<string, unknown>;
+                }>;
+              },
             );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(response as any);
@@ -292,9 +753,9 @@ export default function KeysJawIdApp() {
         // Fresh session has no account - checkForPasskeys flow will handle passkey creation/selection
       }
     } catch (err) {
-      console.error('❌ Failed to handle handshake:', err);
-      setError(err instanceof Error ? err.message : 'Handshake failed');
-      setState('error');
+      console.error("❌ Failed to handle handshake:", err);
+      setError(err instanceof Error ? err.message : "Handshake failed");
+      setState("error");
     }
   };
 
@@ -302,7 +763,7 @@ export default function KeysJawIdApp() {
   const handleEncryptedRequest = async (request: RPCRequestMessage) => {
     try {
       // Load session for this origin
-      const origin = communicator.getOrigin() || '';
+      const origin = communicator.getOrigin() || "";
 
       // Update React state with current origin (needed for useAuth hook)
       setCurrentOrigin(origin);
@@ -310,8 +771,8 @@ export default function KeysJawIdApp() {
       const session = await cryptoHandler.loadSession(origin);
 
       if (!session) {
-        console.error('❌ No session found for origin:', origin);
-        throw new Error('No session found. Please reconnect.');
+        console.error("❌ No session found for origin:", origin);
+        throw new Error("No session found. Please reconnect.");
       }
 
       // Verify and update peer key if changed
@@ -325,7 +786,7 @@ export default function KeysJawIdApp() {
       const chain = decrypted.chain;
 
       // Extract API key from chain rpcUrl if present
-      const apiKeyFromProvider = chain?.rpcUrl?.split('api-key=')[1];
+      const apiKeyFromProvider = chain?.rpcUrl?.split("api-key=")[1];
       if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
         setApiKey(apiKeyFromProvider);
       }
@@ -336,41 +797,58 @@ export default function KeysJawIdApp() {
       // Check for sign message requests
       // personal_sign: always a sign message request
       // wallet_sign: only if request.type === "0x45" (Personal Sign per EIP-191)
-      if (method === 'personal_sign' ||
-        (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x45")) {
+      if (
+        method === "personal_sign" ||
+        (method === "wallet_sign" &&
+          Array.isArray(params) &&
+          params[0]?.request?.type === "0x45")
+      ) {
         requestType = SDKRequestType.SIGN_MESSAGE;
-      } else if (method === 'eth_signTypedData_v4' ||
-        (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x01")) {
+      } else if (
+        method === "eth_signTypedData_v4" ||
+        (method === "wallet_sign" &&
+          Array.isArray(params) &&
+          params[0]?.request?.type === "0x01")
+      ) {
         requestType = SDKRequestType.SIGN_TYPED_DATA;
-      } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
+      } else if (
+        method === "wallet_sendCalls" ||
+        method === "eth_sendTransaction"
+      ) {
         requestType = SDKRequestType.SEND_TRANSACTION;
-      } else if (method === 'eth_chainId') {
+      } else if (method === "eth_chainId") {
         requestType = SDKRequestType.CHAIN_ID;
-      } else if (method === 'wallet_grantPermissions') {
+      } else if (method === "wallet_grantPermissions") {
         requestType = SDKRequestType.GRANT_PERMISSIONS;
-      } else if (method === 'wallet_revokePermissions') {
+      } else if (method === "wallet_revokePermissions") {
         requestType = SDKRequestType.REVOKE_PERMISSIONS;
-      } else if (method === 'wallet_connect') {
+      } else if (method === "wallet_connect") {
         requestType = SDKRequestType.CONNECT;
       } else {
-        console.warn('⚠️ Unsupported method:', method);
+        console.warn("⚠️ Unsupported method:", method);
         requestType = SDKRequestType.UNSUPPORTED_METHOD;
       }
 
       setPendingRequest({
         origin,
         type: requestType,
-        requestId: request.id || '',
-        correlationId: request.correlationId || '',
+        requestId: request.id || "",
+        correlationId: request.correlationId || "",
         metadata: configRef.current?.metadata || null,
         method,
         params: Array.isArray(params) ? params : [],
-        chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) } : undefined,
+        chain: chain
+          ? {
+              id: chain.id,
+              rpcUrl: chain.rpcUrl ?? "",
+              ...(chain.paymaster && { paymaster: chain.paymaster }),
+            }
+          : undefined,
         onApprove: async (result: unknown) => {
           const response = await cryptoHandler.createEncryptedResponse(
-            request.id || '',
-            request.correlationId || '',
-            result
+            request.id || "",
+            request.correlationId || "",
+            result,
           );
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           communicator.sendMessage(response as any);
@@ -378,32 +856,43 @@ export default function KeysJawIdApp() {
         onReject: async (error: string, errorCode?: number) => {
           // Send standard error response (default: EIP-1193 code 4001)
           try {
-            const errorResponse = await cryptoHandler.createEncryptedErrorResponse(
-              request.id || '',
-              request.correlationId || '',
-              errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
-              error || 'User rejected the request'
-            );
+            const errorResponse =
+              await cryptoHandler.createEncryptedErrorResponse(
+                request.id || "",
+                request.correlationId || "",
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest, // Default to user rejected request (EIP-1193 standard)
+                error || "User rejected the request",
+              );
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(errorResponse as any);
             // Close window after sending error
             setTimeout(() => window.close(), 100);
           } catch (err) {
-            console.error('❌ Failed to send rejection response:', err);
+            console.error("❌ Failed to send rejection response:", err);
             window.close();
           }
         },
       });
 
       // For sign message, typed data, transaction, and permission requests, if user is authenticated, show modal directly
-      if ((requestType === SDKRequestType.SIGN_MESSAGE || requestType === SDKRequestType.SIGN_TYPED_DATA || requestType === SDKRequestType.SEND_TRANSACTION || requestType === SDKRequestType.GRANT_PERMISSIONS || requestType === SDKRequestType.REVOKE_PERMISSIONS) && authQuery.isAuthenticated && currentAccount) {
+      if (
+        (requestType === SDKRequestType.SIGN_MESSAGE ||
+          requestType === SDKRequestType.SIGN_TYPED_DATA ||
+          requestType === SDKRequestType.SEND_TRANSACTION ||
+          requestType === SDKRequestType.GRANT_PERMISSIONS ||
+          requestType === SDKRequestType.REVOKE_PERMISSIONS) &&
+        authQuery.isAuthenticated &&
+        currentAccount
+      ) {
         // The modal will be shown in the render logic below
         return;
       }
     } catch (err) {
-      console.error('❌ Failed to handle encrypted request:', err);
-      setError(err instanceof Error ? err.message : 'Failed to decrypt request');
-      setState('error');
+      console.error("❌ Failed to handle encrypted request:", err);
+      setError(
+        err instanceof Error ? err.message : "Failed to decrypt request",
+      );
+      setState("error");
     }
   };
 
@@ -411,70 +900,307 @@ export default function KeysJawIdApp() {
   // SDK MODE
   // ==========================================
   if (isSDKMode) {
+    // === BROWSER MODE: Sign/Send operations (React Native Safari View Controller) ===
+    if (
+      isBrowserMode &&
+      authQuery.isAuthenticated &&
+      browserAction &&
+      callbackUrlRef.current
+    ) {
+      const callbackUrl = callbackUrlRef.current;
+      const requestId = requestIdRef.current;
+
+      // Parse chain from URL params for proper RPC URL
+      const urlParams = new URLSearchParams(window.location.search);
+      const chainParam = urlParams.get("chain");
+      let parsedChain: Chain | undefined;
+      if (chainParam) {
+        try {
+          parsedChain = JSON.parse(base64UrlDecode(chainParam));
+        } catch (e) {
+          console.warn("Failed to parse chain parameter:", e);
+        }
+      }
+
+      // Build proper chain with RPC URL for modals
+      const buildChainForModal = (chainId?: number): Chain => {
+        if (parsedChain) {
+          return parsedChain; // Use full chain from URL params (includes rpcUrl with API key)
+        }
+        // Fallback: construct RPC URL with API key
+        const id = chainId || effectiveChainId;
+        return {
+          id,
+          rpcUrl: apiKey
+            ? `https://rpc.jaw.id/${id}?api-key=${apiKey}`
+            : `https://rpc.jaw.id/${id}`,
+          paymaster: undefined,
+        };
+      };
+
+      // Browser mode: Sign Message
+      if (browserAction.type === "signMessage" && browserAction.message) {
+        return (
+          <SignatureModal
+            origin={currentOrigin || config?.metadata?.appName || "App"}
+            message={browserAction.message}
+            address={authQuery.walletAddress ?? undefined}
+            chain={buildChainForModal()}
+            apiKey={apiKey}
+            onSuccess={async (signature) => {
+              redirectWithResult(callbackUrl, { signature }, requestId);
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message, requestId);
+            }}
+          />
+        );
+      }
+
+      // Browser mode: Sign Typed Data (EIP-712)
+      if (browserAction.type === "signTypedData" && browserAction.typedData) {
+        return (
+          <Eip712Modal
+            origin={currentOrigin || config?.metadata?.appName || "App"}
+            typedDataJson={JSON.stringify(browserAction.typedData)}
+            address={authQuery.walletAddress ?? undefined}
+            chain={buildChainForModal()}
+            apiKey={apiKey}
+            onSuccess={async (signature) => {
+              redirectWithResult(callbackUrl, { signature }, requestId);
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message, requestId);
+            }}
+          />
+        );
+      }
+
+      // Browser mode: Send Transaction
+      if (
+        browserAction.type === "sendTransaction" &&
+        (browserAction.tx || browserAction.calls)
+      ) {
+        let txData: TransactionRequestData;
+        let txChainId: number;
+
+        if (browserAction.calls) {
+          // wallet_sendCalls: array of calls
+          txChainId = browserAction.chainId || effectiveChainId;
+          txData = {
+            method: "wallet_sendCalls",
+            transactions: browserAction.calls.map((call) => ({
+              to: call.to,
+              value: call.value || "0x0",
+              data: call.data,
+              chainId: txChainId,
+            })),
+            chainId: txChainId,
+          };
+        } else if (browserAction.tx) {
+          // eth_sendTransaction: single tx
+          txChainId = browserAction.tx.chainId || effectiveChainId;
+          txData = {
+            method: "eth_sendTransaction",
+            transactions: [
+              {
+                to: browserAction.tx.to,
+                value: browserAction.tx.value || "0x0",
+                data: browserAction.tx.data,
+                chainId: txChainId,
+              },
+            ],
+            chainId: txChainId,
+          };
+        } else {
+          return null;
+        }
+
+        return (
+          <TransactionModal
+            transactionRequest={txData}
+            chain={buildChainForModal(txChainId)}
+            apiKey={apiKey}
+            onSuccess={async (result: TransactionResult) => {
+              redirectWithResult(
+                callbackUrl,
+                {
+                  txHash: result.hash,
+                  id: result.id,
+                  chainId: result.chainId,
+                },
+                requestId,
+              );
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message, requestId);
+            }}
+          />
+        );
+      }
+
+      // Browser mode: Grant Permissions
+      if (
+        browserAction.type === "grantPermissions" &&
+        browserAction.permissions
+      ) {
+        const permissionRequestData: PermissionRequestData = {
+          method: "wallet_grantPermissions",
+          params: [browserAction.permissions],
+        };
+
+        // Use full chain object from browserAction, or build from parsed chain/chainId
+        const chainForModal =
+          browserAction.chain || buildChainForModal(browserAction.chainId);
+
+        return (
+          <PermissionModal
+            permissionRequest={permissionRequestData}
+            chain={chainForModal}
+            apiKey={apiKey || ""}
+            origin={currentOrigin || config?.metadata?.appName || "App"}
+            onSuccess={async (result) => {
+              if ("success" in result) {
+                redirectWithResult(
+                  callbackUrl,
+                  { success: result.success },
+                  requestId,
+                );
+              } else {
+                redirectWithResult(
+                  callbackUrl,
+                  {
+                    permissionId: result.permissionId,
+                    expiry: result.end,
+                    account: result.account,
+                    spender: result.spender,
+                    chainId: result.chainId,
+                  },
+                  requestId,
+                );
+              }
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message, requestId);
+            }}
+          />
+        );
+      }
+
+      // Browser mode: Revoke Permissions
+      if (
+        browserAction.type === "revokePermissions" &&
+        browserAction.permissions
+      ) {
+        const permissionRequestData: PermissionRequestData = {
+          method: "wallet_revokePermissions",
+          params: [browserAction.permissions],
+        };
+
+        // Use full chain object from browserAction, or build from parsed chain/chainId
+        const chainForModal =
+          browserAction.chain || buildChainForModal(browserAction.chainId);
+
+        return (
+          <PermissionModal
+            permissionRequest={permissionRequestData}
+            chain={chainForModal}
+            apiKey={apiKey || ""}
+            origin={currentOrigin || config?.metadata?.appName || "App"}
+            onSuccess={async (result) => {
+              if ("success" in result) {
+                redirectWithResult(
+                  callbackUrl,
+                  { success: result.success },
+                  requestId,
+                );
+              } else {
+                // For revoke, still return success format
+                redirectWithResult(callbackUrl, { success: true }, requestId);
+              }
+            }}
+            onError={async (error) => {
+              redirectWithError(callbackUrl, error.message, requestId);
+            }}
+          />
+        );
+      }
+    }
 
     // Check if we have a pending transaction request and either user is authenticated OR we're in processing state
     // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (pendingRequest?.type === SDKRequestType.SEND_TRANSACTION &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
-
+    if (
+      pendingRequest?.type === SDKRequestType.SEND_TRANSACTION &&
+      state !== "success" &&
+      state !== "error" &&
+      (authQuery.isAuthenticated || state === "processing")
+    ) {
       // Extract transaction data with type safety
       let txData: TransactionRequestData;
       try {
         txData = extractTransactionData(
           pendingRequest.method,
           pendingRequest.params,
-          pendingRequest.chain
+          pendingRequest.chain,
         );
       } catch (err) {
-        console.error('❌ Failed to extract transaction data:', err);
-        setError(err instanceof Error ? err.message : 'Invalid transaction parameters');
-        setState('error');
+        console.error("❌ Failed to extract transaction data:", err);
+        setError(
+          err instanceof Error ? err.message : "Invalid transaction parameters",
+        );
+        setState("error");
         return null;
       }
 
       return (
         <TransactionModal
           transactionRequest={txData}
-          chain={pendingRequest.chain as chain}
+          chain={pendingRequest.chain as Chain}
           apiKey={apiKey}
           origin={currentOrigin || undefined}
           onSuccess={async (result: TransactionResult) => {
-            setState('processing');
+            setState("processing");
             try {
               // Type-safe result handling based on method
               let response: WalletSendCallsReturn | EthSendTransactionReturn;
 
-              if (txData.method === 'wallet_sendCalls') {
+              if (txData.method === "wallet_sendCalls") {
                 // EIP-5792: Return sendCallsId for wallet_sendCalls
                 response = {
-                  id: result.id || `0x${'0'.repeat(64)}`,
+                  id: result.id || `0x${"0".repeat(64)}`,
                   chainId: result.chainId as number,
                   // capabilities can be included if supported by the wallet
                 } satisfies WalletSendCallsReturn;
               } else {
                 // eth_sendTransaction: Return transaction hash
-                response = (result.hash || `0x${'0'.repeat(64)}`) as EthSendTransactionReturn;
+                response = (result.hash ||
+                  `0x${"0".repeat(64)}`) as EthSendTransactionReturn;
               }
 
-              console.log('✅ Transaction response:', response);
+              console.log("✅ Transaction response:", response);
               await pendingRequest.onApprove(response);
-              setState('success');
+              setState("success");
               setTimeout(() => window.close(), 1500);
             } catch (err) {
-              console.error('❌ Failed to send transaction:', err);
-              setError(err instanceof Error ? err.message : 'Failed to send transaction');
-              setState('error');
+              console.error("❌ Failed to send transaction:", err);
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : "Failed to send transaction",
+              );
+              setState("error");
             }
           }}
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest,
+              );
               window.close();
             } catch (err) {
-              console.error('❌ Failed to reject:', err);
+              console.error("❌ Failed to reject:", err);
               window.close();
             }
           }}
@@ -484,20 +1210,25 @@ export default function KeysJawIdApp() {
 
     // Check if we have a pending sign message request and either user is authenticated OR we're in processing state
     // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
+    if (
+      pendingRequest?.type === SDKRequestType.SIGN_MESSAGE &&
+      state !== "success" &&
+      state !== "error" &&
+      (authQuery.isAuthenticated || state === "processing")
+    ) {
       // Extract message and address based on method type
       let messageToSign: string;
       let address: string | undefined;
 
-      if (pendingRequest.method === 'wallet_sign') {
+      if (pendingRequest.method === "wallet_sign") {
         // wallet_sign: params[0] is SignParams object
         // ERC-7871: For type 0x45, data is { message: string }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const signParams = pendingRequest.params[0] as { request: { type: string; data: { message: string } }; address?: string };
-        messageToSign = signParams?.request?.data?.message || '';
+        const signParams = pendingRequest.params[0] as {
+          request: { type: string; data: { message: string } };
+          address?: string;
+        };
+        messageToSign = signParams?.request?.data?.message || "";
         address = signParams?.address;
       } else {
         // personal_sign: params[0] is message, params[1] is address
@@ -515,30 +1246,37 @@ export default function KeysJawIdApp() {
             origin={pendingRequest.origin}
             message={messageToSign}
             address={address}
-            chain={pendingRequest.chain as chain}
+            chain={pendingRequest.chain as Chain}
             apiKey={apiKey}
-            appName={pendingRequest.metadata?.appName || 'dApp'}
+            appName={pendingRequest.metadata?.appName || "dApp"}
             appLogoUrl={pendingRequest.metadata?.appLogoUrl}
             onSuccess={async (signature, message) => {
-              setState('processing');
+              setState("processing");
               try {
                 await pendingRequest.onApprove(signature);
-                console.log('✅ SIWE signature sent successfully');
-                setState('success');
+                console.log("✅ SIWE signature sent successfully");
+                setState("success");
                 setTimeout(() => window.close(), 1500);
               } catch (err) {
-                console.error('❌ Failed to send SIWE signature:', err);
-                setError(err instanceof Error ? err.message : 'Failed to send signature');
-                setState('error');
+                console.error("❌ Failed to send SIWE signature:", err);
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to send signature",
+                );
+                setState("error");
               }
             }}
             onError={async (error, errorCode) => {
               try {
                 // Forward error and code directly from modal
-                await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+                await pendingRequest.onReject(
+                  error.message,
+                  errorCode ?? standardErrorCodes.provider.userRejectedRequest,
+                );
                 window.close();
               } catch (err) {
-                console.error('❌ Failed to reject:', err);
+                console.error("❌ Failed to reject:", err);
                 window.close();
               }
             }}
@@ -553,28 +1291,33 @@ export default function KeysJawIdApp() {
           // onOpenChange={() => { }}
           message={messageToSign}
           address={address}
-          chain={pendingRequest.chain as chain}
+          chain={pendingRequest.chain as Chain}
           apiKey={apiKey}
           onSuccess={async (signature, message) => {
-            setState('processing');
+            setState("processing");
             try {
               await pendingRequest.onApprove(signature);
-              console.log('✅ Signature sent successfully');
-              setState('success');
+              console.log("✅ Signature sent successfully");
+              setState("success");
               setTimeout(() => window.close(), 1500);
             } catch (err) {
-              console.error('❌ Failed to send signature:', err);
-              setError(err instanceof Error ? err.message : 'Failed to send signature');
-              setState('error');
+              console.error("❌ Failed to send signature:", err);
+              setError(
+                err instanceof Error ? err.message : "Failed to send signature",
+              );
+              setState("error");
             }
           }}
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest,
+              );
               window.close();
             } catch (err) {
-              console.error('❌ Failed to reject:', err);
+              console.error("❌ Failed to reject:", err);
               window.close();
             }
           }}
@@ -584,31 +1327,43 @@ export default function KeysJawIdApp() {
 
     // Check if we have a pending EIP-712 typed data signing request and either user is authenticated OR we're in processing state
     // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
+    if (
+      pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA &&
+      state !== "success" &&
+      state !== "error" &&
+      (authQuery.isAuthenticated || state === "processing")
+    ) {
       // Extract typed data JSON and address based on method type
       let address: string | undefined;
       let typedDataJson: string;
 
-      if (pendingRequest.method === 'wallet_sign') {
+      if (pendingRequest.method === "wallet_sign") {
         // ERC-7871: For type 0x01, data is the TypedData object directly
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const signParams = pendingRequest.params[0] as { request: { type: string; data: Record<string, unknown> }; address?: string };
+        const signParams = pendingRequest.params[0] as {
+          request: { type: string; data: Record<string, unknown> };
+          address?: string;
+        };
 
         const data = signParams?.request?.data;
-        typedDataJson = typeof data === 'string' ? data : JSON.stringify(data);
+        typedDataJson = typeof data === "string" ? data : JSON.stringify(data);
 
         address = signParams?.address;
 
-        console.log('🔍 wallet_sign EIP-712 Request:', { type: signParams?.request?.type, address, typedDataJson });
+        console.log("🔍 wallet_sign EIP-712 Request:", {
+          type: signParams?.request?.type,
+          address,
+          typedDataJson,
+        });
       } else {
         // eth_signTypedData_v4: params[0] is address, params[1] is typed data JSON string
         address = pendingRequest.params[0] as string;
         typedDataJson = pendingRequest.params[1] as string;
 
-        console.log('🔍 eth_signTypedData_v4 Request:', { address, typedDataJson });
+        console.log("🔍 eth_signTypedData_v4 Request:", {
+          address,
+          typedDataJson,
+        });
       }
 
       return (
@@ -616,28 +1371,33 @@ export default function KeysJawIdApp() {
           origin={pendingRequest.origin}
           typedDataJson={typedDataJson}
           address={address}
-          chain={pendingRequest.chain as chain}
+          chain={pendingRequest.chain as Chain}
           apiKey={apiKey}
           onSuccess={async (signature) => {
-            setState('processing');
+            setState("processing");
             try {
               await pendingRequest.onApprove(signature);
-              console.log('✅ Typed data signature sent successfully');
-              setState('success');
+              console.log("✅ Typed data signature sent successfully");
+              setState("success");
               setTimeout(() => window.close(), 1500);
             } catch (err) {
-              console.error('❌ Failed to send signature:', err);
-              setError(err instanceof Error ? err.message : 'Failed to send signature');
-              setState('error');
+              console.error("❌ Failed to send signature:", err);
+              setError(
+                err instanceof Error ? err.message : "Failed to send signature",
+              );
+              setState("error");
             }
           }}
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest,
+              );
               window.close();
             } catch (err) {
-              console.error('❌ Failed to reject:', err);
+              console.error("❌ Failed to reject:", err);
               window.close();
             }
           }}
@@ -646,42 +1406,50 @@ export default function KeysJawIdApp() {
     }
 
     // Check if we have a pending grant permissions request and either user is authenticated OR we're in processing state
-    if (pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
-
+    if (
+      pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS &&
+      state !== "success" &&
+      state !== "error" &&
+      (authQuery.isAuthenticated || state === "processing")
+    ) {
       const permissionRequestData: PermissionRequestData = {
-        method: 'wallet_grantPermissions',
+        method: "wallet_grantPermissions",
         params: pendingRequest.params as any,
       };
 
       return (
         <PermissionModal
           permissionRequest={permissionRequestData}
-          chain={pendingRequest.chain as chain}
-          apiKey={apiKey || ''}
+          chain={pendingRequest.chain as Chain}
+          apiKey={apiKey || ""}
           origin={pendingRequest.origin}
           onSuccess={async (result) => {
-            setState('processing');
+            setState("processing");
             try {
               await pendingRequest.onApprove(result);
-              console.log('✅ Permission granted successfully');
-              setState('success');
+              console.log("✅ Permission granted successfully");
+              setState("success");
               setTimeout(() => window.close(), 1500);
             } catch (err) {
-              console.error('❌ Failed to grant permission:', err);
-              setError(err instanceof Error ? err.message : 'Failed to grant permission');
-              setState('error');
+              console.error("❌ Failed to grant permission:", err);
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : "Failed to grant permission",
+              );
+              setState("error");
             }
           }}
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest,
+              );
               window.close();
             } catch (err) {
-              console.error('❌ Failed to reject:', err);
+              console.error("❌ Failed to reject:", err);
               window.close();
             }
           }}
@@ -690,42 +1458,50 @@ export default function KeysJawIdApp() {
     }
 
     // Check if we have a pending revoke permissions request and either user is authenticated OR we're in processing state
-    if (pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS &&
-      state !== 'success' &&
-      state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
-
+    if (
+      pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS &&
+      state !== "success" &&
+      state !== "error" &&
+      (authQuery.isAuthenticated || state === "processing")
+    ) {
       const permissionRequestData: PermissionRequestData = {
-        method: 'wallet_revokePermissions',
+        method: "wallet_revokePermissions",
         params: pendingRequest.params as any,
       };
 
       return (
         <PermissionModal
           permissionRequest={permissionRequestData}
-          chain={pendingRequest.chain as chain}
-          apiKey={apiKey || ''}
+          chain={pendingRequest.chain as Chain}
+          apiKey={apiKey || ""}
           origin={pendingRequest.origin}
           onSuccess={async (result) => {
-            setState('processing');
+            setState("processing");
             try {
               await pendingRequest.onApprove(result);
-              console.log('✅ Permission revoked successfully');
-              setState('success');
+              console.log("✅ Permission revoked successfully");
+              setState("success");
               setTimeout(() => window.close(), 1500);
             } catch (err) {
-              console.error('❌ Failed to revoke permission:', err);
-              setError(err instanceof Error ? err.message : 'Failed to revoke permission');
-              setState('error');
+              console.error("❌ Failed to revoke permission:", err);
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : "Failed to revoke permission",
+              );
+              setState("error");
             }
           }}
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest,
+              );
               window.close();
             } catch (err) {
-              console.error('❌ Failed to reject:', err);
+              console.error("❌ Failed to reject:", err);
               window.close();
             }
           }}
@@ -734,7 +1510,10 @@ export default function KeysJawIdApp() {
     }
 
     // Show unsupported method modal
-    if (!!pendingRequest && pendingRequest?.type === SDKRequestType.UNSUPPORTED_METHOD) {
+    if (
+      !!pendingRequest &&
+      pendingRequest?.type === SDKRequestType.UNSUPPORTED_METHOD
+    ) {
       return (
         <UnsupportedMethodModal
           origin={pendingRequest.origin}
@@ -744,10 +1523,13 @@ export default function KeysJawIdApp() {
           onClose={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.rpc.methodNotFound);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.rpc.methodNotFound,
+              );
               window.close();
             } catch (err) {
-              console.error('❌ Failed to reject unsupported method:', err);
+              console.error("❌ Failed to reject unsupported method:", err);
               window.close();
             }
           }}
@@ -756,14 +1538,14 @@ export default function KeysJawIdApp() {
     }
 
     // Show loading while initializing or checking passkeys
-    if (state === 'initializing' || state === 'passkey-check') {
+    if (state === "initializing" || state === "passkey-check") {
       return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="text-center">
             <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <p className="text-gray-600">
-              {state === 'initializing' && 'Connecting to dApp...'}
-              {state === 'passkey-check' && 'Checking for passkeys...'}
+              {state === "initializing" && "Connecting to dApp..."}
+              {state === "passkey-check" && "Checking for passkeys..."}
             </p>
             {config && (
               <p className="text-sm text-gray-500 mt-2">
@@ -776,24 +1558,23 @@ export default function KeysJawIdApp() {
     }
 
     // Show processing spinner
-    if (state === 'processing') {
+    if (state === "processing") {
       return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="text-center max-w-md p-6">
             <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
             <h3 className="text-xl font-semibold text-gray-900 mb-2">
-              {authQuery.isAuthenticated ? 'Connecting to dApp...' : 'Processing...'}
+              {authQuery.isAuthenticated
+                ? "Connecting to dApp..."
+                : "Processing..."}
             </h3>
             <p className="text-gray-600 mb-4">
               {authQuery.isAuthenticated && authQuery.accountName
                 ? `Authenticated as ${authQuery.accountName}. Waiting for dApp connection...`
-                : 'Please wait while we process your request.'
-              }
+                : "Please wait while we process your request."}
             </p>
             {config?.metadata && (
-              <p className="text-sm text-gray-500">
-                {config.metadata.appName}
-              </p>
+              <p className="text-sm text-gray-500">{config.metadata.appName}</p>
             )}
           </div>
         </div>
@@ -801,13 +1582,23 @@ export default function KeysJawIdApp() {
     }
 
     // Show success state
-    if (state === 'success') {
+    if (state === "success") {
       return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="text-center">
             <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
+              <svg
+                className="w-8 h-8 text-green-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M5 13l4 4L19 7"
+                />
               </svg>
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Success!</h3>
@@ -818,22 +1609,32 @@ export default function KeysJawIdApp() {
     }
 
     // Show error state
-    if (state === 'error') {
+    if (state === "error") {
       return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
           <div className="text-center max-w-md p-6">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+              <svg
+                className="w-8 h-8 text-red-600"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M6 18L18 6M6 6l12 12"
+                />
               </svg>
             </div>
             <h3 className="text-xl font-bold text-gray-900 mb-2">Error</h3>
-            <p className="text-gray-600 mb-4">{error || 'An error occurred'}</p>
+            <p className="text-gray-600 mb-4">{error || "An error occurred"}</p>
             <div className="space-y-2">
               <button
                 onClick={() => {
                   setError(null);
-                  setState('passkey-check');
+                  setState("passkey-check");
                   checkForPasskeys();
                 }}
                 className="w-full py-2 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
@@ -841,10 +1642,7 @@ export default function KeysJawIdApp() {
                 Try Again
               </button>
               <button
-                onClick={() => {
-                  communicator.sendPopupUnload();
-                  window.close();
-                }}
+                onClick={() => window.close()}
                 className="w-full py-2 px-6 bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold rounded-lg transition-colors"
               >
                 Close
@@ -856,10 +1654,19 @@ export default function KeysJawIdApp() {
     }
 
     // Show passkey creation screen
-    if (state === 'passkey-create') {
+    if (state === "passkey-create") {
       return (
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
           <div className="w-full max-w-md">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Create Your Passkey
+              </h2>
+              <p className="text-gray-600">
+                Create a passkey to securely access your wallet
+              </p>
+            </div>
+
             <SignInScreen
               ensConfig={ensConfig}
               chainId={effectiveChainId}
@@ -867,7 +1674,9 @@ export default function KeysJawIdApp() {
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
-              onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
+              onComplete={async (
+                authenticatedAccount: AuthenticatedAccount,
+              ) => {
                 try {
                   // Set the current account from the passed data
                   setCurrentAccount({
@@ -877,8 +1686,10 @@ export default function KeysJawIdApp() {
                     creationDate: new Date().toISOString(),
                     isImported: false,
                   });
-                  // Update session auth state for per-origin isolation
-                  if (currentOrigin) {
+
+                  // Update session auth state for per-origin isolation (SDK mode only)
+                  // In browser mode, credentials are stored via Account.authenticate() and retrieved via fallback in useAuth
+                  if (currentOrigin && !isBrowserMode) {
                     const authState: SessionAuthState = {
                       address: authenticatedAccount.address,
                       credentialId: authenticatedAccount.credentialId,
@@ -886,46 +1697,99 @@ export default function KeysJawIdApp() {
                       publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
-                    console.log('✅ Session auth state updated for origin:', currentOrigin);
+                    console.log(
+                      "✅ Session auth state updated for origin:",
+                      currentOrigin,
+                    );
                   }
 
                   await authQuery.refetch();
 
+                  const accounts = authQuery.allAccounts;
+                  const newestAccount = accounts[accounts.length - 1] || null;
+                  setCurrentAccount(newestAccount);
+
+                  // Browser mode redirect
+                  if (isBrowserMode && callbackUrlRef.current) {
+                    // Get fresh address directly from Account class (reads from localStorage)
+                    // This avoids race condition with React Query state updates
+                    const freshAddress =
+                      Account.getAuthenticatedAddress(apiKey);
+
+                    if (!freshAddress) {
+                      redirectWithError(
+                        callbackUrlRef.current,
+                        "Failed to get wallet address",
+                      );
+                      return;
+                    }
+
+                    redirectWithResult(callbackUrlRef.current, {
+                      address: freshAddress,
+                      username: newestAccount?.username,
+                      credentialId: newestAccount?.credentialId,
+                      chainId: effectiveChainId,
+                    });
+                    return;
+                  }
+
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
-                    setState('account-selection');
+                    setState("account-selection");
                   } else if (
                     pendingRequest?.type === SDKRequestType.SIGN_MESSAGE ||
                     pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
-                    pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
-                    pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
+                    pendingRequest?.type === SDKRequestType.SEND_TRANSACTION
                   ) {
-                    // If there's a pending sign message, typed data, transaction, or permission request,
-                    // the modal will be shown in the priority logic above since user is now authenticated
-                    setState('processing');
+                    // If there's a pending sign message, typed data, or transaction request, the modal will be shown
+                    // in the priority logic above since user is now authenticated
+                    setState("processing");
                   } else {
                     // No pending request yet, stay on current screen and wait for it
                     // useEffect will handle transition when handshake arrives
                     // Don't change state - stay on passkey-create to keep UI visible
                   }
                 } catch (err) {
-                  console.error('❌ Failed after passkey creation:', err);
-                  setError(err instanceof Error ? err.message : 'Failed to proceed');
-                  setState('error');
+                  console.error("❌ Failed after passkey creation:", err);
+                  setError(
+                    err instanceof Error ? err.message : "Failed to proceed",
+                  );
+                  setState("error");
                 }
               }}
             />
+
+            <button
+              onClick={() => {
+                if (isBrowserMode && callbackUrlRef.current) {
+                  redirectWithError(callbackUrlRef.current, "User cancelled");
+                  return;
+                }
+                window.close();
+              }}
+              className="w-full mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       );
     }
 
     // Show passkey authentication screen
-    if (state === 'passkey-auth') {
+    if (state === "passkey-auth") {
       return (
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
           <div className="w-full max-w-md">
+            <div className="text-center mb-6">
+              <h2 className="text-2xl font-bold text-gray-900 mb-2">
+                Welcome Back
+              </h2>
+              <p className="text-gray-600">
+                Use your passkey to access your wallet
+              </p>
+            </div>
+
             <SignInScreen
               ensConfig={ensConfig}
               chainId={effectiveChainId}
@@ -933,7 +1797,9 @@ export default function KeysJawIdApp() {
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
-              onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
+              onComplete={async (
+                authenticatedAccount: AuthenticatedAccount,
+              ) => {
                 try {
                   // Set the current account from the passed data
                   setCurrentAccount({
@@ -944,8 +1810,9 @@ export default function KeysJawIdApp() {
                     isImported: false,
                   });
 
-                  // Update session auth state for per-origin isolation
-                  if (currentOrigin) {
+                  // Update session auth state for per-origin isolation (SDK mode only)
+                  // In browser mode, credentials are stored via Account.authenticate() and retrieved via fallback in useAuth
+                  if (currentOrigin && !isBrowserMode) {
                     const authState: SessionAuthState = {
                       address: authenticatedAccount.address,
                       credentialId: authenticatedAccount.credentialId,
@@ -953,51 +1820,107 @@ export default function KeysJawIdApp() {
                       publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
-                    console.log('✅ Session auth state updated for origin:', currentOrigin, 'with credentialId:', authenticatedAccount.credentialId);
+                    console.log(
+                      "✅ Session auth state updated for origin:",
+                      currentOrigin,
+                      "with credentialId:",
+                      authenticatedAccount.credentialId,
+                    );
                   }
 
                   await authQuery.refetch();
 
+                  const accounts = authQuery.allAccounts;
+                  setCurrentAccount(accounts[0] || null);
+
+                  // Browser mode redirect
+                  if (isBrowserMode && callbackUrlRef.current) {
+                    // Get fresh address directly from Account class (reads from localStorage)
+                    // This avoids race condition with React Query state updates
+                    const freshAddress =
+                      Account.getAuthenticatedAddress(apiKey);
+
+                    if (!freshAddress) {
+                      redirectWithError(
+                        callbackUrlRef.current,
+                        "Failed to get wallet address",
+                      );
+                      return;
+                    }
+
+                    redirectWithResult(callbackUrlRef.current, {
+                      address: freshAddress,
+                      username: accounts[0]?.username,
+                      credentialId: accounts[0]?.credentialId,
+                      chainId: effectiveChainId,
+                    });
+                    return;
+                  }
+
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
-                    setState('account-selection');
+                    setState("account-selection");
                   } else if (
                     pendingRequest?.type === SDKRequestType.SIGN_MESSAGE ||
                     pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
-                    pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
-                    pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
+                    pendingRequest?.type === SDKRequestType.SEND_TRANSACTION
                   ) {
-                    // If there's a pending sign message, typed data, transaction, or permission request,
-                    // the modal will be shown in the priority logic above since user is now authenticated
-                    setState('processing');
-                  } else {
-                    // No pending request yet, stay on current screen and wait for it
-                    // useEffect will handle transition when handshake arrives
-                    // Don't change state - stay on passkey-auth to keep UI visible
+                    setState("processing");
                   }
                 } catch (err) {
-                  console.error('❌ Failed after authentication:', err);
-                  setError(err instanceof Error ? err.message : 'Authentication failed');
-                  setState('passkey-auth');
+                  console.error("Failed after authentication:", err);
+                  setError(
+                    err instanceof Error
+                      ? err.message
+                      : "Authentication failed",
+                  );
+                  setState("passkey-auth");
                 }
               }}
             />
+
+            <button
+              onClick={() => {
+                if (isBrowserMode && callbackUrlRef.current) {
+                  redirectWithError(callbackUrlRef.current, "User cancelled");
+                  return;
+                }
+                window.close();
+              }}
+              className="w-full mt-4 px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+            >
+              Cancel
+            </button>
           </div>
         </div>
       );
     }
 
     // Show connection approval (account-selection state)
-    if (state === 'account-selection' && pendingRequest?.type === SDKRequestType.CONNECT) {
+    if (
+      state === "account-selection" &&
+      pendingRequest?.type === SDKRequestType.CONNECT
+    ) {
       // Extract signInWithEthereum capability from wallet_connect params
       // params structure: [{ capabilities?: { signInWithEthereum?: {...} } }]
-      const walletConnectParams = pendingRequest.params as [{ capabilities?: { signInWithEthereum?: SignInWithEthereumCapabilityRequest } }] | undefined;
-      const signInWithEthereumCapability = walletConnectParams?.[0]?.capabilities?.signInWithEthereum;
+      const walletConnectParams = pendingRequest.params as
+        | [
+            {
+              capabilities?: {
+                signInWithEthereum?: SignInWithEthereumCapabilityRequest;
+              };
+            },
+          ]
+        | undefined;
+      const signInWithEthereumCapability =
+        walletConnectParams?.[0]?.capabilities?.signInWithEthereum;
 
       if (!authQuery.walletAddress) {
         // Reject with internal error (JSON-RPC code -32603)
-        pendingRequest.onReject('Internal error: wallet address not available', standardErrorCodes.rpc.internal);
+        pendingRequest.onReject(
+          "Internal error: wallet address not available",
+          standardErrorCodes.rpc.internal,
+        );
         return null;
       }
       const walletAddress = authQuery.walletAddress;
@@ -1020,7 +1943,9 @@ export default function KeysJawIdApp() {
           }
 
           // Convert hex chainId to number
-          const chainIdNumber = ensureIntNumber(signInWithEthereumCapability.chainId);
+          const chainIdNumber = ensureIntNumber(
+            signInWithEthereumCapability.chainId,
+          );
 
           return createSiweMessage({
             address: walletAddress as `0x${string}`,
@@ -1028,11 +1953,17 @@ export default function KeysJawIdApp() {
             domain: signInWithEthereumCapability.domain || defaultDomain,
             nonce: signInWithEthereumCapability.nonce,
             uri: signInWithEthereumCapability.uri || defaultUri,
-            version: '1',
+            version: "1",
             statement: signInWithEthereumCapability.statement,
-            issuedAt: signInWithEthereumCapability.issuedAt ? new Date(signInWithEthereumCapability.issuedAt) : new Date(),
-            expirationTime: signInWithEthereumCapability.expirationTime ? new Date(signInWithEthereumCapability.expirationTime) : undefined,
-            notBefore: signInWithEthereumCapability.notBefore ? new Date(signInWithEthereumCapability.notBefore) : undefined,
+            issuedAt: signInWithEthereumCapability.issuedAt
+              ? new Date(signInWithEthereumCapability.issuedAt)
+              : new Date(),
+            expirationTime: signInWithEthereumCapability.expirationTime
+              ? new Date(signInWithEthereumCapability.expirationTime)
+              : undefined,
+            notBefore: signInWithEthereumCapability.notBefore
+              ? new Date(signInWithEthereumCapability.notBefore)
+              : undefined,
             requestId: signInWithEthereumCapability.requestId,
             resources: signInWithEthereumCapability.resources,
           });
@@ -1049,40 +1980,52 @@ export default function KeysJawIdApp() {
             appName={pendingRequest.metadata?.appName}
             appLogoUrl={pendingRequest.metadata?.appLogoUrl}
             onSuccess={async (signature: string, message: string) => {
-              setState('processing');
+              setState("processing");
               try {
-                console.log('✅ User signed SIWE message');
+                console.log("✅ User signed SIWE message");
 
                 // Build response per ERC-7846 format with SIWE capability
                 const response = {
-                  accounts: [{
-                    address: walletAddress,
-                    capabilities: {
-                      signInWithEthereum: {
-                        message,
-                        signature: signature as `0x${string}`
-                      }
-                    }
-                  }]
+                  accounts: [
+                    {
+                      address: walletAddress,
+                      capabilities: {
+                        signInWithEthereum: {
+                          message,
+                          signature: signature as `0x${string}`,
+                        },
+                      },
+                    },
+                  ],
                 };
 
-                console.log('✅ SIWE response:', response);
+                console.log("✅ SIWE response:", response);
                 await pendingRequest.onApprove(response);
-                setState('success');
+                setState("success");
                 setTimeout(() => window.close(), 1500);
               } catch (err) {
-                console.error('❌ Failed to approve connection with SIWE:', err);
-                setError(err instanceof Error ? err.message : 'Failed to approve connection');
-                setState('error');
+                console.error(
+                  "❌ Failed to approve connection with SIWE:",
+                  err,
+                );
+                setError(
+                  err instanceof Error
+                    ? err.message
+                    : "Failed to approve connection",
+                );
+                setState("error");
               }
             }}
             onError={async (error, errorCode) => {
               try {
                 // Forward error and code directly from modal
-                await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+                await pendingRequest.onReject(
+                  error.message,
+                  errorCode ?? standardErrorCodes.provider.userRejectedRequest,
+                );
                 window.close();
               } catch (err) {
-                console.error('❌ Failed to reject:', err);
+                console.error("❌ Failed to reject:", err);
                 window.close();
               }
             }}
@@ -1094,39 +2037,48 @@ export default function KeysJawIdApp() {
       return (
         <ConnectModal
           origin={pendingRequest.origin}
-          appName={pendingRequest.metadata?.appName || 'dApp'}
+          appName={pendingRequest.metadata?.appName || "dApp"}
           appLogoUrl={pendingRequest.metadata?.appLogoUrl}
           accountName={authQuery.accountName || currentAccount?.username}
           walletAddress={walletAddress}
           chain={pendingRequest.chain}
           onSuccess={async () => {
-            setState('processing');
+            setState("processing");
             try {
-              console.log('✅ User approved connection');
+              console.log("✅ User approved connection");
 
               // Build response per ERC-7846 format (no capabilities)
               const response = {
-                accounts: [{
-                  address: walletAddress
-                }]
+                accounts: [
+                  {
+                    address: walletAddress,
+                  },
+                ],
               };
 
               await pendingRequest.onApprove(response);
-              setState('success');
+              setState("success");
               setTimeout(() => window.close(), 1500);
             } catch (err) {
-              console.error('❌ Failed to approve connection:', err);
-              setError(err instanceof Error ? err.message : 'Failed to approve connection');
-              setState('error');
+              console.error("❌ Failed to approve connection:", err);
+              setError(
+                err instanceof Error
+                  ? err.message
+                  : "Failed to approve connection",
+              );
+              setState("error");
             }
           }}
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest,
+              );
               window.close();
             } catch (err) {
-              console.error('❌ Failed to reject:', err);
+              console.error("❌ Failed to reject:", err);
               window.close();
             }
           }}
@@ -1136,7 +2088,7 @@ export default function KeysJawIdApp() {
 
     // No pending request yet - should not normally be seen
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
           <p className="text-gray-600">Waiting for request...</p>

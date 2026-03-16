@@ -36,7 +36,8 @@ export const usePasskeys = (options?: UsePasskeysOptions) => {
    * Use this for initial login/authentication
    */
   const getAccount = useCallback(async (chain: chain, credentialId: string, overrideApiKey?: string) => {
-    const effectiveApiKey = overrideApiKey || apiKey;
+    // Add environment variable fallback
+    const effectiveApiKey = overrideApiKey || apiKey || process.env.NEXT_PUBLIC_API_KEY;
     if (!effectiveApiKey) {
       throw new Error('API key is required. Provide it via apiKey parameter or NEXT_PUBLIC_API_KEY environment variable.');
     }
