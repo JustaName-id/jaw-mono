@@ -75,6 +75,14 @@ export interface AccountConfig {
   paymasterContext?: Record<string, unknown>;
   /** Custom storage implementation (defaults to localStorage on web, in-memory in RN) */
   storage?: SyncStorage;
+  /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
+  nativeGetFn?: NativePasskeyGetFn;
+  /** Native passkey create function for React Native (e.g. Passkey.create from react-native-passkey) */
+  nativeCreateFn?: NativePasskeyCreateFn;
+  /** Relying party identifier (defaults to window.location.hostname). Required in React Native. */
+  rpId?: string;
+  /** Relying party name (defaults to 'JAW') */
+  rpName?: string;
 }
 
 /**
@@ -83,44 +91,6 @@ export interface AccountConfig {
 export interface CreateAccountOptions {
   /** Username/display name for the passkey */
   username: string;
-  /** Relying party identifier (defaults to window.location.hostname). Required in React Native. */
-  rpId?: string;
-  /** Relying party name (defaults to 'JAW') */
-  rpName?: string;
-  /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
-  nativeGetFn?: NativePasskeyGetFn;
-  /** Native passkey create function for React Native (e.g. Passkey.create from react-native-passkey) */
-  nativeCreateFn?: NativePasskeyCreateFn;
-}
-
-/**
- * Options for getting an existing account
- */
-export interface GetAccountOptions {
-  /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
-  nativeGetFn?: NativePasskeyGetFn;
-  /** Relying party identifier. Required in React Native. */
-  rpId?: string;
-}
-
-/**
- * Options for importing an account from cloud backup
- */
-export interface ImportAccountOptions {
-  /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
-  nativeGetFn?: NativePasskeyGetFn;
-  /** Relying party identifier. Required in React Native. */
-  rpId?: string;
-}
-
-/**
- * Options for restoring an account from known credentials
- */
-export interface RestoreAccountOptions {
-  /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
-  nativeGetFn?: NativePasskeyGetFn;
-  /** Relying party identifier. Required in React Native. */
-  rpId?: string;
 }
 
 /**
@@ -238,16 +208,15 @@ export class Account {
   static async get(
     config: AccountConfig,
     credentialId?: string,
-    options?: GetAccountOptions,
   ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
 
     // Resolve native passkey functions into viem-compatible getFn
     const resolved = resolvePasskeyOptions({
-      nativeGetFn: options?.nativeGetFn,
+      nativeGetFn: config.nativeGetFn,
     });
     const getFn = resolved.getFn;
-    const rpIdOption = options?.rpId;
+    const rpIdOption = config.rpId;
 
     const passkeyManager = new PasskeyManager(
       config.storage,
@@ -359,7 +328,6 @@ export class Account {
     config: AccountConfig,
     credentialId: string,
     publicKey: `0x${string}`,
-    options?: RestoreAccountOptions,
   ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
 
@@ -371,7 +339,7 @@ export class Account {
 
     // Resolve native passkey functions into viem-compatible getFn
     const resolved = resolvePasskeyOptions({
-      nativeGetFn: options?.nativeGetFn,
+      nativeGetFn: config.nativeGetFn,
     });
 
     const passkeyManager = new PasskeyManager(
@@ -398,7 +366,7 @@ export class Account {
         publicKey: publicKey,
       },
       getFn: resolved.getFn,
-      rpId: options?.rpId,
+      rpId: config.rpId,
     });
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
@@ -440,16 +408,16 @@ export class Account {
     options: CreateAccountOptions,
   ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
-    const { username, rpId, rpName } = options;
+    const { username } = options;
 
     // Resolve native passkey functions into viem-compatible getFn/createFn
     const resolved = resolvePasskeyOptions({
-      nativeGetFn: options.nativeGetFn,
-      nativeCreateFn: options.nativeCreateFn,
+      nativeGetFn: config.nativeGetFn,
+      nativeCreateFn: config.nativeCreateFn,
     });
 
-    const resolvedRpId = resolveRpId(rpId);
-    const resolvedRpName = rpName ?? "JAW";
+    const resolvedRpId = resolveRpId(config.rpId);
+    const resolvedRpName = config.rpName ?? "JAW";
 
     const passkeyManager = new PasskeyManager(
       config.storage,
@@ -502,16 +470,13 @@ export class Account {
    * const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
    * ```
    */
-  static async import(
-    config: AccountConfig,
-    options?: ImportAccountOptions,
-  ): Promise<Account> {
+  static async import(config: AccountConfig): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
-    const rpId = options?.rpId;
+    const rpId = config.rpId;
 
     // Resolve native passkey functions into viem-compatible getFn
     const resolved = resolvePasskeyOptions({
-      nativeGetFn: options?.nativeGetFn,
+      nativeGetFn: config.nativeGetFn,
     });
     const getFn = resolved.getFn;
 

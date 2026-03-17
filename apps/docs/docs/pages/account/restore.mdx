@@ -11,8 +11,7 @@ Restore an account from existing credential data without triggering a WebAuthn p
 static async restore(
   config: AccountConfig,
   credentialId: string,
-  publicKey: `0x${string}`,
-  options?: RestoreAccountOptions
+  publicKey: `0x${string}`
 ): Promise<Account>
 ```
 
@@ -30,6 +29,8 @@ Type: `AccountConfig`
 | `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
 | `paymasterContext` | `Record<string, unknown>` | No | Custom paymaster context |
 | `storage` | `SyncStorage` | No | Custom storage implementation (defaults to localStorage on web, in-memory fallback in React Native) |
+| `nativeGetFn` | `NativePasskeyGetFn` | No | Native passkey get function for React Native (e.g. `Passkey.get`). |
+| `rpId` | `string` | No | Relying party identifier. **Required in React Native.** |
 
 ### credentialId
 
@@ -42,15 +43,6 @@ The credential ID of the passkey to restore.
 Type: `` `0x${string}` ``
 
 The public key of the passkey (hex encoded).
-
-### options
-
-Type: `RestoreAccountOptions | undefined`
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `nativeGetFn` | `NativePasskeyGetFn` | No | Native passkey get function for React Native (e.g. `Passkey.get`). |
-| `rpId` | `string` | No | Relying party identifier. **Required in React Native.** |
 
 
 ## Returns
@@ -113,17 +105,22 @@ async function handleSignRequest(credentialId: string, publicKey: `0x${string}`)
 
 ## React Native Usage
 
-Pass `Passkey.get` from [`react-native-passkey`](https://github.com/f-23/react-native-passkey) as `nativeGetFn` and an explicit `rpId` so signing operations use the native passkey prompt. JAW handles all base64url ↔ ArrayBuffer conversion internally.
+Pass `Passkey.get` from [`react-native-passkey`](https://github.com/f-23/react-native-passkey) as `nativeGetFn` and an explicit `rpId` in `config` so signing operations use the native passkey prompt. JAW handles all base64url ↔ ArrayBuffer conversion internally.
 
 ```typescript
 import { Account } from '@jaw.id/core';
 import { Passkey } from 'react-native-passkey';
 
 const account = await Account.restore(
-  { chainId: 8453, apiKey: 'your-api-key', storage },
+  {
+    chainId: 8453,
+    apiKey: 'your-api-key',
+    storage,
+    nativeGetFn: Passkey.get,
+    rpId: 'myapp.com',
+  },
   credentialId,
   publicKey,
-  { nativeGetFn: Passkey.get, rpId: 'myapp.com' }
 );
 
 // Signing triggers the native passkey prompt via nativeGetFn

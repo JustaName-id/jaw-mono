@@ -726,14 +726,15 @@ describe("Account", () => {
       );
 
       await Account.create(
-        { chainId: 1, apiKey: "test-api-key" },
         {
-          username: "alice",
+          chainId: 1,
+          apiKey: "test-api-key",
           rpId: "example.com",
           rpName: "MyApp",
           nativeCreateFn: mockNativeCreateFn,
           nativeGetFn: mockNativeGetFn,
         },
+        { username: "alice" },
       );
 
       // PasskeyManager.createPasskey should have been called with wrapped native fns
@@ -800,7 +801,9 @@ describe("Account", () => {
       );
 
       const mockNativeGetFn = vi.fn();
-      await Account.get({ chainId: 1, apiKey: "test-api-key" }, undefined, {
+      await Account.get({
+        chainId: 1,
+        apiKey: "test-api-key",
         nativeGetFn: mockNativeGetFn,
         rpId: "example.com",
       });
@@ -859,10 +862,12 @@ describe("Account", () => {
       );
 
       const mockNativeGetFn = vi.fn();
-      await Account.import(
-        { chainId: 1, apiKey: "test-api-key" },
-        { nativeGetFn: mockNativeGetFn, rpId: "myapp.com" },
-      );
+      await Account.import({
+        chainId: 1,
+        apiKey: "test-api-key",
+        nativeGetFn: mockNativeGetFn,
+        rpId: "myapp.com",
+      });
 
       // importPasskeyAccount should have been called with a wrapped getFn and rpId
       expect(mockManagerInstance.importPasskeyAccount).toHaveBeenCalledWith(
@@ -916,10 +921,9 @@ describe("Account", () => {
       );
 
       const account = await Account.restore(
-        { chainId: 1, apiKey: "test-api-key" },
+        { chainId: 1, apiKey: "test-api-key", rpId: "example.com" },
         "cred-123",
         "0x04abc123",
-        { rpId: "example.com" },
       );
 
       expect(account).toBeDefined();
@@ -982,10 +986,14 @@ describe("Account", () => {
 
       const mockNativeGetFn = vi.fn();
       const account = await Account.restore(
-        { chainId: 1, apiKey: "test-api-key" },
+        {
+          chainId: 1,
+          apiKey: "test-api-key",
+          nativeGetFn: mockNativeGetFn,
+          rpId: "example.com",
+        },
         "cred-456",
         "0x04def789",
-        { nativeGetFn: mockNativeGetFn, rpId: "example.com" },
       );
 
       expect(account).toBeDefined();
@@ -1015,10 +1023,9 @@ describe("Account", () => {
       );
 
       await Account.restore(
-        { chainId: 1, apiKey: "test-api-key" },
+        { chainId: 1, apiKey: "test-api-key", rpId: "myapp.com" },
         "cred-xyz",
         "0x04jkl345",
-        { rpId: "myapp.com" },
       );
 
       expect(toWebAuthnAccount).toHaveBeenCalledWith({
@@ -1051,10 +1058,9 @@ describe("Account", () => {
 
       await expect(
         Account.restore(
-          { chainId: 1, apiKey: "test-api-key" },
+          { chainId: 1, apiKey: "test-api-key", rpId: "example.com" },
           "cred-mismatch",
           "0x04forgedkey",
-          { rpId: "example.com" },
         ),
       ).rejects.toThrow(
         "Provided publicKey does not match the stored publicKey",

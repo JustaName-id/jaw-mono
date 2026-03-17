@@ -9,8 +9,7 @@ Import a passkey from cloud backup.
 
 ```typescript
 static async import(
-  config: AccountConfig,
-  options?: ImportAccountOptions
+  config: AccountConfig
 ): Promise<Account>
 ```
 
@@ -26,14 +25,8 @@ Type: `AccountConfig`
 | `chainId` | `number` | Yes | Chain ID for the account |
 | `apiKey` | `string` | Yes | API key for JAW services |
 | `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
+| `paymasterContext` | `Record<string, unknown>` | No | Custom paymaster context for gas sponsorship |
 | `storage` | `SyncStorage` | No | Custom storage implementation (defaults to localStorage on web, in-memory fallback in React Native) |
-
-### options
-
-Type: `ImportAccountOptions | undefined`
-
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
 | `nativeGetFn` | `NativePasskeyGetFn` | No | Native passkey get function for React Native (e.g. `Passkey.get`). |
 | `rpId` | `string` | No | Relying party identifier. **Required in React Native.** |
 
@@ -120,16 +113,19 @@ The import flow allows users to access their JAW account on any device where the
 
 ## React Native Usage
 
-Pass `Passkey.get` from [`react-native-passkey`](https://github.com/f-23/react-native-passkey) as `nativeGetFn` and an explicit `rpId`. JAW handles all base64url ↔ ArrayBuffer conversion internally.
+Pass `Passkey.get` from [`react-native-passkey`](https://github.com/f-23/react-native-passkey) as `nativeGetFn` and an explicit `rpId` in `config`. JAW handles all base64url ↔ ArrayBuffer conversion internally.
 
 ```typescript
 import { Account } from '@jaw.id/core';
 import { Passkey } from 'react-native-passkey';
 
-const account = await Account.import(
-  { chainId: 8453, apiKey: 'your-api-key', storage },
-  { nativeGetFn: Passkey.get, rpId: 'myapp.com' }
-);
+const account = await Account.import({
+  chainId: 8453,
+  apiKey: 'your-api-key',
+  storage,
+  nativeGetFn: Passkey.get,
+  rpId: 'myapp.com',
+});
 ```
 
 
