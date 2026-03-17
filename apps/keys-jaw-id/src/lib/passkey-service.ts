@@ -86,11 +86,11 @@ export class PasskeyService {
         {
           chainId: this.getDefaultChainId(),
           apiKey: this.apiKey,
+          rpId: this.rpId,
+          rpName: this.rpName,
         },
         {
           username,
-          rpId: this.rpId,
-          rpName: this.rpName,
         }
       );
 
