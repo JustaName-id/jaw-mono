@@ -3,9 +3,6 @@
   "workspaces": {
     "": {
       "name": "@jaw-mono/source",
-      "dependencies": {
-        "next-themes": "^0.4.6",
-      },
       "devDependencies": {
         "@babel/core": "^7.14.5",
         "@babel/preset-react": "^7.14.5",
@@ -96,7 +93,7 @@
         "@jaw.id/wagmi": "workspace:*",
         "@tanstack/react-query": "^5.62.16",
         "next": "~15.5.10",
-        "next-themes": "^0.4.4",
+        "next-themes": "^0.4.6",
         "react": "19.0.1",
         "react-dom": "19.0.1",
         "tailwindcss-animate": "^1.0.7",
