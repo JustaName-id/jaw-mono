@@ -243,15 +243,24 @@ console.log('Transaction hash:', txHash);`;
           },
         ], null, 2),
       },
+      {
+        name: 'permissionId',
+        type: 'hex',
+        label: 'Permission ID (optional)',
+        description: 'Execute calls using a granted permission (from wallet_grantPermissions)',
+        required: false,
+      },
     ],
     getCodeSnippet: (params) => {
       const callsStr = params.calls || '[{ to: "0x...", value: "0x2386F26FC10000", data: "0x" }]';
       const chainIdLine = params.chainId && params.chainId !== 'default' ? `\n    chainId: '${params.chainId}',` : '';
-      return `// Send 0.01 ETH
-const result = await jaw.provider.request({
+      const capabilitiesBlock = params.permissionId
+        ? `\n    capabilities: {\n      permissions: {\n        id: '${params.permissionId}',\n      },\n    },`
+        : '';
+      return `const result = await jaw.provider.request({
   method: 'wallet_sendCalls',
   params: [{${chainIdLine}
-    calls: ${callsStr},
+    calls: ${callsStr},${capabilitiesBlock}
   }],
 });
 
@@ -259,9 +268,12 @@ console.log('Batch ID:', result.id);`;
     },
     buildParams: (params) => {
       const calls = JSON.parse(params.calls || '[]');
-      const result: { calls: unknown[]; chainId?: string } = { calls };
+      const result: { calls: unknown[]; chainId?: string; capabilities?: { permissions: { id: string } } } = { calls };
       if (params.chainId && params.chainId !== 'default') {
         result.chainId = params.chainId;
+      }
+      if (params.permissionId) {
+        result.capabilities = { permissions: { id: params.permissionId } };
       }
       return [result];
     },
