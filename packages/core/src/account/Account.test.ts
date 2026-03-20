@@ -522,8 +522,8 @@ describe('Account', () => {
 
   describe('fromLocalAccount', () => {
     it('should have correct function signature', () => {
-      // fromLocalAccount takes (config: AccountConfig, localAccount: LocalAccount)
-      expect(Account.fromLocalAccount.length).toBe(2);
+      // fromLocalAccount takes (config: AccountConfig, localAccount: LocalAccount, options?)
+      expect(Account.fromLocalAccount.length).toBe(3);
     });
 
     it('should create account from LocalAccount', async () => {

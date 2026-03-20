@@ -10,6 +10,9 @@ import {
   estimateUserOpGasWithPermission,
   calculateGas,
   getBundlerClient,
+  createSmartAccountEip7702,
+  sendCallsEip7702 as sendSmartAccountCallsEip7702,
+  sendTransactionEip7702 as sendSmartAccountTransactionEip7702,
   type BundledTransactionResult,
 } from './smartAccount.js';
 import {
@@ -127,6 +130,7 @@ export class Account {
   private readonly _chain: Chain;
   private readonly _passkeyAccount: PasskeyAccount | null;
   private readonly _apiKey: string;
+  private readonly _localAccount: LocalAccount | null;
 
   /**
    * Private constructor - use static factory methods to create instances
@@ -135,12 +139,14 @@ export class Account {
     smartAccount: SmartAccount,
     chain: Chain,
     apiKey: string,
-    passkeyAccount?: PasskeyAccount
+    passkeyAccount?: PasskeyAccount,
+    localAccount?: LocalAccount
   ) {
     this._smartAccount = smartAccount;
     this._chain = chain;
     this._passkeyAccount = passkeyAccount ?? null;
     this._apiKey = apiKey;
+    this._localAccount = localAccount ?? null;
   }
 
   // ============================================
@@ -402,49 +408,57 @@ export class Account {
    *
    * @param config - Account configuration
    * @param localAccount - A viem LocalAccount instance
+   * @param options - Optional settings
+   * @param options.eip7702 - If true, the EOA address is preserved as the smart account address
+   *                          via EIP-7702 delegation instead of creating a new counterfactual address
    * @returns Promise resolving to the Account instance
    *
    * @example
    * ```typescript
    * import { privateKeyToAccount } from 'viem/accounts';
    *
-   * // From private key
-   * const localAccount = privateKeyToAccount('0x...');
+   * // New counterfactual address
    * const account = await Account.fromLocalAccount(
    *   { chainId: 1, apiKey: 'your-api-key' },
-   *   localAccount
+   *   privateKeyToAccount('0x...')
    * );
    *
-   * // From Privy embedded wallet
-   * const privyAccount = await privy.getEmbeddedWallet();
+   * // Keep EOA address via EIP-7702
    * const account = await Account.fromLocalAccount(
    *   { chainId: 1, apiKey: 'your-api-key' },
-   *   privyAccount
+   *   privateKeyToAccount('0x...'),
+   *   { eip7702: true }
    * );
+   * // account.address === eoa.address
    * ```
    */
   static async fromLocalAccount(
     config: AccountConfig,
-    localAccount: LocalAccount
+    localAccount: LocalAccount,
+    options?: { eip7702?: boolean }
   ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
+    const isEip7702 = options?.eip7702 ?? false;
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
 
-    // Register chain in global store for background operations (e.g., waitForReceiptInBackground)
+    // Register chain in global store for background operations
     const existingChains = chainStore.get() ?? [];
     if (!existingChains.some(c => c.id === chain.id)) {
       chainStore.set([...existingChains, chain]);
     }
 
     const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(localAccount, bundlerClient as JustanAccountImplementation['client']);
+    const smartAccount = isEip7702
+      ? await createSmartAccountEip7702(localAccount, bundlerClient as JustanAccountImplementation['client'])
+      : await createSmartAccount(localAccount, bundlerClient as JustanAccountImplementation['client']);
+
     const address = await smartAccount.getAddress();
 
     // Log account issuance for analytics (fire-and-forget)
     logAccountIssuance({ address, type: 'fromLocalAccount', apiKey });
 
-    return new Account(smartAccount, chain, apiKey);
+    return new Account(smartAccount, chain, apiKey, undefined, isEip7702 ? localAccount : undefined);
   }
 
   // ============================================
@@ -692,6 +706,19 @@ export class Account {
       data: call.data,
     }));
 
+    // EIP-7702 path
+    if (this._localAccount) {
+      return await sendSmartAccountTransactionEip7702(
+        this._smartAccount,
+        this._localAccount,
+        formattedCalls,
+        this._chain,
+        this._apiKey,
+        paymasterUrlOverride,
+        paymasterContextOverride
+      );
+    }
+
     // If using JAW ERC-20 paymaster, prepend approval call if needed
     const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
     const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
@@ -743,17 +770,28 @@ export class Account {
       data: call.data,
     }));
 
-    // If using JAW ERC-20 paymaster, prepend approval call if needed
-    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
-    const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
-
-    // Remove gas field from context (only used for approval logic)
-    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
-
     let result: BundledTransactionResult;
 
-    if (options?.permissionId) {
+    // EIP-7702 path
+    if (this._localAccount) {
+      result = await sendSmartAccountCallsEip7702(
+        this._smartAccount,
+        this._localAccount,
+        formattedCalls,
+        this._chain,
+        this._apiKey,
+        paymasterUrlOverride,
+        paymasterContextOverride
+      );
+    } else if (options?.permissionId) {
+      // If using JAW ERC-20 paymaster, prepend approval call if needed
+      const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
+      const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
+
+      // Remove gas field from context (only used for approval logic)
+      const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+      const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+
       // Execute through permission manager
       result = await sendSmartAccountCallsWithPermission(
         this._smartAccount,
@@ -765,6 +803,14 @@ export class Account {
         cleanedContext
       );
     } else {
+      // If using JAW ERC-20 paymaster, prepend approval call if needed
+      const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
+      const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
+
+      // Remove gas field from context (only used for approval logic)
+      const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+      const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+
       // Standard execution
       result = await sendSmartAccountCalls(
         this._smartAccount,
