@@ -775,7 +775,8 @@ export class Account {
         options.permissionId,
         this._apiKey,
         paymasterUrlOverride,
-        cleanedContext
+        cleanedContext,
+        this._localAccount ?? undefined
       );
     } else {
       // Standard execution (EIP-7702 handled inside sendSmartAccountCalls)

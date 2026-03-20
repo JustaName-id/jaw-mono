@@ -329,7 +329,8 @@ export async function sendCallsWithPermission(
     permissionId: Hex,
     apiKey: string,
     paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
+    paymasterContextOverride?: Record<string, unknown>,
+    localAccount?: LocalAccount
 ): Promise<BundledTransactionResult> {
     // Fetch the permission from the relay
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
@@ -345,16 +346,27 @@ export async function sendCallsWithPermission(
     // Encode the executeBatch call with permission
     const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
 
-    // Send a single call to the permissions manager
+    // The permission call routed through the permissions manager
+    let finalCalls: Array<{ to: Address; value: bigint; data: Hex }> = [{
+        to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+        value: 0n,
+        data: encodedData,
+    }];
+
+    // EIP-7702: prepend delegation authorization + owner setup if needed
+    let authorization: Awaited<ReturnType<ToJustanAccountReturnType['signAuthorization']>> | undefined;
+    if (localAccount) {
+        const prepared = await prepareEip7702Calls(smartAccount, localAccount, finalCalls, chain);
+        finalCalls = prepared.calls;
+        authorization = prepared.authorization;
+    }
+
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
-        calls: [{
-            to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
-            value: 0n,
-            data: encodedData,
-        }],
+        calls: finalCalls,
+        ...(authorization ? { authorization } : {}),
     });
 
     return {
