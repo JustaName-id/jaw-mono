@@ -30,6 +30,19 @@ const routes = [
         <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
       </svg>
     ),
+  },
+  {
+    href: '/eip7702',
+    title: 'EIP-7702 Upgrade',
+    description:
+      'Test EOA → smart account upgrade via EIP-7702 with Privy or Turnkey.',
+    badge: 'EIP-7702',
+    badgeColor: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-200',
+    icon: (
+      <svg className="w-6 h-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 13.5l10.5-11.25L12 10.5h8.25L9.75 21.75 12 13.5H3.75z" />
+      </svg>
+    ),
   }
 ];
 
