@@ -1,3 +1,4 @@
+import type { LocalAccount } from 'viem';
 import { Communicator } from '../communicator/index.js';
 import { standardErrorCodes, serializeError, standardErrors } from '../errors/index.js';
 
@@ -40,35 +41,42 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     private readonly communicator: Communicator;
     private readonly apiKey: string;
     private readonly paymasters?: Record<number, PaymasterConfig>;
+    private readonly localAccount?: LocalAccount;
 
     private signer: Signer | null = null;
 
-    constructor({ metadata, preference, apiKey, paymasters }: Readonly<ConstructorOptions>) {
+    constructor({ metadata, preference, apiKey, paymasters, localAccount }: Readonly<ConstructorOptions>) {
         super();
         this.metadata = metadata;
         this.preference = preference;
         this.apiKey = apiKey;
         this.paymasters = paymasters;
+        this.localAccount = localAccount;
         this.communicator = new Communicator({
             metadata,
             preference,
         });
 
-        // Determine the expected signer type from current preference
-        const expectedSignerType: SignerType = preference.mode === Mode.AppSpecific
-            ? 'appSpecific'
-            : 'crossPlatform';
+        // EIP-7702 mode: initialize signer immediately
+        if (this.localAccount) {
+            this.signer = this.initSigner('eip7702');
+        } else {
+            // Determine the expected signer type from current preference
+            const expectedSignerType: SignerType = preference.mode === Mode.AppSpecific
+                ? 'appSpecific'
+                : 'crossPlatform';
 
-        const storedSignerType = loadSignerType();
+            const storedSignerType = loadSignerType();
 
-        // Only restore signer if the stored type matches the current preference
-        // If they don't match, clear the stored type to avoid using wrong signer
-        if (storedSignerType) {
-            if (storedSignerType === expectedSignerType) {
-                this.signer = this.initSigner(storedSignerType);
-            } else {
-                // Mode has changed, clear the old signer type
-                clearSignerType();
+            // Only restore signer if the stored type matches the current preference
+            // If they don't match, clear the stored type to avoid using wrong signer
+            if (storedSignerType) {
+                if (storedSignerType === expectedSignerType) {
+                    this.signer = this.initSigner(storedSignerType);
+                } else {
+                    // Mode has changed, clear the old signer type
+                    clearSignerType();
+                }
             }
         }
     }
@@ -94,9 +102,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             console.warn('Signer cleanup failed during disconnect:', cleanupError);
         }
 
-        // Clear PasskeyManager auth state (explicit logout)
-        const passkeyManager = new PasskeyManager(undefined, undefined, this.apiKey);
-        passkeyManager.logout();
+        // Clear PasskeyManager auth state (explicit logout) - skip for EIP-7702
+        if (!this.localAccount) {
+            const passkeyManager = new PasskeyManager(undefined, undefined, this.apiKey);
+            passkeyManager.logout();
+        }
 
         this.signer = null;
         correlationIds.clear();
@@ -105,9 +115,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     }
 
     private async _request<T>(args: RequestArguments): Promise<T> {
-        const signerType = this.preference.mode === Mode.AppSpecific
-            ? 'appSpecific'
-            : 'crossPlatform';
+        const signerType = this.localAccount
+            ? 'eip7702' as const
+            : this.preference.mode === Mode.AppSpecific
+                ? 'appSpecific'
+                : 'crossPlatform';
 
         try {
             checkErrorForInvalidRequestArgs(args);
@@ -118,7 +130,9 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         await signer.handshake(args);
 
                         this.signer = signer;
-                        storeSignerType(signerType);
+                        if (signerType !== 'eip7702') {
+                            storeSignerType(signerType);
+                        }
                         break;
                     }
                     case 'wallet_connect': {
@@ -128,7 +142,9 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         // This avoids race conditions with popup closure in cross-platform mode.
                         await signer.handshake(args);
                         this.signer = signer;
-                        storeSignerType(signerType);
+                        if (signerType !== 'eip7702') {
+                            storeSignerType(signerType);
+                        }
                         // Handshake sets accounts/capabilities in store via handleResponse.
                         // The subsequent request will return the cached response.
                         const result = await signer.request(args);
@@ -237,7 +253,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         }
     }
 
-    private initSigner(signerType: SignerType): Signer {
+    private initSigner(signerType: SignerType | 'eip7702'): Signer {
         return createSigner({
             signerType,
             metadata: this.metadata,
@@ -247,6 +263,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             apiKey: this.apiKey,
             paymasters: signerType === 'appSpecific' ? this.paymasters : undefined,
             ens: signerType === 'appSpecific' ? this.preference.ens : undefined,
+            localAccount: signerType === 'eip7702' ? this.localAccount : undefined,
         });
     }
 

@@ -1,3 +1,4 @@
+import type { LocalAccount } from 'viem';
 import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
 import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions, Mode, PaymasterConfig } from '../provider/interface.js';
 import { createJAWProvider } from '../provider/createJAWProvider.js';
@@ -11,6 +12,8 @@ export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   paymasters?: Record<number, PaymasterConfig>;
   /** Used to issue subnames */
   ens?: string;
+  /** Optional LocalAccount for EIP-7702 mode */
+  localAccount?: LocalAccount;
 };
 
 const DEFAULT_PREFERENCE: JawProviderPreference = {
@@ -59,6 +62,7 @@ export function create(params: CreateJAWSDKOptions) {
       ...(params.ens ? { ens: params.ens } : {}),
     },
     paymasters: params.paymasters,
+    localAccount: params.localAccount,
   };
 
   if (options.preference?.serverUrl != JAW_PASSKEYS_URL && options.preference.mode == Mode.CrossPlatform) {

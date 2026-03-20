@@ -1,4 +1,5 @@
 import { EventEmitter } from 'eventemitter3';
+import type { LocalAccount } from 'viem';
 import { UIHandler } from '../ui/interface.js';
 
 export interface RequestArguments {
@@ -88,4 +89,6 @@ export interface ConstructorOptions {
     apiKey: string;
     /** Mapping of chain IDs to paymaster configuration */
     paymasters?: Record<number, PaymasterConfig>;
+    /** Optional LocalAccount for EIP-7702 mode */
+    localAccount?: LocalAccount;
 }

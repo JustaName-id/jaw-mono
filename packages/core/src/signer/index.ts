@@ -27,3 +27,7 @@ export {
     storeSignerType,
     clearSignerType,
 } from "./utils.js"
+
+export {
+    EIP7702Signer
+} from "./eip7702/index.js"

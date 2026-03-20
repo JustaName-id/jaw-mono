@@ -92,6 +92,9 @@ export {
     type PasskeyAccount,
 } from './passkey-manager/index.js';
 
+/** EIP-7702 Signer **/
+export { EIP7702Signer } from './signer/eip7702/index.js';
+
 /** Key Manager exports **/
 export {
     KeyManager
