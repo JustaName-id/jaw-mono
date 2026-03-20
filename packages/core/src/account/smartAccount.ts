@@ -144,6 +144,11 @@ export const getBundlerClient = (
     });
 }
 
+type PreparedCalls = {
+    calls: Array<{ to: Address; value: bigint; data: Hex }>;
+    authorization?: Awaited<ReturnType<ToJustanAccountReturnType['signAuthorization']>>;
+};
+
 /**
  * Prepares calls for EIP-7702 execution by checking delegation status
  * and prepending owner setup if needed.
@@ -153,10 +158,7 @@ async function prepareEip7702Calls(
     localAccount: LocalAccount,
     calls: Array<{ to: Address; value: bigint; data: Hex }>,
     chain: Chain
-): Promise<{
-    calls: Array<{ to: Address; value: bigint; data: Hex }>;
-    authorization?: Awaited<ReturnType<ToJustanAccountReturnType['signAuthorization']>>;
-}> {
+): Promise<PreparedCalls> {
     const publicClient = createPublicClient({
         chain: SUPPORTED_CHAINS.find(c => c.id === chain.id),
         transport: http(chain.rpcUrl),
@@ -177,18 +179,15 @@ async function prepareEip7702Calls(
 
     let finalCalls = [...calls];
 
-    // Check if permissions manager is registered as owner
-    let isPmOwner = false;
-    try {
-        isPmOwner = await readContract(publicClient, {
+    // If not delegated, contract code doesn't exist yet — skip the RPC call
+    const isPmOwner = delegated
+        ? await readContract(publicClient, {
             address: localAccount.address,
             abi,
             functionName: 'isOwnerAddress',
             args: [PERMISSIONS_MANAGER_ADDRESS],
-        });
-    } catch {
-        isPmOwner = false;
-    }
+        }).catch(() => false)
+        : false;
 
     if (!isPmOwner) {
         finalCalls = [{
@@ -203,6 +202,29 @@ async function prepareEip7702Calls(
     }
 
     return { calls: finalCalls, authorization };
+}
+
+/**
+ * Formats raw calls and applies EIP-7702 preparation when a localAccount is present.
+ * For non-7702 accounts (no localAccount), just formats the calls.
+ */
+async function prepareCallsForExecution(
+    smartAccount: SmartAccount,
+    calls: Array<{ to: Address; value?: bigint; data?: Hex }>,
+    chain: Chain,
+    localAccount?: LocalAccount
+): Promise<PreparedCalls> {
+    const formatted = calls.map(call => ({
+        to: getAddress(call.to),
+        value: call.value ?? 0n,
+        data: (call.data ?? '0x') as Hex,
+    }));
+
+    if (!localAccount) {
+        return { calls: formatted };
+    }
+
+    return prepareEip7702Calls(smartAccount, localAccount, formatted, chain);
 }
 
 export async function sendTransaction(
@@ -220,18 +242,9 @@ export async function sendTransaction(
 ): Promise<Hash> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
-    let finalCalls = calls.map(call => ({
-        to: getAddress(call.to),
-        value: call.value ?? 0n,
-        data: (call.data ?? '0x') as Hex,
-    }));
-
-    let authorization: Awaited<ReturnType<ToJustanAccountReturnType['signAuthorization']>> | undefined;
-    if (localAccount) {
-        const prepared = await prepareEip7702Calls(smartAccount, localAccount, finalCalls, chain);
-        finalCalls = prepared.calls;
-        authorization = prepared.authorization;
-    }
+    const { calls: finalCalls, authorization } = await prepareCallsForExecution(
+        smartAccount, calls, chain, localAccount
+    );
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
@@ -282,18 +295,9 @@ export async function sendCalls(
 ): Promise<BundledTransactionResult> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
-    let finalCalls = calls.map(call => ({
-        to: getAddress(call.to),
-        value: call.value ?? 0n,
-        data: (call.data ?? '0x') as Hex,
-    }));
-
-    let authorization: Awaited<ReturnType<ToJustanAccountReturnType['signAuthorization']>> | undefined;
-    if (localAccount) {
-        const prepared = await prepareEip7702Calls(smartAccount, localAccount, finalCalls, chain);
-        finalCalls = prepared.calls;
-        authorization = prepared.authorization;
-    }
+    const { calls: finalCalls, authorization } = await prepareCallsForExecution(
+        smartAccount, calls, chain, localAccount
+    );
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
@@ -347,19 +351,16 @@ export async function sendCallsWithPermission(
     const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
 
     // The permission call routed through the permissions manager
-    let finalCalls: Array<{ to: Address; value: bigint; data: Hex }> = [{
+    const permissionCall: Array<{ to: Address; value: bigint; data: Hex }> = [{
         to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
         value: 0n,
         data: encodedData,
     }];
 
     // EIP-7702: prepend delegation authorization + owner setup if needed
-    let authorization: Awaited<ReturnType<ToJustanAccountReturnType['signAuthorization']>> | undefined;
-    if (localAccount) {
-        const prepared = await prepareEip7702Calls(smartAccount, localAccount, finalCalls, chain);
-        finalCalls = prepared.calls;
-        authorization = prepared.authorization;
-    }
+    const { calls: finalCalls, authorization } = localAccount
+        ? await prepareEip7702Calls(smartAccount, localAccount, permissionCall, chain)
+        : { calls: permissionCall, authorization: undefined };
 
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
