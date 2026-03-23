@@ -1,0 +1,105 @@
+# Reown AppKit Integration
+
+Combine JAW passkey smart accounts with [Reown AppKit](https://docs.reown.com/appkit/overview) to offer passkey login alongside other wallets.
+
+Both connectors share a single wagmi config — all standard hooks (`useAccount`, `useSendCalls`, `useSignMessage`) work regardless of which connector the user chose.
+
+:::info[Prerequisites]
+This guide assumes you already have a working Reown AppKit project. If not, follow the [Reown AppKit setup guide](https://docs.reown.com/appkit/next/core/installation) first.
+:::
+
+## Installation
+
+Add `@jaw.id/wagmi` to your existing Reown AppKit project:
+
+:::code-group
+
+```bash [npm]
+npm install @jaw.id/wagmi
+```
+
+```bash [pnpm]
+pnpm add @jaw.id/wagmi
+```
+
+```bash [yarn]
+yarn add @jaw.id/wagmi
+```
+
+```bash [bun]
+bun add @jaw.id/wagmi
+```
+
+:::
+
+:::info
+You need a [JAW API key](https://dashboard.jaw.id).
+:::
+
+Add it to your `.env.local`:
+
+```bash
+NEXT_PUBLIC_JAW_API_KEY=your_jaw_api_key
+```
+
+
+## 1. Create the Connector
+
+```typescript
+import { jaw } from "@jaw.id/wagmi";
+
+const jawConnector = jaw({
+  apiKey: process.env.NEXT_PUBLIC_JAW_API_KEY!,
+  appName: "My App",
+  defaultChainId: baseSepolia.id,
+});
+```
+
+See [Connector](/wagmi/jaw) for all available options (`ens`, `paymasters`, `preference`, etc).
+
+
+## 2. Pass to the WagmiAdapter
+
+Add `jawConnector` to the `connectors` array in your existing `WagmiAdapter` config:
+
+```typescript
+import { cookieStorage, createStorage, http } from "@wagmi/core";
+import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
+import { baseSepolia, base } from "@reown/appkit/networks";
+import { jaw } from "@jaw.id/wagmi";
+
+const jawConnector = jaw({
+  apiKey: process.env.NEXT_PUBLIC_JAW_API_KEY!,
+  appName: "My App",
+  defaultChainId: baseSepolia.id,
+});
+
+export const wagmiAdapter = new WagmiAdapter({
+  storage: createStorage({ storage: cookieStorage }),
+  ssr: true,
+  projectId,
+  networks: [baseSepolia, base],
+  connectors: [jawConnector], // Add JAW here
+  transports: {
+    [baseSepolia.id]: http(),
+    [base.id]: http(),
+  },
+});
+
+export const config = wagmiAdapter.wagmiConfig;
+```
+
+That's it. JAW passkey accounts are now available alongside all other AppKit wallets. All standard wagmi hooks (`useAccount`, `useSendCalls`, `useSignMessage`) work regardless of which connector the user chose.
+
+
+## Full Example
+
+See the complete working example at [jaw-examples/nextjs-reown](https://github.com/JustaName-id/jaw-examples/tree/main/examples/nextjs-reown).
+
+
+## Related
+
+- [Quickstart](/guides/quickstart) - JAW standalone setup
+- [Connector](/wagmi/jaw) - Full `jaw()` connector reference
+- [Gas Sponsoring](/guides/gas-sponsoring) - Sponsor gas for your users
+- [Configuration](/configuration) - All configuration options
