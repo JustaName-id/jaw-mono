@@ -12,9 +12,10 @@ import {
     http,
     createPublicClient,
     LocalAccount,
-    encodeFunctionData
+    encodeFunctionData,
+    decodeFunctionResult
 } from "viem";
-import {getCode, getGasPrice, readContract} from "viem/actions";
+import {call, getCode, getGasPrice, readContract} from "viem/actions";
 import {abi, factoryAbi, JustanAccountImplementation, toJustanAccount, type ToJustanAccountReturnType} from "./toJustanAccount.js";
 import {isDelegatedToImplementation} from "./delegation.js";
 import {createPaymasterFunctions} from "./paymaster.js";
@@ -179,15 +180,37 @@ async function prepareEip7702Calls(
 
     let finalCalls = [...calls];
 
-    // If not delegated, contract code doesn't exist yet — skip the RPC call
-    const isPmOwner = delegated
-        ? await readContract(publicClient, {
-            address: localAccount.address,
+    // Check if permissions manager is already an owner.
+    // When not delegated, use stateOverride to simulate the delegation code
+    // so we can read storage even if the EOA has no code yet (handles re-delegation
+    // where storage persists after clearing delegation).
+    let isPmOwner = false;
+    try {
+        const callData = encodeFunctionData({
             abi,
             functionName: 'isOwnerAddress',
             args: [PERMISSIONS_MANAGER_ADDRESS],
-        }).catch(() => false)
-        : false;
+        });
+        const { data: resultData } = await call(publicClient, {
+            to: localAccount.address,
+            data: callData,
+            ...(!delegated ? {
+                stateOverride: [{
+                    address: localAccount.address,
+                    code: `0xef0100${implementationAddress.slice(2)}` as Hex,
+                }],
+            } : {}),
+        });
+        if (resultData) {
+            isPmOwner = decodeFunctionResult({
+                abi,
+                functionName: 'isOwnerAddress',
+                data: resultData,
+            });
+        }
+    } catch {
+        isPmOwner = false;
+    }
 
     if (!isPmOwner) {
         finalCalls = [{
