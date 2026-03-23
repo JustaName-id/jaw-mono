@@ -11,8 +11,6 @@ import {
   calculateGas,
   getBundlerClient,
   createSmartAccountEip7702,
-  sendCallsEip7702 as sendSmartAccountCallsEip7702,
-  sendTransactionEip7702 as sendSmartAccountTransactionEip7702,
   type BundledTransactionResult,
 } from './smartAccount.js';
 import {
@@ -706,19 +704,6 @@ export class Account {
       data: call.data,
     }));
 
-    // EIP-7702 path
-    if (this._localAccount) {
-      return await sendSmartAccountTransactionEip7702(
-        this._smartAccount,
-        this._localAccount,
-        formattedCalls,
-        this._chain,
-        this._apiKey,
-        paymasterUrlOverride,
-        paymasterContextOverride
-      );
-    }
-
     // If using JAW ERC-20 paymaster, prepend approval call if needed
     const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
     const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
@@ -732,7 +717,8 @@ export class Account {
       this._chain,
       paymasterUrlOverride,
       Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined,
-      this._apiKey
+      this._apiKey,
+      this._localAccount ?? undefined
     );
   }
 
@@ -770,28 +756,17 @@ export class Account {
       data: call.data,
     }));
 
+    // If using JAW ERC-20 paymaster, prepend approval call if needed
+    const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
+    const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
+
+    // Remove gas field from context (only used for approval logic)
+    const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
+    const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
+
     let result: BundledTransactionResult;
 
-    // EIP-7702 path
-    if (this._localAccount) {
-      result = await sendSmartAccountCallsEip7702(
-        this._smartAccount,
-        this._localAccount,
-        formattedCalls,
-        this._chain,
-        this._apiKey,
-        paymasterUrlOverride,
-        paymasterContextOverride
-      );
-    } else if (options?.permissionId) {
-      // If using JAW ERC-20 paymaster, prepend approval call if needed
-      const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
-      const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
-
-      // Remove gas field from context (only used for approval logic)
-      const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-      const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
-
+    if (options?.permissionId) {
       // Execute through permission manager
       result = await sendSmartAccountCallsWithPermission(
         this._smartAccount,
@@ -800,24 +775,18 @@ export class Account {
         options.permissionId,
         this._apiKey,
         paymasterUrlOverride,
-        cleanedContext
+        cleanedContext,
+        this._localAccount ?? undefined
       );
     } else {
-      // If using JAW ERC-20 paymaster, prepend approval call if needed
-      const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, formattedCalls);
-      const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
-
-      // Remove gas field from context (only used for approval logic)
-      const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-      const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
-
-      // Standard execution
+      // Standard execution (EIP-7702 handled inside sendSmartAccountCalls)
       result = await sendSmartAccountCalls(
         this._smartAccount,
         finalCalls,
         this._chain,
         paymasterUrlOverride,
-        cleanedContext
+        cleanedContext,
+        this._localAccount ?? undefined
       );
     }
 
