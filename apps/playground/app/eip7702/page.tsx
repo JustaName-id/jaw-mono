@@ -1,10 +1,10 @@
 'use client';
 
 import { useState } from 'react';
-import { PrivyWrapper, Eip7702Providers } from './providers';
+import { PrivyWrapper } from './providers';
 import { PrivyLoginSection } from './privy-login';
 import { TurnkeyLoginSection } from './turnkey-login';
-import { WagmiActions } from './wagmi-actions';
+import { AccountActions } from './account-actions';
 import type { LocalAccount } from 'viem';
 
 type Provider = 'privy' | 'turnkey';
@@ -17,7 +17,7 @@ export default function Eip7702Page() {
         <div className="min-h-screen bg-background p-6 max-w-2xl mx-auto">
             <h1 className="text-3xl font-bold mb-2">EIP-7702 Client-Side Test</h1>
             <p className="text-muted-foreground mb-6">
-                Test EIP-7702 delegation with real wallet providers through wagmi.
+                Test EIP-7702 delegation using Account.fromLocalAccount() with Privy or Turnkey.
             </p>
 
             {/* Provider selector */}
@@ -44,24 +44,16 @@ export default function Eip7702Page() {
                 </button>
             </div>
 
-            {/* Login section — provider-specific */}
+            {/* Login section */}
             {provider === 'privy' ? (
                 <PrivyWrapper>
                     <PrivyLoginSection onAccountReady={setLocalAccount} />
-                    {localAccount && (
-                        <Eip7702Providers localAccount={localAccount}>
-                            <WagmiActions />
-                        </Eip7702Providers>
-                    )}
+                    {localAccount && <AccountActions localAccount={localAccount} />}
                 </PrivyWrapper>
             ) : (
                 <>
                     <TurnkeyLoginSection onAccountReady={setLocalAccount} />
-                    {localAccount && (
-                        <Eip7702Providers localAccount={localAccount}>
-                            <WagmiActions />
-                        </Eip7702Providers>
-                    )}
+                    {localAccount && <AccountActions localAccount={localAccount} />}
                 </>
             )}
         </div>
