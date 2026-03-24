@@ -79,10 +79,11 @@
     "projects": ["packages/*"],
     "version": {
       "conventionalCommits": true,
+      "preserveLocalDependencyProtocols": false,
       "generatorOptions": {
         "fallbackCurrentVersionResolver": "disk"
       },
-      "preVersionCommand": "bunx nx run-many -t build"
+      "preVersionCommand": "bunx nx run-many -t build --projects='packages/*'"
     },
     "changelog": {
       "projectChangelogs": {
