@@ -12,9 +12,10 @@ import {
     http,
     createPublicClient,
     LocalAccount,
-    encodeFunctionData
+    encodeFunctionData,
+    decodeFunctionResult
 } from "viem";
-import {getCode, getGasPrice, readContract} from "viem/actions";
+import {call, getCode, getGasPrice, readContract} from "viem/actions";
 import {abi, factoryAbi, JustanAccountImplementation, toJustanAccount, type ToJustanAccountReturnType} from "./toJustanAccount.js";
 import {isDelegatedToImplementation} from "./delegation.js";
 import {createPaymasterFunctions} from "./paymaster.js";
@@ -144,6 +145,111 @@ export const getBundlerClient = (
     });
 }
 
+type PreparedCalls = {
+    calls: Array<{ to: Address; value: bigint; data: Hex }>;
+    authorization?: Awaited<ReturnType<ToJustanAccountReturnType['signAuthorization']>>;
+};
+
+/**
+ * Prepares calls for EIP-7702 execution by checking delegation status
+ * and prepending owner setup if needed.
+ */
+async function prepareEip7702Calls(
+    smartAccount: SmartAccount,
+    localAccount: LocalAccount,
+    calls: Array<{ to: Address; value: bigint; data: Hex }>,
+    chain: Chain
+): Promise<PreparedCalls> {
+    const publicClient = createPublicClient({
+        chain: SUPPORTED_CHAINS.find(c => c.id === chain.id),
+        transport: http(chain.rpcUrl),
+    });
+
+    const implementationAddress = await readContract(publicClient, {
+        address: FACTORY_ADDRESS as Address,
+        abi: factoryAbi,
+        functionName: "getImplementation",
+    });
+
+    const delegated = await isDelegatedToImplementation(publicClient, localAccount.address, implementationAddress);
+
+    // Sign authorization if not yet delegated to our implementation
+    const authorization = !delegated
+        ? await (smartAccount as ToJustanAccountReturnType).signAuthorization()
+        : undefined;
+
+    let finalCalls = [...calls];
+
+    // Check if permissions manager is already an owner.
+    // When not delegated, use stateOverride to simulate the delegation code
+    // so we can read storage even if the EOA has no code yet (handles re-delegation
+    // where storage persists after clearing delegation).
+    let isPmOwner = false;
+    try {
+        const callData = encodeFunctionData({
+            abi,
+            functionName: 'isOwnerAddress',
+            args: [PERMISSIONS_MANAGER_ADDRESS],
+        });
+        const { data: resultData } = await call(publicClient, {
+            to: localAccount.address,
+            data: callData,
+            ...(!delegated ? {
+                stateOverride: [{
+                    address: localAccount.address,
+                    code: `0xef0100${implementationAddress.slice(2)}` as Hex,
+                }],
+            } : {}),
+        });
+        if (resultData) {
+            isPmOwner = decodeFunctionResult({
+                abi,
+                functionName: 'isOwnerAddress',
+                data: resultData,
+            });
+        }
+    } catch {
+        isPmOwner = false;
+    }
+
+    if (!isPmOwner) {
+        finalCalls = [{
+            to: getAddress(localAccount.address),
+            value: 0n,
+            data: encodeFunctionData({
+                abi,
+                functionName: 'addOwnerAddress',
+                args: [PERMISSIONS_MANAGER_ADDRESS],
+            }),
+        }, ...finalCalls];
+    }
+
+    return { calls: finalCalls, authorization };
+}
+
+/**
+ * Formats raw calls and applies EIP-7702 preparation when a localAccount is present.
+ * For non-7702 accounts (no localAccount), just formats the calls.
+ */
+async function prepareCallsForExecution(
+    smartAccount: SmartAccount,
+    calls: Array<{ to: Address; value?: bigint; data?: Hex }>,
+    chain: Chain,
+    localAccount?: LocalAccount
+): Promise<PreparedCalls> {
+    const formatted = calls.map(call => ({
+        to: getAddress(call.to),
+        value: call.value ?? 0n,
+        data: (call.data ?? '0x') as Hex,
+    }));
+
+    if (!localAccount) {
+        return { calls: formatted };
+    }
+
+    return prepareEip7702Calls(smartAccount, localAccount, formatted, chain);
+}
+
 export async function sendTransaction(
     smartAccount: SmartAccount,
     calls: Array<{
@@ -154,17 +260,19 @@ export async function sendTransaction(
     chain: Chain,
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>,
-    apiKey?: string
+    apiKey?: string,
+    localAccount?: LocalAccount
 ): Promise<Hash> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
+    const { calls: finalCalls, authorization } = await prepareCallsForExecution(
+        smartAccount, calls, chain, localAccount
+    );
+
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
-        calls: calls.map(call => ({
-            to: getAddress(call.to),
-            value: call.value ?? 0n,
-            data: call.data ?? '0x'
-        })),
+        calls: finalCalls,
+        ...(authorization ? { authorization } : {}),
     })
 
     // Wait for the transaction receipt and get the actual transaction hash
@@ -205,17 +313,19 @@ export async function sendCalls(
     }>,
     chain: Chain,
     paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
+    paymasterContextOverride?: Record<string, unknown>,
+    localAccount?: LocalAccount
 ): Promise<BundledTransactionResult> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
 
+    const { calls: finalCalls, authorization } = await prepareCallsForExecution(
+        smartAccount, calls, chain, localAccount
+    );
+
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
-        calls: calls.map(call => ({
-            to: getAddress(call.to),
-            value: call.value ?? 0n,
-            data: call.data ?? '0x'
-        })),
+        calls: finalCalls,
+        ...(authorization ? { authorization } : {}),
     })
 
     return {
@@ -246,7 +356,8 @@ export async function sendCallsWithPermission(
     permissionId: Hex,
     apiKey: string,
     paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
+    paymasterContextOverride?: Record<string, unknown>,
+    localAccount?: LocalAccount
 ): Promise<BundledTransactionResult> {
     // Fetch the permission from the relay
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
@@ -262,16 +373,24 @@ export async function sendCallsWithPermission(
     // Encode the executeBatch call with permission
     const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
 
-    // Send a single call to the permissions manager
+    // The permission call routed through the permissions manager
+    const permissionCall: Array<{ to: Address; value: bigint; data: Hex }> = [{
+        to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+        value: 0n,
+        data: encodedData,
+    }];
+
+    // EIP-7702: prepend delegation authorization + owner setup if needed
+    const { calls: finalCalls, authorization } = localAccount
+        ? await prepareEip7702Calls(smartAccount, localAccount, permissionCall, chain)
+        : { calls: permissionCall, authorization: undefined };
+
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
-        calls: [{
-            to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
-            value: 0n,
-            data: encodedData,
-        }],
+        calls: finalCalls,
+        ...(authorization ? { authorization } : {}),
     });
 
     return {
@@ -451,176 +570,6 @@ export async function createSmartAccountEip7702(
         owners: [localAccount, PERMISSIONS_MANAGER_ADDRESS],
         eip7702Account: localAccount,
     });
-}
-
-export async function sendCallsEip7702(
-    smartAccount: SmartAccount,
-    localAccount: LocalAccount,
-    calls: Array<{
-        to: Address;
-        value?: bigint;
-        data?: Hex;
-    }>,
-    chain: Chain,
-    apiKey: string,
-    paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
-): Promise<BundledTransactionResult> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
-
-    const publicClient = createPublicClient({
-        chain: SUPPORTED_CHAINS.find(c => c.id === chain.id),
-        transport: http(chain.rpcUrl),
-    });
-
-    const implementationAddress = await readContract(publicClient, {
-        address: FACTORY_ADDRESS as Address,
-        abi: factoryAbi,
-        functionName: "getImplementation",
-    });
-
-    const delegated = await isDelegatedToImplementation(publicClient, localAccount.address, implementationAddress);
-
-    // Sign authorization if not yet delegated to our implementation
-    const authorization = !delegated
-        ? await (smartAccount as ToJustanAccountReturnType).signAuthorization()
-        : undefined;
-
-    let finalCalls = calls.map(call => ({
-        to: getAddress(call.to),
-        value: call.value ?? 0n,
-        data: call.data ?? '0x' as Hex,
-    }));
-
-    // Check if permissions manager is registered as owner
-    let isPmOwner = false;
-    try {
-        isPmOwner = await readContract(publicClient, {
-            address: localAccount.address,
-            abi,
-            functionName: 'isOwnerAddress',
-            args: [PERMISSIONS_MANAGER_ADDRESS],
-        });
-    } catch {
-        isPmOwner = false;
-    }
-
-    if (!isPmOwner) {
-        const addOwnerCall = {
-            to: getAddress(localAccount.address),
-            value: 0n,
-            data: encodeFunctionData({
-                abi,
-                functionName: 'addOwnerAddress',
-                args: [PERMISSIONS_MANAGER_ADDRESS],
-            }),
-        };
-        finalCalls = [addOwnerCall, ...finalCalls];
-    }
-
-    const userOpHash = await bundlerClient.sendUserOperation({
-        account: smartAccount,
-        calls: finalCalls,
-        ...(authorization ? { authorization } : {}),
-    });
-
-    return {
-        id: userOpHash,
-        chainId: chain.id,
-    };
-}
-
-export async function sendTransactionEip7702(
-    smartAccount: SmartAccount,
-    localAccount: LocalAccount,
-    calls: Array<{
-        to: Address;
-        value?: bigint;
-        data?: Hex;
-    }>,
-    chain: Chain,
-    apiKey: string,
-    paymasterUrlOverride?: string,
-    paymasterContextOverride?: Record<string, unknown>
-): Promise<Hash> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
-
-    const publicClient = createPublicClient({
-        chain: SUPPORTED_CHAINS.find(c => c.id === chain.id),
-        transport: http(chain.rpcUrl),
-    });
-
-    const implementationAddress = await readContract(publicClient, {
-        address: FACTORY_ADDRESS as Address,
-        abi: factoryAbi,
-        functionName: "getImplementation",
-    });
-
-    const delegated = await isDelegatedToImplementation(publicClient, localAccount.address, implementationAddress);
-
-    // Sign authorization if not yet delegated to our implementation
-    const authorization = !delegated
-        ? await (smartAccount as ToJustanAccountReturnType).signAuthorization()
-        : undefined;
-
-    let finalCalls = calls.map(call => ({
-        to: getAddress(call.to),
-        value: call.value ?? 0n,
-        data: call.data ?? '0x' as Hex,
-    }));
-
-    // Check if permissions manager is registered as owner
-    let isPmOwner = false;
-    try {
-        isPmOwner = await readContract(publicClient, {
-            address: localAccount.address,
-            abi,
-            functionName: 'isOwnerAddress',
-            args: [PERMISSIONS_MANAGER_ADDRESS],
-        });
-    } catch {
-        isPmOwner = false;
-    }
-
-    if (!isPmOwner) {
-        const addOwnerCall = {
-            to: getAddress(localAccount.address),
-            value: 0n,
-            data: encodeFunctionData({
-                abi,
-                functionName: 'addOwnerAddress',
-                args: [PERMISSIONS_MANAGER_ADDRESS],
-            }),
-        };
-        finalCalls = [addOwnerCall, ...finalCalls];
-    }
-
-    const userOpHash = await bundlerClient.sendUserOperation({
-        account: smartAccount,
-        calls: finalCalls,
-        ...(authorization ? { authorization } : {}),
-    });
-
-    const receipt = await bundlerClient.waitForUserOperationReceipt({
-        hash: userOpHash,
-    });
-
-    if (apiKey) {
-        const actualReceipt = (receipt as any).receipt || receipt;
-        const receiptStatus = actualReceipt.status;
-        const isSuccess = receiptStatus === '0x1' ||
-            receiptStatus === 1 ||
-            (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
-
-        notifyReceiptReceived({
-            userOpHash,
-            transactionHash: actualReceipt.transactionHash,
-            success: isSuccess,
-            apiKey,
-        });
-    }
-
-    return receipt.receipt.transactionHash;
 }
 
 export async function calculateGas(
