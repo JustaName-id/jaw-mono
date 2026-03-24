@@ -1,0 +1,230 @@
+# Upgrade EOA to Smart Account (EIP-7702)
+
+Upgrade an existing EOA (Externally Owned Account) to a JAW smart account while keeping the same address. Your users keep their identity onchain — same address, same history, same token balances — but gain smart account features like batched transactions, permissions, and gas sponsorship.
+
+**What you can do:**
+
+- **Preserve Address** - The EOA address becomes the smart account address
+- **Batch Transactions** - Multiple operations in a single approval
+- **Gas Sponsoring** - Paymasters work out of the box
+- **Permissions** - Grant scoped access to agents and backends
+- **Provider Agnostic** - Works with Privy, Turnkey, raw private keys, or any Viem account
+
+:::info
+EIP-7702 allows EOAs to delegate their code to a smart contract implementation. The delegation happens onchain as part of the first transaction and persists across future transactions. No migration, no asset transfers, no address change.
+:::
+
+
+## How It Works
+
+1. **First transaction** — JAW signs an EIP-7702 authorization, registers the permissions manager as an owner, and executes your call — all in a single UserOperation.
+2. **Subsequent transactions** — The delegation is already active. JAW skips the authorization and owner setup, and just sends your call.
+
+The developer doesn't need to handle any of this. Pass `{ eip7702: true }` and the SDK handles the rest.
+
+
+## Prerequisites
+
+Install the core SDK:
+
+:::code-group
+
+```bash [npm]
+npm install @jaw.id/core viem
+```
+
+```bash [pnpm]
+pnpm add @jaw.id/core viem
+```
+
+```bash [yarn]
+yarn add @jaw.id/core viem
+```
+
+```bash [bun]
+bun add @jaw.id/core viem
+```
+
+:::
+
+Get your API key at **[dashboard.jaw.id](https://dashboard.jaw.id/)**.
+
+
+## Quick Example
+
+```typescript
+import { Account } from '@jaw.id/core';
+import { privateKeyToAccount } from 'viem/accounts';
+import { parseEther } from 'viem';
+
+const localAccount = privateKeyToAccount('0x...');
+
+// Create an EIP-7702 account — address is preserved
+const account = await Account.fromLocalAccount(
+  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
+  localAccount,
+  { eip7702: true }
+);
+
+// account.address === localAccount.address
+console.log('Address:', account.address);
+
+// Send a transaction — delegation happens automatically on first call
+const { id } = await account.sendCalls([
+  { to: '0xRecipient...', value: parseEther('0.1') }
+]);
+```
+
+
+## Provider Integrations
+
+Any wallet provider that exposes a Viem `LocalAccount` works with EIP-7702. The SDK handles authorization signing automatically.
+
+### Private Key
+
+```typescript
+import { Account } from '@jaw.id/core';
+import { privateKeyToAccount } from 'viem/accounts';
+
+const localAccount = privateKeyToAccount('0x...');
+
+const account = await Account.fromLocalAccount(
+  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
+  localAccount,
+  { eip7702: true }
+);
+```
+
+### Privy (Server)
+
+```typescript
+import { Account } from '@jaw.id/core';
+import { PrivyClient } from '@privy-io/server-auth';
+import { createViemAccount } from '@privy-io/server-auth/viem';
+
+const privy = new PrivyClient(PRIVY_APP_ID, PRIVY_APP_SECRET);
+const wallet = await privy.walletApi.getWallet({ id: walletId });
+
+const localAccount = await createViemAccount({
+  walletId: wallet.id,
+  address: wallet.address,
+  privy,
+});
+
+const account = await Account.fromLocalAccount(
+  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
+  localAccount,
+  { eip7702: true }
+);
+```
+
+### Privy (Client)
+
+```typescript
+import { Account } from '@jaw.id/core';
+import { toViemAccount, getEmbeddedConnectedWallet } from '@privy-io/react-auth';
+
+// Inside a React component after Privy login
+const embeddedWallet = getEmbeddedConnectedWallet(wallets);
+const localAccount = await toViemAccount({ wallet: embeddedWallet });
+
+const account = await Account.fromLocalAccount(
+  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
+  localAccount,
+  { eip7702: true }
+);
+```
+
+### Turnkey (Server)
+
+```typescript
+import { Account } from '@jaw.id/core';
+import { Turnkey } from '@turnkey/sdk-server';
+import { createAccount } from '@turnkey/viem';
+
+const turnkey = new Turnkey({
+  apiBaseUrl: 'https://api.turnkey.com',
+  defaultOrganizationId: orgId,
+  apiPublicKey: publicKey,
+  apiPrivateKey: privateKey,
+});
+
+const localAccount = await createAccount({
+  client: turnkey.apiClient(),
+  organizationId: orgId,
+  signWith: walletAddress,
+});
+
+const account = await Account.fromLocalAccount(
+  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
+  localAccount,
+  { eip7702: true }
+);
+```
+
+
+## With Gas Sponsoring
+
+EIP-7702 accounts work with paymasters. Pass a paymaster URL in the config to sponsor gas for your users:
+
+```typescript
+const account = await Account.fromLocalAccount(
+  {
+    chainId: 8453,
+    apiKey: 'YOUR_API_KEY',
+    paymasterUrl: 'https://api.pimlico.io/v2/8453/rpc?apikey=YOUR_PIMLICO_KEY',
+  },
+  localAccount,
+  { eip7702: true }
+);
+
+// Gas is fully sponsored — user pays nothing
+const { id } = await account.sendCalls([
+  { to: '0xRecipient...', value: parseEther('0.1') }
+]);
+```
+
+See [Gas Sponsoring](/guides/gas-sponsoring) for full paymaster setup.
+
+
+## With Permissions
+
+Grant scoped permissions so a backend or agent can execute transactions on behalf of the user:
+
+```typescript
+// 1. Owner grants permission
+const response = await ownerAccount.grantPermissions(
+  Math.floor(Date.now() / 1000) + 86400, // expires in 24h
+  spenderSmartAccountAddress,
+  {
+    calls: [{ target: USDC_ADDRESS, selector: '0xa9059cbb' }],
+    spends: [{ token: USDC_ADDRESS, allowance: '1000000', unit: 'day' }],
+  }
+);
+
+// 2. Spender executes using the permission
+const { id } = await spenderAccount.sendCalls(
+  [{ to: USDC_ADDRESS, data: transferCalldata }],
+  { permissionId: response.permissionId }
+);
+```
+
+See [Permissions](/concepts/permissions) for details.
+
+
+## EIP-7702 vs Regular Smart Account
+
+| | `fromLocalAccount()` | `fromLocalAccount({ eip7702: true })` |
+|---|---|---|
+| **Address** | New counterfactual address | Preserves the EOA address |
+| **First tx** | Deploys smart account via factory | Delegates code via EIP-7702 authorization |
+| **Identity** | New onchain identity | Same address, same history |
+| **Use case** | Backend automation, session keys | Upgrade existing users, preserve reputation |
+
+
+## Related
+
+- [Account.fromLocalAccount()](/account/fromLocalAccount) — API reference
+- [Smart Accounts vs EOAs](/concepts/smart-accounts) — Why smart accounts matter
+- [Gas Sponsoring](/guides/gas-sponsoring) — Paymaster setup
+- [Permissions](/concepts/permissions) — Scoped access control

@@ -98,6 +98,7 @@ export default defineConfig({
       collapsed: false,
       items: [
         { text: 'Quickstart', link: '/guides/quickstart' },
+        { text: 'Upgrade EOA to Smart Account (EIP-7702)', link: '/guides/eip7702-upgrade' },
         { text: 'Embed Stablecoin Payments (Headless)', link: '/guides/embed-stablecoin-payments' },
         { text: 'Onchain Identity', link: '/guides/onchain-identity' },
         { text: 'Gas Sponsoring', link: '/guides/gas-sponsoring' },
