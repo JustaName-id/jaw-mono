@@ -1,3 +1,13 @@
+## 0.1.4 (2026-03-24)
+
+### 🩹 Fixes
+
+- **core:** align dependency versions ([#156](https://github.com/JustaName-id/jaw-mono/pull/156))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.1.3 (2026-03-13)
 
 ### 🩹 Fixes
