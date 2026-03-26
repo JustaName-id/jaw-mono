@@ -1156,16 +1156,16 @@ function TransactionDialogWrapper({
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find(t => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
-
-  // Fetch native token price dynamically based on the chain's native token symbol
-  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
-
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
+
+  // Get native token symbol from feeTokens, falling back to chain's native currency
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1466,6 +1466,7 @@ function TransactionDialogWrapper({
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />
   );
 }
@@ -1494,16 +1495,16 @@ function SendTransactionDialogWrapper({
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find(t => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
-
-  // Fetch native token price dynamically based on the chain's native token symbol
-  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
-
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
+
+  // Get native token symbol from feeTokens, falling back to chain's native currency
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -1787,6 +1788,7 @@ function SendTransactionDialogWrapper({
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />
   );
 }
@@ -1833,13 +1835,6 @@ function PermissionDialogWrapper({
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find(t => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
-
-  // Fetch native token price dynamically based on the chain's native token symbol
-  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
-
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
   const chainId = typeof requestChainId === 'string'
@@ -1847,6 +1842,13 @@ function PermissionDialogWrapper({
     : (requestChainId || defaultChainId || 1);
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
+
+  // Get native token symbol from feeTokens, falling back to chain's native currency
+  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
+
+  // Fetch native token price dynamically based on the chain's native token symbol
+  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -2331,6 +2333,7 @@ function PermissionDialogWrapper({
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={!isSponsored && feeTokens.some(t => !t.isNative)}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />
   );
 }
@@ -2493,7 +2496,7 @@ function RevokePermissionDialogWrapper({
   const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  // Get native token symbol from feeTokens, falling back to chain's native currency
   const nativeToken = feeTokens?.find(t => t.isNative);
   const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
 
@@ -2908,6 +2911,7 @@ function RevokePermissionDialogWrapper({
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={!isSponsored && feeTokens.some(t => !t.isNative)}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />
   );
 }
