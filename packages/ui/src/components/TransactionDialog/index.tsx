@@ -38,6 +38,7 @@ export const TransactionDialog = ({
   isPayingWithErc20,
   // RPC configuration
   mainnetRpcUrl,
+  nativeCurrencySymbol,
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
@@ -51,9 +52,9 @@ export const TransactionDialog = ({
   // Get chain icon using the hook - fetch from capabilities chainMetadata
   const chainIcon = useChainIconURI(currentTransaction?.chainId || 1, apiKey, 24);
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  // Get native token symbol from feeTokens, falling back to chain's native currency
   const nativeToken = feeTokens?.find(t => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
+  const nativeSymbol = nativeToken?.symbol || nativeCurrencySymbol || 'ETH';
 
   // Fetch native token price dynamically based on the chain's native token symbol
   const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
