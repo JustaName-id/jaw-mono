@@ -10,6 +10,7 @@ import {
   estimateUserOpGasWithPermission,
   calculateGas,
   getBundlerClient,
+  createSmartAccountEip7702,
   type BundledTransactionResult,
 } from './smartAccount.js';
 import {
@@ -127,6 +128,7 @@ export class Account {
   private readonly _chain: Chain;
   private readonly _passkeyAccount: PasskeyAccount | null;
   private readonly _apiKey: string;
+  private readonly _localAccount: LocalAccount | null;
 
   /**
    * Private constructor - use static factory methods to create instances
@@ -135,12 +137,14 @@ export class Account {
     smartAccount: SmartAccount,
     chain: Chain,
     apiKey: string,
-    passkeyAccount?: PasskeyAccount
+    passkeyAccount?: PasskeyAccount,
+    localAccount?: LocalAccount
   ) {
     this._smartAccount = smartAccount;
     this._chain = chain;
     this._passkeyAccount = passkeyAccount ?? null;
     this._apiKey = apiKey;
+    this._localAccount = localAccount ?? null;
   }
 
   // ============================================
@@ -402,49 +406,57 @@ export class Account {
    *
    * @param config - Account configuration
    * @param localAccount - A viem LocalAccount instance
+   * @param options - Optional settings
+   * @param options.eip7702 - If true, the EOA address is preserved as the smart account address
+   *                          via EIP-7702 delegation instead of creating a new counterfactual address
    * @returns Promise resolving to the Account instance
    *
    * @example
    * ```typescript
    * import { privateKeyToAccount } from 'viem/accounts';
    *
-   * // From private key
-   * const localAccount = privateKeyToAccount('0x...');
+   * // New counterfactual address
    * const account = await Account.fromLocalAccount(
    *   { chainId: 1, apiKey: 'your-api-key' },
-   *   localAccount
+   *   privateKeyToAccount('0x...')
    * );
    *
-   * // From Privy embedded wallet
-   * const privyAccount = await privy.getEmbeddedWallet();
+   * // Keep EOA address via EIP-7702
    * const account = await Account.fromLocalAccount(
    *   { chainId: 1, apiKey: 'your-api-key' },
-   *   privyAccount
+   *   privateKeyToAccount('0x...'),
+   *   { eip7702: true }
    * );
+   * // account.address === eoa.address
    * ```
    */
   static async fromLocalAccount(
     config: AccountConfig,
-    localAccount: LocalAccount
+    localAccount: LocalAccount,
+    options?: { eip7702?: boolean }
   ): Promise<Account> {
     const { chainId, apiKey, paymasterUrl } = config;
+    const isEip7702 = options?.eip7702 ?? false;
 
     const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
 
-    // Register chain in global store for background operations (e.g., waitForReceiptInBackground)
+    // Register chain in global store for background operations
     const existingChains = chainStore.get() ?? [];
     if (!existingChains.some(c => c.id === chain.id)) {
       chainStore.set([...existingChains, chain]);
     }
 
     const bundlerClient = getBundlerClient(chain);
-    const smartAccount = await createSmartAccount(localAccount, bundlerClient as JustanAccountImplementation['client']);
+    const smartAccount = isEip7702
+      ? await createSmartAccountEip7702(localAccount, bundlerClient as JustanAccountImplementation['client'])
+      : await createSmartAccount(localAccount, bundlerClient as JustanAccountImplementation['client']);
+
     const address = await smartAccount.getAddress();
 
     // Log account issuance for analytics (fire-and-forget)
     logAccountIssuance({ address, type: 'fromLocalAccount', apiKey });
 
-    return new Account(smartAccount, chain, apiKey);
+    return new Account(smartAccount, chain, apiKey, undefined, isEip7702 ? localAccount : undefined);
   }
 
   // ============================================
@@ -705,7 +717,8 @@ export class Account {
       this._chain,
       paymasterUrlOverride,
       Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined,
-      this._apiKey
+      this._apiKey,
+      this._localAccount ?? undefined
     );
   }
 
@@ -762,16 +775,18 @@ export class Account {
         options.permissionId,
         this._apiKey,
         paymasterUrlOverride,
-        cleanedContext
+        cleanedContext,
+        this._localAccount ?? undefined
       );
     } else {
-      // Standard execution
+      // Standard execution (EIP-7702 handled inside sendSmartAccountCalls)
       result = await sendSmartAccountCalls(
         this._smartAccount,
         finalCalls,
         this._chain,
         paymasterUrlOverride,
-        cleanedContext
+        cleanedContext,
+        this._localAccount ?? undefined
       );
     }
 

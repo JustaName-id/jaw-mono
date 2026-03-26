@@ -29,6 +29,11 @@ export {
     type ToJustanAccountReturnType,
 } from "./toJustanAccount.js"
 
+// EIP-7702 delegation utilities
+export {
+    isDelegatedToImplementation,
+} from "./delegation.js"
+
 // ERC-20 Paymaster utilities
 export {
     fetchTokenQuotes,

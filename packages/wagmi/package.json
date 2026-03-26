@@ -1,7 +1,7 @@
 {
   "name": "@jaw.id/wagmi",
   "description": "Wagmi connector and React hooks for JAW.id.",
-  "version": "0.1.4",
+  "version": "0.1.6",
   "type": "module",
   "main": "./dist/index.js",
   "module": "./dist/index.js",
@@ -30,7 +30,7 @@
     "!**/*.tsbuildinfo"
   ],
   "dependencies": {
-    "@jaw.id/core": "0.1.4",
+    "@jaw.id/core": "0.2.0",
     "@wagmi/core": "^3.0.0",
     "tslib": "^2.3.0",
     "viem": "^2.38.2"
