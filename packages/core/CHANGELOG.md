@@ -1,3 +1,13 @@
+## 0.1.5 (2026-03-26)
+
+### 🩹 Fixes
+
+- **core:** flare support ([#157](https://github.com/JustaName-id/jaw-mono/pull/157))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.1.4 (2026-03-24)
 
 ### 🩹 Fixes
