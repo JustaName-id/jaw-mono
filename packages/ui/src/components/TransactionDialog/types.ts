@@ -51,4 +51,7 @@ export interface TransactionDialogProps {
 
   // RPC configuration
   mainnetRpcUrl: string;
+
+  // Native currency symbol for the chain (e.g., 'FLR' for Flare, 'ETH' for Ethereum)
+  nativeCurrencySymbol?: string;
 }

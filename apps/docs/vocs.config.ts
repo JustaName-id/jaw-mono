@@ -104,6 +104,7 @@ export default defineConfig({
         { text: 'Gas Sponsoring', link: '/guides/gas-sponsoring' },
         { text: 'Sign-In With Ethereum', link: '/guides/siwe' },
         { text: 'Subscription Payments', link: '/guides/subscription' },
+        { text: 'Reown AppKit', link: '/guides/reown-appkit' },
       ],
     },
     {
