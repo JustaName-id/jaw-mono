@@ -1,3 +1,13 @@
+## 0.1.7 (2026-03-27)
+
+### 🩹 Fixes
+
+- **ui:** full css isolation for ui components ([#158](https://github.com/JustaName-id/jaw-mono/pull/158))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.1.6 (2026-03-26)
 
 ### 🧱 Updated Dependencies
