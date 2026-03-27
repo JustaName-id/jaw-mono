@@ -788,12 +788,12 @@ function OnboardingDialogWrapper({
         {
           chainId: createChainId,
           apiKey,
+          rpId,
+          rpName,
           paymasterUrl: paymasters?.[createChainId]?.url,
         },
         {
           username: fullUsername,
-          rpId,
-          rpName,
         },
       );
 

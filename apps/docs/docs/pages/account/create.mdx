@@ -26,6 +26,12 @@ Type: `AccountConfig`
 | `chainId` | `number` | Yes | Chain ID for the account |
 | `apiKey` | `string` | Yes | API key for JAW services |
 | `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
+| `paymasterContext` | `Record<string, unknown>` | No | Custom paymaster context for gas sponsorship |
+| `storage` | `SyncStorage` | No | Custom storage implementation (defaults to localStorage on web, in-memory fallback in React Native) |
+| `nativeGetFn` | `NativePasskeyGetFn` | No | Native passkey get function for React Native (e.g. `Passkey.get`). See [React Native Usage](#react-native-usage). |
+| `nativeCreateFn` | `NativePasskeyCreateFn` | No | Native passkey create function for React Native (e.g. `Passkey.create`). See [React Native Usage](#react-native-usage). |
+| `rpId` | `string` | No | Relying party identifier (defaults to `window.location.hostname`). **Required in React Native.** |
+| `rpName` | `string` | No | Relying party name (defaults to `'JAW'`) |
 
 ### options
 
@@ -34,8 +40,6 @@ Type: `CreateAccountOptions`
 | Property | Type | Required | Description |
 |----------|------|----------|-------------|
 | `username` | `string` | Yes | Username/display name for the passkey |
-| `rpId` | `string` | No | Relying party identifier (defaults to `window.location.hostname`) |
-| `rpName` | `string` | No | Relying party name (defaults to `'JAW'`) |
 
 
 ## Returns
@@ -79,12 +83,8 @@ console.log('Username:', account.getMetadata()?.username);
 
 ```typescript
 const account = await Account.create(
-  { chainId: 1, apiKey: 'your-api-key' },
-  {
-    username: 'alice',
-    rpId: 'myapp.com',
-    rpName: 'My Awesome App',
-  }
+  { chainId: 1, apiKey: 'your-api-key', rpId: 'myapp.com', rpName: 'My Awesome App' },
+  { username: 'alice' }
 );
 ```
 
@@ -116,6 +116,37 @@ class MyUIHandler implements UIHandler {
     };
   }
 }
+```
+
+
+## React Native Usage
+
+In React Native, `window` and `navigator.credentials` are unavailable. Pass `Passkey.get` and `Passkey.create` from [`react-native-passkey`](https://github.com/f-23/react-native-passkey) directly in `config` — JAW handles all format conversion, challenge generation, and public key extraction internally.
+
+:::warning[Storage in React Native]
+Without a custom `storage`, JAW falls back to an in-memory store that does **not** persist across app restarts. Pass a `SyncStorage` implementation backed by MMKV or similar for durable persistence.
+:::
+
+```typescript
+import { Account } from '@jaw.id/core';
+import { Passkey } from 'react-native-passkey';
+import type { SyncStorage } from '@jaw.id/core';
+
+// Your SyncStorage backed by MMKV or similar
+const storage: SyncStorage = { /* ... */ };
+
+// Configure once — all RN options live in config
+const config = {
+  chainId: 8453,
+  apiKey: 'your-api-key',
+  storage,
+  nativeGetFn: Passkey.get,
+  nativeCreateFn: Passkey.create,
+  rpId: 'myapp.com',
+  rpName: 'My App',
+};
+
+const account = await Account.create(config, { username: 'alice' });
 ```
 
 

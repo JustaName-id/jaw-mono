@@ -1,13 +1,23 @@
-import { createLocalStorage, type SyncStorage } from '../storage-manager/index.js';
-import {Address} from 'viem';
 import {
-  PasskeyAccount,
-  AuthCheckResult,
-  AuthState,
-} from './types.js';
-import type { JawProviderPreference } from '../provider/index.js';
-import { registerPasskeyInBackend, lookupPasskeyFromBackend, WebAuthnAuthenticationResult , authenticateWithWebAuthnUtils, createPasskeyUtils, ImportWebAuthnAuthenticationResult, importPasskeyUtils} from './utils.js';
-import {JAW_BASE_URL} from "../constants.js";
+  createLocalStorage,
+  type SyncStorage,
+} from "../storage-manager/index.js";
+import { Address } from "viem";
+import { PasskeyAccount, AuthCheckResult, AuthState } from "./types.js";
+import type { JawProviderPreference } from "../provider/index.js";
+import {
+  registerPasskeyInBackend,
+  lookupPasskeyFromBackend,
+  WebAuthnAuthenticationResult,
+  authenticateWithWebAuthnUtils,
+  createPasskeyUtils,
+  ImportWebAuthnAuthenticationResult,
+  importPasskeyUtils,
+  type PasskeyCreateFn,
+  type PasskeyGetFn,
+  type InternalNativeCreateFn,
+} from "./utils.js";
+import { JAW_BASE_URL } from "../constants.js";
 import type { WebAuthnAccount } from "viem/account-abstraction";
 
 /**
@@ -29,8 +39,12 @@ export class PasskeyManager {
   private apiKey?: string;
   private static readonly CREDENTIAL_ID_REGEX = /^[A-Za-z0-9_-]+$/;
 
-  constructor(storage?: SyncStorage, preference?: JawProviderPreference, apiKey?: string) {
-    this.storage = storage ?? createLocalStorage('jaw', 'passkey');
+  constructor(
+    storage?: SyncStorage,
+    preference?: JawProviderPreference,
+    apiKey?: string,
+  ) {
+    this.storage = storage ?? createLocalStorage("jaw", "passkey");
     this.preference = preference ?? {};
     this.apiKey = apiKey;
   }
@@ -40,7 +54,7 @@ export class PasskeyManager {
    */
   checkAuth(): AuthCheckResult {
     try {
-      const authState = this.storage.getItem<AuthState>('authState');
+      const authState = this.storage.getItem<AuthState>("authState");
       if (!authState?.isLoggedIn || !authState?.address) {
         return { isAuthenticated: false };
       }
@@ -50,7 +64,7 @@ export class PasskeyManager {
         address: authState.address,
       };
     } catch (error) {
-      console.error('Error checking auth state:', error);
+      console.error("Error checking auth state:", error);
       return { isAuthenticated: false };
     }
   }
@@ -67,7 +81,7 @@ export class PasskeyManager {
       credentialId,
     };
 
-    this.storage.setItem('authState', authState);
+    this.storage.setItem("authState", authState);
   }
 
   /**
@@ -75,9 +89,9 @@ export class PasskeyManager {
    */
   logout(): void {
     try {
-      this.storage.removeItem('authState');
+      this.storage.removeItem("authState");
     } catch (error) {
-      console.error('Error during logout:', error);
+      console.error("Error during logout:", error);
       throw error;
     }
   }
@@ -87,10 +101,10 @@ export class PasskeyManager {
    */
   fetchAccounts(): PasskeyAccount[] {
     try {
-      const accounts = this.storage.getItem<PasskeyAccount[]>('accounts');
+      const accounts = this.storage.getItem<PasskeyAccount[]>("accounts");
       return Array.isArray(accounts) ? accounts : [];
     } catch (error) {
-      console.error('Error fetching accounts:', error);
+      console.error("Error fetching accounts:", error);
       return [];
     }
   }
@@ -100,10 +114,10 @@ export class PasskeyManager {
    */
   fetchActiveCredentialId(): string | null {
     try {
-      const authState = this.storage.getItem<AuthState>('authState');
+      const authState = this.storage.getItem<AuthState>("authState");
       return authState?.credentialId ?? null;
     } catch (error) {
-      console.error('Error fetching credential ID:', error);
+      console.error("Error fetching credential ID:", error);
       return null;
     }
   }
@@ -117,18 +131,22 @@ export class PasskeyManager {
 
     // Check if account already exists
     const existingIndex = existingAccounts.findIndex(
-      (existingAccount) => existingAccount.credentialId === account.credentialId
+      (existingAccount) =>
+        existingAccount.credentialId === account.credentialId,
     );
 
     if (existingIndex === -1) {
-      console.log('Adding account to list:', account);
-      existingAccounts.push(account);
-      this.storage.setItem('accounts', existingAccounts);
-    } else if (account.isImported && !existingAccounts[existingIndex].isImported) {
+      const updated = [...existingAccounts, account];
+      this.storage.setItem("accounts", updated);
+    } else if (
+      account.isImported &&
+      !existingAccounts[existingIndex].isImported
+    ) {
       // Update existing account's isImported flag if importing an existing local account
-      console.log('Updating account isImported flag:', account.credentialId);
-      existingAccounts[existingIndex].isImported = true;
-      this.storage.setItem('accounts', existingAccounts);
+      const updated = existingAccounts.map((acc, i) =>
+        i === existingIndex ? { ...acc, isImported: true } : acc,
+      );
+      this.storage.setItem("accounts", updated);
     }
   }
 
@@ -140,8 +158,28 @@ export class PasskeyManager {
    * @returns WebAuthn passkey creation result with credential and challenge
    * @throws {PasskeyRegistrationError} If passkey creation fails
    */
-  async createPasskey(username: string, rpId: string, rpName: string): Promise<{ credentialId: string; publicKey: `0x${string}`; webAuthnAccount: WebAuthnAccount; passkeyAccount: PasskeyAccount }> {
-    const { credentialId, publicKey, webAuthnAccount } = await createPasskeyUtils(username, rpId, rpName);
+  async createPasskey(
+    username: string,
+    rpId: string,
+    rpName: string,
+    createFn?: PasskeyCreateFn,
+    nativeCreateFn?: InternalNativeCreateFn,
+    getFn?: PasskeyGetFn,
+  ): Promise<{
+    credentialId: string;
+    publicKey: `0x${string}`;
+    webAuthnAccount: WebAuthnAccount;
+    passkeyAccount: PasskeyAccount;
+  }> {
+    const { credentialId, publicKey, webAuthnAccount } =
+      await createPasskeyUtils(
+        username,
+        rpId,
+        rpName,
+        createFn,
+        nativeCreateFn,
+        getFn,
+      );
     const passkeyAccount: PasskeyAccount = {
       username,
       credentialId,
@@ -150,7 +188,6 @@ export class PasskeyManager {
       isImported: false,
     };
     this.addAccountToList(passkeyAccount);
-    console.log('Accounts list:', this.fetchAccounts());
     return { credentialId, publicKey, webAuthnAccount, passkeyAccount };
   }
 
@@ -163,25 +200,32 @@ export class PasskeyManager {
    * @throws {WebAuthnAuthenticationError} If authentication fails
    */
 
-   async authenticateWithWebAuthn(
+  async authenticateWithWebAuthn(
     rpId: string,
     credentialId: string,
     options?: {
       userVerification?: UserVerificationRequirement;
       timeout?: number;
       transports?: AuthenticatorTransport[];
-    }
+    },
+    getFn?: PasskeyGetFn,
   ): Promise<WebAuthnAuthenticationResult> {
-   return authenticateWithWebAuthnUtils( rpId, credentialId, options);
+    return authenticateWithWebAuthnUtils(rpId, credentialId, options, getFn);
   }
 
   /**
    * Import a passkey account from the backend
+   * @param getFn - Optional custom WebAuthn get function (React Native adapter)
+   * @param rpId - Optional relying party identifier
    * @returns ImportWebAuthnAuthenticationResult
    * @throws {PasskeyLookupError} If backend lookup fails or passkey not found
    */
-  async importPasskeyAccount(): Promise<ImportWebAuthnAuthenticationResult> {
-    return importPasskeyUtils();
+  async importPasskeyAccount(
+    getFn?: PasskeyGetFn,
+    rpId?: string,
+  ): Promise<ImportWebAuthnAuthenticationResult> {
+    const serverUrl = this.preference.serverUrl ?? JAW_BASE_URL;
+    return importPasskeyUtils(getFn, rpId, this.apiKey, serverUrl);
   }
 
   /**
@@ -199,7 +243,7 @@ export class PasskeyManager {
     credentialId: string,
     publicKey: `0x${string}`,
     address: Address,
-    dev = false
+    dev = false,
   ): Promise<void> {
     this.validateDisplayName(name);
     this.validateCredentialId(credentialId);
@@ -214,7 +258,7 @@ export class PasskeyManager {
       },
       this.apiKey,
       dev,
-      serverUrl
+      serverUrl,
     );
 
     // Store auth state
@@ -244,7 +288,7 @@ export class PasskeyManager {
   async storePasskeyAccountForLogin(
     credentialId: string,
     address: Address,
-    dev = false
+    dev = false,
   ): Promise<void> {
     // Lookup from backend first - use base URL since the route path is already defined in Routes
     const serverUrl = this.preference.serverUrl ?? JAW_BASE_URL;
@@ -252,16 +296,17 @@ export class PasskeyManager {
       credentialId,
       this.apiKey,
       dev,
-      serverUrl
+      serverUrl,
     );
 
     // Store auth state (validates inputs)
     this.storeAuthState(address, credentialId);
 
-    // Create account metadata (marked as imported) using backend data
+    // Create account metadata (marked as imported)
+    // Use WebAuthn's credentialId param (not backend's) to prevent encoding mismatches
     const newAccount: PasskeyAccount = {
       username: passkeyData.displayName.trim(),
-      credentialId: passkeyData.credentialId,
+      credentialId,
       publicKey: passkeyData.publicKey as `0x${string}`,
       creationDate: new Date().toISOString(),
       isImported: true,
@@ -279,9 +324,9 @@ export class PasskeyManager {
   removeAccount(credentialId: string): void {
     const accounts = this.fetchAccounts();
     const filteredAccounts = accounts.filter(
-      (account) => account.credentialId !== credentialId
+      (account) => account.credentialId !== credentialId,
     );
-    this.storage.setItem('accounts', filteredAccounts);
+    this.storage.setItem("accounts", filteredAccounts);
 
     // If removing the currently active credential, clear auth state
     const activeCredentialId = this.fetchActiveCredentialId();
@@ -294,8 +339,8 @@ export class PasskeyManager {
    * Clear all stored data (accounts, auth state)
    */
   clearAll(): void {
-    this.storage.removeItem('authState');
-    this.storage.removeItem('accounts');
+    this.storage.removeItem("authState");
+    this.storage.removeItem("accounts");
   }
 
   /**
@@ -342,7 +387,10 @@ export class PasskeyManager {
    * Validate credential ID format
    */
   private validateCredentialId(credentialId: string): void {
-    if (!credentialId || !PasskeyManager.CREDENTIAL_ID_REGEX.test(credentialId)) {
+    if (
+      !credentialId ||
+      !PasskeyManager.CREDENTIAL_ID_REGEX.test(credentialId)
+    ) {
       throw new Error(`Invalid credential ID format: ${credentialId}`);
     }
   }
@@ -353,10 +401,10 @@ export class PasskeyManager {
   private validateDisplayName(name: string): void {
     const trimmedName = name.trim();
     if (!trimmedName) {
-      throw new Error('Display name cannot be empty');
+      throw new Error("Display name cannot be empty");
     }
     if (trimmedName.length > 100) {
-      throw new Error('Display name cannot exceed 100 characters');
+      throw new Error("Display name cannot exceed 100 characters");
     }
   }
 }
