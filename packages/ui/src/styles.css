@@ -131,6 +131,46 @@
   }
 }
 
+/* Style isolation: prevent consumer app CSS from leaking into SDK modals */
+[data-jaw-modal-container] {
+  font-family: ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+  font-size: 16px;
+  font-style: normal;
+  font-weight: 400;
+  font-variant: normal;
+  line-height: 1.5;
+  letter-spacing: normal;
+  word-spacing: normal;
+  text-transform: none;
+  text-indent: 0;
+  text-align: left;
+  text-decoration: none;
+  text-shadow: none;
+  white-space: normal;
+  word-break: normal;
+  overflow-wrap: normal;
+  direction: ltr;
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  -webkit-tap-highlight-color: transparent;
+}
+
+/*
+ * Tailwind preflight subset for SDK modals.
+ * Consumer apps may not use Tailwind, so we apply the critical resets
+ * that Tailwind components depend on (border-box, border resets).
+ * Uses :where() to keep specificity at 0,0,0 so Tailwind utilities can override.
+ */
+:where([data-jaw-modal-container]) *,
+:where([data-jaw-modal-container]) *::before,
+:where([data-jaw-modal-container]) *::after {
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: solid;
+  border-color: var(--border);
+}
+
 
 @layer utilities {
     /* Mobile-safe viewport height utilities */
