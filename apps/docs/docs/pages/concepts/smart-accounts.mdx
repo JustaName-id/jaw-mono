@@ -53,8 +53,29 @@ The security question shifts from _"how do we protect the key?"_ to _"what is th
 JAW smart accounts are ERC-4337 compatible and work with standard bundlers and paymasters. Your users get gasless transactions, batched operations, and programmable permissions out of the box.
 :::
 
+## EIP-7702: Bridging EOAs and Smart Accounts
+
+Historically, upgrading to a smart account meant getting a new address. EIP-7702 changes this, an EOA can delegate its code to a smart contract implementation, gaining smart account capabilities while keeping the same address.
+
+This matters because many users have EOAs with existing history: token balances, ENS names, protocol positions, and onchain reputation. EIP-7702 lets them upgrade without migrating assets or changing their identity.
+
+With JAW, the upgrade is a single flag:
+
+```typescript
+const account = await Account.fromLocalAccount(
+  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
+  localAccount,
+  { eip7702: true }  // Preserves the EOA address
+);
+```
+
+The delegation happens automatically on the first transaction and persists across all future transactions. The EOA gains batching, permissions, gas sponsorship — everything a smart account offers — at the same address.
+
+See the [EIP-7702 Guide](/guides/eip7702-upgrade) for full integration details.
+
 ## Related
 
+- [EIP-7702 Guide](/guides/eip7702-upgrade) — Upgrade an existing EOA to a smart account
 - [Why JAW](/why-jaw) — The full picture: smart accounts + passkeys + permissions
 - [Passkeys & WebAuthn](/concepts/passkeys) — How the signer layer works
 - [The Permission Layer](/concepts/permissions) — Scoped authority for signers and agents

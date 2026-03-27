@@ -45,15 +45,16 @@ export const PermissionDialog = ({
   isPayingWithErc20,
   // RPC configuration
   mainnetRpcUrl,
+  nativeCurrencySymbol,
 }: PermissionDialogProps) => {
   // Ref for scrollable container
   const scrollableRef = useRef<HTMLDivElement>(null);
 
   const isMobile = useIsMobile();
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
+  // Get native token symbol from feeTokens, falling back to chain's native currency
   const nativeToken = feeTokens?.find(t => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
+  const nativeSymbol = nativeToken?.symbol || nativeCurrencySymbol || 'ETH';
 
   // Fetch native token price dynamically based on the chain's native token symbol
   const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);

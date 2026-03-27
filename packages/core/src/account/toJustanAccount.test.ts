@@ -25,6 +25,7 @@ vi.mock('viem', async () => {
 vi.mock('viem/actions', () => ({
     readContract: vi.fn(),
     getChainId: vi.fn(),
+    getTransactionCount: vi.fn(),
     signAuthorization: vi.fn(),
 }));
 
@@ -1168,24 +1169,27 @@ describe('toJustanAccount unit tests', () => {
                 expect(auth).toBe(mockAuth);
             });
 
-            it('should call signAuthorization action if no pre-signed auth', async () => {
-                const mockEOA = {
-                    type: 'local' as const,
-                    address: MOCK_ADDRESS,
-                } as any;
-
+            it('should use native signAuthorization if available (Tier 1)', async () => {
                 const mockAuth = {
                     address: MOCK_DELEGATION_CONTRACT,
                     chainId: 1,
                     nonce: 0,
                 } as any;
 
-                const { readContract, signAuthorization, getChainId } = await import('viem/actions');
+                const mockSignAuthorization = vi.fn().mockResolvedValue(mockAuth);
+                const mockEOA = {
+                    type: 'local' as const,
+                    address: MOCK_ADDRESS,
+                    signAuthorization: mockSignAuthorization,
+                } as any;
+
+                const { readContract, getChainId } = await import('viem/actions');
                 const { toSmartAccount } = await import('viem/account-abstraction');
+                const { getTransactionCount } = await import('viem/actions');
 
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(getChainId).mockResolvedValue(1);
-                vi.mocked(signAuthorization).mockResolvedValue(mockAuth);
+                vi.mocked(getTransactionCount).mockResolvedValue(0);
                 vi.mocked(toSmartAccount).mockImplementation((params: any) => ({
                     ...params,
                 }));
@@ -1200,6 +1204,12 @@ describe('toJustanAccount unit tests', () => {
                 const auth = await account.signAuthorization();
 
                 expect(getChainId).toHaveBeenCalled();
+                expect(getTransactionCount).toHaveBeenCalled();
+                expect(mockSignAuthorization).toHaveBeenCalledWith({
+                    contractAddress: MOCK_DELEGATION_CONTRACT,
+                    chainId: 1,
+                    nonce: 0,
+                });
                 expect(auth).toEqual(mockAuth);
             });
 

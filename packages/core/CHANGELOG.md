@@ -1,3 +1,43 @@
+## 0.2.0 (2026-03-26)
+
+### 🚀 Features
+
+- **core:** add EIP-7702 account layer — delegation, authorization, a… ([#150](https://github.com/JustaName-id/jaw-mono/pull/150))
+
+### ❤️ Thank You
+
+- AngeloAyranji @AngeloAyranji
+
+## 0.1.5 (2026-03-26)
+
+### 🩹 Fixes
+
+- **core:** flare support ([#157](https://github.com/JustaName-id/jaw-mono/pull/157))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 0.1.4 (2026-03-24)
+
+### 🩹 Fixes
+
+- **core:** align dependency versions ([#156](https://github.com/JustaName-id/jaw-mono/pull/156))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
+## 0.1.3 (2026-03-13)
+
+### 🩹 Fixes
+
+- **cli:** use fresh bridge per MCP tool call instead of caching ([#146](https://github.com/JustaName-id/jaw-mono/pull/146))
+
+### ❤️ Thank You
+
+- AngeloAyranji @AngeloAyranji
+
 ## 0.1.2 (2026-03-10)
 
 ### 🩹 Fixes

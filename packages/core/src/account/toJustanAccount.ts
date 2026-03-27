@@ -18,10 +18,10 @@ import {
     decodeFunctionData,
     isAddressEqual,
     type Client,
-    type Account,
     hashTypedData,
 } from "viem";
-import { readContract, getChainId, signAuthorization as signAuthorizationAction } from "viem/actions";
+import { readContract, getChainId, getTransactionCount } from "viem/actions";
+import { hashAuthorization } from "viem/utils";
 import {
     type SmartAccount,
     type WebAuthnAccount,
@@ -71,7 +71,7 @@ export type ToJustanAccountParameters = {
 };
 
 export type ToJustanAccountReturnType = SmartAccount & {
-    signAuthorization: (executor?: 'self' | Account | Address | undefined) => Promise<SignAuthorizationReturnType>;
+    signAuthorization: () => Promise<SignAuthorizationReturnType>;
 };
 
 export async function toJustanAccount(
@@ -190,8 +190,8 @@ export async function toJustanAccount(
         async getFactoryArgs() {
             if (isEip7702) {
                 return {
-                    factory: undefined,
-                    factoryData: undefined,
+                    factory: '0x7702' as Address,
+                    factoryData: '0x' as Hex,
                 };
             }
 
@@ -311,7 +311,7 @@ export async function toJustanAccount(
             })
         },
 
-        async signAuthorization(executor: 'self' | Account | Address | undefined = 'self') {
+        async signAuthorization() {
             if (!isEip7702) {
                 throw new BaseError(
                     "signAuthorization can only be called for EIP-7702 accounts"
@@ -324,15 +324,22 @@ export async function toJustanAccount(
                 );
             }
 
-            return (
-                eip7702Auth ??
-                (await signAuthorizationAction(client, {
-                    account: eip7702Account!,
-                    address: delegationContract as `0x${string}`,
-                    chainId: await getChainId(client),
-                    executor: executor,
-                }))
-            );
+            if (eip7702Auth) {
+                return eip7702Auth;
+            }
+
+            const chainId = await getChainId(client);
+            const nonce = await getTransactionCount(client, { address: eip7702Account!.address });
+
+            if (eip7702Account!.signAuthorization) {
+                return eip7702Account!.signAuthorization({ contractAddress: delegationContract, chainId, nonce });
+            }
+
+            const hash = hashAuthorization({ address: delegationContract, chainId, nonce });
+            const signature = await eip7702Account!.sign!({ hash });
+            const { r, s, yParity } = parseSignature(signature);
+
+            return { address: delegationContract, chainId, nonce, r, s, yParity };
         },
     })
 }

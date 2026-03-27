@@ -1,0 +1,95 @@
+# MCP Server
+
+The JAW CLI includes an [MCP (Model Context Protocol)](https://modelcontextprotocol.io/) server that lets AI agents interact with JAW smart accounts programmatically.
+
+## Setup with Claude Desktop
+
+Add this to your `claude_desktop_config.json`:
+
+```json
+{
+  "mcpServers": {
+    "jaw": {
+      "command": "npx",
+      "args": ["-y", "@jaw.id/cli", "mcp"],
+      "env": {
+        "JAW_API_KEY": "YOUR_API_KEY",
+        "JAW_CHAIN_ID": "8453"
+      }
+    }
+  }
+}
+```
+
+The MCP server runs on stdio transport — no ports or URLs to configure.
+
+:::info
+Environment variables in the MCP config follow the same resolution order as the CLI. You can also pre-configure via `jaw config set` and omit the `env` block.
+:::
+
+## Available Tools
+
+| Tool | Description |
+|------|-------------|
+| `jaw_rpc` | Execute any RPC method (`method`, `params?`, `chainId?`) |
+| `jaw_config_show` | Display current configuration |
+| `jaw_config_set` | Update a configuration value (`key`, `value`) |
+| `jaw_status` | Check relay session and connection status |
+| `jaw_disconnect` | Close relay session and browser tab |
+
+### jaw_rpc
+
+The primary tool. Executes any EIP-1193 RPC method through the browser bridge.
+
+```json
+{
+  "method": "wallet_sendCalls",
+  "params": {
+    "calls": [{ "to": "0x...", "value": "0x..." }]
+  },
+  "chainId": 8453
+}
+```
+
+Methods that require signing (e.g., `wallet_sendCalls`, `personal_sign`) will open the browser for passkey confirmation on first use. The session persists across multiple tool calls.
+
+### jaw_config_set
+
+```json
+{
+  "key": "defaultChain",
+  "value": "8453"
+}
+```
+
+Valid keys: `apiKey`, `defaultChain`, `keysUrl`, `paymasterUrl`, `ens`
+
+## Available Resources
+
+The MCP server exposes documentation resources that AI agents can read for context.
+
+| Resource URI | Description |
+|-------------|-------------|
+| `jaw://api-reference` | Index of all supported RPC methods |
+| `jaw://api-reference/{method}` | Detailed documentation for a specific method |
+
+## Agent Skills
+
+For AI coding assistants that support [skills](https://skills.sh), there's an official skill package that provides deep knowledge of the JAW CLI and SDK.
+
+**Repository:** [github.com/JustaName-id/jaw-skills](https://github.com/JustaName-id/jaw-skills)
+
+### Install
+
+```bash
+npx skills add JustaName-id/jaw-skills
+```
+
+This installs two skills:
+
+| Skill | Description |
+|-------|-------------|
+| `jaw-cli` | CLI usage patterns and best practices |
+| `jaw-sdk-best-practices` | SDK development patterns and architectural guidance |
+
+Once installed, AI assistants automatically apply JAW-specific guidance when working with CLI commands or SDK integration code.

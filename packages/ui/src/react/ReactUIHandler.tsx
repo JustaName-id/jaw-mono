@@ -1,7 +1,7 @@
-'use client';
+"use client";
 
-import React, { useMemo, useState, useEffect } from 'react';
-import { createRoot } from 'react-dom/client';
+import React, { useMemo, useState, useEffect } from "react";
+import { createRoot } from "react-dom/client";
 import {
   UIHandler,
   UIHandlerConfig,
@@ -32,33 +32,39 @@ import {
   type FeeTokenCapability,
   ensureIntNumber,
   standardErrorCodes,
-} from '@jaw.id/core';
-import { formatUnits, erc20Abi, createPublicClient, http } from 'viem';
-import type { Address, Hex } from 'viem';
-import { createSiweMessage } from 'viem/siwe';
+} from "@jaw.id/core";
+import { formatUnits, erc20Abi, createPublicClient, http } from "viem";
+import type { Address, Hex } from "viem";
+import { createSiweMessage } from "viem/siwe";
 
 // Import UI components using relative paths (we're inside @jaw.id/ui)
-import { OnboardingDialog } from '../components/OnboardingDialog';
-import { DefaultDialog, type DefaultDialogProps } from '../components/DefaultDialog';
-import { SignatureDialog } from '../components/SignatureDialog';
-import { SiweDialog } from '../components/SiweDialog';
-import { Eip712Dialog } from '../components/Eip712Dialog';
-import { TransactionDialog } from '../components/TransactionDialog';
-import { PermissionDialog } from '../components/PermissionDialog';
-import { ConnectDialog } from '../components/ConnectDialog';
-import { type FeeTokenOption } from '../components/FeeTokenSelector';
-import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
-import { useChainIconURI } from '../hooks/useChainIconURI';
-import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
-import { useGasEstimation } from '../hooks/useGasEstimation';
-import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
-
+import { OnboardingDialog } from "../components/OnboardingDialog";
+import {
+  DefaultDialog,
+  type DefaultDialogProps,
+} from "../components/DefaultDialog";
+import { SignatureDialog } from "../components/SignatureDialog";
+import { SiweDialog } from "../components/SiweDialog";
+import { Eip712Dialog } from "../components/Eip712Dialog";
+import { TransactionDialog } from "../components/TransactionDialog";
+import { PermissionDialog } from "../components/PermissionDialog";
+import { ConnectDialog } from "../components/ConnectDialog";
+import { type FeeTokenOption } from "../components/FeeTokenSelector";
+import {
+  type LocalStorageAccount,
+  type CreatedAccountData,
+} from "../components/OnboardingDialog/types";
+import { useChainIconURI } from "../hooks/useChainIconURI";
+import { useFeeTokenPrice } from "../hooks/useFeeTokenPrice";
+import { useGasEstimation } from "../hooks/useGasEstimation";
+import { fetchTokenBalance, isNativeToken } from "../utils/tokenBalance";
+import { PortalContainerContext } from "../lib/utils";
 
 /**
  * Converts hex string to UTF-8 string
  */
 function hexToUtf8(hex: string): string {
-  const hexString = hex.startsWith('0x') ? hex.slice(2) : hex;
+  const hexString = hex.startsWith("0x") ? hex.slice(2) : hex;
   const bytes = new Uint8Array(hexString.length / 2);
   for (let i = 0; i < hexString.length; i += 2) {
     bytes[i / 2] = parseInt(hexString.slice(i, i + 2), 16);
@@ -76,12 +82,14 @@ function isSiweMessage(message: string): boolean {
   try {
     // If message is hex-encoded, decode it first
     let decodedMessage = message;
-    if (message.startsWith('0x')) {
+    if (message.startsWith("0x")) {
       decodedMessage = hexToUtf8(message);
     }
 
     // Primary detection: Check for the SIWE signature phrase
-    const hasSiwePhrase = decodedMessage.includes('wants you to sign in with your Ethereum account');
+    const hasSiwePhrase = decodedMessage.includes(
+      "wants you to sign in with your Ethereum account",
+    );
 
     if (!hasSiwePhrase) {
       return false;
@@ -94,9 +102,16 @@ function isSiweMessage(message: string): boolean {
     const hasNonce = /Nonce:\s*[a-zA-Z0-9]{8,}/.test(decodedMessage);
     const hasIssuedAt = /Issued At:\s*.+/.test(decodedMessage);
 
-    return hasSiwePhrase && hasUri && hasVersion && hasChainId && hasNonce && hasIssuedAt;
+    return (
+      hasSiwePhrase &&
+      hasUri &&
+      hasVersion &&
+      hasChainId &&
+      hasNonce &&
+      hasIssuedAt
+    );
   } catch (error) {
-    console.error('Error checking if message is SIWE:', error);
+    console.error("Error checking if message is SIWE:", error);
     return false;
   }
 }
@@ -109,8 +124,8 @@ function isSiweMessage(message: string): boolean {
  * Get chain name from chain ID
  */
 function getChainNameFromId(chainId: number): string {
-  const chain = SUPPORTED_CHAINS.find(c => c.id === chainId);
-  return chain?.name || 'Unknown Network';
+  const chain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
+  return chain?.name || "Unknown Network";
 }
 
 // ============================================================================
@@ -120,13 +135,13 @@ function getChainNameFromId(chainId: number): string {
 // Format timestamp to readable date
 const formatExpiryDate = (timestamp: number): string => {
   const date = new Date(timestamp * 1000);
-  return date.toLocaleString('en-US', {
-    day: '2-digit',
-    month: '2-digit',
-    year: 'numeric',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
+  return date.toLocaleString("en-US", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
     hour12: false,
   });
 };
@@ -135,7 +150,8 @@ const formatExpiryDate = (timestamp: number): string => {
 type TokenInfoMap = Record<string, { decimals: number; symbol: string }>;
 
 // Type assertion to fix React types version mismatch
-const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> = DefaultDialog as React.ComponentType<DefaultDialogProps>;
+const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> =
+  DefaultDialog as React.ComponentType<DefaultDialogProps>;
 
 /**
  * React UI handler for app-specific mode
@@ -172,8 +188,35 @@ export class ReactUIHandler implements UIHandler {
   async request<T = unknown>(request: UIRequest): Promise<UIResponse<T>> {
     return new Promise((resolve, reject) => {
       try {
-        const container = document.createElement('div');
-        container.setAttribute('data-jaw-modal-container', '');
+        const container = document.createElement("div");
+        container.setAttribute("data-jaw-modal-container", "");
+
+        // Style isolation: prevent consumer app CSS from leaking into SDK modals.
+        // Inline styles guarantee isolation regardless of CSS load order or specificity.
+        Object.assign(container.style, {
+          fontFamily:
+            'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+          fontSize: "16px",
+          fontStyle: "normal",
+          fontWeight: "400",
+          fontVariant: "normal",
+          lineHeight: "1.5",
+          letterSpacing: "normal",
+          wordSpacing: "normal",
+          textTransform: "none",
+          textIndent: "0",
+          textAlign: "left",
+          textDecoration: "none",
+          textShadow: "none",
+          whiteSpace: "normal",
+          wordBreak: "normal",
+          overflowWrap: "normal",
+          direction: "ltr",
+          color: "var(--foreground)",
+          WebkitFontSmoothing: "antialiased",
+          MozOsxFontSmoothing: "grayscale",
+          WebkitTapHighlightColor: "transparent",
+        });
 
         // Append to body - Radix UI Dialog will handle all positioning
         document.body.appendChild(container);
@@ -182,14 +225,14 @@ export class ReactUIHandler implements UIHandler {
 
         const cleanup = () => {
           try {
-            document.body.style.removeProperty('pointer-events');
+            document.body.style.removeProperty("pointer-events");
 
             root.unmount();
             if (container.parentNode) {
               container.parentNode.removeChild(container);
             }
           } catch (cleanupError) {
-            console.error('[ReactUIHandler] Cleanup error:', cleanupError);
+            console.error("[ReactUIHandler] Cleanup error:", cleanupError);
           }
         };
 
@@ -207,18 +250,27 @@ export class ReactUIHandler implements UIHandler {
           const response = {
             id: request.id,
             approved: false,
-            error: error as UIError || UIError.userRejected(),
+            error: (error as UIError) || UIError.userRejected(),
           };
           resolve(response);
         };
 
         // Render appropriate dialog based on request type
-        console.log('[ReactUIHandler] Rendering dialog for request type:', request.type);
+        console.log(
+          "[ReactUIHandler] Rendering dialog for request type:",
+          request.type,
+        );
         const dialog = this.renderDialog(request, handleApprove, handleReject);
-        root.render(dialog);
-        console.log('[ReactUIHandler] Dialog rendered');
+        root.render(
+          React.createElement(
+            PortalContainerContext.Provider,
+            { value: container },
+            dialog,
+          ),
+        );
+        console.log("[ReactUIHandler] Dialog rendered");
       } catch (error) {
-        console.error('[ReactUIHandler] Error in request:', error);
+        console.error("[ReactUIHandler] Error in request:", error);
         reject(error);
       }
     });
@@ -226,20 +278,20 @@ export class ReactUIHandler implements UIHandler {
 
   canHandle(request: UIRequest): boolean {
     return [
-      'wallet_connect',
-      'personal_sign',
-      'eth_signTypedData_v4',
-      'wallet_sendCalls',
-      'eth_sendTransaction',
-      'wallet_grantPermissions',
-      'wallet_revokePermissions',
-      'wallet_sign',
+      "wallet_connect",
+      "personal_sign",
+      "eth_signTypedData_v4",
+      "wallet_sendCalls",
+      "eth_sendTransaction",
+      "wallet_grantPermissions",
+      "wallet_revokePermissions",
+      "wallet_sign",
     ].includes(request.type);
   }
 
   async cleanup(): Promise<void> {
     // Cleanup any remaining modals
-    const containers = document.querySelectorAll('[data-jaw-modal-container]');
+    const containers = document.querySelectorAll("[data-jaw-modal-container]");
     containers.forEach((container: Element) => {
       if (container.parentNode) {
         container.parentNode.removeChild(container);
@@ -250,10 +302,10 @@ export class ReactUIHandler implements UIHandler {
   private renderDialog(
     request: UIRequest,
     onApprove: (data: any) => void,
-    onReject: (error?: Error) => void
+    onReject: (error?: Error) => void,
   ): React.ReactElement {
     switch (request.type) {
-      case 'wallet_connect':
+      case "wallet_connect":
         return (
           <OnboardingDialogWrapper
             request={request as ConnectUIRequest}
@@ -266,7 +318,7 @@ export class ReactUIHandler implements UIHandler {
           />
         );
 
-      case 'personal_sign': {
+      case "personal_sign": {
         const signRequest = request as SignatureUIRequest;
         // Check if this is a SIWE message
         if (isSiweMessage(signRequest.data.message)) {
@@ -293,26 +345,30 @@ export class ReactUIHandler implements UIHandler {
         );
       }
 
-      case 'wallet_sign': {
+      case "wallet_sign": {
         const walletSignRequest = request as WalletSignUIRequest;
         const signType = walletSignRequest.data.request.type;
 
-        if (signType === '0x45') {
+        if (signType === "0x45") {
           // ERC-7871 PersonalSign - data is { message: string }
-          const requestData = walletSignRequest.data.request.data as { message: string };
+          const requestData = walletSignRequest.data.request.data as {
+            message: string;
+          };
           const message = requestData.message;
           if (isSiweMessage(message)) {
             return (
               <SiweDialogWrapper
-                request={{
-                  ...walletSignRequest,
-                  type: 'personal_sign',
-                  data: {
-                    message,
-                    address: walletSignRequest.data.address,
-                    chainId: walletSignRequest.data.chainId,
-                  },
-                } as SignatureUIRequest}
+                request={
+                  {
+                    ...walletSignRequest,
+                    type: "personal_sign",
+                    data: {
+                      message,
+                      address: walletSignRequest.data.address,
+                      chainId: walletSignRequest.data.chainId,
+                    },
+                  } as SignatureUIRequest
+                }
                 onApprove={onApprove}
                 onReject={onReject}
                 apiKey={this.config.apiKey}
@@ -323,15 +379,17 @@ export class ReactUIHandler implements UIHandler {
           }
           return (
             <SignatureDialogWrapper
-              request={{
-                ...walletSignRequest,
-                type: 'personal_sign',
-                data: {
-                  message,
-                  address: walletSignRequest.data.address,
-                  chainId: walletSignRequest.data.chainId,
-                },
-              } as SignatureUIRequest}
+              request={
+                {
+                  ...walletSignRequest,
+                  type: "personal_sign",
+                  data: {
+                    message,
+                    address: walletSignRequest.data.address,
+                    chainId: walletSignRequest.data.chainId,
+                  },
+                } as SignatureUIRequest
+              }
               onApprove={onApprove}
               onReject={onReject}
               apiKey={this.config.apiKey}
@@ -339,24 +397,27 @@ export class ReactUIHandler implements UIHandler {
               paymasters={this.config.paymasters}
             />
           );
-        } else if (signType === '0x01') {
+        } else if (signType === "0x01") {
           // ERC-7871 TypedData - data can be either a JSON string or an object
           const typedDataRaw = walletSignRequest.data.request.data;
           // If it's already a string, use it directly; otherwise JSON.stringify it
-          const typedDataJson = typeof typedDataRaw === 'string'
-            ? typedDataRaw
-            : JSON.stringify(typedDataRaw);
+          const typedDataJson =
+            typeof typedDataRaw === "string"
+              ? typedDataRaw
+              : JSON.stringify(typedDataRaw);
           return (
             <Eip712DialogWrapper
-              request={{
-                ...walletSignRequest,
-                type: 'eth_signTypedData_v4',
-                data: {
-                  typedData: typedDataJson,
-                  address: walletSignRequest.data.address,
-                  chainId: walletSignRequest.data.chainId,
-                },
-              } as TypedDataUIRequest}
+              request={
+                {
+                  ...walletSignRequest,
+                  type: "eth_signTypedData_v4",
+                  data: {
+                    typedData: typedDataJson,
+                    address: walletSignRequest.data.address,
+                    chainId: walletSignRequest.data.chainId,
+                  },
+                } as TypedDataUIRequest
+              }
               onApprove={onApprove}
               onReject={onReject}
               apiKey={this.config.apiKey}
@@ -375,7 +436,7 @@ export class ReactUIHandler implements UIHandler {
         }
       }
 
-      case 'eth_signTypedData_v4':
+      case "eth_signTypedData_v4":
         return (
           <Eip712DialogWrapper
             request={request as TypedDataUIRequest}
@@ -387,7 +448,7 @@ export class ReactUIHandler implements UIHandler {
           />
         );
 
-      case 'wallet_sendCalls':
+      case "wallet_sendCalls":
         return (
           <TransactionDialogWrapper
             request={request as TransactionUIRequest}
@@ -399,7 +460,7 @@ export class ReactUIHandler implements UIHandler {
           />
         );
 
-      case 'eth_sendTransaction':
+      case "eth_sendTransaction":
         return (
           <SendTransactionDialogWrapper
             request={request as SendTransactionUIRequest}
@@ -411,7 +472,7 @@ export class ReactUIHandler implements UIHandler {
           />
         );
 
-      case 'wallet_grantPermissions':
+      case "wallet_grantPermissions":
         return (
           <PermissionDialogWrapper
             request={request as PermissionUIRequest}
@@ -423,7 +484,7 @@ export class ReactUIHandler implements UIHandler {
           />
         );
 
-      case 'wallet_revokePermissions':
+      case "wallet_revokePermissions":
         return (
           <RevokePermissionDialogWrapper
             request={request as RevokePermissionUIRequest}
@@ -450,27 +511,35 @@ export class ReactUIHandler implements UIHandler {
 
 // Helper to build chain config with auto-resolved RPC URL from API key
 // Used by OnboardingDialogWrapper which needs lower-level control
-function buildChainConfigFromApiKey(chainId: number, apiKey?: string, paymasterUrl?: string): Chain {
+function buildChainConfigFromApiKey(
+  chainId: number,
+  apiKey?: string,
+  paymasterUrl?: string,
+): Chain {
   return {
     id: chainId,
-    rpcUrl: apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`,
+    rpcUrl: apiKey
+      ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`
+      : `${JAW_RPC_URL}?chainId=${chainId}`,
     ...(paymasterUrl && { paymaster: { url: paymasterUrl } }),
   };
 }
 
 // Helper to build mainnet RPC URL for JustaName SDK (ENS resolution always uses mainnet)
 function getMainnetRpcUrl(apiKey?: string): string {
-  return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
+  return apiKey
+    ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}`
+    : `${JAW_RPC_URL}?chainId=1`;
 }
 
 // Helper to get Account for signing operations
 async function getAccountForSigning(
   apiKey?: string,
   chainId?: number,
-  paymasterUrl?: string
+  paymasterUrl?: string,
 ): Promise<Account> {
   if (!apiKey) {
-    throw new Error('API key is required for signing operations');
+    throw new Error("API key is required for signing operations");
   }
   const targetChainId = chainId || 1;
   return await Account.get({
@@ -506,18 +575,24 @@ function OnboardingDialogWrapper({
 
   // State for ConnectDialog confirmation
   const [showConnectDialog, setShowConnectDialog] = useState(false);
-  const [authenticatedAccountName, setAuthenticatedAccountName] = useState<string | null>(null);
-  const [authenticatedWalletAddress, setAuthenticatedWalletAddress] = useState<string | null>(null);
+  const [authenticatedAccountName, setAuthenticatedAccountName] = useState<
+    string | null
+  >(null);
+  const [authenticatedWalletAddress, setAuthenticatedWalletAddress] = useState<
+    string | null
+  >(null);
   const [isConnecting, setIsConnecting] = useState(false);
 
   // State for SIWE signing flow
   const [isSiweSigning, setIsSiweSigning] = useState(false);
-  const [siweStatus, setSiweStatus] = useState<string>('');
+  const [siweStatus, setSiweStatus] = useState<string>("");
 
   // Get rpId from current domain
-  const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
-  const rpName = 'JAW';
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+  const rpId =
+    typeof window !== "undefined" ? window.location.hostname : "localhost";
+  const rpName = "JAW";
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "unknown";
 
   // Get chain info for ConnectDialog
   const targetChainId = request.data.chainId || defaultChainId || 1;
@@ -528,12 +603,14 @@ function OnboardingDialogWrapper({
   useEffect(() => {
     const loadAccounts = () => {
       const storedAccounts = Account.getStoredAccounts(apiKey);
-      setAccounts(storedAccounts.map(acc => ({
-        username: acc.username,
-        creationDate: new Date(acc.creationDate),
-        credentialId: acc.credentialId,
-        isImported: acc.isImported,
-      })));
+      setAccounts(
+        storedAccounts.map((acc) => ({
+          username: acc.username,
+          creationDate: new Date(acc.creationDate),
+          credentialId: acc.credentialId,
+          isImported: acc.isImported,
+        })),
+      );
     };
     loadAccounts();
   }, [apiKey]);
@@ -551,7 +628,10 @@ function OnboardingDialogWrapper({
     if (authenticatedAddress) {
       // User is already authenticated - approve immediately without showing any UI
       // Use setTimeout to defer the call and avoid unmounting during render
-      console.log('🔇 Silent mode: using existing auth state, address:', authenticatedAddress);
+      console.log(
+        "🔇 Silent mode: using existing auth state, address:",
+        authenticatedAddress,
+      );
       setTimeout(() => {
         onApprove({
           accounts: [{ address: authenticatedAddress }],
@@ -572,7 +652,7 @@ function OnboardingDialogWrapper({
   const handleConnectConfirm = () => {
     if (authenticatedWalletAddress) {
       setIsConnecting(true);
-      console.log('🔗 User approved connection');
+      console.log("🔗 User approved connection");
       onApprove({
         accounts: [{ address: authenticatedWalletAddress }],
       });
@@ -591,13 +671,13 @@ function OnboardingDialogWrapper({
   // Handle selecting an existing account
   const handleAccountSelect = async (account: LocalStorageAccount) => {
     if (!account.credentialId) {
-      console.error('No credential ID for account');
+      console.error("No credential ID for account");
       return;
     }
 
     try {
       if (!apiKey) {
-        throw new Error('API key is required');
+        throw new Error("API key is required");
       }
       setLoggingInAccount(account.username);
 
@@ -608,12 +688,12 @@ function OnboardingDialogWrapper({
           apiKey,
           paymasterUrl: paymasters?.[targetChainId]?.url,
         },
-        account.credentialId
+        account.credentialId,
       );
 
       // If silent mode, skip ConnectDialog and approve immediately
       if (request.data.silent) {
-        console.log('🔇 Silent mode: skipping connect confirmation');
+        console.log("🔇 Silent mode: skipping connect confirmation");
         onApprove({
           accounts: [{ address: accountInstance.address }],
         });
@@ -633,7 +713,7 @@ function OnboardingDialogWrapper({
         accounts: [{ address: accountInstance.address }],
       });
     } catch (error) {
-      console.error('Login failed:', error);
+      console.error("Login failed:", error);
       setLoggingInAccount(null);
     }
   };
@@ -642,7 +722,7 @@ function OnboardingDialogWrapper({
   const handleImportAccount = async () => {
     try {
       if (!apiKey) {
-        throw new Error('API key is required');
+        throw new Error("API key is required");
       }
       setIsImporting(true);
 
@@ -657,7 +737,7 @@ function OnboardingDialogWrapper({
 
       // If silent mode, skip ConnectDialog and approve immediately
       if (request.data.silent) {
-        console.log('🔇 Silent mode: skipping connect confirmation');
+        console.log("🔇 Silent mode: skipping connect confirmation");
         setIsImporting(false);
         onApprove({
           accounts: [{ address: accountInstance.address }],
@@ -667,7 +747,7 @@ function OnboardingDialogWrapper({
 
       // If SIWE is requested, show ConnectDialog for confirmation
       if (signInWithEthereumCapability) {
-        setAuthenticatedAccountName(metadata?.username || 'Imported Account');
+        setAuthenticatedAccountName(metadata?.username || "Imported Account");
         setAuthenticatedWalletAddress(accountInstance.address);
         setShowConnectDialog(true);
         setIsImporting(false);
@@ -680,16 +760,18 @@ function OnboardingDialogWrapper({
         accounts: [{ address: accountInstance.address }],
       });
     } catch (error) {
-      console.error('Import failed:', error);
+      console.error("Import failed:", error);
       setIsImporting(false);
     }
   };
 
   // Handle creating a new account
-  const handleCreateAccount = async (username: string): Promise<CreatedAccountData> => {
+  const handleCreateAccount = async (
+    username: string,
+  ): Promise<CreatedAccountData> => {
     try {
       if (!apiKey) {
-        throw new Error('API key is required');
+        throw new Error("API key is required");
       }
       setIsCreating(true);
 
@@ -697,7 +779,9 @@ function OnboardingDialogWrapper({
       const createChainId = request.data.chainId || defaultChainId || 1;
 
       // Construct full subname when ENS is enabled (e.g., "john.example.eth")
-      const fullUsername = ensDomain ? `${username.trim()}.${ensDomain}` : username.trim();
+      const fullUsername = ensDomain
+        ? `${username.trim()}.${ensDomain}`
+        : username.trim();
 
       // Use Account.create which handles everything
       const accountInstance = await Account.create(
@@ -710,15 +794,17 @@ function OnboardingDialogWrapper({
         },
         {
           username: fullUsername,
-        }
+        },
       );
 
       // Get full account data including credentialId and publicKey from stored accounts
       const storedAccounts = Account.getStoredAccounts(apiKey);
-      const createdAccount = storedAccounts.find(acc => acc.username === fullUsername);
+      const createdAccount = storedAccounts.find(
+        (acc) => acc.username === fullUsername,
+      );
 
       if (!createdAccount) {
-        throw new Error('Failed to retrieve created account data');
+        throw new Error("Failed to retrieve created account data");
       }
 
       // Return full account data - OnboardingDialog will pass it to onAccountCreationComplete
@@ -729,7 +815,7 @@ function OnboardingDialogWrapper({
         publicKey: createdAccount.publicKey,
       };
     } catch (error) {
-      console.error('Account creation failed:', error);
+      console.error("Account creation failed:", error);
       setIsCreating(false);
       throw error;
     }
@@ -737,10 +823,12 @@ function OnboardingDialogWrapper({
 
   // Handle account creation completion (after subname registration if applicable)
   // Account data flows through from onCreateAccount - no intermediate state needed
-  const handleAccountCreationComplete = async (accountData: CreatedAccountData) => {
+  const handleAccountCreationComplete = async (
+    accountData: CreatedAccountData,
+  ) => {
     // If silent mode, skip ConnectDialog and approve immediately
     if (request.data.silent) {
-      console.log('🔇 Silent mode: skipping connect confirmation');
+      console.log("🔇 Silent mode: skipping connect confirmation");
       setIsCreating(false);
       onApprove({
         accounts: [{ address: accountData.address }],
@@ -750,7 +838,7 @@ function OnboardingDialogWrapper({
 
     // If SIWE is requested, show ConnectDialog for confirmation
     if (signInWithEthereumCapability) {
-      setAuthenticatedAccountName(accountData.username || 'New Account');
+      setAuthenticatedAccountName(accountData.username || "New Account");
       setAuthenticatedWalletAddress(accountData.address);
       setShowConnectDialog(true);
       setIsCreating(false);
@@ -766,16 +854,20 @@ function OnboardingDialogWrapper({
 
   // Get config from request - capabilities is Record<string, unknown>
   const ensDomain = ens as string | undefined;
-  console.log('🔗 ENS domain:', ensDomain);
+  console.log("🔗 ENS domain:", ensDomain);
   const chainId = request.data.chainId || defaultChainId || 1;
-  const subnameTextRecords = request.data.capabilities?.subnameTextRecords as SubnameTextRecordCapabilityRequest | undefined;
+  const subnameTextRecords = request.data.capabilities?.subnameTextRecords as
+    | SubnameTextRecordCapabilityRequest
+    | undefined;
 
   // Extract signInWithEthereum capability if present
-  const signInWithEthereumCapability = request.data.capabilities?.signInWithEthereum as SignInWithEthereumCapabilityRequest | undefined;
+  const signInWithEthereumCapability = request.data.capabilities
+    ?.signInWithEthereum as SignInWithEthereumCapabilityRequest | undefined;
 
   // Build SIWE message from capability if present
   const siweMessage = useMemo(() => {
-    if (!signInWithEthereumCapability || !authenticatedWalletAddress) return null;
+    if (!signInWithEthereumCapability || !authenticatedWalletAddress)
+      return null;
 
     try {
       // Extract domain and URI from origin
@@ -792,7 +884,9 @@ function OnboardingDialogWrapper({
       }
 
       // Convert hex chainId to number
-      const chainIdNumber = ensureIntNumber(signInWithEthereumCapability.chainId);
+      const chainIdNumber = ensureIntNumber(
+        signInWithEthereumCapability.chainId,
+      );
 
       return createSiweMessage({
         address: authenticatedWalletAddress as `0x${string}`,
@@ -800,16 +894,22 @@ function OnboardingDialogWrapper({
         domain: signInWithEthereumCapability.domain || defaultDomain,
         nonce: signInWithEthereumCapability.nonce,
         uri: signInWithEthereumCapability.uri || defaultUri,
-        version: '1',
+        version: "1",
         statement: signInWithEthereumCapability.statement,
-        issuedAt: signInWithEthereumCapability.issuedAt ? new Date(signInWithEthereumCapability.issuedAt) : new Date(),
-        expirationTime: signInWithEthereumCapability.expirationTime ? new Date(signInWithEthereumCapability.expirationTime) : undefined,
-        notBefore: signInWithEthereumCapability.notBefore ? new Date(signInWithEthereumCapability.notBefore) : undefined,
+        issuedAt: signInWithEthereumCapability.issuedAt
+          ? new Date(signInWithEthereumCapability.issuedAt)
+          : new Date(),
+        expirationTime: signInWithEthereumCapability.expirationTime
+          ? new Date(signInWithEthereumCapability.expirationTime)
+          : undefined,
+        notBefore: signInWithEthereumCapability.notBefore
+          ? new Date(signInWithEthereumCapability.notBefore)
+          : undefined,
         requestId: signInWithEthereumCapability.requestId,
         resources: signInWithEthereumCapability.resources,
       });
     } catch (error) {
-      console.error('Failed to build SIWE message:', error);
+      console.error("Failed to build SIWE message:", error);
       return null;
     }
   }, [signInWithEthereumCapability, authenticatedWalletAddress, origin]);
@@ -819,36 +919,38 @@ function OnboardingDialogWrapper({
     if (!authenticatedWalletAddress || !siweMessage) return;
 
     setIsSiweSigning(true);
-    setSiweStatus('Signing message...');
+    setSiweStatus("Signing message...");
 
     try {
       // Restore account for signing
       const account = await getAccountForSigning(
         apiKey,
         targetChainId,
-        paymasters?.[targetChainId]?.url
+        paymasters?.[targetChainId]?.url,
       );
 
       // Sign the SIWE message
       const signature = await account.signMessage(siweMessage);
 
-      setSiweStatus('Sign-in successful!');
-      console.log('🔗 User signed SIWE message');
+      setSiweStatus("Sign-in successful!");
+      console.log("🔗 User signed SIWE message");
 
       // Build response per ERC-7846 format with SIWE capability
       onApprove({
-        accounts: [{
-          address: authenticatedWalletAddress,
-          capabilities: {
-            signInWithEthereum: {
-              message: siweMessage,
-              signature: signature as `0x${string}`
-            }
-          }
-        }]
+        accounts: [
+          {
+            address: authenticatedWalletAddress,
+            capabilities: {
+              signInWithEthereum: {
+                message: siweMessage,
+                signature: signature as `0x${string}`,
+              },
+            },
+          },
+        ],
       });
     } catch (error) {
-      console.error('SIWE signature failed:', error);
+      console.error("SIWE signature failed:", error);
       setSiweStatus(`Error: ${(error as Error).message}`);
       setIsSiweSigning(false);
     }
@@ -861,18 +963,22 @@ function OnboardingDialogWrapper({
       setAuthenticatedAccountName(null);
       setAuthenticatedWalletAddress(null);
       setLoggingInAccount(null);
-      setSiweStatus('');
+      setSiweStatus("");
       // Return to account selection
     }
   };
 
   // If showing confirmation dialog and SIWE capability is present, show SiweDialog
   // Note: We check signInWithEthereumCapability first, then siweMessage will be computed
-  if (showConnectDialog && authenticatedWalletAddress && signInWithEthereumCapability) {
+  if (
+    showConnectDialog &&
+    authenticatedWalletAddress &&
+    signInWithEthereumCapability
+  ) {
     // siweMessage should be available since authenticatedWalletAddress is set
     if (!siweMessage) {
       // This shouldn't happen normally, but if SIWE message couldn't be built, fall through to ConnectDialog
-      console.error('SIWE capability present but message could not be built');
+      console.error("SIWE capability present but message could not be built");
     } else {
       return (
         <SiweDialog
@@ -883,7 +989,7 @@ function OnboardingDialogWrapper({
           message={siweMessage}
           origin={origin}
           timestamp={new Date()}
-          appName={request.data.appName || 'dApp'}
+          appName={request.data.appName || "dApp"}
           appLogoUrl={request.data.appLogoUrl ?? undefined}
           accountAddress={authenticatedWalletAddress}
           chainName={chainName}
@@ -908,11 +1014,11 @@ function OnboardingDialogWrapper({
         onOpenChange={(newOpen) => {
           if (!newOpen) handleConnectCancel();
         }}
-        appName={request.data.appName || 'dApp'}
+        appName={request.data.appName || "dApp"}
         appLogoUrl={request.data.appLogoUrl ?? undefined}
         origin={origin}
         timestamp={new Date()}
-        accountName={authenticatedAccountName || 'Account'}
+        accountName={authenticatedAccountName || "Account"}
         walletAddress={authenticatedWalletAddress}
         chainName={chainName}
         chainId={targetChainId}
@@ -934,8 +1040,8 @@ function OnboardingDialogWrapper({
         else setOpen(newOpen);
       }}
       contentStyle={{
-        width: 'fit-content',
-        maxWidth: '450px',
+        width: "fit-content",
+        maxWidth: "450px",
       }}
     >
       <OnboardingDialog
@@ -951,7 +1057,7 @@ function OnboardingDialogWrapper({
         chainId={chainId}
         mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         apiKey={apiKey}
-        supportedChains={SUPPORTED_CHAINS.map(chain => ({ id: chain.id }))}
+        supportedChains={SUPPORTED_CHAINS.map((chain) => ({ id: chain.id }))}
         subnameTextRecords={subnameTextRecords}
       />
     </DefaultDialogComponent>
@@ -975,7 +1081,7 @@ function SignatureDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [signatureStatus, setSignatureStatus] = useState<string>('');
+  const [signatureStatus, setSignatureStatus] = useState<string>("");
 
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
@@ -984,30 +1090,36 @@ function SignatureDialogWrapper({
 
   const handleSign = async () => {
     setIsProcessing(true);
-    setSignatureStatus('Signing message...');
+    setSignatureStatus("Signing message...");
     try {
       // Restore account for signing
       const account = await getAccountForSigning(
         apiKey,
         chainId,
-        paymasters?.[chainId]?.url
+        paymasters?.[chainId]?.url,
       );
 
       // Sign the message
       const signature = await account.signMessage(request.data.message);
 
-      setSignatureStatus('Signature successful!');
+      setSignatureStatus("Signature successful!");
       onApprove(signature);
     } catch (error) {
-      console.error('Signature failed:', error);
-      const errorObj = error instanceof Error ? error : new Error(String(error));
+      console.error("Signature failed:", error);
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
       setSignatureStatus(`Error: ${errorObj.message}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
-      if (errorObj.name === 'NotAllowedError') {
-        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      if (errorObj.name === "NotAllowedError") {
+        onReject(UIError.userRejected("User cancelled the passkey prompt"));
       } else {
         // Internal error
-        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+        onReject(
+          new UIError(
+            standardErrorCodes.rpc.internal as UIErrorCode,
+            errorObj.message,
+          ),
+        );
       }
     } finally {
       setIsProcessing(false);
@@ -1027,7 +1139,9 @@ function SignatureDialogWrapper({
         else setOpen(newOpen);
       }}
       message={request.data.message}
-      origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
+      origin={
+        typeof window !== "undefined" ? window.location.origin : "unknown"
+      }
       timestamp={new Date(request.timestamp)}
       accountAddress={request.data.address}
       chainName={chainName}
@@ -1060,26 +1174,27 @@ function Eip712DialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [signatureStatus, setSignatureStatus] = useState<string>('');
+  const [signatureStatus, setSignatureStatus] = useState<string>("");
 
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
 
   const handleSign = async () => {
     setIsProcessing(true);
-    setSignatureStatus('Signing typed data...');
+    setSignatureStatus("Signing typed data...");
     try {
       // Restore account for signing
       const account = await getAccountForSigning(
         apiKey,
         chainId,
-        paymasters?.[chainId]?.url
+        paymasters?.[chainId]?.url,
       );
 
       // Parse typed data if it's a string
-      const typedData = typeof request.data.typedData === 'string'
-        ? JSON.parse(request.data.typedData)
-        : request.data.typedData;
+      const typedData =
+        typeof request.data.typedData === "string"
+          ? JSON.parse(request.data.typedData)
+          : request.data.typedData;
 
       // Sign the typed data
       const signature = await account.signTypedData({
@@ -1089,18 +1204,24 @@ function Eip712DialogWrapper({
         message: typedData.message,
       });
 
-      setSignatureStatus('Signature successful!');
+      setSignatureStatus("Signature successful!");
       onApprove(signature);
     } catch (error) {
-      console.error('EIP-712 signature failed:', error);
-      const errorObj = error instanceof Error ? error : new Error(String(error));
+      console.error("EIP-712 signature failed:", error);
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
       setSignatureStatus(`Error: ${errorObj.message}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
-      if (errorObj.name === 'NotAllowedError') {
-        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      if (errorObj.name === "NotAllowedError") {
+        onReject(UIError.userRejected("User cancelled the passkey prompt"));
       } else {
         // Internal error
-        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+        onReject(
+          new UIError(
+            standardErrorCodes.rpc.internal as UIErrorCode,
+            errorObj.message,
+          ),
+        );
       }
     } finally {
       setIsProcessing(false);
@@ -1120,7 +1241,9 @@ function Eip712DialogWrapper({
         else setOpen(newOpen);
       }}
       typedDataJson={request.data.typedData}
-      origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
+      origin={
+        typeof window !== "undefined" ? window.location.origin : "unknown"
+      }
       timestamp={new Date(request.timestamp)}
       accountAddress={request.data.address}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
@@ -1151,57 +1274,69 @@ function TransactionDialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
-  const [transactionStatus, setTransactionStatus] = useState<string>('');
+  const [transactionStatus, setTransactionStatus] = useState<string>("");
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find(t => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
+  const chainId = request.data.chainId || defaultChainId || 1;
+  const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
+  const networkName = viemChain?.name || "Unknown Network";
+
+  // Get native token symbol from feeTokens, falling back to chain's native currency
+  const nativeToken = feeTokens?.find((t) => t.isNative);
+  const nativeSymbol =
+    nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || "ETH";
 
   // Fetch native token price dynamically based on the chain's native token symbol
   const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
-  const chainId = request.data.chainId || defaultChainId || 1;
-  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
-  const networkName = viemChain?.name || 'Unknown Network';
-
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
-    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
+    const capabilitiesPaymasterUrl =
+      request.data.capabilities?.paymasterService?.url;
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
   // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
   // Priority: capabilities.paymasterService.context > paymasters[chainId].context
   const effectivePaymasterContext = useMemo(() => {
-    const capabilitiesPaymasterContext = (request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    const capabilitiesPaymasterContext = (
+      request.data.capabilities?.paymasterService as
+        | { context?: Record<string, unknown> }
+        | undefined
+    )?.context;
     return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
   }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
 
   const isSponsored = !!effectivePaymasterUrl;
 
   // Transform calls to transactions format expected by dialog
-  const transactions = useMemo(() => request.data.calls.map(call => ({
-    to: call.to,
-    data: call.data,
-    value: call.value,
-    chainId: request.data.chainId,
-  })), [request.data.calls, request.data.chainId]);
+  const transactions = useMemo(
+    () =>
+      request.data.calls.map((call) => ({
+        to: call.to,
+        data: call.data,
+        value: call.value,
+        chainId: request.data.chainId,
+      })),
+    [request.data.calls, request.data.chainId],
+  );
 
   // Convert transactions to call format for Account operations
   const transactionCalls = useMemo(() => {
-    return request.data.calls.map(call => ({
+    return request.data.calls.map((call) => ({
       to: call.to as Address,
       value: call.value ? BigInt(call.value) : undefined, // Convert string wei to bigint
-      data: (call.data || '0x') as Hex,
+      data: (call.data || "0x") as Hex,
     }));
   }, [request.data.calls]);
 
   // Permission ID for permission-based execution
-  const permissionId = request.data.capabilities?.permissions?.id as Hex | undefined;
+  const permissionId = request.data.capabilities?.permissions?.id as
+    | Hex
+    | undefined;
 
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
@@ -1230,7 +1365,7 @@ function TransactionDialogWrapper({
 
     // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ""}`;
     }
 
     // Native ETH - no paymaster needed
@@ -1243,7 +1378,9 @@ function TransactionDialogWrapper({
     if (selectedFeeToken && !selectedFeeToken.isNative) {
       // Use the actual estimate from tokenEstimates if available
       const estimate = tokenEstimates.find(
-        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+        (e) =>
+          e.tokenAddress.toLowerCase() ===
+          selectedFeeToken.address.toLowerCase(),
       );
 
       if (estimate) {
@@ -1255,15 +1392,24 @@ function TransactionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      const gasUsd =
+        gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
+      const gasInTokenUnits = Math.ceil(
+        gasUsd * Math.pow(10, selectedFeeToken.decimals),
+      );
       return {
         token: selectedFeeToken.address,
         gas: gasInTokenUnits.toString(),
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
+  }, [
+    selectedFeeToken,
+    effectivePaymasterContext,
+    gasFee,
+    nativeTokenPrice,
+    tokenEstimates,
+  ]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1277,13 +1423,15 @@ function TransactionDialogWrapper({
       try {
         // Fetch capabilities from JAW RPC
         const capabilities = await handleGetCapabilitiesRequest(
-          { method: 'wallet_getCapabilities', params: [] },
-          apiKey || '',
-          true // showTestnets
+          { method: "wallet_getCapabilities", params: [] },
+          apiKey || "",
+          true, // showTestnets
         );
 
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as
+          | FeeTokenCapability
+          | undefined;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);
@@ -1291,13 +1439,18 @@ function TransactionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balance = await fetchTokenBalance(
+                token.address,
+                request.data.from,
+                rpcUrl,
+              );
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -1318,20 +1471,23 @@ function TransactionDialogWrapper({
                 logoURI: token.logoURI,
               } as FeeTokenOption;
             } catch (error) {
-              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              console.warn(
+                `Failed to fetch balance for ${token.symbol}:`,
+                error,
+              );
               return {
                 uid: token.uid,
                 symbol: token.symbol,
                 address: token.address,
                 decimals: token.decimals,
                 balance: 0n,
-                balanceFormatted: '0',
+                balanceFormatted: "0",
                 isNative: isNativeToken(token.address),
                 isSelectable: false,
                 logoURI: token.logoURI,
               } as FeeTokenOption;
             }
-          })
+          }),
         );
 
         if (isMounted) {
@@ -1339,7 +1495,10 @@ function TransactionDialogWrapper({
           // Note: Initial token selection is handled by useGasEstimation hook
         }
       } catch (error) {
-        console.warn('[TransactionDialogWrapper] Failed to fetch fee tokens:', error);
+        console.warn(
+          "[TransactionDialogWrapper] Failed to fetch fee tokens:",
+          error,
+        );
       } finally {
         if (isMounted) setFeeTokensLoading(false);
       }
@@ -1364,13 +1523,13 @@ function TransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          effectivePaymasterUrl
+          effectivePaymasterUrl,
         );
         if (isMounted) {
           setAccount(restoredAccount);
         }
       } catch (error) {
-        console.error('Error initializing account:', error);
+        console.error("Error initializing account:", error);
       }
     };
 
@@ -1385,10 +1544,10 @@ function TransactionDialogWrapper({
 
   const handleConfirm = async () => {
     setIsProcessing(true);
-    setTransactionStatus('Processing transaction...');
+    setTransactionStatus("Processing transaction...");
     try {
       if (!account) {
-        throw new Error('Account not initialized');
+        throw new Error("Account not initialized");
       }
 
       // Check if permissions capability is provided
@@ -1398,33 +1557,44 @@ function TransactionDialogWrapper({
         transactionCalls,
         permissionId ? { permissionId } : undefined,
         computedPaymasterUrl,
-        computedPaymasterContext
+        computedPaymasterContext,
       );
 
-      setTransactionStatus('Transaction successful!');
+      setTransactionStatus("Transaction successful!");
       onApprove({
         id: result.id,
         chainId: result.chainId,
       });
     } catch (error) {
-      console.error('Transaction failed:', error);
-      const errorObj = error instanceof Error ? error : new Error(String(error));
+      console.error("Transaction failed:", error);
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
       setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
-      if (errorObj.name === 'NotAllowedError') {
-        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      if (errorObj.name === "NotAllowedError") {
+        onReject(UIError.userRejected("User cancelled the passkey prompt"));
       } else if (
-        errorMessage.includes('AA21') ||
+        errorMessage.includes("AA21") ||
         errorMessage.includes("didn't pay prefund") ||
-        errorMessage.includes('insufficient') ||
-        errorMessage.includes('exceeds balance')
+        errorMessage.includes("insufficient") ||
+        errorMessage.includes("exceeds balance")
       ) {
         // Transaction rejected due to funds/gas issues
-        onReject(new UIError(standardErrorCodes.rpc.transactionRejected as UIErrorCode, errorMessage));
+        onReject(
+          new UIError(
+            standardErrorCodes.rpc.transactionRejected as UIErrorCode,
+            errorMessage,
+          ),
+        );
       } else {
         // Internal error
-        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
+        onReject(
+          new UIError(
+            standardErrorCodes.rpc.internal as UIErrorCode,
+            errorMessage,
+          ),
+        );
       }
     } finally {
       setIsProcessing(false);
@@ -1437,7 +1607,8 @@ function TransactionDialogWrapper({
   };
 
   // Determine if fee token selector should be shown (not sponsored and has ERC-20 options)
-  const showFeeTokenSelector = !isSponsored && feeTokens.some(t => !t.isNative);
+  const showFeeTokenSelector =
+    !isSponsored && feeTokens.some((t) => !t.isNative);
 
   return (
     <TransactionDialog
@@ -1466,6 +1637,7 @@ function TransactionDialogWrapper({
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />
   );
 }
@@ -1489,52 +1661,68 @@ function SendTransactionDialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
-  const [transactionStatus, setTransactionStatus] = useState<string>('');
+  const [transactionStatus, setTransactionStatus] = useState<string>("");
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find(t => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
+  const chainId = request.data.chainId || defaultChainId || 1;
+  const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
+  const networkName = viemChain?.name || "Unknown Network";
+
+  // Get native token symbol from feeTokens, falling back to chain's native currency
+  const nativeToken = feeTokens?.find((t) => t.isNative);
+  const nativeSymbol =
+    nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || "ETH";
 
   // Fetch native token price dynamically based on the chain's native token symbol
   const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
-  const chainId = request.data.chainId || defaultChainId || 1;
-  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
-  const networkName = viemChain?.name || 'Unknown Network';
-
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
-    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
+    const capabilitiesPaymasterUrl =
+      request.data.capabilities?.paymasterService?.url;
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
   // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
   // Priority: capabilities.paymasterService.context > paymasters[chainId].context
   const effectivePaymasterContext = useMemo(() => {
-    const capabilitiesPaymasterContext = (request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    const capabilitiesPaymasterContext = (
+      request.data.capabilities?.paymasterService as
+        | { context?: Record<string, unknown> }
+        | undefined
+    )?.context;
     return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
   }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
 
   const isSponsored = !!effectivePaymasterUrl;
 
   // Transform eth_sendTransaction data to transactions format expected by dialog
-  const transactions = useMemo(() => [{
-    to: request.data.to,
-    data: request.data.data,
-    value: request.data.value,
-    chainId: request.data.chainId,
-  }], [request.data]);
+  const transactions = useMemo(
+    () => [
+      {
+        to: request.data.to,
+        data: request.data.data,
+        value: request.data.value,
+        chainId: request.data.chainId,
+      },
+    ],
+    [request.data],
+  );
 
   // Convert to call format for Account operations
-  const transactionCalls = useMemo(() => [{
-    to: request.data.to as Address,
-    value: request.data.value ? BigInt(request.data.value) : undefined, // Convert string wei to bigint
-    data: (request.data.data || '0x') as Hex,
-  }], [request.data]);
+  const transactionCalls = useMemo(
+    () => [
+      {
+        to: request.data.to as Address,
+        value: request.data.value ? BigInt(request.data.value) : undefined, // Convert string wei to bigint
+        data: (request.data.data || "0x") as Hex,
+      },
+    ],
+    [request.data],
+  );
 
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
@@ -1562,7 +1750,7 @@ function SendTransactionDialogWrapper({
 
     // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ""}`;
     }
 
     // Native ETH - no paymaster needed
@@ -1575,7 +1763,9 @@ function SendTransactionDialogWrapper({
     if (selectedFeeToken && !selectedFeeToken.isNative) {
       // Use the actual estimate from tokenEstimates if available
       const estimate = tokenEstimates.find(
-        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+        (e) =>
+          e.tokenAddress.toLowerCase() ===
+          selectedFeeToken.address.toLowerCase(),
       );
 
       if (estimate) {
@@ -1587,15 +1777,24 @@ function SendTransactionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      const gasUsd =
+        gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
+      const gasInTokenUnits = Math.ceil(
+        gasUsd * Math.pow(10, selectedFeeToken.decimals),
+      );
       return {
         token: selectedFeeToken.address,
         gas: gasInTokenUnits.toString(),
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
+  }, [
+    selectedFeeToken,
+    effectivePaymasterContext,
+    gasFee,
+    nativeTokenPrice,
+    tokenEstimates,
+  ]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1609,13 +1808,15 @@ function SendTransactionDialogWrapper({
       try {
         // Fetch capabilities from JAW RPC
         const capabilities = await handleGetCapabilitiesRequest(
-          { method: 'wallet_getCapabilities', params: [] },
-          apiKey || '',
-          true // showTestnets
+          { method: "wallet_getCapabilities", params: [] },
+          apiKey || "",
+          true, // showTestnets
         );
 
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as
+          | FeeTokenCapability
+          | undefined;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);
@@ -1623,13 +1824,18 @@ function SendTransactionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balance = await fetchTokenBalance(
+                token.address,
+                request.data.from,
+                rpcUrl,
+              );
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -1650,20 +1856,23 @@ function SendTransactionDialogWrapper({
                 logoURI: token.logoURI,
               } as FeeTokenOption;
             } catch (error) {
-              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              console.warn(
+                `Failed to fetch balance for ${token.symbol}:`,
+                error,
+              );
               return {
                 uid: token.uid,
                 symbol: token.symbol,
                 address: token.address,
                 decimals: token.decimals,
                 balance: 0n,
-                balanceFormatted: '0',
+                balanceFormatted: "0",
                 isNative: isNativeToken(token.address),
                 isSelectable: false,
                 logoURI: token.logoURI,
               } as FeeTokenOption;
             }
-          })
+          }),
         );
 
         if (isMounted) {
@@ -1671,7 +1880,10 @@ function SendTransactionDialogWrapper({
           // Note: Initial token selection is handled by useGasEstimation hook
         }
       } catch (error) {
-        console.warn('[SendTransactionDialogWrapper] Failed to fetch fee tokens:', error);
+        console.warn(
+          "[SendTransactionDialogWrapper] Failed to fetch fee tokens:",
+          error,
+        );
       } finally {
         if (isMounted) setFeeTokensLoading(false);
       }
@@ -1696,13 +1908,13 @@ function SendTransactionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          effectivePaymasterUrl
+          effectivePaymasterUrl,
         );
         if (isMounted) {
           setAccount(restoredAccount);
         }
       } catch (error) {
-        console.error('Error initializing account:', error);
+        console.error("Error initializing account:", error);
       }
     };
 
@@ -1717,35 +1929,50 @@ function SendTransactionDialogWrapper({
 
   const handleConfirm = async () => {
     setIsProcessing(true);
-    setTransactionStatus('Processing transaction...');
+    setTransactionStatus("Processing transaction...");
     try {
       if (!account) {
-        throw new Error('Account not initialized');
+        throw new Error("Account not initialized");
       }
 
-      const txHash = await account.sendTransaction(transactionCalls, computedPaymasterUrl, computedPaymasterContext);
+      const txHash = await account.sendTransaction(
+        transactionCalls,
+        computedPaymasterUrl,
+        computedPaymasterContext,
+      );
 
-      setTransactionStatus('Transaction successful!');
+      setTransactionStatus("Transaction successful!");
       onApprove(txHash);
     } catch (error) {
-      console.error('Transaction failed:', error);
-      const errorObj = error instanceof Error ? error : new Error(String(error));
+      console.error("Transaction failed:", error);
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
       setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
-      if (errorObj.name === 'NotAllowedError') {
-        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      if (errorObj.name === "NotAllowedError") {
+        onReject(UIError.userRejected("User cancelled the passkey prompt"));
       } else if (
-        errorMessage.includes('AA21') ||
+        errorMessage.includes("AA21") ||
         errorMessage.includes("didn't pay prefund") ||
-        errorMessage.includes('insufficient') ||
-        errorMessage.includes('exceeds balance')
+        errorMessage.includes("insufficient") ||
+        errorMessage.includes("exceeds balance")
       ) {
         // Transaction rejected due to funds/gas issues
-        onReject(new UIError(standardErrorCodes.rpc.transactionRejected as UIErrorCode, errorMessage));
+        onReject(
+          new UIError(
+            standardErrorCodes.rpc.transactionRejected as UIErrorCode,
+            errorMessage,
+          ),
+        );
       } else {
         // Internal error
-        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
+        onReject(
+          new UIError(
+            standardErrorCodes.rpc.internal as UIErrorCode,
+            errorMessage,
+          ),
+        );
       }
     } finally {
       setIsProcessing(false);
@@ -1758,7 +1985,8 @@ function SendTransactionDialogWrapper({
   };
 
   // Determine if fee token selector should be shown (not sponsored and has ERC-20 options)
-  const showFeeTokenSelector = !isSponsored && feeTokens.some(t => !t.isNative);
+  const showFeeTokenSelector =
+    !isSponsored && feeTokens.some((t) => !t.isNative);
 
   return (
     <TransactionDialog
@@ -1787,19 +2015,20 @@ function SendTransactionDialogWrapper({
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />
   );
 }
 
 // Known function selectors mapping
 const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
-  '0x32323232': 'Any Function',
-  '0xe0e0e0e0': 'Empty Calldata',
-  '0xcc53287f': 'lockdown((address,address)[])',
-  '0x87517c45': 'approve(address,address,uint160,uint48)',
-  '0x095ea7b3': 'approve(address,uint256)',
-  '0x23b872dd': 'transferFrom(address,address,uint256)',
-  '0xa9059cbb': 'transfer(address,uint256)',
+  "0x32323232": "Any Function",
+  "0xe0e0e0e0": "Empty Calldata",
+  "0xcc53287f": "lockdown((address,address)[])",
+  "0x87517c45": "approve(address,address,uint160,uint48)",
+  "0x095ea7b3": "approve(address,uint256)",
+  "0x23b872dd": "transferFrom(address,address,uint256)",
+  "0xa9059cbb": "transfer(address,uint256)",
 };
 
 // Resolve function selector to human-readable name
@@ -1826,39 +2055,46 @@ function PermissionDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [status, setStatus] = useState<string>('');
+  const [status, setStatus] = useState<string>("");
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState(true);
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find(t => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
+  // chainId can be number or hex string (like '0x1')
+  const requestChainId = request.data.chainId;
+  const chainId =
+    typeof requestChainId === "string"
+      ? parseInt(requestChainId, requestChainId.startsWith("0x") ? 16 : 10)
+      : requestChainId || defaultChainId || 1;
+  const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
+  const networkName = viemChain?.name || "Unknown Network";
+
+  // Get native token symbol from feeTokens, falling back to chain's native currency
+  const nativeToken = feeTokens?.find((t) => t.isNative);
+  const nativeSymbol =
+    nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || "ETH";
 
   // Fetch native token price dynamically based on the chain's native token symbol
   const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
-  // chainId can be number or hex string (like '0x1')
-  const requestChainId = request.data.chainId;
-  const chainId = typeof requestChainId === 'string'
-    ? parseInt(requestChainId, requestChainId.startsWith('0x') ? 16 : 10)
-    : (requestChainId || defaultChainId || 1);
-  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
-  const networkName = viemChain?.name || 'Unknown Network';
-
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
-    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
+    const capabilitiesPaymasterUrl =
+      request.data.capabilities?.paymasterService?.url;
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
   // Extract paymasterContext from capabilities (for ERC-20 token payments, mode flags, etc.)
   // Priority: capabilities.paymasterService.context > paymasters[chainId].context
   const effectivePaymasterContext = useMemo(() => {
-    const capabilitiesPaymasterContext = (request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    const capabilitiesPaymasterContext = (
+      request.data.capabilities?.paymasterService as
+        | { context?: Record<string, unknown> }
+        | undefined
+    )?.context;
     return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
   }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
 
@@ -1876,14 +2112,22 @@ function PermissionDialogWrapper({
         request.data.address as Address,
         request.data.spender as Address,
         request.data.expiry,
-        request.data.permissions
+        request.data.permissions,
       );
       return [permissionCall];
     } catch (error) {
-      console.warn('[PermissionDialogWrapper] Failed to build permission grant call:', error);
+      console.warn(
+        "[PermissionDialogWrapper] Failed to build permission grant call:",
+        error,
+      );
       return [];
     }
-  }, [request.data.address, request.data.spender, request.data.expiry, request.data.permissions]);
+  }, [
+    request.data.address,
+    request.data.spender,
+    request.data.expiry,
+    request.data.permissions,
+  ]);
 
   // Use the gas estimation hook for both ETH and ERC-20 cost estimation
   const {
@@ -1911,7 +2155,7 @@ function PermissionDialogWrapper({
 
     // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ""}`;
     }
 
     // Native ETH - no paymaster needed
@@ -1924,7 +2168,9 @@ function PermissionDialogWrapper({
     if (selectedFeeToken && !selectedFeeToken.isNative) {
       // Use the actual estimate from tokenEstimates if available
       const estimate = tokenEstimates.find(
-        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+        (e) =>
+          e.tokenAddress.toLowerCase() ===
+          selectedFeeToken.address.toLowerCase(),
       );
 
       if (estimate) {
@@ -1936,19 +2182,28 @@ function PermissionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      const gasUsd =
+        gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
+      const gasInTokenUnits = Math.ceil(
+        gasUsd * Math.pow(10, selectedFeeToken.decimals),
+      );
       return {
         token: selectedFeeToken.address,
         gas: gasInTokenUnits.toString(),
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
+  }, [
+    selectedFeeToken,
+    effectivePaymasterContext,
+    tokenEstimates,
+    gasFee,
+    nativeTokenPrice,
+  ]);
 
   const chain = useMemo(
     () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
-    [chainId, apiKey, computedPaymasterUrl]
+    [chainId, apiKey, computedPaymasterUrl],
   );
 
   // Get spends array from request (now using spends plural)
@@ -1971,7 +2226,9 @@ function PermissionDialogWrapper({
       const newTokenInfoMap: TokenInfoMap = {};
 
       // Get unique token addresses
-      const uniqueTokens = Array.from(new Set(spendsData.map((spend) => spend.token))) as string[];
+      const uniqueTokens = Array.from(
+        new Set(spendsData.map((spend) => spend.token)),
+      ) as string[];
 
       for (const tokenAddress of uniqueTokens) {
         // Skip if already fetched
@@ -1984,7 +2241,7 @@ function PermissionDialogWrapper({
         if (isNativeToken(tokenAddress)) {
           newTokenInfoMap[tokenAddress] = {
             decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-            symbol: viemChain?.nativeCurrency?.symbol || 'ETH'
+            symbol: viemChain?.nativeCurrency?.symbol || "ETH",
           };
           continue;
         }
@@ -1995,10 +2252,14 @@ function PermissionDialogWrapper({
             chain: {
               id: chainId,
               name: networkName,
-              nativeCurrency: viemChain?.nativeCurrency || { name: 'Ether', symbol: 'ETH', decimals: 18 },
+              nativeCurrency: viemChain?.nativeCurrency || {
+                name: "Ether",
+                symbol: "ETH",
+                decimals: 18,
+              },
               rpcUrls: {
-                default: { http: [chain.rpcUrl || ''] },
-                public: { http: [chain.rpcUrl || ''] },
+                default: { http: [chain.rpcUrl || ""] },
+                public: { http: [chain.rpcUrl || ""] },
               },
             },
             transport: http(chain.rpcUrl),
@@ -2008,28 +2269,31 @@ function PermissionDialogWrapper({
             publicClient.readContract({
               address: tokenAddress as Address,
               abi: erc20Abi,
-              functionName: 'decimals',
+              functionName: "decimals",
             }),
             publicClient.readContract({
               address: tokenAddress as Address,
               abi: erc20Abi,
-              functionName: 'symbol',
+              functionName: "symbol",
             }),
           ]);
 
           newTokenInfoMap[tokenAddress] = { decimals, symbol };
         } catch (error) {
-          console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
+          console.error(
+            `Failed to fetch token info for ${tokenAddress}:`,
+            error,
+          );
           // Fallback to showing truncated token address
           newTokenInfoMap[tokenAddress] = {
             decimals: 18,
-            symbol: tokenAddress.slice(0, 6) + '...' + tokenAddress.slice(-4),
+            symbol: tokenAddress.slice(0, 6) + "..." + tokenAddress.slice(-4),
           };
         }
       }
 
       if (isMounted) {
-        setTokenInfoMap(prev => ({ ...prev, ...newTokenInfoMap }));
+        setTokenInfoMap((prev) => ({ ...prev, ...newTokenInfoMap }));
         setIsLoadingTokenInfo(false);
       }
     };
@@ -2062,13 +2326,15 @@ function PermissionDialogWrapper({
 
         // Fetch capabilities from JAW RPC
         const capabilities = await handleGetCapabilitiesRequest(
-          { method: 'wallet_getCapabilities', params: [] },
-          apiKey || '',
-          true // showTestnets
+          { method: "wallet_getCapabilities", params: [] },
+          apiKey || "",
+          true, // showTestnets
         );
 
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as
+          | FeeTokenCapability
+          | undefined;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);
@@ -2076,13 +2342,18 @@ function PermissionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.address, rpcUrl);
+              const balance = await fetchTokenBalance(
+                token.address,
+                request.data.address,
+                rpcUrl,
+              );
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -2103,20 +2374,23 @@ function PermissionDialogWrapper({
                 logoURI: token.logoURI,
               } as FeeTokenOption;
             } catch (error) {
-              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              console.warn(
+                `Failed to fetch balance for ${token.symbol}:`,
+                error,
+              );
               return {
                 uid: token.uid,
                 symbol: token.symbol,
                 address: token.address,
                 decimals: token.decimals,
                 balance: 0n,
-                balanceFormatted: '0',
+                balanceFormatted: "0",
                 isNative: isNativeToken(token.address),
                 isSelectable: false,
                 logoURI: token.logoURI,
               } as FeeTokenOption;
             }
-          })
+          }),
         );
 
         if (isMounted) {
@@ -2124,7 +2398,10 @@ function PermissionDialogWrapper({
           // Note: Initial token selection is handled by useGasEstimation hook
         }
       } catch (error) {
-        console.warn('[PermissionDialogWrapper] Failed to fetch fee tokens:', error);
+        console.warn(
+          "[PermissionDialogWrapper] Failed to fetch fee tokens:",
+          error,
+        );
       } finally {
         if (isMounted) setFeeTokensLoading(false);
       }
@@ -2149,13 +2426,16 @@ function PermissionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          effectivePaymasterUrl
+          effectivePaymasterUrl,
         );
         if (isMounted) {
           setAccount(restoredAccount);
         }
       } catch (error) {
-        console.error('[PermissionDialogWrapper] Error initializing account:', error);
+        console.error(
+          "[PermissionDialogWrapper] Error initializing account:",
+          error,
+        );
       }
     };
 
@@ -2169,34 +2449,56 @@ function PermissionDialogWrapper({
   // Note: Gas estimation is now handled by useGasEstimation hook
 
   // Convert to SpendPermission array format expected by PermissionDialog
-  const spends = useMemo(() => spendsData.map(spend => {
-    const tokenInfo = tokenInfoMap[spend.token] || (isNativeToken(spend.token)
-      ? { decimals: viemChain?.nativeCurrency?.decimals ?? 18, symbol: nativeSymbol }
-      : { decimals: 18, symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4) });
+  const spends = useMemo(
+    () =>
+      spendsData.map((spend) => {
+        const tokenInfo =
+          tokenInfoMap[spend.token] ||
+          (isNativeToken(spend.token)
+            ? {
+                decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+                symbol: nativeSymbol,
+              }
+            : {
+                decimals: 18,
+                symbol: spend.token.slice(0, 6) + "..." + spend.token.slice(-4),
+              });
 
-    const allowance = BigInt(spend.allowance);
-    const amount = formatUnits(allowance, tokenInfo.decimals);
-    const limit = `${amount} ${tokenInfo.symbol}`;
+        const allowance = BigInt(spend.allowance);
+        const amount = formatUnits(allowance, tokenInfo.decimals);
+        const limit = `${amount} ${tokenInfo.symbol}`;
 
-    // Format duration with multiplier (defaults to 1 if not provided)
-    const multiplier = spend.multiplier ?? 1;
-    const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? 's' : ''}`;
+        // Format duration with multiplier (defaults to 1 if not provided)
+        const multiplier = spend.multiplier ?? 1;
+        const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? "s" : ""}`;
 
-    return {
-      amount,
-      token: isNativeToken(spend.token) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
-      tokenAddress: spend.token,
-      duration,
-      limit,
-    };
-  }), [spendsData, tokenInfoMap, viemChain, nativeSymbol]);
+        return {
+          amount,
+          token: isNativeToken(spend.token)
+            ? `Native (${nativeSymbol})`
+            : tokenInfo.symbol,
+          tokenAddress: spend.token,
+          duration,
+          limit,
+        };
+      }),
+    [spendsData, tokenInfoMap, viemChain, nativeSymbol],
+  );
 
   // Format call permissions
-  const calls = useMemo(() => callsData.map(call => ({
-    target: call.target,
-    selector: call.selector,
-    functionSignature: call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
-  })), [callsData]);
+  const calls = useMemo(
+    () =>
+      callsData.map((call) => ({
+        target: call.target,
+        selector: call.selector,
+        functionSignature:
+          call.functionSignature ||
+          (call.selector
+            ? resolveFunctionSelector(call.selector)
+            : "Unknown Function"),
+      })),
+    [callsData],
+  );
 
   // Format expiry date
   const expiryDate = useMemo(() => {
@@ -2209,54 +2511,56 @@ function PermissionDialogWrapper({
 
     // Describe spend permissions
     if (spends.length > 0) {
-      const spendDescriptions = spends.map(spend => {
+      const spendDescriptions = spends.map((spend) => {
         // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
-        const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
+        const normalizedDuration = spend.duration
+          .replace(/^1\s+/, "")
+          .toLowerCase();
         // Handle "forever" specially - no "per" prefix needed
-        if (normalizedDuration === 'forever') {
+        if (normalizedDuration === "forever") {
           return spend.limit;
         }
         return `${spend.limit} per ${normalizedDuration}`;
       });
-      parts.push(`spend up to ${spendDescriptions.join(', ')}`);
+      parts.push(`spend up to ${spendDescriptions.join(", ")}`);
     }
 
     // Describe call permissions
     if (calls.length > 0) {
-      const callDescriptions = calls.map(call => {
+      const callDescriptions = calls.map((call) => {
         const fnName = call.functionSignature;
         // Check for special selectors
-        if (fnName === 'Any Function') {
-          return 'call any function';
+        if (fnName === "Any Function") {
+          return "call any function";
         }
-        if (fnName === 'Empty Calldata') {
-          return 'send transactions with empty calldata';
+        if (fnName === "Empty Calldata") {
+          return "send transactions with empty calldata";
         }
         // Extract just the function name from signature like "transfer(address,uint256)"
-        const simpleName = fnName.split('(')[0];
+        const simpleName = fnName.split("(")[0];
         return `call ${simpleName}`;
       });
 
       // Deduplicate and join
       const uniqueCalls = [...new Set(callDescriptions)];
-      parts.push(uniqueCalls.join(', '));
+      parts.push(uniqueCalls.join(", "));
     }
 
     if (parts.length === 0) {
       return `You are granting permissions to this dApp until ${expiryDate}. Only approve if you trust this dApp.`;
     }
 
-    return `This will allow the dApp to ${parts.join(' and ')} on your behalf until ${expiryDate}. Only approve if you trust this dApp.`;
+    return `This will allow the dApp to ${parts.join(" and ")} on your behalf until ${expiryDate}. Only approve if you trust this dApp.`;
   }, [spends, calls, expiryDate]);
 
   const handleConfirm = async () => {
     if (!account) {
-      console.error('[PermissionDialogWrapper] Account not initialized');
+      console.error("[PermissionDialogWrapper] Account not initialized");
       return;
     }
 
     setIsProcessing(true);
-    setStatus('Granting permissions...');
+    setStatus("Granting permissions...");
     try {
       // Use the spends array directly from the request (already in correct format)
       const permissionsDetail = {
@@ -2270,21 +2574,27 @@ function PermissionDialogWrapper({
         request.data.spender as Address,
         permissionsDetail,
         computedPaymasterUrl,
-        computedPaymasterContext
+        computedPaymasterContext,
       );
 
-      setStatus('Permissions granted successfully!');
+      setStatus("Permissions granted successfully!");
       onApprove(result);
     } catch (error) {
-      console.error('Permission grant failed:', error);
-      const errorObj = error instanceof Error ? error : new Error(String(error));
+      console.error("Permission grant failed:", error);
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
       setStatus(`Error: ${errorObj.message}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
-      if (errorObj.name === 'NotAllowedError') {
-        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      if (errorObj.name === "NotAllowedError") {
+        onReject(UIError.userRejected("User cancelled the passkey prompt"));
       } else {
         // Internal error
-        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+        onReject(
+          new UIError(
+            standardErrorCodes.rpc.internal as UIErrorCode,
+            errorObj.message,
+          ),
+        );
       }
     } finally {
       setIsProcessing(false);
@@ -2305,7 +2615,9 @@ function PermissionDialogWrapper({
       }}
       mode="grant"
       spenderAddress={request.data.spender}
-      origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
+      origin={
+        typeof window !== "undefined" ? window.location.origin : "unknown"
+      }
       spends={spends}
       calls={calls}
       expiryDate={expiryDate}
@@ -2329,8 +2641,9 @@ function PermissionDialogWrapper({
       feeTokensLoading={feeTokensLoading}
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
-      showFeeTokenSelector={!isSponsored && feeTokens.some(t => !t.isNative)}
+      showFeeTokenSelector={!isSponsored && feeTokens.some((t) => !t.isNative)}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />
   );
 }
@@ -2353,18 +2666,19 @@ function SiweDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [siweStatus, setSiweStatus] = useState<string>('');
+  const [siweStatus, setSiweStatus] = useState<string>("");
 
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(chainId);
   const chainIcon = useChainIconURI(chainId, apiKey, 24);
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "unknown";
 
   // Decode message if it's hex encoded
   const decodedMessage = useMemo(() => {
     const msg = request.data.message;
-    if (msg.startsWith('0x')) {
+    if (msg.startsWith("0x")) {
       try {
         return hexToUtf8(msg);
       } catch {
@@ -2377,7 +2691,7 @@ function SiweDialogWrapper({
   // Extract app name from SIWE message
   const appName = useMemo(() => {
     const match = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/);
-    return match ? match[1] : 'dApp';
+    return match ? match[1] : "dApp";
   }, [decodedMessage]);
 
   // Generate warning if URI in SIWE message doesn't match current origin
@@ -2389,7 +2703,8 @@ function SiweDialogWrapper({
 
       const siweUri = uriMatch[1].trim();
       const siweOrigin = new URL(siweUri).origin;
-      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
+      const currentOrigin =
+        typeof window !== "undefined" ? window.location.origin : "";
 
       if (siweOrigin !== currentOrigin) {
         return `The sign-in request is for "${siweUri}" but you are currently on "${currentOrigin}". This may be a phishing attempt.`;
@@ -2402,30 +2717,36 @@ function SiweDialogWrapper({
 
   const handleSign = async () => {
     setIsProcessing(true);
-    setSiweStatus('Signing message...');
+    setSiweStatus("Signing message...");
     try {
       // Restore account for signing
       const account = await getAccountForSigning(
         apiKey,
         chainId,
-        paymasters?.[chainId]?.url
+        paymasters?.[chainId]?.url,
       );
 
       // Sign the message
       const signature = await account.signMessage(request.data.message);
 
-      setSiweStatus('Sign-in successful!');
+      setSiweStatus("Sign-in successful!");
       onApprove(signature);
     } catch (error) {
-      console.error('SIWE signature failed:', error);
-      const errorObj = error instanceof Error ? error : new Error(String(error));
+      console.error("SIWE signature failed:", error);
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
       setSiweStatus(`Error: ${errorObj.message}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
-      if (errorObj.name === 'NotAllowedError') {
-        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      if (errorObj.name === "NotAllowedError") {
+        onReject(UIError.userRejected("User cancelled the passkey prompt"));
       } else {
         // Internal error
-        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+        onReject(
+          new UIError(
+            standardErrorCodes.rpc.internal as UIErrorCode,
+            errorObj.message,
+          ),
+        );
       }
     } finally {
       setIsProcessing(false);
@@ -2481,8 +2802,9 @@ function RevokePermissionDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [status, setStatus] = useState<string>('');
-  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState(true);
+  const [status, setStatus] = useState<string>("");
+  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] =
+    useState(true);
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [account, setAccount] = useState<Account | null>(null);
@@ -2490,12 +2812,13 @@ function RevokePermissionDialogWrapper({
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
 
   const chainId = request.data.chainId || defaultChainId || 1;
-  const viemChain = SUPPORTED_CHAINS.find(c => c.id === chainId);
-  const networkName = viemChain?.name || 'Unknown Network';
+  const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
+  const networkName = viemChain?.name || "Unknown Network";
 
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find(t => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
+  // Get native token symbol from feeTokens, falling back to chain's native currency
+  const nativeToken = feeTokens?.find((t) => t.isNative);
+  const nativeSymbol =
+    nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || "ETH";
 
   // Fetch native token price dynamically based on the chain's native token symbol
   const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
@@ -2503,14 +2826,19 @@ function RevokePermissionDialogWrapper({
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
-    const capabilitiesPaymasterUrl = request.data.capabilities?.paymasterService?.url;
+    const capabilitiesPaymasterUrl =
+      request.data.capabilities?.paymasterService?.url;
     return capabilitiesPaymasterUrl || paymasters?.[chainId]?.url;
   }, [request.data.capabilities?.paymasterService?.url, paymasters, chainId]);
 
   // Extract paymasterContext from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.context > paymasters[chainId].context
   const effectivePaymasterContext = useMemo(() => {
-    const capabilitiesPaymasterContext = (request.data.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    const capabilitiesPaymasterContext = (
+      request.data.capabilities?.paymasterService as
+        | { context?: Record<string, unknown> }
+        | undefined
+    )?.context;
     return capabilitiesPaymasterContext || paymasters?.[chainId]?.context;
   }, [request.data.capabilities?.paymasterService, paymasters, chainId]);
 
@@ -2525,7 +2853,10 @@ function RevokePermissionDialogWrapper({
       const revokeCall = buildRevokePermissionCall(fetchedPermissionData);
       return [revokeCall];
     } catch (error) {
-      console.warn('[RevokePermissionDialogWrapper] Failed to build permission revoke call:', error);
+      console.warn(
+        "[RevokePermissionDialogWrapper] Failed to build permission revoke call:",
+        error,
+      );
       return [];
     }
   }, [fetchedPermissionData]);
@@ -2556,7 +2887,7 @@ function RevokePermissionDialogWrapper({
 
     // If user selected an ERC-20 token (non-native), use ERC-20 paymaster
     if (selectedFeeToken && !selectedFeeToken.isNative) {
-      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ''}`;
+      return `${JAW_PAYMASTER_URL}?chainId=${chainId}${apiKey ? `&api-key=${apiKey}` : ""}`;
     }
 
     // Native ETH - no paymaster needed
@@ -2569,7 +2900,9 @@ function RevokePermissionDialogWrapper({
     if (selectedFeeToken && !selectedFeeToken.isNative) {
       // Use the actual estimate from tokenEstimates if available
       const estimate = tokenEstimates.find(
-        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+        (e) =>
+          e.tokenAddress.toLowerCase() ===
+          selectedFeeToken.address.toLowerCase(),
       );
 
       if (estimate) {
@@ -2581,19 +2914,28 @@ function RevokePermissionDialogWrapper({
       }
 
       // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
+      const gasUsd =
+        gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
+      const gasInTokenUnits = Math.ceil(
+        gasUsd * Math.pow(10, selectedFeeToken.decimals),
+      );
       return {
         token: selectedFeeToken.address,
         gas: gasInTokenUnits.toString(),
       };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
+  }, [
+    selectedFeeToken,
+    effectivePaymasterContext,
+    tokenEstimates,
+    gasFee,
+    nativeTokenPrice,
+  ]);
 
   const chain = useMemo(
     () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
-    [chainId, apiKey, computedPaymasterUrl]
+    [chainId, apiKey, computedPaymasterUrl],
   );
 
   // Fetch permission details from relay
@@ -2605,8 +2947,11 @@ function RevokePermissionDialogWrapper({
 
     const fetchPermissionDetails = async () => {
       try {
-        const permData = await getPermissionFromRelay(request.data.permissionId as `0x${string}`, apiKey);
-        console.log('✅ Fetched permission details from relay:', permData);
+        const permData = await getPermissionFromRelay(
+          request.data.permissionId as `0x${string}`,
+          apiKey,
+        );
+        console.log("✅ Fetched permission details from relay:", permData);
         setFetchedPermissionData(permData);
 
         // Fetch token info for spends
@@ -2617,7 +2962,7 @@ function RevokePermissionDialogWrapper({
             if (isNativeToken(tokenAddress)) {
               newTokenInfoMap[tokenAddress] = {
                 decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-                symbol: viemChain?.nativeCurrency?.symbol || 'ETH'
+                symbol: viemChain?.nativeCurrency?.symbol || "ETH",
               };
             } else {
               try {
@@ -2625,10 +2970,14 @@ function RevokePermissionDialogWrapper({
                   chain: {
                     id: chainId,
                     name: networkName,
-                    nativeCurrency: viemChain?.nativeCurrency || { name: 'Ether', symbol: 'ETH', decimals: 18 },
+                    nativeCurrency: viemChain?.nativeCurrency || {
+                      name: "Ether",
+                      symbol: "ETH",
+                      decimals: 18,
+                    },
                     rpcUrls: {
-                      default: { http: [chain.rpcUrl || ''] },
-                      public: { http: [chain.rpcUrl || ''] },
+                      default: { http: [chain.rpcUrl || ""] },
+                      public: { http: [chain.rpcUrl || ""] },
                     },
                   },
                   transport: http(chain.rpcUrl),
@@ -2638,17 +2987,20 @@ function RevokePermissionDialogWrapper({
                   publicClient.readContract({
                     address: tokenAddress as Address,
                     abi: erc20Abi,
-                    functionName: 'decimals',
+                    functionName: "decimals",
                   }),
                   publicClient.readContract({
                     address: tokenAddress as Address,
                     abi: erc20Abi,
-                    functionName: 'symbol',
+                    functionName: "symbol",
                   }),
                 ]);
                 newTokenInfoMap[tokenAddress] = { decimals, symbol };
               } catch {
-                newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: tokenAddress };
+                newTokenInfoMap[tokenAddress] = {
+                  decimals: 18,
+                  symbol: tokenAddress,
+                };
               }
             }
           }
@@ -2656,13 +3008,20 @@ function RevokePermissionDialogWrapper({
         }
         setIsLoadingPermissionDetails(false);
       } catch (error) {
-        console.error('❌ Failed to fetch permission details:', error);
+        console.error("❌ Failed to fetch permission details:", error);
         setIsLoadingPermissionDetails(false);
       }
     };
 
     fetchPermissionDetails();
-  }, [request.data.permissionId, apiKey, chainId, networkName, chain.rpcUrl, viemChain]);
+  }, [
+    request.data.permissionId,
+    apiKey,
+    chainId,
+    networkName,
+    chain.rpcUrl,
+    viemChain,
+  ]);
 
   // Fetch fee tokens for ERC-20 paymaster support
   useEffect(() => {
@@ -2678,13 +3037,15 @@ function RevokePermissionDialogWrapper({
       try {
         // Fetch capabilities to get available fee tokens
         const capabilities = await handleGetCapabilitiesRequest(
-          { method: 'wallet_getCapabilities', params: [] },
-          apiKey || '',
-          true // showTestnets
+          { method: "wallet_getCapabilities", params: [] },
+          apiKey || "",
+          true, // showTestnets
         );
 
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
-        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as FeeTokenCapability | undefined;
+        const feeTokenCap = capabilities?.[chainIdHex]?.feeToken as
+          | FeeTokenCapability
+          | undefined;
 
         if (!feeTokenCap?.supported || !feeTokenCap?.tokens?.length) {
           if (isMounted) setFeeTokensLoading(false);
@@ -2692,13 +3053,18 @@ function RevokePermissionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.address as Address, rpcUrl);
+              const balance = await fetchTokenBalance(
+                token.address,
+                request.data.address as Address,
+                rpcUrl,
+              );
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -2719,20 +3085,23 @@ function RevokePermissionDialogWrapper({
                 logoURI: token.logoURI,
               } as FeeTokenOption;
             } catch (error) {
-              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
+              console.warn(
+                `Failed to fetch balance for ${token.symbol}:`,
+                error,
+              );
               return {
                 uid: token.uid,
                 symbol: token.symbol,
                 address: token.address,
                 decimals: token.decimals,
                 balance: 0n,
-                balanceFormatted: '0',
+                balanceFormatted: "0",
                 isNative: isNativeToken(token.address),
                 isSelectable: false,
                 logoURI: token.logoURI,
               } as FeeTokenOption;
             }
-          })
+          }),
         );
 
         if (isMounted) {
@@ -2740,7 +3109,10 @@ function RevokePermissionDialogWrapper({
           // Note: Initial token selection is handled by useGasEstimation hook
         }
       } catch (error) {
-        console.warn('[RevokePermissionDialogWrapper] Failed to fetch fee tokens:', error);
+        console.warn(
+          "[RevokePermissionDialogWrapper] Failed to fetch fee tokens:",
+          error,
+        );
       } finally {
         if (isMounted) setFeeTokensLoading(false);
       }
@@ -2765,13 +3137,16 @@ function RevokePermissionDialogWrapper({
         const restoredAccount = await getAccountForSigning(
           apiKey,
           chainId,
-          effectivePaymasterUrl
+          effectivePaymasterUrl,
         );
         if (isMounted) {
           setAccount(restoredAccount);
         }
       } catch (error) {
-        console.error('[RevokePermissionDialogWrapper] Error initializing account:', error);
+        console.error(
+          "[RevokePermissionDialogWrapper] Error initializing account:",
+          error,
+        );
       }
     };
 
@@ -2790,14 +3165,14 @@ function RevokePermissionDialogWrapper({
       const tokenAddress = spend.token;
       const tokenInfo = tokenInfoMap[tokenAddress] || {
         decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-        symbol: nativeSymbol
+        symbol: nativeSymbol,
       };
       const allowance = BigInt(spend.allowance);
       const amount = formatUnits(allowance, tokenInfo.decimals);
       const limit = `${amount} ${tokenInfo.symbol}`;
       // Format duration with multiplier (unit is period string like 'day', 'week', etc.)
       const multiplier = spend.multiplier ?? 1;
-      const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? 's' : ''}`;
+      const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? "s" : ""}`;
 
       return {
         amount,
@@ -2818,49 +3193,59 @@ function RevokePermissionDialogWrapper({
     return fetchedPermissionData.calls.map((call: any) => ({
       target: call.target,
       selector: call.selector,
-      functionSignature: call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+      functionSignature:
+        call.functionSignature ||
+        (call.selector
+          ? resolveFunctionSelector(call.selector)
+          : "Unknown Function"),
     }));
   }, [fetchedPermissionData]);
 
   // Expiry date from fetched permission
   const expiryDate = useMemo(() => {
-    if (!fetchedPermissionData) return '';
+    if (!fetchedPermissionData) return "";
     const endTimestamp = parseInt(fetchedPermissionData.end, 10);
     return formatExpiryDate(endTimestamp);
   }, [fetchedPermissionData]);
 
   // Spender address from fetched permission
-  const spenderAddress = fetchedPermissionData?.spender || '0x...';
+  const spenderAddress = fetchedPermissionData?.spender || "0x...";
 
   const handleConfirm = async () => {
     if (!account) {
-      console.error('[RevokePermissionDialogWrapper] Account not initialized');
+      console.error("[RevokePermissionDialogWrapper] Account not initialized");
       return;
     }
 
     setIsProcessing(true);
-    setStatus('Revoking permission...');
+    setStatus("Revoking permission...");
     try {
       // Revoke permission using Account class with paymaster context
       await account.revokePermission(
         request.data.permissionId as `0x${string}`,
         computedPaymasterUrl,
-        computedPaymasterContext
+        computedPaymasterContext,
       );
 
-      console.log('Permission revoked');
-      setStatus('Permission revoked successfully!');
+      console.log("Permission revoked");
+      setStatus("Permission revoked successfully!");
       onApprove({ success: true });
     } catch (error) {
-      console.error('Permission revoke failed:', error);
-      const errorObj = error instanceof Error ? error : new Error(String(error));
+      console.error("Permission revoke failed:", error);
+      const errorObj =
+        error instanceof Error ? error : new Error(String(error));
       setStatus(`Error: ${errorObj.message}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
-      if (errorObj.name === 'NotAllowedError') {
-        onReject(UIError.userRejected('User cancelled the passkey prompt'));
+      if (errorObj.name === "NotAllowedError") {
+        onReject(UIError.userRejected("User cancelled the passkey prompt"));
       } else {
         // Internal error
-        onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
+        onReject(
+          new UIError(
+            standardErrorCodes.rpc.internal as UIErrorCode,
+            errorObj.message,
+          ),
+        );
       }
     } finally {
       setIsProcessing(false);
@@ -2882,7 +3267,9 @@ function RevokePermissionDialogWrapper({
       mode="revoke"
       permissionId={request.data.permissionId}
       spenderAddress={spenderAddress}
-      origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
+      origin={
+        typeof window !== "undefined" ? window.location.origin : "unknown"
+      }
       spends={formattedSpends}
       calls={formattedCalls}
       expiryDate={expiryDate}
@@ -2906,8 +3293,9 @@ function RevokePermissionDialogWrapper({
       feeTokensLoading={feeTokensLoading}
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
-      showFeeTokenSelector={!isSponsored && feeTokens.some(t => !t.isNative)}
+      showFeeTokenSelector={!isSponsored && feeTokens.some((t) => !t.isNative)}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />
   );
 }
@@ -2923,12 +3311,13 @@ function UnsupportedMethodDialogWrapper({
   const [open, setOpen] = useState(true);
   const [isClosing, setIsClosing] = useState(false);
 
-  const origin = typeof window !== 'undefined' ? window.location.origin : 'unknown';
+  const origin =
+    typeof window !== "undefined" ? window.location.origin : "unknown";
 
   const handleClose = () => {
     if (!isClosing) {
       setIsClosing(true);
-      console.log('❌ Unsupported method:', method);
+      console.log("❌ Unsupported method:", method);
       setOpen(false);
       // Use UIError.unsupportedRequest which has proper error code
       onReject(UIError.unsupportedRequest(method));
@@ -2943,8 +3332,8 @@ function UnsupportedMethodDialogWrapper({
         else setOpen(newOpen);
       }}
       contentStyle={{
-        width: 'fit-content',
-        maxWidth: '450px',
+        width: "fit-content",
+        maxWidth: "450px",
       }}
     >
       <div className="flex flex-col gap-6 p-6">
@@ -2983,9 +3372,7 @@ function UnsupportedMethodDialogWrapper({
         </div>
 
         {/* Origin */}
-        <p className="text-xs text-gray-500 text-center">
-          Origin: {origin}
-        </p>
+        <p className="text-xs text-gray-500 text-center">Origin: {origin}</p>
 
         {/* Close Button */}
         <button
@@ -2993,10 +3380,9 @@ function UnsupportedMethodDialogWrapper({
           disabled={isClosing}
           className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors"
         >
-          {isClosing ? 'Closing...' : 'Close'}
+          {isClosing ? "Closing..." : "Close"}
         </button>
       </div>
     </DefaultDialogComponent>
   );
 }
-

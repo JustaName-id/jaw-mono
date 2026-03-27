@@ -135,6 +135,25 @@ const hash = await account.sendTransaction({
   ensConfig: { ... },          // Optional - for ENS subnames
 })`,
   },
+  cli: {
+    title: 'JAW CLI & MCP Server',
+    description: 'Command-line interface and MCP server for interacting with JAW smart accounts from terminal, shell scripts, or AI agents.',
+    dirs: ['cli'],
+    includes: [],
+    packageName: '@jaw.id/cli',
+    installCommand: 'npm install -g @jaw.id/cli',
+    quickExample: `# Configure
+jaw config set apiKey=YOUR_KEY defaultChain=8453
+
+# Connect wallet (opens browser for passkey)
+jaw rpc call wallet_connect
+
+# Send a transaction
+jaw rpc call wallet_sendCalls '{"calls":[{"to":"0x...","value":"0xDE0B6B3A7640000"}]}'
+
+# JSON output for scripts/agents
+jaw rpc call eth_accounts -o json -y`,
+  },
   advanced: {
     title: 'JAW Advanced Topics',
     description: 'Advanced implementation details - custom UI handlers, passkey server setup, and specialized configurations.',
@@ -381,6 +400,18 @@ This file is a **routing index only**. To help users with JAW:
 **Package:** \`@jaw.id/core\` + \`@jaw.id/ui\`
 **URL:** ${BASE_URL}/llms-advanced.txt
 
+### llms-cli.txt — CLI & AI Agent Integration
+**Use this when:** User wants to use JAW from the terminal, shell scripts, or set up MCP for AI agents
+**Example questions:**
+- "How do I use JAW from the command line?"
+- "How do I set up JAW MCP server for Claude?"
+- "How do I send a transaction from the terminal?"
+- "How do I configure the JAW CLI?"
+- "How do I self-host the relay?"
+- "How do I use JAW with AI agents?"
+**Package:** \`@jaw.id/cli\`
+**URL:** ${BASE_URL}/llms-cli.txt
+
 ---
 
 ## Package Overview
@@ -390,6 +421,7 @@ This file is a **routing index only**. To help users with JAW:
 | \`@jaw.id/wagmi\` | React/Next.js apps with Wagmi | \`npm install @jaw.id/wagmi wagmi @tanstack/react-query\` |
 | \`@jaw.id/core\` | Non-React or custom provider setups | \`npm install @jaw.id/core\` |
 | \`@jaw.id/ui\` | Custom UI for app-specific mode | \`npm install @jaw.id/ui\` |
+| \`@jaw.id/cli\` | Terminal, scripts, and AI agents | \`npm install -g @jaw.id/cli\` |
 
 ## Quick Links
 

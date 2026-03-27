@@ -1,0 +1,139 @@
+# Commands
+
+## jaw rpc call
+
+Execute any EIP-1193 RPC method through the browser bridge.
+
+```bash
+jaw rpc call <method> [params]
+```
+
+### Arguments
+
+| Argument | Required | Description |
+|----------|----------|-------------|
+| `method` | Yes | RPC method name (e.g., `wallet_connect`, `wallet_sendCalls`) |
+| `params` | No | JSON string with method parameters |
+
+### Flags
+
+| Flag | Short | Default | Description |
+|------|-------|---------|-------------|
+| `--output` | `-o` | `human` | Output format: `json` or `human` |
+| `--chain` | `-c` | config | Chain ID (e.g., `8453` for Base) |
+| `--api-key` | | config | JAW API key |
+| `--timeout` | `-t` | `120` | Request timeout in seconds |
+| `--yes` | `-y` | `false` | Skip confirmations |
+| `--quiet` | `-q` | `false` | Suppress non-essential output |
+
+### Examples
+
+**Connect wallet:**
+```bash
+jaw rpc call wallet_connect
+```
+
+**Get accounts:**
+```bash
+jaw rpc call eth_accounts
+```
+
+**Send ETH (0.01 ETH on Base):**
+```bash
+jaw rpc call wallet_sendCalls '{"calls":[{"to":"0xRecipient","value":"0x2386F26FC10000"}]}' -c 8453
+```
+
+**Send ERC-20 tokens:**
+```bash
+jaw rpc call wallet_sendCalls '{"calls":[{"to":"0xTokenAddress","data":"0xa9059cbb000000000000000000000000RECIPIENT0000000000000000000000000000000000000000000000000000000000000000000000000000000DE0B6B3A7640000"}]}' -c 8453
+```
+
+**Sign a message:**
+```bash
+jaw rpc call personal_sign '["0x48656c6c6f","0xYourAddress"]'
+```
+
+**Grant permissions:**
+```bash
+jaw rpc call wallet_grantPermissions '{"permissions":[{"type":"call","data":{"to":"0xContractAddress"}},{"type":"spend","data":{"token":"0xUSDCAddress","limit":"1000000","period":"daily"}}],"expiry":1735689600}'
+```
+
+**Check transaction status:**
+```bash
+jaw rpc call wallet_getCallsStatus '["0xBundleId"]'
+```
+
+**JSON output (for scripts and AI agents):**
+```bash
+jaw rpc call eth_accounts -o json -y
+```
+
+---
+
+## jaw config set
+
+Set one or more configuration values.
+
+```bash
+jaw config set [key=value ...]
+```
+
+Valid keys: `apiKey`, `defaultChain`, `keysUrl`, `paymasterUrl`, `ens`, `relayUrl`
+
+### Examples
+
+```bash
+# Set API key and chain
+jaw config set apiKey=YOUR_KEY defaultChain=8453
+
+# Enable ENS resolution
+jaw config set ens=myapp.eth
+
+# Set paymaster for gas sponsoring
+jaw config set paymasterUrl=https://paymaster.example.com
+
+# Use a self-hosted relay
+jaw config set relayUrl=wss://relay.mycompany.com
+```
+
+---
+
+## jaw config show
+
+Display current configuration. The API key is redacted in output.
+
+```bash
+jaw config show
+jaw config show -o json
+```
+
+---
+
+## jaw disconnect
+
+Close the relay session and browser tab. Cleans up the session stored in `~/.jaw/relay.json`.
+
+```bash
+jaw disconnect
+```
+
+---
+
+## jaw mcp
+
+Start the MCP server on stdio for AI agent integration. See the [MCP Server](/cli/mcp) page for setup details.
+
+```bash
+jaw mcp
+```
+
+---
+
+## jaw version
+
+Display the CLI version.
+
+```bash
+jaw version
+jaw -v
+```

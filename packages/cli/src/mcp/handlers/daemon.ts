@@ -2,7 +2,6 @@ import * as fs from "node:fs";
 import type { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
 import { mcpError } from "../helpers.js";
 import { shutdownDaemon } from "../../lib/bridge-singleton.js";
-import { closeCachedBridge, isBridgeCached } from "./rpc.js";
 import { PATHS } from "../../lib/paths.js";
 import { loadConfig, redactConfig } from "../../lib/config.js";
 
@@ -31,7 +30,7 @@ export function registerDaemonTools(server: McpServer): void {
           relay: relaySession
             ? { session: true }
             : { session: false },
-          bridgeConnection: isBridgeCached() ? "connected" : "disconnected",
+          bridgeConnection: "disconnected",
           config,
         };
 
@@ -53,7 +52,6 @@ export function registerDaemonTools(server: McpServer): void {
     {},
     async () => {
       try {
-        closeCachedBridge();
         await shutdownDaemon();
         return {
           content: [

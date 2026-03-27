@@ -73,8 +73,9 @@ const formatBalance = (balance: string, symbol: string) => {
   const num = parseFloat(balance);
   if (num === 0) return '0';
   if (num < 0.0001) return '<0.0001';
-  // For ETH, show more decimals; for stablecoins, show 2
-  const decimals = symbol.toUpperCase() === 'ETH' ? 6 : 2;
+  // For stablecoins, show 2 decimals; for native tokens (ETH, FLR, etc.), show more
+  const stablecoins = ['USDC', 'USDT', 'DAI'];
+  const decimals = stablecoins.includes(symbol.toUpperCase()) ? 2 : 6;
   return num.toLocaleString('en-US', {
     minimumFractionDigits: 0,
     maximumFractionDigits: decimals,

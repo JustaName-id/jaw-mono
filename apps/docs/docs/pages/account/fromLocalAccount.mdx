@@ -1,6 +1,6 @@
 # Account.fromLocalAccount()
 
-Create an account from a viem LocalAccount. Ideal for server-side usage or integration with embedded wallet providers.
+Create an account from a Viem `LocalAccount`. Ideal for server-side usage or integration with embedded wallet providers.
 
 **Type:** `static async`
 
@@ -10,7 +10,8 @@ Create an account from a viem LocalAccount. Ideal for server-side usage or integ
 ```typescript
 static async fromLocalAccount(
   config: AccountConfig,
-  localAccount: LocalAccount
+  localAccount: LocalAccount,
+  options?: { eip7702?: boolean }
 ): Promise<Account>
 ```
 
@@ -34,7 +35,15 @@ Type: `LocalAccount` (from viem)
 A viem LocalAccount instance. Can be created from:
 - Private key
 - Mnemonic
-- Embedded wallet providers (Privy, Dynamic, Magic, Turnkey, etc.)
+- Embedded wallet providers (Privy, Turnkey, Magic, etc.)
+
+### options (optional)
+
+Type: `{ eip7702?: boolean }`
+
+| Property | Type | Default | Description |
+|----------|------|---------|-------------|
+| `eip7702` | `boolean` | `false` | When `true`, preserves the EOA address via EIP-7702 delegation instead of creating a new counterfactual address |
 
 
 ## Returns
@@ -44,15 +53,26 @@ A viem LocalAccount instance. Can be created from:
 
 ## Behavior
 
-1. Creates a smart account using the LocalAccount as the owner
-2. No passkey or WebAuthn involved
-3. No authentication state stored (since there's no passkey)
-4. `getMetadata()` returns `null` for these accounts
+**Default mode** (`eip7702: false` or omitted):
+1. Creates a new smart account with a counterfactual address derived from the LocalAccount
+2. The smart account address is different from the LocalAccount address
+3. No delegation or authorization involved
+
+**EIP-7702 mode** (`eip7702: true`):
+1. The smart account address equals the LocalAccount's EOA address
+2. On the first transaction, the SDK signs an EIP-7702 authorization to delegate the EOA's code to the JustanAccount implementation
+3. Registers the permissions manager as an owner
+4. Subsequent transactions skip delegation (already active)
+
+In both modes:
+- No passkey or WebAuthn involved
+- No authentication state stored
+- `getMetadata()` returns `null`
 
 
 ## Examples
 
-### From Private Key
+### Default — New Smart Account Address
 
 ```typescript
 import { Account } from '@jaw.id/core';
@@ -61,12 +81,30 @@ import { privateKeyToAccount } from 'viem/accounts';
 const localAccount = privateKeyToAccount('0x...');
 
 const account = await Account.fromLocalAccount(
-  { chainId: 1, apiKey: 'your-api-key' },
+  { chainId: 8453, apiKey: 'your-api-key' },
   localAccount
 );
 
+// account.address !== localAccount.address (new counterfactual address)
 console.log('Smart account address:', account.address);
-console.log('Has metadata:', account.getMetadata()); // null
+```
+
+### EIP-7702 — Preserve EOA Address
+
+```typescript
+import { Account } from '@jaw.id/core';
+import { privateKeyToAccount } from 'viem/accounts';
+
+const localAccount = privateKeyToAccount('0x...');
+
+const account = await Account.fromLocalAccount(
+  { chainId: 8453, apiKey: 'your-api-key' },
+  localAccount,
+  { eip7702: true }
+);
+
+// account.address === localAccount.address (EOA address preserved)
+console.log('Address:', account.address);
 ```
 
 
@@ -74,8 +112,14 @@ console.log('Has metadata:', account.getMetadata()); // null
 
 Use `fromLocalAccount()` when:
 
-- **Server-side automation** - Backend services that need to execute transactions
-- **Embedded wallets** - Integrating with Privy, Dynamic, Magic, Turnkey, etc.
+- **Server-side automation** — Backend services that need to execute transactions
+- **Embedded wallets** — Integrating with Privy, Turnkey, Magic, etc.
+- **EIP-7702 upgrade** — Upgrading an existing EOA to a smart account while keeping the same address
+
+Use `{ eip7702: true }` when:
+
+- **Preserving address matters** — The user's EOA address has history, reputation, or token balances they want to keep
+- **Provider integration** — The wallet provider gives you a LocalAccount and the user expects their address to stay the same
 
 Do **not** use when:
 
@@ -84,6 +128,7 @@ Do **not** use when:
 
 ## Related
 
-- [Account.get()](/account/get) - Passkey-based authentication
-- [Account.create()](/account/create) - Create passkey account
-- [getMetadata()](/account/getMetadata) - Returns null for LocalAccount-based accounts
+- [EIP-7702 Guide](/guides/eip7702-upgrade) — Full walkthrough with provider examples
+- [Account.get()](/account/get) — Passkey-based authentication
+- [Account.create()](/account/create) — Create passkey account
+- [getMetadata()](/account/getMetadata) — Returns null for LocalAccount-based accounts
