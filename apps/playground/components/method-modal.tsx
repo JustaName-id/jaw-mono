@@ -1,23 +1,22 @@
-'use client';
+"use client";
 
-import { useState, useCallback, useEffect } from 'react';
+import { useState, useCallback, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
   DialogHeader,
   DialogTitle,
   DialogDescription,
-} from './ui/dialog';
-import { Button } from './ui/button';
+} from "./ui/dialog";
+import { Button } from "./ui/button";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "./ui/tabs";
+import { ScrollArea } from "./ui/scroll-area";
 import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from './ui/tabs';
-import { ScrollArea } from './ui/scroll-area';
-import { type RpcMethod, CATEGORY_COLORS, CATEGORY_LABELS } from '../lib/rpc-methods';
-import { ParameterField } from './parameter-field';
+  type RpcMethod,
+  CATEGORY_COLORS,
+  CATEGORY_LABELS,
+} from "../lib/rpc-methods";
+import { ParameterField } from "./parameter-field";
 
 interface MethodModalProps {
   method: RpcMethod | null;
@@ -75,9 +74,9 @@ export function MethodModal({
       const errorMessage =
         err instanceof Error
           ? err.message
-          : typeof err === 'object' && err !== null && 'message' in err
-          ? (err as { message: string }).message
-          : JSON.stringify(err);
+          : typeof err === "object" && err !== null && "message" in err
+            ? (err as { message: string }).message
+            : JSON.stringify(err);
       setError(errorMessage);
     } finally {
       setIsExecuting(false);
@@ -96,7 +95,7 @@ export function MethodModal({
     let text: string;
     if (error) {
       text = error;
-    } else if (typeof result === 'string') {
+    } else if (typeof result === "string") {
       text = result;
     } else {
       text = JSON.stringify(result, null, 2);
@@ -125,16 +124,18 @@ export function MethodModal({
   const filteredParameters = method.parameters?.filter((param) => {
     // Generic showWhen: only show when another param has a specific value
     if (param.showWhen) {
-      const currentValue = params[param.showWhen.param] ?? (
-        method.parameters?.find(p => p.name === param.showWhen!.param)?.defaultValue ?? ''
-      );
+      const currentValue =
+        params[param.showWhen.param] ??
+        method.parameters?.find((p) => p.name === param.showWhen!.param)
+          ?.defaultValue ??
+        "";
       return currentValue === param.showWhen.value;
     }
     // For wallet_sign, show message field only for 0x45, and typedData field only for 0x01
-    if (method.id === 'wallet_sign') {
-      const selectedType = params.type || '0x45';
-      if (param.name === 'message' && selectedType !== '0x45') return false;
-      if (param.name === 'typedData' && selectedType !== '0x01') return false;
+    if (method.id === "wallet_sign") {
+      const selectedType = params.type || "0x45";
+      if (param.name === "message" && selectedType !== "0x45") return false;
+      if (param.name === "typedData" && selectedType !== "0x01") return false;
     }
     return true;
   });
@@ -172,8 +173,10 @@ export function MethodModal({
                       <ParameterField
                         key={param.name}
                         param={param}
-                        value={params[param.name] || ''}
-                        onChange={(value) => handleParamChange(param.name, value)}
+                        value={params[param.name] || ""}
+                        onChange={(value) =>
+                          handleParamChange(param.name, value)
+                        }
                         context={context}
                       />
                     ))}
@@ -191,7 +194,7 @@ export function MethodModal({
                     disabled={!canExecute || isExecuting}
                     className="w-full"
                   >
-                    {isExecuting ? 'Executing...' : 'Execute'}
+                    {isExecuting ? "Executing..." : "Execute"}
                   </Button>
                   {!canExecute && (
                     <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
@@ -205,21 +208,21 @@ export function MethodModal({
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
                       <h4 className="text-sm font-medium">
-                        {error ? 'Error' : 'Result'}
+                        {error ? "Error" : "Result"}
                       </h4>
                       <Button
                         variant="outline"
                         size="sm"
                         onClick={handleCopyResult}
                       >
-                        {resultCopied ? 'Copied!' : 'Copy'}
+                        {resultCopied ? "Copied!" : "Copy"}
                       </Button>
                     </div>
                     <pre
-                      className={`p-3 rounded-md text-xs font-mono overflow-auto max-h-[200px] ${
+                      className={`p-3 rounded-md text-xs font-mono overflow-auto max-h-[200px] whitespace-pre-wrap break-all ${
                         error
-                          ? 'bg-destructive/10 text-destructive'
-                          : 'bg-muted text-foreground'
+                          ? "bg-destructive/10 text-destructive"
+                          : "bg-muted text-foreground"
                       }`}
                     >
                       {error || JSON.stringify(result, null, 2)}
@@ -234,12 +237,8 @@ export function MethodModal({
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-medium">Code Example</h4>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyCode}
-                >
-                  {copied ? 'Copied!' : 'Copy'}
+                <Button variant="outline" size="sm" onClick={handleCopyCode}>
+                  {copied ? "Copied!" : "Copy"}
                 </Button>
               </div>
               <ScrollArea className="h-[400px]">

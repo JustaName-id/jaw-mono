@@ -1,21 +1,22 @@
-import { Address } from '../provider/interface.js';
-import { RequestCapabilities } from '../rpc/permissions.js';
+import { Address } from "../provider/interface.js";
+import { RequestCapabilities } from "../rpc/permissions.js";
+import type { JawTheme } from "./theme.js";
 
 // Re-export PermissionsCapability from permissions module for backwards compatibility
-export type { PermissionsCapability } from '../rpc/permissions.js';
+export type { PermissionsCapability } from "../rpc/permissions.js";
 
 /**
  * UI request types that require user interaction
  */
 export type UIRequestType =
-  | 'wallet_connect'
-  | 'wallet_sendCalls'
-  | 'eth_sendTransaction'
-  | 'wallet_grantPermissions'
-  | 'wallet_revokePermissions'
-  | 'personal_sign'
-  | 'eth_signTypedData_v4'
-  | 'wallet_sign';
+  | "wallet_connect"
+  | "wallet_sendCalls"
+  | "eth_sendTransaction"
+  | "wallet_grantPermissions"
+  | "wallet_revokePermissions"
+  | "personal_sign"
+  | "eth_signTypedData_v4"
+  | "wallet_sign";
 
 /**
  * Base structure for all UI requests
@@ -31,7 +32,7 @@ export interface BaseUIRequest {
  * Connect request (wallet_connect, eth_requestAccounts)
  */
 export interface ConnectUIRequest extends BaseUIRequest {
-  type: 'wallet_connect';
+  type: "wallet_connect";
   data: {
     appName: string;
     appLogoUrl: string | null;
@@ -51,7 +52,7 @@ export interface ConnectUIRequest extends BaseUIRequest {
  * Signature request (personal_sign)
  */
 export interface SignatureUIRequest extends BaseUIRequest {
-  type: 'personal_sign';
+  type: "personal_sign";
   data: {
     message: string;
     address: Address;
@@ -63,7 +64,7 @@ export interface SignatureUIRequest extends BaseUIRequest {
  * EIP-712 typed data signing request
  */
 export interface TypedDataUIRequest extends BaseUIRequest {
-  type: 'eth_signTypedData_v4';
+  type: "eth_signTypedData_v4";
   data: {
     typedData: string; // JSON string
     address: Address;
@@ -75,9 +76,9 @@ export interface TypedDataUIRequest extends BaseUIRequest {
  * Transaction request (wallet_sendCalls)
  */
 export interface TransactionUIRequest extends BaseUIRequest {
-  type: 'wallet_sendCalls';
+  type: "wallet_sendCalls";
   data: {
-    version: '1.0';
+    version: "1.0";
     from: Address;
     calls: Array<{
       to: string;
@@ -96,7 +97,7 @@ export interface TransactionUIRequest extends BaseUIRequest {
  * Returns a transaction hash string instead of { id, chainId }
  */
 export interface SendTransactionUIRequest extends BaseUIRequest {
-  type: 'eth_sendTransaction';
+  type: "eth_sendTransaction";
   data: {
     from: Address;
     to: Address;
@@ -117,7 +118,7 @@ export interface SendTransactionUIRequest extends BaseUIRequest {
  * Permission grant request (wallet_grantPermissions)
  */
 export interface PermissionUIRequest extends BaseUIRequest {
-  type: 'wallet_grantPermissions';
+  type: "wallet_grantPermissions";
   data: {
     address: Address;
     chainId: number | string; // can be hex string like '0x1'
@@ -127,7 +128,7 @@ export interface PermissionUIRequest extends BaseUIRequest {
       spends?: Array<{
         token: Address;
         allowance: string;
-        unit: 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
+        unit: "minute" | "hour" | "day" | "week" | "month" | "year" | "forever";
         /** Multiplier for the period (1-255), defaults to 1 */
         multiplier?: number;
       }>;
@@ -148,7 +149,7 @@ export interface PermissionUIRequest extends BaseUIRequest {
  * Permission revoke request (wallet_revokePermissions)
  */
 export interface RevokePermissionUIRequest extends BaseUIRequest {
-  type: 'wallet_revokePermissions';
+  type: "wallet_revokePermissions";
   data: {
     permissionId: string;
     address: Address;
@@ -162,7 +163,7 @@ export interface RevokePermissionUIRequest extends BaseUIRequest {
  * ERC-7871 PersonalSign request data
  */
 export interface PersonalSignRequestData {
-  type: '0x45';
+  type: "0x45";
   data: {
     message: string; // UTF-8 message string
   };
@@ -172,7 +173,7 @@ export interface PersonalSignRequestData {
  * ERC-7871 TypedData request data
  */
 export interface TypedDataRequestData {
-  type: '0x01';
+  type: "0x01";
   data: Record<string, unknown>; // TypedData as defined by EIP-712
 }
 
@@ -181,7 +182,7 @@ export interface TypedDataRequestData {
  * Type 0x45 = personal sign, Type 0x01 = EIP-712 typed data
  */
 export interface WalletSignUIRequest extends BaseUIRequest {
-  type: 'wallet_sign';
+  type: "wallet_sign";
   data: {
     address: Address;
     chainId?: number;
@@ -227,29 +228,29 @@ export class UIError extends Error {
 
   constructor(code: UIErrorCode, message: string) {
     super(message);
-    this.name = 'UIError';
+    this.name = "UIError";
     this.code = code;
   }
 
-  static userRejected(message = 'User rejected the request'): UIError {
+  static userRejected(message = "User rejected the request"): UIError {
     return new UIError(UIErrorCode.USER_REJECTED, message);
   }
 
-  static timeout(message = 'Request timed out'): UIError {
+  static timeout(message = "Request timed out"): UIError {
     return new UIError(UIErrorCode.TIMEOUT, message);
   }
 
   static unsupportedRequest(type: string): UIError {
     return new UIError(
       UIErrorCode.UNSUPPORTED_REQUEST,
-      `Unsupported UI request type: ${type}`
+      `Unsupported UI request type: ${type}`,
     );
   }
 
   static handlerNotAvailable(): UIError {
     return new UIError(
       UIErrorCode.HANDLER_NOT_AVAILABLE,
-      'No UI handler available for app-specific mode'
+      "No UI handler available for app-specific mode",
     );
   }
 }
@@ -283,6 +284,8 @@ export interface UIHandlerConfig {
   ens?: string;
   /** Whether to show testnet chains */
   showTestnets?: boolean;
+  /** Theme configuration for UI appearance (colors, mode, border radius) */
+  theme?: JawTheme;
 }
 
 /**

@@ -1,8 +1,24 @@
-import {JAW_KEYS_URL, JAW_PASSKEYS_URL} from '../constants.js';
-import { ProviderInterface, AppMetadata, JawProviderPreference, ConstructorOptions, Mode, PaymasterConfig } from '../provider/interface.js';
-import { createJAWProvider } from '../provider/createJAWProvider.js';
-import { store, createInitialChains, ChainClients, createClients } from '../store/index.js';
-import { announceProvider as announceProviderFn, type AnnounceProviderCleanup } from '../provider/eip6963.js';
+import { JAW_KEYS_URL, JAW_PASSKEYS_URL } from "../constants.js";
+import {
+  ProviderInterface,
+  AppMetadata,
+  JawProviderPreference,
+  ConstructorOptions,
+  Mode,
+  PaymasterConfig,
+} from "../provider/interface.js";
+import { createJAWProvider } from "../provider/createJAWProvider.js";
+import {
+  store,
+  createInitialChains,
+  ChainClients,
+  createClients,
+} from "../store/index.js";
+import {
+  announceProvider as announceProviderFn,
+  type AnnounceProviderCleanup,
+} from "../provider/eip6963.js";
+import type { JawTheme } from "../ui/theme.js";
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   apiKey: string;
@@ -11,12 +27,14 @@ export type CreateJAWSDKOptions = Partial<AppMetadata> & {
   paymasters?: Record<number, PaymasterConfig>;
   /** Used to issue subnames */
   ens?: string;
+  /** Theme configuration for UI appearance (colors, mode, border radius) */
+  theme?: JawTheme;
 };
 
 const DEFAULT_PREFERENCE: JawProviderPreference = {
   mode: Mode.CrossPlatform,
   keysUrl: JAW_KEYS_URL,
-  serverUrl:  JAW_PASSKEYS_URL,
+  serverUrl: JAW_PASSKEYS_URL,
   showTestnets: false,
 };
 /**
@@ -49,7 +67,7 @@ export function create(params: CreateJAWSDKOptions) {
   const options: ConstructorOptions = {
     apiKey: params.apiKey,
     metadata: {
-      appName: params.appName || 'DApp',
+      appName: params.appName || "DApp",
       appLogoUrl: params.appLogoUrl || null,
       defaultChainId: params.defaultChainId,
     },
@@ -59,10 +77,16 @@ export function create(params: CreateJAWSDKOptions) {
       ...(params.ens ? { ens: params.ens } : {}),
     },
     paymasters: params.paymasters,
+    theme: params.theme,
   };
 
-  if (options.preference?.serverUrl != JAW_PASSKEYS_URL && options.preference.mode == Mode.CrossPlatform) {
-    throw new Error('Custom Server Url not available with Cross Platform Mode.');
+  if (
+    options.preference?.serverUrl != JAW_PASSKEYS_URL &&
+    options.preference.mode == Mode.CrossPlatform
+  ) {
+    throw new Error(
+      "Custom Server Url not available with Cross Platform Mode.",
+    );
   }
 
   // Store the config
@@ -71,7 +95,7 @@ export function create(params: CreateJAWSDKOptions) {
     preference: options.preference,
     paymasters: options.paymasters,
     apiKey: params.apiKey,
-  }
+  };
   store.config.set(storedOptions);
 
   // Always clear and reinitialize chains on SDK creation to ensure consistency
@@ -82,7 +106,7 @@ export function create(params: CreateJAWSDKOptions) {
     const initialChains = createInitialChains(
       params.apiKey,
       params.paymasters,
-      options.preference.showTestnets
+      options.preference.showTestnets,
     );
     store.chains.set(initialChains);
     createClients(initialChains);
@@ -94,7 +118,9 @@ export function create(params: CreateJAWSDKOptions) {
 
       // Only update if the stored chain differs from the requested default
       if (storedChainId !== params.defaultChainId) {
-        const targetChain = initialChains.find(c => c.id === params.defaultChainId);
+        const targetChain = initialChains.find(
+          (c) => c.id === params.defaultChainId,
+        );
         if (targetChain) {
           store.account.set({ chain: targetChain });
         }
@@ -119,7 +145,7 @@ export function create(params: CreateJAWSDKOptions) {
         provider = createJAWProvider(options);
 
         // Auto-announce via EIP-6963 for CrossPlatform mode
-        if (isCrossPlatformMode && typeof window !== 'undefined') {
+        if (isCrossPlatformMode && typeof window !== "undefined") {
           stopAnnouncing = announceProviderFn(provider);
         }
       }

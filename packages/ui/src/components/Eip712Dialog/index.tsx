@@ -1,7 +1,12 @@
-'use client'
+"use client";
 
 import { Button } from "../ui/button";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "../ui/accordion";
 import { DefaultDialog } from "../DefaultDialog";
 import { Eip712DialogProps } from "./types";
 import { useIsMobile } from "../../hooks";
@@ -17,7 +22,7 @@ interface TypedData {
 }
 
 const isObject = (value: unknown): value is Record<string, unknown> => {
-  return typeof value === 'object' && value !== null && !Array.isArray(value);
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 };
 
 const isArray = (value: unknown): value is unknown[] => {
@@ -25,20 +30,26 @@ const isArray = (value: unknown): value is unknown[] => {
 };
 
 const getValueColor = (value: unknown): string => {
-  if (typeof value === 'string') return 'text-foreground';
-  if (typeof value === 'number') return 'text-blue-600 dark:text-blue-400';
-  if (typeof value === 'boolean') return 'text-purple-600 dark:text-purple-400';
-  if (value === null || value === undefined) return 'text-gray-500 dark:text-gray-400';
-  return 'text-foreground';
+  if (typeof value === "string") return "text-foreground";
+  if (typeof value === "number") return "text-info dark:text-info";
+  if (typeof value === "boolean") return "text-info";
+  if (value === null || value === undefined) return "text-muted-foreground";
+  return "text-foreground";
 };
 
-const formatPrimitiveValue = (value: unknown): { text: string; color: string } => {
-  if (value === null) return { text: 'null', color: getValueColor(null) };
-  if (value === undefined) return { text: 'undefined', color: getValueColor(undefined) };
-  if (typeof value === 'boolean') return { text: String(value), color: getValueColor(value) };
-  if (typeof value === 'number') return { text: String(value), color: getValueColor(value) };
-  if (typeof value === 'string') return { text: `"${value}"`, color: getValueColor(value) };
-  return { text: JSON.stringify(value), color: 'text-foreground' };
+const formatPrimitiveValue = (
+  value: unknown,
+): { text: string; color: string } => {
+  if (value === null) return { text: "null", color: getValueColor(null) };
+  if (value === undefined)
+    return { text: "undefined", color: getValueColor(undefined) };
+  if (typeof value === "boolean")
+    return { text: String(value), color: getValueColor(value) };
+  if (typeof value === "number")
+    return { text: String(value), color: getValueColor(value) };
+  if (typeof value === "string")
+    return { text: `"${value}"`, color: getValueColor(value) };
+  return { text: JSON.stringify(value), color: "text-foreground" };
 };
 
 // Component for rendering a single property line
@@ -46,7 +57,7 @@ const PropertyLine = ({
   propertyKey,
   value,
   isLast,
-  depth
+  depth,
 }: {
   propertyKey: string;
   value: unknown;
@@ -73,7 +84,7 @@ const NestedDataView = ({
   data,
   depth = 0,
   parentKey,
-  isLast = true
+  isLast = true,
 }: {
   data: unknown;
   depth?: number;
@@ -84,7 +95,7 @@ const NestedDataView = ({
 
   if (isObject(data)) {
     const entries = Object.entries(data);
-    const accordionId = `${parentKey || 'root'}-${depth}`;
+    const accordionId = `${parentKey || "root"}-${depth}`;
 
     if (depth === 0) {
       return (
@@ -127,10 +138,22 @@ const NestedDataView = ({
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
               <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden group">
                 <span className="flex items-center gap-0.5">
-                  {parentKey && <span className="text-muted-foreground">"{parentKey}":</span>}
-                  <span className="text-muted-foreground group-data-[state=closed]:inline hidden">{' {...}'}</span>
-                  <span className="text-muted-foreground group-data-[state=open]:inline hidden">{' {'}</span>
-                  {!isLast && <span className="text-muted-foreground group-data-[state=closed]:inline hidden">,</span>}
+                  {parentKey && (
+                    <span className="text-muted-foreground">
+                      "{parentKey}":
+                    </span>
+                  )}
+                  <span className="text-muted-foreground group-data-[state=closed]:inline hidden">
+                    {" {...}"}
+                  </span>
+                  <span className="text-muted-foreground group-data-[state=open]:inline hidden">
+                    {" {"}
+                  </span>
+                  {!isLast && (
+                    <span className="text-muted-foreground group-data-[state=closed]:inline hidden">
+                      ,
+                    </span>
+                  )}
                 </span>
               </AccordionTrigger>
             </div>
@@ -165,7 +188,7 @@ const NestedDataView = ({
                   className="py-0.5 text-muted-foreground"
                   style={{ paddingLeft: `${paddingLeft}px` }}
                 >
-                  <span>{'}'}</span>
+                  <span>{"}"}</span>
                   {!isLast && <span>,</span>}
                 </div>
               </div>
@@ -177,7 +200,7 @@ const NestedDataView = ({
   }
 
   if (isArray(data)) {
-    const accordionId = `${parentKey || 'array'}-${depth}`;
+    const accordionId = `${parentKey || "array"}-${depth}`;
 
     if (depth === 0) {
       return (
@@ -214,7 +237,9 @@ const NestedDataView = ({
                 >
                   <span className="text-muted-foreground">{indexKey}:</span>
                   <span className={formatted.color}>{formatted.text}</span>
-                  {!isLastEntry && <span className="text-muted-foreground">,</span>}
+                  {!isLastEntry && (
+                    <span className="text-muted-foreground">,</span>
+                  )}
                 </div>
               );
             })}
@@ -230,10 +255,22 @@ const NestedDataView = ({
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
               <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden group">
                 <span className="flex items-center gap-0.5">
-                  {parentKey && <span className="text-muted-foreground">"{parentKey}":</span>}
-                  <span className="text-muted-foreground group-data-[state=closed]:inline hidden">{' [...]'}</span>
-                  <span className="text-muted-foreground group-data-[state=open]:inline hidden">{' ['}</span>
-                  {!isLast && <span className="text-muted-foreground group-data-[state=closed]:inline hidden">,</span>}
+                  {parentKey && (
+                    <span className="text-muted-foreground">
+                      "{parentKey}":
+                    </span>
+                  )}
+                  <span className="text-muted-foreground group-data-[state=closed]:inline hidden">
+                    {" [...]"}
+                  </span>
+                  <span className="text-muted-foreground group-data-[state=open]:inline hidden">
+                    {" ["}
+                  </span>
+                  {!isLast && (
+                    <span className="text-muted-foreground group-data-[state=closed]:inline hidden">
+                      ,
+                    </span>
+                  )}
                 </span>
               </AccordionTrigger>
             </div>
@@ -270,7 +307,9 @@ const NestedDataView = ({
                     >
                       <span className="text-muted-foreground">{indexKey}:</span>
                       <span className={formatted.color}>{formatted.text}</span>
-                      {!isLastEntry && <span className="text-muted-foreground">,</span>}
+                      {!isLastEntry && (
+                        <span className="text-muted-foreground">,</span>
+                      )}
                     </div>
                   );
                 })}
@@ -278,7 +317,7 @@ const NestedDataView = ({
                   className="py-0.5 text-muted-foreground"
                   style={{ paddingLeft: `${paddingLeft}px` }}
                 >
-                  <span>{']'}</span>
+                  <span>{"]"}</span>
                   {!isLast && <span>,</span>}
                 </div>
               </div>
@@ -291,7 +330,10 @@ const NestedDataView = ({
 
   const formatted = formatPrimitiveValue(data);
   return (
-    <div className="py-0.5 font-mono text-sm" style={{ paddingLeft: `${paddingLeft}px` }}>
+    <div
+      className="py-0.5 font-mono text-sm"
+      style={{ paddingLeft: `${paddingLeft}px` }}
+    >
       <span className={formatted.color}>{formatted.text}</span>
     </div>
   );
@@ -325,7 +367,7 @@ export const Eip712Dialog = ({
     try {
       return JSON.parse(typedDataJson) as TypedData;
     } catch (error) {
-      console.error('Failed to parse typed data:', error);
+      console.error("Failed to parse typed data:", error);
       return null;
     }
   }, [typedDataJson]);
@@ -334,16 +376,19 @@ export const Eip712Dialog = ({
   useEffect(() => {
     if (accountAddress && chainId) {
       const justaName = getJustaNameInstance(mainnetRpcUrl);
-      justaName.subnames.reverseResolve({
-        address: accountAddress as `0x${string}`,
-        chainId: chainId,
-      }).then((result) => {
-        if (result) {
-          setResolvedAddress(result);
-        }
-      }).catch(() => {
-        // Silently fail if resolution fails
-      });
+      justaName.subnames
+        .reverseResolve({
+          address: accountAddress as `0x${string}`,
+          chainId: chainId,
+        })
+        .then((result) => {
+          if (result) {
+            setResolvedAddress(result);
+          }
+        })
+        .catch(() => {
+          // Silently fail if resolution fails
+        });
     }
   }, [accountAddress, chainId]);
 
@@ -363,10 +408,10 @@ export const Eip712Dialog = ({
         scrollable.scrollTop += e.deltaY;
       };
 
-      scrollable.addEventListener('wheel', handleWheel, { passive: false });
+      scrollable.addEventListener("wheel", handleWheel, { passive: false });
 
       cleanupFn = () => {
-        scrollable.removeEventListener('wheel', handleWheel);
+        scrollable.removeEventListener("wheel", handleWheel);
       };
     }, 100);
 
@@ -377,20 +422,25 @@ export const Eip712Dialog = ({
   }, [open]);
 
   // Get display address - use resolved name or formatted address
-  const displayAddress = getDisplayAddress(resolvedAddress, accountAddress || '');
+  const displayAddress = getDisplayAddress(
+    resolvedAddress,
+    accountAddress || "",
+  );
 
   // Format origin to display only domain (remove protocol)
   const formatOrigin = (url: string) => {
     try {
-      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
-      return urlObj.hostname.replace('www.', '');
+      const urlObj = new URL(url.startsWith("http") ? url : `https://${url}`);
+      return urlObj.hostname.replace("www.", "");
     } catch {
       return origin;
     }
   };
 
   // Get contract address from domain
-  const contractAddress = typedData?.domain?.verifyingContract as string | undefined;
+  const contractAddress = typedData?.domain?.verifyingContract as
+    | string
+    | undefined;
   const domainName = typedData?.domain?.name as string | undefined;
 
   return (
@@ -400,50 +450,58 @@ export const Eip712Dialog = ({
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
           <p className="text-xs font-bold text-muted-foreground leading-[100%]">
-            {timestamp.toLocaleDateString('en-US', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long'
-            })} at {timestamp.toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              timeZoneName: 'short'
+            {timestamp.toLocaleDateString("en-US", {
+              weekday: "long",
+              day: "numeric",
+              month: "long",
+            })}{" "}
+            at{" "}
+            {timestamp.toLocaleTimeString("en-US", {
+              hour: "2-digit",
+              minute: "2-digit",
+              second: "2-digit",
+              timeZoneName: "short",
             })}
           </p>
           <p className="text-[30px] font-normal leading-[100%] text-foreground">
             Review
           </p>
-          <p className="text-xs font-normal leading-[100%] text-foreground">{displayAddress}</p>
+          <p className="text-xs font-normal leading-[100%] text-foreground">
+            {displayAddress}
+          </p>
         </div>
       }
-      contentStyle={isMobile ? {
-        width: '100%',
-        height: '100%',
-        maxWidth: 'none',
-        maxHeight: 'none',
-        overflowY: 'auto',
-      } : {
-        width: '500px',
-        minWidth: '500px',
-      }}
+      contentStyle={
+        isMobile
+          ? {
+              width: "100%",
+              height: "100%",
+              maxWidth: "none",
+              maxHeight: "none",
+              overflowY: "auto",
+            }
+          : {
+              width: "500px",
+              minWidth: "500px",
+            }
+      }
     >
       <div className="flex flex-col gap-6 justify-between max-md:h-full">
         {/* Main Content - Typed Data Tree View */}
         <div className="flex flex-col gap-3 max-md:flex-1 max-h-[60vh] overflow-y-auto min-h-0">
           {typedData ? (
-            <div ref={scrollableRef} className="max-h-[50vh] flex flex-1 overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border">
+            <div
+              ref={scrollableRef}
+              className="max-h-[50vh] flex flex-1 overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border"
+            >
               {/* Combine domain and message into single tree */}
-              <NestedDataView
-                data={
-                  typedData
-                }
-                depth={0}
-              />
+              <NestedDataView data={typedData} depth={0} />
             </div>
           ) : (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-[6px]">
-              <p className="text-sm text-red-600">Failed to parse typed data</p>
+            <div className="p-4 bg-destructive/10 border border-destructive/20 rounded-[6px]">
+              <p className="text-sm text-destructive">
+                Failed to parse typed data
+              </p>
             </div>
           )}
 
@@ -479,8 +537,12 @@ export const Eip712Dialog = ({
                   <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
                     <p className="text-xs font-bold leading-[133%]">Network</p>
                     <div className="flex flex-row items-center gap-1 min-w-0">
-                      {chainIcon && <div className="w-6 h-6 flex-shrink-0">{chainIcon}</div>}
-                      <p className="text-base font-normal leading-[150%] truncate">{chainName}</p>
+                      {chainIcon && (
+                        <div className="w-6 h-6 flex-shrink-0">{chainIcon}</div>
+                      )}
+                      <p className="text-base font-normal leading-[150%] truncate">
+                        {chainName}
+                      </p>
                     </div>
                   </div>
                 </>
@@ -490,10 +552,15 @@ export const Eip712Dialog = ({
 
           {/* Status Message */}
           {signatureStatus && (
-            <div className={`text-sm p-3 rounded-lg ${signatureStatus.includes('Error') ? 'bg-red-50 text-red-600' :
-              signatureStatus.includes('successfully') ? 'bg-green-50 text-green-600' :
-                'bg-blue-50 text-blue-600'
-              }`}>
+            <div
+              className={`text-sm p-3 rounded-lg ${
+                signatureStatus.includes("Error")
+                  ? "bg-destructive/10 text-destructive"
+                  : signatureStatus.includes("successfully")
+                    ? "bg-success/10 text-success"
+                    : "bg-info/10 text-info"
+              }`}
+            >
               {signatureStatus}
             </div>
           )}
@@ -509,17 +576,13 @@ export const Eip712Dialog = ({
           >
             Cancel
           </Button>
-          <Button
-            onClick={onSign}
-            disabled={!canSign}
-            className="flex-1"
-          >
-            {isProcessing ? 'Processing...' : 'Sign'}
+          <Button onClick={onSign} disabled={!canSign} className="flex-1">
+            {isProcessing ? "Processing..." : "Sign"}
           </Button>
         </div>
       </div>
     </DefaultDialog>
-  )
-}
+  );
+};
 
-export * from './types';
+export * from "./types";

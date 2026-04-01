@@ -59,6 +59,13 @@ import { useFeeTokenPrice } from "../hooks/useFeeTokenPrice";
 import { useGasEstimation } from "../hooks/useGasEstimation";
 import { fetchTokenBalance, isNativeToken } from "../utils/tokenBalance";
 import { PortalContainerContext } from "../lib/utils";
+import type { JawTheme } from "@jaw.id/core";
+import { resolveTheme } from "../theme/resolve-theme.js";
+import { applyThemeToContainer } from "../theme/apply-theme.js";
+import {
+  getSystemColorScheme,
+  useColorScheme,
+} from "../theme/use-color-scheme.js";
 
 /**
  * Converts hex string to UTF-8 string
@@ -154,6 +161,38 @@ const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> =
   DefaultDialog as React.ComponentType<DefaultDialogProps>;
 
 /**
+ * Internal component that watches for system color scheme changes
+ * and re-applies theme variables when mode is 'auto'.
+ */
+function ThemeWatcher({
+  theme,
+  container,
+}: {
+  theme: JawTheme;
+  container: HTMLElement;
+}): null {
+  const systemScheme = useColorScheme();
+
+  useEffect(() => {
+    // Only re-apply when mode is 'auto' (or unset, which defaults to auto)
+    if (!theme.mode || theme.mode === "auto") {
+      const resolved = resolveTheme(theme, systemScheme);
+      applyThemeToContainer(container, resolved);
+    }
+  }, [systemScheme, theme, container]);
+
+  return null;
+}
+
+/**
+ * Options for ReactUIHandler constructor.
+ */
+export interface ReactUIHandlerOptions {
+  /** Theme configuration. Takes precedence over theme provided via JAW.create(). */
+  readonly theme?: JawTheme;
+}
+
+/**
  * React UI handler for app-specific mode
  *
  * This handler is automatically initialized by the SDK with the necessary configuration.
@@ -172,10 +211,27 @@ const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> =
  *     uiHandler: new ReactUIHandler(),
  *   },
  * });
+ *
+ * // With theme:
+ * const jaw2 = JAW.create({
+ *   apiKey: 'your-api-key',
+ *   theme: { mode: 'dark', accentColor: '#6366f1' },
+ *   preference: {
+ *     mode: Mode.AppSpecific,
+ *     uiHandler: new ReactUIHandler({
+ *       theme: { accentColor: '#7b3fe4', borderRadius: 'lg' },
+ *     }),
+ *   },
+ * });
  * ```
  */
 export class ReactUIHandler implements UIHandler {
   private config: UIHandlerConfig = {} as UIHandlerConfig;
+  private localTheme?: JawTheme;
+
+  constructor(options?: ReactUIHandlerOptions) {
+    this.localTheme = options?.theme;
+  }
 
   /**
    * Initialize the handler with SDK configuration
@@ -183,6 +239,21 @@ export class ReactUIHandler implements UIHandler {
    */
   init(config: UIHandlerConfig): void {
     this.config = config;
+  }
+
+  /**
+   * Update the theme without recreating the SDK or disconnecting.
+   * Takes effect on the next dialog that opens.
+   */
+  setTheme(theme: JawTheme): void {
+    this.localTheme = theme;
+  }
+
+  /** Merged theme: local theme wins over init-provided theme */
+  private get effectiveTheme(): JawTheme {
+    const initTheme = this.config.theme;
+    if (!initTheme && !this.localTheme) return {};
+    return { ...initTheme, ...this.localTheme };
   }
 
   async request<T = unknown>(request: UIRequest): Promise<UIResponse<T>> {
@@ -194,8 +265,6 @@ export class ReactUIHandler implements UIHandler {
         // Style isolation: prevent consumer app CSS from leaking into SDK modals.
         // Inline styles guarantee isolation regardless of CSS load order or specificity.
         Object.assign(container.style, {
-          fontFamily:
-            'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
           fontSize: "16px",
           fontStyle: "normal",
           fontWeight: "400",
@@ -212,11 +281,18 @@ export class ReactUIHandler implements UIHandler {
           wordBreak: "normal",
           overflowWrap: "normal",
           direction: "ltr",
-          color: "var(--foreground)",
           WebkitFontSmoothing: "antialiased",
           MozOsxFontSmoothing: "grayscale",
           WebkitTapHighlightColor: "transparent",
         });
+
+        // Apply theme: resolves --jaw-* CSS variables onto the container.
+        // fontFamily and color are set by the theme via --jaw-font-family and --jaw-color-foreground.
+        const resolved = resolveTheme(
+          this.effectiveTheme,
+          getSystemColorScheme(),
+        );
+        applyThemeToContainer(container, resolved);
 
         // Append to body - Radix UI Dialog will handle all positioning
         document.body.appendChild(container);
@@ -256,19 +332,19 @@ export class ReactUIHandler implements UIHandler {
         };
 
         // Render appropriate dialog based on request type
-        console.log(
-          "[ReactUIHandler] Rendering dialog for request type:",
-          request.type,
-        );
         const dialog = this.renderDialog(request, handleApprove, handleReject);
+        const effectiveTheme = this.effectiveTheme;
         root.render(
           React.createElement(
             PortalContainerContext.Provider,
             { value: container },
+            React.createElement(ThemeWatcher, {
+              theme: effectiveTheme,
+              container,
+            }),
             dialog,
           ),
         );
-        console.log("[ReactUIHandler] Dialog rendered");
       } catch (error) {
         console.error("[ReactUIHandler] Error in request:", error);
         reject(error);
@@ -628,10 +704,6 @@ function OnboardingDialogWrapper({
     if (authenticatedAddress) {
       // User is already authenticated - approve immediately without showing any UI
       // Use setTimeout to defer the call and avoid unmounting during render
-      console.log(
-        "🔇 Silent mode: using existing auth state, address:",
-        authenticatedAddress,
-      );
       setTimeout(() => {
         onApprove({
           accounts: [{ address: authenticatedAddress }],
@@ -652,7 +724,6 @@ function OnboardingDialogWrapper({
   const handleConnectConfirm = () => {
     if (authenticatedWalletAddress) {
       setIsConnecting(true);
-      console.log("🔗 User approved connection");
       onApprove({
         accounts: [{ address: authenticatedWalletAddress }],
       });
@@ -693,7 +764,6 @@ function OnboardingDialogWrapper({
 
       // If silent mode, skip ConnectDialog and approve immediately
       if (request.data.silent) {
-        console.log("🔇 Silent mode: skipping connect confirmation");
         onApprove({
           accounts: [{ address: accountInstance.address }],
         });
@@ -737,7 +807,6 @@ function OnboardingDialogWrapper({
 
       // If silent mode, skip ConnectDialog and approve immediately
       if (request.data.silent) {
-        console.log("🔇 Silent mode: skipping connect confirmation");
         setIsImporting(false);
         onApprove({
           accounts: [{ address: accountInstance.address }],
@@ -828,7 +897,6 @@ function OnboardingDialogWrapper({
   ) => {
     // If silent mode, skip ConnectDialog and approve immediately
     if (request.data.silent) {
-      console.log("🔇 Silent mode: skipping connect confirmation");
       setIsCreating(false);
       onApprove({
         accounts: [{ address: accountData.address }],
@@ -854,7 +922,6 @@ function OnboardingDialogWrapper({
 
   // Get config from request - capabilities is Record<string, unknown>
   const ensDomain = ens as string | undefined;
-  console.log("🔗 ENS domain:", ensDomain);
   const chainId = request.data.chainId || defaultChainId || 1;
   const subnameTextRecords = request.data.capabilities?.subnameTextRecords as
     | SubnameTextRecordCapabilityRequest
@@ -933,7 +1000,6 @@ function OnboardingDialogWrapper({
       const signature = await account.signMessage(siweMessage);
 
       setSiweStatus("Sign-in successful!");
-      console.log("🔗 User signed SIWE message");
 
       // Build response per ERC-7846 format with SIWE capability
       onApprove({
@@ -2951,7 +3017,6 @@ function RevokePermissionDialogWrapper({
           request.data.permissionId as `0x${string}`,
           apiKey,
         );
-        console.log("✅ Fetched permission details from relay:", permData);
         setFetchedPermissionData(permData);
 
         // Fetch token info for spends
@@ -3227,7 +3292,6 @@ function RevokePermissionDialogWrapper({
         computedPaymasterContext,
       );
 
-      console.log("Permission revoked");
       setStatus("Permission revoked successfully!");
       onApprove({ success: true });
     } catch (error) {
@@ -3317,7 +3381,6 @@ function UnsupportedMethodDialogWrapper({
   const handleClose = () => {
     if (!isClosing) {
       setIsClosing(true);
-      console.log("❌ Unsupported method:", method);
       setOpen(false);
       // Use UIError.unsupportedRequest which has proper error code
       onReject(UIError.unsupportedRequest(method));
@@ -3358,27 +3421,29 @@ function UnsupportedMethodDialogWrapper({
 
         {/* Content */}
         <div className="text-center">
-          <h3 className="text-xl font-bold text-gray-900 mb-2">
+          <h3 className="text-xl font-bold text-foreground mb-2">
             Unsupported Method
           </h3>
-          <p className="text-sm text-gray-600 mb-4">
+          <p className="text-sm text-muted-foreground mb-4">
             This wallet does not support the following method:
           </p>
-          <div className="bg-gray-100 rounded-lg p-4">
-            <code className="text-sm font-mono text-gray-900 break-all">
+          <div className="bg-muted rounded-lg p-4">
+            <code className="text-sm font-mono text-foreground break-all">
               {method}
             </code>
           </div>
         </div>
 
         {/* Origin */}
-        <p className="text-xs text-gray-500 text-center">Origin: {origin}</p>
+        <p className="text-xs text-muted-foreground text-center">
+          Origin: {origin}
+        </p>
 
         {/* Close Button */}
         <button
           onClick={handleClose}
           disabled={isClosing}
-          className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors"
+          className="w-full py-3 px-6 bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground font-semibold rounded-lg transition-colors"
         >
           {isClosing ? "Closing..." : "Close"}
         </button>
