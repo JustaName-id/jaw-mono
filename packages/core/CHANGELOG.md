@@ -1,3 +1,13 @@
+## 0.2.1 (2026-04-06)
+
+### 🩹 Fixes
+
+- dos chain support ([#160](https://github.com/JustaName-id/jaw-mono/pull/160))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.2.0 (2026-03-26)
 
 ### 🚀 Features
