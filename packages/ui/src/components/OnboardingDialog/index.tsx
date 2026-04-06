@@ -1,22 +1,16 @@
-"use client";
+'use client';
 
-import { Button } from "../ui/button";
-import { Input } from "../ui/input";
-import { Spinner } from "../ui/spinner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "../ui/card";
-import { WalletIcon } from "../../icons";
-import { ChevronRight } from "lucide-react";
-import { OrSeparator } from "../OrSeparator";
-import { OnboardingDialogProps } from "./types";
-import { useState, useEffect, useRef } from "react";
-import { getJustaNameInstance } from "../../utils/justaNameInstance";
-import { toCoinType } from "viem";
+import { Button } from '../ui/button';
+import { Input } from '../ui/input';
+import { Spinner } from '../ui/spinner';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
+import { WalletIcon } from '../../icons';
+import { ChevronRight } from 'lucide-react';
+import { OrSeparator } from '../OrSeparator';
+import { OnboardingDialogProps } from './types';
+import { useState, useEffect, useRef } from 'react';
+import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { toCoinType } from 'viem';
 
 export function OnboardingDialog({
   accounts,
@@ -40,8 +34,8 @@ export function OnboardingDialog({
   // Validation state
   const [isValid, setIsValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
-  const [message, setMessage] = useState("");
-  const [username, setUsername] = useState("");
+  const [message, setMessage] = useState('');
+  const [username, setUsername] = useState('');
   const [debouncedUsername, setDebouncedUsername] = useState(username);
 
   // Error state
@@ -64,18 +58,18 @@ export function OnboardingDialog({
       // Reset state
       setIsLoading(false);
       setIsValid(false);
-      setMessage("");
+      setMessage('');
 
       // Check if username includes dots
-      if (username.includes(".")) {
-        setMessage("Invalid format");
+      if (username.includes('.')) {
+        setMessage('Invalid format');
         setIsValid(false);
         return;
       }
 
       // Check minimum length
       if (username.length > 0 && username.length <= 2) {
-        setMessage("Minimum 3 characters");
+        setMessage('Minimum 3 characters');
         setIsValid(false);
         return;
       }
@@ -87,7 +81,7 @@ export function OnboardingDialog({
 
       // If no ensDomain, just validate format and length
       if (!ensDomain) {
-        setMessage("Available");
+        setMessage('Available');
         setIsValid(true);
         return;
       }
@@ -95,25 +89,25 @@ export function OnboardingDialog({
       // Check availability with SDK
       if (debouncedUsername.length > 2 && chainId) {
         setIsLoading(true);
-        setMessage("Checking availability...");
+        setMessage('Checking availability...');
 
         try {
           const justaName = getJustaNameInstance(mainnetRpcUrl);
           const result = await justaName.subnames.isSubnameAvailable({
-            subname: debouncedUsername + "." + ensDomain,
+            subname: debouncedUsername + '.' + ensDomain,
             chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
           });
 
           if (result?.isAvailable) {
-            setMessage("Available");
+            setMessage('Available');
             setIsValid(true);
           } else {
-            setMessage("Unavailable");
+            setMessage('Unavailable');
             setIsValid(false);
           }
         } catch (error) {
-          console.error("Error checking subname availability:", error);
-          setMessage("Error checking availability");
+          console.error('Error checking subname availability:', error);
+          setMessage('Error checking availability');
           setIsValid(false);
         } finally {
           setIsLoading(false);
@@ -137,10 +131,10 @@ export function OnboardingDialog({
     };
 
     // Add event listener with passive: false to allow preventDefault
-    scrollable.addEventListener("wheel", handleWheel, { passive: false });
+    scrollable.addEventListener('wheel', handleWheel, { passive: false });
 
     return () => {
-      scrollable.removeEventListener("wheel", handleWheel);
+      scrollable.removeEventListener('wheel', handleWheel);
     };
   }, []);
 
@@ -152,13 +146,7 @@ export function OnboardingDialog({
       // onCreateAccount now returns full account data (not just address)
       const accountData = await onCreateAccount(username);
 
-      if (
-        ensDomain &&
-        chainId &&
-        apiKey &&
-        supportedChains &&
-        accountData.address
-      ) {
+      if (ensDomain && chainId && apiKey && supportedChains && accountData.address) {
         try {
           const justaName = getJustaNameInstance(mainnetRpcUrl);
 
@@ -166,7 +154,6 @@ export function OnboardingDialog({
             address: accountData.address,
             coinType: toCoinType(chain.id).toString(),
           }));
-
 
           // Use subnameTextRecords from capabilities if provided (only used during new account creation)
           // If not provided or empty, use empty array (no text records will be set)
@@ -177,20 +164,17 @@ export function OnboardingDialog({
               chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
               addresses: addresses,
               overrideSignatureCheck: true,
-              text:
-                subnameTextRecords && subnameTextRecords.length > 0
-                  ? subnameTextRecords
-                  : [],
+              text: subnameTextRecords && subnameTextRecords.length > 0 ? subnameTextRecords : [],
             },
             {
               xApiKey: apiKey,
               xAddress: accountData.address,
-              xMessage: "",
-            },
+              xMessage: '',
+            }
           );
         } catch (subnameError) {
-          const errorMessage = `Failed to register subname: ${subnameError instanceof Error ? subnameError.message : "Unknown error"}`;
-          console.error("❌ SUBNAME ERROR:", errorMessage, subnameError);
+          const errorMessage = `Failed to register subname: ${subnameError instanceof Error ? subnameError.message : 'Unknown error'}`;
+          console.error('❌ SUBNAME ERROR:', errorMessage, subnameError);
           setError(errorMessage);
           return; // Don't complete if subname registration fails
         }
@@ -199,8 +183,8 @@ export function OnboardingDialog({
       // Pass account data through to completion handler
       await onAccountCreationComplete(accountData);
     } catch (error) {
-      const errorMessage = `Account creation failed: ${error instanceof Error ? error.message : "Unknown error"}`;
-      console.error("❌ ACCOUNT CREATION ERROR:", errorMessage, error);
+      const errorMessage = `Account creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
+      console.error('❌ ACCOUNT CREATION ERROR:', errorMessage, error);
       setError(errorMessage);
     }
   };
@@ -219,17 +203,10 @@ export function OnboardingDialog({
 
       <CardContent className="flex flex-col gap-5">
         {/* Existing Accounts */}
-        <div
-          ref={scrollableRef}
-          className="flex flex-col gap-1 max-h-[40vh] overflow-y-auto overscroll-contain"
-        >
+        <div ref={scrollableRef} className="flex flex-col gap-1 max-h-[40vh] overflow-y-auto overscroll-contain">
           {accounts.map((account) => (
             <Button
-              key={
-                account.credentialId ||
-                account.username ||
-                Math.random().toString()
-              }
+              key={account.credentialId || account.username || Math.random().toString()}
               onClick={() => onAccountSelect(account)}
               variant="ghost"
               className="w-full h-auto !py-2 !px-3 flex items-center justify-between hover:bg-muted/50"
@@ -238,18 +215,13 @@ export function OnboardingDialog({
               <div className="flex items-center flex-row gap-2">
                 <WalletIcon className="!w-6 !h-6" />
                 <div className="text-left">
-                  <p className="text-sm font-normal text-foreground">
-                    {account.username || "Unnamed Account"}
-                  </p>
+                  <p className="text-sm font-normal text-foreground">{account.username || 'Unnamed Account'}</p>
                   <p className="text-xs font-semibold text-muted-foreground">
-                    {new Date(account.creationDate).toLocaleDateString(
-                      "en-US",
-                      {
-                        year: "numeric",
-                        month: "short",
-                        day: "numeric",
-                      },
-                    )}
+                    {new Date(account.creationDate).toLocaleDateString('en-US', {
+                      year: 'numeric',
+                      month: 'short',
+                      day: 'numeric',
+                    })}
                   </p>
                 </div>
               </div>
@@ -270,9 +242,7 @@ export function OnboardingDialog({
           disabled={isImporting}
         >
           <WalletIcon className="!w-6 !h-6" stroke="currentColor" />
-          <span>
-            {isImporting ? "Opening Passkey..." : "Import an existing account"}
-          </span>
+          <span>{isImporting ? 'Opening Passkey...' : 'Import an existing account'}</span>
         </Button>
 
         <OrSeparator />
@@ -286,9 +256,7 @@ export function OnboardingDialog({
               onChange={(e) => setUsername(e.target.value)}
               className="flex-1"
               right={
-                ensDomain ? (
-                  <span className="text-sm font-bold text-foreground">{`.${ensDomain}`}</span>
-                ) : undefined
+                ensDomain ? <span className="text-sm font-bold text-foreground">{`.${ensDomain}`}</span> : undefined
               }
             />
             {isCreating ? (
@@ -299,7 +267,7 @@ export function OnboardingDialog({
                   try {
                     await handleCreateAccountClick();
                   } catch (err) {
-                    console.error("❌ Button onClick caught error:", err);
+                    console.error('❌ Button onClick caught error:', err);
                   }
                 }}
                 disabled={!isValid || isLoading}
@@ -312,11 +280,7 @@ export function OnboardingDialog({
             <div className="flex items-center justify-between px-1">
               <span
                 className={`text-xs font-medium ${
-                  isLoading
-                    ? "text-muted-foreground"
-                    : isValid
-                      ? "text-success"
-                      : "text-destructive"
+                  isLoading ? 'text-muted-foreground' : isValid ? 'text-green-600' : 'text-red-600'
                 }`}
               >
                 {message}
@@ -324,14 +288,12 @@ export function OnboardingDialog({
             </div>
           )}
           {error && (
-            <div className="flex flex-col gap-2 px-1 py-2 bg-destructive/10 border border-destructive/20 rounded-md overflow-hidden">
-              <span className="text-xs font-medium text-destructive break-all">
-                {error}
-              </span>
+            <div className="flex flex-col gap-2 px-1 py-2 bg-red-50 border border-red-200 rounded-md overflow-hidden">
+              <span className="text-xs font-medium text-red-600 break-all">{error}</span>
               <Button
                 onClick={() => setError(null)}
                 variant="ghost"
-                className="h-6 text-xs text-destructive hover:text-destructive/80 hover:bg-destructive/10"
+                className="h-6 text-xs text-red-600 hover:text-red-700 hover:bg-red-100"
               >
                 Dismiss
               </Button>
@@ -343,4 +305,4 @@ export function OnboardingDialog({
   );
 }
 
-export * from "./types";
+export * from './types';
