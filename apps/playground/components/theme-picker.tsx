@@ -1,5 +1,7 @@
 'use client';
 
+import { useEffect, useState } from 'react';
+import { useTheme } from 'next-themes';
 import type { JawTheme, JawThemeMode, JawBorderRadius } from '@jaw.id/core';
 import { Card } from './ui/card';
 
@@ -16,7 +18,37 @@ const ACCENT_PRESETS = [
 const RADIUS_OPTIONS: JawBorderRadius[] = ['sm', 'md', 'lg'];
 const MODE_OPTIONS: JawThemeMode[] = ['light', 'dark', 'auto'];
 
+/**
+ * Map next-themes value <-> JawThemeMode.
+ * next-themes uses 'system'; JawTheme uses 'auto'.
+ */
+function nextThemeToMode(value: string | undefined): JawThemeMode {
+  if (value === 'light') return 'light';
+  if (value === 'dark') return 'dark';
+  return 'auto';
+}
+function modeToNextTheme(mode: JawThemeMode): string {
+  return mode === 'auto' ? 'system' : mode;
+}
+
 export function ThemePicker({ theme, onThemeChange }: { theme: JawTheme; onThemeChange: (theme: JawTheme) => void }) {
+  const { theme: nextTheme, setTheme: setNextTheme } = useTheme();
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  // The mode displayed in the picker is the next-themes value (single source of truth)
+  // until mounted, fall back to the SDK theme prop
+  const effectiveMode: JawThemeMode = mounted ? nextThemeToMode(nextTheme) : (theme.mode ?? 'auto');
+
+  const handleModeChange = (m: JawThemeMode) => {
+    // Update both: next-themes (which updates <html class>) AND the SDK theme
+    setNextTheme(modeToNextTheme(m));
+    onThemeChange({ ...theme, mode: m });
+  };
+
   return (
     <Card className="p-4">
       <h3 className="mb-3 text-sm font-semibold">Theme (SDK Dialogs)</h3>
@@ -28,9 +60,9 @@ export function ThemePicker({ theme, onThemeChange }: { theme: JawTheme; onTheme
             {MODE_OPTIONS.map((m) => (
               <button
                 key={m}
-                onClick={() => onThemeChange({ ...theme, mode: m })}
+                onClick={() => handleModeChange(m)}
                 className={`rounded px-2 py-1 text-xs transition-colors ${
-                  (theme.mode ?? 'auto') === m
+                  effectiveMode === m
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}

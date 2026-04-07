@@ -7,6 +7,7 @@ import { Mode, type PaymasterConfig, type JawTheme } from '@jaw.id/core';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { ThemePicker } from '../../components/theme-picker';
+import { ThemeToggle } from '../../components/theme-toggle';
 import { parseEther, formatUnits, type Address } from 'viem';
 import {
   useAccount,
@@ -347,8 +348,9 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
     <div className="bg-background min-h-screen p-4 md:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
-        <div className="space-y-2">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="text-foreground text-2xl font-bold md:text-3xl">JAW.id Playground - Wagmi</h1>
+          <ThemeToggle />
         </div>
 
         {/* Mode Toggle */}

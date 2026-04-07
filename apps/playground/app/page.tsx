@@ -3,6 +3,7 @@
 import Link from 'next/link';
 import Image from 'next/image';
 import { Card } from '../components/ui/card';
+import { ThemeToggle } from '../components/theme-toggle';
 
 const routes = [
   {
@@ -42,6 +43,10 @@ const routes = [
 export default function Home() {
   return (
     <div className="bg-background flex min-h-screen flex-col">
+      {/* Top bar with theme toggle */}
+      <div className="flex justify-end p-4">
+        <ThemeToggle />
+      </div>
       {/* Hero Section */}
       <div className="flex flex-1 flex-col items-center justify-center px-4 py-12 md:py-20">
         {/* Logo & Title */}
