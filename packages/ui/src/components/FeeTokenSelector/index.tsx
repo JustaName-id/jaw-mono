@@ -1,12 +1,12 @@
-'use client'
+"use client";
 
-import { useState } from 'react';
-import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
-import { Button } from '../ui/button';
-import { Spinner } from '../ui/spinner';
-import { EthIcon, UsdcIcon, UsdtIcon, GenericTokenIcon } from '../../icons';
-import { cn } from '../../lib/utils';
-import { ChevronDown, X } from 'lucide-react';
+import { useState } from "react";
+import { Popover, PopoverContent, PopoverTrigger } from "../ui/popover";
+import { Button } from "../ui/button";
+import { Spinner } from "../ui/spinner";
+import { EthIcon, UsdcIcon, UsdtIcon, GenericTokenIcon } from "../../icons";
+import { cn } from "../../lib/utils";
+import { ChevronDown, X } from "lucide-react";
 
 export interface FeeTokenOption {
   uid: string;
@@ -37,7 +37,7 @@ interface FeeTokenSelectorProps {
 
 // Get token icon - use logoURI if available, otherwise fall back to symbol-based icons
 const getTokenIcon = (symbol: string, className?: string, logoURI?: string) => {
-  const iconClass = cn('size-8 shrink-0', className);
+  const iconClass = cn("size-8 shrink-0", className);
 
   // Use logoURI if available
   if (logoURI) {
@@ -45,11 +45,11 @@ const getTokenIcon = (symbol: string, className?: string, logoURI?: string) => {
       <img
         src={logoURI}
         alt={symbol}
-        className={cn(iconClass, 'rounded-full object-cover')}
+        className={cn(iconClass, "rounded-full object-cover")}
         onError={(e) => {
           // Fallback to generic icon if image fails to load
-          e.currentTarget.style.display = 'none';
-          e.currentTarget.nextElementSibling?.classList.remove('hidden');
+          e.currentTarget.style.display = "none";
+          e.currentTarget.nextElementSibling?.classList.remove("hidden");
         }}
       />
     );
@@ -57,11 +57,11 @@ const getTokenIcon = (symbol: string, className?: string, logoURI?: string) => {
 
   // Fallback to symbol-based icons
   switch (symbol.toUpperCase()) {
-    case 'ETH':
+    case "ETH":
       return <EthIcon className={iconClass} />;
-    case 'USDC':
+    case "USDC":
       return <UsdcIcon className={iconClass} />;
-    case 'USDT':
+    case "USDT":
       return <UsdtIcon className={iconClass} />;
     default:
       return <GenericTokenIcon className={iconClass} />;
@@ -71,12 +71,12 @@ const getTokenIcon = (symbol: string, className?: string, logoURI?: string) => {
 // Format balance for display (max 6 decimal places, min 4 for small values)
 const formatBalance = (balance: string, symbol: string) => {
   const num = parseFloat(balance);
-  if (num === 0) return '0';
-  if (num < 0.0001) return '<0.0001';
+  if (num === 0) return "0";
+  if (num < 0.0001) return "<0.0001";
   // For stablecoins, show 2 decimals; for native tokens (ETH, FLR, etc.), show more
-  const stablecoins = ['USDC', 'USDT', 'DAI'];
+  const stablecoins = ["USDC", "USDT", "DAI"];
   const decimals = stablecoins.includes(symbol.toUpperCase()) ? 2 : 6;
-  return num.toLocaleString('en-US', {
+  return num.toLocaleString("en-US", {
     minimumFractionDigits: 0,
     maximumFractionDigits: decimals,
   });
@@ -84,7 +84,7 @@ const formatBalance = (balance: string, symbol: string) => {
 
 // Format USD value (show at least 4 decimals for small gas amounts)
 const formatUsd = (value: number) => {
-  return `$${value.toLocaleString('en-US', {
+  return `$${value.toLocaleString("en-US", {
     minimumFractionDigits: 4,
     maximumFractionDigits: 4,
   })}`;
@@ -111,13 +111,13 @@ export const FeeTokenSelector = ({
   }
 
   // Don't render if no ERC-20 tokens available (only native)
-  const hasErc20Options = tokens.some(t => !t.isNative);
+  const hasErc20Options = tokens.some((t) => !t.isNative);
   if (!hasErc20Options) {
     return null;
   }
 
-  const nativeToken = tokens.find(t => t.isNative);
-  const erc20Tokens = tokens.filter(t => !t.isNative);
+  const nativeToken = tokens.find((t) => t.isNative);
+  const erc20Tokens = tokens.filter((t) => !t.isNative);
 
   const handleSelect = (token: FeeTokenOption) => {
     if (token.isSelectable) {
@@ -137,17 +137,19 @@ export const FeeTokenSelector = ({
       const balance = parseFloat(token.balanceFormatted);
       // Show appropriate decimal places based on token decimals
       const displayDecimals = token.decimals >= 6 ? 2 : token.decimals;
-      return `${balance.toLocaleString('en-US', {
+      return `${balance.toLocaleString("en-US", {
         minimumFractionDigits: 0,
         maximumFractionDigits: displayDecimals,
       })} ${token.symbol}`;
     }
-    return '';
+    return "";
   };
 
   // Get gas cost for a token
   // For ERC-20 tokens, use pre-computed gasCostFormatted if available (from paymaster quote)
-  const getGasCost = (token: FeeTokenOption): { formatted: string; usd: string } | null => {
+  const getGasCost = (
+    token: FeeTokenOption,
+  ): { formatted: string; usd: string } | null => {
     // Tokens with 0 balance - no gas cost to show
     if (token.balance === 0n) {
       return null;
@@ -156,19 +158,21 @@ export const FeeTokenSelector = ({
     // If token has pre-computed gas cost (from paymaster quote), use that
     if (token.gasCostFormatted) {
       // Check if it's a valid numeric value (not "Insufficient" or "Estimation failed")
-      const numericPart = token.gasCostFormatted.replace(/[^0-9.]/g, '');
+      const numericPart = token.gasCostFormatted.replace(/[^0-9.]/g, "");
       const tokenCost = parseFloat(numericPart);
 
       // If not a valid number, don't show gas cost
-      if (isNaN(tokenCost) || numericPart === '') {
+      if (isNaN(tokenCost) || numericPart === "") {
         return null;
       }
 
       return {
         formatted: token.gasCostFormatted,
-        usd: ['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase()) && !isNaN(tokenCost)
-          ? formatUsd(tokenCost)
-          : '',
+        usd:
+          ["USDC", "USDT", "DAI"].includes(token.symbol.toUpperCase()) &&
+          !isNaN(tokenCost)
+            ? formatUsd(tokenCost)
+            : "",
       };
     }
 
@@ -201,7 +205,13 @@ export const FeeTokenSelector = ({
   };
 
   // Token row component
-  const TokenRow = ({ token, showGasCost = true }: { token: FeeTokenOption; showGasCost?: boolean }) => {
+  const TokenRow = ({
+    token,
+    showGasCost = true,
+  }: {
+    token: FeeTokenOption;
+    showGasCost?: boolean;
+  }) => {
     const balanceUsd = getBalanceUsd(token);
     const gasCost = showGasCost ? getGasCost(token) : null;
     const isSelected = selectedToken?.address === token.address;
@@ -211,23 +221,32 @@ export const FeeTokenSelector = ({
         onClick={() => handleSelect(token)}
         disabled={!token.isSelectable || disabled}
         className={cn(
-          'w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors',
-          'hover:bg-muted/60',
-          isSelected && 'bg-zinc-200',
-          !token.isSelectable && 'opacity-50 cursor-not-allowed',
-          token.isSelectable && 'cursor-pointer'
+          "w-full flex items-center gap-2 px-2 py-2 rounded-md transition-colors",
+          "hover:bg-muted/60",
+          isSelected && "bg-secondary",
+          !token.isSelectable && "opacity-50 cursor-not-allowed",
+          token.isSelectable && "cursor-pointer",
         )}
       >
         {/* Token Icon */}
-        {getTokenIcon(token.symbol, 'size-6', token.logoURI)}
+        {getTokenIcon(token.symbol, "size-6", token.logoURI)}
 
         {/* Token Info */}
         <div className="flex-1 text-left min-w-0">
           <div className="flex items-center gap-1">
-            <span className={cn("font-semibold text-xs", isSelected && "text-foreground")}>{token.symbol}</span>
+            <span
+              className={cn(
+                "font-semibold text-xs",
+                isSelected && "text-foreground",
+              )}
+            >
+              {token.symbol}
+            </span>
           </div>
           <div className="text-[10px] text-muted-foreground truncate">
-            Bal: {balanceUsd || `${formatBalance(token.balanceFormatted, token.symbol)} ${token.symbol}`}
+            Bal:{" "}
+            {balanceUsd ||
+              `${formatBalance(token.balanceFormatted, token.symbol)} ${token.symbol}`}
           </div>
         </div>
 
@@ -236,11 +255,13 @@ export const FeeTokenSelector = ({
           {gasCost?.usd ? (
             <>
               <div className="font-semibold text-xs">{gasCost.usd}</div>
-              <div className="text-[10px] text-muted-foreground">Up to {gasCost.formatted}</div>
+              <div className="text-[10px] text-muted-foreground">
+                Up to {gasCost.formatted}
+              </div>
             </>
           ) : !token.isSelectable ? (
             <span className="text-[10px] text-destructive">
-              {token.balance === 0n ? '0' : 'Insufficient'}
+              {token.balance === 0n ? "0" : "Insufficient"}
             </span>
           ) : null}
         </div>
@@ -249,7 +270,7 @@ export const FeeTokenSelector = ({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           variant="outline"
@@ -258,16 +279,17 @@ export const FeeTokenSelector = ({
           disabled={disabled}
           className="h-7 px-2 gap-1 text-xs font-medium rounded-md border-muted-foreground/30"
         >
-          {selectedToken && getTokenIcon(selectedToken.symbol, 'size-3.5', selectedToken.logoURI)}
-          <span>{selectedToken?.symbol || 'Select'}</span>
+          {selectedToken &&
+            getTokenIcon(
+              selectedToken.symbol,
+              "size-3.5",
+              selectedToken.logoURI,
+            )}
+          <span>{selectedToken?.symbol || "Select"}</span>
           <ChevronDown className="size-3 opacity-50" />
         </Button>
       </PopoverTrigger>
-      <PopoverContent
-        className="w-64 p-0"
-        align="end"
-        sideOffset={4}
-      >
+      <PopoverContent className="w-64 p-0" align="end" sideOffset={4}>
         {/* Header */}
         <div className="flex items-center justify-between px-3 py-2.5 border-b">
           <h3 className="font-semibold text-sm">Select a token</h3>
@@ -298,7 +320,11 @@ export const FeeTokenSelector = ({
                 Pay with other tokens
               </p>
               {erc20Tokens.map((token) => (
-                <TokenRow key={token.address} token={token} showGasCost={true} />
+                <TokenRow
+                  key={token.address}
+                  token={token}
+                  showGasCost={true}
+                />
               ))}
             </div>
           )}
