@@ -1,7 +1,5 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useTheme } from 'next-themes';
 import type { JawTheme, JawThemeMode, JawBorderRadius } from '@jaw.id/core';
 import { Card } from './ui/card';
 
@@ -19,39 +17,23 @@ const RADIUS_OPTIONS: JawBorderRadius[] = ['sm', 'md', 'lg'];
 const MODE_OPTIONS: JawThemeMode[] = ['light', 'dark', 'auto'];
 
 /**
- * Map next-themes value <-> JawThemeMode.
- * next-themes uses 'system'; JawTheme uses 'auto'.
+ * SDK-only theme picker. Mode/accent/radius changes here affect the SDK
+ * dialogs only — they DO NOT change the playground's own theme. Use the
+ * sun/moon button in the page header for the global playground theme.
+ *
+ * The picker's mode === 'auto' means "follow the playground" (because the
+ * SDK's auto mode reads <html class="dark|light"> set by next-themes).
  */
-function nextThemeToMode(value: string | undefined): JawThemeMode {
-  if (value === 'light') return 'light';
-  if (value === 'dark') return 'dark';
-  return 'auto';
-}
-function modeToNextTheme(mode: JawThemeMode): string {
-  return mode === 'auto' ? 'system' : mode;
-}
-
 export function ThemePicker({ theme, onThemeChange }: { theme: JawTheme; onThemeChange: (theme: JawTheme) => void }) {
-  const { theme: nextTheme, setTheme: setNextTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
-
-  useEffect(() => {
-    setMounted(true);
-  }, []);
-
-  // The mode displayed in the picker is the next-themes value (single source of truth)
-  // until mounted, fall back to the SDK theme prop
-  const effectiveMode: JawThemeMode = mounted ? nextThemeToMode(nextTheme) : (theme.mode ?? 'auto');
-
-  const handleModeChange = (m: JawThemeMode) => {
-    // Update both: next-themes (which updates <html class>) AND the SDK theme
-    setNextTheme(modeToNextTheme(m));
-    onThemeChange({ ...theme, mode: m });
-  };
+  const effectiveMode: JawThemeMode = theme.mode ?? 'auto';
 
   return (
     <Card className="p-4">
       <h3 className="mb-3 text-sm font-semibold">Theme (SDK Dialogs)</h3>
+      <p className="text-muted-foreground mb-3 text-xs">
+        These settings affect SDK dialogs only. Use the sun/moon button at the top to change the playground theme. Set
+        mode to <code className="bg-muted rounded px-1">auto</code> to follow the playground.
+      </p>
       <div className="flex flex-wrap gap-4">
         {/* Mode */}
         <div className="flex flex-col gap-1">
@@ -60,7 +42,7 @@ export function ThemePicker({ theme, onThemeChange }: { theme: JawTheme; onTheme
             {MODE_OPTIONS.map((m) => (
               <button
                 key={m}
-                onClick={() => handleModeChange(m)}
+                onClick={() => onThemeChange({ ...theme, mode: m })}
                 className={`rounded px-2 py-1 text-xs transition-colors ${
                   effectiveMode === m
                     ? 'bg-primary text-primary-foreground'

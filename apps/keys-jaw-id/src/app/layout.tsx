@@ -18,9 +18,15 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" suppressHydrationWarning>
-      <ReactQueryProvider>
-        <ThemeProvider attribute="class" defaultTheme="system" enableSystem disableTransitionOnChange>
-          <body className="bg-background text-foreground">
+      <body className="bg-background text-foreground">
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+          disableTransitionOnChange
+          value={{ light: 'light', dark: 'dark' }}
+        >
+          <ReactQueryProvider>
             <div
               aria-hidden="true"
               style={{
@@ -47,9 +53,9 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               />
             </div>
             <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>
-          </body>
+          </ReactQueryProvider>
         </ThemeProvider>
-      </ReactQueryProvider>
+      </body>
     </html>
   );
 }
