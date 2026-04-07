@@ -1,3 +1,17 @@
+## 0.1.9 (2026-04-07)
+
+### 🩹 Fixes
+
+- **ui:** add theme configuration system for SDK dialogs ([#159](https://github.com/JustaName-id/jaw-mono/pull/159))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.2
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.1.8 (2026-04-06)
 
 ### 🧱 Updated Dependencies
