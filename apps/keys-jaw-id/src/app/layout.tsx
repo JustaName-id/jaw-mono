@@ -30,7 +30,14 @@ export default async function RootLayout({ children }: { children: React.ReactNo
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: SET_INITIAL_THEME }} />
+        {/*
+         * suppressHydrationWarning is required because the browser strips the
+         * `nonce` attribute from the DOM after CSP validation (security feature).
+         * React then sees server `nonce="abc..."` vs client `nonce=""` and would
+         * regenerate the tree without this hint. The script content itself is
+         * static so suppressing the warning is safe.
+         */}
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: SET_INITIAL_THEME }} suppressHydrationWarning />
       </head>
       <body className="bg-background text-foreground">
         <ReactQueryProvider>
