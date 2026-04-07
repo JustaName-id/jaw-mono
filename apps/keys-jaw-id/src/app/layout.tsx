@@ -21,16 +21,16 @@ const SET_INITIAL_THEME = `(function(){try{var d=document.documentElement;var m=
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Reading headers() makes this layout dynamic (no static caching).
-  // Next.js 14+ automatically reads the CSP nonce from the response header
-  // set by middleware and stamps its own inline <script> tags with it.
-  // We don't need to manually pass the nonce — calling headers() is enough
-  // to opt into per-request rendering so the nonce is unique each time.
-  await headers();
+  // The middleware forwards the CSP nonce on the request as `x-nonce`; we
+  // read it here and stamp our user-authored inline <script> with it so the
+  // production CSP (`strict-dynamic`) does not block it.
+  const requestHeaders = await headers();
+  const nonce = requestHeaders.get('x-nonce') ?? undefined;
 
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        <script dangerouslySetInnerHTML={{ __html: SET_INITIAL_THEME }} />
+        <script nonce={nonce} dangerouslySetInnerHTML={{ __html: SET_INITIAL_THEME }} />
       </head>
       <body className="bg-background text-foreground">
         <ReactQueryProvider>
