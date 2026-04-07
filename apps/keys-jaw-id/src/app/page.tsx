@@ -802,12 +802,12 @@ export default function KeysJawIdApp() {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <div className="text-center">
-            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600"></div>
-            <p className="text-gray-600">
+            <div className="border-primary mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2"></div>
+            <p className="text-muted-foreground">
               {state === 'initializing' && 'Connecting to dApp...'}
               {state === 'passkey-check' && 'Checking for passkeys...'}
             </p>
-            {config && <p className="mt-2 text-sm text-gray-500">SDK v{config.version}</p>}
+            {config && <p className="text-muted-foreground mt-2 text-sm">SDK v{config.version}</p>}
           </div>
         </div>
       );
@@ -818,16 +818,16 @@ export default function KeysJawIdApp() {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <div className="max-w-md p-6 text-center">
-            <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-b-2 border-blue-600"></div>
-            <h3 className="mb-2 text-xl font-semibold text-gray-900">
+            <div className="border-primary mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-b-2"></div>
+            <h3 className="text-foreground mb-2 text-xl font-semibold">
               {authQuery.isAuthenticated ? 'Connecting to dApp...' : 'Processing...'}
             </h3>
-            <p className="mb-4 text-gray-600">
+            <p className="text-muted-foreground mb-4">
               {authQuery.isAuthenticated && authQuery.accountName
                 ? `Authenticated as ${authQuery.accountName}. Waiting for dApp connection...`
                 : 'Please wait while we process your request.'}
             </p>
-            {config?.metadata && <p className="text-sm text-gray-500">{config.metadata.appName}</p>}
+            {config?.metadata && <p className="text-muted-foreground text-sm">{config.metadata.appName}</p>}
           </div>
         </div>
       );
@@ -838,13 +838,18 @@ export default function KeysJawIdApp() {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <div className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
-              <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+              <svg
+                className="h-8 w-8 text-emerald-600 dark:text-emerald-400"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="mb-2 text-xl font-bold text-gray-900">Success!</h3>
-            <p className="text-gray-600">Operation completed successfully</p>
+            <h3 className="text-foreground mb-2 text-xl font-bold">Success!</h3>
+            <p className="text-muted-foreground">Operation completed successfully</p>
           </div>
         </div>
       );
@@ -855,13 +860,13 @@ export default function KeysJawIdApp() {
       return (
         <div className="flex min-h-screen items-center justify-center">
           <div className="max-w-md p-6 text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
-              <svg className="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="bg-destructive/10 mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full">
+              <svg className="text-destructive h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <h3 className="mb-2 text-xl font-bold text-gray-900">Error</h3>
-            <p className="mb-4 text-gray-600">{error || 'An error occurred'}</p>
+            <h3 className="text-foreground mb-2 text-xl font-bold">Error</h3>
+            <p className="text-muted-foreground mb-4">{error || 'An error occurred'}</p>
             <div className="space-y-2">
               <button
                 onClick={() => {
@@ -869,7 +874,7 @@ export default function KeysJawIdApp() {
                   setState('passkey-check');
                   checkForPasskeys();
                 }}
-                className="w-full rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-700"
+                className="bg-primary text-primary-foreground hover:bg-primary/90 w-full rounded-lg px-6 py-2 font-semibold transition-colors"
               >
                 Try Again
               </button>
@@ -878,7 +883,7 @@ export default function KeysJawIdApp() {
                   communicator.sendPopupUnload();
                   window.close();
                 }}
-                className="w-full rounded-lg bg-gray-200 px-6 py-2 font-semibold text-gray-900 transition-colors hover:bg-gray-300"
+                className="bg-secondary text-secondary-foreground hover:bg-secondary/80 w-full rounded-lg px-6 py-2 font-semibold transition-colors"
               >
                 Close
               </button>
@@ -1194,8 +1199,8 @@ export default function KeysJawIdApp() {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600"></div>
-          <p className="text-gray-600">Waiting for request...</p>
+          <div className="border-primary mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2"></div>
+          <p className="text-muted-foreground">Waiting for request...</p>
         </div>
       </div>
     );
