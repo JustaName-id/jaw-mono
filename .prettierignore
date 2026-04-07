@@ -1,0 +1,38 @@
+# Dependencies
+node_modules
+
+# Build output
+dist
+.next
+out
+build
+coverage
+.nx
+**/*.tsbuildinfo
+
+# Auto-generated files
+**/sdk-info.ts
+**/oclif.manifest.json
+**/next-env.d.ts
+packages/*/CHANGELOG.md
+apps/docs/docs/dist
+
+# Vite/vitest temp
+vite.config.*.timestamp*
+vitest.config.*.timestamp*
+
+# Solidity / Foundry (out of scope)
+contracts
+
+# IDE / editor
+.vscode
+.idea
+
+# Lock files
+bun.lock
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Binary / generated assets
+**/*.iife.js

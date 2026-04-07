@@ -1,4 +1,8 @@
 #!/bin/sh
 export PATH="$HOME/.bun/bin:$PATH"
+
+# Format staged files via lint-staged (Prettier)
+bunx lint-staged
+
 # Run all tests with Vitest, excluding docs app
 bunx vitest run --exclude='**/apps/docs/**' --exclude='**/contracts/**'

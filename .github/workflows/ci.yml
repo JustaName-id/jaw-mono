@@ -33,6 +33,9 @@ jobs:
 
       - run: bun install --frozen-lockfile
 
+      - name: Check code formatting
+        run: bunx prettier --check .
+
       - uses: nrwl/nx-set-shas@v4
 
       - run: bunx nx affected -t lint test typecheck build
