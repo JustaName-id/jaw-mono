@@ -1,12 +1,23 @@
 import './global.css';
 import { headers } from 'next/headers';
 import { ReactQueryProvider } from './providers/react-query';
-import { ThemeProvider } from './providers/theme-provider';
+import { SystemThemeListener } from '../components/SystemThemeListener';
 
 export const metadata = {
   title: 'Welcome to keys-jaw-id',
   description: 'Keys Jaw ID',
 };
+
+/**
+ * Inline script that runs synchronously before any paint.
+ * Reads `prefers-color-scheme` and sets `light`/`dark` class on <html>.
+ *
+ * This is intentionally NOT next-themes — keys.jaw.id is a popup that only
+ * follows the OS theme; there's no toggle, no persistence, no React state
+ * to manage. A 200-byte inline script is the simplest, most reliable
+ * solution and has zero hydration concerns.
+ */
+const SET_INITIAL_THEME = `(function(){try{var d=document.documentElement;var m=window.matchMedia('(prefers-color-scheme: dark)').matches;d.classList.remove('light','dark');d.classList.add(m?'dark':'light');d.style.colorScheme=m?'dark':'light';}catch(e){}})();`;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Reading headers() makes this layout dynamic (no static caching).
@@ -18,43 +29,40 @@ export default async function RootLayout({ children }: { children: React.ReactNo
 
   return (
     <html lang="en" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: SET_INITIAL_THEME }} />
+      </head>
       <body className="bg-background text-foreground">
-        <ThemeProvider
-          attribute="class"
-          defaultTheme="system"
-          enableSystem
-          disableTransitionOnChange
-          value={{ light: 'light', dark: 'dark' }}
-        >
-          <ReactQueryProvider>
-            <div
-              aria-hidden="true"
+        <ReactQueryProvider>
+          <SystemThemeListener />
+          <div
+            aria-hidden="true"
+            style={{
+              position: 'fixed',
+              inset: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
+              zIndex: 0,
+            }}
+          >
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src="/jaw-logo.png"
+              alt=""
+              className="dark:invert"
               style={{
-                position: 'fixed',
-                inset: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                pointerEvents: 'none',
-                zIndex: 0,
+                height: '90vh',
+                width: 'auto',
+                opacity: 0.06,
+                userSelect: 'none',
               }}
-            >
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src="/jaw-logo.png"
-                alt=""
-                style={{
-                  height: '90vh',
-                  width: 'auto',
-                  opacity: 0.06,
-                  userSelect: 'none',
-                }}
-                draggable={false}
-              />
-            </div>
-            <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>
-          </ReactQueryProvider>
-        </ThemeProvider>
+              draggable={false}
+            />
+          </div>
+          <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>
+        </ReactQueryProvider>
       </body>
     </html>
   );
