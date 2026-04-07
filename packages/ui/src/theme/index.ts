@@ -9,7 +9,12 @@ export { hexToOklch, oklchToString, deriveAccentPalette } from './palette.js';
 export type { Oklch } from './palette.js';
 
 // Default palettes and mapping tables
-export { DEFAULT_LIGHT_PALETTE, DEFAULT_DARK_PALETTE, BORDER_RADIUS_MAP, FONT_STACK_MAP } from './constants.js';
+export {
+  DEFAULT_LIGHT_PALETTE,
+  DEFAULT_DARK_PALETTE,
+  BORDER_RADIUS_MAP,
+  FONT_STACK_MAP,
+} from './constants.js';
 
 // Resolution pipeline
 export { resolveTheme } from './resolve-theme.js';

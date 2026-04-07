@@ -1,33 +1,41 @@
-import { JAW_KEYS_URL, JAW_PASSKEYS_URL } from '../constants.js';
+import { JAW_KEYS_URL, JAW_PASSKEYS_URL } from "../constants.js";
 import {
-    ProviderInterface,
-    AppMetadata,
-    JawProviderPreference,
-    ConstructorOptions,
-    Mode,
-    PaymasterConfig,
-} from '../provider/interface.js';
-import type { JawTheme } from '../ui/theme.js';
-import { createJAWProvider } from '../provider/createJAWProvider.js';
-import { store, createInitialChains, ChainClients, createClients } from '../store/index.js';
-import { announceProvider as announceProviderFn, type AnnounceProviderCleanup } from '../provider/eip6963.js';
+  ProviderInterface,
+  AppMetadata,
+  JawProviderPreference,
+  ConstructorOptions,
+  Mode,
+  PaymasterConfig,
+} from "../provider/interface.js";
+import { createJAWProvider } from "../provider/createJAWProvider.js";
+import {
+  store,
+  createInitialChains,
+  ChainClients,
+  createClients,
+} from "../store/index.js";
+import {
+  announceProvider as announceProviderFn,
+  type AnnounceProviderCleanup,
+} from "../provider/eip6963.js";
+import type { JawTheme } from "../ui/theme.js";
 
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
-    apiKey: string;
-    preference?: Partial<JawProviderPreference>;
-    /** Mapping of chain IDs to paymaster configuration */
-    paymasters?: Record<number, PaymasterConfig>;
-    /** Used to issue subnames */
-    ens?: string;
-    /** Theme configuration for SDK dialogs */
-    theme?: JawTheme;
+  apiKey: string;
+  preference?: Partial<JawProviderPreference>;
+  /** Mapping of chain IDs to paymaster configuration */
+  paymasters?: Record<number, PaymasterConfig>;
+  /** Used to issue subnames */
+  ens?: string;
+  /** Theme configuration for UI appearance (colors, mode, border radius) */
+  theme?: JawTheme;
 };
 
 const DEFAULT_PREFERENCE: JawProviderPreference = {
-    mode: Mode.CrossPlatform,
-    keysUrl: JAW_KEYS_URL,
-    serverUrl: JAW_PASSKEYS_URL,
-    showTestnets: false,
+  mode: Mode.CrossPlatform,
+  keysUrl: JAW_KEYS_URL,
+  serverUrl: JAW_PASSKEYS_URL,
+  showTestnets: false,
 };
 /**
  * Create a JAW SDK instance (factory function pattern).
@@ -56,98 +64,109 @@ const DEFAULT_PREFERENCE: JawProviderPreference = {
  */
 
 export function create(params: CreateJAWSDKOptions) {
-    const options: ConstructorOptions = {
-        apiKey: params.apiKey,
-        metadata: {
-            appName: params.appName || 'DApp',
-            appLogoUrl: params.appLogoUrl || null,
-            defaultChainId: params.defaultChainId,
-        },
-        preference: {
-            ...DEFAULT_PREFERENCE,
-            ...params.preference,
-            ...(params.ens ? { ens: params.ens } : {}),
-        },
-        paymasters: params.paymasters,
-        theme: params.theme,
-    };
+  const options: ConstructorOptions = {
+    apiKey: params.apiKey,
+    metadata: {
+      appName: params.appName || "DApp",
+      appLogoUrl: params.appLogoUrl || null,
+      defaultChainId: params.defaultChainId,
+    },
+    preference: {
+      ...DEFAULT_PREFERENCE,
+      ...params.preference,
+      ...(params.ens ? { ens: params.ens } : {}),
+    },
+    paymasters: params.paymasters,
+    theme: params.theme,
+  };
 
-    if (options.preference?.serverUrl != JAW_PASSKEYS_URL && options.preference.mode == Mode.CrossPlatform) {
-        throw new Error('Custom Server Url not available with Cross Platform Mode.');
-    }
+  if (
+    options.preference?.serverUrl != JAW_PASSKEYS_URL &&
+    options.preference.mode == Mode.CrossPlatform
+  ) {
+    throw new Error(
+      "Custom Server Url not available with Cross Platform Mode.",
+    );
+  }
 
-    // Store the config
-    const storedOptions = {
-        metadata: options.metadata,
-        preference: options.preference,
-        paymasters: options.paymasters,
-        apiKey: params.apiKey,
-    };
-    store.config.set(storedOptions);
+  // Store the config
+  const storedOptions = {
+    metadata: options.metadata,
+    preference: options.preference,
+    paymasters: options.paymasters,
+    apiKey: params.apiKey,
+  };
+  store.config.set(storedOptions);
 
-    // Always clear and reinitialize chains on SDK creation to ensure consistency
-    store.chains.clear();
-    ChainClients.setState({});
+  // Always clear and reinitialize chains on SDK creation to ensure consistency
+  store.chains.clear();
+  ChainClients.setState({});
 
-    if (params.apiKey) {
-        const initialChains = createInitialChains(params.apiKey, params.paymasters, options.preference.showTestnets);
-        store.chains.set(initialChains);
-        createClients(initialChains);
+  if (params.apiKey) {
+    const initialChains = createInitialChains(
+      params.apiKey,
+      params.paymasters,
+      options.preference.showTestnets,
+    );
+    store.chains.set(initialChains);
+    createClients(initialChains);
 
-        // Update stored account chain if defaultChainId is provided and differs from stored chain
-        if (params.defaultChainId !== undefined) {
-            const currentAccount = store.account.get();
-            const storedChainId = currentAccount.chain?.id;
+    // Update stored account chain if defaultChainId is provided and differs from stored chain
+    if (params.defaultChainId !== undefined) {
+      const currentAccount = store.account.get();
+      const storedChainId = currentAccount.chain?.id;
 
-            // Only update if the stored chain differs from the requested default
-            if (storedChainId !== params.defaultChainId) {
-                const targetChain = initialChains.find((c) => c.id === params.defaultChainId);
-                if (targetChain) {
-                    store.account.set({ chain: targetChain });
-                }
-            }
+      // Only update if the stored chain differs from the requested default
+      if (storedChainId !== params.defaultChainId) {
+        const targetChain = initialChains.find(
+          (c) => c.id === params.defaultChainId,
+        );
+        if (targetChain) {
+          store.account.set({ chain: targetChain });
         }
+      }
     }
+  }
 
-    let provider: ProviderInterface | null = null;
-    let stopAnnouncing: AnnounceProviderCleanup | null = null;
+  let provider: ProviderInterface | null = null;
+  let stopAnnouncing: AnnounceProviderCleanup | null = null;
 
-    // Helper to check if EIP-6963 announcement should be enabled
-    const isCrossPlatformMode = options.preference?.mode === Mode.CrossPlatform;
+  // Helper to check if EIP-6963 announcement should be enabled
+  const isCrossPlatformMode = options.preference?.mode === Mode.CrossPlatform;
 
-    return {
-        /**
-         * Get the JAW Provider instance.
-         * Direct access to the provider for making requests.
-         * Creates a new provider if one doesn't exist yet (lazy initialization).
-         */
-        get provider(): ProviderInterface {
-            if (!provider) {
-                provider = createJAWProvider(options);
+  return {
+    /**
+     * Get the JAW Provider instance.
+     * Direct access to the provider for making requests.
+     * Creates a new provider if one doesn't exist yet (lazy initialization).
+     */
+    get provider(): ProviderInterface {
+      if (!provider) {
+        provider = createJAWProvider(options);
 
-                // Auto-announce via EIP-6963 for CrossPlatform mode
-                if (isCrossPlatformMode && typeof window !== 'undefined') {
-                    stopAnnouncing = announceProviderFn(provider);
-                }
-            }
-            return provider;
-        },
+        // Auto-announce via EIP-6963 for CrossPlatform mode
+        if (isCrossPlatformMode && typeof window !== "undefined") {
+          stopAnnouncing = announceProviderFn(provider);
+        }
+      }
+      return provider;
+    },
 
-        /**
-         * Disconnect the provider and clean up resources.
-         * @returns A promise that resolves when disconnection is complete.
-         */
-        async disconnect(): Promise<void> {
-            // Stop announcing when disconnecting
-            if (stopAnnouncing) {
-                stopAnnouncing();
-                stopAnnouncing = null;
-            }
+    /**
+     * Disconnect the provider and clean up resources.
+     * @returns A promise that resolves when disconnection is complete.
+     */
+    async disconnect(): Promise<void> {
+      // Stop announcing when disconnecting
+      if (stopAnnouncing) {
+        stopAnnouncing();
+        stopAnnouncing = null;
+      }
 
-            if (provider) {
-                await provider.disconnect();
-                provider = null;
-            }
-        },
-    };
+      if (provider) {
+        await provider.disconnect();
+        provider = null;
+      }
+    },
+  };
 }

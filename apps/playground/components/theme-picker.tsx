@@ -16,7 +16,13 @@ const ACCENT_PRESETS = [
 const RADIUS_OPTIONS: JawBorderRadius[] = ['sm', 'md', 'lg'];
 const MODE_OPTIONS: JawThemeMode[] = ['light', 'dark', 'auto'];
 
-export function ThemePicker({ theme, onThemeChange }: { theme: JawTheme; onThemeChange: (theme: JawTheme) => void }) {
+export function ThemePicker({
+  theme,
+  onThemeChange,
+}: {
+  theme: JawTheme;
+  onThemeChange: (theme: JawTheme) => void;
+}) {
   return (
     <Card className="p-4">
       <h3 className="text-sm font-semibold mb-3">Theme (SDK Dialogs)</h3>
@@ -55,7 +61,9 @@ export function ThemePicker({ theme, onThemeChange }: { theme: JawTheme; onTheme
                   })
                 }
                 className={`w-6 h-6 rounded-full border-2 transition-colors ${
-                  (theme.accentColor ?? '') === preset.value ? 'border-foreground' : 'border-transparent'
+                  (theme.accentColor ?? '') === preset.value
+                    ? 'border-foreground'
+                    : 'border-transparent'
                 }`}
                 style={{
                   backgroundColor: preset.value || 'var(--primary)',
