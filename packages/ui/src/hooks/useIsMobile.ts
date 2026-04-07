@@ -1,36 +1,36 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState } from 'react';
 
 export function useIsMobile(breakpoint = 768) {
-  const [isMobile, setIsMobile] = useState(false)
+  const [isMobile, setIsMobile] = useState(false);
 
   useEffect(() => {
     // Check if window is defined (client-side)
-    if (typeof window === 'undefined') return undefined
+    if (typeof window === 'undefined') return undefined;
 
     // Media query for mobile detection
-    const mediaQuery = window.matchMedia(`(max-width: ${breakpoint - 1}px)`)
+    const mediaQuery = window.matchMedia(`(max-width: ${breakpoint - 1}px)`);
 
     // Set initial value
-    setIsMobile(mediaQuery.matches)
+    setIsMobile(mediaQuery.matches);
 
     // Handler for media query changes
     const handleMediaQueryChange = (e: MediaQueryListEvent) => {
-      setIsMobile(e.matches)
-    }
+      setIsMobile(e.matches);
+    };
 
     // Modern browsers
     if (mediaQuery.addEventListener) {
-      mediaQuery.addEventListener('change', handleMediaQueryChange)
-      return () => mediaQuery.removeEventListener('change', handleMediaQueryChange)
+      mediaQuery.addEventListener('change', handleMediaQueryChange);
+      return () => mediaQuery.removeEventListener('change', handleMediaQueryChange);
     }
     // Legacy browsers
     else if (mediaQuery.addListener) {
-      mediaQuery.addListener(handleMediaQueryChange)
-      return () => mediaQuery.removeListener(handleMediaQueryChange)
+      mediaQuery.addListener(handleMediaQueryChange);
+      return () => mediaQuery.removeListener(handleMediaQueryChange);
     }
 
-    return undefined
-  }, [breakpoint])
+    return undefined;
+  }, [breakpoint]);
 
-  return isMobile
+  return isMobile;
 }

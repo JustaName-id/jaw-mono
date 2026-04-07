@@ -16,26 +16,20 @@ const ACCENT_PRESETS = [
 const RADIUS_OPTIONS: JawBorderRadius[] = ['sm', 'md', 'lg'];
 const MODE_OPTIONS: JawThemeMode[] = ['light', 'dark', 'auto'];
 
-export function ThemePicker({
-  theme,
-  onThemeChange,
-}: {
-  theme: JawTheme;
-  onThemeChange: (theme: JawTheme) => void;
-}) {
+export function ThemePicker({ theme, onThemeChange }: { theme: JawTheme; onThemeChange: (theme: JawTheme) => void }) {
   return (
     <Card className="p-4">
-      <h3 className="text-sm font-semibold mb-3">Theme (SDK Dialogs)</h3>
+      <h3 className="mb-3 text-sm font-semibold">Theme (SDK Dialogs)</h3>
       <div className="flex flex-wrap gap-4">
         {/* Mode */}
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Mode</span>
+          <span className="text-muted-foreground text-xs">Mode</span>
           <div className="flex gap-1">
             {MODE_OPTIONS.map((m) => (
               <button
                 key={m}
                 onClick={() => onThemeChange({ ...theme, mode: m })}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`rounded px-2 py-1 text-xs transition-colors ${
                   (theme.mode ?? 'auto') === m
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -49,8 +43,8 @@ export function ThemePicker({
 
         {/* Accent Color */}
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Accent</span>
-          <div className="flex gap-1 items-center">
+          <span className="text-muted-foreground text-xs">Accent</span>
+          <div className="flex items-center gap-1">
             {ACCENT_PRESETS.map((preset) => (
               <button
                 key={preset.label}
@@ -60,10 +54,8 @@ export function ThemePicker({
                     accentColor: preset.value || undefined,
                   })
                 }
-                className={`w-6 h-6 rounded-full border-2 transition-colors ${
-                  (theme.accentColor ?? '') === preset.value
-                    ? 'border-foreground'
-                    : 'border-transparent'
+                className={`h-6 w-6 rounded-full border-2 transition-colors ${
+                  (theme.accentColor ?? '') === preset.value ? 'border-foreground' : 'border-transparent'
                 }`}
                 style={{
                   backgroundColor: preset.value || 'var(--primary)',
@@ -76,13 +68,13 @@ export function ThemePicker({
 
         {/* Border Radius */}
         <div className="flex flex-col gap-1">
-          <span className="text-xs text-muted-foreground">Radius</span>
+          <span className="text-muted-foreground text-xs">Radius</span>
           <div className="flex gap-1">
             {RADIUS_OPTIONS.map((r) => (
               <button
                 key={r}
                 onClick={() => onThemeChange({ ...theme, borderRadius: r })}
-                className={`px-2 py-1 text-xs rounded transition-colors ${
+                className={`rounded px-2 py-1 text-xs transition-colors ${
                   (theme.borderRadius ?? 'md') === r
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'

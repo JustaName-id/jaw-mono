@@ -4,37 +4,37 @@ Unified signing method supporting multiple message formats (ERC-7871). Delegates
 
 **Authentication Required:** No
 
-
 ## Request
 
 ```typescript
 await jaw.provider.request({
   method: 'wallet_sign',
-  params: [{
-    // chainId: '0x1', // Optional - defaults to connected chain
-    request: {
-      type: '0x45', // or '0x01'
-      data: { message: 'Hello World' } // or TypedData object for 0x01
+  params: [
+    {
+      // chainId: '0x1', // Optional - defaults to connected chain
+      request: {
+        type: '0x45', // or '0x01'
+        data: { message: 'Hello World' }, // or TypedData object for 0x01
+      },
     },
-  }],
+  ],
 });
 ```
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `chainId` | `0x${string}` | No | Target chain ID (defaults to connected chain) |
-| `request.type` | `string` | Yes | Signature type: `"0x45"` (personal_sign) or `"0x01"` (signTypedData_v4) |
-| `request.data` | `object` | Yes | For 0x45: `{ message: string }`. For 0x01: TypedData object (EIP-712) |
+| Name           | Type          | Required | Description                                                             |
+| -------------- | ------------- | -------- | ----------------------------------------------------------------------- |
+| `chainId`      | `0x${string}` | No       | Target chain ID (defaults to connected chain)                           |
+| `request.type` | `string`      | Yes      | Signature type: `"0x45"` (personal_sign) or `"0x01"` (signTypedData_v4) |
+| `request.data` | `object`      | Yes      | For 0x45: `{ message: string }`. For 0x01: TypedData object (EIP-712)   |
 
 ### Supported Types
 
-| Type | EIP Standard | Description | Data Format |
-|------|--------------|-------------|-------------|
-| `0x45` | EIP-191 | Personal message signing | `{ message: string }` - UTF-8 message string |
-| `0x01` | EIP-712 | Structured typed data signing | TypedData object with `types`, `domain`, `primaryType`, `message` |
-
+| Type   | EIP Standard | Description                   | Data Format                                                       |
+| ------ | ------------ | ----------------------------- | ----------------------------------------------------------------- |
+| `0x45` | EIP-191      | Personal message signing      | `{ message: string }` - UTF-8 message string                      |
+| `0x01` | EIP-712      | Structured typed data signing | TypedData object with `types`, `domain`, `primaryType`, `message` |
 
 ## Response
 
@@ -45,9 +45,8 @@ Returns the signature as a hexadecimal string.
 ### Example
 
 ```typescript
-"0x1234567890abcdef..."
+'0x1234567890abcdef...';
 ```
-
 
 ## Behavior
 
@@ -57,15 +56,13 @@ Returns the signature as a hexadecimal string.
 - Opens popup for user approval
 - Returns signature in same format as the underlying method
 
-
 ## Errors
 
-| Code | Description |
-|------|-------------|
-| 4001 | User rejected the request |
-| 4100 | Unauthorized (not authenticated) |
+| Code   | Description                                         |
+| ------ | --------------------------------------------------- |
+| 4001   | User rejected the request                           |
+| 4100   | Unauthorized (not authenticated)                    |
 | -32602 | Invalid params (unsupported type or malformed data) |
-
 
 ## Example
 
@@ -76,14 +73,16 @@ const message = 'Hello World';
 
 const signature = await jaw.provider.request({
   method: 'wallet_sign',
-  params: [{
-    request: {
-      type: '0x45',
-      data: {
-        message: message, // UTF-8 message string
+  params: [
+    {
+      request: {
+        type: '0x45',
+        data: {
+          message: message, // UTF-8 message string
+        },
       },
     },
-  }],
+  ],
 });
 ```
 
@@ -116,12 +115,14 @@ const typedData = {
 
 const signature = await jaw.provider.request({
   method: 'wallet_sign',
-  params: [{
-    request: {
-      type: '0x01',
-      data: typedData, // TypedData object directly
+  params: [
+    {
+      request: {
+        type: '0x01',
+        data: typedData, // TypedData object directly
+      },
     },
-  }],
+  ],
 });
 ```
 
@@ -141,17 +142,18 @@ Issued At: ${new Date().toISOString()}`;
 
 const signature = await jaw.provider.request({
   method: 'wallet_sign',
-  params: [{
-    request: {
-      type: '0x45',
-      data: {
-        message: siweMessage, // UTF-8 message string
+  params: [
+    {
+      request: {
+        type: '0x45',
+        data: {
+          message: siweMessage, // UTF-8 message string
+        },
       },
     },
-  }],
+  ],
 });
 ```
-
 
 ## Related Methods
 

@@ -14,19 +14,19 @@ export type IssuanceType = 'create' | 'import' | 'fromLocalAccount';
  * Request payload for logging account issuance
  */
 export interface LogAccountIssuanceRequest {
-  address: Address;
-  type: IssuanceType;
-  timestamp: number;
+    address: Address;
+    type: IssuanceType;
+    timestamp: number;
 }
 
 /**
  * Route definitions for analytics operations
  */
 export interface AnalyticsRoutes {
-  LOG_ACCOUNT_ISSUANCE: {
-    request: LogAccountIssuanceRequest;
-    response: void;
-    headers: Record<string, string>;
-    pathParams?: never;
-  };
+    LOG_ACCOUNT_ISSUANCE: {
+        request: LogAccountIssuanceRequest;
+        response: void;
+        headers: Record<string, string>;
+        pathParams?: never;
+    };
 }

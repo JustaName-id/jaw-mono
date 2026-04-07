@@ -4,13 +4,11 @@ Get the authenticated account address without fully loading the account.
 
 **Type:** `static`
 
-
 ## Signature
 
 ```typescript
 static getAuthenticatedAddress(apiKey: string): Address | null
 ```
-
 
 ## Parameters
 
@@ -20,11 +18,9 @@ Type: `string`
 
 API key for JAW services. Used to scope the storage lookup.
 
-
 ## Returns
 
 `Address | null` - The account address if authenticated, or `null` if not authenticated.
-
 
 ## Behavior
 
@@ -35,7 +31,6 @@ This is a synchronous method that checks the authentication state stored locally
 3. Returns `null` if not authenticated
 
 This method does **not** trigger WebAuthn or any network requests.
-
 
 ## Example
 
@@ -51,13 +46,11 @@ if (address) {
 }
 ```
 
-
 ## Use Cases
 
 - **Check before restore** - Verify authentication before calling `Account.get()`
 - **Conditional UI** - Show different UI based on authentication state
 - **Quick status check** - Get address without full account initialization
-
 
 ## Related
 

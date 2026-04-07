@@ -6,23 +6,21 @@ Embed onchain stablecoin payments directly into your telecom, neobank, or fintec
 This guide is for **headless mode** using the `Account` class directly. If you're using the JAW Provider or Wagmi connector, stablecoin gas payments are handled automatically — the built-in UI modals let users select fee tokens across all supported chains with no configuration needed.
 :::
 
-
 ## Why Stablecoin Payments?
 
 Traditional cross-border payments are slow and expensive. When you send $1,000 to a contractor in Brazil using traditional rails, the costs add up quickly: payment processor fees ($10–$40), intermediary bank cuts (0.1%–4.0% FX spread), and 3-5 days of settlement time. By the time the payment clears, the recipient has lost $80 to fees.
 
 **Stablecoins change this entirely:**
 
-| Traditional Rails | Stablecoin Rails |
-|-------------------|------------------|
-| 3-5 business days | Seconds |
-| $40-80 in fees per $1,000 | ~$0.01-0.10 |
-| Bank hours only | 24/7/365 |
-| Currency volatility risk | Dollar-denominated stability |
-| Opaque reconciliation | On-chain transparency |
+| Traditional Rails         | Stablecoin Rails             |
+| ------------------------- | ---------------------------- |
+| 3-5 business days         | Seconds                      |
+| $40-80 in fees per $1,000 | ~$0.01-0.10                  |
+| Bank hours only           | 24/7/365                     |
+| Currency volatility risk  | Dollar-denominated stability |
+| Opaque reconciliation     | On-chain transparency        |
 
 With JAW, you can embed these benefits directly into your application. Users authenticate with passkeys (no seed phrases), pay gas fees in USDC (no ETH needed), and send payments that settle in seconds.
-
 
 ## Prerequisites
 
@@ -50,7 +48,6 @@ bun add @jaw.id/core
 
 Get your API key at **[dashboard.jaw.id](https://dashboard.jaw.id/)**.
 
-
 ## Configuration
 
 Set up your account configuration with the ERC-20 paymaster for USDC gas payments:
@@ -68,7 +65,6 @@ const config = {
 const paymasterUrl = `${JAW_PAYMASTER_URL}?chainId=8453&api-key=YOUR_API_KEY`;
 ```
 
-
 ## Account Management
 
 Since you're using the `Account` class directly (headless mode), no JAW UI is rendered. The only prompt users see is the native browser/OS passkey dialog.
@@ -78,7 +74,7 @@ Since you're using the `Account` class directly (headless mode), no JAW UI is re
 ```typescript [Create Account]
 // New user: create account with passkey
 const account = await Account.create(config, {
-  username: 'user@yourapp.com' // Your app's user identifier
+  username: 'user@yourapp.com', // Your app's user identifier
 });
 
 // Store the credentialId for future sign-ins
@@ -100,7 +96,6 @@ const account = await Account.get(config, credentialId);
 Your application manages the `username → credentialId` mapping. When a user creates an account, store their `credentialId` in your backend. On subsequent sign-ins, look up the `credentialId` by username and pass it to `Account.get()`.
 :::
 
-
 ## Send a USDC Payment
 
 Send USDC with gas fees paid in USDC - users don't need ETH:
@@ -110,19 +105,21 @@ import { encodeFunctionData, erc20Abi, parseUnits } from 'viem';
 
 // Send 10 USDC to a recipient
 const { id, chainId } = await account.sendCalls(
-  [{
-    to: USDC_ADDRESS,
-    data: encodeFunctionData({
-      abi: erc20Abi,
-      functionName: 'transfer',
-      args: [
-        '0xRecipientAddress...', // Recipient address
-        parseUnits('10', 6)      // 10 USDC (6 decimals)
-      ]
-    })
-  }],
-  undefined,              // options
-  paymasterUrl,           // ERC-20 paymaster
+  [
+    {
+      to: USDC_ADDRESS,
+      data: encodeFunctionData({
+        abi: erc20Abi,
+        functionName: 'transfer',
+        args: [
+          '0xRecipientAddress...', // Recipient address
+          parseUnits('10', 6), // 10 USDC (6 decimals)
+        ],
+      }),
+    },
+  ],
+  undefined, // options
+  paymasterUrl, // ERC-20 paymaster
   { token: USDC_ADDRESS } // Pay gas in USDC
 );
 
@@ -130,7 +127,6 @@ console.log('Transaction submitted:', id);
 ```
 
 The SDK automatically handles the USDC approval for gas payment - no extra step required.
-
 
 ## Check Transaction Status
 
@@ -157,7 +153,6 @@ if (status) {
 }
 ```
 
-
 ## Batch Payments
 
 Send multiple payments in a single transaction for payroll or mass payouts:
@@ -174,25 +169,18 @@ const calls = recipients.map(({ address, amount }) => ({
   data: encodeFunctionData({
     abi: erc20Abi,
     functionName: 'transfer',
-    args: [address, parseUnits(amount, 6)]
-  })
+    args: [address, parseUnits(amount, 6)],
+  }),
 }));
 
-const { id } = await account.sendCalls(
-  calls,
-  undefined,
-  paymasterUrl,
-  { token: USDC_ADDRESS }
-);
+const { id } = await account.sendCalls(calls, undefined, paymasterUrl, { token: USDC_ADDRESS });
 ```
 
 All transfers execute atomically - either all succeed or all fail together.
 
-
 ## Supported Networks
 
 See [Supported Networks](/supported-networks) for the full list.
-
 
 ## Related
 

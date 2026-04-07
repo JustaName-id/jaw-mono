@@ -82,9 +82,7 @@ const INSUFFICIENT_FUNDS_ERRORS = [
  */
 function isInsufficientFundsError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return INSUFFICIENT_FUNDS_ERRORS.some(msg =>
-    error.message.toLowerCase().includes(msg.toLowerCase())
-  );
+  return INSUFFICIENT_FUNDS_ERRORS.some((msg) => error.message.toLowerCase().includes(msg.toLowerCase()));
 }
 
 /**
@@ -160,11 +158,12 @@ export function useGasEstimation({
   // Track ERC-20 token addresses to re-run estimation when new tokens are added
   // This is stable when only gasCostFormatted/isSelectable change (preventing infinite loops)
   const erc20TokenAddresses = useMemo(
-    () => feeTokens
-      .filter(t => !t.isNative)
-      .map(t => t.address.toLowerCase())
-      .sort()
-      .join(','),
+    () =>
+      feeTokens
+        .filter((t) => !t.isNative)
+        .map((t) => t.address.toLowerCase())
+        .sort()
+        .join(','),
     [feeTokens]
   );
 
@@ -181,9 +180,7 @@ export function useGasEstimation({
   useEffect(() => {
     if (!selectedFeeToken || selectedFeeToken.isNative) return;
 
-    const updatedToken = feeTokens.find(
-      t => t.address.toLowerCase() === selectedFeeToken.address.toLowerCase()
-    );
+    const updatedToken = feeTokens.find((t) => t.address.toLowerCase() === selectedFeeToken.address.toLowerCase());
 
     // Update if gasCostFormatted changed (new estimate came in)
     if (updatedToken && updatedToken.gasCostFormatted !== selectedFeeToken.gasCostFormatted) {
@@ -214,9 +211,7 @@ export function useGasEstimation({
     // Use a fallback gas estimate and still run ERC-20 estimation with a dummy call
     // Using zero address as dummy target for estimation purposes
     const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000' as Address;
-    const effectiveCalls = transactionCalls.length > 0
-      ? transactionCalls
-      : [{ to: ZERO_ADDRESS, value: 0n }]; // Dummy call for estimation
+    const effectiveCalls = transactionCalls.length > 0 ? transactionCalls : [{ to: ZERO_ADDRESS, value: 0n }]; // Dummy call for estimation
 
     // Increment version to track this estimation
     const currentVersion = ++estimationVersionRef.current;
@@ -229,27 +224,23 @@ export function useGasEstimation({
     try {
       // Use refs to avoid infinite loops (these values shouldn't trigger re-estimation)
       const currentFeeTokens = feeTokensRef.current;
-      const erc20Tokens = currentFeeTokens.filter(t => !t.isNative);
+      const erc20Tokens = currentFeeTokens.filter((t) => !t.isNative);
       // Filter tokens with balance > 0 for estimation (paymaster can't validate with 0 balance)
-      const erc20TokensWithBalance = erc20Tokens.filter(t => t.balance > 0n);
+      const erc20TokensWithBalance = erc20Tokens.filter((t) => t.balance > 0n);
       const paymasterUrl = buildPaymasterUrl(chainId, apiKey);
 
       // Convert effectiveCalls to ensure value is bigint for estimateErc20PaymasterCosts
-      const callsWithBigIntValue = effectiveCalls.map(call => ({
+      const callsWithBigIntValue = effectiveCalls.map((call) => ({
         to: call.to as Address,
-        value: call.value !== undefined
-          ? (typeof call.value === 'string' ? BigInt(call.value) : call.value)
-          : undefined,
+        value:
+          call.value !== undefined ? (typeof call.value === 'string' ? BigInt(call.value) : call.value) : undefined,
         data: call.data as Hex | undefined,
       }));
 
       // Run ETH and ERC-20 estimation in parallel
       const [ethResult, erc20Result] = await Promise.allSettled([
         // ETH gas estimation
-        account.calculateGasCost(
-          effectiveCalls,
-          permissionId ? { permissionId } : undefined
-        ),
+        account.calculateGasCost(effectiveCalls, permissionId ? { permissionId } : undefined),
         // ERC-20 gas estimation (only for tokens with balance > 0)
         // Tokens with 0 balance will be marked as not selectable below
         erc20TokensWithBalance.length > 0
@@ -258,14 +249,14 @@ export function useGasEstimation({
               callsWithBigIntValue,
               account.getChain(),
               paymasterUrl,
-              erc20TokensWithBalance.map(t => ({
+              erc20TokensWithBalance.map((t) => ({
                 address: t.address as Address,
                 symbol: t.symbol,
                 decimals: t.decimals,
                 balance: t.balance,
               }))
             )
-          : Promise.resolve([])
+          : Promise.resolve([]),
       ]);
 
       // Check if this estimation is still current (handle race conditions)
@@ -282,7 +273,7 @@ export function useGasEstimation({
         setTokenEstimates(erc20Estimates);
 
         // Update feeTokens with the estimated costs and selectability
-        updatedFeeTokens = currentFeeTokens.map(token => {
+        updatedFeeTokens = currentFeeTokens.map((token) => {
           if (token.isNative) return token;
 
           // Tokens with 0 balance are not selectable (can't pay gas fees)
@@ -294,9 +285,7 @@ export function useGasEstimation({
             };
           }
 
-          const estimate = erc20Estimates.find(
-            e => e.tokenAddress.toLowerCase() === token.address.toLowerCase()
-          );
+          const estimate = erc20Estimates.find((e) => e.tokenAddress.toLowerCase() === token.address.toLowerCase());
 
           if (estimate) {
             return {
@@ -317,7 +306,7 @@ export function useGasEstimation({
         if (isInsufficientBalance) {
           // This is an expected case - user doesn't have enough ERC-20 tokens
           // Don't log as error, just mark tokens as insufficient
-          updatedFeeTokens = currentFeeTokens.map(token => {
+          updatedFeeTokens = currentFeeTokens.map((token) => {
             if (token.isNative) return token;
 
             // Tokens with 0 balance are not selectable
@@ -347,7 +336,7 @@ export function useGasEstimation({
         } else {
           // Unexpected error - log it and show estimation failed
           console.error('[useGasEstimation] ERC-20 estimation failed:', erc20Result.reason);
-          updatedFeeTokens = currentFeeTokens.map(token => {
+          updatedFeeTokens = currentFeeTokens.map((token) => {
             if (token.isNative) return token;
 
             // Tokens with 0 balance - just mark as not selectable without error message
@@ -371,8 +360,7 @@ export function useGasEstimation({
 
       // Process ETH result
       const ethSuccess = ethResult.status === 'fulfilled';
-      const ethInsufficientFunds = ethResult.status === 'rejected' &&
-        isInsufficientFundsError(ethResult.reason);
+      const ethInsufficientFunds = ethResult.status === 'rejected' && isInsufficientFundsError(ethResult.reason);
 
       if (ethSuccess) {
         handleEthSuccess(ethResult.value, updatedFeeTokens);
@@ -394,8 +382,8 @@ export function useGasEstimation({
         setEstimatingTokenCosts(false);
       }
     }
-  // Note: feeTokens and onFeeTokensUpdate accessed via refs to prevent infinite loops
-  // erc20TokenAddresses triggers re-estimation when new ERC-20 tokens are added (but not when estimates update)
+    // Note: feeTokens and onFeeTokensUpdate accessed via refs to prevent infinite loops
+    // erc20TokenAddresses triggers re-estimation when new ERC-20 tokens are added (but not when estimates update)
   }, [account, transactionCalls, chainId, apiKey, isSponsored, permissionId, erc20TokenAddresses]);
 
   // -------------------------------------------------------------------------
@@ -405,26 +393,27 @@ export function useGasEstimation({
   /**
    * Handle successful ETH gas estimation
    */
-  const handleEthSuccess = useCallback((gasPrice: string, updatedFeeTokens: FeeTokenOption[]) => {
-    setGasFee(gasPrice);
-    setGasEstimationError('');
+  const handleEthSuccess = useCallback(
+    (gasPrice: string, updatedFeeTokens: FeeTokenOption[]) => {
+      setGasFee(gasPrice);
+      setGasEstimationError('');
 
-    // Auto-select native token if not already selected
-    if (!selectedFeeToken) {
-      const nativeToken = updatedFeeTokens.find(t => t.isNative && t.isSelectable);
-      if (nativeToken) {
-        setSelectedFeeToken(nativeToken);
+      // Auto-select native token if not already selected
+      if (!selectedFeeToken) {
+        const nativeToken = updatedFeeTokens.find((t) => t.isNative && t.isSelectable);
+        if (nativeToken) {
+          setSelectedFeeToken(nativeToken);
+        }
       }
-    }
-  }, [selectedFeeToken]);
+    },
+    [selectedFeeToken]
+  );
 
   /**
    * Handle ETH insufficient funds - try to fallback to ERC-20
    */
-  const handleEthInsufficientFunds = useCallback((
-    updatedFeeTokens: FeeTokenOption[],
-  ) => {
-    const selectableErc20 = updatedFeeTokens.find(t => !t.isNative && t.isSelectable);
+  const handleEthInsufficientFunds = useCallback((updatedFeeTokens: FeeTokenOption[]) => {
+    const selectableErc20 = updatedFeeTokens.find((t) => !t.isNative && t.isSelectable);
 
     if (selectableErc20) {
       // Auto-select first selectable ERC-20 token

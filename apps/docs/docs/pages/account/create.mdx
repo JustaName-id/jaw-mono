@@ -4,7 +4,6 @@ Create a new account with a passkey.
 
 **Type:** `static async`
 
-
 ## Signature
 
 ```typescript
@@ -14,34 +13,31 @@ static async create(
 ): Promise<Account>
 ```
 
-
 ## Parameters
 
 ### config
 
 Type: `AccountConfig`
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `chainId` | `number` | Yes | Chain ID for the account |
-| `apiKey` | `string` | Yes | API key for JAW services |
-| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
+| Property       | Type     | Required | Description                              |
+| -------------- | -------- | -------- | ---------------------------------------- |
+| `chainId`      | `number` | Yes      | Chain ID for the account                 |
+| `apiKey`       | `string` | Yes      | API key for JAW services                 |
+| `paymasterUrl` | `string` | No       | Custom paymaster URL for gas sponsorship |
 
 ### options
 
 Type: `CreateAccountOptions`
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `username` | `string` | Yes | Username/display name for the passkey |
-| `rpId` | `string` | No | Relying party identifier (defaults to `window.location.hostname`) |
-| `rpName` | `string` | No | Relying party name (defaults to `'JAW'`) |
-
+| Property   | Type     | Required | Description                                                       |
+| ---------- | -------- | -------- | ----------------------------------------------------------------- |
+| `username` | `string` | Yes      | Username/display name for the passkey                             |
+| `rpId`     | `string` | No       | Relying party identifier (defaults to `window.location.hostname`) |
+| `rpName`   | `string` | No       | Relying party name (defaults to `'JAW'`)                          |
 
 ## Returns
 
 `Promise<Account>` - The newly created Account instance
-
 
 ## Behavior
 
@@ -50,14 +46,12 @@ Type: `CreateAccountOptions`
 3. Stores the passkey account and authentication state
 4. Returns the ready-to-use Account instance
 
-
 ## Errors
 
-| Error | Description |
-|-------|-------------|
+| Error           | Description                                                         |
+| --------------- | ------------------------------------------------------------------- |
 | WebAuthn errors | User cancelled passkey creation or browser doesn't support WebAuthn |
-| Network errors | Failed to communicate with JAW services |
-
+| Network errors  | Failed to communicate with JAW services                             |
 
 ## Examples
 
@@ -66,10 +60,7 @@ Type: `CreateAccountOptions`
 ```typescript
 import { Account } from '@jaw.id/core';
 
-const account = await Account.create(
-  { chainId: 1, apiKey: 'your-api-key' },
-  { username: 'alice' }
-);
+const account = await Account.create({ chainId: 1, apiKey: 'your-api-key' }, { username: 'alice' });
 
 console.log('Created account:', account.address);
 console.log('Username:', account.getMetadata()?.username);
@@ -87,7 +78,6 @@ const account = await Account.create(
   }
 );
 ```
-
 
 ## Usage in Custom UI Handler
 
@@ -117,7 +107,6 @@ class MyUIHandler implements UIHandler {
   }
 }
 ```
-
 
 ## Related
 

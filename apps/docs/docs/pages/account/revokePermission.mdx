@@ -4,13 +4,11 @@ Revoke a previously granted permission.
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
 async revokePermission(permissionId: Hex): Promise<RevokePermissionApiResponse>
 ```
-
 
 ## Parameters
 
@@ -19,7 +17,6 @@ async revokePermission(permissionId: Hex): Promise<RevokePermissionApiResponse>
 Type: `Hex`
 
 The permission ID (hash) to revoke. This is the `id` field returned from `grantPermissions()`.
-
 
 ## Returns
 
@@ -34,14 +31,12 @@ interface RevokePermissionApiResponse {
 }
 ```
 
-
 ## Behavior
 
 1. Sends a revocation request to the JAW relay
 2. Signs the revocation with the smart account
 3. The permission is invalidated and can no longer be used
 4. Returns confirmation of the revocation
-
 
 ## Example
 
@@ -64,7 +59,6 @@ if (response.success) {
   console.log('Revocation failed');
 }
 ```
-
 
 ## Related
 

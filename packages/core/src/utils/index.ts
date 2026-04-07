@@ -6,20 +6,11 @@ export {
     encryptContent,
     decryptContent,
     exportKeyToHexString,
-    importKeyFromHexString
-} from "./crypto.js";
+    importKeyFromHexString,
+} from './crypto.js';
 
-export {
-    get
-} from "./get.js"
+export { get } from './get.js';
 
-export {
-    fetchRPCRequest,
-    checkErrorForInvalidRequestArgs,
-    buildHandleJawRpcUrl
-} from "./provider.js"
+export { fetchRPCRequest, checkErrorForInvalidRequestArgs, buildHandleJawRpcUrl } from './provider.js';
 
-export {
-    hexStringFromNumber,
-    ensureIntNumber
-} from "./type.js"
+export { hexStringFromNumber, ensureIntNumber } from './type.js';

@@ -4,13 +4,11 @@ Hook to get the call history for an account. Can be called with or without a con
 
 **Type:** `hook`
 
-
 ## Import
 
 ```typescript
 import { useGetCallsHistory } from '@jaw.id/wagmi';
 ```
-
 
 ## Signature
 
@@ -24,9 +22,8 @@ function useGetCallsHistory(parameters?: {
   sort?: 'asc' | 'desc';
   config?: Config;
   query?: UseQueryParameters;
-}): UseQueryResult
+}): UseQueryResult;
 ```
-
 
 ## Parameters
 
@@ -78,20 +75,19 @@ Type: `UseQueryParameters` (optional)
 
 TanStack React Query options (excluding `gcTime` and `staleTime` which are managed internally).
 
-
 ## Returns
 
 Returns a TanStack React Query result:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `data` | `CallsHistoryItem[]` | Array of call history items |
-| `isLoading` | `boolean` | Whether initial load is in progress |
-| `isFetching` | `boolean` | Whether any fetch is in progress |
-| `isSuccess` | `boolean` | Whether query succeeded |
-| `isError` | `boolean` | Whether query failed |
-| `error` | `Error` | Error if query failed |
-| `refetch` | `function` | Manually refetch history |
+| Property     | Type                 | Description                         |
+| ------------ | -------------------- | ----------------------------------- |
+| `data`       | `CallsHistoryItem[]` | Array of call history items         |
+| `isLoading`  | `boolean`            | Whether initial load is in progress |
+| `isFetching` | `boolean`            | Whether any fetch is in progress    |
+| `isSuccess`  | `boolean`            | Whether query succeeded             |
+| `isError`    | `boolean`            | Whether query failed                |
+| `error`      | `Error`              | Error if query failed               |
+| `refetch`    | `function`           | Manually refetch history            |
 
 ### data
 
@@ -116,14 +112,12 @@ interface CallsHistoryItem {
 }
 ```
 
-
 ## Behavior
 
 1. **Works without connection** when `address` is provided
 2. **Uses connected address** automatically when wallet is connected
 3. **Caches for 30 seconds** before becoming stale
 4. **Supports pagination** via `index` cursor
-
 
 ## Examples
 
@@ -182,7 +176,11 @@ import { useGetCallsHistory } from '@jaw.id/wagmi';
 function PaginatedHistory({ address }: { address: `0x${string}` }) {
   const [cursor, setCursor] = useState<number | undefined>();
 
-  const { data: history, isLoading, isFetching } = useGetCallsHistory({
+  const {
+    data: history,
+    isLoading,
+    isFetching,
+  } = useGetCallsHistory({
     address,
     index: cursor,
     limit: 10,
@@ -197,11 +195,7 @@ function PaginatedHistory({ address }: { address: `0x${string}` }) {
 
   return (
     <div>
-      {history?.map((item) => (
-        <div key={item.id}>
-          {item.status === 200 ? 'Completed' : 'Pending'}
-        </div>
-      ))}
+      {history?.map((item) => <div key={item.id}>{item.status === 200 ? 'Completed' : 'Pending'}</div>)}
       <button onClick={loadMore} disabled={isFetching}>
         {isFetching ? 'Loading...' : 'Load More'}
       </button>
@@ -224,9 +218,7 @@ function PendingTransactions() {
     <div>
       <h3>Pending Transactions ({pending.length})</h3>
       {pending.map((item) => (
-        <div key={item.id}>
-          Submitted: {new Date(item.timestamp * 1000).toLocaleString()}
-        </div>
+        <div key={item.id}>Submitted: {new Date(item.timestamp * 1000).toLocaleString()}</div>
       ))}
     </div>
   );
@@ -251,7 +243,6 @@ function RefreshableHistory() {
   );
 }
 ```
-
 
 ## Related
 

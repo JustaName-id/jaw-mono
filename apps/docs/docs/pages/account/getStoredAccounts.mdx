@@ -4,13 +4,11 @@ Get all stored passkey accounts.
 
 **Type:** `static`
 
-
 ## Signature
 
 ```typescript
 static getStoredAccounts(apiKey: string): PasskeyAccount[]
 ```
-
 
 ## Parameters
 
@@ -19,7 +17,6 @@ static getStoredAccounts(apiKey: string): PasskeyAccount[]
 Type: `string`
 
 API key for JAW services. Used to scope the storage lookup.
-
 
 ## Returns
 
@@ -44,7 +41,6 @@ interface PasskeyAccount {
 }
 ```
 
-
 ## Behavior
 
 This is a synchronous method that retrieves all passkey accounts stored locally:
@@ -52,7 +48,6 @@ This is a synchronous method that retrieves all passkey accounts stored locally:
 1. Reads from localStorage
 2. Returns all stored accounts regardless of authentication state
 3. Returns an empty array if no accounts are stored
-
 
 ## Example
 
@@ -62,11 +57,10 @@ import { Account } from '@jaw.id/core';
 const accounts = Account.getStoredAccounts('your-api-key');
 
 console.log(`Found ${accounts.length} stored accounts:`);
-accounts.forEach(acc => {
+accounts.forEach((acc) => {
   console.log(`- ${acc.username}: ${acc.address}`);
 });
 ```
-
 
 ## Use Cases
 
@@ -74,7 +68,6 @@ accounts.forEach(acc => {
 - **Onboarding flow** - Check if user has existing accounts
 - **Account management** - Display list of all user accounts
 - **Pre-fetch account info** - Show account details before authentication
-
 
 ## Related
 

@@ -1,13 +1,10 @@
-import { BaseCommand } from "../../base-command.js";
-import { loadConfig, redactConfig } from "../../lib/config.js";
+import { BaseCommand } from '../../base-command.js';
+import { loadConfig, redactConfig } from '../../lib/config.js';
 
 export default class ConfigShow extends BaseCommand {
-  static override description = "Show current CLI configuration";
+  static override description = 'Show current CLI configuration';
 
-  static override examples = [
-    "<%= config.bin %> config show",
-    "<%= config.bin %> config show --output json",
-  ];
+  static override examples = ['<%= config.bin %> config show', '<%= config.bin %> config show --output json'];
 
   static override flags = {
     ...BaseCommand.baseFlags,
@@ -16,6 +13,6 @@ export default class ConfigShow extends BaseCommand {
   async run(): Promise<void> {
     const { flags } = await this.parse(ConfigShow);
     const config = loadConfig();
-    this.outputResult(redactConfig(config), flags.output as "json" | "human");
+    this.outputResult(redactConfig(config), flags.output as 'json' | 'human');
   }
 }

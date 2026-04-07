@@ -5,9 +5,7 @@
     "emitDeclarationOnly": true,
     "importHelpers": true,
     "isolatedModules": true,
-    "lib": [
-      "es2022"
-    ],
+    "lib": ["es2022"],
     "module": "nodenext",
     "moduleResolution": "nodenext",
     "noEmitOnError": true,
@@ -18,29 +16,15 @@
     "skipLibCheck": true,
     "strict": true,
     "target": "es2022",
-    "customConditions": [
-      "@jaw-mono/source"
-    ],
+    "customConditions": ["@jaw-mono/source"],
     "baseUrl": ".",
     "paths": {
-      "@jaw.id/cli": [
-        "packages/cli/src/index.ts"
-      ],
-      "@jaw.id/cli/*": [
-        "packages/cli/src/*"
-      ],
-      "@jaw.id/core": [
-        "packages/core/src/index.ts"
-      ],
-      "@jaw.id/core/*": [
-        "packages/core/src/*"
-      ],
-      "@jaw.id/ui": [
-        "packages/ui/src/index.ts"
-      ],
-      "@jaw.id/ui/*": [
-        "packages/ui/src/*"
-      ]
+      "@jaw.id/cli": ["packages/cli/src/index.ts"],
+      "@jaw.id/cli/*": ["packages/cli/src/*"],
+      "@jaw.id/core": ["packages/core/src/index.ts"],
+      "@jaw.id/core/*": ["packages/core/src/*"],
+      "@jaw.id/ui": ["packages/ui/src/index.ts"],
+      "@jaw.id/ui/*": ["packages/ui/src/*"]
     }
   }
 }

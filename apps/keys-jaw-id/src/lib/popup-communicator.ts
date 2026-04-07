@@ -90,9 +90,7 @@ export class PopupCommunicator {
    * Listen for messages from the opener
    * Returns cleanup function
    */
-  onMessage<T = unknown>(
-    callback: (message: Message & { data?: T }) => void
-  ): () => void {
+  onMessage<T = unknown>(callback: (message: Message & { data?: T }) => void): () => void {
     const handler = (event: MessageEvent) => {
       // Ignore messages not from opener
       if (this.opener && event.source !== this.opener) {

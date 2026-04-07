@@ -4,54 +4,54 @@ Broadcast bundle of calls to the network.
 
 **Authentication Required:** No
 
-
 ## Request
 
 ```typescript
 await jaw.provider.request({
   method: 'wallet_sendCalls',
-  params: [{
-    calls: [
-      {
-        to: '0xContractA...',
-        value: '0x0',
-        data: '0x...',
-      },
-      {
-        to: '0xContractB...',
-        value: '0x0',
-        data: '0x...',
-      },
-    ],
-  }],
+  params: [
+    {
+      calls: [
+        {
+          to: '0xContractA...',
+          value: '0x0',
+          data: '0x...',
+        },
+        {
+          to: '0xContractB...',
+          value: '0x0',
+          data: '0x...',
+        },
+      ],
+    },
+  ],
 });
 ```
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `calls` | `array` | Yes | Array of call objects |
-| `calls[].to` | `0x${string}` | Yes | Recipient address |
-| `calls[].value` | `0x${string}` | No | Value in wei (hex), default "0x0" |
-| `calls[].data` | `0x${string}` | No | Call data (hex), default "0x" |
-| `chainId` | `0x${string}` | No | Target chain ID (defaults to connected chain) |
-| `capabilities` | `object` | No | Additional capabilities (see below) |
+| Name            | Type          | Required | Description                                   |
+| --------------- | ------------- | -------- | --------------------------------------------- |
+| `calls`         | `array`       | Yes      | Array of call objects                         |
+| `calls[].to`    | `0x${string}` | Yes      | Recipient address                             |
+| `calls[].value` | `0x${string}` | No       | Value in wei (hex), default "0x0"             |
+| `calls[].data`  | `0x${string}` | No       | Call data (hex), default "0x"                 |
+| `chainId`       | `0x${string}` | No       | Target chain ID (defaults to connected chain) |
+| `capabilities`  | `object`      | No       | Additional capabilities (see below)           |
 
 ### Capabilities
 
-| Name | Type | Description |
-|------|------|-------------|
-| `capabilities.permissions` | `object` | Permission capability for delegated execution |
-| `capabilities.permissions.id` | `0x${string}` | ID of the permission to use for execution |
-| `capabilities.paymasterService` | `object` | Paymaster service for per-call gas sponsorship |
-| `capabilities.paymasterService.url` | `string` | Paymaster service URL (ERC-7677 compliant) |
-| `capabilities.paymasterService.context` | `object` | Optional context (e.g., `{ sponsorshipPolicyId: '...' }`) |
+| Name                                    | Type          | Description                                               |
+| --------------------------------------- | ------------- | --------------------------------------------------------- |
+| `capabilities.permissions`              | `object`      | Permission capability for delegated execution             |
+| `capabilities.permissions.id`           | `0x${string}` | ID of the permission to use for execution                 |
+| `capabilities.paymasterService`         | `object`      | Paymaster service for per-call gas sponsorship            |
+| `capabilities.paymasterService.url`     | `string`      | Paymaster service URL (ERC-7677 compliant)                |
+| `capabilities.paymasterService.context` | `object`      | Optional context (e.g., `{ sponsorshipPolicyId: '...' }`) |
 
 :::info
 The `paymasterService` capability allows you to specify a paymaster per-call, overriding any paymaster configured at the SDK level.
 :::
-
 
 ## Response
 
@@ -65,7 +65,6 @@ Returns a batch call identifier.
 }
 ```
 
-
 ## Behavior
 
 - All calls succeed atomically or all fail together
@@ -75,15 +74,13 @@ Returns a batch call identifier.
 - Gas is sponsored by paymaster if configured
 - Users offered native ERC-20 paymaster option for gas fees (no configuration needed)
 
-
 ## Errors
 
-| Code | Description |
-|------|-------------|
-| 4001 | User rejected the request |
-| 4100 | Unauthorized (not authenticated) |
-| -32602 | Invalid params |
-
+| Code   | Description                      |
+| ------ | -------------------------------- |
+| 4001   | User rejected the request        |
+| 4100   | Unauthorized (not authenticated) |
+| -32602 | Invalid params                   |
 
 ## Example
 
@@ -92,14 +89,16 @@ Returns a batch call identifier.
 ```typescript
 import { encodeFunctionData } from 'viem';
 
-const transferAbi = [{
-  name: 'transfer',
-  type: 'function',
-  inputs: [
-    { name: 'to', type: 'address' },
-    { name: 'amount', type: 'uint256' },
-  ],
-}];
+const transferAbi = [
+  {
+    name: 'transfer',
+    type: 'function',
+    inputs: [
+      { name: 'to', type: 'address' },
+      { name: 'amount', type: 'uint256' },
+    ],
+  },
+];
 
 const account = '0x1234...';
 const recipient = '0x5678...';
@@ -120,18 +119,20 @@ const uniTransfer = encodeFunctionData({
 // Send both transfers atomically
 const result = await jaw.provider.request({
   method: 'wallet_sendCalls',
-  params: [{
-    calls: [
-      {
-        to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-        data: usdcTransfer,
-      },
-      {
-        to: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984',
-        data: uniTransfer,
-      },
-    ],
-  }],
+  params: [
+    {
+      calls: [
+        {
+          to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+          data: usdcTransfer,
+        },
+        {
+          to: '0x1f9840a85d5aF5bf1D1762F925BDADdC4201F984',
+          data: uniTransfer,
+        },
+      ],
+    },
+  ],
 });
 
 console.log('Batch ID:', result.id);
@@ -168,25 +169,28 @@ const transferData = encodeFunctionData({
 // Execute the transfer using the permission
 const result = await jaw.provider.request({
   method: 'wallet_sendCalls',
-  params: [{
-    calls: [
-      {
-        to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
-        data: transferData,
-      },
-    ],
-    capabilities: {
-      permissions: {
-        id: permissionId,
+  params: [
+    {
+      calls: [
+        {
+          to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', // USDC
+          data: transferData,
+        },
+      ],
+      capabilities: {
+        permissions: {
+          id: permissionId,
+        },
       },
     },
-  }],
+  ],
 });
 
 console.log('Batch ID:', result.id);
 ```
 
 When using the `permissions` capability:
+
 - The calls are executed through the JustaPermissionManager contract
 - The permission's call and spend limits are enforced
 - The spender must have been granted appropriate permissions for the calls being made

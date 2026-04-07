@@ -6,14 +6,16 @@ export {
     type WalletConnectCapabilities,
     type WalletConnectRequest,
     type WalletConnectResponse,
-} from "./wallet_connect.js"
+} from './wallet_connect.js';
+
+export { type ViemRPCParams, type ViemRPCReturnType } from './methodTypes.js';
 
 export {
-    type ViemRPCParams,
-    type ViemRPCReturnType,
-} from './methodTypes.js';
-
-export {storeCallStatus, getCallStatus, waitForReceiptInBackground, getCallStatusEIP5792} from './wallet_sendCalls.js';
+    storeCallStatus,
+    getCallStatus,
+    waitForReceiptInBackground,
+    getCallStatusEIP5792,
+} from './wallet_sendCalls.js';
 
 export {
     handleGetCallsHistoryRequest,
@@ -58,5 +60,5 @@ export {
     buildRevokePermissionCall,
     ANY_TARGET,
     ANY_FN_SEL,
-    EMPTY_CALLDATA_FN_SEL
+    EMPTY_CALLDATA_FN_SEL,
 } from './permissions.js';

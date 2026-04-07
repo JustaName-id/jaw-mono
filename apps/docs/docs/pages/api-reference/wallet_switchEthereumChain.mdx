@@ -4,7 +4,6 @@ Switch to a different chain.
 
 **Authentication Required:** Yes
 
-
 ## Request
 
 ```typescript
@@ -16,9 +15,9 @@ await jaw.provider.request({
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `chainId` | `0x${string}` | Yes | Target chain ID in hexadecimal format |
+| Name      | Type          | Required | Description                           |
+| --------- | ------------- | -------- | ------------------------------------- |
+| `chainId` | `0x${string}` | Yes      | Target chain ID in hexadecimal format |
 
 ### Example
 
@@ -26,13 +25,11 @@ await jaw.provider.request({
 [{ "chainId": "0x2105" }]
 ```
 
-
 ## Response
 
 Returns `null` on success.
 
 **Type:** `null`
-
 
 ## Behavior
 
@@ -41,15 +38,13 @@ Returns `null` on success.
 - All subsequent transactions use the new chain
 - Only supported chains can be switched to
 
-
 ## Errors
 
-| Code | Description |
-|------|-------------|
-| 4001 | User rejected the request |
+| Code | Description                      |
+| ---- | -------------------------------- |
+| 4001 | User rejected the request        |
 | 4100 | Unauthorized (not authenticated) |
-| 4902 | Chain not supported |
-
+| 4902 | Chain not supported              |
 
 ## Example
 
@@ -84,7 +79,6 @@ await jaw.provider.request({
   params: [{ chainId: '0x2105' }], // Base
 });
 ```
-
 
 ## Related Methods
 

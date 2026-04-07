@@ -4,23 +4,17 @@ Hook to disconnect from the wallet.
 
 **Type:** `hook`
 
-
 ## Import
 
 ```typescript
 import { useDisconnect } from '@jaw.id/wagmi';
 ```
 
-
 ## Signature
 
 ```typescript
-function useDisconnect(parameters?: {
-  config?: Config;
-  mutation?: UseMutationParameters;
-}): UseMutationResult
+function useDisconnect(parameters?: { config?: Config; mutation?: UseMutationParameters }): UseMutationResult;
 ```
-
 
 ## Parameters
 
@@ -36,20 +30,18 @@ Type: `UseMutationParameters` (optional)
 
 TanStack React Query mutation options.
 
-
 ## Returns
 
 Returns a TanStack React Query mutation result:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `mutate` | `function` | Function to trigger disconnection |
-| `mutateAsync` | `function` | Async version of mutate |
-| `isPending` | `boolean` | Whether disconnection is in progress |
-| `isSuccess` | `boolean` | Whether disconnection succeeded |
-| `isError` | `boolean` | Whether disconnection failed |
-| `error` | `Error` | Error if disconnection failed |
-
+| Property      | Type       | Description                          |
+| ------------- | ---------- | ------------------------------------ |
+| `mutate`      | `function` | Function to trigger disconnection    |
+| `mutateAsync` | `function` | Async version of mutate              |
+| `isPending`   | `boolean`  | Whether disconnection is in progress |
+| `isSuccess`   | `boolean`  | Whether disconnection succeeded      |
+| `isError`     | `boolean`  | Whether disconnection failed         |
+| `error`       | `Error`    | Error if disconnection failed        |
 
 ## Mutation Variables
 
@@ -60,7 +52,6 @@ When calling `mutate()`, you can optionally pass:
 Type: `Connector` (optional)
 
 Specific connector to disconnect from. If omitted, disconnects the active connector.
-
 
 ## Examples
 
@@ -113,11 +104,7 @@ function DisconnectButton() {
   const connector = jaw({ apiKey: '...' });
 
   // Disconnect only this specific connector
-  return (
-    <button onClick={() => disconnect({ connector })}>
-      Disconnect JAW
-    </button>
-  );
+  return <button onClick={() => disconnect({ connector })}>Disconnect JAW</button>;
 }
 ```
 
@@ -135,7 +122,9 @@ function WalletButton() {
   if (isConnected) {
     return (
       <div>
-        <span>{address?.slice(0, 6)}...{address?.slice(-4)}</span>
+        <span>
+          {address?.slice(0, 6)}...{address?.slice(-4)}
+        </span>
         <button onClick={() => disconnect({})} disabled={isDisconnecting}>
           {isDisconnecting ? '...' : 'Disconnect'}
         </button>
@@ -144,16 +133,12 @@ function WalletButton() {
   }
 
   return (
-    <button
-      onClick={() => connect({ connector: jaw({ apiKey: '...' }) })}
-      disabled={isConnecting}
-    >
+    <button onClick={() => connect({ connector: jaw({ apiKey: '...' }) })} disabled={isConnecting}>
       {isConnecting ? 'Connecting...' : 'Connect'}
     </button>
   );
 }
 ```
-
 
 ## Related
 

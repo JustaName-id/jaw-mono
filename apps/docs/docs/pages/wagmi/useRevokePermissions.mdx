@@ -4,23 +4,17 @@ Hook to revoke an active permission by its ID. This permanently disables the per
 
 **Type:** `hook`
 
-
 ## Import
 
 ```typescript
 import { useRevokePermissions } from '@jaw.id/wagmi';
 ```
 
-
 ## Signature
 
 ```typescript
-function useRevokePermissions(parameters?: {
-  config?: Config;
-  mutation?: UseMutationParameters;
-}): UseMutationResult
+function useRevokePermissions(parameters?: { config?: Config; mutation?: UseMutationParameters }): UseMutationResult;
 ```
-
 
 ## Parameters
 
@@ -36,20 +30,19 @@ Type: `UseMutationParameters` (optional)
 
 TanStack React Query mutation options.
 
-
 ## Returns
 
 Returns a TanStack React Query mutation result:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `mutate` | `function` | Function to revoke permission |
-| `mutateAsync` | `function` | Async version of mutate |
-| `data` | `RevokePermissionApiResponse` | Revocation result |
-| `isPending` | `boolean` | Whether revocation is in progress |
-| `isSuccess` | `boolean` | Whether revocation succeeded |
-| `isError` | `boolean` | Whether revocation failed |
-| `error` | `Error` | Error if revocation failed |
+| Property      | Type                          | Description                       |
+| ------------- | ----------------------------- | --------------------------------- |
+| `mutate`      | `function`                    | Function to revoke permission     |
+| `mutateAsync` | `function`                    | Async version of mutate           |
+| `data`        | `RevokePermissionApiResponse` | Revocation result                 |
+| `isPending`   | `boolean`                     | Whether revocation is in progress |
+| `isSuccess`   | `boolean`                     | Whether revocation succeeded      |
+| `isError`     | `boolean`                     | Whether revocation failed         |
+| `error`       | `Error`                       | Error if revocation failed        |
 
 ### data
 
@@ -62,7 +55,6 @@ interface RevokePermissionApiResponse {
 }
 ```
 
-
 ## Mutation Variables
 
 When calling `mutate()`, pass an object with the following properties:
@@ -72,6 +64,7 @@ When calling `mutate()`, pass an object with the following properties:
 Type: `Hex` (e.g., `` `0x${string}` ``)
 
 The permission ID (hash) to revoke. You can obtain this from:
+
 - The `permissionId` field returned when granting a permission
 - The `permissionId` field from permissions returned by `usePermissions()`
 
@@ -151,7 +144,6 @@ revoke({
 });
 ```
 
-
 ## Examples
 
 ### Basic Usage
@@ -163,10 +155,7 @@ function RevokeButton({ permissionId }: { permissionId: `0x${string}` }) {
   const { mutate: revoke, isPending } = useRevokePermissions();
 
   return (
-    <button
-      onClick={() => revoke({ id: permissionId })}
-      disabled={isPending}
-    >
+    <button onClick={() => revoke({ id: permissionId })} disabled={isPending}>
       {isPending ? 'Revoking...' : 'Revoke Permission'}
     </button>
   );
@@ -255,15 +244,20 @@ function PermissionsManager() {
         return (
           <div key={permission.permissionId} className="permission-card">
             <div className="permission-info">
-              <p><strong>Spender:</strong> {permission.spender}</p>
-              <p><strong>Expires:</strong> {new Date(permission.end * 1000).toLocaleDateString()}</p>
-              <p><strong>Call Permissions:</strong> {permission.calls.length}</p>
-              <p><strong>Spend Limits:</strong> {permission.spends.length}</p>
+              <p>
+                <strong>Spender:</strong> {permission.spender}
+              </p>
+              <p>
+                <strong>Expires:</strong> {new Date(permission.end * 1000).toLocaleDateString()}
+              </p>
+              <p>
+                <strong>Call Permissions:</strong> {permission.calls.length}
+              </p>
+              <p>
+                <strong>Spend Limits:</strong> {permission.spends.length}
+              </p>
             </div>
-            <button
-              onClick={() => revoke({ id: permission.permissionId })}
-              disabled={isPending}
-            >
+            <button onClick={() => revoke({ id: permission.permissionId })} disabled={isPending}>
               {isRevoking ? 'Revoking...' : 'Revoke'}
             </button>
           </div>
@@ -325,7 +319,6 @@ function SponsoredRevoke({ permissionId }) {
 }
 ```
 
-
 ## Important Notes
 
 :::warning
@@ -335,7 +328,6 @@ function SponsoredRevoke({ permissionId }) {
 :::info
 **Transaction Required**: Revoking a permission requires an on-chain transaction. The user will need to pay gas for the transaction (unless using a paymaster for gasless revocation).
 :::
-
 
 ## Related
 

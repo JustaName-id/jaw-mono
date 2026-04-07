@@ -11,28 +11,21 @@ interface ChainInfo {
   hexId: string;
 }
 
-
 // Generate chain info from core's SUPPORTED_CHAINS
-const MAINNET_CHAINS: ChainInfo[] = CORE_MAINNET_CHAINS.map(chain => ({
+const MAINNET_CHAINS: ChainInfo[] = CORE_MAINNET_CHAINS.map((chain) => ({
   name: chain.name,
   chainId: chain.id,
   hexId: `0x${chain.id.toString(16)}`,
 }));
 
-const TESTNET_CHAINS: ChainInfo[] = CORE_TESTNET_CHAINS.map(chain => ({
+const TESTNET_CHAINS: ChainInfo[] = CORE_TESTNET_CHAINS.map((chain) => ({
   name: chain.name,
   chainId: chain.id,
   hexId: `0x${chain.id.toString(16)}`,
 }));
 
 const CheckIcon = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 16 16"
-    fill="none"
-    style={{ color: '#22c55e' }}
-  >
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: '#22c55e' }}>
     <path
       d="M13.5 4.5L6 12L2.5 8.5"
       stroke="currentColor"
@@ -44,20 +37,8 @@ const CheckIcon = () => (
 );
 
 const XIcon = () => (
-  <svg
-    width="16"
-    height="16"
-    viewBox="0 0 16 16"
-    fill="none"
-    style={{ color: '#ef4444' }}
-  >
-    <path
-      d="M12 4L4 12M4 4L12 12"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-    />
+  <svg width="16" height="16" viewBox="0 0 16 16" fill="none" style={{ color: '#ef4444' }}>
+    <path d="M12 4L4 12M4 4L12 12" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" />
   </svg>
 );
 
@@ -88,11 +69,7 @@ function FeeTokensCell({ tokens }: { tokens: string[] | null }) {
   if (tokens.length === 0) {
     return <span style={{ color: '#94a3b8' }}>-</span>;
   }
-  return (
-    <span style={{ fontSize: '0.875rem' }}>
-      {tokens.join(', ')}
-    </span>
-  );
+  return <span style={{ fontSize: '0.875rem' }}>{tokens.join(', ')}</span>;
 }
 
 interface CapabilitiesTableProps {
@@ -161,14 +138,16 @@ export function CapabilitiesTable({ type }: CapabilitiesTableProps) {
     const chainCaps = capabilities[hexId];
     if (!chainCaps) return [];
 
-    const feeToken = chainCaps.feeToken as {
-      supported?: boolean;
-      tokens?: Array<{ symbol: string }>
-    } | undefined;
+    const feeToken = chainCaps.feeToken as
+      | {
+          supported?: boolean;
+          tokens?: Array<{ symbol: string }>;
+        }
+      | undefined;
 
     if (!feeToken?.supported || !feeToken.tokens) return [];
 
-    return feeToken.tokens.map(t => t.symbol);
+    return feeToken.tokens.map((t) => t.symbol);
   };
 
   const tableStyles: React.CSSProperties = {
@@ -201,13 +180,15 @@ export function CapabilitiesTable({ type }: CapabilitiesTableProps) {
 
   if (error && !capabilities) {
     return (
-      <div style={{
-        padding: '1rem',
-        backgroundColor: 'var(--vocs-color_background2)',
-        borderRadius: '0.5rem',
-        color: 'var(--vocs-color_text2)',
-        fontSize: '0.875rem',
-      }}>
+      <div
+        style={{
+          padding: '1rem',
+          backgroundColor: 'var(--vocs-color_background2)',
+          borderRadius: '0.5rem',
+          color: 'var(--vocs-color_text2)',
+          fontSize: '0.875rem',
+        }}
+      >
         {error}. Showing static data.
         <table style={{ ...tableStyles, marginTop: '1rem' }}>
           <thead>
@@ -221,8 +202,12 @@ export function CapabilitiesTable({ type }: CapabilitiesTableProps) {
             {chains.map((chain) => (
               <tr key={chain.hexId}>
                 <td style={tdStyles}>{chain.name}</td>
-                <td style={tdStyles}><code>{chain.chainId}</code></td>
-                <td style={tdStyles}><code>{chain.hexId}</code></td>
+                <td style={tdStyles}>
+                  <code>{chain.chainId}</code>
+                </td>
+                <td style={tdStyles}>
+                  <code>{chain.hexId}</code>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -245,9 +230,15 @@ export function CapabilitiesTable({ type }: CapabilitiesTableProps) {
             <tr>
               <th style={thStyles}>Network</th>
               <th style={thStyles}>Chain ID</th>
-              <th style={thCenterStyles} title="Atomic batch transactions (EIP-5792)">Batch</th>
-              <th style={thCenterStyles} title="Gasless transactions via paymaster">Gasless</th>
-              <th style={thCenterStyles} title="Permission system support">Permissions</th>
+              <th style={thCenterStyles} title="Atomic batch transactions (EIP-5792)">
+                Batch
+              </th>
+              <th style={thCenterStyles} title="Gasless transactions via paymaster">
+                Gasless
+              </th>
+              <th style={thCenterStyles} title="Permission system support">
+                Permissions
+              </th>
               <th style={thStyles}>Fee Tokens</th>
             </tr>
           </thead>
@@ -257,9 +248,7 @@ export function CapabilitiesTable({ type }: CapabilitiesTableProps) {
                 <td style={tdStyles}>{chain.name}</td>
                 <td style={tdStyles}>
                   <code>{chain.chainId}</code>
-                  <span style={{ color: 'var(--vocs-color_text3)', marginLeft: '0.5rem' }}>
-                    ({chain.hexId})
-                  </span>
+                  <span style={{ color: 'var(--vocs-color_text3)', marginLeft: '0.5rem' }}>({chain.hexId})</span>
                 </td>
                 <td style={tdCenterStyles}>
                   <CapabilityCell supported={getCapability(chain.hexId, 'atomicBatch')} />

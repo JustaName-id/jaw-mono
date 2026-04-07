@@ -16,32 +16,29 @@ Without a sponsoring paymaster, the built-in UI modals let users choose to pay g
 **Requirement:** This guide uses EIP-7677 compatible paymasters with EntryPoint v0.8.
 :::
 
-
 ## 1. Choose a Provider
 
 Pick a paymaster provider and create an account. Generate your API key in their dashboard and deposit funds to cover gas costs.
 
 **Compatible Providers:**
 
-| Provider | Dashboard |
-|----------|-----------|
-| [Pimlico](https://pimlico.io) | [dashboard.pimlico.io](https://dashboard.pimlico.io) |
+| Provider                          | Dashboard                                                          |
+| --------------------------------- | ------------------------------------------------------------------ |
+| [Pimlico](https://pimlico.io)     | [dashboard.pimlico.io](https://dashboard.pimlico.io)               |
 | [Etherspot](https://etherspot.io) | [developer.etherspot.io](https://developer.etherspot.io/dashboard) |
 
 :::info
 Ensure your provider supports **EntryPoint v0.8** and **EIP-7677**. Not all providers support this yet.
 :::
 
-
 ## 2. Integration Path
 
 Pick your integration method:
 
-| Approach | Best For |
-|----------|----------|
-| **Wagmi** | React apps already using wagmi connectors. |
-| **Core SDK** | Custom implementations or non-React apps. |
-
+| Approach     | Best For                                   |
+| ------------ | ------------------------------------------ |
+| **Wagmi**    | React apps already using wagmi connectors. |
+| **Core SDK** | Custom implementations or non-React apps.  |
 
 ## 3. Enable Paymasters
 
@@ -92,7 +89,6 @@ const jaw = JAW.create({
 If you haven't set up JAW yet, start with the [Quickstart](/guides/quickstart) guide first.
 :::
 
-
 ## 4. Configuration Format
 
 Each network is configured by chain ID with its own paymaster URL. The optional `context` object passes sponsorship policies or provider-specific settings.
@@ -105,7 +101,6 @@ paymasters: {
   }
 }
 ```
-
 
 ## 5. Add Sponsorship Policies
 
@@ -168,7 +163,6 @@ const jaw = JAW.create({
 The `context` keys are provider-specific. Check your paymaster provider's documentation for the correct format.
 :::
 
-
 ## 6. Multi-Chain Configuration
 
 Support multiple blockchains with gas sponsorship. Set up a paymaster for each network so users get the same smooth experience everywhere.
@@ -181,8 +175,8 @@ import { jaw } from '@jaw.id/wagmi';
 const connector = jaw({
   apiKey: 'YOUR_JAW_API_KEY',
   paymasters: {
-    1: { url: 'https://api.pimlico.io/v2/1/rpc?apikey=...' },      // Ethereum Mainnet
-    10: { url: 'https://api.pimlico.io/v2/10/rpc?apikey=...' },    // Optimism
+    1: { url: 'https://api.pimlico.io/v2/1/rpc?apikey=...' }, // Ethereum Mainnet
+    10: { url: 'https://api.pimlico.io/v2/10/rpc?apikey=...' }, // Optimism
     8453: { url: 'https://api.pimlico.io/v2/8453/rpc?apikey=...' }, // Base
     42161: { url: 'https://api.pimlico.io/v2/42161/rpc?apikey=...' }, // Arbitrum
   },
@@ -195,8 +189,8 @@ import { JAW } from '@jaw.id/core';
 const jaw = JAW.create({
   apiKey: 'YOUR_JAW_API_KEY',
   paymasters: {
-    1: { url: 'https://api.pimlico.io/v2/1/rpc?apikey=...' },      // Ethereum Mainnet
-    10: { url: 'https://api.pimlico.io/v2/10/rpc?apikey=...' },    // Optimism
+    1: { url: 'https://api.pimlico.io/v2/1/rpc?apikey=...' }, // Ethereum Mainnet
+    10: { url: 'https://api.pimlico.io/v2/10/rpc?apikey=...' }, // Optimism
     8453: { url: 'https://api.pimlico.io/v2/8453/rpc?apikey=...' }, // Base
     42161: { url: 'https://api.pimlico.io/v2/42161/rpc?apikey=...' }, // Arbitrum
   },
@@ -209,14 +203,12 @@ const jaw = JAW.create({
 Sponsorship policies are configured per-provider. Check your provider's documentation for chain-specific settings.
 :::
 
-
 ## Configuration Reference
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `url` | `string` | Yes | The paymaster service endpoint URL |
-| `context` | `Record<string, unknown>` | No | Additional context passed to the paymaster (e.g., `sponsorshipPolicyId`) |
-
+| Property  | Type                      | Required | Description                                                              |
+| --------- | ------------------------- | -------- | ------------------------------------------------------------------------ |
+| `url`     | `string`                  | Yes      | The paymaster service endpoint URL                                       |
+| `context` | `Record<string, unknown>` | No       | Additional context passed to the paymaster (e.g., `sponsorshipPolicyId`) |
 
 ## Related
 

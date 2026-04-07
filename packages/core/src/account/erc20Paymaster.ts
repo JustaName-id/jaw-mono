@@ -8,48 +8,48 @@ import { ERC20_PAYMASTER_ADDRESS } from '../constants.js';
  * Token quote from Pimlico's ERC-20 paymaster
  */
 export interface TokenQuote {
-  tokenAddress: Address;
-  postOpGas: bigint;
-  exchangeRate: bigint;
-  paymasterAddress: Address;
+    tokenAddress: Address;
+    postOpGas: bigint;
+    exchangeRate: bigint;
+    paymasterAddress: Address;
 }
 
 /**
  * Estimated cost for a token
  */
 export interface TokenEstimate {
-  tokenAddress: Address;
-  symbol: string;
-  decimals: number;
-  tokenCost: bigint;
-  tokenCostFormatted: string;
-  paymasterAddress: Address;
-  exchangeRate: bigint;
-  /** Whether the user has sufficient balance to pay with this token */
-  hasSufficientBalance: boolean;
+    tokenAddress: Address;
+    symbol: string;
+    decimals: number;
+    tokenCost: bigint;
+    tokenCostFormatted: string;
+    paymasterAddress: Address;
+    exchangeRate: bigint;
+    /** Whether the user has sufficient balance to pay with this token */
+    hasSufficientBalance: boolean;
 }
 
 /**
  * Token info for estimation
  */
 export interface TokenInfo {
-  address: Address;
-  symbol: string;
-  decimals: number;
-  /** User's balance in the smallest unit (wei for 18 decimals, etc.) */
-  balance: bigint;
+    address: Address;
+    symbol: string;
+    decimals: number;
+    /** User's balance in the smallest unit (wei for 18 decimals, etc.) */
+    balance: bigint;
 }
 
 /**
  * Gas fields from a prepared UserOperation (EntryPoint v0.7/0.8)
  */
 export interface UserOpGasFields {
-  preVerificationGas: bigint;
-  verificationGasLimit: bigint;
-  callGasLimit: bigint;
-  paymasterVerificationGasLimit?: bigint;
-  paymasterPostOpGasLimit?: bigint;
-  maxFeePerGas: bigint;
+    preVerificationGas: bigint;
+    verificationGasLimit: bigint;
+    callGasLimit: bigint;
+    paymasterVerificationGasLimit?: bigint;
+    paymasterPostOpGasLimit?: bigint;
+    maxFeePerGas: bigint;
 }
 
 /**
@@ -62,54 +62,47 @@ export interface UserOpGasFields {
  * @returns Array of token quotes with exchange rates
  */
 export async function fetchTokenQuotes(
-  paymasterUrl: string,
-  chainId: number,
-  tokens: Address[]
+    paymasterUrl: string,
+    chainId: number,
+    tokens: Address[]
 ): Promise<TokenQuote[]> {
-  // Pimlico expects:
-  // - id as a number (not UUID string)
-  // - params as [{tokens: [...]}, entryPointAddress, chainIdHex]
-  const requestBody = {
-    jsonrpc: '2.0',
-    id: 1,
-    method: 'pimlico_getTokenQuotes',
-    params: [
-      { tokens },
-      entryPoint08Address,
-      `0x${chainId.toString(16)}`
-    ]
-  };
+    // Pimlico expects:
+    // - id as a number (not UUID string)
+    // - params as [{tokens: [...]}, entryPointAddress, chainIdHex]
+    const requestBody = {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'pimlico_getTokenQuotes',
+        params: [{ tokens }, entryPoint08Address, `0x${chainId.toString(16)}`],
+    };
 
-  const response = await fetch(paymasterUrl, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(requestBody),
-  });
+    const response = await fetch(paymasterUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(requestBody),
+    });
 
-  const data = await response.json();
+    const data = await response.json();
 
-  if (data.error) {
-    throw new Error(`pimlico_getTokenQuotes error: ${data.error.message || JSON.stringify(data.error)}`);
-  }
+    if (data.error) {
+        throw new Error(`pimlico_getTokenQuotes error: ${data.error.message || JSON.stringify(data.error)}`);
+    }
 
-  const result = data.result;
-  if (!result?.quotes || !Array.isArray(result.quotes)) {
-    throw new Error('Invalid response from pimlico_getTokenQuotes: no quotes array');
-  }
+    const result = data.result;
+    if (!result?.quotes || !Array.isArray(result.quotes)) {
+        throw new Error('Invalid response from pimlico_getTokenQuotes: no quotes array');
+    }
 
-  const quotes = result.quotes.map((q: {
-    token: string;
-    postOpGas: string;
-    exchangeRate: string;
-    paymaster: string;
-  }) => ({
-    tokenAddress: q.token as Address,
-    postOpGas: BigInt(q.postOpGas),
-    exchangeRate: BigInt(q.exchangeRate),
-    paymasterAddress: q.paymaster as Address,
-  }));
+    const quotes = result.quotes.map(
+        (q: { token: string; postOpGas: string; exchangeRate: string; paymaster: string }) => ({
+            tokenAddress: q.token as Address,
+            postOpGas: BigInt(q.postOpGas),
+            exchangeRate: BigInt(q.exchangeRate),
+            paymasterAddress: q.paymaster as Address,
+        })
+    );
 
-  return quotes;
+    return quotes;
 }
 
 /**
@@ -127,74 +120,72 @@ export async function fetchTokenQuotes(
  * @returns Array of token estimates with costs
  */
 export async function estimateErc20PaymasterCosts(
-  smartAccount: SmartAccount,
-  calls: Array<{ to: Address; value?: bigint; data?: Hex }>,
-  chain: Chain,
-  paymasterUrl: string,
-  tokens: TokenInfo[]
+    smartAccount: SmartAccount,
+    calls: Array<{ to: Address; value?: bigint; data?: Hex }>,
+    chain: Chain,
+    paymasterUrl: string,
+    tokens: TokenInfo[]
 ): Promise<TokenEstimate[]> {
-  if (tokens.length === 0) {
-    return [];
-  }
+    if (tokens.length === 0) {
+        return [];
+    }
 
-  // 1. Get quotes for all tokens in one call
-  const tokenAddresses = tokens.map(t => t.address);
-  const quotes = await fetchTokenQuotes(paymasterUrl, chain.id, tokenAddresses);
+    // 1. Get quotes for all tokens in one call
+    const tokenAddresses = tokens.map((t) => t.address);
+    const quotes = await fetchTokenQuotes(paymasterUrl, chain.id, tokenAddresses);
 
-  if (quotes.length === 0) {
-    throw new Error('No token quotes returned from paymaster');
-  }
+    if (quotes.length === 0) {
+        throw new Error('No token quotes returned from paymaster');
+    }
 
-  // 2. Build calls with dummy approval for estimation
-  // Use MaxUint256 for approval - amount doesn't affect gas estimation
-  const MaxUint256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
+    // 2. Build calls with dummy approval for estimation
+    // Use MaxUint256 for approval - amount doesn't affect gas estimation
+    const MaxUint256 = BigInt('0xffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff');
 
-  // Use the first quote's paymaster address (should be same for all)
-  const paymasterAddress = quotes[0]?.paymasterAddress || ERC20_PAYMASTER_ADDRESS;
+    // Use the first quote's paymaster address (should be same for all)
+    const paymasterAddress = quotes[0]?.paymasterAddress || ERC20_PAYMASTER_ADDRESS;
 
-  // Create a dummy approval call (we'll use the first token for estimation)
-  // Gas cost is similar regardless of which token we approve
-  const approvalCall = {
-    to: tokens[0].address,
-    value: 0n,
-    data: encodeFunctionData({
-      abi: erc20Abi,
-      functionName: 'approve',
-      args: [paymasterAddress, MaxUint256]
-    })
-  };
+    // Create a dummy approval call (we'll use the first token for estimation)
+    // Gas cost is similar regardless of which token we approve
+    const approvalCall = {
+        to: tokens[0].address,
+        value: 0n,
+        data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [paymasterAddress, MaxUint256],
+        }),
+    };
 
-  const callsWithApproval = [approvalCall, ...calls];
+    const callsWithApproval = [approvalCall, ...calls];
 
-  // 3. Prepare UserOp WITH the paymaster configured
-  // This is key - the paymaster being included means estimation won't fail with AA21
-  const bundlerClient = getBundlerClient(
-    chain,
-    paymasterUrl,
-    { token: tokens[0].address }
-  );
+    // 3. Prepare UserOp WITH the paymaster configured
+    // This is key - the paymaster being included means estimation won't fail with AA21
+    const bundlerClient = getBundlerClient(chain, paymasterUrl, { token: tokens[0].address });
 
-  const userOp = await bundlerClient.prepareUserOperation({
-    account: smartAccount,
-    calls: callsWithApproval,
-  });
+    const userOp = await bundlerClient.prepareUserOperation({
+        account: smartAccount,
+        calls: callsWithApproval,
+    });
 
-  // 4. Extract gas fields from userOp
-  const gas: UserOpGasFields = {
-    preVerificationGas: userOp.preVerificationGas,
-    verificationGasLimit: userOp.verificationGasLimit,
-    callGasLimit: userOp.callGasLimit,
-    paymasterVerificationGasLimit: 'paymasterVerificationGasLimit' in userOp
-      ? (userOp as { paymasterVerificationGasLimit?: bigint }).paymasterVerificationGasLimit
-      : undefined,
-    paymasterPostOpGasLimit: 'paymasterPostOpGasLimit' in userOp
-      ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit
-      : undefined,
-    maxFeePerGas: userOp.maxFeePerGas,
-  };
+    // 4. Extract gas fields from userOp
+    const gas: UserOpGasFields = {
+        preVerificationGas: userOp.preVerificationGas,
+        verificationGasLimit: userOp.verificationGasLimit,
+        callGasLimit: userOp.callGasLimit,
+        paymasterVerificationGasLimit:
+            'paymasterVerificationGasLimit' in userOp
+                ? (userOp as { paymasterVerificationGasLimit?: bigint }).paymasterVerificationGasLimit
+                : undefined,
+        paymasterPostOpGasLimit:
+            'paymasterPostOpGasLimit' in userOp
+                ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit
+                : undefined,
+        maxFeePerGas: userOp.maxFeePerGas,
+    };
 
-  // 5. Calculate cost for each token using the utility function
-  return calculateTokenEstimatesFromGas(gas, quotes, tokens);
+    // 5. Calculate cost for each token using the utility function
+    return calculateTokenEstimatesFromGas(gas, quotes, tokens);
 }
 
 /**
@@ -202,14 +193,14 @@ export async function estimateErc20PaymasterCosts(
  * This follows Pimlico's getRequiredPrefund formula for EntryPoint v0.7/0.8.
  */
 export function getRequiredPrefund(gas: UserOpGasFields): bigint {
-  const totalGas =
-    gas.preVerificationGas +
-    gas.verificationGasLimit +
-    gas.callGasLimit +
-    (gas.paymasterVerificationGasLimit || 0n) +
-    (gas.paymasterPostOpGasLimit || 0n);
+    const totalGas =
+        gas.preVerificationGas +
+        gas.verificationGasLimit +
+        gas.callGasLimit +
+        (gas.paymasterVerificationGasLimit || 0n) +
+        (gas.paymasterPostOpGasLimit || 0n);
 
-  return totalGas * gas.maxFeePerGas;
+    return totalGas * gas.maxFeePerGas;
 }
 
 /**
@@ -224,22 +215,19 @@ export function getRequiredPrefund(gas: UserOpGasFields): bigint {
  * @param quote - Token quote from fetchTokenQuotes
  * @returns Token cost in the token's smallest unit
  */
-export function calculateTokenCostFromGas(
-  gas: UserOpGasFields,
-  quote: TokenQuote
-): bigint {
-  const totalGas =
-    gas.preVerificationGas +
-    gas.verificationGasLimit +
-    gas.callGasLimit +
-    (gas.paymasterVerificationGasLimit || 0n) +
-    (gas.paymasterPostOpGasLimit || 0n);
+export function calculateTokenCostFromGas(gas: UserOpGasFields, quote: TokenQuote): bigint {
+    const totalGas =
+        gas.preVerificationGas +
+        gas.verificationGasLimit +
+        gas.callGasLimit +
+        (gas.paymasterVerificationGasLimit || 0n) +
+        (gas.paymasterPostOpGasLimit || 0n);
 
-  // maxCostInWei = (totalGas + postOpGas) * maxFeePerGas
-  const maxCostWei = ((totalGas + quote.postOpGas) * gas.maxFeePerGas * 80n) / 100n;
+    // maxCostInWei = (totalGas + postOpGas) * maxFeePerGas
+    const maxCostWei = ((totalGas + quote.postOpGas) * gas.maxFeePerGas * 80n) / 100n;
 
-  // Convert to token using exchange rate
-  return (maxCostWei * quote.exchangeRate) / BigInt(1e18);
+    // Convert to token using exchange rate
+    return (maxCostWei * quote.exchangeRate) / BigInt(1e18);
 }
 
 /**
@@ -252,31 +240,31 @@ export function calculateTokenCostFromGas(
  * @returns Array of token estimates
  */
 export function calculateTokenEstimatesFromGas(
-  gas: UserOpGasFields,
-  quotes: TokenQuote[],
-  tokens: TokenInfo[]
+    gas: UserOpGasFields,
+    quotes: TokenQuote[],
+    tokens: TokenInfo[]
 ): TokenEstimate[] {
-  return quotes.map((quote) => {
-    const token = tokens.find(t => t.address.toLowerCase() === quote.tokenAddress.toLowerCase());
-    const decimals = token?.decimals || 18;
-    const symbol = token?.symbol || 'UNKNOWN';
-    const balance = token?.balance || 0n;
+    return quotes.map((quote) => {
+        const token = tokens.find((t) => t.address.toLowerCase() === quote.tokenAddress.toLowerCase());
+        const decimals = token?.decimals || 18;
+        const symbol = token?.symbol || 'UNKNOWN';
+        const balance = token?.balance || 0n;
 
-    const tokenCost = calculateTokenCostFromGas(gas, quote);
-    const hasSufficientBalance = balance >= tokenCost;
-    const tokenCostFormatted = formatTokenAmount(tokenCost, decimals);
+        const tokenCost = calculateTokenCostFromGas(gas, quote);
+        const hasSufficientBalance = balance >= tokenCost;
+        const tokenCostFormatted = formatTokenAmount(tokenCost, decimals);
 
-    return {
-      tokenAddress: quote.tokenAddress,
-      symbol,
-      decimals,
-      tokenCost,
-      tokenCostFormatted,
-      paymasterAddress: quote.paymasterAddress,
-      exchangeRate: quote.exchangeRate,
-      hasSufficientBalance,
-    };
-  });
+        return {
+            tokenAddress: quote.tokenAddress,
+            symbol,
+            decimals,
+            tokenCost,
+            tokenCostFormatted,
+            paymasterAddress: quote.paymasterAddress,
+            exchangeRate: quote.exchangeRate,
+            hasSufficientBalance,
+        };
+    });
 }
 
 /**
@@ -288,19 +276,19 @@ export function calculateTokenEstimatesFromGas(
  * @returns The encoded call data
  */
 export function encodeApprovalCall(
-  tokenAddress: Address,
-  spender: Address,
-  amount: bigint
+    tokenAddress: Address,
+    spender: Address,
+    amount: bigint
 ): { to: Address; value: bigint; data: Hex } {
-  return {
-    to: tokenAddress,
-    value: 0n,
-    data: encodeFunctionData({
-      abi: erc20Abi,
-      functionName: 'approve',
-      args: [spender, amount]
-    })
-  };
+    return {
+        to: tokenAddress,
+        value: 0n,
+        data: encodeFunctionData({
+            abi: erc20Abi,
+            functionName: 'approve',
+            args: [spender, amount],
+        }),
+    };
 }
 
 /**
@@ -308,10 +296,10 @@ export function encodeApprovalCall(
  * Shows up to 4 decimal places for amounts < 1, 2 decimal places otherwise.
  */
 function formatTokenAmount(amount: bigint, decimals: number): string {
-  const formatted = formatUnits(amount, decimals);
-  const num = parseFloat(formatted);
+    const formatted = formatUnits(amount, decimals);
+    const num = parseFloat(formatted);
 
-  if (num === 0) return '0';
-  if (num < 1) return num.toFixed(4);
-  return num.toFixed(2);
+    if (num === 0) return '0';
+    if (num < 1) return num.toFixed(4);
+    return num.toFixed(2);
 }

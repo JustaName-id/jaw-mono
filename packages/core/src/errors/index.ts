@@ -1,7 +1,4 @@
-export {
-    standardErrorCodes,
-    errorValues,
-} from "./constants.js"
+export { standardErrorCodes, errorValues } from './constants.js';
 
 export {
     standardErrors,
@@ -9,8 +6,8 @@ export {
     isViemError,
     viemHttpErrorToProviderError,
     InvalidConfigurationException,
-    type InsufficientBalanceErrorData
-} from './errors.js'
+    type InsufficientBalanceErrorData,
+} from './errors.js';
 
 export {
     JSON_RPC_SERVER_ERROR_MESSAGE,
@@ -19,8 +16,6 @@ export {
     getErrorCode,
     serialize,
     type SerializedEthereumRpcError,
-} from "./utils.js"
+} from './utils.js';
 
-export {
-    serializeError,
-} from "./serializeError.js"
+export { serializeError } from './serializeError.js';

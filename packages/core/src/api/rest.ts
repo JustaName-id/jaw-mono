@@ -1,4 +1,4 @@
-import {backendInstance, controlledAxiosPromise} from './axiosController.js';
+import { backendInstance, controlledAxiosPromise } from './axiosController.js';
 import { Routes, ROUTES } from './routes/index.js';
 import qs from 'qs';
 
@@ -16,50 +16,48 @@ import qs from 'qs';
  * @returns The promise of the data.
  */
 export const restCall = <
-  T extends keyof ROUTES,
-  K extends 'GET' | 'POST' | 'DELETE' | 'PATCH',
-  U extends ROUTES[T]['request'],
-  V extends ROUTES[T]['headers'],
-  P extends ROUTES[T]['pathParams'],
-  Q extends ROUTES[T] extends { queryParams: infer QP } ? QP : never
+    T extends keyof ROUTES,
+    K extends 'GET' | 'POST' | 'DELETE' | 'PATCH',
+    U extends ROUTES[T]['request'],
+    V extends ROUTES[T]['headers'],
+    P extends ROUTES[T]['pathParams'],
+    Q extends ROUTES[T] extends { queryParams: infer QP } ? QP : never,
 >(
-  route: T,
-  method: K,
-  request: U,
-  headers?: V,
-  pathParams?: P,
-  dev?: boolean,
-  serverUrl?: string,
-  queryParams?: Q
+    route: T,
+    method: K,
+    request: U,
+    headers?: V,
+    pathParams?: P,
+    dev?: boolean,
+    serverUrl?: string,
+    queryParams?: Q
 ): Promise<ROUTES[T]['response']> => {
-  // Get the route template
-  let url = Routes[route];
+    // Get the route template
+    let url = Routes[route];
 
-  // Replace path parameters if provided
-  if (pathParams) {
-    Object.entries(pathParams as Record<string, string>).forEach(([key, value]) => {
-      url = url.replace(`:${key}`, encodeURIComponent(value));
-    });
-  }
+    // Replace path parameters if provided
+    if (pathParams) {
+        Object.entries(pathParams as Record<string, string>).forEach(([key, value]) => {
+            url = url.replace(`:${key}`, encodeURIComponent(value));
+        });
+    }
 
-  // Determine params based on method
-  // GET: request goes to params
-  // PATCH: queryParams goes to params, request goes to data
-  // POST/DELETE: request goes to data
-  const params = method === 'GET'
-    ? request
-    : (method === 'PATCH' && queryParams ? queryParams : undefined);
+    // Determine params based on method
+    // GET: request goes to params
+    // PATCH: queryParams goes to params, request goes to data
+    // POST/DELETE: request goes to data
+    const params = method === 'GET' ? request : method === 'PATCH' && queryParams ? queryParams : undefined;
 
-  return controlledAxiosPromise<ROUTES[T]['response']>(
-      backendInstance(dev, serverUrl).request({
-      url,
-      method,
-      params,
-      paramsSerializer: (params) => {
-        return qs.stringify(params, { arrayFormat: 'repeat' });
-      },
-      data: method === 'POST' || method === 'PATCH' ? request : undefined,
-      headers: headers || {},
-    })
-  );
+    return controlledAxiosPromise<ROUTES[T]['response']>(
+        backendInstance(dev, serverUrl).request({
+            url,
+            method,
+            params,
+            paramsSerializer: (params) => {
+                return qs.stringify(params, { arrayFormat: 'repeat' });
+            },
+            data: method === 'POST' || method === 'PATCH' ? request : undefined,
+            headers: headers || {},
+        })
+    );
 };

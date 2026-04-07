@@ -26,7 +26,6 @@ import type { PopupConfig, PendingRequest } from '../utils/types';
 import { extractSubnameTextRecords } from '../lib/extractSubnameTexts';
 import { standardErrorCodes } from '@jaw.id/core';
 
-
 // Note: TransactionRequestData is now imported from TransactionModal for consistency
 
 // Simple state types
@@ -39,7 +38,6 @@ type PopupState =
   | 'processing'
   | 'success'
   | 'error';
-
 
 export default function KeysJawIdApp() {
   // Current origin for session-based auth
@@ -80,15 +78,18 @@ export default function KeysJawIdApp() {
     setIsSDKMode(true);
 
     // Initialize crypto handler
-    cryptoHandler.initialize().then(() => {
-      console.log('✅ CryptoHandler initialized');
-      // Send PopupLoaded event
-      communicator.sendPopupLoaded();
-    }).catch(err => {
-      console.error('❌ Failed to initialize CryptoHandler:', err);
-      setError('Failed to initialize');
-      setState('error');
-    });
+    cryptoHandler
+      .initialize()
+      .then(() => {
+        console.log('✅ CryptoHandler initialized');
+        // Send PopupLoaded event
+        communicator.sendPopupLoaded();
+      })
+      .catch((err) => {
+        console.error('❌ Failed to initialize CryptoHandler:', err);
+        setError('Failed to initialize');
+        setState('error');
+      });
 
     // Listen for messages
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -97,7 +98,6 @@ export default function KeysJawIdApp() {
 
       // Handle config message
       if (message.data?.version) {
-
         setConfig(message.data);
         configRef.current = message.data;
 
@@ -229,7 +229,7 @@ export default function KeysJawIdApp() {
       // Check for existing session
       const existingSession = await cryptoHandler.getSession(origin);
 
-      // For pure key exchange handshake (method: 'handshake') 
+      // For pure key exchange handshake (method: 'handshake')
       // This situation never happens because the wallet_connect/ eth_requestAccounts request is always sent first
       if (method === 'handshake') {
         if (!existingSession) {
@@ -275,7 +275,9 @@ export default function KeysJawIdApp() {
           metadata: configRef.current?.metadata || null,
           method,
           params: Array.isArray(params) ? params : [],
-          chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) } : undefined,
+          chain: chain
+            ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) }
+            : undefined,
           onApprove: async (result: unknown) => {
             const response = await cryptoHandler.createHandshakeResponse(
               request.id,
@@ -336,11 +338,15 @@ export default function KeysJawIdApp() {
       // Check for sign message requests
       // personal_sign: always a sign message request
       // wallet_sign: only if request.type === "0x45" (Personal Sign per EIP-191)
-      if (method === 'personal_sign' ||
-        (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x45")) {
+      if (
+        method === 'personal_sign' ||
+        (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === '0x45')
+      ) {
         requestType = SDKRequestType.SIGN_MESSAGE;
-      } else if (method === 'eth_signTypedData_v4' ||
-        (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === "0x01")) {
+      } else if (
+        method === 'eth_signTypedData_v4' ||
+        (method === 'wallet_sign' && Array.isArray(params) && params[0]?.request?.type === '0x01')
+      ) {
         requestType = SDKRequestType.SIGN_TYPED_DATA;
       } else if (method === 'wallet_sendCalls' || method === 'eth_sendTransaction') {
         requestType = SDKRequestType.SEND_TRANSACTION;
@@ -365,7 +371,9 @@ export default function KeysJawIdApp() {
         metadata: configRef.current?.metadata || null,
         method,
         params: Array.isArray(params) ? params : [],
-        chain: chain ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) } : undefined,
+        chain: chain
+          ? { id: chain.id, rpcUrl: chain.rpcUrl ?? '', ...(chain.paymaster && { paymaster: chain.paymaster }) }
+          : undefined,
         onApprove: async (result: unknown) => {
           const response = await cryptoHandler.createEncryptedResponse(
             request.id || '',
@@ -396,7 +404,15 @@ export default function KeysJawIdApp() {
       });
 
       // For sign message, typed data, transaction, and permission requests, if user is authenticated, show modal directly
-      if ((requestType === SDKRequestType.SIGN_MESSAGE || requestType === SDKRequestType.SIGN_TYPED_DATA || requestType === SDKRequestType.SEND_TRANSACTION || requestType === SDKRequestType.GRANT_PERMISSIONS || requestType === SDKRequestType.REVOKE_PERMISSIONS) && authQuery.isAuthenticated && currentAccount) {
+      if (
+        (requestType === SDKRequestType.SIGN_MESSAGE ||
+          requestType === SDKRequestType.SIGN_TYPED_DATA ||
+          requestType === SDKRequestType.SEND_TRANSACTION ||
+          requestType === SDKRequestType.GRANT_PERMISSIONS ||
+          requestType === SDKRequestType.REVOKE_PERMISSIONS) &&
+        authQuery.isAuthenticated &&
+        currentAccount
+      ) {
         // The modal will be shown in the render logic below
         return;
       }
@@ -411,22 +427,18 @@ export default function KeysJawIdApp() {
   // SDK MODE
   // ==========================================
   if (isSDKMode) {
-
     // Check if we have a pending transaction request and either user is authenticated OR we're in processing state
     // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (pendingRequest?.type === SDKRequestType.SEND_TRANSACTION &&
+    if (
+      pendingRequest?.type === SDKRequestType.SEND_TRANSACTION &&
       state !== 'success' &&
       state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
-
+      (authQuery.isAuthenticated || state === 'processing')
+    ) {
       // Extract transaction data with type safety
       let txData: TransactionRequestData;
       try {
-        txData = extractTransactionData(
-          pendingRequest.method,
-          pendingRequest.params,
-          pendingRequest.chain
-        );
+        txData = extractTransactionData(pendingRequest.method, pendingRequest.params, pendingRequest.chain);
       } catch (err) {
         console.error('❌ Failed to extract transaction data:', err);
         setError(err instanceof Error ? err.message : 'Invalid transaction parameters');
@@ -471,7 +483,10 @@ export default function KeysJawIdApp() {
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest
+              );
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -484,10 +499,12 @@ export default function KeysJawIdApp() {
 
     // Check if we have a pending sign message request and either user is authenticated OR we're in processing state
     // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (pendingRequest?.type === SDKRequestType.SIGN_MESSAGE &&
+    if (
+      pendingRequest?.type === SDKRequestType.SIGN_MESSAGE &&
       state !== 'success' &&
       state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
+      (authQuery.isAuthenticated || state === 'processing')
+    ) {
       // Extract message and address based on method type
       let messageToSign: string;
       let address: string | undefined;
@@ -496,7 +513,10 @@ export default function KeysJawIdApp() {
         // wallet_sign: params[0] is SignParams object
         // ERC-7871: For type 0x45, data is { message: string }
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const signParams = pendingRequest.params[0] as { request: { type: string; data: { message: string } }; address?: string };
+        const signParams = pendingRequest.params[0] as {
+          request: { type: string; data: { message: string } };
+          address?: string;
+        };
         messageToSign = signParams?.request?.data?.message || '';
         address = signParams?.address;
       } else {
@@ -535,7 +555,10 @@ export default function KeysJawIdApp() {
             onError={async (error, errorCode) => {
               try {
                 // Forward error and code directly from modal
-                await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+                await pendingRequest.onReject(
+                  error.message,
+                  errorCode ?? standardErrorCodes.provider.userRejectedRequest
+                );
                 window.close();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
@@ -571,7 +594,10 @@ export default function KeysJawIdApp() {
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest
+              );
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -584,10 +610,12 @@ export default function KeysJawIdApp() {
 
     // Check if we have a pending EIP-712 typed data signing request and either user is authenticated OR we're in processing state
     // Don't show modal if state is 'success' or 'error' (request has been completed)
-    if (pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA &&
+    if (
+      pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA &&
       state !== 'success' &&
       state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
+      (authQuery.isAuthenticated || state === 'processing')
+    ) {
       // Extract typed data JSON and address based on method type
       let address: string | undefined;
       let typedDataJson: string;
@@ -595,7 +623,10 @@ export default function KeysJawIdApp() {
       if (pendingRequest.method === 'wallet_sign') {
         // ERC-7871: For type 0x01, data is the TypedData object directly
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        const signParams = pendingRequest.params[0] as { request: { type: string; data: Record<string, unknown> }; address?: string };
+        const signParams = pendingRequest.params[0] as {
+          request: { type: string; data: Record<string, unknown> };
+          address?: string;
+        };
 
         const data = signParams?.request?.data;
         typedDataJson = typeof data === 'string' ? data : JSON.stringify(data);
@@ -634,7 +665,10 @@ export default function KeysJawIdApp() {
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest
+              );
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -646,11 +680,12 @@ export default function KeysJawIdApp() {
     }
 
     // Check if we have a pending grant permissions request and either user is authenticated OR we're in processing state
-    if (pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS &&
+    if (
+      pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS &&
       state !== 'success' &&
       state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
-
+      (authQuery.isAuthenticated || state === 'processing')
+    ) {
       const permissionRequestData: PermissionRequestData = {
         method: 'wallet_grantPermissions',
         params: pendingRequest.params as any,
@@ -678,7 +713,10 @@ export default function KeysJawIdApp() {
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest
+              );
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -690,11 +728,12 @@ export default function KeysJawIdApp() {
     }
 
     // Check if we have a pending revoke permissions request and either user is authenticated OR we're in processing state
-    if (pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS &&
+    if (
+      pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS &&
       state !== 'success' &&
       state !== 'error' &&
-      (authQuery.isAuthenticated || state === 'processing')) {
-
+      (authQuery.isAuthenticated || state === 'processing')
+    ) {
       const permissionRequestData: PermissionRequestData = {
         method: 'wallet_revokePermissions',
         params: pendingRequest.params as any,
@@ -722,7 +761,10 @@ export default function KeysJawIdApp() {
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest
+              );
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -758,18 +800,14 @@ export default function KeysJawIdApp() {
     // Show loading while initializing or checking passkeys
     if (state === 'initializing' || state === 'passkey-check') {
       return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="flex min-h-screen items-center justify-center">
           <div className="text-center">
-            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+            <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600"></div>
             <p className="text-gray-600">
               {state === 'initializing' && 'Connecting to dApp...'}
               {state === 'passkey-check' && 'Checking for passkeys...'}
             </p>
-            {config && (
-              <p className="text-sm text-gray-500 mt-2">
-                SDK v{config.version}
-              </p>
-            )}
+            {config && <p className="mt-2 text-sm text-gray-500">SDK v{config.version}</p>}
           </div>
         </div>
       );
@@ -778,23 +816,18 @@ export default function KeysJawIdApp() {
     // Show processing spinner
     if (state === 'processing') {
       return (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center max-w-md p-6">
-            <div className="animate-spin rounded-full h-16 w-16 border-b-2 border-blue-600 mx-auto mb-4"></div>
-            <h3 className="text-xl font-semibold text-gray-900 mb-2">
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="max-w-md p-6 text-center">
+            <div className="mx-auto mb-4 h-16 w-16 animate-spin rounded-full border-b-2 border-blue-600"></div>
+            <h3 className="mb-2 text-xl font-semibold text-gray-900">
               {authQuery.isAuthenticated ? 'Connecting to dApp...' : 'Processing...'}
             </h3>
-            <p className="text-gray-600 mb-4">
+            <p className="mb-4 text-gray-600">
               {authQuery.isAuthenticated && authQuery.accountName
                 ? `Authenticated as ${authQuery.accountName}. Waiting for dApp connection...`
-                : 'Please wait while we process your request.'
-              }
+                : 'Please wait while we process your request.'}
             </p>
-            {config?.metadata && (
-              <p className="text-sm text-gray-500">
-                {config.metadata.appName}
-              </p>
-            )}
+            {config?.metadata && <p className="text-sm text-gray-500">{config.metadata.appName}</p>}
           </div>
         </div>
       );
@@ -803,14 +836,14 @@ export default function KeysJawIdApp() {
     // Show success state
     if (state === 'success') {
       return (
-        <div className="min-h-screen flex items-center justify-center">
+        <div className="flex min-h-screen items-center justify-center">
           <div className="text-center">
-            <div className="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-green-100">
+              <svg className="h-8 w-8 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Success!</h3>
+            <h3 className="mb-2 text-xl font-bold text-gray-900">Success!</h3>
             <p className="text-gray-600">Operation completed successfully</p>
           </div>
         </div>
@@ -820,15 +853,15 @@ export default function KeysJawIdApp() {
     // Show error state
     if (state === 'error') {
       return (
-        <div className="min-h-screen flex items-center justify-center">
-          <div className="text-center max-w-md p-6">
-            <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
-              <svg className="w-8 h-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+        <div className="flex min-h-screen items-center justify-center">
+          <div className="max-w-md p-6 text-center">
+            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-red-100">
+              <svg className="h-8 w-8 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
               </svg>
             </div>
-            <h3 className="text-xl font-bold text-gray-900 mb-2">Error</h3>
-            <p className="text-gray-600 mb-4">{error || 'An error occurred'}</p>
+            <h3 className="mb-2 text-xl font-bold text-gray-900">Error</h3>
+            <p className="mb-4 text-gray-600">{error || 'An error occurred'}</p>
             <div className="space-y-2">
               <button
                 onClick={() => {
@@ -836,7 +869,7 @@ export default function KeysJawIdApp() {
                   setState('passkey-check');
                   checkForPasskeys();
                 }}
-                className="w-full py-2 px-6 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-lg transition-colors"
+                className="w-full rounded-lg bg-blue-600 px-6 py-2 font-semibold text-white transition-colors hover:bg-blue-700"
               >
                 Try Again
               </button>
@@ -845,7 +878,7 @@ export default function KeysJawIdApp() {
                   communicator.sendPopupUnload();
                   window.close();
                 }}
-                className="w-full py-2 px-6 bg-gray-200 hover:bg-gray-300 text-gray-900 font-semibold rounded-lg transition-colors"
+                className="w-full rounded-lg bg-gray-200 px-6 py-2 font-semibold text-gray-900 transition-colors hover:bg-gray-300"
               >
                 Close
               </button>
@@ -858,7 +891,7 @@ export default function KeysJawIdApp() {
     // Show passkey creation screen
     if (state === 'passkey-create') {
       return (
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="flex min-h-screen items-center justify-center p-4">
           <div className="w-full max-w-md">
             <SignInScreen
               ensConfig={ensConfig}
@@ -924,7 +957,7 @@ export default function KeysJawIdApp() {
     // Show passkey authentication screen
     if (state === 'passkey-auth') {
       return (
-        <div className="min-h-screen flex items-center justify-center p-4">
+        <div className="flex min-h-screen items-center justify-center p-4">
           <div className="w-full max-w-md">
             <SignInScreen
               ensConfig={ensConfig}
@@ -953,7 +986,12 @@ export default function KeysJawIdApp() {
                       publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
-                    console.log('✅ Session auth state updated for origin:', currentOrigin, 'with credentialId:', authenticatedAccount.credentialId);
+                    console.log(
+                      '✅ Session auth state updated for origin:',
+                      currentOrigin,
+                      'with credentialId:',
+                      authenticatedAccount.credentialId
+                    );
                   }
 
                   await authQuery.refetch();
@@ -992,7 +1030,9 @@ export default function KeysJawIdApp() {
     if (state === 'account-selection' && pendingRequest?.type === SDKRequestType.CONNECT) {
       // Extract signInWithEthereum capability from wallet_connect params
       // params structure: [{ capabilities?: { signInWithEthereum?: {...} } }]
-      const walletConnectParams = pendingRequest.params as [{ capabilities?: { signInWithEthereum?: SignInWithEthereumCapabilityRequest } }] | undefined;
+      const walletConnectParams = pendingRequest.params as
+        | [{ capabilities?: { signInWithEthereum?: SignInWithEthereumCapabilityRequest } }]
+        | undefined;
       const signInWithEthereumCapability = walletConnectParams?.[0]?.capabilities?.signInWithEthereum;
 
       if (!authQuery.walletAddress) {
@@ -1030,9 +1070,15 @@ export default function KeysJawIdApp() {
             uri: signInWithEthereumCapability.uri || defaultUri,
             version: '1',
             statement: signInWithEthereumCapability.statement,
-            issuedAt: signInWithEthereumCapability.issuedAt ? new Date(signInWithEthereumCapability.issuedAt) : new Date(),
-            expirationTime: signInWithEthereumCapability.expirationTime ? new Date(signInWithEthereumCapability.expirationTime) : undefined,
-            notBefore: signInWithEthereumCapability.notBefore ? new Date(signInWithEthereumCapability.notBefore) : undefined,
+            issuedAt: signInWithEthereumCapability.issuedAt
+              ? new Date(signInWithEthereumCapability.issuedAt)
+              : new Date(),
+            expirationTime: signInWithEthereumCapability.expirationTime
+              ? new Date(signInWithEthereumCapability.expirationTime)
+              : undefined,
+            notBefore: signInWithEthereumCapability.notBefore
+              ? new Date(signInWithEthereumCapability.notBefore)
+              : undefined,
             requestId: signInWithEthereumCapability.requestId,
             resources: signInWithEthereumCapability.resources,
           });
@@ -1055,15 +1101,17 @@ export default function KeysJawIdApp() {
 
                 // Build response per ERC-7846 format with SIWE capability
                 const response = {
-                  accounts: [{
-                    address: walletAddress,
-                    capabilities: {
-                      signInWithEthereum: {
-                        message,
-                        signature: signature as `0x${string}`
-                      }
-                    }
-                  }]
+                  accounts: [
+                    {
+                      address: walletAddress,
+                      capabilities: {
+                        signInWithEthereum: {
+                          message,
+                          signature: signature as `0x${string}`,
+                        },
+                      },
+                    },
+                  ],
                 };
 
                 console.log('✅ SIWE response:', response);
@@ -1079,7 +1127,10 @@ export default function KeysJawIdApp() {
             onError={async (error, errorCode) => {
               try {
                 // Forward error and code directly from modal
-                await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+                await pendingRequest.onReject(
+                  error.message,
+                  errorCode ?? standardErrorCodes.provider.userRejectedRequest
+                );
                 window.close();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
@@ -1106,9 +1157,11 @@ export default function KeysJawIdApp() {
 
               // Build response per ERC-7846 format (no capabilities)
               const response = {
-                accounts: [{
-                  address: walletAddress
-                }]
+                accounts: [
+                  {
+                    address: walletAddress,
+                  },
+                ],
               };
 
               await pendingRequest.onApprove(response);
@@ -1123,7 +1176,10 @@ export default function KeysJawIdApp() {
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
-              await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.provider.userRejectedRequest);
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest
+              );
               window.close();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
@@ -1136,9 +1192,9 @@ export default function KeysJawIdApp() {
 
     // No pending request yet - should not normally be seen
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="flex min-h-screen items-center justify-center">
         <div className="text-center">
-          <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+          <div className="mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2 border-blue-600"></div>
           <p className="text-gray-600">Waiting for request...</p>
         </div>
       </div>

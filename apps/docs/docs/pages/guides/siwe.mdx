@@ -9,24 +9,22 @@ Authenticate users with their signature. When users connect, your frontend knows
 - **Secure Sessions** - Issue JWTs or session cookies
 - **Link Accounts** - Associate wallets with existing user accounts
 
-
 ## 1. Integration Path
 
-| Approach | Best For |
-|----------|----------|
-| **Wagmi** | React apps using wagmi connectors |
+| Approach     | Best For                                 |
+| ------------ | ---------------------------------------- |
+| **Wagmi**    | React apps using wagmi connectors        |
 | **Core SDK** | Custom implementations or non-React apps |
-
 
 ## 2. Backend Endpoints
 
 Set up three endpoints on your server to handle the SIWE flow:
 
-| Endpoint | Purpose |
-|----------|---------|
-| `GET /api/siwe/nonce` | Generate a fresh nonce to prevent replay attacks |
-| `POST /api/siwe/verify` | Validate signature and issue session token |
-| `POST /api/siwe/logout` | Clear user session |
+| Endpoint                | Purpose                                          |
+| ----------------------- | ------------------------------------------------ |
+| `GET /api/siwe/nonce`   | Generate a fresh nonce to prevent replay attacks |
+| `POST /api/siwe/verify` | Validate signature and issue session token       |
+| `POST /api/siwe/logout` | Clear user session                               |
 
 ### Nonce Endpoint
 
@@ -98,7 +96,6 @@ export async function POST() {
 }
 ```
 
-
 ## 3. Client-Side Sign-In
 
 Request a SIWE signature during connection using the `signInWithEthereum` capability in `wallet_connect`.
@@ -117,35 +114,38 @@ function SignInButton() {
     const { nonce } = await nonceRes.json();
 
     // 2. Connect with SIWE capability
-    connect({
-      connector: config.connectors[0],
-      capabilities: {
-        signInWithEthereum: {
-          nonce,
-          chainId: '0x1',
-          domain: window.location.host,
-          uri: window.location.origin,
-          statement: 'Sign in to My App',
-          expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+    connect(
+      {
+        connector: config.connectors[0],
+        capabilities: {
+          signInWithEthereum: {
+            nonce,
+            chainId: '0x1',
+            domain: window.location.host,
+            uri: window.location.origin,
+            statement: 'Sign in to My App',
+            expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+          },
         },
       },
-    }, {
-      onSuccess: async (data) => {
-        const siweResponse = data.accounts[0].capabilities?.signInWithEthereum;
+      {
+        onSuccess: async (data) => {
+          const siweResponse = data.accounts[0].capabilities?.signInWithEthereum;
 
-        if (siweResponse && 'message' in siweResponse) {
-          // 3. Send to backend for verification
-          await fetch('/api/siwe/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              message: siweResponse.message,
-              signature: siweResponse.signature,
-            }),
-          });
-        }
-      },
-    });
+          if (siweResponse && 'message' in siweResponse) {
+            // 3. Send to backend for verification
+            await fetch('/api/siwe/verify', {
+              method: 'POST',
+              headers: { 'Content-Type': 'application/json' },
+              body: JSON.stringify({
+                message: siweResponse.message,
+                signature: siweResponse.signature,
+              }),
+            });
+          }
+        },
+      }
+    );
   };
 
   return <button onClick={handleSignIn}>Sign In</button>;
@@ -160,18 +160,20 @@ const { nonce } = await nonceRes.json();
 // 2. Connect with SIWE capability
 const result = await jaw.provider.request({
   method: 'wallet_connect',
-  params: [{
-    capabilities: {
-      signInWithEthereum: {
-        nonce,
-        chainId: '0x1',
-        domain: window.location.host,
-        uri: window.location.origin,
-        statement: 'Sign in to My App',
-        expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+  params: [
+    {
+      capabilities: {
+        signInWithEthereum: {
+          nonce,
+          chainId: '0x1',
+          domain: window.location.host,
+          uri: window.location.origin,
+          statement: 'Sign in to My App',
+          expirationTime: new Date(Date.now() + 60 * 60 * 1000).toISOString(), // 1 hour
+        },
       },
     },
-  }],
+  ],
 });
 
 // 3. Extract SIWE response
@@ -192,20 +194,18 @@ if (siweResponse && 'message' in siweResponse) {
 
 :::
 
-
 ## 4. SIWE Parameters
 
-| Parameter | Required | Description |
-|-----------|----------|-------------|
-| `nonce` | Yes | Random string from your backend to prevent replay attacks |
-| `chainId` | Yes | Chain ID in hex format (e.g., `'0x1'` for mainnet) |
-| `domain` | No | Your app's domain (e.g., `'myapp.com'`) |
-| `uri` | No | Your app's full URI (e.g., `'https://myapp.com'`) |
-| `statement` | No | Human-readable message the user is signing |
-| `expirationTime` | No | ISO 8601 timestamp when signature expires |
-| `issuedAt` | No | ISO 8601 timestamp when signature was issued |
-| `resources` | No | Array of resource URIs the user is authorizing |
-
+| Parameter        | Required | Description                                               |
+| ---------------- | -------- | --------------------------------------------------------- |
+| `nonce`          | Yes      | Random string from your backend to prevent replay attacks |
+| `chainId`        | Yes      | Chain ID in hex format (e.g., `'0x1'` for mainnet)        |
+| `domain`         | No       | Your app's domain (e.g., `'myapp.com'`)                   |
+| `uri`            | No       | Your app's full URI (e.g., `'https://myapp.com'`)         |
+| `statement`      | No       | Human-readable message the user is signing                |
+| `expirationTime` | No       | ISO 8601 timestamp when signature expires                 |
+| `issuedAt`       | No       | ISO 8601 timestamp when signature was issued              |
+| `resources`      | No       | Array of resource URIs the user is authorizing            |
 
 ## 5. Security Best Practices
 
@@ -214,7 +214,6 @@ if (siweResponse && 'message' in siweResponse) {
 - **Set expiration times** - Limit signature validity to a reasonable window (e.g., 1 hour)
 - **Store sessions securely** - Use HTTP-only cookies or encrypted tokens
 - **Validate the domain** - Ensure the signed domain matches your application
-
 
 ## Related
 

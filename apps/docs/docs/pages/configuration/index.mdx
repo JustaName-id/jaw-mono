@@ -2,7 +2,6 @@
 
 Configuration options for the JAW SDK. These options apply to both the **Wagmi connector** and the **direct provider**.
 
-
 ## Usage
 
 ### With Wagmi (Recommended)
@@ -45,35 +44,32 @@ const jaw = JAW.create({
 });
 ```
 
-
 ## Configuration Options
 
 ### Core Parameters
 
-| Parameter | Type | Required | Description |
-|-----------|------|----------|-------------|
-| [apiKey](/configuration/apiKey) | `string` | Yes | API key for JAW services authentication |
-| [appName](/configuration/appName) | `string` | No | Application name displayed to users |
-| [appLogoUrl](/configuration/appLogoUrl) | `string \| null` | No | URL to application logo image |
-| [ens](/configuration/ens) | `string` | No | ENS domain for issuing subnames |
-| [defaultChainId](/configuration/defaultChainId) | `number` | No | Default blockchain network |
-| [preference](/configuration/mode) | `object` | No | Advanced SDK behavior options |
-| [paymasters](/configuration/paymasters) | `Record<number, { url: string; context?: Record<string, unknown> }>` | No | Custom paymaster configuration per chain |
-
+| Parameter                                       | Type                                                                 | Required | Description                              |
+| ----------------------------------------------- | -------------------------------------------------------------------- | -------- | ---------------------------------------- |
+| [apiKey](/configuration/apiKey)                 | `string`                                                             | Yes      | API key for JAW services authentication  |
+| [appName](/configuration/appName)               | `string`                                                             | No       | Application name displayed to users      |
+| [appLogoUrl](/configuration/appLogoUrl)         | `string \| null`                                                     | No       | URL to application logo image            |
+| [ens](/configuration/ens)                       | `string`                                                             | No       | ENS domain for issuing subnames          |
+| [defaultChainId](/configuration/defaultChainId) | `number`                                                             | No       | Default blockchain network               |
+| [preference](/configuration/mode)               | `object`                                                             | No       | Advanced SDK behavior options            |
+| [paymasters](/configuration/paymasters)         | `Record<number, { url: string; context?: Record<string, unknown> }>` | No       | Custom paymaster configuration per chain |
 
 ## Preference Options
 
 The `preference` object contains advanced configuration:
 
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| [mode](/configuration/mode) | `Mode.CrossPlatform` \| `Mode.AppSpecific` | `Mode.CrossPlatform` | Authentication mode |
-| [uiHandler](/configuration/mode/app-specific#uihandler) | `UIHandler` | `undefined` | UI handler for rendering dialogs (required when mode is `Mode.AppSpecific`) |
-| showTestnets | `boolean` | `false` | Include testnet networks (see [Supported Networks](/supported-networks)) |
-| authTTL | `number` | `86400` | Session cache TTL in seconds. Set to `0` to disable caching (require auth on every page load). |
+| Option                                                  | Type                                       | Default              | Description                                                                                    |
+| ------------------------------------------------------- | ------------------------------------------ | -------------------- | ---------------------------------------------------------------------------------------------- |
+| [mode](/configuration/mode)                             | `Mode.CrossPlatform` \| `Mode.AppSpecific` | `Mode.CrossPlatform` | Authentication mode                                                                            |
+| [uiHandler](/configuration/mode/app-specific#uihandler) | `UIHandler`                                | `undefined`          | UI handler for rendering dialogs (required when mode is `Mode.AppSpecific`)                    |
+| showTestnets                                            | `boolean`                                  | `false`              | Include testnet networks (see [Supported Networks](/supported-networks))                       |
+| authTTL                                                 | `number`                                   | `86400`              | Session cache TTL in seconds. Set to `0` to disable caching (require auth on every page load). |
 
 [Learn more about authentication modes →](/configuration/mode)
-
 
 ## Return Value
 
@@ -119,7 +115,6 @@ Method to disconnect the current session and clean up resources.
 await jaw.disconnect();
 ```
 
-
 ## Minimal Configuration
 
 The only required option is `apiKey`:
@@ -131,7 +126,6 @@ const connector = jaw({ apiKey: 'your-api-key' });
 // Provider
 const jaw = JAW.create({ apiKey: 'your-api-key' });
 ```
-
 
 ## Related
 

@@ -4,7 +4,6 @@ Create an account from a Viem `LocalAccount`. Ideal for server-side usage or int
 
 **Type:** `static async`
 
-
 ## Signature
 
 ```typescript
@@ -15,24 +14,24 @@ static async fromLocalAccount(
 ): Promise<Account>
 ```
 
-
 ## Parameters
 
 ### config
 
 Type: `AccountConfig`
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `chainId` | `number` | Yes | Chain ID for the account |
-| `apiKey` | `string` | Yes | API key for JAW services |
-| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
+| Property       | Type     | Required | Description                              |
+| -------------- | -------- | -------- | ---------------------------------------- |
+| `chainId`      | `number` | Yes      | Chain ID for the account                 |
+| `apiKey`       | `string` | Yes      | API key for JAW services                 |
+| `paymasterUrl` | `string` | No       | Custom paymaster URL for gas sponsorship |
 
 ### localAccount
 
 Type: `LocalAccount` (from viem)
 
 A viem LocalAccount instance. Can be created from:
+
 - Private key
 - Mnemonic
 - Embedded wallet providers (Privy, Turnkey, Magic, etc.)
@@ -41,34 +40,34 @@ A viem LocalAccount instance. Can be created from:
 
 Type: `{ eip7702?: boolean }`
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
+| Property  | Type      | Default | Description                                                                                                     |
+| --------- | --------- | ------- | --------------------------------------------------------------------------------------------------------------- |
 | `eip7702` | `boolean` | `false` | When `true`, preserves the EOA address via EIP-7702 delegation instead of creating a new counterfactual address |
-
 
 ## Returns
 
 `Promise<Account>` - The Account instance
 
-
 ## Behavior
 
 **Default mode** (`eip7702: false` or omitted):
+
 1. Creates a new smart account with a counterfactual address derived from the LocalAccount
 2. The smart account address is different from the LocalAccount address
 3. No delegation or authorization involved
 
 **EIP-7702 mode** (`eip7702: true`):
+
 1. The smart account address equals the LocalAccount's EOA address
 2. On the first transaction, the SDK signs an EIP-7702 authorization to delegate the EOA's code to the JustanAccount implementation
 3. Registers the permissions manager as an owner
 4. Subsequent transactions skip delegation (already active)
 
 In both modes:
+
 - No passkey or WebAuthn involved
 - No authentication state stored
 - `getMetadata()` returns `null`
-
 
 ## Examples
 
@@ -80,10 +79,7 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 const localAccount = privateKeyToAccount('0x...');
 
-const account = await Account.fromLocalAccount(
-  { chainId: 8453, apiKey: 'your-api-key' },
-  localAccount
-);
+const account = await Account.fromLocalAccount({ chainId: 8453, apiKey: 'your-api-key' }, localAccount);
 
 // account.address !== localAccount.address (new counterfactual address)
 console.log('Smart account address:', account.address);
@@ -97,16 +93,13 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 const localAccount = privateKeyToAccount('0x...');
 
-const account = await Account.fromLocalAccount(
-  { chainId: 8453, apiKey: 'your-api-key' },
-  localAccount,
-  { eip7702: true }
-);
+const account = await Account.fromLocalAccount({ chainId: 8453, apiKey: 'your-api-key' }, localAccount, {
+  eip7702: true,
+});
 
 // account.address === localAccount.address (EOA address preserved)
 console.log('Address:', account.address);
 ```
-
 
 ## When to Use
 
@@ -124,7 +117,6 @@ Use `{ eip7702: true }` when:
 Do **not** use when:
 
 - You want passkey-based authentication (use `create()` or `get()`)
-
 
 ## Related
 

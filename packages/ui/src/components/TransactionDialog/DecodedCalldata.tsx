@@ -14,7 +14,14 @@ interface DecodedCalldataProps {
   mainnetRpcUrl?: string;
 }
 
-export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, mainnetRpcUrl }: DecodedCalldataProps) => {
+export const DecodedCalldata = ({
+  to,
+  data,
+  chainId,
+  apiKey,
+  resolvedAddresses,
+  mainnetRpcUrl,
+}: DecodedCalldataProps) => {
   const { decoded, isLoading } = useDecodedCalldata(to, data, chainId, apiKey);
   const [localResolved, setLocalResolved] = useState<Record<string, string>>({});
   const attemptedRef = useRef<Set<string>>(new Set());
@@ -91,12 +98,10 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, 
       <div className="flex flex-col gap-2">
         <div className="flex items-center gap-2">
           <Spinner className="size-3" />
-          <span className="text-xs text-muted-foreground">Decoding calldata...</span>
+          <span className="text-muted-foreground text-xs">Decoding calldata...</span>
         </div>
-        <div className="p-2.5 bg-secondary rounded-[6px] max-h-[40vh] overflow-y-auto opacity-50">
-          <p className="text-xs font-semibold leading-[150%] break-all text-foreground font-mono">
-            {data}
-          </p>
+        <div className="bg-secondary max-h-[40vh] overflow-y-auto rounded-[6px] p-2.5 opacity-50">
+          <p className="text-foreground break-all font-mono text-xs font-semibold leading-[150%]">{data}</p>
         </div>
       </div>
     );
@@ -104,10 +109,8 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, 
 
   if (!decoded) {
     return (
-      <div className="p-2.5 bg-secondary rounded-[6px] max-h-[40vh] overflow-y-auto">
-        <p className="text-xs font-semibold leading-[150%] break-all text-foreground font-mono">
-          {data}
-        </p>
+      <div className="bg-secondary max-h-[40vh] overflow-y-auto rounded-[6px] p-2.5">
+        <p className="text-foreground break-all font-mono text-xs font-semibold leading-[150%]">{data}</p>
       </div>
     );
   }
@@ -115,28 +118,24 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, 
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-xs font-semibold text-foreground bg-primary/10 px-2 py-0.5 rounded">
+        <span className="text-foreground bg-primary/10 rounded px-2 py-0.5 text-xs font-semibold">
           {decoded.functionName}
         </span>
-        <span className="text-xs text-muted-foreground font-mono">
-          {decoded.signature}
-        </span>
+        <span className="text-muted-foreground font-mono text-xs">{decoded.signature}</span>
       </div>
 
       {decoded.params.length > 0 && (
-        <div className="flex flex-col gap-1 p-2 bg-secondary rounded-[6px]">
+        <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
           {decoded.params.map((param, i) => {
             const resolvedName = param.rawValue ? allResolved[param.rawValue.toLowerCase()] : undefined;
             return (
               <div key={i} className="flex flex-col gap-0.5">
                 <div className="flex items-baseline gap-1.5">
-                  <span className="text-xs font-semibold text-muted-foreground">{param.name}</span>
-                  <span className="text-[10px] text-muted-foreground/60 font-mono">{param.type}</span>
+                  <span className="text-muted-foreground text-xs font-semibold">{param.name}</span>
+                  <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
                 </div>
-                <p className="text-xs font-mono break-all text-foreground leading-[150%]">
-                  {resolvedName
-                    ? `${resolvedName} (${formatAddress(param.rawValue!)})`
-                    : param.value}
+                <p className="text-foreground break-all font-mono text-xs leading-[150%]">
+                  {resolvedName ? `${resolvedName} (${formatAddress(param.rawValue!)})` : param.value}
                 </p>
               </div>
             );
@@ -145,13 +144,9 @@ export const DecodedCalldata = ({ to, data, chainId, apiKey, resolvedAddresses, 
       )}
 
       <details className="text-xs">
-        <summary className="text-muted-foreground cursor-pointer hover:text-foreground">
-          Raw calldata
-        </summary>
-        <div className="p-2 bg-secondary rounded-[6px] mt-1 max-h-[20vh] overflow-y-auto">
-          <p className="text-xs font-mono leading-[150%] break-all text-foreground">
-            {data}
-          </p>
+        <summary className="text-muted-foreground hover:text-foreground cursor-pointer">Raw calldata</summary>
+        <div className="bg-secondary mt-1 max-h-[20vh] overflow-y-auto rounded-[6px] p-2">
+          <p className="text-foreground break-all font-mono text-xs leading-[150%]">{data}</p>
         </div>
       </details>
     </div>

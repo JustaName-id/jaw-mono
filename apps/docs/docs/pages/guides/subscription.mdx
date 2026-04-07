@@ -2,7 +2,6 @@
 
 Learn how to implement recurring subscription payments using JAW's permission system. This enables services like Netflix, Spotify, or any SaaS to charge users automatically without requiring approval for each payment.
 
-
 ## The Problem with Traditional Crypto Payments
 
 In traditional crypto payments, users must approve **every single transaction**. This creates a poor user experience for recurring payments:
@@ -14,7 +13,6 @@ In traditional crypto payments, users must approve **every single transaction**.
 
 This friction makes crypto unsuitable for subscription businesses.
 
-
 ## How Permissions Solve This
 
 JAW's permission system (based on ERC-7715) allows users to grant **time-limited, amount-capped permissions** to service providers. The key insight is that permissions are **scoped** - they can only be used for specific actions you define.
@@ -25,7 +23,6 @@ JAW's permission system (based on ERC-7715) allows users to grant **time-limited
 2. **Service Stores Permission ID** - Service stores permissionId in their database
 3. **Monthly Charge** - Service transfers USDC using permissionId (no user interaction needed!)
 4. **User Can Cancel Anytime** - User revokes permission, subscription ends immediately
-
 
 ## Implementation
 
@@ -130,27 +127,34 @@ function SubscribeButton({ planPrice }: { planPrice: string }) {
   const { mutate: grantPermission, isPending } = useGrantPermissions();
 
   const handleSubscribe = () => {
-    grantPermission({
-      expiry: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60, // 1 year
-      spender: SERVICE_SPENDER,
-      permissions: {
-        spends: [{
-          token: USDC_ADDRESS,
-          allowance: parseUnits(planPrice, 6).toString(),
-          unit: 'month',
-          multiplier: 1,
-        }],
-        calls: [{
-          target: USDC_ADDRESS,
-          functionSignature: 'transfer(address,uint256)',
-        }],
+    grantPermission(
+      {
+        expiry: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60, // 1 year
+        spender: SERVICE_SPENDER,
+        permissions: {
+          spends: [
+            {
+              token: USDC_ADDRESS,
+              allowance: parseUnits(planPrice, 6).toString(),
+              unit: 'month',
+              multiplier: 1,
+            },
+          ],
+          calls: [
+            {
+              target: USDC_ADDRESS,
+              functionSignature: 'transfer(address,uint256)',
+            },
+          ],
+        },
       },
-    }, {
-      onSuccess: (data) => {
-        // Store data.permissionId in your backend!
-        console.log('Permission ID:', data.permissionId);
-      },
-    });
+      {
+        onSuccess: (data) => {
+          // Store data.permissionId in your backend!
+          console.log('Permission ID:', data.permissionId);
+        },
+      }
+    );
   };
 
   return (
@@ -170,23 +174,29 @@ const USDC_ADDRESS: Address = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'; // U
 async function subscribe(userAddress: Address, planPrice: string) {
   const result = await jaw.provider.request({
     method: 'wallet_grantPermissions',
-    params: [{
-      address: userAddress,
-      expiry: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
-      spender: SERVICE_SPENDER,
-      permissions: {
-        spends: [{
-          token: USDC_ADDRESS,
-          allowance: parseUnits(planPrice, 6).toString(),
-          unit: 'month',
-          multiplier: 1,
-        }],
-        calls: [{
-          target: USDC_ADDRESS,
-          functionSignature: 'transfer(address,uint256)',
-        }],
+    params: [
+      {
+        address: userAddress,
+        expiry: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60,
+        spender: SERVICE_SPENDER,
+        permissions: {
+          spends: [
+            {
+              token: USDC_ADDRESS,
+              allowance: parseUnits(planPrice, 6).toString(),
+              unit: 'month',
+              multiplier: 1,
+            },
+          ],
+          calls: [
+            {
+              target: USDC_ADDRESS,
+              functionSignature: 'transfer(address,uint256)',
+            },
+          ],
+        },
       },
-    }],
+    ],
   });
 
   const permissionId = (result as { permissionId: string }).permissionId;
@@ -218,29 +228,30 @@ const spenderAccount = privateKeyToAccount(process.env.SPENDER_PRIVATE_KEY as `0
 
 async function chargeSubscription(permissionId: string, amount: string) {
   // Create account instance from the spender's private key
-  const account = await Account.fromLocalAccount(
-    { chainId: 8453, apiKey: process.env.JAW_API_KEY! },
-    spenderAccount
-  );
+  const account = await Account.fromLocalAccount({ chainId: 8453, apiKey: process.env.JAW_API_KEY! }, spenderAccount);
 
   // Transfer USDC from user to your treasury
   const { id } = await account.sendCalls(
-    [{
-      to: USDC_ADDRESS,
-      data: encodeFunctionData({
-        abi: [{
-          name: 'transfer',
-          type: 'function',
-          inputs: [
-            { name: 'to', type: 'address' },
-            { name: 'amount', type: 'uint256' }
+    [
+      {
+        to: USDC_ADDRESS,
+        data: encodeFunctionData({
+          abi: [
+            {
+              name: 'transfer',
+              type: 'function',
+              inputs: [
+                { name: 'to', type: 'address' },
+                { name: 'amount', type: 'uint256' },
+              ],
+              outputs: [{ type: 'bool' }],
+            },
           ],
-          outputs: [{ type: 'bool' }]
-        }],
-        functionName: 'transfer',
-        args: [SERVICE_TREASURY, parseUnits(amount, 6)],
-      }),
-    }],
+          functionName: 'transfer',
+          args: [SERVICE_TREASURY, parseUnits(amount, 6)],
+        }),
+      },
+    ],
     { permissionId: permissionId as `0x${string}` }
   );
 
@@ -261,10 +272,7 @@ function CancelButton({ permissionId }: { permissionId: string }) {
   const { mutate: revokePermission, isPending } = useRevokePermissions();
 
   return (
-    <button
-      onClick={() => revokePermission({ id: permissionId as `0x${string}` })}
-      disabled={isPending}
-    >
+    <button onClick={() => revokePermission({ id: permissionId as `0x${string}` })} disabled={isPending}>
       {isPending ? 'Cancelling...' : 'Cancel Subscription'}
     </button>
   );
@@ -275,10 +283,12 @@ function CancelButton({ permissionId }: { permissionId: string }) {
 async function cancelSubscription(userAddress: Address, permissionId: string) {
   await jaw.provider.request({
     method: 'wallet_revokePermissions',
-    params: [{
-      address: userAddress,
-      id: permissionId as `0x${string}`,
-    }],
+    params: [
+      {
+        address: userAddress,
+        id: permissionId as `0x${string}`,
+      },
+    ],
   });
 }
 ```
@@ -289,30 +299,28 @@ async function cancelSubscription(userAddress: Address, permissionId: string) {
 **Listing Permissions**: Use `usePermissions()` (Wagmi) or `wallet_getPermissions` (Core SDK) to retrieve all active permissions for a user.
 :::
 
-
 ## Permission Parameters Reference
 
-| Parameter | Purpose | Example |
-|-----------|---------|---------|
-| `spender` | Address authorized to use this permission | Your backend wallet |
-| `expiry` | Unix timestamp when permission expires | 1 year from now |
-| `permissions.spends.token` | Token address to spend | USDC address |
-| `permissions.spends.allowance` | Max amount per period | $10 (10000000 for USDC) |
-| `permissions.spends.unit` | Time period | `month` |
-| `permissions.calls.target` | Contract that can be called | USDC contract address |
-| `permissions.calls.functionSignature` | Function that can be called | `transfer(address,uint256)` |
+| Parameter                             | Purpose                                   | Example                     |
+| ------------------------------------- | ----------------------------------------- | --------------------------- |
+| `spender`                             | Address authorized to use this permission | Your backend wallet         |
+| `expiry`                              | Unix timestamp when permission expires    | 1 year from now             |
+| `permissions.spends.token`            | Token address to spend                    | USDC address                |
+| `permissions.spends.allowance`        | Max amount per period                     | $10 (10000000 for USDC)     |
+| `permissions.spends.unit`             | Time period                               | `month`                     |
+| `permissions.calls.target`            | Contract that can be called               | USDC contract address       |
+| `permissions.calls.functionSignature` | Function that can be called               | `transfer(address,uint256)` |
 
 ### Time Units
 
-| Unit | Description |
-|------|-------------|
-| `minute` | Resets every minute |
-| `hour` | Resets every hour |
-| `day` | Resets every 24 hours |
-| `week` | Resets every 7 days |
-| `month` | Resets every ~30 days |
-| `year` | Resets every 365 days |
-
+| Unit     | Description           |
+| -------- | --------------------- |
+| `minute` | Resets every minute   |
+| `hour`   | Resets every hour     |
+| `day`    | Resets every 24 hours |
+| `week`   | Resets every 7 days   |
+| `month`  | Resets every ~30 days |
+| `year`   | Resets every 365 days |
 
 ## Related
 

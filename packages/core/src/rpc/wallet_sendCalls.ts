@@ -101,36 +101,43 @@ export function transformReceiptsToEIP5792(receipts: unknown[]): CallReceipt[] {
         // Format 1: Direct receipt object (from waitForUserOperationReceipt)
         // Format 2: Wrapped receipt with userOpHash, receipt field, etc.
         const actualReceipt = receipt.receipt || receipt;
-        
+
         // Extract logs - prefer logs from actualReceipt, fallback to top-level logs
         // Logs should only include those relevant to the user operation
         const logs = (actualReceipt.logs || receipt.logs || []).map((log: any) => ({
             address: log.address as `0x${string}`,
-            data: log.data || '0x' as `0x${string}`,
+            data: log.data || ('0x' as `0x${string}`),
             topics: (log.topics || []) as `0x${string}`[],
         }));
 
         // Determine status: 0x1 for success, 0x0 for failure
         // Check receipt.status, receipt.success, or actualReceipt.status
-        const success = actualReceipt.status === '0x1' || 
-                       actualReceipt.status === 1 ||
-                       receipt.success === true ||
-                       actualReceipt.success === true ||
-                       (actualReceipt.status === undefined && actualReceipt.transactionHash !== undefined);
-        const status = success ? '0x1' as `0x${string}` : '0x0' as `0x${string}`;
+        const success =
+            actualReceipt.status === '0x1' ||
+            actualReceipt.status === 1 ||
+            receipt.success === true ||
+            actualReceipt.success === true ||
+            (actualReceipt.status === undefined && actualReceipt.transactionHash !== undefined);
+        const status = success ? ('0x1' as `0x${string}`) : ('0x0' as `0x${string}`);
 
         // Extract required fields - prefer actualReceipt, fallback to top-level receipt
         const blockHash = (actualReceipt.blockHash || receipt.blockHash) as `0x${string}`;
         const blockNumberRaw = actualReceipt.blockNumber ?? receipt.blockNumber;
         // Ensure blockNumber is always in hex format
-        const blockNumber = typeof blockNumberRaw === 'string' 
-            ? (blockNumberRaw.startsWith('0x') ? blockNumberRaw as `0x${string}` : numberToHex(BigInt(blockNumberRaw)) as `0x${string}`)
-            : numberToHex(blockNumberRaw) as `0x${string}`;
+        const blockNumber =
+            typeof blockNumberRaw === 'string'
+                ? blockNumberRaw.startsWith('0x')
+                    ? (blockNumberRaw as `0x${string}`)
+                    : (numberToHex(BigInt(blockNumberRaw)) as `0x${string}`)
+                : (numberToHex(blockNumberRaw) as `0x${string}`);
         const gasUsedRaw = actualReceipt.gasUsed ?? receipt.gasUsed;
         // Ensure gasUsed is always in hex format
-        const gasUsed = typeof gasUsedRaw === 'string'
-            ? (gasUsedRaw.startsWith('0x') ? gasUsedRaw as `0x${string}` : numberToHex(BigInt(gasUsedRaw)) as `0x${string}`)
-            : numberToHex(gasUsedRaw) as `0x${string}`;
+        const gasUsed =
+            typeof gasUsedRaw === 'string'
+                ? gasUsedRaw.startsWith('0x')
+                    ? (gasUsedRaw as `0x${string}`)
+                    : (numberToHex(BigInt(gasUsedRaw)) as `0x${string}`)
+                : (numberToHex(gasUsedRaw) as `0x${string}`);
         const transactionHash = (actualReceipt.transactionHash || receipt.transactionHash) as `0x${string}`;
 
         return {
@@ -151,11 +158,11 @@ export function transformReceiptsToEIP5792(receipts: unknown[]): CallReceipt[] {
  */
 export function getCallStatusEIP5792(batchId: string): CallStatusResponse | undefined {
     const callStatus = getCallStatus(batchId);
-    
+
     if (!callStatus) {
         return undefined;
     }
-    
+
     // Return status in expected format
     // EIP-5792 Status codes:
     // 100 = pending (not completed onchain)
@@ -178,9 +185,7 @@ export function getCallStatusEIP5792(batchId: string): CallStatusResponse | unde
     }
 
     // Transform receipts to EIP-5792 format
-    const transformedReceipts = callStatus.receipts 
-        ? transformReceiptsToEIP5792(callStatus.receipts)
-        : undefined;
+    const transformedReceipts = callStatus.receipts ? transformReceiptsToEIP5792(callStatus.receipts) : undefined;
 
     // Format chainId as hex string
     const chainId = callStatus.chainId ?? 1;
@@ -227,7 +232,8 @@ export async function waitForReceiptInBackground(userOpHash: string, chainId: nu
         // - status === '0x1' or 1 means success
         // - status === '0x0' or 0 means failure (reverted)
         // - If status is undefined but receipt exists, assume success (included on-chain)
-        const isSuccess = receiptStatus === '0x1' ||
+        const isSuccess =
+            receiptStatus === '0x1' ||
             receiptStatus === 1 ||
             (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
 
@@ -256,8 +262,7 @@ export async function waitForReceiptInBackground(userOpHash: string, chainId: nu
         }
     } catch (error) {
         // Check if this is a timeout error
-        const isTimeoutError = error instanceof Error &&
-            error.name === 'WaitForUserOperationReceiptTimeoutError';
+        const isTimeoutError = error instanceof Error && error.name === 'WaitForUserOperationReceiptTimeoutError';
 
         if (isTimeoutError) {
             // Timeout doesn't mean failure - operation may still be pending on-chain
@@ -270,4 +275,3 @@ export async function waitForReceiptInBackground(userOpHash: string, chainId: nu
         }
     }
 }
-

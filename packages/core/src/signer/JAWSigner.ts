@@ -2,11 +2,7 @@ import { Address, numberToHex } from 'viem';
 
 import { Signer } from './interface.js';
 
-import {
-    assertParamsChainId,
-    getCachedWalletConnectResponse,
-    injectRequestCapabilities,
-} from './SignerUtils.js';
+import { assertParamsChainId, getCachedWalletConnectResponse, injectRequestCapabilities } from './SignerUtils.js';
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
@@ -22,13 +18,9 @@ import {
     SignInWithEthereumCapabilityRequest,
     SubnameTextRecordCapabilityRequest,
     handleGetPermissionsRequest,
-    handleGetCapabilitiesRequest
+    handleGetCapabilitiesRequest,
 } from '../rpc/index.js';
-import {
-    fetchRPCRequest,
-    ensureIntNumber,
-    hexStringFromNumber
-} from '../utils/index.js';
+import { fetchRPCRequest, ensureIntNumber, hexStringFromNumber } from '../utils/index.js';
 import { clearSignerType } from './signerStorage.js';
 
 type ConstructorOptions = {
@@ -107,9 +99,11 @@ export abstract class JAWSigner implements Signer {
                 // Trigger wallet_connect to establish connection and get accounts
                 await this._request({
                     method: 'wallet_connect',
-                    params: [{
-                        capabilities: {}
-                    }]
+                    params: [
+                        {
+                            capabilities: {},
+                        },
+                    ],
                 });
                 return this.accounts;
             }
@@ -120,7 +114,7 @@ export abstract class JAWSigner implements Signer {
 
                 // Check if chain is supported
                 const chains = store.getState().chains ?? [];
-                const chain = chains.find(c => c.id === chainId);
+                const chain = chains.find((c) => c.id === chainId);
                 if (!chain) {
                     throw standardErrors.provider.unsupportedMethod(
                         `wallet_switchEthereumChain is not supported for chainID ${chainId}`
@@ -413,9 +407,7 @@ export abstract class JAWSigner implements Signer {
             const chainId = ensureIntNumber(chainIdHex);
             const chain = chains.find((c) => c.id === chainId);
             if (!chain) {
-                throw standardErrors.provider.unsupportedMethod(
-                    `Chain ${chainIdHex} (${chainId}) is not supported`
-                );
+                throw standardErrors.provider.unsupportedMethod(`Chain ${chainIdHex} (${chainId}) is not supported`);
             }
             return chain;
         }
@@ -569,7 +561,10 @@ export abstract class JAWSigner implements Signer {
 
         // If capabilities exist, inject them into the request
         if (requestCapabilities) {
-            const capabilitiesToInject: Record<string, SignInWithEthereumCapabilityRequest | SubnameTextRecordCapabilityRequest> = { ...requestCapabilities };
+            const capabilitiesToInject: Record<
+                string,
+                SignInWithEthereumCapabilityRequest | SubnameTextRecordCapabilityRequest
+            > = { ...requestCapabilities };
             return injectRequestCapabilities(request, capabilitiesToInject);
         }
 

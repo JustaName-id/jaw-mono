@@ -1,13 +1,11 @@
-import { Separator } from "../ui/separator";
+import { Separator } from '../ui/separator';
 
 export const OrSeparator = () => {
-    return (
-        <div className="flex flex-row gap-2 items-center max-w-full">
-            <Separator className='w-full shrink' />
-            <span className="bg-background text-sm text-muted-foreground">
-                Or
-            </span>
-            <Separator className='w-full shrink' />
-        </div>
-    )
-}
+  return (
+    <div className="flex max-w-full flex-row items-center gap-2">
+      <Separator className="w-full shrink" />
+      <span className="bg-background text-muted-foreground text-sm">Or</span>
+      <Separator className="w-full shrink" />
+    </div>
+  );
+};

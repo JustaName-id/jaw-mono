@@ -1,8 +1,4 @@
-import {
-  type PasskeyAccount,
-  Account,
-  type Chain,
-} from '@jaw.id/core';
+import { type PasskeyAccount, Account, type Chain } from '@jaw.id/core';
 import type { Address } from 'viem';
 
 export interface PasskeyCreationResult {
@@ -101,7 +97,7 @@ export class PasskeyService {
 
       // Get the passkey account from stored accounts
       const storedAccounts = Account.getStoredAccounts(this.apiKey);
-      const passkeyAccount = storedAccounts.find(acc => acc.username === username);
+      const passkeyAccount = storedAccounts.find((acc) => acc.username === username);
 
       if (!passkeyAccount) {
         throw new Error('Failed to retrieve created passkey account');
@@ -144,7 +140,7 @@ export class PasskeyService {
       console.log('🌐 Using rpId:', this.rpId);
 
       // Find the passkey data
-      const passkeyData = existingAccounts.find(acc => acc.credentialId === credentialId);
+      const passkeyData = existingAccounts.find((acc) => acc.credentialId === credentialId);
       if (!passkeyData) {
         throw new Error(`Passkey with ID ${credentialId} not found`);
       }
@@ -189,7 +185,7 @@ export class PasskeyService {
 
     // Get the imported passkey account from stored accounts
     const storedAccounts = Account.getStoredAccounts(this.apiKey);
-    const passkeyAccount = storedAccounts.find(acc => acc.isImported && acc.username === metadata.username);
+    const passkeyAccount = storedAccounts.find((acc) => acc.isImported && acc.username === metadata.username);
 
     if (!passkeyAccount) {
       throw new Error('Failed to retrieve imported passkey account');

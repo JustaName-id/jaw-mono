@@ -3,153 +3,152 @@ import { KeyManager } from './keyManager.js';
 import { createMemoryStorage, type SyncStorage } from '../storage-manager/index.js';
 
 describe('KeyManager', () => {
-  let storage: SyncStorage;
-  let keyManager: KeyManager;
+    let storage: SyncStorage;
+    let keyManager: KeyManager;
 
-  beforeEach(() => {
-    storage = createMemoryStorage();
-    keyManager = new KeyManager(storage);
-  });
+    beforeEach(() => {
+        storage = createMemoryStorage();
+        keyManager = new KeyManager(storage);
+    });
 
-  it('should generate and store own public key', async () => {
-    const publicKey = await keyManager.getOwnPublicKey();
-    expect(publicKey).toBeDefined();
-    expect(publicKey.type).toBe('public');
-  });
+    it('should generate and store own public key', async () => {
+        const publicKey = await keyManager.getOwnPublicKey();
+        expect(publicKey).toBeDefined();
+        expect(publicKey.type).toBe('public');
+    });
 
-  it('should return same public key on multiple calls', async () => {
-    const publicKey1 = await keyManager.getOwnPublicKey();
-    const publicKey2 = await keyManager.getOwnPublicKey();
-    
-    // Keys should be the same instance
-    expect(publicKey1).toBe(publicKey2);
-  });
+    it('should return same public key on multiple calls', async () => {
+        const publicKey1 = await keyManager.getOwnPublicKey();
+        const publicKey2 = await keyManager.getOwnPublicKey();
 
-  it('should return null shared secret before peer key is set', async () => {
-    const sharedSecret = await keyManager.getSharedSecret();
-    expect(sharedSecret).toBeNull();
-  });
+        // Keys should be the same instance
+        expect(publicKey1).toBe(publicKey2);
+    });
 
-  it('should derive shared secret after setting peer public key', async () => {
-    // Create a second key manager to act as peer
-    const peerKeyManager = new KeyManager(createMemoryStorage());
-    const peerPublicKey = await peerKeyManager.getOwnPublicKey();
+    it('should return null shared secret before peer key is set', async () => {
+        const sharedSecret = await keyManager.getSharedSecret();
+        expect(sharedSecret).toBeNull();
+    });
 
-    // Set peer's public key
-    await keyManager.setPeerPublicKey(peerPublicKey);
+    it('should derive shared secret after setting peer public key', async () => {
+        // Create a second key manager to act as peer
+        const peerKeyManager = new KeyManager(createMemoryStorage());
+        const peerPublicKey = await peerKeyManager.getOwnPublicKey();
 
-    // Should now have a shared secret
-    const sharedSecret = await keyManager.getSharedSecret();
-    expect(sharedSecret).toBeDefined();
-    expect(sharedSecret).not.toBeNull();
-  });
+        // Set peer's public key
+        await keyManager.setPeerPublicKey(peerPublicKey);
 
-  it('should derive same shared secret on both sides', async () => {
-    const storage1 = createMemoryStorage();
-    const storage2 = createMemoryStorage();
-    
-    const manager1 = new KeyManager(storage1);
-    const manager2 = new KeyManager(storage2);
+        // Should now have a shared secret
+        const sharedSecret = await keyManager.getSharedSecret();
+        expect(sharedSecret).toBeDefined();
+        expect(sharedSecret).not.toBeNull();
+    });
 
-    // Get public keys
-    const publicKey1 = await manager1.getOwnPublicKey();
-    const publicKey2 = await manager2.getOwnPublicKey();
+    it('should derive same shared secret on both sides', async () => {
+        const storage1 = createMemoryStorage();
+        const storage2 = createMemoryStorage();
 
-    // Exchange public keys
-    await manager1.setPeerPublicKey(publicKey2);
-    await manager2.setPeerPublicKey(publicKey1);
+        const manager1 = new KeyManager(storage1);
+        const manager2 = new KeyManager(storage2);
 
-    // Get shared secrets
-    const secret1 = await manager1.getSharedSecret();
-    const secret2 = await manager2.getSharedSecret();
+        // Get public keys
+        const publicKey1 = await manager1.getOwnPublicKey();
+        const publicKey2 = await manager2.getOwnPublicKey();
 
-    expect(secret1).toBeDefined();
-    expect(secret2).toBeDefined();
+        // Exchange public keys
+        await manager1.setPeerPublicKey(publicKey2);
+        await manager2.setPeerPublicKey(publicKey1);
 
-    // Both should be AES-GCM keys
-    expect(secret1?.algorithm.name).toBe('AES-GCM');
-    expect(secret2?.algorithm.name).toBe('AES-GCM');
-  });
+        // Get shared secrets
+        const secret1 = await manager1.getSharedSecret();
+        const secret2 = await manager2.getSharedSecret();
 
-  it('should persist keys to storage', async () => {
-    await keyManager.getOwnPublicKey();
+        expect(secret1).toBeDefined();
+        expect(secret2).toBeDefined();
 
-    // Verify keys were stored
-    const ownPrivateKey = storage.getItem('ownPrivateKey');
-    const ownPublicKey = storage.getItem('ownPublicKey');
+        // Both should be AES-GCM keys
+        expect(secret1?.algorithm.name).toBe('AES-GCM');
+        expect(secret2?.algorithm.name).toBe('AES-GCM');
+    });
 
-    expect(ownPrivateKey).toBeDefined();
-    expect(ownPrivateKey).not.toBeNull();
-    expect(ownPublicKey).toBeDefined();
-    expect(ownPublicKey).not.toBeNull();
-  });
+    it('should persist keys to storage', async () => {
+        await keyManager.getOwnPublicKey();
 
-  it('should load keys from storage', async () => {
-    // Generate keys
-    const publicKey1 = await keyManager.getOwnPublicKey();
+        // Verify keys were stored
+        const ownPrivateKey = storage.getItem('ownPrivateKey');
+        const ownPublicKey = storage.getItem('ownPublicKey');
 
-    // Create new manager with same storage
-    const newManager = new KeyManager(storage);
-    const publicKey2 = await newManager.getOwnPublicKey();
+        expect(ownPrivateKey).toBeDefined();
+        expect(ownPrivateKey).not.toBeNull();
+        expect(ownPublicKey).toBeDefined();
+        expect(ownPublicKey).not.toBeNull();
+    });
 
-    // Should load the same keys (they won't be === but should have same exported value)
-    expect(publicKey1).toBeDefined();
-    expect(publicKey2).toBeDefined();
-  });
+    it('should load keys from storage', async () => {
+        // Generate keys
+        const publicKey1 = await keyManager.getOwnPublicKey();
 
-  it('should clear all keys', async () => {
-    // Generate keys and set peer
-    await keyManager.getOwnPublicKey();
-    const peerManager = new KeyManager(createMemoryStorage());
-    const peerKey = await peerManager.getOwnPublicKey();
-    await keyManager.setPeerPublicKey(peerKey);
+        // Create new manager with same storage
+        const newManager = new KeyManager(storage);
+        const publicKey2 = await newManager.getOwnPublicKey();
 
-    // Verify shared secret exists
-    const secretBefore = await keyManager.getSharedSecret();
-    expect(secretBefore).not.toBeNull();
+        // Should load the same keys (they won't be === but should have same exported value)
+        expect(publicKey1).toBeDefined();
+        expect(publicKey2).toBeDefined();
+    });
 
-    // Clear
-    await keyManager.clear();
+    it('should clear all keys', async () => {
+        // Generate keys and set peer
+        await keyManager.getOwnPublicKey();
+        const peerManager = new KeyManager(createMemoryStorage());
+        const peerKey = await peerManager.getOwnPublicKey();
+        await keyManager.setPeerPublicKey(peerKey);
 
-    // Verify storage is cleared
-    expect(storage.getItem('ownPrivateKey')).toBeNull();
-    expect(storage.getItem('ownPublicKey')).toBeNull();
-    expect(storage.getItem('peerPublicKey')).toBeNull();
+        // Verify shared secret exists
+        const secretBefore = await keyManager.getSharedSecret();
+        expect(secretBefore).not.toBeNull();
 
-    // Shared secret should be null
-    const secretAfter = await keyManager.getSharedSecret();
-    expect(secretAfter).toBeNull();
-  });
+        // Clear
+        await keyManager.clear();
 
-  it('should regenerate keys after clear', async () => {
-    const publicKey1 = await keyManager.getOwnPublicKey();
-    await keyManager.clear();
-    const publicKey2 = await keyManager.getOwnPublicKey();
+        // Verify storage is cleared
+        expect(storage.getItem('ownPrivateKey')).toBeNull();
+        expect(storage.getItem('ownPublicKey')).toBeNull();
+        expect(storage.getItem('peerPublicKey')).toBeNull();
 
-    // Keys should be different after regeneration
-    expect(publicKey1).not.toBe(publicKey2);
-  });
+        // Shared secret should be null
+        const secretAfter = await keyManager.getSharedSecret();
+        expect(secretAfter).toBeNull();
+    });
 
-  it('should handle concurrent key loading without race conditions', async () => {
-    const testStorage = createMemoryStorage();
-    const testKeyManager = new KeyManager(testStorage);
+    it('should regenerate keys after clear', async () => {
+        const publicKey1 = await keyManager.getOwnPublicKey();
+        await keyManager.clear();
+        const publicKey2 = await keyManager.getOwnPublicKey();
 
-    // Call getOwnPublicKey multiple times concurrently
-    const [key1, key2, key3] = await Promise.all([
-      testKeyManager.getOwnPublicKey(),
-      testKeyManager.getOwnPublicKey(),
-      testKeyManager.getOwnPublicKey(),
-    ]);
+        // Keys should be different after regeneration
+        expect(publicKey1).not.toBe(publicKey2);
+    });
 
-    // All should be the same instance (no duplicate key generation)
-    expect(key1).toBe(key2);
-    expect(key2).toBe(key3);
+    it('should handle concurrent key loading without race conditions', async () => {
+        const testStorage = createMemoryStorage();
+        const testKeyManager = new KeyManager(testStorage);
 
-    // Verify only one key pair was stored
-    const storedPrivateKey = testStorage.getItem('ownPrivateKey');
-    const storedPublicKey = testStorage.getItem('ownPublicKey');
-    expect(storedPrivateKey).toBeDefined();
-    expect(storedPublicKey).toBeDefined();
-  });
+        // Call getOwnPublicKey multiple times concurrently
+        const [key1, key2, key3] = await Promise.all([
+            testKeyManager.getOwnPublicKey(),
+            testKeyManager.getOwnPublicKey(),
+            testKeyManager.getOwnPublicKey(),
+        ]);
+
+        // All should be the same instance (no duplicate key generation)
+        expect(key1).toBe(key2);
+        expect(key2).toBe(key3);
+
+        // Verify only one key pair was stored
+        const storedPrivateKey = testStorage.getItem('ownPrivateKey');
+        const storedPublicKey = testStorage.getItem('ownPublicKey');
+        expect(storedPrivateKey).toBeDefined();
+        expect(storedPublicKey).toBeDefined();
+    });
 });
-

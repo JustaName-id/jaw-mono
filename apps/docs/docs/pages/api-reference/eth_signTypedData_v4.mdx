@@ -4,25 +4,21 @@ Sign structured typed data via EIP-712.
 
 **Authentication Required:** Yes
 
-
 ## Request
 
 ```typescript
 await jaw.provider.request({
   method: 'eth_signTypedData_v4',
-  params: [
-    '0x1234...',
-    JSON.stringify(typedData),
-  ],
+  params: ['0x1234...', JSON.stringify(typedData)],
 });
 ```
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `address` | `0x${string}` | Yes | Address to sign with |
-| `typedData` | `string` | Yes | JSON stringified EIP-712 typed data |
+| Name        | Type          | Required | Description                         |
+| ----------- | ------------- | -------- | ----------------------------------- |
+| `address`   | `0x${string}` | Yes      | Address to sign with                |
+| `typedData` | `string`      | Yes      | JSON stringified EIP-712 typed data |
 
 ### TypedData Structure
 
@@ -48,12 +44,8 @@ The typed data must follow EIP-712 format:
 ### Example
 
 ```json
-[
-  "0x1234567890123456789012345678901234567890",
-  "..."
-]
+["0x1234567890123456789012345678901234567890", "..."]
 ```
-
 
 ## Response
 
@@ -64,9 +56,8 @@ Returns the signature as a hexadecimal string.
 ### Example
 
 ```typescript
-"0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab"
+'0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab';
 ```
-
 
 ## Behavior
 
@@ -74,15 +65,13 @@ Returns the signature as a hexadecimal string.
 - Validates EIP-712 format before signing
 - Shows domain, message types, and values to user
 
-
 ## Errors
 
-| Code | Description |
-|------|-------------|
-| 4001 | User rejected the request |
-| 4100 | Unauthorized (not authenticated) |
+| Code   | Description                             |
+| ------ | --------------------------------------- |
+| 4001   | User rejected the request               |
+| 4100   | Unauthorized (not authenticated)        |
 | -32602 | Invalid params (malformed EIP-712 data) |
-
 
 ## Example
 
@@ -128,7 +117,6 @@ const signature = await jaw.provider.request({
   params: [account, JSON.stringify(typedData)],
 });
 ```
-
 
 ## Related Methods
 

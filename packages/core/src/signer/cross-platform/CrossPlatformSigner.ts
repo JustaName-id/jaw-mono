@@ -10,12 +10,7 @@ import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../../messag
 import { KeyManager } from '../../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/index.js';
 import { store, SDKChain } from '../../store/index.js';
-import {
-    decryptContent,
-    encryptContent,
-    exportKeyToHexString,
-    importKeyFromHexString,
-} from '../../utils/index.js';
+import { decryptContent, encryptContent, exportKeyToHexString, importKeyFromHexString } from '../../utils/index.js';
 
 type ConstructorOptions = {
     metadata: AppMetadata;
@@ -52,12 +47,11 @@ export class CrossPlatformSigner extends JAWSigner {
                     method: args.method,
                     params: args.params ?? [],
                 },
-                chain
+                chain,
             },
             correlationId
         );
-        const response: RPCResponseMessage =
-            await this.communicator.postRequestAndWaitForResponse(handshakeMessage);
+        const response: RPCResponseMessage = await this.communicator.postRequestAndWaitForResponse(handshakeMessage);
 
         // store peer's public key
         if ('failure' in response.content) {
@@ -178,10 +172,7 @@ export class CrossPlatformSigner extends JAWSigner {
         await super.cleanup();
     }
 
-    private async sendRequestToPopup(
-        request: RequestArguments,
-        overrideChain?: SDKChain
-    ): Promise<unknown> {
+    private async sendRequestToPopup(request: RequestArguments, overrideChain?: SDKChain): Promise<unknown> {
         // Open the popup before constructing the request message.
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
         await this.communicator.waitForPopupLoaded?.();

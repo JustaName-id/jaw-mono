@@ -27,10 +27,7 @@ describe('Crypto', () => {
             const peerKeyPair = await generateKeyPair();
 
             const sharedSecret = await deriveSharedSecret(ownKeyPair.privateKey, peerKeyPair.publicKey);
-            const sharedSecretDerivedByPeer = await deriveSharedSecret(
-                peerKeyPair.privateKey,
-                ownKeyPair.publicKey
-            );
+            const sharedSecretDerivedByPeer = await deriveSharedSecret(peerKeyPair.privateKey, ownKeyPair.publicKey);
 
             const plaintext = 'This is a secret message';
             const encryptedMessage = await encrypt(sharedSecret, plaintext);
@@ -50,10 +47,7 @@ describe('Crypto', () => {
             const encryptedMessage = await encrypt(sharedSecret, plaintext);
 
             // generate new keypair on otherKeyManager and use it to derive different shared secret
-            const sharedSecretDerivedByPeer = await deriveSharedSecret(
-                peerKeyPair.privateKey,
-                peerKeyPair.publicKey
-            );
+            const sharedSecretDerivedByPeer = await deriveSharedSecret(peerKeyPair.privateKey, peerKeyPair.publicKey);
 
             // Attempting to decrypt with a different shared secret
             await expect(decrypt(sharedSecretDerivedByPeer, encryptedMessage)).rejects.toThrow(

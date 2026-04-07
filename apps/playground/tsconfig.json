@@ -8,11 +8,7 @@
     "module": "esnext",
     "moduleResolution": "bundler",
     "resolveJsonModule": true,
-    "lib": [
-      "dom",
-      "dom.iterable",
-      "esnext"
-    ],
+    "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
     "allowSyntheticDefaultImports": true,
     "forceConsistentCasingInFileNames": true,
@@ -25,15 +21,9 @@
       }
     ],
     "paths": {
-      "@/*": [
-        "./app/*"
-      ],
-      "viem": [
-        "node_modules/viem"
-      ],
-      "viem/*": [
-        "node_modules/viem/*"
-      ]
+      "@/*": ["./app/*"],
+      "viem": ["node_modules/viem"],
+      "viem/*": ["node_modules/viem/*"]
     },
     "outDir": "dist",
     "tsBuildInfoFile": "dist/tsconfig.tsbuildinfo"

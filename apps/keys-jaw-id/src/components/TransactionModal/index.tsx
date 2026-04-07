@@ -1,18 +1,34 @@
-'use client'
+'use client';
 
-import { TransactionDialog, TransactionData, FeeTokenOption, fetchTokenBalance, isNativeToken, useFeeTokenPrice, useGasEstimation } from "@jaw.id/ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { Address, Hash, Hex, formatUnits } from "viem";
-import { getChainNameFromId } from "../../lib/chain-handlers";
-import { useSessionAccount } from "../../hooks";
-import { type Chain, type TransactionCall, standardErrorCodes, handleGetCapabilitiesRequest, JAW_PAYMASTER_URL, JAW_RPC_URL, type FeeTokenCapability } from "@jaw.id/core";
+import {
+  TransactionDialog,
+  TransactionData,
+  FeeTokenOption,
+  fetchTokenBalance,
+  isNativeToken,
+  useFeeTokenPrice,
+  useGasEstimation,
+} from '@jaw.id/ui';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Address, Hash, Hex, formatUnits } from 'viem';
+import { getChainNameFromId } from '../../lib/chain-handlers';
+import { useSessionAccount } from '../../hooks';
+import {
+  type Chain,
+  type TransactionCall,
+  standardErrorCodes,
+  handleGetCapabilitiesRequest,
+  JAW_PAYMASTER_URL,
+  JAW_RPC_URL,
+  type FeeTokenCapability,
+} from '@jaw.id/core';
 
 // Transaction execution result
 export interface TransactionResult {
   hash?: Hash;
   sendCallsId?: string;
   userOpHash?: Hash;
-  id?:Hash;
+  id?: Hash;
   chainId?: number;
 }
 
@@ -40,9 +56,9 @@ export interface TransactionModalProps {
   transactionRequest?: TransactionRequestData;
   transactions?: TransactionData[];
   sponsored?: boolean;
-  chain?: Chain;  // Chain info with RPC and paymaster URLs
+  chain?: Chain; // Chain info with RPC and paymaster URLs
   apiKey?: string;
-  origin?: string;  // Origin for per-origin auth session
+  origin?: string; // Origin for per-origin auth session
   onSuccess?: (result: TransactionResult) => void;
   onError?: (error: Error, errorCode?: number) => void;
 }
@@ -55,10 +71,14 @@ export const TransactionModal = ({
   apiKey,
   origin,
   onSuccess,
-  onError
+  onError,
 }: TransactionModalProps) => {
   // Single hook handles session lookup + account restoration
-  const { account, isLoading: isAccountLoading, walletAddress } = useSessionAccount({
+  const {
+    account,
+    isLoading: isAccountLoading,
+    walletAddress,
+  } = useSessionAccount({
     origin,
     chain,
     apiKey,
@@ -72,7 +92,7 @@ export const TransactionModal = ({
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
 
   // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeToken = feeTokens?.find((t) => t.isNative);
   const nativeSymbol = nativeToken?.symbol || 'ETH';
 
   // Fetch native token price dynamically based on the chain's native token symbol
@@ -104,11 +124,11 @@ export const TransactionModal = ({
   const normalizedTransactions = useMemo((): TransactionData[] => {
     // Use transactionRequest if available
     if (transactionRequest) {
-      return transactionRequest.transactions.map(tx => ({
+      return transactionRequest.transactions.map((tx) => ({
         to: tx.to || '',
         data: tx.data || '0x',
         value: tx.value,
-        chainId: tx.chainId
+        chainId: tx.chainId,
       }));
     }
 
@@ -161,10 +181,10 @@ export const TransactionModal = ({
 
   // Convert normalized transactions to TransactionCall format for gas estimation
   const transactionCalls = useMemo((): TransactionCall[] => {
-    return normalizedTransactions.map(tx => ({
+    return normalizedTransactions.map((tx) => ({
       to: tx.to as Address,
       value: tx.value ? BigInt(tx.value) : undefined,
-      data: (tx.data as `0x${string}`) || '0x'
+      data: (tx.data as `0x${string}`) || '0x',
     }));
   }, [normalizedTransactions]);
 
@@ -211,7 +231,7 @@ export const TransactionModal = ({
     if (selectedFeeToken && !selectedFeeToken.isNative) {
       // Use the actual estimate from tokenEstimates if available
       const estimate = tokenEstimates.find(
-        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+        (e) => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
       );
 
       if (estimate) {
@@ -234,7 +254,7 @@ export const TransactionModal = ({
   }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
 
   // Determine if fee token selector should be shown
-  const showFeeTokenSelector = !isSponsored && feeTokens.some(t => !t.isNative);
+  const showFeeTokenSelector = !isSponsored && feeTokens.some((t) => !t.isNative);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -273,9 +293,7 @@ export const TransactionModal = ({
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
               // For ERC-20 tokens: require at least 0.5 units
-              const isSelectable = isNative
-                ? balance > 0n
-                : parseFloat(balanceFormatted) >= 0.5;
+              const isSelectable = isNative ? balance > 0n : parseFloat(balanceFormatted) >= 0.5;
 
               return {
                 uid: token.uid,
@@ -342,10 +360,10 @@ export const TransactionModal = ({
       setTransactionStatus('Sending transaction...');
 
       // Convert normalized transactions to TransactionCall format
-      const transactionCalls: TransactionCall[] = normalizedTransactions.map(tx => ({
+      const transactionCalls: TransactionCall[] = normalizedTransactions.map((tx) => ({
         to: tx.to as Address,
         value: tx.value ? BigInt(tx.value) : undefined, // Convert string wei to bigint
-        data: (tx.data as `0x${string}`) || '0x'
+        data: (tx.data as `0x${string}`) || '0x',
       }));
 
       // Send transaction using Account class
@@ -370,11 +388,7 @@ export const TransactionModal = ({
           chainId: bundledResult.chainId,
         };
       } else {
-        const txHash = await account.sendTransaction(
-          transactionCalls,
-          computedPaymasterUrl,
-          computedPaymasterContext
-        );
+        const txHash = await account.sendTransaction(transactionCalls, computedPaymasterUrl, computedPaymasterContext);
         result = {
           hash: txHash,
         };
@@ -384,9 +398,8 @@ export const TransactionModal = ({
 
       // Call onSuccess immediately - parent will handle closing
       onSuccess?.(result);
-
     } catch (error) {
-      console.error("Error in transaction:", error);
+      console.error('Error in transaction:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       setTransactionStatus(`Error: ${errorMessage}`);
       const errorObj = error instanceof Error ? error : new Error(errorMessage);
@@ -395,12 +408,13 @@ export const TransactionModal = ({
       if (error instanceof Error && error.name === 'NotAllowedError') {
         // User cancelled passkey prompt
         errorCode = standardErrorCodes.provider.userRejectedRequest;
-      } else if (error instanceof Error && (
-        errorMessage.includes('AA21') ||
-        errorMessage.includes("didn't pay prefund") ||
-        errorMessage.includes('insufficient') ||
-        errorMessage.includes('exceeds balance')
-      )) {
+      } else if (
+        error instanceof Error &&
+        (errorMessage.includes('AA21') ||
+          errorMessage.includes("didn't pay prefund") ||
+          errorMessage.includes('insufficient') ||
+          errorMessage.includes('exceeds balance'))
+      ) {
         // Transaction rejected due to funds/gas issues
         errorCode = standardErrorCodes.rpc.transactionRejected;
       } else {
@@ -410,7 +424,16 @@ export const TransactionModal = ({
       onError?.(errorObj, errorCode);
       setIsProcessing(false);
     }
-  }, [account, chain, normalizedTransactions, transactionRequest, computedPaymasterUrl, computedPaymasterContext, onSuccess, onError]);
+  }, [
+    account,
+    chain,
+    normalizedTransactions,
+    transactionRequest,
+    computedPaymasterUrl,
+    computedPaymasterContext,
+    onSuccess,
+    onError,
+  ]);
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
@@ -434,7 +457,9 @@ export const TransactionModal = ({
       // open={open}
       // onOpenChange={handleCancel}
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {
+        console.log('onOpenChange');
+      }}
       transactions={normalizedTransactions}
       walletAddress={walletAddress ?? ''}
       gasFee={gasFee}
@@ -457,4 +482,4 @@ export const TransactionModal = ({
       isPayingWithErc20={isPayingWithErc20}
     />
   );
-}
+};

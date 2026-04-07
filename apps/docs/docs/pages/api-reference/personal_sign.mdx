@@ -4,7 +4,6 @@ Signs an EIP-191 personal message.
 
 **Authentication Required:** Yes
 
-
 ## Request
 
 ```typescript
@@ -16,17 +15,16 @@ await jaw.provider.request({
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `message` | `0x${string}` | Yes | Message to sign (hex encoded) |
-| `address` | `0x${string}` | Yes | Address to sign with |
+| Name      | Type          | Required | Description                   |
+| --------- | ------------- | -------- | ----------------------------- |
+| `message` | `0x${string}` | Yes      | Message to sign (hex encoded) |
+| `address` | `0x${string}` | Yes      | Address to sign with          |
 
 ### Example
 
 ```typescript
-["0x48656c6c6f20576f726c64", "0x1234567890123456789012345678901234567890"]
+['0x48656c6c6f20576f726c64', '0x1234567890123456789012345678901234567890'];
 ```
-
 
 ## Response
 
@@ -37,9 +35,8 @@ Returns the signature as a hexadecimal string.
 ### Example
 
 ```typescript
-"0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1c"
+'0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1c';
 ```
-
 
 ## Behavior
 
@@ -47,15 +44,13 @@ Returns the signature as a hexadecimal string.
 - Displays human-readable message to user
 - Returns EIP-191 signature with "\x19Ethereum Signed Message:\n" prefix
 
-
 ## Errors
 
-| Code | Description |
-|------|-------------|
-| 4001 | User rejected the request |
-| 4100 | Unauthorized (not authenticated) |
+| Code   | Description                              |
+| ------ | ---------------------------------------- |
+| 4001   | User rejected the request                |
+| 4100   | Unauthorized (not authenticated)         |
 | -32602 | Invalid params (message not hex encoded) |
-
 
 ## Example
 
@@ -73,7 +68,6 @@ const signature = await jaw.provider.request({
 
 console.log('Signature:', signature);
 ```
-
 
 ## Related Methods
 

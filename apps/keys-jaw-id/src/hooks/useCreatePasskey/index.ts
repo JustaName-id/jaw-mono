@@ -1,5 +1,5 @@
-import { useMutation } from "@tanstack/react-query";
-import { PasskeyService } from "../../lib/passkey-service";
+import { useMutation } from '@tanstack/react-query';
+import { PasskeyService } from '../../lib/passkey-service';
 
 export interface UseCreatePasskeyResult {
   address: string;

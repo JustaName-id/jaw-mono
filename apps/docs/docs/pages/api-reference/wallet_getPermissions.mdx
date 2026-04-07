@@ -4,7 +4,6 @@ Get all permissions for an account.
 
 **Authentication Required:** No (if address provided)
 
-
 ## Request
 
 ```typescript
@@ -16,11 +15,11 @@ await jaw.provider.request({
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `address` | `string` | No* | Account address to query |
+| Name      | Type     | Required | Description              |
+| --------- | -------- | -------- | ------------------------ |
+| `address` | `string` | No\*     | Account address to query |
 
-*Required if not authenticated. Auto-injected if authenticated and not provided.
+\*Required if not authenticated. Auto-injected if authenticated and not provided.
 
 ### Example
 
@@ -33,7 +32,6 @@ Or when authenticated (auto-injects address):
 ```json
 []
 ```
-
 
 ## Response
 
@@ -52,17 +50,21 @@ Returns an array of permission objects.
     "start": 1704067200,
     "end": 1735689600,
     "salt": "0x1a2b3c...",
-    "calls": [{
-      "target": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-      "selector": "0xa9059cbb",
-      "checker": "0x0000000000000000000000000000000000000000"
-    }],
-    "spends": [{
-      "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-      "allowance": "0x16345785d8a0000",
-      "unit": "day",
-      "multiplier": 1
-    }],
+    "calls": [
+      {
+        "target": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+        "selector": "0xa9059cbb",
+        "checker": "0x0000000000000000000000000000000000000000"
+      }
+    ],
+    "spends": [
+      {
+        "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+        "allowance": "0x16345785d8a0000",
+        "unit": "day",
+        "multiplier": 1
+      }
+    ],
     "chainId": "0x1"
   }
 ]
@@ -70,18 +72,17 @@ Returns an array of permission objects.
 
 ### Permission Object Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `permissionId` | `string` | Unique permission identifier (hash) |
-| `account` | `string` | Account that granted the permission |
-| `spender` | `string` | Address that received permissions |
-| `start` | `number` | Unix timestamp when permission becomes valid |
-| `end` | `number` | Unix timestamp when permission expires |
-| `salt` | `string` | Salt for permission uniqueness (hex) |
-| `calls` | `array` | Granted call permissions |
-| `spends` | `array` | Granted spend limits |
-| `chainId` | `string` | Chain ID (hex) |
-
+| Field          | Type     | Description                                  |
+| -------------- | -------- | -------------------------------------------- |
+| `permissionId` | `string` | Unique permission identifier (hash)          |
+| `account`      | `string` | Account that granted the permission          |
+| `spender`      | `string` | Address that received permissions            |
+| `start`        | `number` | Unix timestamp when permission becomes valid |
+| `end`          | `number` | Unix timestamp when permission expires       |
+| `salt`         | `string` | Salt for permission uniqueness (hex)         |
+| `calls`        | `array`  | Granted call permissions                     |
+| `spends`       | `array`  | Granted spend limits                         |
+| `chainId`      | `string` | Chain ID (hex)                               |
 
 ## Behavior
 
@@ -89,13 +90,11 @@ Returns an array of permission objects.
 - Auto-injects connected address if authenticated
 - Returns empty array if no permissions found
 
-
 ## Errors
 
-| Code | Description |
-|------|-------------|
+| Code   | Description                                              |
+| ------ | -------------------------------------------------------- |
 | -32602 | Invalid params (address required when not authenticated) |
-
 
 ## Example
 
@@ -104,7 +103,6 @@ const permissions = await jaw.provider.request({
   method: 'wallet_getPermissions',
 });
 ```
-
 
 ## Related Methods
 

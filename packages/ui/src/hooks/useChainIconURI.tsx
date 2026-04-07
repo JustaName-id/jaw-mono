@@ -1,8 +1,5 @@
-import { JSX, useState, useEffect, useMemo } from "react";
-import {
-  handleGetCapabilitiesRequest,
-  type ChainMetadataCapability,
-} from "@jaw.id/core";
+import { JSX, useState, useEffect, useMemo } from 'react';
+import { handleGetCapabilitiesRequest, type ChainMetadataCapability } from '@jaw.id/core';
 
 // Simple in-memory cache for chain icons to avoid redundant API calls
 const chainIconCache = new Map<string, string | null>();
@@ -16,11 +13,7 @@ const chainIconCache = new Map<string, string | null>();
  * @param size - The size of the icon in pixels (default: 24)
  * @returns JSX.Element - The chain icon or a fallback element
  */
-export const useChainIconURI = (
-  chainId: number,
-  apiKey?: string,
-  size?: number,
-): JSX.Element => {
+export const useChainIconURI = (chainId: number, apiKey?: string, size?: number): JSX.Element => {
   const iconSize = size ?? 24;
   const cacheKey = `${chainId}-${apiKey}`;
 
@@ -51,18 +44,16 @@ export const useChainIconURI = (
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
         const capabilities = await handleGetCapabilitiesRequest(
           {
-            method: "wallet_getCapabilities",
+            method: 'wallet_getCapabilities',
             params: [undefined, [chainIdHex]],
           },
           apiKey,
-          true, // showTestnets to get all chains
+          true // showTestnets to get all chains
         );
 
         if (isMounted) {
           const chainCapabilities = capabilities[chainIdHex];
-          const chainMetadata = chainCapabilities?.chainMetadata as
-            | ChainMetadataCapability
-            | undefined;
+          const chainMetadata = chainCapabilities?.chainMetadata as ChainMetadataCapability | undefined;
           const icon = chainMetadata?.icon ?? null;
 
           // Cache the result
@@ -71,10 +62,7 @@ export const useChainIconURI = (
           setIsLoading(false);
         }
       } catch (error) {
-        console.warn(
-          `Failed to fetch capabilities for chain ${chainId}:`,
-          error,
-        );
+        console.warn(`Failed to fetch capabilities for chain ${chainId}:`, error);
         if (isMounted) {
           // Cache null to prevent repeated failed requests
           chainIconCache.set(cacheKey, null);
@@ -103,7 +91,7 @@ export const useChainIconURI = (
             width: iconSize,
             height: iconSize,
             minWidth: iconSize,
-            borderRadius: "50%",
+            borderRadius: '50%',
           }}
         />
       );
@@ -113,21 +101,21 @@ export const useChainIconURI = (
     return (
       <div
         style={{
-          backgroundColor: isLoading ? "var(--muted)" : "var(--secondary)",
-          border: "1px solid var(--border)",
-          display: "flex",
+          backgroundColor: isLoading ? 'var(--muted)' : 'var(--secondary)',
+          border: '1px solid var(--border)',
+          display: 'flex',
           height: `${iconSize}px`,
           width: `${iconSize}px`,
           minWidth: `${iconSize}px`,
-          alignItems: "center",
-          justifyContent: "center",
-          textAlign: "center",
-          borderRadius: "50%",
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          borderRadius: '50%',
           fontSize: `${Math.max(10, iconSize / 3)}px`,
-          color: "var(--muted-foreground)",
+          color: 'var(--muted-foreground)',
         }}
       >
-        {isLoading ? "..." : "?"}
+        {isLoading ? '...' : '?'}
       </div>
     );
   }, [iconURI, chainId, iconSize, isLoading]);

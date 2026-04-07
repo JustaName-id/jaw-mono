@@ -9,14 +9,5 @@ export default defineConfig({
   sourcemap: true,
   clean: false,
   treeshake: true,
-  external: [
-    'viem',
-    'ox',
-    'zustand',
-    'axios',
-    'eventemitter3',
-    'mipd',
-    'qs',
-    'tslib',
-  ],
+  external: ['viem', 'ox', 'zustand', 'axios', 'eventemitter3', 'mipd', 'qs', 'tslib'],
 });

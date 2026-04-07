@@ -1,4 +1,1 @@
-export {
-    Communicator,
-    type CommunicatorOptions,
-} from './communicator.js';
+export { Communicator, type CommunicatorOptions } from './communicator.js';

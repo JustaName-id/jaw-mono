@@ -4,29 +4,30 @@ Get token balances across multiple chains for an account. Implements EIP-7811.
 
 **Authentication Required:** No (requires account parameter)
 
-
 ## Request
 
 ```typescript
 await jaw.provider.request({
   method: 'wallet_getAssets',
-  params: [{
-    account: '0x1234...',
-    assetFilter: {
-      '0x1': [{ address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', type: 'erc20' }],
+  params: [
+    {
+      account: '0x1234...',
+      assetFilter: {
+        '0x1': [{ address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', type: 'erc20' }],
+      },
     },
-  }],
+  ],
 });
 ```
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `account` | `string` | Yes | Account address to query |
-| `chainFilter` | `string[]` | No | Limit to specific chains (hex chain IDs) |
-| `assetTypeFilter` | `AssetType[]` | No | Filter by asset type: `'native'` or `'erc20'` |
-| `assetFilter` | `AssetFilter` | No | Filter by specific assets per chain |
+| Name              | Type          | Required | Description                                   |
+| ----------------- | ------------- | -------- | --------------------------------------------- |
+| `account`         | `string`      | Yes      | Account address to query                      |
+| `chainFilter`     | `string[]`    | No       | Limit to specific chains (hex chain IDs)      |
+| `assetTypeFilter` | `AssetType[]` | No       | Filter by asset type: `'native'` or `'erc20'` |
+| `assetFilter`     | `AssetFilter` | No       | Filter by specific assets per chain           |
 
 ### Types
 
@@ -44,33 +45,38 @@ type AssetFilterEntry = {
 ### Example
 
 ```json
-[{
-  "account": "0x1234567890123456789012345678901234567890",
-  "chainFilter": ["0x1", "0x89"]
-}]
+[
+  {
+    "account": "0x1234567890123456789012345678901234567890",
+    "chainFilter": ["0x1", "0x89"]
+  }
+]
 ```
 
 With asset type filter (ERC-20 tokens only):
 
 ```json
-[{
-  "account": "0x1234567890123456789012345678901234567890",
-  "assetTypeFilter": ["erc20"]
-}]
+[
+  {
+    "account": "0x1234567890123456789012345678901234567890",
+    "assetTypeFilter": ["erc20"]
+  }
+]
 ```
 
 With specific asset filter:
 
 ```json
-[{
-  "account": "0x1234567890123456789012345678901234567890",
-  "assetFilter": {
-    "0x1": [{ "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "type": "erc20" }],
-    "0x2105": [{ "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "type": "erc20" }]
+[
+  {
+    "account": "0x1234567890123456789012345678901234567890",
+    "assetFilter": {
+      "0x1": [{ "address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48", "type": "erc20" }],
+      "0x2105": [{ "address": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "type": "erc20" }]
+    }
   }
-}]
+]
 ```
-
 
 ## Response
 
@@ -142,13 +148,12 @@ type Asset = {
 
 ### Asset Object Fields
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `address` | `string \| null` | Token contract address, `null` for native tokens |
-| `balance` | `string` | Balance in smallest unit (wei/raw), hex format |
-| `metadata` | `object \| null` | Token metadata (decimals, name, symbol) |
-| `type` | `'native' \| 'erc20'` | Asset type |
-
+| Field      | Type                  | Description                                      |
+| ---------- | --------------------- | ------------------------------------------------ |
+| `address`  | `string \| null`      | Token contract address, `null` for native tokens |
+| `balance`  | `string`              | Balance in smallest unit (wei/raw), hex format   |
+| `metadata` | `object \| null`      | Token metadata (decimals, name, symbol)          |
+| `type`     | `'native' \| 'erc20'` | Asset type                                       |
 
 ## Behavior
 
@@ -158,7 +163,6 @@ type Asset = {
 - Can be called without authentication
 - Returns only tokens with non-zero balances
 
-
 ## Example
 
 ### Get All Assets
@@ -166,9 +170,11 @@ type Asset = {
 ```typescript
 const assets = await jaw.provider.request({
   method: 'wallet_getAssets',
-  params: [{
-    account: '0x1234...',
-  }],
+  params: [
+    {
+      account: '0x1234...',
+    },
+  ],
 });
 ```
 
@@ -178,10 +184,12 @@ const assets = await jaw.provider.request({
 // Only get ERC-20 tokens
 const tokens = await jaw.provider.request({
   method: 'wallet_getAssets',
-  params: [{
-    account: '0x1234...',
-    assetTypeFilter: ['erc20'],
-  }],
+  params: [
+    {
+      account: '0x1234...',
+      assetTypeFilter: ['erc20'],
+    },
+  ],
 });
 ```
 
@@ -191,16 +199,17 @@ const tokens = await jaw.provider.request({
 // Get only USDC on mainnet and Base
 const usdc = await jaw.provider.request({
   method: 'wallet_getAssets',
-  params: [{
-    account: '0x1234...',
-    assetFilter: {
-      '0x1': [{ address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', type: 'erc20' }],
-      '0x2105': [{ address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', type: 'erc20' }],
+  params: [
+    {
+      account: '0x1234...',
+      assetFilter: {
+        '0x1': [{ address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', type: 'erc20' }],
+        '0x2105': [{ address: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', type: 'erc20' }],
+      },
     },
-  }],
+  ],
 });
 ```
-
 
 ## Related Methods
 

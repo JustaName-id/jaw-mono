@@ -1,7 +1,5 @@
 import { standardErrors } from '../errors/index.js';
-import {
-    RequestArguments,
-} from '../provider/index.js';
+import { RequestArguments } from '../provider/index.js';
 
 /**
  * Constructs the JAW RPC URL with the provided API key as a query parameter
@@ -54,11 +52,7 @@ export function checkErrorForInvalidRequestArgs(args: unknown): asserts args is 
         });
     }
 
-    if (
-        params !== undefined &&
-        !Array.isArray(params) &&
-        (typeof params !== 'object' || params === null)
-    ) {
+    if (params !== undefined && !Array.isArray(params) && (typeof params !== 'object' || params === null)) {
         throw standardErrors.rpc.invalidParams({
             message: "'args.params' must be an object or array if provided.",
             data: args,

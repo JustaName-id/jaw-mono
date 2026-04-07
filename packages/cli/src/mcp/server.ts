@@ -1,14 +1,14 @@
-import { McpServer } from "@modelcontextprotocol/sdk/server/mcp.js";
-import { StdioServerTransport } from "@modelcontextprotocol/sdk/server/stdio.js";
-import { registerRpcTool } from "./handlers/rpc.js";
-import { registerConfigTools } from "./handlers/config.js";
-import { registerDaemonTools } from "./handlers/daemon.js";
-import { registerResources } from "./handlers/resources.js";
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
+import { registerRpcTool } from './handlers/rpc.js';
+import { registerConfigTools } from './handlers/config.js';
+import { registerDaemonTools } from './handlers/daemon.js';
+import { registerResources } from './handlers/resources.js';
 
 export function createMcpServer(): McpServer {
   const server = new McpServer({
-    name: "jaw",
-    version: "0.0.1",
+    name: 'jaw',
+    version: '0.0.1',
   });
 
   registerRpcTool(server);

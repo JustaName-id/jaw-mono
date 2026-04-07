@@ -4,13 +4,11 @@ Hook to get wallet capabilities for supported chains. Implements EIP-5792 for ca
 
 **Type:** `hook`
 
-
 ## Import
 
 ```typescript
 import { useCapabilities } from '@jaw.id/wagmi';
 ```
-
 
 ## Signature
 
@@ -22,9 +20,8 @@ function useCapabilities(parameters?: {
   chainFilter?: Hex[];
   config?: Config;
   query?: UseQueryParameters;
-}): UseQueryResult
+}): UseQueryResult;
 ```
-
 
 ## Parameters
 
@@ -64,20 +61,19 @@ Type: `UseQueryParameters` (optional)
 
 TanStack React Query options (excluding `gcTime` and `staleTime` which are managed internally).
 
-
 ## Returns
 
 Returns a TanStack React Query result:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `data` | `Record<Hex, Record<string, unknown>>` | Capabilities keyed by chain ID (hex) |
-| `isLoading` | `boolean` | Whether initial load is in progress |
-| `isFetching` | `boolean` | Whether any fetch is in progress |
-| `isSuccess` | `boolean` | Whether query succeeded |
-| `isError` | `boolean` | Whether query failed |
-| `error` | `Error` | Error if query failed |
-| `refetch` | `function` | Manually refetch capabilities |
+| Property     | Type                                   | Description                          |
+| ------------ | -------------------------------------- | ------------------------------------ |
+| `data`       | `Record<Hex, Record<string, unknown>>` | Capabilities keyed by chain ID (hex) |
+| `isLoading`  | `boolean`                              | Whether initial load is in progress  |
+| `isFetching` | `boolean`                              | Whether any fetch is in progress     |
+| `isSuccess`  | `boolean`                              | Whether query succeeded              |
+| `isError`    | `boolean`                              | Whether query failed                 |
+| `error`      | `Error`                                | Error if query failed                |
+| `refetch`    | `function`                             | Manually refetch capabilities        |
 
 ### data
 
@@ -104,14 +100,12 @@ type WalletGetCapabilitiesResponse = Record<Hex, Record<string, unknown>>;
 }
 ```
 
-
 ## Behavior
 
 1. **Works without connection** when `address` parameter is provided
 2. **Auto-enables** when wallet is connected or address is provided
 3. **Caches results** for optimal performance
 4. **Returns all chains** by default, use `chainFilter` to limit
-
 
 ## Examples
 
@@ -198,17 +192,15 @@ function PaymasterSupport() {
 }
 ```
 
-
 ## Available Capabilities
 
-| Capability | Description |
-|------------|-------------|
-| `atomicBatch` | Support for `wallet_sendCalls` (EIP-5792) |
-| `atomic` | Atomic transaction execution |
-| `paymasterService` | Gasless transactions via ERC-7677 |
-| `permissions` | Permission system support |
-| `feeToken` | Supported fee tokens for gas |
-
+| Capability         | Description                               |
+| ------------------ | ----------------------------------------- |
+| `atomicBatch`      | Support for `wallet_sendCalls` (EIP-5792) |
+| `atomic`           | Atomic transaction execution              |
+| `paymasterService` | Gasless transactions via ERC-7677         |
+| `permissions`      | Permission system support                 |
+| `feeToken`         | Supported fee tokens for gas              |
 
 ## Related
 
