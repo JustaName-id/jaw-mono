@@ -1,11 +1,11 @@
-'use client'
+'use client';
 
-import { SignatureDialog, useChainIconURI } from "@jaw.id/ui";
-import { useSessionAccount } from "../../hooks";
-import { useCallback, useMemo, useState } from "react";
-import type { chain } from "../../lib/sdk-types";
-import { getChainNameFromId } from "../../lib/chain-handlers";
-import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
+import { SignatureDialog, useChainIconURI } from '@jaw.id/ui';
+import { useSessionAccount } from '../../hooks';
+import { useCallback, useMemo, useState } from 'react';
+import type { chain } from '../../lib/sdk-types';
+import { getChainNameFromId } from '../../lib/chain-handlers';
+import { standardErrorCodes, JAW_RPC_URL } from '@jaw.id/core';
 
 export interface SignatureModalProps {
   origin: string;
@@ -24,7 +24,7 @@ export const SignatureModal = ({
   chain,
   apiKey,
   onSuccess,
-  onError
+  onError,
 }: SignatureModalProps) => {
   // Single hook handles session lookup + account restoration
   const { account, isLoading: isAccountLoading } = useSessionAccount({
@@ -57,7 +57,7 @@ export const SignatureModal = ({
   }, [effectiveApiKey]);
 
   // Get chain name and icon
-  const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
+  const chainName = useMemo(() => (chain ? getChainNameFromId(chain.id) : undefined), [chain]);
   const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
 
   const signMessage = useCallback(async () => {
@@ -75,15 +75,15 @@ export const SignatureModal = ({
 
       // Call onSuccess immediately - parent will handle closing
       onSuccess(signature, messageToSign);
-
     } catch (error) {
-      console.error("Error signing message:", error);
+      console.error('Error signing message:', error);
       setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Signature failed'}`);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       // Check if user cancelled passkey prompt (NotAllowedError)
-      const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-        ? standardErrorCodes.provider.userRejectedRequest
-        : standardErrorCodes.rpc.internal;
+      const errorCode =
+        error instanceof Error && error.name === 'NotAllowedError'
+          ? standardErrorCodes.provider.userRejectedRequest
+          : standardErrorCodes.rpc.internal;
       onError(errorObj, errorCode);
       setIsProcessing(false);
     }
@@ -102,7 +102,9 @@ export const SignatureModal = ({
   return (
     <SignatureDialog
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {
+        console.log('onOpenChange');
+      }}
       message={messageToSign}
       origin={origin}
       timestamp={timestamp}
@@ -118,4 +120,4 @@ export const SignatureModal = ({
       canSign={canSign}
     />
   );
-}
+};

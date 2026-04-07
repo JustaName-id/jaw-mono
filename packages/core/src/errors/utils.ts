@@ -10,10 +10,7 @@ type ErrorValueKey = keyof typeof errorValues;
  * Gets the message for a given code, or a fallback message if the code has
  * no corresponding message.
  */
-export function getMessageFromCode(
-    code: number | undefined,
-    fallbackMessage: string = FALLBACK_MESSAGE
-): string {
+export function getMessageFromCode(code: number | undefined, fallbackMessage: string = FALLBACK_MESSAGE): string {
     if (code && Number.isInteger(code)) {
         const codeString = code.toString();
 
@@ -69,8 +66,7 @@ function isErrorWithCode(error: unknown): error is ErrorWithCode {
     return (
         typeof error === 'object' &&
         error !== null &&
-        (typeof (error as ErrorWithCode).code === 'number' ||
-            typeof (error as ErrorWithCode).errorCode === 'number')
+        (typeof (error as ErrorWithCode).code === 'number' || typeof (error as ErrorWithCode).errorCode === 'number')
     );
 }
 
@@ -88,10 +84,7 @@ export interface SerializedEthereumRpcError {
     stack?: string;
 }
 
-export function serialize(
-    error: unknown,
-    { shouldIncludeStack = false } = {}
-): SerializedEthereumRpcError {
+export function serialize(error: unknown, { shouldIncludeStack = false } = {}): SerializedEthereumRpcError {
     const serialized: Partial<SerializedEthereumRpcError> = {};
 
     if (
@@ -146,7 +139,5 @@ function hasKey(obj: Record<string, unknown>, key: string) {
 }
 
 function hasStringProperty<T>(obj: unknown, prop: keyof T): obj is T {
-    return (
-        typeof obj === 'object' && obj !== null && prop in obj && typeof (obj as T)[prop] === 'string'
-    );
+    return typeof obj === 'object' && obj !== null && prop in obj && typeof (obj as T)[prop] === 'string';
 }

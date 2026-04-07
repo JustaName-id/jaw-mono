@@ -1,7 +1,7 @@
-'use client'
+'use client';
 
-import { useState } from "react";
-import { standardErrorCodes } from "@jaw.id/core";
+import { useState } from 'react';
+import { standardErrorCodes } from '@jaw.id/core';
 
 export interface UnsupportedMethodModalProps {
   origin: string;
@@ -16,7 +16,7 @@ export const UnsupportedMethodModal = ({
   method,
   appName,
   appLogoUrl,
-  onClose
+  onClose,
 }: UnsupportedMethodModalProps) => {
   const [isClosing, setIsClosing] = useState<boolean>(false);
 
@@ -30,17 +30,13 @@ export const UnsupportedMethodModal = ({
   };
 
   return (
-    <div className="min-h-screen flex items-center justify-center bg-gray-50 p-4">
-      <div className="w-full max-w-md bg-white rounded-2xl shadow-xl p-8">
+    <div className="flex min-h-screen items-center justify-center bg-gray-50 p-4">
+      <div className="w-full max-w-md rounded-2xl bg-white p-8 shadow-xl">
         {/* App Info */}
         {(appLogoUrl || appName) && (
-          <div className="flex items-center gap-3 mb-6 pb-6 border-b border-gray-200">
+          <div className="mb-6 flex items-center gap-3 border-b border-gray-200 pb-6">
             {appLogoUrl && (
-              <img
-                src={appLogoUrl}
-                alt={appName || 'App'}
-                className="w-12 h-12 rounded-lg object-cover"
-              />
+              <img src={appLogoUrl} alt={appName || 'App'} className="h-12 w-12 rounded-lg object-cover" />
             )}
             <div className="flex-1">
               <p className="text-sm font-medium text-gray-900">{appName || 'dApp'}</p>
@@ -50,14 +46,9 @@ export const UnsupportedMethodModal = ({
         )}
 
         {/* Error Icon */}
-        <div className="flex justify-center mb-6">
-          <div className="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center">
-            <svg
-              className="w-8 h-8 text-orange-600"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+        <div className="mb-6 flex justify-center">
+          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-orange-100">
+            <svg className="h-8 w-8 text-orange-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -69,17 +60,11 @@ export const UnsupportedMethodModal = ({
         </div>
 
         {/* Content */}
-        <div className="text-center mb-8">
-          <h3 className="text-xl font-bold text-gray-900 mb-2">
-            Unsupported Method
-          </h3>
-          <p className="text-sm text-gray-600 mb-4">
-            This wallet does not support the following method:
-          </p>
-          <div className="bg-gray-100 rounded-lg p-4">
-            <code className="text-sm font-mono text-gray-900 break-all">
-              {method}
-            </code>
+        <div className="mb-8 text-center">
+          <h3 className="mb-2 text-xl font-bold text-gray-900">Unsupported Method</h3>
+          <p className="mb-4 text-sm text-gray-600">This wallet does not support the following method:</p>
+          <div className="rounded-lg bg-gray-100 p-4">
+            <code className="break-all font-mono text-sm text-gray-900">{method}</code>
           </div>
         </div>
 
@@ -87,11 +72,11 @@ export const UnsupportedMethodModal = ({
         <button
           onClick={handleClose}
           disabled={isClosing}
-          className="w-full py-3 px-6 bg-blue-600 hover:bg-blue-700 disabled:bg-gray-400 text-white font-semibold rounded-lg transition-colors"
+          className="w-full rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-blue-700 disabled:bg-gray-400"
         >
           {isClosing ? 'Closing...' : 'Close'}
         </button>
       </div>
     </div>
   );
-}
+};

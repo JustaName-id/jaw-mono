@@ -12,12 +12,12 @@ The critical property: **the private key never leaves the secure enclave.** It c
 
 Traditional approaches to securing onchain private keys all share a common problem: the secret material must be accessible at some point.
 
-| Approach | Where the secret lives | Exposure risk |
-|----------|----------------------|---------------|
-| **Seed phrase** | Paper, metal plate, password manager | Physical theft, digital compromise, human error |
-| **Browser extension** | Encrypted in browser storage | Malware, phishing, XSS |
-| **KMS / MPC** | Split across servers, iframes, TEEs | Auth token hijack, reconstitution window, provider dependency |
-| **Passkey** | Device secure enclave | None — key cannot be extracted |
+| Approach              | Where the secret lives               | Exposure risk                                                 |
+| --------------------- | ------------------------------------ | ------------------------------------------------------------- |
+| **Seed phrase**       | Paper, metal plate, password manager | Physical theft, digital compromise, human error               |
+| **Browser extension** | Encrypted in browser storage         | Malware, phishing, XSS                                        |
+| **KMS / MPC**         | Split across servers, iframes, TEEs  | Auth token hijack, reconstitution window, provider dependency |
+| **Passkey**           | Device secure enclave                | None — key cannot be extracted                                |
 
 Passkeys eliminate the entire category of problems that embedded wallet infrastructure was built to solve:
 
@@ -55,12 +55,12 @@ When passkeys sync via iCloud Keychain or Google Password Manager, they travel *
 
 JAW supports two modes for passkey operations, depending on whether you want portability or full control:
 
-| | CrossPlatform | AppSpecific |
-|---|---|---|
-| **Passkey bound to** | `keys.jaw.id` | Your domain |
-| **Reusable across apps** | Yes | No |
-| **UI control** | JAW-managed popup | Your custom UI |
-| **Best for** | Multi-app ecosystems | White-label products |
+|                          | CrossPlatform        | AppSpecific          |
+| ------------------------ | -------------------- | -------------------- |
+| **Passkey bound to**     | `keys.jaw.id`        | Your domain          |
+| **Reusable across apps** | Yes                  | No                   |
+| **UI control**           | JAW-managed popup    | Your custom UI       |
+| **Best for**             | Multi-app ecosystems | White-label products |
 
 Both modes use the same passkey security model — the difference is where the WebAuthn ceremony happens and whether the credential is portable.
 

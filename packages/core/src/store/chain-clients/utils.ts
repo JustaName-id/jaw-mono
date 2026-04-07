@@ -12,18 +12,18 @@ import { store } from '../store.js';
  * Paymaster configuration for a chain
  */
 export type PaymasterConfig = {
-  /** The paymaster RPC URL */
-  url: string;
-  /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
-  context?: Record<string, unknown>;
+    /** The paymaster RPC URL */
+    url: string;
+    /** Optional context to pass to paymaster calls (e.g., sponsorshipPolicyId for Pimlico) */
+    context?: Record<string, unknown>;
 };
 
 export type SDKChain = {
-  id: number;
-  rpcUrl?: string;
-  nativeCurrency?: RPCResponseNativeCurrency;
-  /** Optional paymaster configuration for sponsored transactions */
-  paymaster?: PaymasterConfig;
+    id: number;
+    rpcUrl?: string;
+    nativeCurrency?: RPCResponseNativeCurrency;
+    /** Optional paymaster configuration for sponsored transactions */
+    paymaster?: PaymasterConfig;
 };
 
 /**
@@ -35,53 +35,53 @@ export type SDKChain = {
  * @returns Object containing the PublicClient and BundlerClient, or undefined if no rpcUrl
  */
 function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerClient: BundlerClient } | undefined {
-  if (!chain.rpcUrl) {
-    return undefined;
-  }
+    if (!chain.rpcUrl) {
+        return undefined;
+    }
 
-  const viemchain = defineChain({
-    id: chain.id,
-    rpcUrls: {
-      default: {
-        http: [chain.rpcUrl],
-      },
-    },
-    name: chain.nativeCurrency?.name ?? '',
-    nativeCurrency: {
-      name: chain.nativeCurrency?.name ?? '',
-      symbol: chain.nativeCurrency?.symbol ?? '',
-      decimals: chain.nativeCurrency?.decimal ?? 18,
-    },
-  });
-
-  const client = createPublicClient({
-    chain: viemchain,
-    transport: http(chain.rpcUrl),
-  });
-
-  // If no paymaster URL, return bundler client without paymaster
-  if (!chain.paymaster?.url) {
-    const bundlerClient = createBundlerClient({
-      chain: viemchain,
-      client,
-      transport: http(chain.rpcUrl),
+    const viemchain = defineChain({
+        id: chain.id,
+        rpcUrls: {
+            default: {
+                http: [chain.rpcUrl],
+            },
+        },
+        name: chain.nativeCurrency?.name ?? '',
+        nativeCurrency: {
+            name: chain.nativeCurrency?.name ?? '',
+            symbol: chain.nativeCurrency?.symbol ?? '',
+            decimals: chain.nativeCurrency?.decimal ?? 18,
+        },
     });
+
+    const client = createPublicClient({
+        chain: viemchain,
+        transport: http(chain.rpcUrl),
+    });
+
+    // If no paymaster URL, return bundler client without paymaster
+    if (!chain.paymaster?.url) {
+        const bundlerClient = createBundlerClient({
+            chain: viemchain,
+            client,
+            transport: http(chain.rpcUrl),
+        });
+        return { client, bundlerClient };
+    }
+
+    // Create paymaster client and wrap with custom functions that handle gas price fetching and v0.8 gas limits
+    const paymasterClient = createPaymasterClient({
+        transport: http(chain.paymaster.url),
+    });
+
+    const bundlerClient = createBundlerClient({
+        chain: viemchain,
+        client,
+        paymaster: createPaymasterFunctions(client, paymasterClient, chain.id, chain.paymaster.context),
+        transport: http(chain.rpcUrl),
+    });
+
     return { client, bundlerClient };
-  }
-
-  // Create paymaster client and wrap with custom functions that handle gas price fetching and v0.8 gas limits
-  const paymasterClient = createPaymasterClient({
-    transport: http(chain.paymaster.url)
-  });
-
-  const bundlerClient = createBundlerClient({
-    chain: viemchain,
-    client,
-    paymaster: createPaymasterFunctions(client, paymasterClient, chain.id, chain.paymaster.context),
-    transport: http(chain.rpcUrl),
-  });
-
-  return { client, bundlerClient };
 }
 
 /**
@@ -90,15 +90,15 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
  * @param chains - Array of chains to create clients for
  */
 export function createClients(chains: SDKChain[]) {
-  chains.forEach((chain) => {
-    const clients = createClientForChain(chain);
-    if (clients) {
-      ChainClients.setState({
-        ...ChainClients.getState(),
-        [chain.id]: clients,
-      });
-    }
-  });
+    chains.forEach((chain) => {
+        const clients = createClientForChain(chain);
+        if (clients) {
+            ChainClients.setState({
+                ...ChainClients.getState(),
+                [chain.id]: clients,
+            });
+        }
+    });
 }
 
 /**
@@ -109,29 +109,29 @@ export function createClients(chains: SDKChain[]) {
  * @returns The PublicClient, or undefined if the chain is not configured
  */
 export function getClient(chainId: number): PublicClient | undefined {
-  // Check if client already exists
-  const existingClient = ChainClients.getState()[chainId]?.client;
-  if (existingClient) {
-    return existingClient;
-  }
+    // Check if client already exists
+    const existingClient = ChainClients.getState()[chainId]?.client;
+    if (existingClient) {
+        return existingClient;
+    }
 
-  // Lazy create: find chain in store and create client
-  const chains = store.getState().chains ?? [];
-  const chain = chains.find(c => c.id === chainId);
-  if (!chain) {
+    // Lazy create: find chain in store and create client
+    const chains = store.getState().chains ?? [];
+    const chain = chains.find((c) => c.id === chainId);
+    if (!chain) {
+        return undefined;
+    }
+
+    const clients = createClientForChain(chain);
+    if (clients) {
+        ChainClients.setState({
+            ...ChainClients.getState(),
+            [chainId]: clients,
+        });
+        return clients.client;
+    }
+
     return undefined;
-  }
-
-  const clients = createClientForChain(chain);
-  if (clients) {
-    ChainClients.setState({
-      ...ChainClients.getState(),
-      [chainId]: clients,
-    });
-    return clients.client;
-  }
-
-  return undefined;
 }
 
 /**
@@ -142,29 +142,29 @@ export function getClient(chainId: number): PublicClient | undefined {
  * @returns The BundlerClient, or undefined if the chain is not configured
  */
 export function getBundlerClient(chainId: number): BundlerClient | undefined {
-  // Check if client already exists
-  const existingClient = ChainClients.getState()?.[chainId]?.bundlerClient;
-  if (existingClient) {
-    return existingClient;
-  }
+    // Check if client already exists
+    const existingClient = ChainClients.getState()?.[chainId]?.bundlerClient;
+    if (existingClient) {
+        return existingClient;
+    }
 
-  // Lazy create: find chain in store and create client
-  const chains = store.getState().chains ?? [];
-  const chain = chains.find(c => c.id === chainId);
-  if (!chain) {
+    // Lazy create: find chain in store and create client
+    const chains = store.getState().chains ?? [];
+    const chain = chains.find((c) => c.id === chainId);
+    if (!chain) {
+        return undefined;
+    }
+
+    const clients = createClientForChain(chain);
+    if (clients) {
+        ChainClients.setState({
+            ...ChainClients.getState(),
+            [chainId]: clients,
+        });
+        return clients.bundlerClient;
+    }
+
     return undefined;
-  }
-
-  const clients = createClientForChain(chain);
-  if (clients) {
-    ChainClients.setState({
-      ...ChainClients.getState(),
-      [chainId]: clients,
-    });
-    return clients.bundlerClient;
-  }
-
-  return undefined;
 }
 
 /**
@@ -191,14 +191,14 @@ export function getBundlerClient(chainId: number): BundlerClient | undefined {
  * ```
  */
 export function createInitialChains(
-  apiKey: string,
-  paymasters?: Record<number, PaymasterConfig>,
-  showTestnets = false
+    apiKey: string,
+    paymasters?: Record<number, PaymasterConfig>,
+    showTestnets = false
 ): SDKChain[] {
-  const chains = getSupportedChains(showTestnets);
-  return chains.map((chain) => ({
-    id: chain.id,
-    rpcUrl: `${JAW_RPC_URL}?chainId=${chain.id}&api-key=${apiKey}`,
-    ...(paymasters?.[chain.id] ? { paymaster: paymasters[chain.id] } : {}),
-  }));
+    const chains = getSupportedChains(showTestnets);
+    return chains.map((chain) => ({
+        id: chain.id,
+        rpcUrl: `${JAW_RPC_URL}?chainId=${chain.id}&api-key=${apiKey}`,
+        ...(paymasters?.[chain.id] ? { paymaster: paymasters[chain.id] } : {}),
+    }));
 }

@@ -4,7 +4,6 @@ Get currently connected accounts without triggering authentication. Returns an e
 
 **Authentication Required:** No
 
-
 ## Request
 
 ```typescript
@@ -17,7 +16,6 @@ await jaw.provider.request({
 
 None
 
-
 ## Response
 
 Returns an array of connected account addresses. Returns an empty array if not authenticated.
@@ -27,22 +25,20 @@ Returns an array of connected account addresses. Returns an empty array if not a
 ### Example (Connected)
 
 ```typescript
-["0x1234567890123456789012345678901234567890"]
+['0x1234567890123456789012345678901234567890'];
 ```
 
 ### Example (Not Connected)
 
 ```typescript
-[]
+[];
 ```
-
 
 ## Behavior
 
 - Returns empty array if not authenticated
 - Returns cached accounts if already connected
 - Does not trigger authentication popup
-
 
 ## Example
 
@@ -57,7 +53,6 @@ const accounts = await jaw.provider.request({
   method: 'eth_accounts',
 });
 ```
-
 
 ## Related Methods
 

@@ -4,13 +4,11 @@ Import a passkey from cloud backup.
 
 **Type:** `static async`
 
-
 ## Signature
 
 ```typescript
 static async import(config: AccountConfig): Promise<Account>
 ```
-
 
 ## Parameters
 
@@ -18,17 +16,15 @@ static async import(config: AccountConfig): Promise<Account>
 
 Type: `AccountConfig`
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `chainId` | `number` | Yes | Chain ID for the account |
-| `apiKey` | `string` | Yes | API key for JAW services |
-| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
-
+| Property       | Type     | Required | Description                              |
+| -------------- | -------- | -------- | ---------------------------------------- |
+| `chainId`      | `number` | Yes      | Chain ID for the account                 |
+| `apiKey`       | `string` | Yes      | API key for JAW services                 |
+| `paymasterUrl` | `string` | No       | Custom paymaster URL for gas sponsorship |
 
 ## Returns
 
 `Promise<Account>` - The imported Account instance
-
 
 ## Behavior
 
@@ -38,14 +34,12 @@ Type: `AccountConfig`
 4. Stores the passkey account marked as imported
 5. Returns the ready-to-use Account instance
 
-
 ## Errors
 
-| Error | Description |
-|-------|-------------|
-| WebAuthn errors | User cancelled or browser doesn't support WebAuthn |
-| `Failed to retrieve imported passkey account` | Backend lookup failed |
-
+| Error                                         | Description                                        |
+| --------------------------------------------- | -------------------------------------------------- |
+| WebAuthn errors                               | User cancelled or browser doesn't support WebAuthn |
+| `Failed to retrieve imported passkey account` | Backend lookup failed                              |
 
 ## Examples
 
@@ -92,7 +86,6 @@ class MyUIHandler implements UIHandler {
 }
 ```
 
-
 ## Cloud Sync Providers
 
 Passkeys can be synced via:
@@ -103,7 +96,6 @@ Passkeys can be synced via:
 - **1Password, Dashlane, etc.**: Third-party password managers
 
 The import flow allows users to access their JAW account on any device where their passkeys are synced.
-
 
 ## Related
 

@@ -1,26 +1,33 @@
-'use client'
+'use client';
 
-import { PermissionDialog, useGasEstimation, useFeeTokenPrice, type FeeTokenOption, fetchTokenBalance, isNativeToken } from "@jaw.id/ui";
-import { useCallback, useEffect, useMemo, useState } from "react";
-import { formatUnits, erc20Abi, createPublicClient, http, type Address } from "viem";
-import { getChainNameFromId } from "../../lib/chain-handlers";
-import { useSessionAccount } from "../../hooks";
 import {
-    type Chain,
-    type WalletGrantPermissionsRequest,
-    type WalletRevokePermissionsRequest,
-    type WalletGrantPermissionsResponse,
-    type SpendPeriod,
-    getPermissionFromRelay,
-    buildGrantPermissionCall,
-    buildRevokePermissionCall,
-    standardErrorCodes,
-    JAW_PAYMASTER_URL,
-    JAW_RPC_URL,
-    SUPPORTED_CHAINS,
-    handleGetCapabilitiesRequest,
-    type FeeTokenCapability,
-} from "@jaw.id/core";
+  PermissionDialog,
+  useGasEstimation,
+  useFeeTokenPrice,
+  type FeeTokenOption,
+  fetchTokenBalance,
+  isNativeToken,
+} from '@jaw.id/ui';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { formatUnits, erc20Abi, createPublicClient, http, type Address } from 'viem';
+import { getChainNameFromId } from '../../lib/chain-handlers';
+import { useSessionAccount } from '../../hooks';
+import {
+  type Chain,
+  type WalletGrantPermissionsRequest,
+  type WalletRevokePermissionsRequest,
+  type WalletGrantPermissionsResponse,
+  type SpendPeriod,
+  getPermissionFromRelay,
+  buildGrantPermissionCall,
+  buildRevokePermissionCall,
+  standardErrorCodes,
+  JAW_PAYMASTER_URL,
+  JAW_RPC_URL,
+  SUPPORTED_CHAINS,
+  handleGetCapabilitiesRequest,
+  type FeeTokenCapability,
+} from '@jaw.id/core';
 
 // Known function selectors mapping
 const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
@@ -126,10 +133,14 @@ export const PermissionModal = ({
   apiKey,
   origin,
   onSuccess,
-  onError
+  onError,
 }: PermissionModalProps) => {
   // Single hook handles session lookup + account restoration
-  const { account, isLoading: isAccountLoading, walletAddress } = useSessionAccount({
+  const {
+    account,
+    isLoading: isAccountLoading,
+    walletAddress,
+  } = useSessionAccount({
     origin,
     chain,
     apiKey,
@@ -145,7 +156,7 @@ export const PermissionModal = ({
   const [feeTokensLoading, setFeeTokensLoading] = useState<boolean>(true);
 
   // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeToken = feeTokens?.find((t) => t.isNative);
   const nativeSymbol = nativeToken?.symbol || 'ETH';
 
   // Fetch native token price dynamically based on the chain's native token symbol
@@ -197,14 +208,16 @@ export const PermissionModal = ({
     if (!permissionRequest) return chain?.paymaster?.context;
 
     const params = permissionRequest.params[0];
-    const capabilitiesPaymasterContext = (params?.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined)?.context;
+    const capabilitiesPaymasterContext = (
+      params?.capabilities?.paymasterService as { context?: Record<string, unknown> } | undefined
+    )?.context;
     return capabilitiesPaymasterContext || chain?.paymaster?.context;
   }, [permissionRequest, chain?.paymaster?.context]);
 
   // Get viem chain for fee token fetching
   const viemChain = useMemo(() => {
     if (!chain?.id) return null;
-    return SUPPORTED_CHAINS.find(c => c.id === chain.id);
+    return SUPPORTED_CHAINS.find((c) => c.id === chain.id);
   }, [chain?.id]);
 
   // Check if this is a sponsored transaction (paymaster provided)
@@ -284,7 +297,7 @@ export const PermissionModal = ({
     if (selectedFeeToken && !selectedFeeToken.isNative) {
       // Use the actual estimate from tokenEstimates if available
       const estimate = tokenEstimates.find(
-        e => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
+        (e) => e.tokenAddress.toLowerCase() === selectedFeeToken.address.toLowerCase()
       );
 
       if (estimate) {
@@ -386,9 +399,9 @@ export const PermissionModal = ({
         amount,
         token: isNativeToken(tokenAddress)
           ? 'Native (ETH)'
-          : (tokenInfo.symbol === tokenAddress
-              ? `${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-4)}`
-              : tokenInfo.symbol),
+          : tokenInfo.symbol === tokenAddress
+            ? `${tokenAddress.slice(0, 6)}...${tokenAddress.slice(-4)}`
+            : tokenInfo.symbol,
         tokenAddress,
         duration,
         limit,
@@ -401,7 +414,8 @@ export const PermissionModal = ({
     return callsData.map((call: any) => ({
       target: call.target,
       selector: call.selector,
-      functionSignature: call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+      functionSignature:
+        call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
     }));
   }, [callsData]);
 
@@ -442,17 +456,15 @@ export const PermissionModal = ({
 
     // Describe spend permissions
     if (formattedSpends.length > 0) {
-      const spendDescriptions = formattedSpends.map(
-        (spend: { limit: string; duration: string }) => {
-          // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
-          const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
-          // Handle "forever" specially - no "per" prefix needed
-          if (normalizedDuration === 'forever') {
-            return spend.limit;
-          }
-          return `${spend.limit} per ${normalizedDuration}`;
+      const spendDescriptions = formattedSpends.map((spend: { limit: string; duration: string }) => {
+        // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
+        const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
+        // Handle "forever" specially - no "per" prefix needed
+        if (normalizedDuration === 'forever') {
+          return spend.limit;
         }
-      );
+        return `${spend.limit} per ${normalizedDuration}`;
+      });
       parts.push(`spend up to ${spendDescriptions.join(', ')}`);
     }
 
@@ -571,9 +583,7 @@ export const PermissionModal = ({
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
               // For ERC-20 tokens: require at least 0.5 units
-              const isSelectable = tokenIsNative
-                ? balance > 0n
-                : parseFloat(balanceFormatted) >= 0.5;
+              const isSelectable = tokenIsNative ? balance > 0n : parseFloat(balanceFormatted) >= 0.5;
 
               return {
                 uid: token.uid,
@@ -686,7 +696,7 @@ export const PermissionModal = ({
       }
 
       if (isMounted) {
-        setTokenInfoMap(prev => ({ ...prev, ...newTokenInfoMap }));
+        setTokenInfoMap((prev) => ({ ...prev, ...newTokenInfoMap }));
         setIsLoadingTokenInfo(false);
       }
     };
@@ -756,26 +766,22 @@ export const PermissionModal = ({
         }
 
         // Account.revokePermission with paymaster URL and context for ERC-20 payment
-        await account.revokePermission(
-          permissionDetails.permissionId,
-          computedPaymasterUrl,
-          computedPaymasterContext
-        );
+        await account.revokePermission(permissionDetails.permissionId, computedPaymasterUrl, computedPaymasterContext);
 
         console.log('Permission revoked');
         setStatus('Permission revoked successfully!');
         onSuccess?.({ success: true });
       }
-
     } catch (error) {
-      console.error("Error in permission operation:", error);
+      console.error('Error in permission operation:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
       setStatus(`Error: ${errorMessage}`);
       const errorObj = error instanceof Error ? error : new Error(errorMessage);
       // Check if user cancelled passkey prompt (NotAllowedError)
-      const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-        ? standardErrorCodes.provider.userRejectedRequest
-        : standardErrorCodes.rpc.internal;
+      const errorCode =
+        error instanceof Error && error.name === 'NotAllowedError'
+          ? standardErrorCodes.provider.userRejectedRequest
+          : standardErrorCodes.rpc.internal;
       onError?.(errorObj, errorCode);
       setIsProcessing(false);
     }
@@ -801,9 +807,13 @@ export const PermissionModal = ({
   return (
     <PermissionDialog
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {
+        console.log('onOpenChange');
+      }}
       mode={mode}
-      permissionId={mode === 'revoke' && 'permissionId' in permissionDetails ? permissionDetails.permissionId : undefined}
+      permissionId={
+        mode === 'revoke' && 'permissionId' in permissionDetails ? permissionDetails.permissionId : undefined
+      }
       spenderAddress={spenderAddress}
       origin={origin || ''}
       spends={formattedSpends}
@@ -828,7 +838,7 @@ export const PermissionModal = ({
       feeTokensLoading={feeTokensLoading}
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
-      showFeeTokenSelector={!isSponsored && feeTokens.some(t => !t.isNative)}
+      showFeeTokenSelector={!isSponsored && feeTokens.some((t) => !t.isNative)}
       isPayingWithErc20={isPayingWithErc20}
     />
   );

@@ -15,21 +15,18 @@ JAW handles subname registration during account creation. For profile resolution
 For advanced ENS features, check the [JustaName documentation](https://docs.justaname.id).
 :::
 
-
 ## 1. Configure ENS Domain
 
 Before using ENS features, you need to configure your domain in the JAW Dashboard.
 
 **[Set up your ENS domain at dashboard.jaw.id](https://dashboard.jaw.id)**
 
-
 ## 2. Integration Path
 
-| Approach | Best For |
-|----------|----------|
-| **Wagmi** | React apps using wagmi connectors |
+| Approach     | Best For                                 |
+| ------------ | ---------------------------------------- |
+| **Wagmi**    | React apps using wagmi connectors        |
 | **Core SDK** | Custom implementations or non-React apps |
-
 
 ## 3. Add Domain to Configuration
 
@@ -78,7 +75,6 @@ const jaw = JAW.create({
 You must configure your ENS domain in the [JAW Dashboard](https://dashboard.jaw.id) before subname issuance will work.
 :::
 
-
 ## 4. Attach Profile Data on Connect
 
 When a user creates an account with a subname, their address is automatically attached to all supported networks - enabling multichain address resolution out of the box.
@@ -113,15 +109,17 @@ function ConnectWithProfile() {
 ```typescript [Core SDK]
 const result = await jaw.provider.request({
   method: 'wallet_connect',
-  params: [{
-    capabilities: {
-      subnameTextRecords: [
-        { key: 'avatar', value: 'https://myapp.com/avatars/default.png' },
-        { key: 'description', value: 'New user on MyApp' },
-        { key: 'url', value: 'https://myapp.com' },
-      ],
+  params: [
+    {
+      capabilities: {
+        subnameTextRecords: [
+          { key: 'avatar', value: 'https://myapp.com/avatars/default.png' },
+          { key: 'description', value: 'New user on MyApp' },
+          { key: 'url', value: 'https://myapp.com' },
+        ],
+      },
     },
-  }],
+  ],
 });
 ```
 
@@ -130,7 +128,6 @@ const result = await jaw.provider.request({
 :::info
 Text records are only attached if the `ens` option is configured and the user creates a new account with a subname.
 :::
-
 
 ## 5. Resolve Profiles
 
@@ -165,17 +162,18 @@ import { JustaName } from '@justaname.id/sdk';
 
 // Initialize the SDK
 const justaName = JustaName.init({
-  networks: [{
-    chainId: 1,
-    providerUrl: 'https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY',
-  }],
+  networks: [
+    {
+      chainId: 1,
+      providerUrl: 'https://eth-mainnet.g.alchemy.com/v2/YOUR_KEY',
+    },
+  ],
 });
 
 // Get profile by ENS name
 const profile = await justaName.subnames.getRecords({
   ens: 'alice.yourdomain.eth',
 });
-
 ```
 
 ### Resolve by Address (Reverse Lookup)
@@ -192,32 +190,30 @@ const name = await justaName.subnames.reverseResolve({
 
 ```typescript
 interface SubnameResponse {
-  ens: string;                    // e.g., "alice.yourdomain.eth"
+  ens: string; // e.g., "alice.yourdomain.eth"
   records: {
     texts: Array<{
-      key: string;                // e.g., "avatar", "description", "url", "twitter"
+      key: string; // e.g., "avatar", "description", "url", "twitter"
       value: string;
     }>;
     coins: Array<{
-      id: number;                 // Coin type (60 = ETH, 0 = BTC, etc.)
-      name: string;               // e.g., "ETH", "BTC"
-      value: string;              // Address on that chain
+      id: number; // Coin type (60 = ETH, 0 = BTC, etc.)
+      name: string; // e.g., "ETH", "BTC"
+      value: string; // Address on that chain
     }>;
     contentHash: {
-      protocolType: string;       // e.g., "ipfs"
-      decoded: string;            // Content hash value
+      protocolType: string; // e.g., "ipfs"
+      decoded: string; // Content hash value
     } | null;
   };
 }
 ```
-
 
 ## 6. Advanced Identity Features
 
 For more control over subname management, custom profile fields, or direct ENS integration, check the JustaName documentation.
 
 **[JustaName Documentation](https://docs.justaname.id)**
-
 
 ## Related
 

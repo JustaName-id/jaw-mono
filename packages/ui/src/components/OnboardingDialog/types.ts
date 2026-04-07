@@ -1,4 +1,4 @@
-import type { SubnameTextRecordCapabilityRequest } from "@jaw.id/core";
+import type { SubnameTextRecordCapabilityRequest } from '@jaw.id/core';
 
 export interface LocalStorageAccount {
   username: string;

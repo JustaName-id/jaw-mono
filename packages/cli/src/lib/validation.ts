@@ -7,7 +7,7 @@ export function isValidHex(value: string): boolean {
 }
 
 export function isValidChainId(value: string | number): boolean {
-  const num = typeof value === "string" ? parseInt(value, 10) : value;
+  const num = typeof value === 'string' ? parseInt(value, 10) : value;
   return Number.isInteger(num) && num > 0;
 }
 
@@ -19,14 +19,14 @@ export function parseChainId(value: string): number {
   return num;
 }
 
-export function assertAddress(value: string, label = "address"): `0x${string}` {
+export function assertAddress(value: string, label = 'address'): `0x${string}` {
   if (!isValidAddress(value)) {
     throw new Error(`Invalid ${label}: ${value}`);
   }
   return value as `0x${string}`;
 }
 
-export function parseWei(raw: string, label = "value"): bigint {
+export function parseWei(raw: string, label = 'value'): bigint {
   try {
     return BigInt(raw);
   } catch {
@@ -38,14 +38,11 @@ export function isValidKeysUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     const isTrustedHost =
-      parsed.hostname.endsWith(".jaw.id") ||
-      parsed.hostname === "jaw.id" ||
-      parsed.hostname === "localhost" ||
-      parsed.hostname === "127.0.0.1";
-    const isSecure =
-      parsed.protocol === "https:" ||
-      parsed.hostname === "localhost" ||
-      parsed.hostname === "127.0.0.1";
+      parsed.hostname.endsWith('.jaw.id') ||
+      parsed.hostname === 'jaw.id' ||
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1';
+    const isSecure = parsed.protocol === 'https:' || parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
     return isTrustedHost && isSecure;
   } catch {
     return false;
@@ -56,16 +53,12 @@ export function isValidRelayUrl(url: string): boolean {
   try {
     const parsed = new URL(url);
     const isTrustedHost =
-      parsed.hostname.endsWith(".jaw.id") ||
-      parsed.hostname === "jaw.id" ||
-      parsed.hostname === "localhost" ||
-      parsed.hostname === "127.0.0.1";
-    const isSecure =
-      parsed.protocol === "wss:" ||
-      parsed.hostname === "localhost" ||
-      parsed.hostname === "127.0.0.1";
-    const isWebSocket =
-      parsed.protocol === "wss:" || parsed.protocol === "ws:";
+      parsed.hostname.endsWith('.jaw.id') ||
+      parsed.hostname === 'jaw.id' ||
+      parsed.hostname === 'localhost' ||
+      parsed.hostname === '127.0.0.1';
+    const isSecure = parsed.protocol === 'wss:' || parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1';
+    const isWebSocket = parsed.protocol === 'wss:' || parsed.protocol === 'ws:';
     return isTrustedHost && isSecure && isWebSocket;
   } catch {
     return false;

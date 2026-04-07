@@ -22,35 +22,26 @@ interface MethodCardProps {
 export function MethodCard({ method, onClick, disabled }: MethodCardProps) {
   return (
     <Card
-      className={`p-4 cursor-pointer transition-all hover:shadow-md hover:border-primary/50 ${
-        disabled ? 'opacity-50 cursor-not-allowed' : ''
+      className={`hover:border-primary/50 cursor-pointer p-4 transition-all hover:shadow-md ${
+        disabled ? 'cursor-not-allowed opacity-50' : ''
       }`}
       onClick={disabled ? undefined : onClick}
     >
       <div className="flex flex-col gap-2">
         <div className="flex items-start justify-between gap-2">
-          <h3 className="font-mono text-sm font-semibold text-foreground break-all">
-            {method.name}
-          </h3>
+          <h3 className="text-foreground break-all font-mono text-sm font-semibold">{method.name}</h3>
           <span
-            className={`px-2 py-0.5 text-xs font-medium rounded-full whitespace-nowrap ${
+            className={`whitespace-nowrap rounded-full px-2 py-0.5 text-xs font-medium ${
               CATEGORY_COLORS[method.category]
             }`}
           >
             {CATEGORY_LABELS[method.category]}
           </span>
         </div>
-        <p className="text-xs text-muted-foreground line-clamp-2">
-          {method.description}
-        </p>
+        <p className="text-muted-foreground line-clamp-2 text-xs">{method.description}</p>
         {method.requiresConnection ? (
           <div className="flex items-center gap-1 text-xs text-amber-600 dark:text-amber-400">
-            <svg
-              className="w-3 h-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"
@@ -62,12 +53,7 @@ export function MethodCard({ method, onClick, disabled }: MethodCardProps) {
           </div>
         ) : (
           <div className="flex items-center gap-1 text-xs text-green-600 dark:text-green-400">
-            <svg
-              className="w-3 h-3"
-              fill="none"
-              viewBox="0 0 24 24"
-              stroke="currentColor"
-            >
+            <svg className="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

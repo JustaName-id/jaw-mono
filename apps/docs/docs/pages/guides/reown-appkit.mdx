@@ -42,35 +42,33 @@ Add it to your `.env.local`:
 NEXT_PUBLIC_JAW_API_KEY=your_jaw_api_key
 ```
 
-
 ## 1. Create the Connector
 
 ```typescript
-import { jaw } from "@jaw.id/wagmi";
+import { jaw } from '@jaw.id/wagmi';
 
 const jawConnector = jaw({
   apiKey: process.env.NEXT_PUBLIC_JAW_API_KEY!,
-  appName: "My App",
+  appName: 'My App',
   defaultChainId: baseSepolia.id,
 });
 ```
 
 See [Connector](/wagmi/jaw) for all available options (`ens`, `paymasters`, `preference`, etc).
 
-
 ## 2. Pass to the WagmiAdapter
 
 Add `jawConnector` to the `connectors` array in your existing `WagmiAdapter` config:
 
 ```typescript
-import { cookieStorage, createStorage, http } from "@wagmi/core";
-import { WagmiAdapter } from "@reown/appkit-adapter-wagmi";
-import { baseSepolia, base } from "@reown/appkit/networks";
-import { jaw } from "@jaw.id/wagmi";
+import { cookieStorage, createStorage, http } from '@wagmi/core';
+import { WagmiAdapter } from '@reown/appkit-adapter-wagmi';
+import { baseSepolia, base } from '@reown/appkit/networks';
+import { jaw } from '@jaw.id/wagmi';
 
 const jawConnector = jaw({
   apiKey: process.env.NEXT_PUBLIC_JAW_API_KEY!,
-  appName: "My App",
+  appName: 'My App',
   defaultChainId: baseSepolia.id,
 });
 
@@ -91,11 +89,9 @@ export const config = wagmiAdapter.wagmiConfig;
 
 That's it. JAW passkey accounts are now available alongside all other AppKit wallets. All standard wagmi hooks (`useAccount`, `useSendCalls`, `useSignMessage`) work regardless of which connector the user chose.
 
-
 ## Full Example
 
 See the complete working example at [jaw-examples/nextjs-reown](https://github.com/JustaName-id/jaw-examples/tree/main/examples/nextjs-reown).
-
 
 ## Related
 

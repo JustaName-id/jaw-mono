@@ -3,8 +3,8 @@ import { SDK_VERSION } from '../sdk-info.js';
 import { Message, MessageID } from '../messages/message.js';
 import { standardErrors } from '../errors/errors.js';
 
-import {AppMetadata, JawProviderPreference} from '../provider/interface.js';
-import {ConfigMessage} from "../messages/configMessage.js";
+import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
+import { ConfigMessage } from '../messages/configMessage.js';
 
 export type CommunicatorOptions = {
     metadata: AppMetadata;
@@ -53,8 +53,9 @@ export class Communicator {
             .then(() => {
                 this.disconnect();
             })
-            .catch(() => { /* empty */ });
-
+            .catch(() => {
+                /* empty */
+            });
 
         return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded')
             .then((message) => {
@@ -64,7 +65,7 @@ export class Communicator {
                         version: SDK_VERSION,
                         metadata: this.metadata,
                         preference: this.preference,
-                        location: window.location.toString()
+                        location: window.location.toString(),
                     },
                 });
             })
@@ -117,9 +118,7 @@ export class Communicator {
      * @param request - The request message with an ID
      * @returns Promise resolving to the response message
      */
-    async postRequestAndWaitForResponse<M extends Message>(
-        request: Message & { id: MessageID }
-    ): Promise<M> {
+    async postRequestAndWaitForResponse<M extends Message>(request: Message & { id: MessageID }): Promise<M> {
         const responsePromise = this.onMessage<M>(({ requestId }) => requestId === request.id);
         await this.postMessage(request);
         return await responsePromise;
@@ -131,9 +130,7 @@ export class Communicator {
      * @param timeout - Timeout in milliseconds (default: defaultTimeout)
      * @returns Promise resolving to the matching message
      */
-    async onMessage<M extends Message>(
-        predicate: (msg: Partial<M>) => boolean
-    ): Promise<M> {
+    async onMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): Promise<M> {
         return new Promise((resolve, reject) => {
             const listener = (event: MessageEvent) => {
                 // Validate origin

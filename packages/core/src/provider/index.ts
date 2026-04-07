@@ -9,14 +9,9 @@ export {
     type ProviderEventCallback,
     type ConstructorOptions,
     type PaymasterConfig,
-    Mode
-} from "./interface.js"
+    Mode,
+} from './interface.js';
 
-export {
-    JAWProvider
-} from "./JAWProvider.js"
+export { JAWProvider } from './JAWProvider.js';
 
-export {
-    createJAWProvider,
-    type CreateProviderOptions
-} from "./createJAWProvider.js"
+export { createJAWProvider, type CreateProviderOptions } from './createJAWProvider.js';

@@ -1,54 +1,54 @@
-import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'fs'
-import { join, basename, dirname } from 'path'
-import { fileURLToPath } from 'url'
-import { unified } from 'unified'
-import remarkParse from 'remark-parse'
-import remarkMdx from 'remark-mdx'
-import remarkStringify from 'remark-stringify'
-import { toMarkdown } from 'mdast-util-to-markdown'
-import { mdxToMarkdown } from 'mdast-util-mdx'
-import { gfmToMarkdown } from 'mdast-util-gfm'
-import { visit } from 'unist-util-visit'
-import type { Heading } from 'mdast'
+import { readFileSync, writeFileSync, readdirSync, existsSync, statSync } from 'fs';
+import { join, basename, dirname } from 'path';
+import { fileURLToPath } from 'url';
+import { unified } from 'unified';
+import remarkParse from 'remark-parse';
+import remarkMdx from 'remark-mdx';
+import remarkStringify from 'remark-stringify';
+import { toMarkdown } from 'mdast-util-to-markdown';
+import { mdxToMarkdown } from 'mdast-util-mdx';
+import { gfmToMarkdown } from 'mdast-util-gfm';
+import { visit } from 'unist-util-visit';
+import type { Heading } from 'mdast';
 
 // Use fileURLToPath for ESM compatibility across environments
-const __filename = fileURLToPath(import.meta.url)
-const __dirname = dirname(__filename)
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
 // apps/docs is the root of the docs app
-const DOCS_APP_ROOT = join(__dirname, '..')
-const PAGES_DIR = join(DOCS_APP_ROOT, 'docs/pages')
+const DOCS_APP_ROOT = join(__dirname, '..');
+const PAGES_DIR = join(DOCS_APP_ROOT, 'docs/pages');
 
 // Find the dist directory - Vocs outputs to different locations locally vs Vercel
 function findDistDir(): string {
   const candidates = [
-    join(DOCS_APP_ROOT, 'docs/dist'),              // Local: Vocs default
-    join(DOCS_APP_ROOT, '.vercel/output/static'),  // Vercel: static output
-  ]
+    join(DOCS_APP_ROOT, 'docs/dist'), // Local: Vocs default
+    join(DOCS_APP_ROOT, '.vercel/output/static'), // Vercel: static output
+  ];
 
   for (const candidate of candidates) {
     if (existsSync(candidate)) {
-      return candidate
+      return candidate;
     }
   }
 
-  throw new Error(`Dist directory not found. Checked: ${candidates.join(', ')}`)
+  throw new Error(`Dist directory not found. Checked: ${candidates.join(', ')}`);
 }
 
 // DIST_DIR is resolved lazily inside main() to ensure vocs build has completed
-let DIST_DIR: string
+let DIST_DIR: string;
 
-const BASE_URL = 'https://docs.jaw.id'
+const BASE_URL = 'https://docs.jaw.id';
 
 // Domain configuration with rich headers for LLM discoverability
 interface DomainConfig {
-  title: string
-  description: string
-  dirs: string[]
-  includes: string[]
-  packageName?: string
-  installCommand?: string
-  quickExample?: string
+  title: string;
+  description: string;
+  dirs: string[];
+  includes: string[];
+  packageName?: string;
+  installCommand?: string;
+  quickExample?: string;
 }
 
 const DOMAINS: Record<string, DomainConfig> = {
@@ -137,7 +137,8 @@ const hash = await account.sendTransaction({
   },
   cli: {
     title: 'JAW CLI & MCP Server',
-    description: 'Command-line interface and MCP server for interacting with JAW smart accounts from terminal, shell scripts, or AI agents.',
+    description:
+      'Command-line interface and MCP server for interacting with JAW smart accounts from terminal, shell scripts, or AI agents.',
     dirs: ['cli'],
     includes: [],
     packageName: '@jaw.id/cli',
@@ -156,7 +157,8 @@ jaw rpc call eth_accounts -o json -y`,
   },
   advanced: {
     title: 'JAW Advanced Topics',
-    description: 'Advanced implementation details - custom UI handlers, passkey server setup, and specialized configurations.',
+    description:
+      'Advanced implementation details - custom UI handlers, passkey server setup, and specialized configurations.',
     dirs: ['advanced'],
     includes: [],
     packageName: '@jaw.id/core + @jaw.id/ui',
@@ -173,67 +175,68 @@ const provider = await JAW.create({
   chains: [...],
 });`,
   },
-}
+};
 
 function getAllMdxFiles(dir: string): string[] {
-  const files: string[] = []
+  const files: string[] = [];
 
-  if (!existsSync(dir)) return files
+  if (!existsSync(dir)) return files;
 
-  const entries = readdirSync(dir)
+  const entries = readdirSync(dir);
   for (const entry of entries) {
-    const fullPath = join(dir, entry)
-    const stat = statSync(fullPath)
+    const fullPath = join(dir, entry);
+    const stat = statSync(fullPath);
 
     if (stat.isDirectory()) {
-      files.push(...getAllMdxFiles(fullPath))
+      files.push(...getAllMdxFiles(fullPath));
     } else if (entry.endsWith('.mdx') || entry.endsWith('.md')) {
-      files.push(fullPath)
+      files.push(fullPath);
     }
   }
 
-  return files
+  return files;
 }
 
 function parseMdxFile(filePath: string): { title: string; content: string } {
-  const raw = readFileSync(filePath, 'utf-8')
+  const raw = readFileSync(filePath, 'utf-8');
 
-  const parser = unified()
-    .use(remarkParse)
-    .use(remarkMdx)
-    .use(remarkStringify)
+  const parser = unified().use(remarkParse).use(remarkMdx).use(remarkStringify);
 
-  const ast = parser.parse(raw)
+  const ast = parser.parse(raw);
 
   // Extract title from first H1
-  let title = basename(filePath, '.mdx')
+  let title = basename(filePath, '.mdx');
   visit(ast, { type: 'heading', depth: 1 }, (node: Heading) => {
-    const textNode = node.children[0]
+    const textNode = node.children[0];
     if (textNode && textNode.type === 'text') {
-      title = textNode.value
+      title = textNode.value;
     }
-  })
+  });
 
   // Shift all headings down by 1 level for context files
-  visit(ast, (n) => n.type === 'heading', (n) => {
-    const node = n as Heading
-    if (node.depth >= 1 && node.depth <= 4) {
-      node.depth = (node.depth + 1) as 2 | 3 | 4 | 5
+  visit(
+    ast,
+    (n) => n.type === 'heading',
+    (n) => {
+      const node = n as Heading;
+      if (node.depth >= 1 && node.depth <= 4) {
+        node.depth = (node.depth + 1) as 2 | 3 | 4 | 5;
+      }
     }
-  })
+  );
 
   // Remove frontmatter
   visit(ast, { type: 'yaml' }, (_, i, p) => {
     if (p && typeof i === 'number') {
-      p.children.splice(i, 1)
+      p.children.splice(i, 1);
     }
-  })
+  });
 
   const content = toMarkdown(ast, {
     extensions: [gfmToMarkdown(), mdxToMarkdown()],
-  })
+  });
 
-  return { title, content }
+  return { title, content };
 }
 
 function generateDomainFile(domainKey: string, domain: DomainConfig): string {
@@ -244,69 +247,69 @@ function generateDomainFile(domainKey: string, domain: DomainConfig): string {
     '',
     '**This file is self-contained.** You have everything needed to help with this topic. Do NOT fetch other llms-*.txt files unless the user explicitly asks about a different topic.',
     '',
-  ]
+  ];
 
   // Add key info section
-  lines.push('## Key Info')
+  lines.push('## Key Info');
   if (domain.packageName) {
-    lines.push(`- **Package:** \`${domain.packageName}\``)
+    lines.push(`- **Package:** \`${domain.packageName}\``);
   }
   if (domain.installCommand) {
-    lines.push(`- **Install:** \`${domain.installCommand}\``)
+    lines.push(`- **Install:** \`${domain.installCommand}\``);
   }
-  lines.push('- **Dashboard:** https://dashboard.jaw.id')
-  lines.push('- **Docs:** https://docs.jaw.id')
-  lines.push('')
+  lines.push('- **Dashboard:** https://dashboard.jaw.id');
+  lines.push('- **Docs:** https://docs.jaw.id');
+  lines.push('');
 
   // Add quick example
   if (domain.quickExample) {
-    lines.push('## Quick Example')
-    lines.push('```typescript')
-    lines.push(domain.quickExample)
-    lines.push('```')
-    lines.push('')
+    lines.push('## Quick Example');
+    lines.push('```typescript');
+    lines.push(domain.quickExample);
+    lines.push('```');
+    lines.push('');
   }
 
-  lines.push('---')
-  lines.push('')
+  lines.push('---');
+  lines.push('');
 
   // Collect all files for this domain
-  const files: string[] = []
+  const files: string[] = [];
 
   // Add files from specified directories
   for (const dir of domain.dirs) {
-    const dirPath = join(PAGES_DIR, dir)
-    files.push(...getAllMdxFiles(dirPath))
+    const dirPath = join(PAGES_DIR, dir);
+    files.push(...getAllMdxFiles(dirPath));
   }
 
   // Add specific included files
   for (const include of domain.includes) {
-    const filePath = join(PAGES_DIR, include)
+    const filePath = join(PAGES_DIR, include);
     if (existsSync(filePath)) {
-      files.push(filePath)
+      files.push(filePath);
     }
   }
 
   // Sort files for consistent output
-  files.sort()
+  files.sort();
 
   // Process each file
   for (const file of files) {
     try {
-      const { title, content } = parseMdxFile(file)
-      const relativePath = file.replace(PAGES_DIR, '').replace(/\.(mdx|md)$/, '')
+      const { title, content } = parseMdxFile(file);
+      const relativePath = file.replace(PAGES_DIR, '').replace(/\.(mdx|md)$/, '');
 
-      lines.push(`## ${title}`)
-      lines.push(`Source: ${BASE_URL}${relativePath}`)
-      lines.push('')
-      lines.push(content)
-      lines.push('')
+      lines.push(`## ${title}`);
+      lines.push(`Source: ${BASE_URL}${relativePath}`);
+      lines.push('');
+      lines.push(content);
+      lines.push('');
     } catch (e) {
-      console.error(`Error processing ${file}:`, e)
+      console.error(`Error processing ${file}:`, e);
     }
   }
 
-  return lines.join('\n')
+  return lines.join('\n');
 }
 
 function generateRoutingIndex(): string {
@@ -429,7 +432,7 @@ This file is a **routing index only**. To help users with JAW:
 - **Documentation:** https://docs.jaw.id
 - **GitHub:** https://github.com/JustaName-id/jaw-mono
 - **Developers Chat:** https://t.me/+RsFLPfky7-YxZjVk  
-`
+`;
 }
 
 function generateFullTxt(): string {
@@ -456,47 +459,47 @@ The routing index will direct you to the specific documentation file you need ba
 - Quickstart & guides: ${BASE_URL}/llms-quickstart.txt
 - Configuration: ${BASE_URL}/llms-configuration.txt
 - Advanced topics: ${BASE_URL}/llms-advanced.txt
-`
+`;
 }
 
 async function main() {
   // Resolve DIST_DIR at runtime (after vocs build has completed)
-  DIST_DIR = findDistDir()
-  console.log('Generating llms.txt files to:', DIST_DIR)
+  DIST_DIR = findDistDir();
+  console.log('Generating llms.txt files to:', DIST_DIR);
 
   // Generate domain-specific files
   for (const [key, domain] of Object.entries(DOMAINS)) {
-    const content = generateDomainFile(key, domain)
-    const outputPath = join(DIST_DIR, `llms-${key}.txt`)
-    writeFileSync(outputPath, content)
-    console.log(`  Generated: llms-${key}.txt (${content.length} bytes)`)
+    const content = generateDomainFile(key, domain);
+    const outputPath = join(DIST_DIR, `llms-${key}.txt`);
+    writeFileSync(outputPath, content);
+    console.log(`  Generated: llms-${key}.txt (${content.length} bytes)`);
   }
 
   // Generate routing index (overwrites Vocs-generated llms.txt)
-  const routingIndex = generateRoutingIndex()
-  const llmsPath = join(DIST_DIR, 'llms.txt')
-  writeFileSync(llmsPath, routingIndex)
-  console.log(`  Generated: llms.txt (routing index, ${routingIndex.length} bytes)`)
+  const routingIndex = generateRoutingIndex();
+  const llmsPath = join(DIST_DIR, 'llms.txt');
+  writeFileSync(llmsPath, routingIndex);
+  console.log(`  Generated: llms.txt (routing index, ${routingIndex.length} bytes)`);
 
   // Verify the file was written correctly
-  const written = readFileSync(llmsPath, 'utf-8')
+  const written = readFileSync(llmsPath, 'utf-8');
   if (written.includes('# JAW Documentation')) {
-    console.log('  Verified: llms.txt contains custom routing index')
+    console.log('  Verified: llms.txt contains custom routing index');
   } else {
-    console.error('ERROR: llms.txt does not contain expected content')
-    console.error('First 100 chars:', written.slice(0, 100))
+    console.error('ERROR: llms.txt does not contain expected content');
+    console.error('First 100 chars:', written.slice(0, 100));
   }
 
   // Generate llms-full.txt (redirects to router - some tools look for this file)
-  const fullTxt = generateFullTxt()
-  const fullPath = join(DIST_DIR, 'llms-full.txt')
-  writeFileSync(fullPath, fullTxt)
-  console.log(`  Generated: llms-full.txt (redirect, ${fullTxt.length} bytes)`)
+  const fullTxt = generateFullTxt();
+  const fullPath = join(DIST_DIR, 'llms-full.txt');
+  writeFileSync(fullPath, fullTxt);
+  console.log(`  Generated: llms-full.txt (redirect, ${fullTxt.length} bytes)`);
 
-  console.log('Done!')
+  console.log('Done!');
 }
 
 main().catch((err) => {
-  console.error('Script failed:', err)
-  process.exit(1)
-})
+  console.error('Script failed:', err);
+  process.exit(1);
+});

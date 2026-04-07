@@ -4,13 +4,11 @@ Clear authentication state (logout).
 
 **Type:** `static`
 
-
 ## Signature
 
 ```typescript
 static logout(apiKey: string): void
 ```
-
 
 ## Parameters
 
@@ -20,11 +18,9 @@ Type: `string`
 
 API key for JAW services. Used to scope the storage operation.
 
-
 ## Returns
 
 `void`
-
 
 ## Behavior
 
@@ -35,10 +31,10 @@ This method clears the current authentication state:
 3. Does **not** remove stored passkey accounts (user can still login later)
 
 After logout:
+
 - `Account.getAuthenticatedAddress()` returns `null`
 - `Account.get()` without credentialId will throw
 - `Account.getStoredAccounts()` still returns all accounts
-
 
 ## Example
 
@@ -49,13 +45,11 @@ Account.logout('your-api-key');
 console.log('Logged out');
 ```
 
-
 ## Important Notes
 
 - Logout is **local only** - it doesn't affect the smart account
 - Stored passkey accounts remain available for future login
 - The user can still access their account by logging in again
-
 
 ## Related
 

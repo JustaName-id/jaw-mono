@@ -75,14 +75,14 @@ jaw rpc call wallet_getAssets
 jaw rpc call eth_chainId
 ```
 
-| Flag | Description | Default |
-|------|-------------|---------|
-| `-o, --output` | Output format: `json` or `human` | `human` |
-| `-c, --chain` | Chain ID | config default |
-| `--api-key` | JAW API key | config/env |
-| `-t, --timeout` | Request timeout (seconds) | `120` |
-| `-y, --yes` | Skip confirmations | `false` |
-| `-q, --quiet` | Suppress non-essential output | `false` |
+| Flag            | Description                      | Default        |
+| --------------- | -------------------------------- | -------------- |
+| `-o, --output`  | Output format: `json` or `human` | `human`        |
+| `-c, --chain`   | Chain ID                         | config default |
+| `--api-key`     | JAW API key                      | config/env     |
+| `-t, --timeout` | Request timeout (seconds)        | `120`          |
+| `-y, --yes`     | Skip confirmations               | `false`        |
+| `-q, --quiet`   | Suppress non-essential output    | `false`        |
 
 ### `jaw config show`
 
@@ -194,11 +194,11 @@ jaw mcp
 
 ### MCP Tools
 
-| Tool | Description |
-|------|-------------|
-| `jaw_rpc` | Execute any JAW.id wallet RPC method. Supports all EIP-1193 methods. Opens browser for passkey signing when needed. |
-| `jaw_config_show` | Show current CLI configuration (API key redacted). |
-| `jaw_config_set` | Set a CLI configuration value. |
+| Tool              | Description                                                                                                         |
+| ----------------- | ------------------------------------------------------------------------------------------------------------------- |
+| `jaw_rpc`         | Execute any JAW.id wallet RPC method. Supports all EIP-1193 methods. Opens browser for passkey signing when needed. |
+| `jaw_config_show` | Show current CLI configuration (API key redacted).                                                                  |
+| `jaw_config_set`  | Set a CLI configuration value.                                                                                      |
 
 ### Example Agent Usage
 
@@ -209,11 +209,11 @@ Agent: jaw_rpc({ method: "wallet_sendCalls", params: { calls: [{ to: "0x...", va
 
 ## Environment Variables
 
-| Variable | Description |
-|----------|-------------|
-| `JAW_API_KEY` | JAW API key |
-| `JAW_CHAIN_ID` | Default chain ID |
-| `JAW_OUTPUT` | Output format (`json` or `human`) |
+| Variable       | Description                       |
+| -------------- | --------------------------------- |
+| `JAW_API_KEY`  | JAW API key                       |
+| `JAW_CHAIN_ID` | Default chain ID                  |
+| `JAW_OUTPUT`   | Output format (`json` or `human`) |
 
 ## Configuration
 
@@ -231,9 +231,9 @@ Config file: `~/.jaw/config.json`
 
 The daemon also writes runtime state to `~/.jaw/`:
 
-| File | Purpose |
-|------|---------|
-| `config.json` | User configuration (mode 0600) |
-| `bridge.json` | Active daemon connection info (port, token, pid) |
-| `session.json` | Cached session state |
-| `daemon.log` | Daemon stdout/stderr for debugging |
+| File           | Purpose                                          |
+| -------------- | ------------------------------------------------ |
+| `config.json`  | User configuration (mode 0600)                   |
+| `bridge.json`  | Active daemon connection info (port, token, pid) |
+| `session.json` | Cached session state                             |
+| `daemon.log`   | Daemon stdout/stderr for debugging               |

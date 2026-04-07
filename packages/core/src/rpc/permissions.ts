@@ -1,9 +1,16 @@
-import { encodeFunctionData, type Address, type Hex, decodeEventLog, toFunctionSelector, zeroAddress as ZERO_ADDRESS } from 'viem';
+import {
+    encodeFunctionData,
+    type Address,
+    type Hex,
+    decodeEventLog,
+    toFunctionSelector,
+    zeroAddress as ZERO_ADDRESS,
+} from 'viem';
 import { getTransactionReceipt } from 'viem/actions';
-import {PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL, JAW_PROXY_URL} from '../constants.js';
+import { PERMISSIONS_MANAGER_ADDRESS, JAW_RPC_URL, JAW_PROXY_URL } from '../constants.js';
 import { sendTransaction, getBundlerClient } from '../account/smartAccount.js';
-import {SmartAccount} from 'viem/account-abstraction';
-import {Chain} from '../store/index.js';
+import { SmartAccount } from 'viem/account-abstraction';
+import { Chain } from '../store/index.js';
 import { standardErrors } from '../errors/errors.js';
 import { restCall } from '../api/index.js';
 import { buildHandleJawRpcUrl, fetchRPCRequest } from '../utils/index.js';
@@ -21,7 +28,7 @@ export const NATIVE_TOKEN: Address = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE
  */
 export const ANY_TARGET: Address = '0x3232323232323232323232323232323232323232';
 export const ANY_FN_SEL: Hex = '0x32323232';
-export const EMPTY_CALLDATA_FN_SEL: Hex ='0xe0e0e0e0';
+export const EMPTY_CALLDATA_FN_SEL: Hex = '0xe0e0e0e0';
 
 /**
  * Period type for spend limits - matches the SpendPeriod enum in the contract
@@ -156,7 +163,7 @@ export type RequestCapabilities = {
     /** Paymaster service for sponsored transactions */
     paymasterService?: PaymasterServiceCapability;
     /** Permissions capability for wallet_sendCalls */
-    permissions?: PermissionsCapability;    
+    permissions?: PermissionsCapability;
     /** Additional capabilities can be added here */
     [key: string]: unknown;
 };
@@ -178,7 +185,7 @@ export type WalletGrantPermissionsRequest = {
             chainId?: string;
             /** Optional capabilities including paymaster service */
             capabilities?: RequestCapabilities;
-        }
+        },
     ];
 };
 
@@ -274,7 +281,7 @@ export type WalletRevokePermissionsRequest = {
             id: Hex;
             /** Optional capabilities including paymaster service */
             capabilities?: RequestCapabilities;
-        }
+        },
     ];
 };
 
@@ -335,14 +342,13 @@ export async function grantPermissions(
 
     await storePermissionInRelay(permissionHash, permission, chainId, apiKey);
 
-
     // Convert internal Permission to JSON-serializable response format
-    const responseCalls: CallPermissionDetail[] = permission.calls.map(call => ({
+    const responseCalls: CallPermissionDetail[] = permission.calls.map((call) => ({
         target: call.target,
         selector: call.selector,
     }));
 
-    const responseSpends: SpendPermissionDetail[] = permission.spends.map(spend => ({
+    const responseSpends: SpendPermissionDetail[] = permission.spends.map((spend) => ({
         token: spend.token,
         allowance: `0x${spend.allowance.toString(16)}`,
         unit: spend.unit,
@@ -401,14 +407,7 @@ export async function revokePermission(
         ? [erc20ApprovalCall, revokeCall]
         : [revokeCall];
 
-    await sendTransaction(
-        smartAccount,
-        calls,
-        chain,
-        paymasterUrlOverride,
-        paymasterContextOverride,
-        apiKey
-    );
+    await sendTransaction(smartAccount, calls, chain, paymasterUrlOverride, paymasterContextOverride, apiKey);
 
     return await deletePermissionFromRelay(permissionId, apiKey);
 }
@@ -416,10 +415,7 @@ export async function revokePermission(
 /**
  * Get permission from the relay using typed REST API call with path params
  */
-export async function getPermissionFromRelay(
-    permissionHash: Hex,
-    apiKey: string
-): Promise<StorePermissionApiResponse> {
+export async function getPermissionFromRelay(permissionHash: Hex, apiKey: string): Promise<StorePermissionApiResponse> {
     const permissionsBaseUrl = JAW_PROXY_URL;
 
     return await restCall(
@@ -436,16 +432,14 @@ export async function getPermissionFromRelay(
 /**
  * Convert relay permission data to Permission struct
  */
-export function relayPermissionToPermission(
-    relayPermission: StorePermissionApiResponse
-): Permission {
-    const calls: CallPermission[] = relayPermission.calls.map(call => ({
+export function relayPermissionToPermission(relayPermission: StorePermissionApiResponse): Permission {
+    const calls: CallPermission[] = relayPermission.calls.map((call) => ({
         target: call.target as Address,
         selector: call.selector as Hex,
         checker: (call.checker as Address) || ZERO_ADDRESS,
     }));
 
-    const spends: SpendLimit[] = relayPermission.spends.map(spend => ({
+    const spends: SpendLimit[] = relayPermission.spends.map((spend) => ({
         token: spend.token as Address,
         allowance: BigInt(spend.allowance),
         unit: spend.unit,
@@ -489,9 +483,11 @@ export async function handleGetPermissionsRequest(
             // Inject the connected account's address
             modifiedRequest = {
                 ...request,
-                params: [{
-                    address: connectedAddress
-                }]
+                params: [
+                    {
+                        address: connectedAddress,
+                    },
+                ],
             };
         } else {
             // No address provided and no connected address - throw error
@@ -517,15 +513,10 @@ function apiPermissionsToPermission(
     const start = Math.floor(Date.now() / 1000);
 
     // Generate a random salt for uniqueness
-    const salt = BigInt(
-        '0x' +
-            Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(
-                ''
-            )
-    );
+    const salt = BigInt('0x' + Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''));
 
     // Convert call permissions - compute selector from signature if not provided
-    const calls: CallPermission[] = (permissions.calls || []).map(call => {
+    const calls: CallPermission[] = (permissions.calls || []).map((call) => {
         let selector: Hex;
 
         if (call.selector) {
@@ -536,7 +527,7 @@ function apiPermissionsToPermission(
             selector = computeFunctionSelector(call.functionSignature);
         } else {
             throw standardErrors.rpc.invalidParams({
-                message: 'Either selector or functionSignature must be provided for call permission'
+                message: 'Either selector or functionSignature must be provided for call permission',
             });
         }
 
@@ -548,11 +539,9 @@ function apiPermissionsToPermission(
     });
 
     // Convert spend permissions
-    const spends: SpendLimit[] = (permissions.spends || []).map(spend => {
+    const spends: SpendLimit[] = (permissions.spends || []).map((spend) => {
         // Use native token address if token is empty or undefined
-        const token = spend.token && spend.token.trim() !== ''
-            ? (spend.token as Address)
-            : NATIVE_TOKEN;
+        const token = spend.token && spend.token.trim() !== '' ? (spend.token as Address) : NATIVE_TOKEN;
 
         return {
             token,
@@ -589,12 +578,12 @@ async function storePermissionInRelay(
         start: permission.start,
         end: permission.end,
         salt: `0x${permission.salt.toString(16)}` as Hex,
-        calls: permission.calls.map(call => ({
+        calls: permission.calls.map((call) => ({
             target: call.target,
             selector: call.selector,
             checker: call.checker,
         })),
-        spends: permission.spends.map(spend => ({
+        spends: permission.spends.map((spend) => ({
             token: spend.token,
             allowance: `0x${spend.allowance.toString(16)}`,
             unit: spend.unit,
@@ -619,10 +608,7 @@ async function storePermissionInRelay(
 /**
  * Delete permission from the relay using typed REST API call with path params
  */
-async function deletePermissionFromRelay(
-    permissionHash: Hex,
-    apiKey: string
-): Promise<RevokePermissionApiResponse> {
+async function deletePermissionFromRelay(permissionHash: Hex, apiKey: string): Promise<RevokePermissionApiResponse> {
     const permissionsBaseUrl = JAW_PROXY_URL;
 
     return await restCall(
@@ -639,10 +625,7 @@ async function deletePermissionFromRelay(
 /**
  * Extract the permission hash from the PermissionApproved event in a transaction receipt
  */
-async function extractPermissionHashFromTransaction(
-    txHash: Hex,
-    chain: Chain
-): Promise<Hex> {
+async function extractPermissionHashFromTransaction(txHash: Hex, chain: Chain): Promise<Hex> {
     const bundlerClient = getBundlerClient(chain);
 
     const receipt = await getTransactionReceipt(bundlerClient, {
@@ -672,7 +655,7 @@ async function extractPermissionHashFromTransaction(
     }
 
     throw standardErrors.rpc.internal({
-        message: 'PermissionApproved event not found in transaction receipt'
+        message: 'PermissionApproved event not found in transaction receipt',
     });
 }
 
@@ -682,9 +665,9 @@ async function extractPermissionHashFromTransaction(
 function permissionToContractFormat(permission: Permission) {
     return {
         ...permission,
-        spends: permission.spends.map(spend => {
+        spends: permission.spends.map((spend) => {
             // Convert 'year' to 'month' with multiplier * 12 (contract has no Year unit)
-            const unit = spend.unit === 'year' ? 'month' as const : spend.unit;
+            const unit = spend.unit === 'year' ? ('month' as const) : spend.unit;
             const multiplier = spend.unit === 'year' ? spend.multiplier * 12 : spend.multiplier;
             return {
                 token: spend.token,
@@ -760,9 +743,7 @@ export function buildGrantPermissionCall(
  * @param relayPermission - The permission data from the relay
  * @returns Transaction call object with to and data fields
  */
-export function buildRevokePermissionCall(
-    relayPermission: StorePermissionApiResponse
-): { to: Address; data: Hex } {
+export function buildRevokePermissionCall(relayPermission: StorePermissionApiResponse): { to: Address; data: Hex } {
     const permission = relayPermissionToPermission(relayPermission);
     const revokeCallData = encodeRevokePermission(permission);
 

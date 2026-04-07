@@ -3,12 +3,7 @@
   "compilerOptions": {
     "outDir": "dist",
     "lib": ["dom", "dom.iterable", "esnext"],
-    "types": [
-      "node",
-      "@nx/react/typings/cssmodule.d.ts",
-      "@nx/react/typings/image.d.ts",
-      "vite/client"
-    ],
+    "types": ["node", "@nx/react/typings/cssmodule.d.ts", "@nx/react/typings/image.d.ts", "vite/client"],
     "rootDir": "src",
     "jsx": "react-jsx",
     "module": "esnext",
@@ -31,13 +26,12 @@
     "src/**/*.js",
     "src/**/*.jsx",
     "src/**/*.ts",
-    "src/**/*.tsx"
-,
-"../../apps/keys-jaw-id/src/utils/constants.ts"
-],
-"references": [
-{
-  "path": "../core/tsconfig.lib.json"
-}
-]
+    "src/**/*.tsx",
+    "../../apps/keys-jaw-id/src/utils/constants.ts"
+  ],
+  "references": [
+    {
+      "path": "../core/tsconfig.lib.json"
+    }
+  ]
 }

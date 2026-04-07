@@ -132,24 +132,24 @@ export function WagmiMethodModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <DialogTitle className="font-mono">{method.name}</DialogTitle>
-            <span className={`px-2 py-0.5 text-xs font-medium rounded-full ${CATEGORY_COLORS[method.category]}`}>
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CATEGORY_COLORS[method.category]}`}>
               {CATEGORY_LABELS[method.category]}
             </span>
           </div>
           <DialogDescription>{method.description}</DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="execute" className="flex-1 flex flex-col min-h-0">
+        <Tabs defaultValue="execute" className="flex min-h-0 flex-1 flex-col">
           <TabsList className="w-fit">
             <TabsTrigger value="execute">Execute</TabsTrigger>
             <TabsTrigger value="code">Code Snippet</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="execute" className="flex-1 min-h-0 mt-4">
+          <TabsContent value="execute" className="mt-4 min-h-0 flex-1">
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-4 pb-4">
                 {/* Parameters */}
@@ -166,7 +166,7 @@ export function WagmiMethodModal({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">This method has no parameters.</p>
+                  <p className="text-muted-foreground text-sm">This method has no parameters.</p>
                 )}
 
                 {/* Execute Button */}
@@ -175,7 +175,7 @@ export function WagmiMethodModal({
                     {executing ? 'Executing...' : 'Execute'}
                   </Button>
                   {!canExecute && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
                       Connect your wallet first to execute this method.
                     </p>
                   )}
@@ -191,7 +191,7 @@ export function WagmiMethodModal({
                       </Button>
                     </div>
                     <pre
-                      className={`p-3 rounded-md text-xs font-mono overflow-auto max-h-[200px] whitespace-pre-wrap break-all ${
+                      className={`max-h-[200px] overflow-auto whitespace-pre-wrap break-all rounded-md p-3 font-mono text-xs ${
                         error ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
                       }`}
                     >
@@ -203,7 +203,7 @@ export function WagmiMethodModal({
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="code" className="flex-1 min-h-0 mt-4">
+          <TabsContent value="code" className="mt-4 min-h-0 flex-1">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-medium">Code Example</h4>
@@ -212,7 +212,7 @@ export function WagmiMethodModal({
                 </Button>
               </div>
               <ScrollArea className="h-[400px]">
-                <pre className="p-4 rounded-md bg-muted text-xs font-mono overflow-auto">{codeSnippet}</pre>
+                <pre className="bg-muted overflow-auto rounded-md p-4 font-mono text-xs">{codeSnippet}</pre>
               </ScrollArea>
             </div>
           </TabsContent>

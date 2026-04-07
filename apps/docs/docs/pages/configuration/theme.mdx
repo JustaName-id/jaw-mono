@@ -32,14 +32,14 @@ const jaw = JAW.create({
 
 ## Theme Properties
 
-| Property | Type | Default | Description |
-|----------|------|---------|-------------|
-| `mode` | `'light' \| 'dark' \| 'auto'` | `'auto'` | Color scheme. `'auto'` follows the user's system preference. |
-| `accentColor` | `string` | — | Primary color as hex (e.g. `'#6366f1'`). Applied to buttons, focus rings, links. |
-| `accentColorForeground` | `string` | auto-detected | Text color on accent backgrounds. Auto-detected from luminance if omitted. |
-| `borderRadius` | `'sm' \| 'md' \| 'lg'` | `'md'` | Corner rounding for cards, buttons, and inputs. |
-| `fontStack` | `'system' \| 'rounded' \| 'mono'` | `'system'` | Font family preset. |
-| `cssVariables` | `Record<string, string>` | — | Granular CSS variable overrides (see below). |
+| Property                | Type                              | Default       | Description                                                                      |
+| ----------------------- | --------------------------------- | ------------- | -------------------------------------------------------------------------------- |
+| `mode`                  | `'light' \| 'dark' \| 'auto'`     | `'auto'`      | Color scheme. `'auto'` follows the user's system preference.                     |
+| `accentColor`           | `string`                          | —             | Primary color as hex (e.g. `'#6366f1'`). Applied to buttons, focus rings, links. |
+| `accentColorForeground` | `string`                          | auto-detected | Text color on accent backgrounds. Auto-detected from luminance if omitted.       |
+| `borderRadius`          | `'sm' \| 'md' \| 'lg'`            | `'md'`        | Corner rounding for cards, buttons, and inputs.                                  |
+| `fontStack`             | `'system' \| 'rounded' \| 'mono'` | `'system'`    | Font family preset.                                                              |
+| `cssVariables`          | `Record<string, string>`          | —             | Granular CSS variable overrides (see below).                                     |
 
 ## Three Layers of Customization
 
@@ -52,7 +52,7 @@ const jaw = JAW.create({
   apiKey: 'your-api-key',
   theme: {
     mode: 'dark',
-    accentColor: '#e11d48',  // Rose
+    accentColor: '#e11d48', // Rose
     borderRadius: 'lg',
   },
   preference: {
@@ -93,7 +93,7 @@ Target `[data-jaw-modal-container]` in your own CSS. No SDK changes needed.
 [data-jaw-modal-container] {
   --jaw-color-primary: oklch(0.65 0.25 270);
   --jaw-color-background: oklch(0.12 0.01 260);
-  font-family: "Inter", sans-serif;
+  font-family: 'Inter', sans-serif;
 }
 ```
 
@@ -135,7 +135,9 @@ const jaw = JAW.create({
 When `mode` is `'auto'` (the default), the SDK detects the user's system color scheme and switches dynamically. If the user changes their OS dark/light preference while a dialog is open, it updates live.
 
 ```typescript
-theme: { mode: 'auto' }  // follows system preference
+theme: {
+  mode: 'auto';
+} // follows system preference
 ```
 
 ## Available CSS Variables
@@ -144,38 +146,38 @@ Use these with `cssVariables` for granular overrides. All values use the [OKLCH]
 
 ### Colors
 
-| Variable | Description |
-|----------|-------------|
-| `--jaw-color-background` | Dialog backdrop |
-| `--jaw-color-foreground` | Primary text |
-| `--jaw-color-card` | Card/section backgrounds |
-| `--jaw-color-card-foreground` | Card text |
-| `--jaw-color-primary` | Buttons, links, focus rings |
-| `--jaw-color-primary-foreground` | Text on primary backgrounds |
-| `--jaw-color-secondary` | Secondary backgrounds |
-| `--jaw-color-secondary-foreground` | Secondary text |
-| `--jaw-color-muted` | Muted/disabled backgrounds |
-| `--jaw-color-muted-foreground` | Muted text |
-| `--jaw-color-accent` | Hover/active state backgrounds |
-| `--jaw-color-accent-foreground` | Accent text |
-| `--jaw-color-border` | Borders and dividers |
-| `--jaw-color-input` | Input field borders |
-| `--jaw-color-ring` | Focus ring color |
-| `--jaw-color-destructive` | Error/danger backgrounds |
-| `--jaw-color-destructive-foreground` | Error/danger text |
-| `--jaw-color-success` | Success state |
-| `--jaw-color-success-foreground` | Success text |
-| `--jaw-color-warning` | Warning state |
-| `--jaw-color-warning-foreground` | Warning text |
-| `--jaw-color-info` | Info state |
-| `--jaw-color-info-foreground` | Info text |
+| Variable                             | Description                    |
+| ------------------------------------ | ------------------------------ |
+| `--jaw-color-background`             | Dialog backdrop                |
+| `--jaw-color-foreground`             | Primary text                   |
+| `--jaw-color-card`                   | Card/section backgrounds       |
+| `--jaw-color-card-foreground`        | Card text                      |
+| `--jaw-color-primary`                | Buttons, links, focus rings    |
+| `--jaw-color-primary-foreground`     | Text on primary backgrounds    |
+| `--jaw-color-secondary`              | Secondary backgrounds          |
+| `--jaw-color-secondary-foreground`   | Secondary text                 |
+| `--jaw-color-muted`                  | Muted/disabled backgrounds     |
+| `--jaw-color-muted-foreground`       | Muted text                     |
+| `--jaw-color-accent`                 | Hover/active state backgrounds |
+| `--jaw-color-accent-foreground`      | Accent text                    |
+| `--jaw-color-border`                 | Borders and dividers           |
+| `--jaw-color-input`                  | Input field borders            |
+| `--jaw-color-ring`                   | Focus ring color               |
+| `--jaw-color-destructive`            | Error/danger backgrounds       |
+| `--jaw-color-destructive-foreground` | Error/danger text              |
+| `--jaw-color-success`                | Success state                  |
+| `--jaw-color-success-foreground`     | Success text                   |
+| `--jaw-color-warning`                | Warning state                  |
+| `--jaw-color-warning-foreground`     | Warning text                   |
+| `--jaw-color-info`                   | Info state                     |
+| `--jaw-color-info-foreground`        | Info text                      |
 
 ### Layout
 
-| Variable | Description |
-|----------|-------------|
-| `--jaw-radius` | Base border radius (e.g. `0.625rem`) |
-| `--jaw-font-family` | Font family string |
+| Variable            | Description                          |
+| ------------------- | ------------------------------------ |
+| `--jaw-radius`      | Base border radius (e.g. `0.625rem`) |
+| `--jaw-font-family` | Font family string                   |
 
 ## How Accent Color Works
 

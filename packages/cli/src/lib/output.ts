@@ -36,9 +36,7 @@ function formatHuman(data: unknown, indent = 0): string {
     return entries
       .map(([key, val]) => {
         const paddedKey = key.padEnd(maxKeyLen);
-        const valStr = typeof val === 'object' && val !== null
-          ? '\n' + formatHuman(val, indent + 2)
-          : String(val);
+        const valStr = typeof val === 'object' && val !== null ? '\n' + formatHuman(val, indent + 2) : String(val);
         return `${pad}${paddedKey}  ${valStr}`;
       })
       .join('\n');
@@ -51,15 +49,11 @@ export function printTable(rows: Record<string, unknown>[]): string {
   if (rows.length === 0) return '(no results)';
 
   const keys = Object.keys(rows[0]);
-  const widths = keys.map(k =>
-    Math.max(k.length, ...rows.map(r => String(r[k] ?? '').length))
-  );
+  const widths = keys.map((k) => Math.max(k.length, ...rows.map((r) => String(r[k] ?? '').length)));
 
   const header = keys.map((k, i) => k.padEnd(widths[i])).join('  ');
-  const separator = widths.map(w => '-'.repeat(w)).join('  ');
-  const body = rows.map(r =>
-    keys.map((k, i) => String(r[k] ?? '').padEnd(widths[i])).join('  ')
-  ).join('\n');
+  const separator = widths.map((w) => '-'.repeat(w)).join('  ');
+  const body = rows.map((r) => keys.map((k, i) => String(r[k] ?? '').padEnd(widths[i])).join('  ')).join('\n');
 
   return `${header}\n${separator}\n${body}`;
 }

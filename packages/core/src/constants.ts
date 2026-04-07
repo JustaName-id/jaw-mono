@@ -2,22 +2,21 @@ export const JAW_WALLET_ICON: `data:image/${string}` = `data:image/svg+xml;base6
 
 export const JAW_WALLET_NAME = 'JAW';
 
-export const JAW_WALLET_ID = 'jaw'
-export const JAW_KEYS_URL = "https://keys.jaw.id";
+export const JAW_WALLET_ID = 'jaw';
+export const JAW_KEYS_URL = 'https://keys.jaw.id';
 export const JAW_WALLET_RDNS = 'keys.jaw.id';
 
-export const JAW_BASE_URL = "https://api.justaname.id";
+export const JAW_BASE_URL = 'https://api.justaname.id';
 export const JAW_PROXY_URL = `${JAW_BASE_URL}/proxy/v1`;
 export const JAW_RPC_URL = `${JAW_PROXY_URL}/rpc`;
 export const JAW_PAYMASTER_URL = `${JAW_RPC_URL}/erc20-paymaster`;
 export const JAW_PASSKEYS_URL = `${JAW_BASE_URL}/wallet/v2/passkeys`;
 
-export const FACTORY_ADDRESS = "0x5803c076563C85799989d42Fc00292A8aE52fa9E";
-export const CONTRACT_NAME = "JustanAccount";
-export const CONTRACT_VERSION = "1";
+export const FACTORY_ADDRESS = '0x5803c076563C85799989d42Fc00292A8aE52fa9E';
+export const CONTRACT_NAME = 'JustanAccount';
+export const CONTRACT_VERSION = '1';
 
-export const PERMISSIONS_MANAGER_ADDRESS = "0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8"
+export const PERMISSIONS_MANAGER_ADDRESS = '0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8';
 
-
-export const EIP7702_CODE_PREFIX = "0xef0100";
-export const ERC20_PAYMASTER_ADDRESS = "0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402";
+export const EIP7702_CODE_PREFIX = '0xef0100';
+export const ERC20_PAYMASTER_ADDRESS = '0x888888888888Ec68A58AB8094Cc1AD20Ba3D2402';

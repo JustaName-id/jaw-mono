@@ -49,10 +49,7 @@ const JAW_TO_SHORT_ALIAS: Readonly<Record<string, string>> = {
  * - Toggles the `dark` class based on `colorScheme`
  * - Sets `color-scheme` CSS property for native form controls
  */
-export function applyThemeToContainer(
-  container: HTMLElement,
-  resolved: ResolvedTheme,
-): void {
+export function applyThemeToContainer(container: HTMLElement, resolved: ResolvedTheme): void {
   const entries = Object.entries(resolved.variables);
   for (let i = 0; i < entries.length; i++) {
     const [key, value] = entries[i];

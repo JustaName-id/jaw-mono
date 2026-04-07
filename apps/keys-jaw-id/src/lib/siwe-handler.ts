@@ -125,7 +125,7 @@ export function parseSiweMessage(message: string): SiweMessageFields | null {
       expirationTime: fields['Expiration Time'],
       notBefore: fields['Not Before'],
       requestId: fields['Request ID'],
-      resources: fields['Resources']?.split('\n').filter(r => r.trim()) || undefined,
+      resources: fields['Resources']?.split('\n').filter((r) => r.trim()) || undefined,
     };
   } catch (error) {
     console.error('Error parsing SIWE message:', error);

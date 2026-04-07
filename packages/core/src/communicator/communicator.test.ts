@@ -162,10 +162,7 @@ describe('Communicator', () => {
                 },
                 urlOrigin,
             ]);
-            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([
-                mockRequest,
-                urlOrigin,
-            ]);
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([mockRequest, urlOrigin]);
 
             expect(response).toEqual({
                 requestId: mockRequest.id,

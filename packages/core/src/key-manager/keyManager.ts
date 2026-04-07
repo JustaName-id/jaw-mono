@@ -1,9 +1,4 @@
-import {
-    deriveSharedSecret,
-    exportKeyToHexString,
-    generateKeyPair,
-    importKeyFromHexString,
-} from '../utils/crypto.js';
+import { deriveSharedSecret, exportKeyToHexString, generateKeyPair, importKeyFromHexString } from '../utils/crypto.js';
 import { createLocalStorage, type SyncStorage } from '../storage-manager/index.js';
 
 interface StorageItem {
@@ -28,7 +23,7 @@ const PEER_PUBLIC_KEY: StorageItem = {
 
 /**
  * KeyManager handles cryptographic key management for secure communication
- * 
+ *
  * Features:
  * - Generates and stores ECDH P-256 key pairs
  * - Derives shared secrets for encrypted communication

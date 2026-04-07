@@ -15,11 +15,10 @@ export function getJustaNameInstance(providerUrl: string) {
       networks: [
         {
           chainId: 1,
-          providerUrl
-        }
-      ]
+          providerUrl,
+        },
+      ],
     });
   }
   return justaNameInstance;
 }
-

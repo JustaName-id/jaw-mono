@@ -30,7 +30,7 @@ export namespace getCapabilitiesQueryKey {
  * Used by useCapabilities hook and for cache invalidation.
  */
 export function getCapabilitiesQueryKey<config extends Config>(
-  parameters: getCapabilitiesQueryKey.Parameters<config>,
+  parameters: getCapabilitiesQueryKey.Parameters<config>
 ): getCapabilitiesQueryKey.Value<config> {
   const { address, chainId, connector, chainFilter } = parameters;
   return [
@@ -70,7 +70,7 @@ export namespace getPermissionsQueryKey {
  * Used by usePermissions hook and for cache invalidation.
  */
 export function getPermissionsQueryKey<config extends Config>(
-  parameters: getPermissionsQueryKey.Parameters<config>,
+  parameters: getPermissionsQueryKey.Parameters<config>
 ): getPermissionsQueryKey.Value<config> {
   const { address, chainId, connector } = parameters;
   return [
@@ -115,7 +115,7 @@ export namespace getAssetsQueryKey {
  * Used by useGetAssets hook and for cache invalidation.
  */
 export function getAssetsQueryKey<config extends Config>(
-  parameters: getAssetsQueryKey.Parameters<config>,
+  parameters: getAssetsQueryKey.Parameters<config>
 ): getAssetsQueryKey.Value<config> {
   const { address, chainId, connector, chainFilter, assetTypeFilter, assetFilter } = parameters;
   return [
@@ -163,7 +163,7 @@ export namespace getCallsHistoryQueryKey {
  * Used by useCallsHistory hook and for cache invalidation.
  */
 export function getCallsHistoryQueryKey<config extends Config>(
-  parameters: getCallsHistoryQueryKey.Parameters<config>,
+  parameters: getCallsHistoryQueryKey.Parameters<config>
 ): getCallsHistoryQueryKey.Value<config> {
   const { address, chainId, connector, index, limit, sort } = parameters;
   return [
@@ -178,4 +178,3 @@ export function getCallsHistoryQueryKey<config extends Config>(
     },
   ] as const;
 }
-

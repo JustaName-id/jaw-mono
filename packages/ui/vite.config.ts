@@ -8,7 +8,11 @@ import * as path from 'path';
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/packages/ui',
-  plugins: [react(), libInjectCss(), dts({ entryRoot: 'src', tsconfigPath: path.join(__dirname, 'tsconfig.lib.json') })],
+  plugins: [
+    react(),
+    libInjectCss(),
+    dts({ entryRoot: 'src', tsconfigPath: path.join(__dirname, 'tsconfig.lib.json') }),
+  ],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),
@@ -35,11 +39,11 @@ export default defineConfig(() => ({
       fileName: 'index',
       // Change this to the formats you want to support.
       // Don't forget to update your package.json as well.
-      formats: ['es' as const]
+      formats: ['es' as const],
     },
     rollupOptions: {
       // External packages that should not be bundled into your library.
-      external: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime']
+      external: ['react', 'react-dom', 'react-dom/client', 'react/jsx-runtime'],
     },
   },
 }));

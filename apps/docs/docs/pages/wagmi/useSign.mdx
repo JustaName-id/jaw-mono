@@ -4,23 +4,17 @@ Hook to sign messages using the unified `wallet_sign` method (ERC-7871). This co
 
 **Type:** `hook`
 
-
 ## Import
 
 ```typescript
 import { useSign } from '@jaw.id/wagmi';
 ```
 
-
 ## Signature
 
 ```typescript
-function useSign(parameters?: {
-  config?: Config;
-  mutation?: UseMutationParameters;
-}): UseMutationResult
+function useSign(parameters?: { config?: Config; mutation?: UseMutationParameters }): UseMutationResult;
 ```
-
 
 ## Parameters
 
@@ -36,21 +30,19 @@ Type: `UseMutationParameters` (optional)
 
 TanStack React Query mutation options.
 
-
 ## Returns
 
 Returns a TanStack React Query mutation result:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `mutate` | `function` | Function to sign a message |
-| `mutateAsync` | `function` | Async version of mutate |
-| `data` | `Hex` | The signature |
-| `isPending` | `boolean` | Whether signing is in progress |
-| `isSuccess` | `boolean` | Whether signing succeeded |
-| `isError` | `boolean` | Whether signing failed |
-| `error` | `Error` | Error if signing failed |
-
+| Property      | Type       | Description                    |
+| ------------- | ---------- | ------------------------------ |
+| `mutate`      | `function` | Function to sign a message     |
+| `mutateAsync` | `function` | Async version of mutate        |
+| `data`        | `Hex`      | The signature                  |
+| `isPending`   | `boolean`  | Whether signing is in progress |
+| `isSuccess`   | `boolean`  | Whether signing succeeded      |
+| `isError`     | `boolean`  | Whether signing failed         |
+| `error`       | `Error`    | Error if signing failed        |
 
 ## Mutation Variables
 
@@ -89,12 +81,11 @@ The signing request, which can be one of two types:
 
 ### Optional Parameters
 
-| Parameter | Type | Description |
-|-----------|------|-------------|
-| `address` | `Address` | Specific account address |
-| `chainId` | `number` | Target chain ID for signing |
-| `connector` | `Connector` | Specific connector |
-
+| Parameter   | Type        | Description                 |
+| ----------- | ----------- | --------------------------- |
+| `address`   | `Address`   | Specific account address    |
+| `chainId`   | `number`    | Target chain ID for signing |
+| `connector` | `Connector` | Specific connector          |
 
 ## Why Use useSign?
 
@@ -103,9 +94,9 @@ The signing request, which can be one of two types:
 Instead of choosing between `useSignMessage` and `useSignTypedData`, use a single hook that handles both:
 
 | Signature Type | Type Code | Standard |
-|---------------|-----------|----------|
-| Personal Sign | `0x45` | EIP-191 |
-| Typed Data | `0x01` | EIP-712 |
+| -------------- | --------- | -------- |
+| Personal Sign  | `0x45`    | EIP-191  |
+| Typed Data     | `0x01`    | EIP-712  |
 
 ### Chain-Specific Signing
 
@@ -125,7 +116,6 @@ signMessage({
 :::info
 The `chainId` parameter specifies which chain's smart account to use for signing. This is separate from any chain ID that might be included in the message content itself (like in EIP-712's domain).
 :::
-
 
 ## Examples
 
@@ -270,16 +260,14 @@ function SignWithCallbacks() {
 }
 ```
 
-
 ## Comparison with Wagmi Hooks
 
-| Feature | `useSignMessage` | `useSignTypedData` | `useSign` |
-|---------|------------------|-------------------|-----------|
-| Personal sign (EIP-191) | Yes | No | Yes |
-| Typed data (EIP-712) | No | Yes | Yes |
-| Target chain parameter | No | No | Yes |
-| Smart account aware | No | No | Yes |
-
+| Feature                 | `useSignMessage` | `useSignTypedData` | `useSign` |
+| ----------------------- | ---------------- | ------------------ | --------- |
+| Personal sign (EIP-191) | Yes              | No                 | Yes       |
+| Typed data (EIP-712)    | No               | Yes                | Yes       |
+| Target chain parameter  | No               | No                 | Yes       |
+| Smart account aware     | No               | No                 | Yes       |
 
 ## Use Cases
 
@@ -288,7 +276,6 @@ function SignWithCallbacks() {
 - **Multi-chain dApps** - Sign for different chains without switching
 - **Permit Signatures** - Sign EIP-2612 permit messages
 - **Off-chain Orders** - Sign trading orders for DEX aggregators
-
 
 ## Related
 

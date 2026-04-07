@@ -5,16 +5,16 @@
  * All messages (except key_exchange) are E2E encrypted via ECDH + AES-256-GCM.
  */
 
-import * as crypto from "node:crypto";
-import type { webcrypto } from "node:crypto";
-import WebSocket from "ws";
+import * as crypto from 'node:crypto';
+import type { webcrypto } from 'node:crypto';
+import WebSocket from 'ws';
 import {
   deriveSharedSecret,
   encryptMessage,
   decryptMessage,
   importKeyFromHex,
   type EncryptedEnvelope,
-} from "./crypto.js";
+} from './crypto.js';
 
 type CKey = webcrypto.CryptoKey;
 
@@ -102,7 +102,7 @@ export class WSBridge {
    */
   async connect(
     onBrowserNeeded?: () => Promise<void>,
-    onPeerKeyChanged?: (newPeerPublicKeyHex: string) => void,
+    onPeerKeyChanged?: (newPeerPublicKeyHex: string) => void
   ): Promise<void> {
     // Store callbacks for auto-reopen on browser disconnect
     this.onBrowserNeeded = onBrowserNeeded;
@@ -118,7 +118,7 @@ export class WSBridge {
 
   private async connectInternal(
     onBrowserNeeded?: () => Promise<void>,
-    onPeerKeyChanged?: (newPeerPublicKeyHex: string) => void,
+    onPeerKeyChanged?: (newPeerPublicKeyHex: string) => void
   ): Promise<void> {
     return new Promise((resolve, reject) => {
       const url = `${this.relayUrl}?session=${encodeURIComponent(this.session)}&role=cli`;
@@ -130,45 +130,37 @@ export class WSBridge {
 
       const timer = setTimeout(() => {
         ws.close();
-        reject(
-          new Error(
-            "Browser did not connect in time.\n" +
-              "Run `jaw disconnect` then try again.",
-          ),
-        );
+        reject(new Error('Browser did not connect in time.\n' + 'Run `jaw disconnect` then try again.'));
       }, 30_000);
 
       const sendEncryptedInit = async () => {
         if (!this.sharedSecret) return;
         const envelope = await encryptMessage(this.sharedSecret, {
-          type: "init",
+          type: 'init',
           apiKey: this.config.apiKey,
           chainId: this.config.chainId,
           ens: this.config.ens,
           paymasterUrl: this.config.paymasterUrl,
         });
-        this.sendRaw(ws, JSON.stringify({ type: "encrypted", ...envelope }));
+        this.sendRaw(ws, JSON.stringify({ type: 'encrypted', ...envelope }));
       };
 
       const waitForReady = () => {
         const readyTimer = setTimeout(() => {
           ws.close();
-          reject(new Error("Browser SDK did not become ready in time."));
+          reject(new Error('Browser SDK did not become ready in time.'));
         }, 15_000);
 
         const onMsg = async (data: WebSocket.Data) => {
           const msg = safeParse(data);
           if (!msg) return;
 
-          if (msg.type === "encrypted" && this.sharedSecret) {
+          if (msg.type === 'encrypted' && this.sharedSecret) {
             try {
-              const inner = await decryptMessage(
-                this.sharedSecret,
-                msg as unknown as EncryptedEnvelope,
-              );
-              if (inner.type === "ready") {
+              const inner = await decryptMessage(this.sharedSecret, msg as unknown as EncryptedEnvelope);
+              if (inner.type === 'ready') {
                 clearTimeout(readyTimer);
-                ws.off("message", onMsg);
+                ws.off('message', onMsg);
                 this.reconnectAttempts = 0; // Reset on successful connect
                 resolve();
               }
@@ -177,7 +169,7 @@ export class WSBridge {
             }
           }
         };
-        ws.on("message", onMsg);
+        ws.on('message', onMsg);
       };
 
       const onBrowserReady = async () => {
@@ -189,15 +181,15 @@ export class WSBridge {
         await sendEncryptedInit();
       };
 
-      ws.on("open", () => {
+      ws.on('open', () => {
         this.ws = ws;
       });
 
-      ws.on("message", async (data) => {
+      ws.on('message', async (data) => {
         const msg = safeParse(data);
         if (!msg) return;
 
-        if (msg.type === "status") {
+        if (msg.type === 'status') {
           if (msg.browserConnected) {
             if (this.sharedSecret) {
               // Already have shared secret — skip key exchange
@@ -213,13 +205,13 @@ export class WSBridge {
               /* best effort */
             });
           }
-        } else if (msg.type === "browser_connected") {
+        } else if (msg.type === 'browser_connected') {
           expectingKeyExchange = true;
           // Wait for key_exchange from browser
-        } else if (msg.type === "browser_disconnected") {
+        } else if (msg.type === 'browser_disconnected') {
           // Browser tab closed — attempt to reopen after cooldown
           this.handleBrowserDisconnect();
-        } else if (msg.type === "key_exchange" && expectingKeyExchange) {
+        } else if (msg.type === 'key_exchange' && expectingKeyExchange) {
           expectingKeyExchange = false;
           const peerKey = msg.publicKey as string;
           this.peerPublicKeyHex = peerKey;
@@ -229,12 +221,12 @@ export class WSBridge {
         }
       });
 
-      ws.on("error", (err) => {
+      ws.on('error', (err) => {
         clearTimeout(timer);
         reject(err);
       });
 
-      ws.on("close", () => {
+      ws.on('close', () => {
         clearTimeout(timer);
         if (!this.disposed) {
           this.handleRelayDisconnect();
@@ -249,59 +241,47 @@ export class WSBridge {
   async request(method: string, params?: unknown): Promise<unknown> {
     const ws = this.ws;
     if (!ws || ws.readyState !== WebSocket.OPEN) {
-      throw new Error("Not connected to relay");
+      throw new Error('Not connected to relay');
     }
     if (!this.sharedSecret) {
-      throw new Error("No shared secret — key exchange not completed");
+      throw new Error('No shared secret — key exchange not completed');
     }
 
     const id = crypto.randomUUID();
 
     const envelope = await encryptMessage(this.sharedSecret, {
-      type: "rpc_request",
+      type: 'rpc_request',
       id,
       method,
       params,
     });
 
-    const serialized = JSON.stringify({ type: "encrypted", ...envelope });
+    const serialized = JSON.stringify({ type: 'encrypted', ...envelope });
     assertMessageSize(serialized, method);
 
     return new Promise<unknown>((resolve, reject) => {
       const timer = setTimeout(() => {
         reject(
-          new Error(
-            `Request timed out after ${this.timeout / 1000}s. ` +
-              "Did you complete the action in the browser?",
-          ),
+          new Error(`Request timed out after ${this.timeout / 1000}s. ` + 'Did you complete the action in the browser?')
         );
         this.close();
       }, this.timeout);
 
       const onMessage = async (data: WebSocket.Data) => {
         const msg = safeParse(data);
-        if (!msg || msg.type !== "encrypted" || !this.sharedSecret) return;
+        if (!msg || msg.type !== 'encrypted' || !this.sharedSecret) return;
 
         try {
-          const inner = await decryptMessage(
-            this.sharedSecret,
-            msg as unknown as EncryptedEnvelope,
-          );
-          if (inner.type === "rpc_response" && inner.id === id) {
+          const inner = await decryptMessage(this.sharedSecret, msg as unknown as EncryptedEnvelope);
+          if (inner.type === 'rpc_response' && inner.id === id) {
             clearTimeout(timer);
-            ws.off("message", onMessage);
+            ws.off('message', onMessage);
 
             if (inner.success) {
               resolve(inner.data);
             } else {
-              const err = inner.error as
-                | { code: number; message: string }
-                | undefined;
-              reject(
-                new Error(
-                  err ? `[${err.code}] ${err.message}` : "Request failed",
-                ),
-              );
+              const err = inner.error as { code: number; message: string } | undefined;
+              reject(new Error(err ? `[${err.code}] ${err.message}` : 'Request failed'));
             }
           }
         } catch {
@@ -309,7 +289,7 @@ export class WSBridge {
         }
       };
 
-      ws.on("message", onMessage);
+      ws.on('message', onMessage);
       this.sendRaw(ws, serialized);
     });
   }
@@ -323,12 +303,9 @@ export class WSBridge {
     if (this.ws?.readyState === WebSocket.OPEN && this.sharedSecret) {
       try {
         const envelope = await encryptMessage(this.sharedSecret, {
-          type: "shutdown",
+          type: 'shutdown',
         });
-        this.sendRaw(
-          this.ws,
-          JSON.stringify({ type: "encrypted", ...envelope }),
-        );
+        this.sendRaw(this.ws, JSON.stringify({ type: 'encrypted', ...envelope }));
       } catch {
         // Best effort
       }
@@ -362,7 +339,7 @@ export class WSBridge {
         resolve();
       }, 3000);
 
-      ws.on("open", async () => {
+      ws.on('open', async () => {
         this.ws = ws;
         try {
           await this.shutdown();
@@ -373,7 +350,7 @@ export class WSBridge {
         resolve();
       });
 
-      ws.on("error", () => {
+      ws.on('error', () => {
         clearTimeout(timer);
         resolve();
       });
@@ -428,11 +405,9 @@ export class WSBridge {
 
     setTimeout(() => {
       if (this.disposed) return;
-      this.connectInternal(this.onBrowserNeeded, this.onPeerKeyChanged).catch(
-        () => {
-          // Reconnection failed — will retry if attempts remain
-        },
-      );
+      this.connectInternal(this.onBrowserNeeded, this.onPeerKeyChanged).catch(() => {
+        // Reconnection failed — will retry if attempts remain
+      });
     }, delay);
   }
 
@@ -443,11 +418,8 @@ export class WSBridge {
 
   private async deriveSecret(): Promise<void> {
     if (!this.peerPublicKeyHex) return;
-    const privateKey = await importKeyFromHex("private", this.privateKeyHex);
-    const peerPublicKey = await importKeyFromHex(
-      "public",
-      this.peerPublicKeyHex,
-    );
+    const privateKey = await importKeyFromHex('private', this.privateKeyHex);
+    const peerPublicKey = await importKeyFromHex('public', this.peerPublicKeyHex);
     this.sharedSecret = await deriveSharedSecret(privateKey, peerPublicKey);
   }
 }
@@ -457,12 +429,12 @@ export class WSBridge {
  * Throws with a descriptive error if the message is too large.
  */
 function assertMessageSize(serialized: string, method: string): void {
-  const byteLength = Buffer.byteLength(serialized, "utf-8");
+  const byteLength = Buffer.byteLength(serialized, 'utf-8');
   if (byteLength > MAX_MESSAGE_BYTES) {
     const sizeMB = (byteLength / (1024 * 1024)).toFixed(2);
     throw new Error(
       `Message for ${method} is too large (${sizeMB} MB, limit ${MAX_MESSAGE_BYTES / (1024 * 1024)} MB). ` +
-        "Try reducing the number of calls in your batch.",
+        'Try reducing the number of calls in your batch.'
     );
   }
 }

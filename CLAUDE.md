@@ -66,6 +66,7 @@ bunx nx release
 ### Smart Contracts (`contracts/`)
 
 Git submodules containing Foundry projects:
+
 - **justanaccount** - smart account implementation
 - **permissions** - Permission manager contract for delegated access control
 

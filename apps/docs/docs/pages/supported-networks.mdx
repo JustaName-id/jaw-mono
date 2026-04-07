@@ -4,11 +4,9 @@ import { CapabilitiesTable } from '../components/CapabilitiesTable';
 
 JAW smart accounts are supported across multiple EVM networks. The table below shows real-time capabilities fetched from the JAW API.
 
-
 ## Mainnets
 
 <CapabilitiesTable type="mainnet" />
-
 
 ## Testnets
 
@@ -25,27 +23,24 @@ const jaw = JAW.create({
 
 <CapabilitiesTable type="testnet" />
 
-
 ## Contract Addresses
 
 These contracts are deployed at the same address across all supported networks.
 
-| Contract | Address |
-|----------|---------|
-| Account | `0xbb4f7d5418Cd8DADB61bb95561179e517572cBCd` |
-| Factory | `0x5803c076563C85799989d42Fc00292A8aE52fa9E` |
+| Contract            | Address                                      |
+| ------------------- | -------------------------------------------- |
+| Account             | `0xbb4f7d5418Cd8DADB61bb95561179e517572cBCd` |
+| Factory             | `0x5803c076563C85799989d42Fc00292A8aE52fa9E` |
 | Permissions Manager | `0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8` |
-
 
 ## Capabilities Explained
 
-| Capability | Description |
-|------------|-------------|
-| **Batch** | Atomic batch transactions via `wallet_sendCalls` (EIP-5792) - all calls succeed or fail together |
-| **Gasless** | Sponsored transactions via paymaster service (ERC-7677) - users don't pay gas |
-| **Permissions** | Permission system for delegating spend and call rights to third parties |
-| **Fee Tokens** | Tokens that can be used to pay for gas fees on each network |
-
+| Capability      | Description                                                                                      |
+| --------------- | ------------------------------------------------------------------------------------------------ |
+| **Batch**       | Atomic batch transactions via `wallet_sendCalls` (EIP-5792) - all calls succeed or fail together |
+| **Gasless**     | Sponsored transactions via paymaster service (ERC-7677) - users don't pay gas                    |
+| **Permissions** | Permission system for delegating spend and call rights to third parties                          |
+| **Fee Tokens**  | Tokens that can be used to pay for gas fees on each network                                      |
 
 ## Related
 

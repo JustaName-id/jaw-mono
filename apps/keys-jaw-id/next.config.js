@@ -3,7 +3,6 @@
 const path = require('path');
 const { composePlugins, withNx } = require('@nx/next');
 
-
 /**
  * @type {import('@nx/next/plugins/with-nx').WithNxOptions}
  **/
@@ -14,9 +13,7 @@ const nextConfig = {
   poweredByHeader: false,
   productionBrowserSourceMaps: false,
   compiler: {
-    removeConsole: process.env.NODE_ENV === 'production'
-      ? { exclude: ['error', 'warn'] }
-      : false,
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
   },
   transpilePackages: ['@jaw.id/ui'],
   experimental: {
@@ -30,12 +27,8 @@ const nextConfig = {
     // for opacity modifier support. This app's own Tailwind config generates
     // all needed utilities from the UI package's source files.
     const overrideCss = path.resolve(__dirname, 'src/app/ui-overrides.css');
-    config.resolve.alias[
-      path.resolve(__dirname, '../../packages/ui/src/styles.css')
-    ] = overrideCss;
-    config.resolve.alias[
-      path.resolve(__dirname, '../../packages/ui/dist/index.css')
-    ] = overrideCss;
+    config.resolve.alias[path.resolve(__dirname, '../../packages/ui/src/styles.css')] = overrideCss;
+    config.resolve.alias[path.resolve(__dirname, '../../packages/ui/dist/index.css')] = overrideCss;
     return config;
   },
 };
@@ -46,4 +39,3 @@ const plugins = [
 ];
 
 module.exports = composePlugins(...plugins)(nextConfig);
-

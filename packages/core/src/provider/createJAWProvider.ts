@@ -9,5 +9,5 @@ export type CreateProviderOptions = ConstructorOptions;
  * @returns A JAW Provider object.
  */
 export function createJAWProvider(options: CreateProviderOptions): JAWProvider {
-  return new JAWProvider(options);
+    return new JAWProvider(options);
 }

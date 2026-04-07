@@ -4,7 +4,6 @@ Grant granular permissions to a spender address for delegated transaction execut
 
 **Authentication Required:** No
 
-
 ## Request
 
 ```typescript
@@ -12,41 +11,47 @@ import { parseEther } from 'viem';
 
 await jaw.provider.request({
   method: 'wallet_grantPermissions',
-  params: [{
-    expiry: 1735689600, // Unix timestamp
-    spender: '0x5678...', // Who gets permissions
-    permissions: {
-      calls: [{
-        target: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-        functionSignature: 'transfer(address,uint256)',
-      }],
-      spends: [{
-        token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-        allowance: parseEther('0.1').toString(), // 0.1 ETH
-        unit: 'day',
-      }],
+  params: [
+    {
+      expiry: 1735689600, // Unix timestamp
+      spender: '0x5678...', // Who gets permissions
+      permissions: {
+        calls: [
+          {
+            target: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            functionSignature: 'transfer(address,uint256)',
+          },
+        ],
+        spends: [
+          {
+            token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+            allowance: parseEther('0.1').toString(), // 0.1 ETH
+            unit: 'day',
+          },
+        ],
+      },
+      // chainId: '0x1', // Optional - defaults to connected chain
     },
-    // chainId: '0x1', // Optional - defaults to connected chain
-  }],
+  ],
 });
 ```
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `expiry` | `number` | Yes | Expiration timestamp (seconds) |
-| `spender` | `0x${string}` | Yes | Address receiving permissions |
-| `permissions` | `object` | Yes | Permission details |
-| `chainId` | `0x${string}` | No | Target chain ID (defaults to connected chain) |
-| `capabilities` | `object` | No | Additional capabilities (see below) |
+| Name           | Type          | Required | Description                                   |
+| -------------- | ------------- | -------- | --------------------------------------------- |
+| `expiry`       | `number`      | Yes      | Expiration timestamp (seconds)                |
+| `spender`      | `0x${string}` | Yes      | Address receiving permissions                 |
+| `permissions`  | `object`      | Yes      | Permission details                            |
+| `chainId`      | `0x${string}` | No       | Target chain ID (defaults to connected chain) |
+| `capabilities` | `object`      | No       | Additional capabilities (see below)           |
 
 ### Capabilities
 
-| Name | Type | Description |
-|------|------|-------------|
-| `capabilities.paymasterService` | `object` | Paymaster service for gas sponsorship |
-| `capabilities.paymasterService.url` | `string` | Paymaster service URL (ERC-7677 compliant) |
+| Name                                    | Type     | Description                                               |
+| --------------------------------------- | -------- | --------------------------------------------------------- |
+| `capabilities.paymasterService`         | `object` | Paymaster service for gas sponsorship                     |
+| `capabilities.paymasterService.url`     | `string` | Paymaster service URL (ERC-7677 compliant)                |
 | `capabilities.paymasterService.context` | `object` | Optional context (e.g., `{ sponsorshipPolicyId: '...' }`) |
 
 :::info
@@ -59,26 +64,27 @@ The `paymasterService` capability allows you to specify a paymaster per-call, ov
 
 Array of call permissions. Each permission:
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `target` | `0x${string}` | Yes | Contract address |
-| `functionSignature` | `string` | No* | Function signature (e.g., "transfer(address,uint256)") |
-| `selector` | `0x${string}` | No* | 4-byte function selector (0x...) |
+| Name                | Type          | Required | Description                                            |
+| ------------------- | ------------- | -------- | ------------------------------------------------------ |
+| `target`            | `0x${string}` | Yes      | Contract address                                       |
+| `functionSignature` | `string`      | No\*     | Function signature (e.g., "transfer(address,uint256)") |
+| `selector`          | `0x${string}` | No\*     | 4-byte function selector (0x...)                       |
 
-*Either `functionSignature` or `selector` is required.
+\*Either `functionSignature` or `selector` is required.
 
-#### spends (Optional*)
+#### spends (Optional\*)
 
 Array of spend limits. Each limit:
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `token` | `0x${string}` | Yes | Token address (`0xEeee...` for native token) |
-| `allowance` | `string` | Yes | Spending allowance in wei (decimal or hex string) |
-| `unit` | `string` | Yes | Time unit for allowance reset |
-| `multiplier` | `number` | No | Multiplier for the time unit (default: 1) |
+| Name         | Type          | Required | Description                                       |
+| ------------ | ------------- | -------- | ------------------------------------------------- |
+| `token`      | `0x${string}` | Yes      | Token address (`0xEeee...` for native token)      |
+| `allowance`  | `string`      | Yes      | Spending allowance in wei (decimal or hex string) |
+| `unit`       | `string`      | Yes      | Time unit for allowance reset                     |
+| `multiplier` | `number`      | No       | Multiplier for the time unit (default: 1)         |
 
 **Valid Units:**
+
 - `minute` - Resets every minute
 - `hour` - Resets every hour
 - `day` - Resets every day
@@ -87,9 +93,7 @@ Array of spend limits. Each limit:
 - `year` - Resets every year
 - `forever` - Never resets (one-time allowance)
 
-*Spend Limits are required if moving funds.
-
-
+\*Spend Limits are required if moving funds.
 
 ## Response
 
@@ -102,21 +106,24 @@ Returns permission grant result with generated permission ID.
   "start": 1704067200,
   "end": 1735689600,
   "salt": "0x1a2b3c...",
-  "calls": [{
-    "target": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
-    "selector": "0xa9059cbb"
-  }],
-  "spends": [{
-    "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
-    "allowance": "0x16345785d8a0000",
-    "unit": "day",
-    "multiplier": 1
-  }],
+  "calls": [
+    {
+      "target": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+      "selector": "0xa9059cbb"
+    }
+  ],
+  "spends": [
+    {
+      "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "allowance": "0x16345785d8a0000",
+      "unit": "day",
+      "multiplier": 1
+    }
+  ],
   "permissionId": "0xabc123...",
   "chainId": "0x1"
 }
 ```
-
 
 ## Behavior
 
@@ -124,15 +131,13 @@ Returns permission grant result with generated permission ID.
 - Approves permission
 - Returns permission ID for future revocation
 
-
 ## Errors
 
-| Code | Description |
-|------|-------------|
-| 4001 | User rejected the request |
-| 4100 | Unauthorized (not authenticated) |
-| -32602 | Invalid params |
-
+| Code   | Description                      |
+| ------ | -------------------------------- |
+| 4001   | User rejected the request        |
+| 4100   | Unauthorized (not authenticated) |
+| -32602 | Invalid params                   |
 
 ## Example
 
@@ -142,28 +147,34 @@ import { parseUnits } from 'viem';
 // Allow DeFi protocol to swap USDC with daily limit
 const permission = await jaw.provider.request({
   method: 'wallet_grantPermissions',
-  params: [{
-    expiry: Math.floor(Date.now() / 1000) + (365 * 24 * 60 * 60), // 1 year
-    spender: dexRouterAddress,
-    permissions: {
-      calls: [{
-        target: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-        functionSignature: 'approve(address,uint256)',
-      }, {
-        target: dexRouterAddress,
-        functionSignature: 'swap(address,address,uint256,uint256)',
-      }],
-      spends: [{
-        token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-        allowance: parseUnits('1000', 6).toString(), // 1000 USDC per day
-        unit: 'day',
-      }],
+  params: [
+    {
+      expiry: Math.floor(Date.now() / 1000) + 365 * 24 * 60 * 60, // 1 year
+      spender: dexRouterAddress,
+      permissions: {
+        calls: [
+          {
+            target: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            functionSignature: 'approve(address,uint256)',
+          },
+          {
+            target: dexRouterAddress,
+            functionSignature: 'swap(address,address,uint256,uint256)',
+          },
+        ],
+        spends: [
+          {
+            token: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+            allowance: parseUnits('1000', 6).toString(), // 1000 USDC per day
+            unit: 'day',
+          },
+        ],
+      },
+      // chainId: '0x1', // Optional - defaults to connected chain
     },
-    // chainId: '0x1', // Optional - defaults to connected chain
-  }],
+  ],
 });
 ```
-
 
 ## Related Methods
 

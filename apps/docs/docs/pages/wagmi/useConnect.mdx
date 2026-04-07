@@ -4,23 +4,17 @@ Hook to connect to the wallet with optional capabilities.
 
 **Type:** `hook`
 
-
 ## Import
 
 ```typescript
 import { useConnect } from '@jaw.id/wagmi';
 ```
 
-
 ## Signature
 
 ```typescript
-function useConnect(parameters?: {
-  config?: Config;
-  mutation?: UseMutationParameters;
-}): UseMutationResult
+function useConnect(parameters?: { config?: Config; mutation?: UseMutationParameters }): UseMutationResult;
 ```
-
 
 ## Parameters
 
@@ -36,20 +30,19 @@ Type: `UseMutationParameters` (optional)
 
 TanStack React Query mutation options.
 
-
 ## Returns
 
 Returns a TanStack React Query mutation result:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `mutate` | `function` | Function to trigger connection |
-| `mutateAsync` | `function` | Async version of mutate |
-| `data` | `{ accounts, chainId }` | Connection result |
-| `isPending` | `boolean` | Whether connection is in progress |
-| `isSuccess` | `boolean` | Whether connection succeeded |
-| `isError` | `boolean` | Whether connection failed |
-| `error` | `Error` | Error if connection failed |
+| Property      | Type                    | Description                       |
+| ------------- | ----------------------- | --------------------------------- |
+| `mutate`      | `function`              | Function to trigger connection    |
+| `mutateAsync` | `function`              | Async version of mutate           |
+| `data`        | `{ accounts, chainId }` | Connection result                 |
+| `isPending`   | `boolean`               | Whether connection is in progress |
+| `isSuccess`   | `boolean`               | Whether connection succeeded      |
+| `isError`     | `boolean`               | Whether connection failed         |
+| `error`       | `Error`                 | Error if connection failed        |
 
 ### data
 
@@ -63,7 +56,6 @@ When successful, `data` contains:
 ```
 
 If capabilities were requested, accounts include capability information.
-
 
 ## Mutation Variables
 
@@ -102,7 +94,6 @@ interface WalletConnectCapabilities {
 }
 ```
 
-
 ## Examples
 
 ### Basic Connection
@@ -118,10 +109,7 @@ function ConnectButton() {
   if (isConnected) return <p>Connected!</p>;
 
   return (
-    <button
-      onClick={() => connect({ connector: jaw({ apiKey: '...' }) })}
-      disabled={isPending}
-    >
+    <button onClick={() => connect({ connector: jaw({ apiKey: '...' }) })} disabled={isPending}>
       {isPending ? 'Connecting...' : 'Connect'}
     </button>
   );
@@ -138,10 +126,7 @@ function ConnectButton() {
   const { mutate: connect, isPending } = useConnect();
 
   return (
-    <button
-      onClick={() => connect({ connector: config.connectors[0] })}
-      disabled={isPending}
-    >
+    <button onClick={() => connect({ connector: config.connectors[0] })} disabled={isPending}>
       Connect
     </button>
   );
@@ -240,18 +225,16 @@ function ConnectWithCallbacks() {
 }
 ```
 
-
 ## Difference from wagmi useConnect
 
-| Feature | `wagmi.useConnect` | `@jaw.id/wagmi.useConnect` |
-|---------|-------------------|------------------------|
-| Basic connection | Yes | Yes |
-| Capabilities parameter | No | Yes |
-| Uses `wallet_connect` | No | When capabilities provided |
-| Returns account capabilities | No | Yes (when requested) |
+| Feature                      | `wagmi.useConnect` | `@jaw.id/wagmi.useConnect` |
+| ---------------------------- | ------------------ | -------------------------- |
+| Basic connection             | Yes                | Yes                        |
+| Capabilities parameter       | No                 | Yes                        |
+| Uses `wallet_connect`        | No                 | When capabilities provided |
+| Returns account capabilities | No                 | Yes (when requested)       |
 
 Use `@jaw.id/wagmi`'s `useConnect` when you need to request capabilities during connection. For basic connections without capabilities, either hook works.
-
 
 ## Related
 

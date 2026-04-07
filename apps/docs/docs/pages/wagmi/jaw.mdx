@@ -9,22 +9,18 @@ import { jaw } from '@jaw.id/wagmi';
 
 const config = createConfig({
   chains: [mainnet],
-  connectors: [
-    jaw({ apiKey: 'YOUR_API_KEY' }),
-  ],
+  connectors: [jaw({ apiKey: 'YOUR_API_KEY' })],
   transports: {
     [mainnet.id]: http(),
   },
 });
 ```
 
-
 ## Signature
 
 ```typescript
-function jaw(parameters: JawParameters): Connector
+function jaw(parameters: JawParameters): Connector;
 ```
-
 
 ## Parameters
 
@@ -81,23 +77,20 @@ Type: `Record<number, { url: string; context?: Record<string, unknown> }>`
 
 Custom paymaster configuration by chain ID for gas sponsorship. See [paymasters](/configuration/paymasters) for details.
 
-
 ## Returns
 
 `Connector` - A Wagmi-compatible connector instance.
-
 
 ## Connector Properties
 
 The returned connector has these Wagmi-standard properties:
 
-| Property | Value |
-|----------|-------|
-| `id` | `'jaw'` |
-| `name` | `'JAW'` |
-| `type` | `'jaw'` |
-| `rdns` | `'keys.jaw.id'` |
-
+| Property | Value           |
+| -------- | --------------- |
+| `id`     | `'jaw'`         |
+| `name`   | `'JAW'`         |
+| `type`   | `'jaw'`         |
+| `rdns`   | `'keys.jaw.id'` |
 
 ## Example
 
@@ -131,7 +124,6 @@ const config = createConfig({
   },
 });
 ```
-
 
 ## Related
 

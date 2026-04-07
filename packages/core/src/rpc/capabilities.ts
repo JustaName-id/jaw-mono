@@ -45,10 +45,10 @@ export async function handleGetCapabilitiesRequest(
     if (!filterChainIds || filterChainIds.length === 0) {
         if (!showTestnets) {
             // Only request mainnet chains
-            const chainFilter = MAINNET_CHAINS.map(chain => hexStringFromNumber(chain.id));
+            const chainFilter = MAINNET_CHAINS.map((chain) => hexStringFromNumber(chain.id));
             requestArgs = {
                 ...request,
-                params: [params?.[0], chainFilter]
+                params: [params?.[0], chainFilter],
             };
         }
         // If showTestnets is true, don't modify params - let proxy return all chains

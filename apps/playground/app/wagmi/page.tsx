@@ -1,13 +1,13 @@
-"use client";
+'use client';
 
-import { useState, useCallback, Suspense } from "react";
-import { flushSync } from "react-dom";
-import { useSearchParams } from "next/navigation";
-import { Mode, type PaymasterConfig, type JawTheme } from "@jaw.id/core";
-import { Card } from "../../components/ui/card";
-import { Button } from "../../components/ui/button";
-import { ThemePicker } from "../../components/theme-picker";
-import { parseEther, formatUnits, type Address } from "viem";
+import { useState, useCallback, Suspense } from 'react';
+import { flushSync } from 'react-dom';
+import { useSearchParams } from 'next/navigation';
+import { Mode, type PaymasterConfig, type JawTheme } from '@jaw.id/core';
+import { Card } from '../../components/ui/card';
+import { Button } from '../../components/ui/button';
+import { ThemePicker } from '../../components/theme-picker';
+import { parseEther, formatUnits, type Address } from 'viem';
 import {
   useAccount,
   useChainId,
@@ -19,7 +19,7 @@ import {
   useConnect as useWagmiConnect,
   useSendCalls,
   useCallsStatus,
-} from "wagmi";
+} from 'wagmi';
 import {
   useConnect,
   useDisconnect,
@@ -32,25 +32,22 @@ import {
   useGetCallsHistory,
   type PersonalSignRequestData,
   type TypedDataRequestData,
-} from "@jaw.id/wagmi";
+} from '@jaw.id/wagmi';
 
-import { WagmiProviders } from "./providers";
-import { type ModeType } from "./config";
-import { MethodCard } from "../../components/method-card";
-import { WagmiMethodModal } from "../../components/wagmi-method-modal";
-import { EncodeDataModal } from "../../components/encode-data-modal";
-import { ExecutionLog, type LogEntry } from "../../components/execution-log";
-import {
-  ConfigSnippet,
-  type PaymasterApplyConfig,
-} from "../../components/config-snippet";
+import { WagmiProviders } from './providers';
+import { type ModeType } from './config';
+import { MethodCard } from '../../components/method-card';
+import { WagmiMethodModal } from '../../components/wagmi-method-modal';
+import { EncodeDataModal } from '../../components/encode-data-modal';
+import { ExecutionLog, type LogEntry } from '../../components/execution-log';
+import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import {
   WAGMI_METHODS,
   CATEGORIES,
   CATEGORY_LABELS,
   type WagmiMethod,
   type MethodCategory,
-} from "../../lib/wagmi-methods";
+} from '../../lib/wagmi-methods';
 
 interface WagmiPageContentProps {
   mode: ModeType;
@@ -60,13 +57,7 @@ interface WagmiPageContentProps {
   onThemeChange: (theme: JawTheme) => void;
 }
 
-function WagmiPageContent({
-  mode,
-  pmConfig,
-  onPaymasterApply,
-  theme,
-  onThemeChange,
-}: WagmiPageContentProps) {
+function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChange }: WagmiPageContentProps) {
   const { address, isConnected, connector } = useAccount();
   const chainId = useChainId();
   const { data: balance } = useBalance({ address });
@@ -80,23 +71,15 @@ function WagmiPageContent({
   // JAW Wagmi Hooks
   const { mutateAsync: jawConnect } = useConnect();
   const { mutateAsync: jawDisconnect } = useDisconnect();
-  const { mutateAsync: grantPermissions, isPending: isGrantingPermissions } =
-    useGrantPermissions();
-  const { mutateAsync: revokePermissions, isPending: isRevokingPermissions } =
-    useRevokePermissions();
+  const { mutateAsync: grantPermissions, isPending: isGrantingPermissions } = useGrantPermissions();
+  const { mutateAsync: revokePermissions, isPending: isRevokingPermissions } = useRevokePermissions();
   const { mutateAsync: sign, isPending: isSigning } = useSign();
 
   // State for query addresses (allows querying for arbitrary addresses)
-  const [permissionsAddress, setPermissionsAddress] = useState<
-    string | undefined
-  >();
+  const [permissionsAddress, setPermissionsAddress] = useState<string | undefined>();
   const [assetsAddress, setAssetsAddress] = useState<string | undefined>();
-  const [capabilitiesAddress, setCapabilitiesAddress] = useState<
-    string | undefined
-  >();
-  const [callsHistoryAddress, setCallsHistoryAddress] = useState<
-    string | undefined
-  >();
+  const [capabilitiesAddress, setCapabilitiesAddress] = useState<string | undefined>();
+  const [callsHistoryAddress, setCallsHistoryAddress] = useState<string | undefined>();
 
   const {
     data: permissions,
@@ -128,7 +111,7 @@ function WagmiPageContent({
   });
 
   // Calls status state
-  const [lastBatchId, setLastBatchId] = useState<string>("");
+  const [lastBatchId, setLastBatchId] = useState<string>('');
   const {
     data: callsStatus,
     refetch: refetchCallsStatus,
@@ -138,58 +121,45 @@ function WagmiPageContent({
     query: { enabled: !!lastBatchId },
   });
 
-  const [selectedMethod, setSelectedMethod] = useState<WagmiMethod | null>(
-    null,
-  );
+  const [selectedMethod, setSelectedMethod] = useState<WagmiMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
-  const [selectedCategory, setSelectedCategory] = useState<
-    MethodCategory | "all"
-  >("all");
+  const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
   const [isExecuting, setIsExecuting] = useState(false);
 
-  const addLog = useCallback(
-    (type: LogEntry["type"], method: string, data: unknown) => {
-      setLogs((prev) => [
-        ...prev,
-        { timestamp: new Date(), type, method, data },
-      ]);
-    },
-    [],
-  );
+  const addLog = useCallback((type: LogEntry['type'], method: string, data: unknown) => {
+    setLogs((prev) => [...prev, { timestamp: new Date(), type, method, data }]);
+  }, []);
 
   const handleExecute = useCallback(
-    async (
-      method: WagmiMethod,
-      params: Record<string, unknown>,
-    ): Promise<unknown> => {
-      addLog("request", method.name, params);
+    async (method: WagmiMethod, params: Record<string, unknown>): Promise<unknown> => {
+      addLog('request', method.name, params);
       setIsExecuting(true);
 
       try {
         let result: unknown;
-        const jawConnector = connectors.find((c) => c.id === "jaw");
+        const jawConnector = connectors.find((c) => c.id === 'jaw');
 
         switch (method.hookType) {
-          case "jawConnect": {
+          case 'jawConnect': {
             if (jawConnector) {
               result = await jawConnect({ connector: jawConnector });
             }
             break;
           }
 
-          case "jawDisconnect":
+          case 'jawDisconnect':
             result = await jawDisconnect({ connector });
             break;
 
-          case "useSwitchChain":
+          case 'useSwitchChain':
             result = await switchChainAsync({
               chainId: params.chainId as number,
             });
             break;
 
-          case "useSendTransaction":
+          case 'useSendTransaction':
             result = await sendTransactionAsync({
               to: params.to as Address,
               value: parseEther(params.value as string),
@@ -197,35 +167,29 @@ function WagmiPageContent({
             });
             break;
 
-          case "useSignMessage":
+          case 'useSignMessage':
             result = await signMessageAsync({
               message: params.message as string,
             });
             break;
 
-          case "useSignTypedData":
+          case 'useSignTypedData':
             result = await signTypedDataAsync({
-              domain:
-                (params as { domain?: Record<string, unknown> }).domain || {},
-              types:
-                (params as { types?: Record<string, unknown> }).types || {},
-              primaryType:
-                (params as { primaryType?: string }).primaryType || "",
-              message:
-                (params as { message?: Record<string, unknown> }).message || {},
+              domain: (params as { domain?: Record<string, unknown> }).domain || {},
+              types: (params as { types?: Record<string, unknown> }).types || {},
+              primaryType: (params as { primaryType?: string }).primaryType || '',
+              message: (params as { message?: Record<string, unknown> }).message || {},
             });
             break;
 
-          case "useSign":
+          case 'useSign':
             result = await sign({
               chainId: params.chainId as number | undefined,
-              request: params.request as
-                | PersonalSignRequestData
-                | TypedDataRequestData,
+              request: params.request as PersonalSignRequestData | TypedDataRequestData,
             });
             break;
 
-          case "useSendCalls": {
+          case 'useSendCalls': {
             const sendCallsResult = await sendCallsAsync({
               calls: params.calls as Array<{
                 to: Address;
@@ -238,13 +202,13 @@ function WagmiPageContent({
             break;
           }
 
-          case "useCallsStatus":
+          case 'useCallsStatus':
             setLastBatchId(params.id as string);
             await refetchCallsStatus();
-            result = callsStatus || { status: "pending" };
+            result = callsStatus || { status: 'pending' };
             break;
 
-          case "useCapabilities": {
+          case 'useCapabilities': {
             const targetAddress = params.address as string | undefined;
             if (targetAddress) {
               flushSync(() => setCapabilitiesAddress(targetAddress));
@@ -254,7 +218,7 @@ function WagmiPageContent({
             break;
           }
 
-          case "useGrantPermissions":
+          case 'useGrantPermissions':
             result = await grantPermissions({
               spender: params.spender as Address,
               expiry: params.expiry as number,
@@ -262,13 +226,13 @@ function WagmiPageContent({
             });
             break;
 
-          case "useRevokePermissions":
+          case 'useRevokePermissions':
             result = await revokePermissions({
               id: params.id as `0x${string}`,
             });
             break;
 
-          case "usePermissions": {
+          case 'usePermissions': {
             const targetAddress = (params.address as string) || address;
             if (targetAddress) {
               flushSync(() => setPermissionsAddress(targetAddress));
@@ -278,7 +242,7 @@ function WagmiPageContent({
             break;
           }
 
-          case "useGetAssets": {
+          case 'useGetAssets': {
             const targetAddress = (params.address as string) || address;
             if (targetAddress) {
               flushSync(() => setAssetsAddress(targetAddress));
@@ -288,7 +252,7 @@ function WagmiPageContent({
             break;
           }
 
-          case "useGetCallsHistory": {
+          case 'useGetCallsHistory': {
             const targetAddress = (params.address as string) || address;
             if (targetAddress) {
               flushSync(() => setCallsHistoryAddress(targetAddress));
@@ -302,16 +266,16 @@ function WagmiPageContent({
             throw new Error(`Unknown hook type: ${method.hookType}`);
         }
 
-        addLog("response", method.name, result);
+        addLog('response', method.name, result);
         return result;
       } catch (error) {
         const errorMessage =
           error instanceof Error
             ? error.message
-            : typeof error === "object" && error !== null && "message" in error
+            : typeof error === 'object' && error !== null && 'message' in error
               ? (error as { message: string }).message
               : JSON.stringify(error);
-        addLog("error", method.name, errorMessage);
+        addLog('error', method.name, errorMessage);
         throw error;
       } finally {
         setIsExecuting(false);
@@ -346,11 +310,11 @@ function WagmiPageContent({
       refetchCallsHistory,
       callsHistory,
       addLog,
-    ],
+    ]
   );
 
   const handleMethodClick = (method: WagmiMethod) => {
-    if (method.category === "utility") {
+    if (method.category === 'utility') {
       setIsEncodeModalOpen(true);
       return;
     }
@@ -364,9 +328,7 @@ function WagmiPageContent({
   };
 
   const filteredMethods =
-    selectedCategory === "all"
-      ? WAGMI_METHODS
-      : WAGMI_METHODS.filter((m) => m.category === selectedCategory);
+    selectedCategory === 'all' ? WAGMI_METHODS : WAGMI_METHODS.filter((m) => m.category === selectedCategory);
 
   // Check if any operation is pending
   // Using isExecuting as the primary state since we use async versions of hooks
@@ -382,87 +344,72 @@ function WagmiPageContent({
     isExecuting;
 
   return (
-    <div className="min-h-screen p-4 md:p-8 bg-background">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="bg-background min-h-screen p-4 md:p-8">
+      <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            JAW.id Playground - Wagmi
-          </h1>
+          <h1 className="text-foreground text-2xl font-bold md:text-3xl">JAW.id Playground - Wagmi</h1>
         </div>
 
         {/* Mode Toggle */}
         <Card className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-muted-foreground">
-                Mode:
-              </span>
+              <span className="text-muted-foreground text-sm font-medium">Mode:</span>
               <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                className={`rounded-full px-3 py-1 text-sm font-medium ${
                   mode === Mode.AppSpecific
-                    ? "bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200"
-                    : "bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200"
+                    ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
+                    : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
                 }`}
               >
-                {mode === Mode.AppSpecific ? "App-Specific" : "Cross-Platform"}
+                {mode === Mode.AppSpecific ? 'App-Specific' : 'Cross-Platform'}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <ConfigSnippet
-                type="wagmi"
-                mode={mode}
-                paymasters={pmConfig}
-                onPaymasterApply={onPaymasterApply}
-              />
+              <ConfigSnippet type="wagmi" mode={mode} paymasters={pmConfig} onPaymasterApply={onPaymasterApply} />
               <a
                 href="/wagmi"
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
                   mode === Mode.CrossPlatform
-                    ? "bg-blue-600 text-white"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
                 Cross-Platform
               </a>
               <a
                 href="/wagmi?mode=app-specific"
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
                   mode === Mode.AppSpecific
-                    ? "bg-purple-600 text-white"
-                    : "bg-muted text-muted-foreground hover:bg-muted/80"
+                    ? 'bg-purple-600 text-white'
+                    : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
               >
                 App-Specific
               </a>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
+          <p className="text-muted-foreground mt-2 text-xs">
             {mode === Mode.AppSpecific
-              ? "Direct signing with UI handled by UIHandler in your app"
-              : "Passkey operations handled via keys.jaw.id"}
+              ? 'Direct signing with UI handled by UIHandler in your app'
+              : 'Passkey operations handled via keys.jaw.id'}
           </p>
         </Card>
 
         {/* Theme Picker (only for AppSpecific mode which uses ReactUIHandler) */}
-        {mode === Mode.AppSpecific && (
-          <ThemePicker theme={theme} onThemeChange={onThemeChange} />
-        )}
+        {mode === Mode.AppSpecific && <ThemePicker theme={theme} onThemeChange={onThemeChange} />}
 
         {/* Connection Status */}
         <Card className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold mb-3">Connection Status</h2>
+              <h2 className="mb-3 text-lg font-semibold">Connection Status</h2>
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">Status:</span>
-                  <span
-                    className={`font-medium ${
-                      isConnected ? "text-green-600" : "text-red-600"
-                    }`}
-                  >
-                    {isConnected ? "Connected" : "Disconnected"}
+                  <span className={`font-medium ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
+                    {isConnected ? 'Connected' : 'Disconnected'}
                   </span>
                 </div>
                 {address && (
@@ -470,12 +417,12 @@ function WagmiPageContent({
                     <span className="text-muted-foreground">Account:</span>
                     <button
                       onClick={() => navigator.clipboard.writeText(address)}
-                      className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
+                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
                       title="Click to copy"
                     >
                       {address.slice(0, 6)}...{address.slice(-4)}
                       <svg
-                        className="w-3 h-3 text-muted-foreground"
+                        className="text-muted-foreground h-3 w-3"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -494,15 +441,13 @@ function WagmiPageContent({
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Chain:</span>
                     <button
-                      onClick={() =>
-                        navigator.clipboard.writeText(chainId.toString())
-                      }
-                      className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
+                      onClick={() => navigator.clipboard.writeText(chainId.toString())}
+                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
                       title="Click to copy"
                     >
                       {chainId}
                       <svg
-                        className="w-3 h-3 text-muted-foreground"
+                        className="text-muted-foreground h-3 w-3"
                         fill="none"
                         viewBox="0 0 24 24"
                         stroke="currentColor"
@@ -520,11 +465,8 @@ function WagmiPageContent({
                 {balance && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Balance:</span>
-                    <span className="bg-muted px-2 py-0.5 rounded text-xs font-mono">
-                      {parseFloat(
-                        formatUnits(balance.value, balance.decimals),
-                      ).toFixed(4)}{" "}
-                      {balance.symbol}
+                    <span className="bg-muted rounded px-2 py-0.5 font-mono text-xs">
+                      {parseFloat(formatUnits(balance.value, balance.decimals)).toFixed(4)} {balance.symbol}
                     </span>
                   </div>
                 )}
@@ -534,9 +476,7 @@ function WagmiPageContent({
               {!isConnected ? (
                 <Button
                   onClick={() => {
-                    const connectMethod = WAGMI_METHODS.find(
-                      (m) => m.id === "jaw_connect",
-                    );
+                    const connectMethod = WAGMI_METHODS.find((m) => m.id === 'jaw_connect');
                     if (connectMethod) handleMethodClick(connectMethod);
                   }}
                 >
@@ -546,9 +486,7 @@ function WagmiPageContent({
                 <Button
                   variant="outline"
                   onClick={() => {
-                    const disconnectMethod = WAGMI_METHODS.find(
-                      (m) => m.id === "jaw_disconnect",
-                    );
+                    const disconnectMethod = WAGMI_METHODS.find((m) => m.id === 'jaw_disconnect');
                     if (disconnectMethod) handleMethodClick(disconnectMethod);
                   }}
                 >
@@ -562,21 +500,19 @@ function WagmiPageContent({
         {/* Category Filter */}
         <div className="flex flex-wrap gap-2">
           <Button
-            variant={selectedCategory === "all" ? "default" : "outline"}
+            variant={selectedCategory === 'all' ? 'default' : 'outline'}
             size="sm"
-            onClick={() => setSelectedCategory("all")}
+            onClick={() => setSelectedCategory('all')}
           >
             All ({WAGMI_METHODS.length})
           </Button>
           {CATEGORIES.map((category) => {
-            const count = WAGMI_METHODS.filter(
-              (m) => m.category === category,
-            ).length;
+            const count = WAGMI_METHODS.filter((m) => m.category === category).length;
             if (count === 0) return null;
             return (
               <Button
                 key={category}
-                variant={selectedCategory === category ? "default" : "outline"}
+                variant={selectedCategory === category ? 'default' : 'outline'}
                 size="sm"
                 onClick={() => setSelectedCategory(category)}
               >
@@ -587,7 +523,7 @@ function WagmiPageContent({
         </div>
 
         {/* Method Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredMethods.map((method) => (
             <MethodCard
               key={method.id}
@@ -609,10 +545,7 @@ function WagmiPageContent({
         <ExecutionLog logs={logs} onClear={() => setLogs([])} />
 
         {/* Encode Data Modal */}
-        <EncodeDataModal
-          isOpen={isEncodeModalOpen}
-          onClose={() => setIsEncodeModalOpen(false)}
-        />
+        <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
 
         {/* Method Modal */}
         <WagmiMethodModal
@@ -631,16 +564,13 @@ function WagmiPageContent({
 
 function WagmiPageInner() {
   const searchParams = useSearchParams();
-  const modeParam = searchParams.get("mode");
+  const modeParam = searchParams.get('mode');
 
-  const mode: ModeType =
-    modeParam === "app-specific" ? Mode.AppSpecific : Mode.CrossPlatform;
+  const mode: ModeType = modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
 
-  const [paymasters, setPaymasters] = useState<
-    Record<number, PaymasterConfig> | undefined
-  >();
+  const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
-  const [theme, setTheme] = useState<JawTheme>({ mode: "auto" });
+  const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
 
   const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
     if (config) {
@@ -677,7 +607,7 @@ export default function WagmiPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen p-8 bg-background flex items-center justify-center">
+        <div className="bg-background flex min-h-screen items-center justify-center p-8">
           <p className="text-muted-foreground">Loading...</p>
         </div>
       }

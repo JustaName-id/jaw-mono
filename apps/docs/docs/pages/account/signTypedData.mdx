@@ -4,7 +4,6 @@ Sign EIP-712 typed data.
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
@@ -12,7 +11,6 @@ async signTypedData(
   typedData: TypedDataDefinition<TypedData, string>
 ): Promise<Hex>
 ```
-
 
 ## Parameters
 
@@ -37,18 +35,15 @@ interface TypedDataDefinition {
 }
 ```
 
-
 ## Returns
 
 `Promise<Hex>` - The signature as a hex string.
-
 
 ## Behavior
 
 1. Encodes the typed data according to EIP-712
 2. Signs with the smart account (passkey or local account)
 3. Returns the signature wrapped for smart account validation
-
 
 ## Example
 
@@ -63,19 +58,13 @@ import { Account } from '@jaw.id/core';
 const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 2: Create a new account with passkey
-const account = await Account.create(
-  { chainId: 1, apiKey: 'your-api-key' },
-  { username: 'alice' }
-);
+const account = await Account.create({ chainId: 1, apiKey: 'your-api-key' }, { username: 'alice' });
 
 // Option 3: Import from cloud backup
 const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 4: From a local account (server-side / embedded wallets)
-const account = await Account.fromLocalAccount(
-  { chainId: 1, apiKey: 'your-api-key' },
-  localAccount
-);
+const account = await Account.fromLocalAccount({ chainId: 1, apiKey: 'your-api-key' }, localAccount);
 ```
 
 ### Basic Usage
@@ -101,7 +90,6 @@ const signature = await account.signTypedData({
   },
 });
 ```
-
 
 ## Related
 

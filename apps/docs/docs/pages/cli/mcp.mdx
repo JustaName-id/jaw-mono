@@ -29,13 +29,13 @@ Environment variables in the MCP config follow the same resolution order as the 
 
 ## Available Tools
 
-| Tool | Description |
-|------|-------------|
-| `jaw_rpc` | Execute any RPC method (`method`, `params?`, `chainId?`) |
-| `jaw_config_show` | Display current configuration |
-| `jaw_config_set` | Update a configuration value (`key`, `value`) |
-| `jaw_status` | Check relay session and connection status |
-| `jaw_disconnect` | Close relay session and browser tab |
+| Tool              | Description                                              |
+| ----------------- | -------------------------------------------------------- |
+| `jaw_rpc`         | Execute any RPC method (`method`, `params?`, `chainId?`) |
+| `jaw_config_show` | Display current configuration                            |
+| `jaw_config_set`  | Update a configuration value (`key`, `value`)            |
+| `jaw_status`      | Check relay session and connection status                |
+| `jaw_disconnect`  | Close relay session and browser tab                      |
 
 ### jaw_rpc
 
@@ -68,9 +68,9 @@ Valid keys: `apiKey`, `defaultChain`, `keysUrl`, `paymasterUrl`, `ens`
 
 The MCP server exposes documentation resources that AI agents can read for context.
 
-| Resource URI | Description |
-|-------------|-------------|
-| `jaw://api-reference` | Index of all supported RPC methods |
+| Resource URI                   | Description                                  |
+| ------------------------------ | -------------------------------------------- |
+| `jaw://api-reference`          | Index of all supported RPC methods           |
 | `jaw://api-reference/{method}` | Detailed documentation for a specific method |
 
 ## Agent Skills
@@ -87,9 +87,9 @@ npx skills add JustaName-id/jaw-skills
 
 This installs two skills:
 
-| Skill | Description |
-|-------|-------------|
-| `jaw-cli` | CLI usage patterns and best practices |
+| Skill                    | Description                                         |
+| ------------------------ | --------------------------------------------------- |
+| `jaw-cli`                | CLI usage patterns and best practices               |
 | `jaw-sdk-best-practices` | SDK development patterns and architectural guidance |
 
 Once installed, AI assistants automatically apply JAW-specific guidance when working with CLI commands or SDK integration code.

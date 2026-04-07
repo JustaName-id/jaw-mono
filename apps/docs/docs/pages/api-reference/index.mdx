@@ -72,109 +72,100 @@ jaw.provider.on('disconnect', (error: ProviderRpcError) => {
 });
 ```
 
-
 ## Account Methods
 
 Methods for managing user accounts and authentication.
 
-| Method | Description | Auth Required |
-|--------|-------------|---------------|
-| [eth_requestAccounts](/api-reference/eth_requestAccounts) | Request user authentication and account access | No |
-| [eth_accounts](/api-reference/eth_accounts) | Get currently connected accounts | No |
-
+| Method                                                    | Description                                    | Auth Required |
+| --------------------------------------------------------- | ---------------------------------------------- | ------------- |
+| [eth_requestAccounts](/api-reference/eth_requestAccounts) | Request user authentication and account access | No            |
+| [eth_accounts](/api-reference/eth_accounts)               | Get currently connected accounts               | No            |
 
 ## Chain Methods
 
 Methods for querying and switching blockchain networks.
 
-| Method | Description | Auth Required |
-|--------|-------------|---------------|
-| [eth_chainId](/api-reference/eth_chainId) | Get current chain ID (hex) | No |
-| [wallet_switchEthereumChain](/api-reference/wallet_switchEthereumChain) | Switch to a different chain | Yes |
-
+| Method                                                                  | Description                 | Auth Required |
+| ----------------------------------------------------------------------- | --------------------------- | ------------- |
+| [eth_chainId](/api-reference/eth_chainId)                               | Get current chain ID (hex)  | No            |
+| [wallet_switchEthereumChain](/api-reference/wallet_switchEthereumChain) | Switch to a different chain | Yes           |
 
 ## Transaction Methods
 
 Methods for sending transactions and batch operations.
 
-| Method | Description | Auth Required |
-|--------|-------------|---------------|
-| [eth_sendTransaction](/api-reference/eth_sendTransaction) | Broadcast a transaction to the network | Yes |
-| [wallet_sendCalls](/api-reference/wallet_sendCalls) | Broadcast bundle of calls to the network | No* |
-| [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) | Get batch transaction status | No |
-
+| Method                                                        | Description                              | Auth Required |
+| ------------------------------------------------------------- | ---------------------------------------- | ------------- |
+| [eth_sendTransaction](/api-reference/eth_sendTransaction)     | Broadcast a transaction to the network   | Yes           |
+| [wallet_sendCalls](/api-reference/wallet_sendCalls)           | Broadcast bundle of calls to the network | No\*          |
+| [wallet_getCallsStatus](/api-reference/wallet_getCallsStatus) | Get batch transaction status             | No            |
 
 ## Signing Methods
 
 Methods for signing messages and typed data.
 
-| Method | Description | Auth Required |
-|--------|-------------|---------------|
-| [personal_sign](/api-reference/personal_sign) | Sign a message with EIP-191 | Yes |
-| [eth_signTypedData_v4](/api-reference/eth_signTypedData_v4) | Sign structured typed data (EIP-712) | Yes |
-| [wallet_sign](/api-reference/wallet_sign) | Unified signing method supporting multiple message formats | No* |
+| Method                                                      | Description                                                | Auth Required |
+| ----------------------------------------------------------- | ---------------------------------------------------------- | ------------- |
+| [personal_sign](/api-reference/personal_sign)               | Sign a message with EIP-191                                | Yes           |
+| [eth_signTypedData_v4](/api-reference/eth_signTypedData_v4) | Sign structured typed data (EIP-712)                       | Yes           |
+| [wallet_sign](/api-reference/wallet_sign)                   | Unified signing method supporting multiple message formats | No\*          |
 
-*Can use ephemeral signer if not authenticated
-
+\*Can use ephemeral signer if not authenticated
 
 ## Wallet Methods
 
 Methods for wallet connection and lifecycle management.
 
-| Method | Description | Auth Required |
-|--------|-------------|---------------|
-| [wallet_connect](/api-reference/wallet_connect) | Connect with advanced capabilities (SIWE, subnames) | No |
-| [wallet_disconnect](/api-reference/wallet_disconnect) | Disconnect current session | No |
-
+| Method                                                | Description                                         | Auth Required |
+| ----------------------------------------------------- | --------------------------------------------------- | ------------- |
+| [wallet_connect](/api-reference/wallet_connect)       | Connect with advanced capabilities (SIWE, subnames) | No            |
+| [wallet_disconnect](/api-reference/wallet_disconnect) | Disconnect current session                          | No            |
 
 ## Capability Methods
 
 Methods for querying wallet capabilities.
 
-| Method | Description | Auth Required |
-|--------|-------------|---------------|
-| [wallet_getCapabilities](/api-reference/wallet_getCapabilities) | Get wallet capabilities per chain (EIP-5792) | No |
-
+| Method                                                          | Description                                  | Auth Required |
+| --------------------------------------------------------------- | -------------------------------------------- | ------------- |
+| [wallet_getCapabilities](/api-reference/wallet_getCapabilities) | Get wallet capabilities per chain (EIP-5792) | No            |
 
 ## Permission Methods
 
 Methods for managing granular permissions for delegated transactions.
 
-| Method | Description | Auth Required |
-|--------|-------------|---------------|
-| [wallet_grantPermissions](/api-reference/wallet_grantPermissions) | Grant call and spend permissions to a spender | No* |
-| [wallet_revokePermissions](/api-reference/wallet_revokePermissions) | Revoke previously granted permissions | No* |
-| [wallet_getPermissions](/api-reference/wallet_getPermissions) | Get all permissions for an account | No** |
+| Method                                                              | Description                                   | Auth Required |
+| ------------------------------------------------------------------- | --------------------------------------------- | ------------- |
+| [wallet_grantPermissions](/api-reference/wallet_grantPermissions)   | Grant call and spend permissions to a spender | No\*          |
+| [wallet_revokePermissions](/api-reference/wallet_revokePermissions) | Revoke previously granted permissions         | No\*          |
+| [wallet_getPermissions](/api-reference/wallet_getPermissions)       | Get all permissions for an account            | No\*\*        |
 
-*Can use ephemeral signer if not authenticated
+\*Can use ephemeral signer if not authenticated
 
-**Requires address parameter if not authenticated
-
+\*\*Requires address parameter if not authenticated
 
 ## Asset Methods
 
 Methods for querying token balances.
 
-| Method | Description | Auth Required |
-|--------|-------------|---------------|
-| [wallet_getAssets](/api-reference/wallet_getAssets) | Get token balances across chains (EIP-7811) | No** |
+| Method                                              | Description                                 | Auth Required |
+| --------------------------------------------------- | ------------------------------------------- | ------------- |
+| [wallet_getAssets](/api-reference/wallet_getAssets) | Get token balances across chains (EIP-7811) | No\*\*        |
 
-**Requires address parameter
-
+\*\*Requires address parameter
 
 ## Error Codes
 
 JAW SDK follows EIP-1193 error codes:
 
-| Code | Message | Description |
-|------|---------|-------------|
-| 4001 | User Rejected Request | User declined in popup |
-| 4100 | Unauthorized | Not authenticated |
-| 4200 | Unsupported Method | Method not supported |
-| 4900 | Disconnected | Provider disconnected |
-| 4901 | Chain Disconnected | Chain not available |
-| -32700 | Parse Error | Invalid JSON |
-| -32600 | Invalid Request | Invalid request object |
-| -32601 | Method Not Found | Method doesn't exist |
-| -32602 | Invalid Params | Invalid parameters |
-| -32603 | Internal Error | Internal JSON-RPC error |
+| Code   | Message               | Description             |
+| ------ | --------------------- | ----------------------- |
+| 4001   | User Rejected Request | User declined in popup  |
+| 4100   | Unauthorized          | Not authenticated       |
+| 4200   | Unsupported Method    | Method not supported    |
+| 4900   | Disconnected          | Provider disconnected   |
+| 4901   | Chain Disconnected    | Chain not available     |
+| -32700 | Parse Error           | Invalid JSON            |
+| -32600 | Invalid Request       | Invalid request object  |
+| -32601 | Method Not Found      | Method doesn't exist    |
+| -32602 | Invalid Params        | Invalid parameters      |
+| -32603 | Internal Error        | Internal JSON-RPC error |

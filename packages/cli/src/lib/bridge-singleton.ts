@@ -7,16 +7,16 @@
  * - Creates a WSBridge client connected to the relay
  */
 
-import * as fs from "node:fs";
-import * as crypto from "node:crypto";
-import { PATHS } from "./paths.js";
-import { ensureDir, loadConfig } from "./config.js";
-import { WSBridge } from "./ws-bridge.js";
-import { isValidKeysUrl, isValidRelayUrl } from "./validation.js";
-import { generateKeyPair, exportKeyToHex } from "./crypto.js";
+import * as fs from 'node:fs';
+import * as crypto from 'node:crypto';
+import { PATHS } from './paths.js';
+import { ensureDir, loadConfig } from './config.js';
+import { WSBridge } from './ws-bridge.js';
+import { isValidKeysUrl, isValidRelayUrl } from './validation.js';
+import { generateKeyPair, exportKeyToHex } from './crypto.js';
 
-const DEFAULT_KEYS_URL = "https://keys.jaw.id";
-const DEFAULT_RELAY_URL = "wss://relay.jaw.id";
+const DEFAULT_KEYS_URL = 'https://keys.jaw.id';
+const DEFAULT_RELAY_URL = 'wss://relay.jaw.id';
 
 interface RelaySession {
   session: string;
@@ -40,7 +40,7 @@ export interface BridgeOptions {
 function loadRelaySession(): RelaySession | null {
   try {
     if (!fs.existsSync(PATHS.relay)) return null;
-    const raw = fs.readFileSync(PATHS.relay, "utf-8");
+    const raw = fs.readFileSync(PATHS.relay, 'utf-8');
     const parsed = JSON.parse(raw) as RelaySession;
     // Basic validation
     if (!parsed.session || !parsed.relayUrl || !parsed.privateKey || !parsed.publicKey) {
@@ -54,8 +54,8 @@ function loadRelaySession(): RelaySession | null {
 
 function saveRelaySession(info: RelaySession): void {
   ensureDir(PATHS.root);
-  fs.writeFileSync(PATHS.relay, JSON.stringify(info, null, 2) + "\n", {
-    encoding: "utf-8",
+  fs.writeFileSync(PATHS.relay, JSON.stringify(info, null, 2) + '\n', {
+    encoding: 'utf-8',
     mode: 0o600,
   });
 }
@@ -104,8 +104,8 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
 
 async function createNewSession(relayUrl: string): Promise<RelaySession> {
   const kp = await generateKeyPair();
-  const privateKey = await exportKeyToHex("private", kp.privateKey);
-  const publicKey = await exportKeyToHex("public", kp.publicKey);
+  const privateKey = await exportKeyToHex('private', kp.privateKey);
+  const publicKey = await exportKeyToHex('public', kp.publicKey);
 
   return {
     session: crypto.randomUUID(),
@@ -122,7 +122,7 @@ async function connectBridge(
   options: BridgeOptions,
   chainId: number,
   keysUrl: string,
-  relayUrl: string,
+  relayUrl: string
 ): Promise<WSBridge> {
   const config = loadConfig();
   const bridge = new WSBridge({
@@ -144,28 +144,23 @@ async function connectBridge(
     // onBrowserNeeded
     async () => {
       const bridgeUrl = buildBridgeUrl(keysUrl, relaySession.session, relayUrl, relaySession.publicKey);
-      const { default: open } = await import("open");
+      const { default: open } = await import('open');
       await open(bridgeUrl);
     },
     // onPeerKeyChanged
     (newPeerKey) => {
       relaySession.peerPublicKey = newPeerKey;
       saveRelaySession(relaySession);
-    },
+    }
   );
 
   return bridge;
 }
 
-function buildBridgeUrl(
-  keysUrl: string,
-  session: string,
-  relayUrl: string,
-  cliPublicKeyHex: string,
-): string {
-  const url = new URL("/cli-bridge", keysUrl);
-  url.searchParams.set("session", session);
-  url.searchParams.set("relay", relayUrl);
+function buildBridgeUrl(keysUrl: string, session: string, relayUrl: string, cliPublicKeyHex: string): string {
+  const url = new URL('/cli-bridge', keysUrl);
+  url.searchParams.set('session', session);
+  url.searchParams.set('relay', relayUrl);
   // CLI public key in fragment — not sent to server
   url.hash = `pk=${cliPublicKeyHex}`;
   return url.toString();
@@ -184,7 +179,7 @@ export async function shutdownDaemon(): Promise<void> {
       relayUrl: session.relayUrl,
       session: session.session,
       timeout: 5000,
-      config: { apiKey: "", chainId: 1 },
+      config: { apiKey: '', chainId: 1 },
       privateKeyHex: session.privateKey,
       publicKeyHex: session.publicKey,
       peerPublicKeyHex: session.peerPublicKey,
@@ -197,18 +192,28 @@ export async function shutdownDaemon(): Promise<void> {
   deleteRelaySession();
 
   // Legacy cleanup: kill old daemon process and remove files
-  const legacyBridge = PATHS.root + "/bridge.json";
-  const legacyLog = PATHS.root + "/daemon.log";
-  const legacyLock = PATHS.root + "/daemon.lock";
+  const legacyBridge = PATHS.root + '/bridge.json';
+  const legacyLog = PATHS.root + '/daemon.log';
+  const legacyLock = PATHS.root + '/daemon.lock';
   try {
     if (fs.existsSync(legacyBridge)) {
-      const info = JSON.parse(fs.readFileSync(legacyBridge, "utf-8"));
+      const info = JSON.parse(fs.readFileSync(legacyBridge, 'utf-8'));
       if (info.pid && Number.isInteger(info.pid) && info.pid > 0) {
-        try { process.kill(info.pid, "SIGTERM"); } catch { /* already dead */ }
+        try {
+          process.kill(info.pid, 'SIGTERM');
+        } catch {
+          /* already dead */
+        }
       }
     }
-  } catch { /* ignore */ }
+  } catch {
+    /* ignore */
+  }
   for (const f of [legacyBridge, legacyLog, legacyLock]) {
-    try { if (fs.existsSync(f)) fs.unlinkSync(f); } catch { /* ignore */ }
+    try {
+      if (fs.existsSync(f)) fs.unlinkSync(f);
+    } catch {
+      /* ignore */
+    }
   }
 }

@@ -4,13 +4,11 @@ Hook to get the current permissions for the connected account. Automatically upd
 
 **Type:** `hook`
 
-
 ## Import
 
 ```typescript
 import { usePermissions } from '@jaw.id/wagmi';
 ```
-
 
 ## Signature
 
@@ -21,9 +19,8 @@ function usePermissions(parameters?: {
   connector?: Connector;
   config?: Config;
   query?: UseQueryParameters;
-}): UseQueryResult
+}): UseQueryResult;
 ```
-
 
 ## Parameters
 
@@ -57,20 +54,19 @@ Type: `UseQueryParameters` (optional)
 
 TanStack React Query options (excluding `gcTime` and `staleTime` which are managed internally).
 
-
 ## Returns
 
 Returns a TanStack React Query result:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `data` | `WalletGetPermissionsResponse` | Array of permissions |
-| `isLoading` | `boolean` | Whether initial load is in progress |
-| `isFetching` | `boolean` | Whether any fetch is in progress |
-| `isSuccess` | `boolean` | Whether query succeeded |
-| `isError` | `boolean` | Whether query failed |
-| `error` | `Error` | Error if query failed |
-| `refetch` | `function` | Manually refetch permissions |
+| Property     | Type                           | Description                         |
+| ------------ | ------------------------------ | ----------------------------------- |
+| `data`       | `WalletGetPermissionsResponse` | Array of permissions                |
+| `isLoading`  | `boolean`                      | Whether initial load is in progress |
+| `isFetching` | `boolean`                      | Whether any fetch is in progress    |
+| `isSuccess`  | `boolean`                      | Whether query succeeded             |
+| `isError`    | `boolean`                      | Whether query failed                |
+| `error`      | `Error`                        | Error if query failed               |
+| `refetch`    | `function`                     | Manually refetch permissions        |
 
 ### data
 
@@ -97,14 +93,12 @@ interface Permission {
 }
 ```
 
-
 ## Behavior
 
 1. **Auto-enables** when wallet is connected
 2. **Listens for changes** via `permissionsChanged` event
 3. **Auto-refetches** when permissions change on-chain
 4. **Caches indefinitely** until invalidated by events
-
 
 ## Examples
 

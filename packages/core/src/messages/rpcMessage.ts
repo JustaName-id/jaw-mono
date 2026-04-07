@@ -19,23 +19,23 @@ export type EncryptedData = {
 export interface RPCRequestMessage extends RPCMessage {
     content:
         | {
-        handshake: RequestArguments;
-        chain: Chain;
-    }
+              handshake: RequestArguments;
+              chain: Chain;
+          }
         | {
-        encrypted: EncryptedData;
-    };
+              encrypted: EncryptedData;
+          };
 }
 
 export interface RPCResponseMessage extends RPCMessage {
     requestId: MessageID;
     content:
         | {
-        encrypted: EncryptedData;
-    }
+              encrypted: EncryptedData;
+          }
         | {
-        failure: SerializedEthereumRpcError;
-    };
+              failure: SerializedEthereumRpcError;
+          };
 }
 
 export type RPCRequest = {
@@ -52,14 +52,13 @@ export type RPCResponseNativeCurrency = {
 export type RPCResponse = {
     result:
         | {
-        value: unknown; // JSON-RPC result
-    }
+              value: unknown; // JSON-RPC result
+          }
         | {
-        error: SerializedEthereumRpcError;
-    };
+              error: SerializedEthereumRpcError;
+          };
     data?: {
         chains?: { [key: number]: Chain };
         capabilities?: Record<`0x${string}`, Record<string, unknown>>;
     };
 };
-

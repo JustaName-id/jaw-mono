@@ -1,4 +1,4 @@
-import { JSX } from "react";
+import { JSX } from 'react';
 export interface SiweDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

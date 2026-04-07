@@ -8,14 +8,14 @@ An EOA is Ethereum's original account type. Your address is derived from your pu
 
 This has direct consequences:
 
-| Property | EOA Behavior |
-|----------|-------------|
-| **Key loss** | Account is permanently inaccessible |
-| **Key compromise** | Attacker has full, unrestricted control |
-| **Key rotation** | Impossible — the key _is_ the address |
-| **Multi-signer** | Not supported natively |
-| **Spending limits** | Not possible at the account level |
-| **Recovery** | Only through the seed phrase |
+| Property            | EOA Behavior                            |
+| ------------------- | --------------------------------------- |
+| **Key loss**        | Account is permanently inaccessible     |
+| **Key compromise**  | Attacker has full, unrestricted control |
+| **Key rotation**    | Impossible — the key _is_ the address   |
+| **Multi-signer**    | Not supported natively                  |
+| **Spending limits** | Not possible at the account level       |
+| **Recovery**        | Only through the seed phrase            |
 
 Every embedded wallet provider, KMS solution, and MPC protocol is ultimately building infrastructure to manage this single point of failure. The key still has unlimited authority. The architecture just makes sure you never have to see it.
 
@@ -25,14 +25,14 @@ A smart account is an onchain smart contract that acts as your account. Your add
 
 This unlinking changes the security model fundamentally:
 
-| Property | Smart Account Behavior |
-|----------|----------------------|
-| **Signer loss** | Replace it — account address doesn't change |
-| **Signer compromise** | Revoke it — attacker is locked out, assets stay safe |
-| **Signer rotation** | Swap signers freely, identity is preserved |
-| **Multi-signer** | Multiple signers with different scopes |
-| **Spending limits** | Enforced at the account level per signer |
-| **Recovery** | Programmable: backup signers, guardians, social recovery |
+| Property              | Smart Account Behavior                                   |
+| --------------------- | -------------------------------------------------------- |
+| **Signer loss**       | Replace it — account address doesn't change              |
+| **Signer compromise** | Revoke it — attacker is locked out, assets stay safe     |
+| **Signer rotation**   | Swap signers freely, identity is preserved               |
+| **Multi-signer**      | Multiple signers with different scopes                   |
+| **Spending limits**   | Enforced at the account level per signer                 |
+| **Recovery**          | Programmable: backup signers, guardians, social recovery |
 
 The account is no longer a function of the key. The key is a replaceable, constrainable input to the account.
 
@@ -65,7 +65,7 @@ With JAW, the upgrade is a single flag:
 const account = await Account.fromLocalAccount(
   { chainId: 8453, apiKey: 'YOUR_API_KEY' },
   localAccount,
-  { eip7702: true }  // Preserves the EOA address
+  { eip7702: true } // Preserves the EOA address
 );
 ```
 

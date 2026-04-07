@@ -1,5 +1,5 @@
 import { SerializedEthereumRpcError } from '../errors/index.js';
-import {Address} from "viem";
+import { Address } from 'viem';
 
 export type SignInWithEthereumCapabilityRequest = {
     nonce: string;
@@ -16,13 +16,12 @@ export type SignInWithEthereumCapabilityRequest = {
     resources?: string[];
 };
 
-
 export type SignInWithEthereumCapabilityResponse = {
     message: string;
     signature: `0x${string}`;
 };
 
-export type SubnameTextRecordCapabilityRequest = Array<{ key: string; value: string }>
+export type SubnameTextRecordCapabilityRequest = Array<{ key: string; value: string }>;
 
 /**
  * Response from subname text record capability.

@@ -1,26 +1,9 @@
 'use client';
 
 import { useEffect, useMemo, useRef } from 'react';
-import {
-  type Config,
-  type ResolvedRegister,
-  useAccount,
-  useChainId,
-  useConfig,
-  useConnectors,
-} from 'wagmi';
-import {
-  type UseMutationParameters,
-  type UseQueryParameters,
-  type UseQueryReturnType,
-} from 'wagmi/query';
-import {
-  type UseMutationResult,
-  useMutation,
-  useQuery,
-  useQueryClient,
-  skipToken,
-} from '@tanstack/react-query';
+import { type Config, type ResolvedRegister, useAccount, useChainId, useConfig, useConnectors } from 'wagmi';
+import { type UseMutationParameters, type UseQueryParameters, type UseQueryReturnType } from 'wagmi/query';
+import { type UseMutationResult, useMutation, useQuery, useQueryClient, skipToken } from '@tanstack/react-query';
 import type { EIP1193Provider } from 'viem';
 import {
   connect,
@@ -33,26 +16,21 @@ import {
   sign,
   getCallsHistory,
 } from './core.js';
-import { getPermissionsQueryKey, getAssetsQueryKey, getCapabilitiesQueryKey, getCallsHistoryQueryKey } from './query.js';
+import {
+  getPermissionsQueryKey,
+  getAssetsQueryKey,
+  getCapabilitiesQueryKey,
+  getCallsHistoryQueryKey,
+} from './query.js';
 
 // ============================================================================
 // useConnect
 // ============================================================================
 
 export namespace useConnect {
-  export type Parameters<
-    config extends Config = Config,
-    context = unknown,
-  > = {
+  export type Parameters<config extends Config = Config, context = unknown> = {
     config?: config;
-    mutation?:
-      | UseMutationParameters<
-          connect.ReturnType,
-          connect.ErrorType,
-          connect.Parameters,
-          context
-        >
-      | undefined;
+    mutation?: UseMutationParameters<connect.ReturnType, connect.ErrorType, connect.Parameters, context> | undefined;
   };
 
   export type ReturnType<context = unknown> = UseMutationResult<
@@ -84,11 +62,8 @@ export namespace useConnect {
  * });
  * ```
  */
-export function useConnect<
-  config extends Config = ResolvedRegister['config'],
-  context = unknown,
->(
-  parameters: useConnect.Parameters<config, context> = {},
+export function useConnect<config extends Config = ResolvedRegister['config'], context = unknown>(
+  parameters: useConnect.Parameters<config, context> = {}
 ): useConnect.ReturnType<context> {
   const { mutation } = parameters;
   const config = useConfig(parameters as { config?: Config });
@@ -107,10 +82,7 @@ export function useConnect<
 // ============================================================================
 
 export namespace useGrantPermissions {
-  export type Parameters<
-    config extends Config = Config,
-    context = unknown,
-  > = {
+  export type Parameters<config extends Config = Config, context = unknown> = {
     config?: config;
     mutation?:
       | UseMutationParameters<
@@ -122,10 +94,7 @@ export namespace useGrantPermissions {
       | undefined;
   };
 
-  export type ReturnType<
-    config extends Config = Config,
-    context = unknown,
-  > = UseMutationResult<
+  export type ReturnType<config extends Config = Config, context = unknown> = UseMutationResult<
     grantPermissions.ReturnType,
     grantPermissions.ErrorType,
     grantPermissions.Parameters<config>,
@@ -150,11 +119,8 @@ export namespace useGrantPermissions {
  * });
  * ```
  */
-export function useGrantPermissions<
-  config extends Config = ResolvedRegister['config'],
-  context = unknown,
->(
-  parameters: useGrantPermissions.Parameters<config, context> = {},
+export function useGrantPermissions<config extends Config = ResolvedRegister['config'], context = unknown>(
+  parameters: useGrantPermissions.Parameters<config, context> = {}
 ): useGrantPermissions.ReturnType<config, context> {
   const { mutation } = parameters;
   const config = useConfig(parameters as { config?: Config });
@@ -173,10 +139,7 @@ export function useGrantPermissions<
 // ============================================================================
 
 export namespace useRevokePermissions {
-  export type Parameters<
-    config extends Config = Config,
-    context = unknown,
-  > = {
+  export type Parameters<config extends Config = Config, context = unknown> = {
     config?: config;
     mutation?:
       | UseMutationParameters<
@@ -188,10 +151,7 @@ export namespace useRevokePermissions {
       | undefined;
   };
 
-  export type ReturnType<
-    config extends Config = Config,
-    context = unknown,
-  > = UseMutationResult<
+  export type ReturnType<config extends Config = Config, context = unknown> = UseMutationResult<
     revokePermissions.ReturnType,
     revokePermissions.ErrorType,
     revokePermissions.Parameters<config>,
@@ -211,11 +171,8 @@ export namespace useRevokePermissions {
  * });
  * ```
  */
-export function useRevokePermissions<
-  config extends Config = ResolvedRegister['config'],
-  context = unknown,
->(
-  parameters: useRevokePermissions.Parameters<config, context> = {},
+export function useRevokePermissions<config extends Config = ResolvedRegister['config'], context = unknown>(
+  parameters: useRevokePermissions.Parameters<config, context> = {}
 ): useRevokePermissions.ReturnType<config, context> {
   const { mutation } = parameters;
   const config = useConfig(parameters as { config?: Config });
@@ -252,8 +209,10 @@ export namespace usePermissions {
       | undefined;
   };
 
-  export type ReturnType<selectData = getPermissions.ReturnType> =
-    UseQueryReturnType<selectData, getPermissions.ErrorType>;
+  export type ReturnType<selectData = getPermissions.ReturnType> = UseQueryReturnType<
+    selectData,
+    getPermissions.ErrorType
+  >;
 }
 
 /**
@@ -271,9 +230,7 @@ export namespace usePermissions {
 export function usePermissions<
   config extends Config = ResolvedRegister['config'],
   selectData = getPermissions.ReturnType,
->(
-  parameters: usePermissions.Parameters<config, selectData> = {},
-): usePermissions.ReturnType<selectData> {
+>(parameters: usePermissions.Parameters<config, selectData> = {}): usePermissions.ReturnType<selectData> {
   const { query = {}, ...rest } = parameters;
 
   const config = useConfig(rest as { config?: Config });
@@ -294,9 +251,7 @@ export function usePermissions<
   const isConnected = status === 'connected' || (status === 'reconnecting' && activeConnector?.getProvider);
   const canQueryDisconnected = Boolean(targetAddress && activeConnector?.getProvider);
 
-  const enabled = Boolean(
-    (isConnected || canQueryDisconnected) && (query.enabled ?? true),
-  );
+  const enabled = Boolean((isConnected || canQueryDisconnected) && (query.enabled ?? true));
 
   const queryKey = useMemo(
     () =>
@@ -305,7 +260,7 @@ export function usePermissions<
         chainId: parameters.chainId ?? chainId,
         connector: activeConnector,
       }),
-    [targetAddress, chainId, parameters.chainId, activeConnector],
+    [targetAddress, chainId, parameters.chainId, activeConnector]
   );
 
   // Set up event listener for permission changes
@@ -374,18 +329,10 @@ export function usePermissions<
 // ============================================================================
 
 export namespace useDisconnect {
-  export type Parameters<
-    config extends Config = Config,
-    context = unknown,
-  > = {
+  export type Parameters<config extends Config = Config, context = unknown> = {
     config?: config;
     mutation?:
-      | UseMutationParameters<
-          disconnect.ReturnType,
-          disconnect.ErrorType,
-          disconnect.Parameters,
-          context
-        >
+      | UseMutationParameters<disconnect.ReturnType, disconnect.ErrorType, disconnect.Parameters, context>
       | undefined;
   };
 
@@ -411,11 +358,8 @@ export namespace useDisconnect {
  * disconnectWallet({ connector: jawWallet({ apiKey: 'xxx' }) });
  * ```
  */
-export function useDisconnect<
-  config extends Config = ResolvedRegister['config'],
-  context = unknown,
->(
-  parameters: useDisconnect.Parameters<config, context> = {},
+export function useDisconnect<config extends Config = ResolvedRegister['config'], context = unknown>(
+  parameters: useDisconnect.Parameters<config, context> = {}
 ): useDisconnect.ReturnType<context> {
   const { mutation } = parameters;
   const config = useConfig(parameters as { config?: Config });
@@ -441,19 +385,13 @@ export namespace useGetAssets {
     config?: config;
     query?:
       | Omit<
-          UseQueryParameters<
-            getAssets.ReturnType,
-            getAssets.ErrorType,
-            selectData,
-            getAssetsQueryKey.Value<config>
-          >,
+          UseQueryParameters<getAssets.ReturnType, getAssets.ErrorType, selectData, getAssetsQueryKey.Value<config>>,
           'gcTime' | 'staleTime'
         >
       | undefined;
   };
 
-  export type ReturnType<selectData = getAssets.ReturnType> =
-    UseQueryReturnType<selectData, getAssets.ErrorType>;
+  export type ReturnType<selectData = getAssets.ReturnType> = UseQueryReturnType<selectData, getAssets.ErrorType>;
 }
 
 /**
@@ -474,11 +412,8 @@ export namespace useGetAssets {
  * const { data } = useGetAssets({ assetTypeFilter: ['erc20'] });
  * ```
  */
-export function useGetAssets<
-  config extends Config = ResolvedRegister['config'],
-  selectData = getAssets.ReturnType,
->(
-  parameters: useGetAssets.Parameters<config, selectData> = {},
+export function useGetAssets<config extends Config = ResolvedRegister['config'], selectData = getAssets.ReturnType>(
+  parameters: useGetAssets.Parameters<config, selectData> = {}
 ): useGetAssets.ReturnType<selectData> {
   const { query = {}, ...rest } = parameters;
 
@@ -500,9 +435,7 @@ export function useGetAssets<
   const isConnected = status === 'connected' || (status === 'reconnecting' && activeConnector?.getProvider);
   const canQueryDisconnected = Boolean(targetAddress && activeConnector?.getProvider);
 
-  const enabled = Boolean(
-    (isConnected || canQueryDisconnected) && (query.enabled ?? true),
-  );
+  const enabled = Boolean((isConnected || canQueryDisconnected) && (query.enabled ?? true));
 
   const queryKey = useMemo(
     () =>
@@ -522,7 +455,7 @@ export function useGetAssets<
       parameters.chainFilter,
       parameters.assetTypeFilter,
       parameters.assetFilter,
-    ],
+    ]
   );
 
   // Set up event listener for asset changes (e.g., after transactions)
@@ -578,12 +511,14 @@ export function useGetAssets<
 
           return provider.request({
             method: 'wallet_getAssets' as never,
-            params: [{
-              account: targetAddress,
-              chainFilter: parameters.chainFilter,
-              assetTypeFilter: parameters.assetTypeFilter,
-              assetFilter: parameters.assetFilter,
-            }] as never,
+            params: [
+              {
+                account: targetAddress,
+                chainFilter: parameters.chainFilter,
+                assetTypeFilter: parameters.assetTypeFilter,
+                assetFilter: parameters.assetFilter,
+              },
+            ] as never,
           }) as Promise<getAssets.ReturnType>;
         }
       : skipToken,
@@ -615,8 +550,10 @@ export namespace useCapabilities {
       | undefined;
   };
 
-  export type ReturnType<selectData = getCapabilities.ReturnType> =
-    UseQueryReturnType<selectData, getCapabilities.ErrorType>;
+  export type ReturnType<selectData = getCapabilities.ReturnType> = UseQueryReturnType<
+    selectData,
+    getCapabilities.ErrorType
+  >;
 }
 
 /**
@@ -638,9 +575,7 @@ export namespace useCapabilities {
 export function useCapabilities<
   config extends Config = ResolvedRegister['config'],
   selectData = getCapabilities.ReturnType,
->(
-  parameters: useCapabilities.Parameters<config, selectData> = {},
-): useCapabilities.ReturnType<selectData> {
+>(parameters: useCapabilities.Parameters<config, selectData> = {}): useCapabilities.ReturnType<selectData> {
   const { query = {}, ...rest } = parameters;
 
   const config = useConfig(rest as { config?: Config });
@@ -660,9 +595,7 @@ export function useCapabilities<
   const isConnected = status === 'connected' || (status === 'reconnecting' && activeConnector?.getProvider);
   const canQueryDisconnected = Boolean(activeConnector?.getProvider);
 
-  const enabled = Boolean(
-    (isConnected || canQueryDisconnected) && (query.enabled ?? true),
-  );
+  const enabled = Boolean((isConnected || canQueryDisconnected) && (query.enabled ?? true));
 
   const queryKey = useMemo(
     () =>
@@ -672,7 +605,7 @@ export function useCapabilities<
         connector: activeConnector,
         chainFilter: parameters.chainFilter,
       }),
-    [targetAddress, chainId, parameters.chainId, activeConnector, parameters.chainFilter],
+    [targetAddress, chainId, parameters.chainId, activeConnector, parameters.chainFilter]
   );
 
   return useQuery({
@@ -709,25 +642,12 @@ export function useCapabilities<
 // ============================================================================
 
 export namespace useSign {
-  export type Parameters<
-    config extends Config = Config,
-    context = unknown,
-  > = {
+  export type Parameters<config extends Config = Config, context = unknown> = {
     config?: config;
-    mutation?:
-      | UseMutationParameters<
-          sign.ReturnType,
-          sign.ErrorType,
-          sign.Parameters<config>,
-          context
-        >
-      | undefined;
+    mutation?: UseMutationParameters<sign.ReturnType, sign.ErrorType, sign.Parameters<config>, context> | undefined;
   };
 
-  export type ReturnType<
-    config extends Config = Config,
-    context = unknown,
-  > = UseMutationResult<
+  export type ReturnType<config extends Config = Config, context = unknown> = UseMutationResult<
     sign.ReturnType,
     sign.ErrorType,
     sign.Parameters<config>,
@@ -774,11 +694,8 @@ export namespace useSign {
  * });
  * ```
  */
-export function useSign<
-  config extends Config = ResolvedRegister['config'],
-  context = unknown,
->(
-  parameters: useSign.Parameters<config, context> = {},
+export function useSign<config extends Config = ResolvedRegister['config'], context = unknown>(
+  parameters: useSign.Parameters<config, context> = {}
 ): useSign.ReturnType<config, context> {
   const { mutation } = parameters;
   const config = useConfig(parameters as { config?: Config });
@@ -815,8 +732,10 @@ export namespace useGetCallsHistory {
       | undefined;
   };
 
-  export type ReturnType<selectData = getCallsHistory.ReturnType> =
-    UseQueryReturnType<selectData, getCallsHistory.ErrorType>;
+  export type ReturnType<selectData = getCallsHistory.ReturnType> = UseQueryReturnType<
+    selectData,
+    getCallsHistory.ErrorType
+  >;
 }
 
 /**
@@ -842,9 +761,7 @@ export namespace useGetCallsHistory {
 export function useGetCallsHistory<
   config extends Config = ResolvedRegister['config'],
   selectData = getCallsHistory.ReturnType,
->(
-  parameters: useGetCallsHistory.Parameters<config, selectData> = {},
-): useGetCallsHistory.ReturnType<selectData> {
+>(parameters: useGetCallsHistory.Parameters<config, selectData> = {}): useGetCallsHistory.ReturnType<selectData> {
   const { query = {}, ...rest } = parameters;
 
   const config = useConfig(rest as { config?: Config });
@@ -864,9 +781,7 @@ export function useGetCallsHistory<
   const isConnected = status === 'connected' || (status === 'reconnecting' && activeConnector?.getProvider);
   const canQueryDisconnected = Boolean(targetAddress && activeConnector?.getProvider);
 
-  const enabled = Boolean(
-    (isConnected || canQueryDisconnected) && (query.enabled ?? true),
-  );
+  const enabled = Boolean((isConnected || canQueryDisconnected) && (query.enabled ?? true));
 
   const queryKey = useMemo(
     () =>
@@ -878,7 +793,7 @@ export function useGetCallsHistory<
         limit: parameters.limit,
         sort: parameters.sort,
       }),
-    [targetAddress, chainId, parameters.chainId, activeConnector, parameters.index, parameters.limit, parameters.sort],
+    [targetAddress, chainId, parameters.chainId, activeConnector, parameters.index, parameters.limit, parameters.sort]
   );
 
   return useQuery({
@@ -902,13 +817,15 @@ export function useGetCallsHistory<
 
           return provider.request({
             method: 'wallet_getCallsHistory' as never,
-            params: [{
-              address: targetAddress,
-              chainId: parameters.chainId,
-              index: parameters.index,
-              limit: parameters.limit,
-              sort: parameters.sort,
-            }] as never,
+            params: [
+              {
+                address: targetAddress,
+                chainId: parameters.chainId,
+                index: parameters.index,
+                limit: parameters.limit,
+                sort: parameters.sort,
+              },
+            ] as never,
           }) as Promise<getCallsHistory.ReturnType>;
         }
       : skipToken,
@@ -916,4 +833,3 @@ export function useGetCallsHistory<
     staleTime: 30_000, // Cache for 30 seconds
   }) as useGetCallsHistory.ReturnType<selectData>;
 }
-

@@ -4,39 +4,41 @@ Broadcast a transaction to the network.
 
 **Authentication Required:** Yes
 
-
 ## Request
 
 ```typescript
 await jaw.provider.request({
   method: 'eth_sendTransaction',
-  params: [{
-    to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-    value: '0x9184e72a000',
-    data: '0x',
-  }],
+  params: [
+    {
+      to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+      value: '0x9184e72a000',
+      data: '0x',
+    },
+  ],
 });
 ```
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `to` | `0x${string}` | Yes | Recipient address |
-| `value` | `0x${string}` | No | Amount in wei (hexadecimal) |
-| `data` | `0x${string}` | No | Transaction data (hexadecimal) |
-| `chainId` | `0x${string}` | No | Target chain ID (defaults to connected chain) |
+| Name      | Type          | Required | Description                                   |
+| --------- | ------------- | -------- | --------------------------------------------- |
+| `to`      | `0x${string}` | Yes      | Recipient address                             |
+| `value`   | `0x${string}` | No       | Amount in wei (hexadecimal)                   |
+| `data`    | `0x${string}` | No       | Transaction data (hexadecimal)                |
+| `chainId` | `0x${string}` | No       | Target chain ID (defaults to connected chain) |
 
 ### Example
 
 ```typescript
-[{
-  "to": "0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb",
-  "value": "0x9184e72a000",
-  "data": "0x"
-}]
+[
+  {
+    to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+    value: '0x9184e72a000',
+    data: '0x',
+  },
+];
 ```
-
 
 ## Response
 
@@ -47,9 +49,8 @@ Returns the transaction hash after the transaction is submitted.
 ### Example
 
 ```typescript
-"0xabc123def456..."
+'0xabc123def456...';
 ```
-
 
 ## Behavior
 
@@ -58,15 +59,13 @@ Returns the transaction hash after the transaction is submitted.
 - Transaction is sponsored by paymaster if configured
 - Returns transaction hash after submission
 
-
 ## Errors
 
-| Code | Description |
-|------|-------------|
-| 4001 | User rejected the request |
-| 4100 | Unauthorized (not authenticated) |
-| -32602 | Invalid params |
-
+| Code   | Description                      |
+| ------ | -------------------------------- |
+| 4001   | User rejected the request        |
+| 4100   | Unauthorized (not authenticated) |
+| -32602 | Invalid params                   |
 
 ## Example Usage
 
@@ -75,10 +74,12 @@ Returns the transaction hash after the transaction is submitted.
 ```typescript
 const txHash = await jaw.provider.request({
   method: 'eth_sendTransaction',
-  params: [{
-    to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
-    value: '0xde0b6b3a7640000', // 1 ETH in wei (hex)
-  }],
+  params: [
+    {
+      to: '0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb',
+      value: '0xde0b6b3a7640000', // 1 ETH in wei (hex)
+    },
+  ],
 });
 
 console.log('Transaction hash:', txHash);
@@ -91,27 +92,30 @@ import { encodeFunctionData } from 'viem';
 
 // Encode ERC-20 transfer function
 const data = encodeFunctionData({
-  abi: [{
-    name: 'transfer',
-    type: 'function',
-    inputs: [
-      { name: 'to', type: 'address' },
-      { name: 'amount', type: 'uint256' },
-    ],
-  }],
+  abi: [
+    {
+      name: 'transfer',
+      type: 'function',
+      inputs: [
+        { name: 'to', type: 'address' },
+        { name: 'amount', type: 'uint256' },
+      ],
+    },
+  ],
   functionName: 'transfer',
   args: ['0x742d35Cc6634C0532925a3b844Bc9e7595f0bEb', 1000000n],
 });
 
 const txHash = await jaw.provider.request({
   method: 'eth_sendTransaction',
-  params: [{
-    to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-    data,
-  }],
+  params: [
+    {
+      to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
+      data,
+    },
+  ],
 });
 ```
-
 
 ## Related Methods
 
