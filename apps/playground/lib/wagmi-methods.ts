@@ -108,16 +108,135 @@ export const WAGMI_METHODS: WagmiMethod[] = [
     category: 'wallet',
     description: 'Connect with JAW wallet using wallet_connect',
     requiresConnection: false,
-    parameters: [],
-    getCodeSnippet: () => `import { useConnect } from '@jaw.id/wagmi';
+    parameters: [
+      {
+        name: 'enableSiwe',
+        type: 'toggle',
+        label: 'Enable SIWE',
+        description: 'Request Sign-In with Ethereum capability',
+        required: false,
+        defaultValue: 'false',
+      },
+      {
+        name: 'siweStatement',
+        type: 'string',
+        label: 'SIWE Statement',
+        description: 'Human-readable statement for SIWE',
+        required: false,
+        defaultValue: 'Sign in with your JAW account',
+        showWhen: { param: 'enableSiwe', value: 'true' },
+      },
+      {
+        name: 'enableSubnameTextRecords',
+        type: 'toggle',
+        label: 'Enable Subname Text Records',
+        description: 'Request subname with text records (requires ENS configured)',
+        required: false,
+        defaultValue: 'false',
+      },
+      {
+        name: 'subnameTextRecords',
+        type: 'json',
+        label: 'Text Records (JSON)',
+        description: 'Array of { key, value } records to set on the subname',
+        required: false,
+        defaultValue: JSON.stringify(
+          [
+            { key: 'com.twitter', value: '@myhandle' },
+            { key: 'com.github', value: 'myusername' },
+          ],
+          null,
+          2
+        ),
+        showWhen: { param: 'enableSubnameTextRecords', value: 'true' },
+      },
+    ],
+    getCodeSnippet: (params) => {
+      const enableSiwe = params.enableSiwe === 'true';
+      const enableSubnameTextRecords = params.enableSubnameTextRecords === 'true';
+
+      const capabilities: string[] = [];
+
+      if (enableSiwe) {
+        capabilities.push(`      signInWithEthereum: {
+        nonce,
+        chainId: '0x1',
+        statement: '${params.siweStatement || 'Sign in with your JAW account'}',
+      }`);
+      }
+
+      if (enableSubnameTextRecords) {
+        const records = params.subnameTextRecords || '[{ "key": "com.twitter", "value": "@myhandle" }]';
+        capabilities.push(`      subnameTextRecords: ${records}`);
+      }
+
+      if (capabilities.length > 0) {
+        const nonceDecl = enableSiwe ? 'const nonce = crypto.randomUUID();\n\n' : '';
+        return `${nonceDecl}import { useConnect } from '@jaw.id/wagmi';
 import { useConnect as useWagmiConnect } from 'wagmi';
 
 const { connectors } = useWagmiConnect();
 const { mutate: connect } = useConnect();
 
 const jawConnector = connectors.find(c => c.id === 'jaw');
-connect({ connector: jawConnector });`,
-    buildParams: () => ({}),
+connect({
+  connector: jawConnector,
+  capabilities: {
+${capabilities.join(',\n')}
+  },
+});${
+          enableSiwe
+            ? `
+
+// Access SIWE result
+// result.accounts[0]?.capabilities?.signInWithEthereum`
+            : ''
+        }${
+          enableSubnameTextRecords
+            ? `
+
+// Access subname result
+// result.accounts[0]?.capabilities?.subnameTextRecords`
+            : ''
+        }`;
+      }
+
+      return `import { useConnect } from '@jaw.id/wagmi';
+import { useConnect as useWagmiConnect } from 'wagmi';
+
+const { connectors } = useWagmiConnect();
+const { mutate: connect } = useConnect();
+
+const jawConnector = connectors.find(c => c.id === 'jaw');
+connect({ connector: jawConnector });`;
+    },
+    buildParams: (params) => {
+      const enableSiwe = params.enableSiwe === 'true';
+      const enableSubnameTextRecords = params.enableSubnameTextRecords === 'true';
+
+      if (!enableSiwe && !enableSubnameTextRecords) return {};
+
+      const capabilities: Record<string, unknown> = {};
+
+      if (enableSiwe) {
+        const nonce = Math.random().toString(36).substring(2, 15);
+        capabilities.signInWithEthereum = {
+          nonce,
+          chainId: '0x1',
+          statement: params.siweStatement || 'Sign in with your JAW account',
+        };
+      }
+
+      if (enableSubnameTextRecords) {
+        try {
+          capabilities.subnameTextRecords = JSON.parse(params.subnameTextRecords || '[]');
+        } catch {
+          capabilities.subnameTextRecords = [];
+        }
+      }
+
+      return { capabilities };
+    },
   },
   {
     id: 'jaw_disconnect',

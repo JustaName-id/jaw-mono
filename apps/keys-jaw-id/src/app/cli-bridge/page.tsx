@@ -300,43 +300,57 @@ function CLIBridgeContent() {
   // Validation
   if (!sessionId || !relayUrl) {
     return (
-      <div style={styles.container}>
-        <div style={styles.card}>
-          <img src="/jaw-logo.png" alt="JAW" style={styles.logo} />
-          <h1 style={styles.title}>JAW CLI</h1>
-          <p style={styles.error}>Error</p>
-          <p style={styles.subtext}>Missing required parameters: session, relay</p>
+      <div className="flex min-h-screen items-center justify-center font-sans">
+        <div className="max-w-md p-12 text-center">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img src="/jaw-logo.png" alt="JAW" className="mx-auto mb-4 block h-12 w-12 opacity-80" />
+          <h1 className="text-foreground mb-4 text-xl font-semibold">JAW CLI</h1>
+          <p className="text-destructive text-base font-semibold">Error</p>
+          <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+            Missing required parameters: session, relay
+          </p>
         </div>
       </div>
     );
   }
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <img src="/jaw-logo.png" alt="JAW" style={styles.logo} />
-        <h1 style={styles.title}>JAW CLI</h1>
+    <div className="flex min-h-screen items-center justify-center font-sans">
+      <div className="max-w-md p-12 text-center">
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src="/jaw-logo.png" alt="JAW" className="mx-auto mb-4 block h-12 w-12 opacity-80" />
+        <h1 className="text-foreground mb-4 text-xl font-semibold">JAW CLI</h1>
 
-        {state === 'connecting' && <p style={styles.text}>Connecting to relay...</p>}
+        {state === 'connecting' && (
+          <p className="text-muted-foreground mb-4 text-sm leading-relaxed">Connecting to relay...</p>
+        )}
 
         {state === 'connected' && (
           <>
-            <p style={styles.success}>Connected</p>
-            <p style={styles.subtext}>
+            <p className="text-base font-semibold text-emerald-600 dark:text-emerald-400">Connected</p>
+            <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
               This tab is your CLI&apos;s signing backend.
               <br />
               Keep it open while using the CLI.
             </p>
-            {lastMethod && <p style={styles.method}>Last request: {lastMethod}</p>}
+            {lastMethod && (
+              <p className="text-muted-foreground bg-muted mt-4 rounded p-2 font-mono text-xs">
+                Last request: {lastMethod}
+              </p>
+            )}
           </>
         )}
 
-        {state === 'disconnected' && <p style={styles.subtext}>CLI disconnected. You can close this tab.</p>}
+        {state === 'disconnected' && (
+          <p className="text-muted-foreground mt-2 text-sm leading-relaxed">
+            CLI disconnected. You can close this tab.
+          </p>
+        )}
 
         {state === 'error' && (
           <>
-            <p style={styles.error}>Error</p>
-            <p style={styles.subtext}>{error}</p>
+            <p className="text-destructive text-base font-semibold">Error</p>
+            <p className="text-muted-foreground mt-2 text-sm leading-relaxed">{error}</p>
           </>
         )}
       </div>
@@ -367,9 +381,9 @@ export default function CLIBridgePage() {
   return (
     <Suspense
       fallback={
-        <div style={styles.container}>
-          <div style={styles.card}>
-            <p style={styles.text}>Loading...</p>
+        <div className="flex min-h-screen items-center justify-center font-sans">
+          <div className="max-w-md p-12 text-center">
+            <p className="text-muted-foreground mb-4 text-sm leading-relaxed">Loading...</p>
           </div>
         </div>
       }
@@ -378,64 +392,3 @@ export default function CLIBridgePage() {
     </Suspense>
   );
 }
-
-const styles: Record<string, React.CSSProperties> = {
-  container: {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'center',
-    minHeight: '100vh',
-    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
-  },
-  card: {
-    textAlign: 'center',
-    padding: '3rem',
-    maxWidth: '420px',
-  },
-  logo: {
-    width: '48px',
-    height: '48px',
-    marginBottom: '1rem',
-    marginLeft: 'auto',
-    marginRight: 'auto',
-    display: 'block',
-    opacity: 0.8,
-  },
-  title: {
-    fontSize: '1.25rem',
-    fontWeight: 600,
-    marginBottom: '1rem',
-    color: '#111',
-  },
-  text: {
-    color: '#555',
-    fontSize: '0.95rem',
-    lineHeight: 1.5,
-    marginBottom: '1rem',
-  },
-  subtext: {
-    color: '#888',
-    fontSize: '0.85rem',
-    lineHeight: 1.5,
-    marginTop: '0.5rem',
-  },
-  method: {
-    color: '#666',
-    fontSize: '0.8rem',
-    fontFamily: 'monospace',
-    marginTop: '1rem',
-    padding: '0.5rem',
-    backgroundColor: '#f5f5f5',
-    borderRadius: '4px',
-  },
-  success: {
-    color: '#16a34a',
-    fontSize: '1.1rem',
-    fontWeight: 600,
-  },
-  error: {
-    color: '#dc2626',
-    fontSize: '1.1rem',
-    fontWeight: 600,
-  },
-};

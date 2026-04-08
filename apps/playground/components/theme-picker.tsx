@@ -16,10 +16,24 @@ const ACCENT_PRESETS = [
 const RADIUS_OPTIONS: JawBorderRadius[] = ['sm', 'md', 'lg'];
 const MODE_OPTIONS: JawThemeMode[] = ['light', 'dark', 'auto'];
 
+/**
+ * SDK-only theme picker. Mode/accent/radius changes here affect the SDK
+ * dialogs only — they DO NOT change the playground's own theme. Use the
+ * sun/moon button in the page header for the global playground theme.
+ *
+ * The picker's mode === 'auto' means "follow the playground" (because the
+ * SDK's auto mode reads <html class="dark|light"> set by next-themes).
+ */
 export function ThemePicker({ theme, onThemeChange }: { theme: JawTheme; onThemeChange: (theme: JawTheme) => void }) {
+  const effectiveMode: JawThemeMode = theme.mode ?? 'auto';
+
   return (
     <Card className="p-4">
       <h3 className="mb-3 text-sm font-semibold">Theme (SDK Dialogs)</h3>
+      <p className="text-muted-foreground mb-3 text-xs">
+        These settings affect SDK dialogs only. Use the sun/moon button at the top to change the playground theme. Set
+        mode to <code className="bg-muted rounded px-1">auto</code> to follow the playground.
+      </p>
       <div className="flex flex-wrap gap-4">
         {/* Mode */}
         <div className="flex flex-col gap-1">
@@ -30,7 +44,7 @@ export function ThemePicker({ theme, onThemeChange }: { theme: JawTheme; onTheme
                 key={m}
                 onClick={() => onThemeChange({ ...theme, mode: m })}
                 className={`rounded px-2 py-1 text-xs transition-colors ${
-                  (theme.mode ?? 'auto') === m
+                  effectiveMode === m
                     ? 'bg-primary text-primary-foreground'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
                 }`}
