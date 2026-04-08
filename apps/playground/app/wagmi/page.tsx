@@ -145,12 +145,11 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
         switch (method.hookType) {
           case 'jawConnect': {
             if (jawConnector) {
-              result = await jawConnect({
-                connector: jawConnector,
-                ...(params.capabilities && {
-                  capabilities: params.capabilities as import('@jaw.id/core').WalletConnectCapabilities,
-                }),
-              });
+              const connectParams: Parameters<typeof jawConnect>[0] = { connector: jawConnector };
+              if (params.capabilities) {
+                connectParams.capabilities = params.capabilities as import('@jaw.id/core').WalletConnectCapabilities;
+              }
+              result = await jawConnect(connectParams);
             }
             break;
           }
