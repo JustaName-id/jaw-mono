@@ -1,3 +1,13 @@
+## 0.1.10 (2026-04-08)
+
+### 🩹 Fixes
+
+- **playground:** added dark mode light mode in playground and auto theme mode on keys-jaw-id ([#162](https://github.com/JustaName-id/jaw-mono/pull/162))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.1.9 (2026-04-07)
 
 ### 🩹 Fixes
