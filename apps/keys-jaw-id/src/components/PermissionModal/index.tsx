@@ -332,6 +332,7 @@ export const PermissionModal = ({
         expiry: grantParams.expiry,
         spends: grantParams.permissions.spends || [],
         calls: grantParams.permissions.calls || [],
+        address: grantParams.address,
       };
     } else {
       const params = permissionRequest.params as WalletRevokePermissionsRequest['params'];
@@ -749,7 +750,8 @@ export const PermissionModal = ({
             calls: permissionDetails.calls,
           },
           computedPaymasterUrl,
-          computedPaymasterContext
+          computedPaymasterContext,
+          permissionDetails.address
         );
 
         console.log('Permissions granted:', result);
@@ -766,7 +768,12 @@ export const PermissionModal = ({
         }
 
         // Account.revokePermission with paymaster URL and context for ERC-20 payment
-        await account.revokePermission(permissionDetails.permissionId, computedPaymasterUrl, computedPaymasterContext);
+        await account.revokePermission(
+          permissionDetails.permissionId,
+          computedPaymasterUrl,
+          computedPaymasterContext,
+          permissionDetails.address
+        );
 
         console.log('Permission revoked');
         setStatus('Permission revoked successfully!');

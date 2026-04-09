@@ -7,7 +7,7 @@ Sign a personal message (EIP-191).
 ## Signature
 
 ```typescript
-async signMessage(message: string): Promise<Hex>
+async signMessage(message: string, options?: { address?: Address }): Promise<Hex>
 ```
 
 ## Parameters
@@ -17,6 +17,10 @@ async signMessage(message: string): Promise<Hex>
 Type: `string`
 
 The message to sign.
+
+### options (optional)
+
+Type: `{ address?: Address }`
 
 ## Returns
 
@@ -53,6 +57,17 @@ const account = await Account.fromLocalAccount({ chainId: 1, apiKey: 'your-api-k
 ```typescript
 const signature = await account.signMessage('Hello, World!');
 console.log('Signature:', signature);
+```
+
+### Signing from a Different Account
+
+Target account address to sign from. The signer must be a registered owner on that account.
+
+```typescript
+const otherAccountAddress = '0xOtherAccount...';
+const signature = await account.signMessage('Hello from another account', {
+  address: otherAccountAddress,
+});
 ```
 
 ### Sign-In with Ethereum (SIWE)

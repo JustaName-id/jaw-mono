@@ -10,7 +10,8 @@ Send a transaction and wait for the receipt.
 async sendTransaction(
   calls: TransactionCall[],
   paymasterUrlOverride?: string,
-  paymasterContextOverride?: Record<string, unknown>
+  paymasterContextOverride?: Record<string, unknown>,
+  from?: Address
 ): Promise<Hash>
 ```
 
@@ -50,6 +51,12 @@ Custom paymaster context. For ERC-20 payment, include the token address:
   token: '0xUSDC_ADDRESS...';
 }
 ```
+
+### from (optional)
+
+Type: `Address`
+
+Target account address to execute from. The signer must be a registered owner on that account.
 
 ## Returns
 
@@ -119,6 +126,21 @@ const data = encodeFunctionData({
 });
 
 const hash = await account.sendTransaction([{ to: USDC_ADDRESS, data }]);
+```
+
+### Sending from a Different Account
+
+Target account address to execute from. The signer must be a registered owner on that account.
+
+```typescript
+import { parseEther } from 'viem';
+
+const hash = await account.sendTransaction(
+  [{ to: '0xRecipient...', value: parseEther('0.1') }],
+  undefined, // paymasterUrlOverride
+  undefined, // paymasterContextOverride
+  '0xOtherAccount...' // from
+);
 ```
 
 ## Related

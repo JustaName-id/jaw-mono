@@ -42,8 +42,8 @@ Optional settings for call execution.
 
 ```typescript
 interface SendCallsOptions {
-  /** Permission ID to use for executing the calls through the permission manager */
   permissionId?: Hex;
+  from?: Address;
 }
 ```
 
@@ -155,6 +155,14 @@ When using the `permissionId` option:
 - The calls are executed through the JustaPermissionManager contract
 - The permission's call and spend limits are enforced
 - The spender must have been granted appropriate permissions for the calls being made
+
+### Sending from a Different Account
+
+Target account address to execute from. The signer must be a registered owner on that account.
+
+```typescript
+const { id } = await account.sendCalls([{ to: '0x...', data: '0x...' }], { from: '0xOtherAccount...' });
+```
 
 ## sendTransaction vs sendCalls
 

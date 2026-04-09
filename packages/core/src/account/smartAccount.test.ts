@@ -80,11 +80,21 @@ import { createSmartAccountForAddress } from './smartAccount.js';
 const MOCK_TARGET_ADDRESS = '0x1234567890123456789012345678901234567890' as Address;
 const MOCK_PUBLIC_KEY =
     '0x04abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890ab' as Hex;
+const MOCK_LOCAL_ADDRESS = '0xabcdef0123456789abcdef0123456789abcdef01' as Address;
+const MOCK_LOCAL_ADDRESS_PADDED = '0x000000000000000000000000abcdef0123456789abcdef0123456789abcdef01' as Hex;
 const MOCK_BUNDLER_CLIENT = { chain: { id: 1 } } as any;
 const MOCK_WEBAUTHN_ACCOUNT = {
     type: 'webAuthn' as const,
     publicKey: MOCK_PUBLIC_KEY,
     sign: vi.fn(),
+} as any;
+const MOCK_LOCAL_ACCOUNT = {
+    type: 'local' as const,
+    address: MOCK_LOCAL_ADDRESS,
+    sign: vi.fn(),
+    signMessage: vi.fn(),
+    signTransaction: vi.fn(),
+    signTypedData: vi.fn(),
 } as any;
 
 describe('createSmartAccountForAddress', () => {
@@ -158,5 +168,35 @@ describe('createSmartAccountForAddress', () => {
             ownerIndex: 2,
             address: MOCK_TARGET_ADDRESS,
         });
+    });
+
+    it('creates smart account when local account address matches (padded to 32 bytes)', async () => {
+        const mockSmartAccount = { address: MOCK_TARGET_ADDRESS } as any;
+        vi.mocked(getCode).mockResolvedValue('0x1234' as Hex);
+        vi.mocked(readContract)
+            .mockResolvedValueOnce(1n) // ownerCount
+            .mockResolvedValueOnce(MOCK_LOCAL_ADDRESS_PADDED); // ownerAtIndex(0) matches padded address
+        vi.mocked(toJustanAccount).mockResolvedValue(mockSmartAccount);
+
+        const result = await createSmartAccountForAddress(MOCK_TARGET_ADDRESS, MOCK_LOCAL_ACCOUNT, MOCK_BUNDLER_CLIENT);
+
+        expect(result).toBe(mockSmartAccount);
+        expect(toJustanAccount).toHaveBeenCalledWith({
+            client: MOCK_BUNDLER_CLIENT,
+            owners: [MOCK_LOCAL_ACCOUNT, '0xf1b40E3D5701C04d86F7828f0EB367B9C90901D8'],
+            ownerIndex: 0,
+            address: MOCK_TARGET_ADDRESS,
+        });
+    });
+
+    it('throws if local account is not an owner', async () => {
+        vi.mocked(getCode).mockResolvedValue('0x1234' as Hex);
+        vi.mocked(readContract)
+            .mockResolvedValueOnce(1n) // ownerCount
+            .mockResolvedValueOnce('0x00000000000000000000000000000000aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa' as Hex); // ownerAtIndex(0) - no match
+
+        await expect(
+            createSmartAccountForAddress(MOCK_TARGET_ADDRESS, MOCK_LOCAL_ACCOUNT, MOCK_BUNDLER_CLIENT)
+        ).rejects.toThrow(`Signer is not an owner on account ${MOCK_TARGET_ADDRESS}`);
     });
 });

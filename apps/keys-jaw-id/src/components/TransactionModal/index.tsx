@@ -50,6 +50,8 @@ export interface TransactionRequestData {
   callsId?: string;
   // Permission ID for permission-based execution
   permissionId?: `0x${string}`;
+  // Account address to execute from
+  from?: `0x${string}`;
 }
 
 export interface TransactionModalProps {
@@ -372,9 +374,10 @@ export const TransactionModal = ({
       // Use sendCalls for wallet_sendCalls, sendTransaction for eth_sendTransaction
       if (transactionRequest?.method === 'wallet_sendCalls') {
         // Build options with permissionId if available
-        const options = transactionRequest?.permissionId
-          ? { permissionId: transactionRequest.permissionId }
-          : undefined;
+        const options =
+          transactionRequest?.permissionId || transactionRequest?.from
+            ? { permissionId: transactionRequest?.permissionId, from: transactionRequest?.from }
+            : undefined;
 
         const bundledResult = await account.sendCalls(
           transactionCalls,
@@ -388,7 +391,12 @@ export const TransactionModal = ({
           chainId: bundledResult.chainId,
         };
       } else {
-        const txHash = await account.sendTransaction(transactionCalls, computedPaymasterUrl, computedPaymasterContext);
+        const txHash = await account.sendTransaction(
+          transactionCalls,
+          computedPaymasterUrl,
+          computedPaymasterContext,
+          transactionRequest?.from
+        );
         result = {
           hash: txHash,
         };

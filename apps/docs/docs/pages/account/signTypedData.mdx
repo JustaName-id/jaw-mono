@@ -8,7 +8,8 @@ Sign EIP-712 typed data.
 
 ```typescript
 async signTypedData(
-  typedData: TypedDataDefinition<TypedData, string>
+  typedData: TypedDataDefinition<TypedData, string>,
+  options?: { address?: Address }
 ): Promise<Hex>
 ```
 
@@ -19,6 +20,10 @@ async signTypedData(
 Type: `TypedDataDefinition<TypedData, string>`
 
 The EIP-712 typed data to sign, including domain, types, primary type, and message.
+
+### options (optional)
+
+Type: `{ address?: Address }`
 
 ```typescript
 interface TypedDataDefinition {
@@ -89,6 +94,22 @@ const signature = await account.signTypedData({
     timestamp: BigInt(Date.now()),
   },
 });
+```
+
+### Signing from a Different Account
+
+Target account address to sign from. The signer must be a registered owner on that account.
+
+```typescript
+const signature = await account.signTypedData(
+  {
+    domain: { name: 'MyApp', version: '1', chainId: 1, verifyingContract: '0x...' },
+    types: { Message: [{ name: 'content', type: 'string' }] },
+    primaryType: 'Message',
+    message: { content: 'Hello' },
+  },
+  { address: '0xOtherAccount...' }
+);
 ```
 
 ## Related

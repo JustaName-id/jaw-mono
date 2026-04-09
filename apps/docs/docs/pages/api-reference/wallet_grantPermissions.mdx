@@ -43,6 +43,7 @@ await jaw.provider.request({
 | `expiry`       | `number`      | Yes      | Expiration timestamp (seconds)                |
 | `spender`      | `0x${string}` | Yes      | Address receiving permissions                 |
 | `permissions`  | `object`      | Yes      | Permission details                            |
+| `address`      | `0x${string}` | No       | Account address to grant permissions on       |
 | `chainId`      | `0x${string}` | No       | Target chain ID (defaults to connected chain) |
 | `capabilities` | `object`      | No       | Additional capabilities (see below)           |
 
