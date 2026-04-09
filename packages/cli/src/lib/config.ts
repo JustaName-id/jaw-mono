@@ -8,13 +8,24 @@ export function ensureDir(dir: string): void {
   fs.chmodSync(dir, 0o700);
 }
 
+function migrateConfig(config: JawConfig): JawConfig {
+  if (config.paymasterUrl && !config.paymasters) {
+    const chainId = config.defaultChain ?? 84532;
+    config.paymasters = { [chainId]: { url: config.paymasterUrl } };
+    delete config.paymasterUrl;
+    saveConfig(config);
+  }
+  return config;
+}
+
 export function loadConfig(): JawConfig {
   if (!fs.existsSync(PATHS.config)) {
     return {};
   }
   const raw = fs.readFileSync(PATHS.config, 'utf-8');
   try {
-    return JSON.parse(raw) as JawConfig;
+    const config = JSON.parse(raw) as JawConfig;
+    return migrateConfig(config);
   } catch {
     throw new Error(
       `Config file at ${PATHS.config} is not valid JSON. Run \`jaw config set apiKey=<key>\` to reset it.`

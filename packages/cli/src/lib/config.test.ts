@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as os from 'node:os';
+import type { JawConfig } from './types.js';
 
 const TEST_ROOT = path.join(os.tmpdir(), 'jaw-config-test');
 
@@ -63,5 +64,41 @@ describe('config', () => {
     saveConfig({ apiKey: 'old-key' });
     setConfigValue('apiKey', 'new-key');
     expect(loadConfig().apiKey).toBe('new-key');
+  });
+});
+
+describe('migrateConfig', () => {
+  it('migrates paymasterUrl to paymasters with defaultChain', () => {
+    saveConfig({
+      apiKey: 'test',
+      defaultChain: 84532,
+      paymasterUrl: 'https://pm.example.com',
+    } as JawConfig);
+    const config = loadConfig();
+    expect(config.paymasters).toEqual({
+      84532: { url: 'https://pm.example.com' },
+    });
+    expect(config.paymasterUrl).toBeUndefined();
+  });
+
+  it('migrates paymasterUrl to paymasters with fallback chain 84532', () => {
+    saveConfig({
+      apiKey: 'test',
+      paymasterUrl: 'https://pm.example.com',
+    } as JawConfig);
+    const config = loadConfig();
+    expect(config.paymasters).toEqual({
+      84532: { url: 'https://pm.example.com' },
+    });
+  });
+
+  it('does not migrate if paymasters already exists', () => {
+    saveConfig({
+      apiKey: 'test',
+      paymasters: { 1: { url: 'https://existing.com' } },
+      paymasterUrl: 'https://old.com',
+    } as JawConfig);
+    const config = loadConfig();
+    expect(config.paymasters).toEqual({ 1: { url: 'https://existing.com' } });
   });
 });
