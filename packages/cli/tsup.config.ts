@@ -26,6 +26,8 @@ export default defineConfig({
     'commands/mcp/index': 'src/commands/mcp/index.ts',
     'commands/rpc/call': 'src/commands/rpc/call.ts',
     'commands/session/setup': 'src/commands/session/setup.ts',
+    'commands/session/status': 'src/commands/session/status.ts',
+    'commands/session/revoke': 'src/commands/session/revoke.ts',
     // mcp
     'mcp/server': 'src/mcp/server.ts',
     'mcp/tools': 'src/mcp/tools.ts',
