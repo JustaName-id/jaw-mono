@@ -70,10 +70,17 @@ describe('SessionBridge', () => {
     expect(result).toEqual(['0xSession']);
   });
 
-  it('wallet_sendCalls extracts calls and injects permissionId', async () => {
+  it('wallet_sendCalls extracts calls and injects permissionId (array format)', async () => {
     const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
     const calls = [{ to: '0xTarget', value: '0x0' }];
     await bridge.request('wallet_sendCalls', [{ calls }]);
+    expect(mockSendCalls).toHaveBeenCalledWith(calls, { permissionId: '0xPermId' });
+  });
+
+  it('wallet_sendCalls handles direct object format from CLI', async () => {
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+    const calls = [{ to: '0xTarget', value: '0x0' }];
+    await bridge.request('wallet_sendCalls', { calls });
     expect(mockSendCalls).toHaveBeenCalledWith(calls, { permissionId: '0xPermId' });
   });
 

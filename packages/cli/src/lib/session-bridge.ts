@@ -80,26 +80,34 @@ export class SessionBridge {
         return [config.sessionAddress];
 
       case 'wallet_sendCalls': {
-        const [{ calls }] = params as [{ calls: Array<{ to: string; value?: string; data?: string }> }];
+        // params can be { calls } (from CLI JSON.parse) or [{ calls }] (EIP-5792 array format)
+        const payload = Array.isArray(params) ? params[0] : params;
+        const { calls } = payload as { calls: Array<{ to: string; value?: string; data?: string }> };
         return account.sendCalls(calls as Parameters<Account['sendCalls']>[0], {
           permissionId: config.permissionId as `0x${string}`,
         });
       }
 
       case 'wallet_getCallsStatus': {
-        const [batchId] = params as [string];
+        const batchId = Array.isArray(params) ? params[0] : params;
         return account.getCallStatus(batchId as `0x${string}`);
       }
 
       case 'personal_sign': {
-        const [message] = params as [string];
-        return account.signMessage(message);
+        const message = Array.isArray(params) ? params[0] : params;
+        return account.signMessage(message as string);
       }
 
       case 'eth_signTypedData_v4': {
-        const [, typedDataStr] = params as [string, string];
-        const typedData = typeof typedDataStr === 'string' ? JSON.parse(typedDataStr) : typedDataStr;
-        return account.signTypedData(typedData);
+        // params can be [address, typedDataStr] or just the typed data object
+        let typedData: unknown;
+        if (Array.isArray(params)) {
+          const raw = params.length > 1 ? params[1] : params[0];
+          typedData = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        } else {
+          typedData = typeof params === 'string' ? JSON.parse(params) : params;
+        }
+        return account.signTypedData(typedData as Parameters<Account['signTypedData']>[0]);
       }
 
       case 'wallet_grantPermissions':
