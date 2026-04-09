@@ -109,7 +109,7 @@ describe('createSmartAccountForAddress', () => {
 
         await expect(
             createSmartAccountForAddress(MOCK_TARGET_ADDRESS, MOCK_WEBAUTHN_ACCOUNT, MOCK_BUNDLER_CLIENT)
-        ).rejects.toThrow(`Passkey is not an owner on account ${MOCK_TARGET_ADDRESS}`);
+        ).rejects.toThrow(`Signer is not an owner on account ${MOCK_TARGET_ADDRESS}`);
     });
 
     it('creates smart account when passkey is owner at index 0', async () => {

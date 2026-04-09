@@ -1093,7 +1093,7 @@ export class Account {
     /**
      * Resolves which SmartAccount to use for an operation.
      * If overrideAddress is provided and differs from the default, creates a temporary
-     * SmartAccount for the target address using the current passkey.
+     * SmartAccount for the target address using the current signer.
      * @internal
      */
     private async resolveSmartAccount(overrideAddress?: Address): Promise<SmartAccount> {
@@ -1101,23 +1101,32 @@ export class Account {
             return this._smartAccount;
         }
 
-        if (!this._passkeyAccount) {
-            throw new Error('Address override is only supported for passkey-based accounts');
+        const bundlerClient = getBundlerClient(this._chain);
+
+        if (this._passkeyAccount) {
+            const webAuthnAccount = toWebAuthnAccount({
+                credential: {
+                    id: this._passkeyAccount.credentialId,
+                    publicKey: this._passkeyAccount.publicKey,
+                },
+            });
+
+            return await createSmartAccountForAddress(
+                overrideAddress,
+                webAuthnAccount,
+                bundlerClient as JustanAccountImplementation['client']
+            );
         }
 
-        const webAuthnAccount = toWebAuthnAccount({
-            credential: {
-                id: this._passkeyAccount.credentialId,
-                publicKey: this._passkeyAccount.publicKey,
-            },
-        });
+        if (this._localAccount) {
+            return await createSmartAccountForAddress(
+                overrideAddress,
+                this._localAccount,
+                bundlerClient as JustanAccountImplementation['client']
+            );
+        }
 
-        const bundlerClient = getBundlerClient(this._chain);
-        return await createSmartAccountForAddress(
-            overrideAddress,
-            webAuthnAccount,
-            bundlerClient as JustanAccountImplementation['client']
-        );
+        throw new Error('Address override requires a passkey or local account signer');
     }
 
     // ============================================

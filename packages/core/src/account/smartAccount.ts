@@ -593,14 +593,14 @@ export function formatPublicKey(publicKey: Hex): Hex {
 
 /**
  * Create a temporary SmartAccount instance for signing on behalf of a different account.
- * Verifies the passkey is a registered owner on the target account.
+ * Verifies the signer is a registered owner on the target account.
  */
 export async function createSmartAccountForAddress(
     targetAddress: Address,
-    account: WebAuthnAccount,
+    account: WebAuthnAccount | LocalAccount,
     bundlerClient: JustanAccountImplementation['client']
 ): Promise<SmartAccount> {
-    const ownerBytes: Hex = account.publicKey;
+    const ownerBytes: Hex = account.type === 'webAuthn' ? account.publicKey : account.address;
 
     const code = await getCode(bundlerClient, { address: targetAddress });
     if (!code) {
@@ -633,7 +633,7 @@ export async function createSmartAccountForAddress(
         }
     }
 
-    throw standardErrors.rpc.invalidParams(`Passkey is not an owner on account ${targetAddress}`);
+    throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
 }
 
 export async function createSmartAccountEip7702(
