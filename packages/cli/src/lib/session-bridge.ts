@@ -1,5 +1,4 @@
-import { Account } from '@jaw.id/core';
-import { privateKeyToAccount } from 'viem/accounts';
+import type { Account } from '@jaw.id/core';
 import { loadSessionKey } from './keystore.js';
 import { loadSessionConfig, type SessionConfig } from './session-config.js';
 import { loadConfig } from './config.js';
@@ -11,16 +10,18 @@ export interface SessionBridgeOptions {
   paymasterContext?: Record<string, unknown>;
 }
 
+interface InitializedSession {
+  account: Account;
+  config: SessionConfig;
+}
+
 export class SessionBridge {
   private readonly options: SessionBridgeOptions;
-  private account: Account | null = null;
-  private sessionConfig: SessionConfig | null = null;
-  private initialized = false;
+  private session: InitializedSession | null = null;
 
   constructor(options: SessionBridgeOptions) {
     this.options = { ...options };
 
-    // Resolve paymaster from config if not provided
     if (!this.options.paymasterUrl) {
       const config = loadConfig();
       const pm = config.paymasters?.[this.options.chainId];
@@ -31,20 +32,20 @@ export class SessionBridge {
     }
   }
 
-  private async init(): Promise<void> {
-    if (this.initialized) return;
+  private async getSession(): Promise<InitializedSession> {
+    if (this.session) {
+      this.checkExpiry(this.session.config);
+      return this.session;
+    }
 
-    // 1. Decrypt keystore
     let privateKeyHex: string | null = loadSessionKey(this.options.apiKey);
 
-    // 2. Create viem LocalAccount
+    const { privateKeyToAccount } = await import('viem/accounts');
     const localAccount = privateKeyToAccount(privateKeyHex as `0x${string}`);
-
-    // 3. Memory hygiene — null the hex string
     privateKeyHex = null;
 
-    // 4. Create JAW Account
-    this.account = await Account.fromLocalAccount(
+    const { Account } = await import('@jaw.id/core');
+    const account = await Account.fromLocalAccount(
       {
         chainId: this.options.chainId,
         apiKey: this.options.apiKey,
@@ -54,25 +55,27 @@ export class SessionBridge {
       localAccount
     );
 
-    // 5. Load session config and check expiry
-    this.sessionConfig = loadSessionConfig();
-    this.initialized = true;
+    const config = loadSessionConfig();
+    this.checkExpiry(config);
+
+    this.session = { account, config };
+    return this.session;
   }
 
-  private checkExpiry(): void {
-    if (!this.sessionConfig) return;
-    if (this.sessionConfig.expiry <= Date.now() / 1000) {
-      const expiryDate = new Date(this.sessionConfig.expiry * 1000).toISOString();
+  private checkExpiry(config: SessionConfig): void {
+    if (config.expiry <= Date.now() / 1000) {
+      const expiryDate = new Date(config.expiry * 1000).toISOString();
       throw new Error(`Session expired on ${expiryDate}. Run \`jaw session setup\` to create a new session.`);
     }
   }
 
-  async request(method: string, params?: unknown): Promise<unknown> {
-    await this.init();
-    this.checkExpiry();
+  private extractParams(params: unknown): { asArray: unknown[]; raw: unknown } {
+    const asArray = Array.isArray(params) ? params : [params];
+    return { asArray, raw: params };
+  }
 
-    const account = this.account!;
-    const config = this.sessionConfig!;
+  async request(method: string, params?: unknown): Promise<unknown> {
+    const { account, config } = await this.getSession();
 
     switch (method) {
       case 'eth_requestAccounts':
@@ -80,9 +83,10 @@ export class SessionBridge {
         return [config.sessionAddress];
 
       case 'wallet_sendCalls': {
-        // params can be { calls } (from CLI JSON.parse) or [{ calls }] (EIP-5792 array format)
         const payload = Array.isArray(params) ? params[0] : params;
-        const { calls } = payload as { calls: Array<{ to: string; value?: string; data?: string }> };
+        const { calls } = payload as {
+          calls: Array<{ to: string; value?: string; data?: string }>;
+        };
         return account.sendCalls(calls as Parameters<Account['sendCalls']>[0], {
           permissionId: config.permissionId as `0x${string}`,
         });
@@ -99,14 +103,9 @@ export class SessionBridge {
       }
 
       case 'eth_signTypedData_v4': {
-        // params can be [address, typedDataStr] or just the typed data object
-        let typedData: unknown;
-        if (Array.isArray(params)) {
-          const raw = params.length > 1 ? params[1] : params[0];
-          typedData = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        } else {
-          typedData = typeof params === 'string' ? JSON.parse(params) : params;
-        }
+        const { asArray } = this.extractParams(params);
+        const raw = asArray.length > 1 ? asArray[1] : asArray[0];
+        const typedData = typeof raw === 'string' ? JSON.parse(raw) : raw;
         return account.signTypedData(typedData as Parameters<Account['signTypedData']>[0]);
       }
 
