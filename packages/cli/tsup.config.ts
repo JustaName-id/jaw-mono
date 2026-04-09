@@ -14,6 +14,10 @@ export default defineConfig({
     'lib/session-store': 'src/lib/session-store.ts',
     'lib/types': 'src/lib/types.ts',
     'lib/validation': 'src/lib/validation.ts',
+    // session lib
+    'lib/keystore': 'src/lib/keystore.ts',
+    'lib/session-config': 'src/lib/session-config.ts',
+    'lib/session-bridge': 'src/lib/session-bridge.ts',
     // commands
     'commands/version': 'src/commands/version.ts',
     'commands/disconnect': 'src/commands/disconnect.ts',
@@ -21,6 +25,7 @@ export default defineConfig({
     'commands/config/show': 'src/commands/config/show.ts',
     'commands/mcp/index': 'src/commands/mcp/index.ts',
     'commands/rpc/call': 'src/commands/rpc/call.ts',
+    'commands/session/setup': 'src/commands/session/setup.ts',
     // mcp
     'mcp/server': 'src/mcp/server.ts',
     'mcp/tools': 'src/mcp/tools.ts',
@@ -45,6 +50,8 @@ export default defineConfig({
     '@modelcontextprotocol/sdk/server/stdio.js',
     '@oclif/core',
     'open',
+    'viem',
+    'viem/accounts',
     'ws',
     'zod',
   ],
