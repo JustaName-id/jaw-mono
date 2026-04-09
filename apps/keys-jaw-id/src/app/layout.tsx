@@ -68,7 +68,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
               draggable={false}
             />
           </div>
-          <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>
+          <div style={{ position: 'relative' }}>{children}</div>
         </ReactQueryProvider>
       </body>
     </html>
