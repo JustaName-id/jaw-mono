@@ -64,9 +64,9 @@ console.log('Signature:', signature);
 Target account address to sign from. The signer must be a registered owner on that account.
 
 ```typescript
-const otherAccountAddress = '0xOtherAccount...';
+const targetAccountAddress = '0xTargetAccount...';
 const signature = await account.signMessage('Hello from another account', {
-  address: otherAccountAddress,
+  address: targetAccountAddress,
 });
 ```
 

@@ -161,7 +161,7 @@ When using the `permissionId` option:
 Target account address to execute from. The signer must be a registered owner on that account.
 
 ```typescript
-const { id } = await account.sendCalls([{ to: '0x...', data: '0x...' }], { from: '0xOtherAccount...' });
+const { id } = await account.sendCalls([{ to: '0x...', data: '0x...' }], { from: '0xTargetAccount...' });
 ```
 
 ## sendTransaction vs sendCalls

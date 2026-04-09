@@ -715,6 +715,7 @@ export class Account {
         from?: Address
     ): Promise<Hash> {
         const smartAccount = await this.resolveSmartAccount(from);
+        const isOverride = this.isAddressOverride(from);
 
         const formattedCalls = calls.map((call) => ({
             to: call.to,
@@ -741,7 +742,7 @@ export class Account {
             paymasterUrlOverride,
             Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined,
             this._apiKey,
-            this._localAccount ?? undefined
+            isOverride ? undefined : (this._localAccount ?? undefined)
         );
     }
 
@@ -779,6 +780,7 @@ export class Account {
         paymasterContextOverride?: Record<string, unknown>
     ): Promise<BundledTransactionResult> {
         const smartAccount = await this.resolveSmartAccount(options?.from);
+        const isOverride = this.isAddressOverride(options?.from);
 
         const formattedCalls = calls.map((call) => ({
             to: call.to,
@@ -799,6 +801,9 @@ export class Account {
         const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
         const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
+        // Don't pass localAccount when overriding address — target is a standard smart account, not EIP-7702
+        const localAccount = isOverride ? undefined : (this._localAccount ?? undefined);
+
         let result: BundledTransactionResult;
 
         if (options?.permissionId) {
@@ -811,7 +816,7 @@ export class Account {
                 this._apiKey,
                 paymasterUrlOverride,
                 cleanedContext,
-                this._localAccount ?? undefined
+                localAccount
             );
         } else {
             // Standard execution (EIP-7702 handled inside sendSmartAccountCalls)
@@ -821,7 +826,7 @@ export class Account {
                 this._chain,
                 paymasterUrlOverride,
                 cleanedContext,
-                this._localAccount ?? undefined
+                localAccount
             );
         }
 
@@ -1127,6 +1132,14 @@ export class Account {
         }
 
         throw new Error('Address override requires a passkey or local account signer');
+    }
+
+    /**
+     * Returns true if the given address is a valid override (different from the default account).
+     * @internal
+     */
+    private isAddressOverride(address?: Address): boolean {
+        return !!address && address.toLowerCase() !== this._smartAccount.address.toLowerCase();
     }
 
     // ============================================
