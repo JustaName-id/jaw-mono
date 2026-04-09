@@ -189,16 +189,8 @@
   }
 }
 
-/* Style isolation: prevent consumer app CSS from leaking into SDK modals.
- * The container gets position:fixed + z-index:9999 to create a stacking context
- * that renders above any host page content regardless of the host's own z-index
- * setup. pointer-events:none on the container is overridden by pointer-events:auto
- * on the dialog overlay/content rendered inside. */
+/* Style isolation: prevent consumer app CSS from leaking into SDK modals */
 [data-jaw-modal-container] {
-  position: fixed;
-  inset: 0;
-  z-index: 9999;
-  pointer-events: none;
   font-family: var(
     --jaw-font-family,
     ui-sans-serif,
