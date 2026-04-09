@@ -31,6 +31,12 @@ export abstract class BaseCommand extends Command {
       description: 'Suppress non-essential output',
       default: false,
     }),
+    session: Flags.boolean({
+      char: 's',
+      description: 'Use local session key (auto mode)',
+      default: false,
+      env: 'JAW_SESSION',
+    }),
   };
 
   protected resolveApiKey(flags: { 'api-key'?: string }): string {

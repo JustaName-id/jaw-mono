@@ -58,7 +58,7 @@ export default class RpcCall extends BaseCommand {
       apiKey,
       chainId: flags.chain ?? config.defaultChain,
       ens: config.ens,
-      paymasterUrl: config.paymasterUrl,
+      paymasterUrl: config.paymasters?.[flags.chain ?? config.defaultChain ?? 1]?.url,
       timeout: flags.timeout * 1000,
     });
 

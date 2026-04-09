@@ -133,7 +133,7 @@ async function connectBridge(
       apiKey: options.apiKey,
       chainId,
       ens: options.ens ?? config.ens,
-      paymasterUrl: options.paymasterUrl ?? config.paymasterUrl,
+      paymasterUrl: options.paymasterUrl ?? config.paymasters?.[chainId]?.url,
     },
     privateKeyHex: relaySession.privateKey,
     publicKeyHex: relaySession.publicKey,
