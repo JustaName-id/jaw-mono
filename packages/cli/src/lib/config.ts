@@ -48,7 +48,7 @@ export function redactConfig(config: JawConfig): Record<string, unknown> {
   };
 }
 
-export function getConfigValue(key: keyof JawConfig): string | number | undefined {
+export function getConfigValue(key: keyof JawConfig): JawConfig[keyof JawConfig] {
   const config = loadConfig();
   return config[key];
 }

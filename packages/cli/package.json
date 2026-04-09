@@ -57,6 +57,18 @@
   },
   "nx": {
     "targets": {
+      "typecheck": {
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "NODE_OPTIONS='--max-old-space-size=8192' tsc --noEmit -p tsconfig.lib.json"
+        },
+        "cache": true,
+        "inputs": [
+          "default",
+          "^production"
+        ]
+      },
       "build": {
         "executor": "nx:run-commands",
         "options": {

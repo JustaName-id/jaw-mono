@@ -1,4 +1,3 @@
-import type { Account } from '@jaw.id/core';
 import { loadSessionKey } from './keystore.js';
 import { loadSessionConfig, type SessionConfig } from './session-config.js';
 import { loadConfig } from './config.js';
@@ -10,8 +9,15 @@ export interface SessionBridgeOptions {
   paymasterContext?: Record<string, unknown>;
 }
 
+/** Lazily resolved Account instance + session config */
 interface InitializedSession {
-  account: Account;
+  account: {
+    address: string;
+    sendCalls: (...args: unknown[]) => Promise<unknown>;
+    getCallStatus: (batchId: `0x${string}`) => unknown;
+    signMessage: (message: string) => Promise<`0x${string}`>;
+    signTypedData: (typedData: unknown) => Promise<`0x${string}`>;
+  };
   config: SessionConfig;
 }
 
@@ -58,7 +64,7 @@ export class SessionBridge {
     const config = loadSessionConfig();
     this.checkExpiry(config);
 
-    this.session = { account, config };
+    this.session = { account: account as InitializedSession['account'], config };
     return this.session;
   }
 
@@ -67,11 +73,6 @@ export class SessionBridge {
       const expiryDate = new Date(config.expiry * 1000).toISOString();
       throw new Error(`Session expired on ${expiryDate}. Run \`jaw session setup\` to create a new session.`);
     }
-  }
-
-  private extractParams(params: unknown): { asArray: unknown[]; raw: unknown } {
-    const asArray = Array.isArray(params) ? params : [params];
-    return { asArray, raw: params };
   }
 
   async request(method: string, params?: unknown): Promise<unknown> {
@@ -87,7 +88,7 @@ export class SessionBridge {
         const { calls } = payload as {
           calls: Array<{ to: string; value?: string; data?: string }>;
         };
-        return account.sendCalls(calls as Parameters<Account['sendCalls']>[0], {
+        return account.sendCalls(calls, {
           permissionId: config.permissionId as `0x${string}`,
         });
       }
@@ -103,10 +104,10 @@ export class SessionBridge {
       }
 
       case 'eth_signTypedData_v4': {
-        const { asArray } = this.extractParams(params);
+        const asArray = Array.isArray(params) ? params : [params];
         const raw = asArray.length > 1 ? asArray[1] : asArray[0];
         const typedData = typeof raw === 'string' ? JSON.parse(raw) : raw;
-        return account.signTypedData(typedData as Parameters<Account['signTypedData']>[0]);
+        return account.signTypedData(typedData);
       }
 
       case 'wallet_grantPermissions':
