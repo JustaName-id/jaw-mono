@@ -54,6 +54,7 @@ import {
     dosChain,
 } from 'viem/chains';
 import { PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS } from '../constants.js';
+import { standardErrors } from '../errors/errors.js';
 import {
     getPermissionFromRelay,
     relayPermissionToPermission,
@@ -588,6 +589,51 @@ export function formatPublicKey(publicKey: Hex): Hex {
         return pad(publicKey);
     }
     return publicKey;
+}
+
+/**
+ * Create a temporary SmartAccount instance for signing on behalf of a different account.
+ * Verifies the passkey is a registered owner on the target account.
+ */
+export async function createSmartAccountForAddress(
+    targetAddress: Address,
+    account: WebAuthnAccount,
+    bundlerClient: JustanAccountImplementation['client']
+): Promise<SmartAccount> {
+    const ownerBytes: Hex = account.publicKey;
+
+    const code = await getCode(bundlerClient, { address: targetAddress });
+    if (!code) {
+        throw standardErrors.rpc.invalidParams(`Account ${targetAddress} is not deployed`);
+    }
+
+    const ownerCount = await readContract(bundlerClient, {
+        address: targetAddress,
+        abi,
+        functionName: 'ownerCount',
+    });
+
+    const formatted = formatPublicKey(ownerBytes);
+
+    for (let i = 0; i < Number(ownerCount); i++) {
+        const owner = await readContract(bundlerClient, {
+            address: targetAddress,
+            abi,
+            functionName: 'ownerAtIndex',
+            args: [BigInt(i)],
+        });
+
+        if ((owner as string).toLowerCase() === formatted.toLowerCase()) {
+            return await toJustanAccount({
+                client: bundlerClient,
+                owners: [account, PERMISSIONS_MANAGER_ADDRESS],
+                ownerIndex: i,
+                address: targetAddress,
+            });
+        }
+    }
+
+    throw standardErrors.rpc.invalidParams(`Passkey is not an owner on account ${targetAddress}`);
 }
 
 export async function createSmartAccountEip7702(

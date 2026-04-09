@@ -359,7 +359,7 @@ export class AppSpecificSigner extends JAWSigner {
                     timestamp: Date.now(),
                     correlationId,
                     data: {
-                        address: this.accounts[0],
+                        address: permissionData.address ?? this.accounts[0],
                         chainId: resolvedChain.id,
                         expiry: permissionData.expiry,
                         spender: permissionData.spender,

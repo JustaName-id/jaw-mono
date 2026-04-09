@@ -181,6 +181,8 @@ export type WalletGrantPermissionsRequest = {
             spender: Address;
             /** Permissions details */
             permissions: PermissionsDetail;
+            /** Override account address — grant permission on a different account this passkey owns */
+            address?: Address;
             /** Target chain ID. Defaults to the connected chain. */
             chainId?: string;
             /** Optional capabilities including paymaster service */
