@@ -48,24 +48,40 @@ bun add -g @jaw.id/cli
 
 ## Configuration
 
-Set your API key and default chain before using the CLI:
+import { ConfigGenerator } from '../../components/ConfigGenerator';
+
+The CLI reads configuration from `~/.jaw/config.json`. You can set it up in two ways:
+
+### Option 1: Config Generator
+
+Use the interactive form below to build your config and get a ready-to-paste command:
+
+<ConfigGenerator />
+
+### Option 2: Manual Setup
+
+Set individual values with `jaw config set`:
 
 ```bash
 jaw config set apiKey=YOUR_API_KEY defaultChain=8453
 ```
 
+For nested config (paymasters, permissions), edit `~/.jaw/config.json` directly or use `jaw config write` with inline JSON.
+
 Get an API key from the [JAW Dashboard](https://dashboard.jaw.id).
 
 ### Configuration Keys
 
-| Key            | Description                       | Example                                   |
-| -------------- | --------------------------------- | ----------------------------------------- |
-| `apiKey`       | Your JAW API key (required)       | `jaw config set apiKey=sk_...`            |
-| `defaultChain` | Default chain ID                  | `jaw config set defaultChain=8453`        |
-| `ens`          | ENS domain for subname resolution | `jaw config set ens=myapp.eth`            |
-| `paymasterUrl` | Paymaster URL for gas sponsoring  | `jaw config set paymasterUrl=https://...` |
-| `keysUrl`      | Keys service URL                  | Default: `https://keys.jaw.id`            |
-| `relayUrl`     | Relay WebSocket URL               | Default: `wss://relay.jaw.id`             |
+| Key             | Description                         | Set via CLI                        |
+| --------------- | ----------------------------------- | ---------------------------------- |
+| `apiKey`        | Your JAW API key (required)         | `jaw config set apiKey=sk_...`     |
+| `defaultChain`  | Default chain ID                    | `jaw config set defaultChain=8453` |
+| `ens`           | ENS domain for subname resolution   | `jaw config set ens=myapp.eth`     |
+| `sessionExpiry` | Session expiry in days (default: 7) | `jaw config set sessionExpiry=14`  |
+| `keysUrl`       | Keys service URL                    | Default: `https://keys.jaw.id`     |
+| `relayUrl`      | Relay WebSocket URL                 | Default: `wss://relay.jaw.id`      |
+| `paymasters`    | Per-chain paymaster config          | Edit `config.json` directly        |
+| `permissions`   | Session permission scope            | Edit `config.json` directly        |
 
 ### Resolution Order
 
