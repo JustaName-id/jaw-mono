@@ -259,6 +259,32 @@ export const PermissionModal = ({
     }
   }, [mode, walletAddress, permissionRequest, fetchedPermissionData]);
 
+  // Extract permission details from request (needed before gas estimation for address override)
+  const permissionDetails = useMemo(() => {
+    if (!permissionRequest) return null;
+
+    if (mode === 'grant') {
+      const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
+      const [grantParams] = params;
+
+      return {
+        spender: grantParams.spender,
+        expiry: grantParams.expiry,
+        spends: grantParams.permissions.spends || [],
+        calls: grantParams.permissions.calls || [],
+        address: grantParams.address,
+      };
+    } else {
+      const params = permissionRequest.params as WalletRevokePermissionsRequest['params'];
+      const [revokeParams] = params;
+
+      return {
+        permissionId: revokeParams.id,
+        address: revokeParams.address,
+      };
+    }
+  }, [permissionRequest, mode]);
+
   // Use the gas estimation hook for both ETH and ERC-20 cost estimation
   const {
     gasFee,
@@ -320,32 +346,6 @@ export const PermissionModal = ({
     }
     return effectivePaymasterContext;
   }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
-
-  // Extract permission details from request
-  const permissionDetails = useMemo(() => {
-    if (!permissionRequest) return null;
-
-    if (mode === 'grant') {
-      const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
-      const [grantParams] = params;
-
-      return {
-        spender: grantParams.spender,
-        expiry: grantParams.expiry,
-        spends: grantParams.permissions.spends || [],
-        calls: grantParams.permissions.calls || [],
-        address: grantParams.address,
-      };
-    } else {
-      const params = permissionRequest.params as WalletRevokePermissionsRequest['params'];
-      const [revokeParams] = params;
-
-      return {
-        permissionId: revokeParams.id,
-        address: revokeParams.address,
-      };
-    }
-  }, [permissionRequest, mode]);
 
   // Network name and icon
   const networkName = useMemo(() => {
