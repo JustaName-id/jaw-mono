@@ -18,7 +18,7 @@ vi.mock('./paths.js', () => {
     },
   };
 });
-const { loadConfig, saveConfig, getConfigValue, setConfigValue } = await import('./config.js');
+const { loadConfig, saveConfig, setConfigValue } = await import('./config.js');
 const { PATHS } = await import('./paths.js');
 
 beforeEach(() => {
@@ -52,12 +52,6 @@ describe('config', () => {
     expect(config.apiKey).toBe('first');
     expect(config.defaultChain).toBe(1);
     expect(fs.existsSync(PATHS.root)).toBe(true);
-  });
-
-  it('getConfigValue returns specific value', () => {
-    saveConfig({ apiKey: 'my-key', defaultChain: 42 });
-    expect(getConfigValue('apiKey')).toBe('my-key');
-    expect(getConfigValue('defaultChain')).toBe(42);
   });
 
   it('setConfigValue updates a single value', () => {

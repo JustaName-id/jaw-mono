@@ -10,7 +10,7 @@ export function ensureDir(dir: string): void {
 
 function migrateConfig(config: JawConfig): JawConfig {
   if (config.paymasterUrl && !config.paymasters) {
-    const chainId = config.defaultChain ?? 84532;
+    const chainId = config.defaultChain ?? 1;
     config.paymasters = { [chainId]: { url: config.paymasterUrl } };
     delete config.paymasterUrl;
     saveConfig(config);
@@ -46,11 +46,6 @@ export function redactConfig(config: JawConfig): Record<string, unknown> {
     ...config,
     apiKey: config.apiKey ? `${config.apiKey.slice(0, 8)}...` : undefined,
   };
-}
-
-export function getConfigValue(key: keyof JawConfig): JawConfig[keyof JawConfig] {
-  const config = loadConfig();
-  return config[key];
 }
 
 export function setConfigValue(key: keyof JawConfig, value: string | number): void {

@@ -36,6 +36,12 @@ export default class RpcCall extends BaseCommand {
       description: 'Request timeout in seconds',
       default: 120,
     }),
+    session: Flags.boolean({
+      char: 's',
+      description: 'Use local session key (auto mode)',
+      default: false,
+      env: 'JAW_SESSION',
+    }),
   };
 
   async run(): Promise<void> {
