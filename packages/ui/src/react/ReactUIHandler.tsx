@@ -1314,6 +1314,7 @@ function TransactionDialogWrapper({
     feeTokens,
     isSponsored,
     permissionId,
+    address: request.data.from,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -1653,6 +1654,7 @@ function SendTransactionDialogWrapper({
     apiKey,
     feeTokens,
     isSponsored,
+    address: request.data.from,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -2005,6 +2007,7 @@ function PermissionDialogWrapper({
     apiKey,
     feeTokens,
     isSponsored,
+    address: request.data.address,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -2665,6 +2668,7 @@ function RevokePermissionDialogWrapper({
     apiKey,
     feeTokens,
     isSponsored,
+    address: request.data.address,
     onFeeTokensUpdate: setFeeTokens,
   });
 

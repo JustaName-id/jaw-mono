@@ -227,17 +227,18 @@ export const PermissionModal = ({
   const transactionCalls = useMemo(() => {
     if (mode === 'grant') {
       // Grant mode: build grant permission call
-      if (!walletAddress || !permissionRequest) return [];
+      // Use override address if provided, otherwise fall back to connected wallet address
+      const params = permissionRequest?.params as WalletGrantPermissionsRequest['params'] | undefined;
+      const grantParams = params?.[0];
+      const targetAddress = grantParams?.address ?? walletAddress;
+      if (!targetAddress || !permissionRequest) return [];
 
       try {
-        const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
-        const [grantParams] = params;
-
         const permissionCall = buildGrantPermissionCall(
-          walletAddress as Address,
-          grantParams.spender as Address,
-          grantParams.expiry,
-          grantParams.permissions
+          targetAddress as Address,
+          grantParams!.spender as Address,
+          grantParams!.expiry,
+          grantParams!.permissions
         );
         return [permissionCall];
       } catch (error) {
@@ -274,6 +275,7 @@ export const PermissionModal = ({
     apiKey: extractedApiKey,
     feeTokens,
     isSponsored,
+    address: permissionDetails?.address as Address | undefined,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -540,8 +542,10 @@ export const PermissionModal = ({
 
   // Fetch fee tokens (ETH + available ERC-20 tokens from chain config)
   useEffect(() => {
+    // Use override address for balance fetching when operating on behalf of another account
+    const balanceAddress = permissionDetails?.address ?? walletAddress;
     // Skip if already sponsored via capabilities or config, or missing required data
-    if (effectivePaymasterUrl || !chain || !walletAddress) {
+    if (effectivePaymasterUrl || !chain || !balanceAddress) {
       setFeeTokensLoading(false);
       return;
     }
@@ -579,7 +583,7 @@ export const PermissionModal = ({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, walletAddress, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -629,7 +633,7 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, extractedApiKey, viemChain, walletAddress, effectivePaymasterUrl]);
+  }, [chain, extractedApiKey, viemChain, walletAddress, permissionDetails?.address, effectivePaymasterUrl]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {

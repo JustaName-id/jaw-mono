@@ -29,6 +29,8 @@ export interface UseGasEstimationConfig {
   isSponsored?: boolean;
   /** Optional permission ID for permission-based execution */
   permissionId?: Hex;
+  /** Override account address — estimate gas for a different account this passkey owns */
+  address?: Address;
   /** Callback when fee tokens are updated with estimates */
   onFeeTokensUpdate?: (tokens: FeeTokenOption[]) => void;
 }
@@ -132,6 +134,7 @@ export function useGasEstimation({
   feeTokens,
   isSponsored = false,
   permissionId,
+  address,
   onFeeTokensUpdate,
 }: UseGasEstimationConfig): UseGasEstimationResult {
   // -------------------------------------------------------------------------
@@ -237,15 +240,18 @@ export function useGasEstimation({
         data: call.data as Hex | undefined,
       }));
 
+      // Resolve the correct smart account for estimation (handles address override)
+      const resolvedSmartAccount = await account.getSmartAccountFor(address);
+
       // Run ETH and ERC-20 estimation in parallel
       const [ethResult, erc20Result] = await Promise.allSettled([
         // ETH gas estimation
-        account.calculateGasCost(effectiveCalls, permissionId ? { permissionId } : undefined),
+        account.calculateGasCost(effectiveCalls, permissionId || address ? { permissionId, address } : undefined),
         // ERC-20 gas estimation (only for tokens with balance > 0)
         // Tokens with 0 balance will be marked as not selectable below
         erc20TokensWithBalance.length > 0
           ? estimateErc20PaymasterCosts(
-              account.getSmartAccount(),
+              resolvedSmartAccount,
               callsWithBigIntValue,
               account.getChain(),
               paymasterUrl,
@@ -384,7 +390,7 @@ export function useGasEstimation({
     }
     // Note: feeTokens and onFeeTokensUpdate accessed via refs to prevent infinite loops
     // erc20TokenAddresses triggers re-estimation when new ERC-20 tokens are added (but not when estimates update)
-  }, [account, transactionCalls, chainId, apiKey, isSponsored, permissionId, erc20TokenAddresses]);
+  }, [account, transactionCalls, chainId, apiKey, isSponsored, permissionId, address, erc20TokenAddresses]);
 
   // -------------------------------------------------------------------------
   // Result Handlers

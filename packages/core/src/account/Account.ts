@@ -612,6 +612,15 @@ export class Account {
     }
 
     /**
+     * Get the SmartAccount for a given address, resolving an override if needed.
+     * If the address matches the connected account (or is omitted), returns the default SmartAccount.
+     * Otherwise, creates a temporary SmartAccount for the target address using the current signer.
+     */
+    async getSmartAccountFor(address?: Address): Promise<SmartAccount> {
+        return this.resolveSmartAccount(address);
+    }
+
+    /**
      * Get the chain configuration
      *
      * @returns The Chain configuration object

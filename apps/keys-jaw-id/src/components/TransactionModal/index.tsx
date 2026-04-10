@@ -210,6 +210,7 @@ export const TransactionModal = ({
     feeTokens,
     isSponsored,
     permissionId,
+    address: transactionRequest?.from,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -261,7 +262,9 @@ export const TransactionModal = ({
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
     // Skip if already sponsored via capabilities or config
-    if (effectivePaymasterUrl || !chain || !walletAddress) return;
+    // Use override address for balance fetching when executing on behalf of another account
+    const balanceAddress = transactionRequest?.from ?? walletAddress;
+    if (effectivePaymasterUrl || !chain || !balanceAddress) return;
 
     let isMounted = true;
 
@@ -290,7 +293,7 @@ export const TransactionModal = ({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, walletAddress, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -341,7 +344,7 @@ export const TransactionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, effectiveApiKey, walletAddress, effectivePaymasterUrl]);
+  }, [chain, effectiveApiKey, walletAddress, transactionRequest?.from, effectivePaymasterUrl]);
 
   // Note: Account initialization is handled by useSessionAccount hook
   // Note: Gas estimation is handled by useGasEstimation hook
