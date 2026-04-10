@@ -469,7 +469,7 @@ export const TransactionModal = ({
         console.log('onOpenChange');
       }}
       transactions={normalizedTransactions}
-      walletAddress={walletAddress ?? ''}
+      walletAddress={transactionRequest?.from ?? walletAddress ?? ''}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}
