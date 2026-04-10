@@ -1,0 +1,121 @@
+# Configuration
+
+import { ConfigGenerator } from '../../components/ConfigGenerator';
+
+The CLI reads all configuration from `~/.jaw/config.json`. This includes API credentials, paymaster setup, and session permissions.
+
+## Config Generator
+
+Use the interactive form to build your config and get a ready-to-paste command:
+
+<ConfigGenerator />
+
+## Manual Setup
+
+### Flat values (via CLI)
+
+```bash
+jaw config set apiKey=YOUR_API_KEY defaultChain=8453 sessionExpiry=7
+```
+
+### Full config (via `config write`)
+
+Write inline JSON or from a file:
+
+```bash
+jaw config write '{"apiKey":"...","defaultChain":8453,"paymasters":{...}}'
+jaw config write ./my-config.json
+```
+
+### View current config
+
+```bash
+jaw config show
+```
+
+## Configuration Reference
+
+| Key             | Type     | Description                                            | CLI settable |
+| --------------- | -------- | ------------------------------------------------------ | ------------ |
+| `apiKey`        | `string` | Your JAW API key ([get one](https://dashboard.jaw.id)) | Yes          |
+| `defaultChain`  | `number` | Default chain ID for all commands                      | Yes          |
+| `ens`           | `string` | ENS domain for subname resolution                      | Yes          |
+| `sessionExpiry` | `number` | Session key expiry in days (default: 7)                | Yes          |
+| `keysUrl`       | `string` | Keys service URL (default: `https://keys.jaw.id`)      | Yes          |
+| `relayUrl`      | `string` | Relay WebSocket URL (default: `wss://relay.jaw.id`)    | Yes          |
+| `paymasters`    | `object` | Per-chain paymaster config                             | Edit JSON    |
+| `permissions`   | `object` | Session permission scope                               | Edit JSON    |
+
+## Config File Structure
+
+```json
+{
+  "apiKey": "jaw_...",
+  "defaultChain": 84532,
+  "ens": "mydomain.eth",
+  "keysUrl": "https://keys.jaw.id",
+  "relayUrl": "wss://relay.jaw.id",
+  "paymasters": {
+    "84532": {
+      "url": "https://api.pimlico.io/v2/84532/rpc?apikey=...",
+      "context": { "sponsorshipPolicyId": "sp_my_policy" }
+    }
+  },
+  "sessionExpiry": 7,
+  "permissions": {
+    "calls": [{ "target": "0x3232...", "selector": "0xe0e0e0e0" }],
+    "spends": [{ "token": "0xEeee...EEeE", "allowance": "0x16345785d8a0000", "unit": "day", "multiplier": 1 }]
+  }
+}
+```
+
+### Paymasters
+
+Per-chain paymaster configuration. Each key is a chain ID:
+
+```json
+"paymasters": {
+  "8453": { "url": "https://api.pimlico.io/v2/8453/rpc?apikey=..." },
+  "84532": {
+    "url": "https://api.pimlico.io/v2/84532/rpc?apikey=...",
+    "context": { "sponsorshipPolicyId": "sp_my_policy" }
+  }
+}
+```
+
+- `url` — Paymaster RPC endpoint (required)
+- `context` — Optional context object passed to paymaster calls (e.g., Pimlico sponsorship policy)
+
+### Permissions
+
+Defines the scope of what a session key can do. Only used by [Auto Mode](/cli/auto-mode).
+
+**Call permissions** — which contracts and functions the session key can call:
+
+| Preset                     | target           | selector     | Description                            |
+| -------------------------- | ---------------- | ------------ | -------------------------------------- |
+| Any target, any function   | `0x3232...3232`  | `0x32323232` | Wildcard — can call any contract       |
+| Any target, empty calldata | `0x3232...3232`  | `0xe0e0e0e0` | Only ETH transfers (no contract calls) |
+| Custom                     | `0xYourContract` | `0xa9059cbb` | Specific contract + function selector  |
+
+**Spend limits** — how much the session key can spend:
+
+| Field        | Description                                                                    |
+| ------------ | ------------------------------------------------------------------------------ |
+| `token`      | Token address. Use `0xEeee...EEeE` for native ETH                              |
+| `allowance`  | Max amount in wei (hex string)                                                 |
+| `unit`       | Rate limit period: `minute`, `hour`, `day`, `week`, `month`, `year`, `forever` |
+| `multiplier` | Number of periods (e.g., `2` with `day` = every 2 days)                        |
+
+## Resolution Order
+
+Configuration values are resolved in this order (first match wins):
+
+1. CLI flags (`--api-key`, `--chain`)
+2. Environment variables (`JAW_API_KEY`, `JAW_CHAIN_ID`, `JAW_OUTPUT`)
+3. Config file (`~/.jaw/config.json`)
+4. Built-in defaults
+
+## Migration
+
+If you previously used `paymasterUrl` (single string), it's automatically migrated to the `paymasters` map on first load using your `defaultChain`.

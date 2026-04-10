@@ -2,7 +2,7 @@
 
 ## jaw rpc call
 
-Execute any EIP-1193 RPC method through the browser bridge.
+Execute any EIP-1193 RPC method through the browser bridge or local session key.
 
 ```bash
 jaw rpc call <method> [params]
@@ -17,14 +17,15 @@ jaw rpc call <method> [params]
 
 ### Flags
 
-| Flag        | Short | Default | Description                      |
-| ----------- | ----- | ------- | -------------------------------- |
-| `--output`  | `-o`  | `human` | Output format: `json` or `human` |
-| `--chain`   | `-c`  | config  | Chain ID (e.g., `8453` for Base) |
-| `--api-key` |       | config  | JAW API key                      |
-| `--timeout` | `-t`  | `120`   | Request timeout in seconds       |
-| `--yes`     | `-y`  | `false` | Skip confirmations               |
-| `--quiet`   | `-q`  | `false` | Suppress non-essential output    |
+| Flag        | Short | Default | Description                                         |
+| ----------- | ----- | ------- | --------------------------------------------------- |
+| `--output`  | `-o`  | `human` | Output format: `json` or `human`                    |
+| `--chain`   | `-c`  | config  | Chain ID (e.g., `8453` for Base)                    |
+| `--api-key` |       | config  | JAW API key                                         |
+| `--timeout` | `-t`  | `120`   | Request timeout in seconds                          |
+| `--yes`     | `-y`  | `false` | Skip confirmations                                  |
+| `--quiet`   | `-q`  | `false` | Suppress non-essential output                       |
+| `--session` | `-s`  | `false` | Use local session key ([Auto Mode](/cli/auto-mode)) |
 
 ### Examples
 
@@ -86,7 +87,7 @@ Set one or more configuration values.
 jaw config set [key=value ...]
 ```
 
-Valid keys: `apiKey`, `defaultChain`, `keysUrl`, `paymasterUrl`, `ens`, `relayUrl`
+Valid keys: `apiKey`, `defaultChain`, `keysUrl`, `ens`, `relayUrl`, `sessionExpiry`
 
 ### Examples
 
@@ -97,12 +98,38 @@ jaw config set apiKey=YOUR_KEY defaultChain=8453
 # Enable ENS resolution
 jaw config set ens=myapp.eth
 
-# Set paymaster for gas sponsoring
-jaw config set paymasterUrl=https://paymaster.example.com
+# Set session expiry
+jaw config set sessionExpiry=14
 
 # Use a self-hosted relay
 jaw config set relayUrl=wss://relay.mycompany.com
 ```
+
+---
+
+## jaw config write
+
+Write a full config from inline JSON or a file path.
+
+```bash
+jaw config write <json-or-filepath>
+```
+
+If the input starts with `{`, it's parsed as inline JSON. Otherwise, it's read as a file path.
+
+### Examples
+
+```bash
+# Inline JSON
+jaw config write '{"apiKey":"...","defaultChain":84532,"paymasters":{...}}'
+
+# From file
+jaw config write ./my-config.json
+```
+
+:::tip
+Use the [Config Generator](/cli/configuration) to build your JSON interactively.
+:::
 
 ---
 
@@ -113,6 +140,52 @@ Display current configuration. The API key is redacted in output.
 ```bash
 jaw config show
 jaw config show -o json
+```
+
+---
+
+## jaw session setup
+
+Generate a session key and grant scoped on-chain permissions. Opens the browser once for passkey approval. See [Auto Mode](/cli/auto-mode) for details.
+
+```bash
+jaw session setup [--chain <id>] [--permissions <json|file>] [--expiry <days>]
+```
+
+### Flags
+
+| Flag            | Description                                              |
+| --------------- | -------------------------------------------------------- |
+| `--permissions` | Override `config.permissions` (inline JSON or file path) |
+| `--expiry`      | Override `config.sessionExpiry` (days, default: 7)       |
+| `--yes` / `-y`  | Skip overwrite confirmation                              |
+
+### Example
+
+```bash
+jaw session setup --chain 84532
+jaw session setup --chain 84532 --expiry 14 --yes
+```
+
+---
+
+## jaw session status
+
+Show current session status.
+
+```bash
+jaw session status
+jaw session status -o json
+```
+
+---
+
+## jaw session revoke
+
+Revoke the on-chain permission and delete local session files. Opens browser for passkey approval (skipped if session is expired).
+
+```bash
+jaw session revoke
 ```
 
 ---

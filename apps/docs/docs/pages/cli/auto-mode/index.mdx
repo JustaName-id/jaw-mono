@@ -1,0 +1,87 @@
+# Auto Mode
+
+Auto mode lets AI agents use a JAW smart account without a browser or passkey for every operation. A human approves once during setup, and the agent runs autonomously after that within scoped, on-chain permissions.
+
+## How It Works
+
+```
+  SETUP (one-time)              RUNTIME (autonomous)           TEARDOWN (when done)
+
+  Human runs                    Agent runs                     Human runs
+  jaw session setup             jaw rpc call ... --session     jaw session revoke
+       │                              │                              │
+       ▼                              ▼                              ▼
+  Passkey approves              Local key signs                Passkey approves
+  grantPermissions              PermissionManager              revokePermissions
+  on-chain                      validates + executes           on-chain
+       │                              │                              │
+       ▼                              ▼                              ▼
+  keystore.json                 No browser needed              Delete keystore
+  session-config.json           No human needed                Delete session-config
+```
+
+### Setup (one-time, human required)
+
+1. `jaw session setup` generates a random session key
+2. Encrypts it to `~/.jaw/keystore.json` (AES-256-GCM, API-key-derived)
+3. Opens browser — passkey approves `wallet_grantPermissions` on-chain
+4. Saves permission details to `~/.jaw/session-config.json`
+5. Browser is never needed again
+
+### Execution (autonomous, no human)
+
+1. `jaw rpc call ... --session` decrypts the session key
+2. Creates a local Account from the key
+3. Injects the `permissionId` automatically
+4. PermissionManager validates: correct spender? within call scope? under spend limit? not expired?
+5. Transaction executes on behalf of the owner's wallet
+
+### Revocation
+
+1. `jaw session revoke` opens browser for passkey approval
+2. Permission revoked on-chain — session key is immediately useless
+3. Local keystore and session config deleted
+
+## Security Model
+
+The session key is scoped by **on-chain enforcement** — even if the key is compromised, damage is bounded:
+
+| Constraint             | How it works                                        |
+| ---------------------- | --------------------------------------------------- |
+| **Call restrictions**  | Only whitelisted contract + function selector pairs |
+| **Spend limits**       | Capped token spend per time period                  |
+| **Time bound**         | Permission expires automatically (default: 7 days)  |
+| **Instant revocation** | Owner can revoke at any time via passkey            |
+
+The PermissionManager smart contract validates every transaction at the contract level. If the session key tries anything outside its scope, the transaction **reverts on-chain**.
+
+### Defense in Depth
+
+| Layer                      | Protects against                                     |
+| -------------------------- | ---------------------------------------------------- |
+| File permissions (`0o600`) | Other users on the same machine                      |
+| AES-256-GCM encryption     | File exfiltration (keystore useless without API key) |
+| On-chain permissions       | Compromised key exceeding granted scope              |
+| Expiry                     | Long-term exposure from a forgotten session          |
+| Revocation                 | Immediate response to suspected compromise           |
+
+## Identity
+
+The session key operates as its **own smart account**. When using `--session`:
+
+- `eth_requestAccounts` returns the **session key's** address (the agent's identity)
+- Transactions execute on the **owner's** wallet via PermissionManager
+- The owner's address is stored in `session-config.json` as reference data
+
+## Prerequisites
+
+Before setting up auto mode:
+
+1. [Configure](/cli/configuration) your API key, chain, and paymaster
+2. Add `permissions` to your config (use the [Config Generator](/cli/configuration))
+3. Have a funded smart account (the owner account that will grant permissions)
+
+## Next Steps
+
+- [Setup](/cli/auto-mode/setup) — Create a session with `jaw session setup`
+- [Usage](/cli/auto-mode/usage) — Run commands with `--session`, manage lifecycle

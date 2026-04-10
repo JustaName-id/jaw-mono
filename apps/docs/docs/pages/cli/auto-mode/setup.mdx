@@ -1,0 +1,167 @@
+# Session Setup
+
+## Prerequisites
+
+Make sure your `~/.jaw/config.json` has:
+
+- `apiKey` — your JAW API key
+- `defaultChain` or use `--chain` flag
+- `permissions` — the scope for the session key
+- `paymasters` (optional) — for gas-sponsored transactions
+
+Use the [Config Generator](/cli/configuration) to build your config.
+
+## Create a Session
+
+```bash
+jaw session setup --chain 84532
+```
+
+This will:
+
+1. Generate a random secp256k1 session key
+2. Derive the session key's smart account address
+3. Open your browser for passkey approval of `wallet_grantPermissions`
+4. Encrypt the key to `~/.jaw/keystore.json`
+5. Save session metadata to `~/.jaw/session-config.json`
+
+Output:
+
+```
+Session created successfully.
+
+  Session address:  0xee3EC45...
+  Owner address:    0x810440...
+  Permission ID:    0x60a8d6...
+  Chain:            84532
+  Expires:          2026-04-16T09:15:18.000Z (7 days)
+
+Use --session flag to execute RPC calls in auto mode.
+```
+
+## Flags
+
+### `--permissions` (optional override)
+
+Override `config.permissions` for this setup. Accepts inline JSON or a file path:
+
+```bash
+# Inline JSON
+jaw session setup --permissions '{"calls":[{"target":"0x...","selector":"0x..."}]}'
+
+# File path
+jaw session setup --permissions ./my-permissions.json
+```
+
+Resolution order: `--permissions` flag > `config.permissions`. Error if neither is set.
+
+### `--expiry` (optional override)
+
+Override `config.sessionExpiry` for this setup. Value in days:
+
+```bash
+jaw session setup --expiry 14
+```
+
+Resolution order: `--expiry` flag > `config.sessionExpiry` > default 7 days.
+
+### `--yes` / `-y`
+
+Skip the confirmation prompt when overwriting an existing session:
+
+```bash
+jaw session setup --chain 84532 --yes
+```
+
+## Permission Format
+
+### Call Permissions
+
+Define which contracts and functions the session key can call:
+
+```json
+{
+  "calls": [
+    {
+      "target": "0x3232323232323232323232323232323232323232",
+      "selector": "0xe0e0e0e0"
+    }
+  ]
+}
+```
+
+**Wildcards:**
+
+| target           | selector     | Meaning                                                 |
+| ---------------- | ------------ | ------------------------------------------------------- |
+| `0x3232...3232`  | `0x32323232` | Any contract, any function                              |
+| `0x3232...3232`  | `0xe0e0e0e0` | Any contract, empty calldata only (ETH transfers)       |
+| `0xYourContract` | `0xa9059cbb` | Specific contract, specific function (e.g., `transfer`) |
+| `0xYourContract` | `0x32323232` | Specific contract, any function                         |
+
+### Spend Limits
+
+Cap how much the session key can spend:
+
+```json
+{
+  "spends": [
+    {
+      "token": "0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE",
+      "allowance": "0x16345785d8a0000",
+      "unit": "day",
+      "multiplier": 1
+    }
+  ]
+}
+```
+
+- `token` — `0xEeee...EEeE` for native ETH, or any ERC-20 address
+- `allowance` — Max amount in wei (hex). `0x16345785d8a0000` = 0.1 ETH
+- `unit` — `minute`, `hour`, `day`, `week`, `month`, `year`, `forever`
+- `multiplier` — Number of periods (e.g., `2` + `day` = every 2 days)
+
+## Files Created
+
+After setup, two files are created in `~/.jaw/`:
+
+### `keystore.json`
+
+Encrypted session private key (AES-256-GCM, encrypted with your API key):
+
+```json
+{
+  "version": 1,
+  "iv": "<base64>",
+  "salt": "<base64>",
+  "ciphertext": "<base64>",
+  "tag": "<base64>",
+  "address": "0x...",
+  "createdAt": "2026-04-09T..."
+}
+```
+
+The keystore is useless without your API key. On-chain PermissionManager is the primary security boundary.
+
+### `session-config.json`
+
+Session metadata:
+
+```json
+{
+  "ownerAddress": "0x...",
+  "sessionAddress": "0x...",
+  "permissionId": "0x...",
+  "chainId": 84532,
+  "expiry": 1749100800,
+  "createdAt": "2026-04-09T..."
+}
+```
+
+- `ownerAddress` — The human's smart account (the account being acted on behalf of)
+- `sessionAddress` — The session key's smart account (the agent's identity)
+- `permissionId` — On-chain permission hash from PermissionManager
+
+## Next Steps
+
+- [Usage](/cli/auto-mode/usage) — Run commands with `--session`
