@@ -65,24 +65,24 @@ describe('migrateConfig', () => {
   it('migrates paymasterUrl to paymasters with defaultChain', () => {
     saveConfig({
       apiKey: 'test',
-      defaultChain: 84532,
+      defaultChain: 1,
       paymasterUrl: 'https://pm.example.com',
     } as JawConfig);
     const config = loadConfig();
     expect(config.paymasters).toEqual({
-      84532: { url: 'https://pm.example.com' },
+      1: { url: 'https://pm.example.com' },
     });
     expect(config.paymasterUrl).toBeUndefined();
   });
 
-  it('migrates paymasterUrl to paymasters with fallback chain 84532', () => {
+  it('migrates paymasterUrl to paymasters with fallback chain 1', () => {
     saveConfig({
       apiKey: 'test',
       paymasterUrl: 'https://pm.example.com',
     } as JawConfig);
     const config = loadConfig();
     expect(config.paymasters).toEqual({
-      84532: { url: 'https://pm.example.com' },
+      1: { url: 'https://pm.example.com' },
     });
   });
 
