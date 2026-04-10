@@ -23,6 +23,7 @@ export default defineConfig({
     'commands/disconnect': 'src/commands/disconnect.ts',
     'commands/config/set': 'src/commands/config/set.ts',
     'commands/config/show': 'src/commands/config/show.ts',
+    'commands/config/write': 'src/commands/config/write.ts',
     'commands/mcp/index': 'src/commands/mcp/index.ts',
     'commands/rpc/call': 'src/commands/rpc/call.ts',
     'commands/session/setup': 'src/commands/session/setup.ts',
