@@ -1,6 +1,7 @@
 'use client';
 
 import { useState } from 'react';
+import { MAINNET_CHAINS as CORE_MAINNET_CHAINS, TESTNET_CHAINS as CORE_TESTNET_CHAINS } from '@jaw.id/core';
 
 // ── Constants ──────────────────────────────────────────────────────────────────
 
@@ -9,29 +10,14 @@ const WILDCARD_SELECTOR = '0x32323232';
 const EMPTY_CALLDATA_SELECTOR = '0xe0e0e0e0';
 const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 
-const MAINNET_CHAINS: Record<number, string> = {
-  1: 'Ethereum',
-  8453: 'Base',
-  10: 'OP Mainnet',
-  42161: 'Arbitrum One',
-  59144: 'Linea',
-  43114: 'Avalanche',
-  56: 'BNB Smart Chain',
-  42220: 'Celo',
-  14: 'Flare',
-  57073: 'Ink',
-  7979: 'DOS Chain',
-};
+// Derive chain ID → name maps from @jaw.id/core
+const MAINNET_CHAINS: Record<number, string> = Object.fromEntries(
+  CORE_MAINNET_CHAINS.map((chain) => [chain.id, chain.name])
+);
 
-const TESTNET_CHAINS: Record<number, string> = {
-  11155111: 'Sepolia',
-  84532: 'Base Sepolia',
-  11155420: 'OP Sepolia',
-  421614: 'Arbitrum Sepolia',
-  11142220: 'Celo Sepolia',
-  43113: 'Avalanche Fuji',
-  763373: 'Ink Sepolia',
-};
+const TESTNET_CHAINS: Record<number, string> = Object.fromEntries(
+  CORE_TESTNET_CHAINS.map((chain) => [chain.id, chain.name])
+);
 
 const KNOWN_CHAINS: Record<number, string> = {
   ...MAINNET_CHAINS,
