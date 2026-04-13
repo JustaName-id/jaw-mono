@@ -22,7 +22,7 @@ This will:
 1. Generate a random secp256k1 session key
 2. Derive the session key's smart account address
 3. Open your browser for passkey approval of `wallet_grantPermissions`
-4. Encrypt the key to `~/.jaw/keystore.json`
+4. Save the key to `~/.jaw/keystore.json`
 5. Save session metadata to `~/.jaw/session-config.json`
 
 Output:
@@ -127,21 +127,18 @@ After setup, two files are created in `~/.jaw/`:
 
 ### `keystore.json`
 
-Encrypted session private key (AES-256-GCM, encrypted with your API key):
+Session private key (file permissions `0o600`):
 
 ```json
 {
-  "version": 1,
-  "iv": "<base64>",
-  "salt": "<base64>",
-  "ciphertext": "<base64>",
-  "tag": "<base64>",
+  "version": 2,
+  "privateKey": "0x...",
   "address": "0x...",
   "createdAt": "2026-04-09T..."
 }
 ```
 
-The keystore is useless without your API key. On-chain PermissionManager is the primary security boundary.
+On-chain PermissionManager is the primary security boundary — even if the key is read from disk, it can only act within its granted permission scope.
 
 ### `session-config.json`
 

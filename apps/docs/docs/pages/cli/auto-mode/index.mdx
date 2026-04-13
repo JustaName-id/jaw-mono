@@ -23,14 +23,14 @@ Auto mode lets AI agents use a JAW smart account without a browser or passkey fo
 ### Setup (one-time, human required)
 
 1. `jaw session setup` generates a random session key
-2. Encrypts it to `~/.jaw/keystore.json` (AES-256-GCM, API-key-derived)
+2. Saves it to `~/.jaw/keystore.json` (file permissions `0o600`)
 3. Opens browser — passkey approves `wallet_grantPermissions` on-chain
 4. Saves permission details to `~/.jaw/session-config.json`
 5. Browser is never needed again
 
 ### Execution (autonomous, no human)
 
-1. `jaw rpc call ... --session` decrypts the session key
+1. `jaw rpc call ... --session` loads the session key
 2. Creates a local Account from the key
 3. Injects the `permissionId` automatically
 4. PermissionManager validates: correct spender? within call scope? under spend limit? not expired?
@@ -57,13 +57,12 @@ The PermissionManager smart contract validates every transaction at the contract
 
 ### Defense in Depth
 
-| Layer                      | Protects against                                     |
-| -------------------------- | ---------------------------------------------------- |
-| File permissions (`0o600`) | Other users on the same machine                      |
-| AES-256-GCM encryption     | File exfiltration (keystore useless without API key) |
-| On-chain permissions       | Compromised key exceeding granted scope              |
-| Expiry                     | Long-term exposure from a forgotten session          |
-| Revocation                 | Immediate response to suspected compromise           |
+| Layer                      | Protects against                            |
+| -------------------------- | ------------------------------------------- |
+| File permissions (`0o600`) | Other users on the same machine             |
+| On-chain permissions       | Compromised key exceeding granted scope     |
+| Expiry                     | Long-term exposure from a forgotten session |
+| Revocation                 | Immediate response to suspected compromise  |
 
 ## Identity
 

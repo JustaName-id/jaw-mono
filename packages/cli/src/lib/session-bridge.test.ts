@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 
 // Mock keystore
 vi.mock('./keystore.js', () => ({
-  loadSessionKey: vi.fn().mockReturnValue('0x' + 'ab'.repeat(32)),
+  loadSessionKey: vi.fn(() => '0x' + 'ab'.repeat(32)),
 }));
 
 // Mock session-config

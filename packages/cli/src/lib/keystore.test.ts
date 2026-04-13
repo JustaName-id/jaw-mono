@@ -4,7 +4,6 @@ import * as path from 'node:path';
 import * as os from 'node:os';
 
 const TEST_ROOT = path.join(os.tmpdir(), 'jaw-keystore-test');
-const TEST_API_KEY = 'test-api-key-12345';
 
 vi.mock('./paths.js', () => {
   const p = require('node:path');
@@ -20,7 +19,7 @@ vi.mock('./paths.js', () => {
   };
 });
 
-const { generateSessionKey, encryptAndSaveKeystore, loadSessionKey, deleteKeystore, keystoreExists } = await import(
+const { generateSessionKey, saveKeystore, loadSessionKey, deleteKeystore, keystoreExists } = await import(
   './keystore.js'
 );
 const { PATHS } = await import('./paths.js');
@@ -40,26 +39,20 @@ describe('keystore', () => {
     expect(key).toMatch(/^0x[0-9a-f]{64}$/);
   });
 
-  it('encrypt then decrypt round-trips the key', () => {
+  it('save then load round-trips the key', () => {
     const key = generateSessionKey();
-    encryptAndSaveKeystore(key, '0xabc123', TEST_API_KEY);
-    const decrypted = loadSessionKey(TEST_API_KEY);
-    expect(decrypted).toBe(key);
+    saveKeystore(key, '0xabc123');
+    const loaded = loadSessionKey();
+    expect(loaded).toBe(key);
   });
 
   it('loadSessionKey throws if keystore does not exist', () => {
-    expect(() => loadSessionKey(TEST_API_KEY)).toThrow(/No session configured/);
-  });
-
-  it('loadSessionKey throws with wrong API key', () => {
-    const key = generateSessionKey();
-    encryptAndSaveKeystore(key, '0xabc123', TEST_API_KEY);
-    expect(() => loadSessionKey('wrong-api-key')).toThrow(/Failed to decrypt/);
+    expect(() => loadSessionKey()).toThrow(/No session configured/);
   });
 
   it('deleteKeystore removes the file', () => {
     const key = generateSessionKey();
-    encryptAndSaveKeystore(key, '0xabc123', TEST_API_KEY);
+    saveKeystore(key, '0xabc123');
     expect(fs.existsSync(PATHS.keystore)).toBe(true);
     deleteKeystore();
     expect(fs.existsSync(PATHS.keystore)).toBe(false);
@@ -70,18 +63,15 @@ describe('keystore', () => {
   });
 
   it('keystoreExists returns true after save', () => {
-    encryptAndSaveKeystore(generateSessionKey(), '0xabc123', TEST_API_KEY);
+    saveKeystore(generateSessionKey(), '0xabc123');
     expect(keystoreExists()).toBe(true);
   });
 
-  it('keystore.json has version 1 and expected fields', () => {
-    encryptAndSaveKeystore(generateSessionKey(), '0xabc123', TEST_API_KEY);
+  it('keystore.json has version 2 and expected fields', () => {
+    saveKeystore(generateSessionKey(), '0xabc123');
     const raw = JSON.parse(fs.readFileSync(PATHS.keystore, 'utf-8'));
-    expect(raw.version).toBe(1);
-    expect(raw.iv).toBeDefined();
-    expect(raw.salt).toBeDefined();
-    expect(raw.ciphertext).toBeDefined();
-    expect(raw.tag).toBeDefined();
+    expect(raw.version).toBe(2);
+    expect(raw.privateKey).toBeDefined();
     expect(raw.address).toBe('0xabc123');
     expect(raw.createdAt).toBeDefined();
   });

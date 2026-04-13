@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import { BaseCommand } from '../../base-command.js';
 import { loadConfig } from '../../lib/config.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
-import { generateSessionKey, encryptAndSaveKeystore, keystoreExists } from '../../lib/keystore.js';
+import { generateSessionKey, saveKeystore, keystoreExists } from '../../lib/keystore.js';
 import { saveSessionConfig } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 
@@ -101,8 +101,8 @@ export default class SessionSetup extends BaseCommand {
 
     bridge.close();
 
-    // 7. Encrypt and save keystore
-    encryptAndSaveKeystore(privateKeyHex, sessionAddress, apiKey);
+    // 7. Save keystore
+    saveKeystore(privateKeyHex, sessionAddress);
 
     // 8. Save session config
     saveSessionConfig({

@@ -44,7 +44,7 @@ export class SessionBridge {
       return this.session;
     }
 
-    let privateKeyHex: string | null = loadSessionKey(this.options.apiKey);
+    let privateKeyHex: string | null = loadSessionKey();
 
     const { privateKeyToAccount } = await import('viem/accounts');
     const localAccount = privateKeyToAccount(privateKeyHex as `0x${string}`);

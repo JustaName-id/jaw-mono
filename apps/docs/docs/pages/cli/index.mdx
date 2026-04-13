@@ -36,7 +36,7 @@ jaw rpc call wallet_sendCalls '{"calls":[...]}'
 A human approves once during setup. From then on, the CLI signs locally with a scoped session key — no browser needed. On-chain [PermissionManager](/account/grantPermissions) enforces call restrictions, spend limits, and expiry.
 
 ```
-┌─────────┐     Decrypt      ┌─────────────┐     Validate      ┌──────────┐
+┌─────────┐      Load        ┌─────────────┐     Validate      ┌──────────┐
 │   CLI   │ ── keystore ───► │ Session key │ ── on-chain ────► │ Response │
 └─────────┘                  │ signs       │   PermissionMgr   └──────────┘
                              └─────────────┘
