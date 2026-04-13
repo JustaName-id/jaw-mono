@@ -1,3 +1,13 @@
+## 0.2.3 (2026-04-13)
+
+### 🩹 Fixes
+
+- **core:** allow signer to pass other smart account address ([#163](https://github.com/JustaName-id/jaw-mono/pull/163))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.2.2 (2026-04-07)
 
 ### 🩹 Fixes

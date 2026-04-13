@@ -19,10 +19,11 @@ await jaw.provider.request({
 
 ### Parameters
 
-| Name           | Type     | Required | Description                         |
-| -------------- | -------- | -------- | ----------------------------------- |
-| `id`           | `string` | Yes      | Permission ID to revoke             |
-| `capabilities` | `object` | No       | Additional capabilities (see below) |
+| Name           | Type          | Required | Description                         |
+| -------------- | ------------- | -------- | ----------------------------------- |
+| `id`           | `string`      | Yes      | Permission ID to revoke             |
+| `address`      | `0x${string}` | No       | Account address to revoke on        |
+| `capabilities` | `object`      | No       | Additional capabilities (see below) |
 
 ### Capabilities
 

@@ -64,6 +64,8 @@ export type ToJustanAccountParameters = {
           }
         | undefined;
     factoryAddress?: Address | undefined;
+    /** Override the factory-derived address. Used when signing for an account this passkey owns but didn't create. */
+    address?: Address | undefined;
 
     // EIP-7702 parameters (optional)
     eip7702Account?: LocalAccount | undefined;
@@ -86,6 +88,7 @@ export async function toJustanAccount(parameters: ToJustanAccountParameters): Pr
             version: '0.8',
         },
         factoryAddress = FACTORY_ADDRESS,
+        address: addressOverride,
         // EIP-7702 parameters
         eip7702Account,
         eip7702Auth,
@@ -125,7 +128,9 @@ export async function toJustanAccount(parameters: ToJustanAccountParameters): Pr
     if (!owner) throw new Error('No owner provided');
 
     let accountAddress: Address;
-    if (isEip7702) {
+    if (addressOverride) {
+        accountAddress = addressOverride;
+    } else if (isEip7702) {
         accountAddress = eip7702Account!.address;
     } else {
         accountAddress = await readContract(client, {

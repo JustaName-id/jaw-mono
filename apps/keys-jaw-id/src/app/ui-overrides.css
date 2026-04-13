@@ -1,6 +1,4 @@
-/* Intentionally empty.
- *
- * This file replaces the UI package's styles.css via webpack alias in next.config.js.
+/* This file replaces the UI package's styles.css via webpack alias in next.config.js.
  * The UI package's CSS conflicts with this app because:
  *   - It defines oklch CSS variables on :root that clash with this app's HSL variables
  *   - It generates duplicate Tailwind utility classes using var(--color) directly,
@@ -9,3 +7,48 @@
  * This app's own Tailwind config scans the UI package's source files and generates
  * all needed utility classes with the correct hsl() format.
  */
+
+/*
+ * Fix OKLCH/HSL format conflict in SDK dialogs.
+ *
+ * The SDK's applyThemeToContainer sets --card, --primary, etc. as OKLCH strings
+ * via inline styles on [data-jaw-modal-container]. But this app's Tailwind
+ * wraps them in hsl(): e.g. hsl(var(--card) / 1). OKLCH inside hsl() is
+ * invalid CSS, making backgrounds transparent.
+ *
+ * Fix: force the short aliases to inherit from the host's :root (which has
+ * HSL channel values) using !important to override the inline styles.
+ * The SDK's --jaw-color-* variables remain on the container for any CSS
+ * that references them directly.
+ */
+[data-jaw-modal-container] {
+  --background: inherit !important;
+  --foreground: inherit !important;
+  --card: inherit !important;
+  --card-foreground: inherit !important;
+  --popover: inherit !important;
+  --popover-foreground: inherit !important;
+  --primary: inherit !important;
+  --primary-foreground: inherit !important;
+  --secondary: inherit !important;
+  --secondary-foreground: inherit !important;
+  --muted: inherit !important;
+  --muted-foreground: inherit !important;
+  --accent: inherit !important;
+  --accent-foreground: inherit !important;
+  --destructive: inherit !important;
+  --destructive-foreground: inherit !important;
+  --border: inherit !important;
+  --input: inherit !important;
+  --ring: inherit !important;
+}
+
+/* Preflight reset for SDK modals — box-sizing and border defaults */
+:where([data-jaw-modal-container]) *,
+:where([data-jaw-modal-container]) *::before,
+:where([data-jaw-modal-container]) *::after {
+  box-sizing: border-box;
+  border-width: 0;
+  border-style: solid;
+  border-color: hsl(var(--border));
+}

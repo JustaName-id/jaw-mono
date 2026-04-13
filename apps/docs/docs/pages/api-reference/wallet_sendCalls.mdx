@@ -32,6 +32,7 @@ await jaw.provider.request({
 
 | Name            | Type          | Required | Description                                   |
 | --------------- | ------------- | -------- | --------------------------------------------- |
+| `from`          | `0x${string}` | No       | Account address to execute from               |
 | `calls`         | `array`       | Yes      | Array of call objects                         |
 | `calls[].to`    | `0x${string}` | Yes      | Recipient address                             |
 | `calls[].value` | `0x${string}` | No       | Value in wei (hex), default "0x0"             |
