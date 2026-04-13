@@ -219,6 +219,8 @@ export class AppSpecificSigner extends JAWSigner {
             case 'wallet_sign': {
                 // ERC-7871 wallet_sign params structure with optional chainId
                 type WalletSignParams = {
+                    /** Account address to sign with. */
+                    address?: Address;
                     /** Target chain ID in hex format. Defaults to the connected chain. */
                     chainId?: `0x${string}`;
                     request: PersonalSignRequestData | TypedDataRequestData;
@@ -235,7 +237,7 @@ export class AppSpecificSigner extends JAWSigner {
                     timestamp: Date.now(),
                     correlationId,
                     data: {
-                        address: this.accounts[0],
+                        address: signParams.address ?? this.accounts[0],
                         chainId: resolvedChain.id,
                         request: signParams.request,
                     },
@@ -359,7 +361,7 @@ export class AppSpecificSigner extends JAWSigner {
                     timestamp: Date.now(),
                     correlationId,
                     data: {
-                        address: this.accounts[0],
+                        address: permissionData.address ?? this.accounts[0],
                         chainId: resolvedChain.id,
                         expiry: permissionData.expiry,
                         spender: permissionData.spender,

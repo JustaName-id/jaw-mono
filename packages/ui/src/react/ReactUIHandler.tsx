@@ -1084,7 +1084,7 @@ function SignatureDialogWrapper({
       const account = await getAccountForSigning(apiKey, chainId, paymasters?.[chainId]?.url);
 
       // Sign the message
-      const signature = await account.signMessage(request.data.message);
+      const signature = await account.signMessage(request.data.message, { address: request.data.address });
 
       setSignatureStatus('Signature successful!');
       onApprove(signature);
@@ -1167,12 +1167,15 @@ function Eip712DialogWrapper({
         typeof request.data.typedData === 'string' ? JSON.parse(request.data.typedData) : request.data.typedData;
 
       // Sign the typed data
-      const signature = await account.signTypedData({
-        domain: typedData.domain,
-        types: typedData.types,
-        primaryType: typedData.primaryType,
-        message: typedData.message,
-      });
+      const signature = await account.signTypedData(
+        {
+          domain: typedData.domain,
+          types: typedData.types,
+          primaryType: typedData.primaryType,
+          message: typedData.message,
+        },
+        { address: request.data.address }
+      );
 
       setSignatureStatus('Signature successful!');
       onApprove(signature);
@@ -1311,6 +1314,7 @@ function TransactionDialogWrapper({
     feeTokens,
     isSponsored,
     permissionId,
+    address: request.data.from,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -1481,7 +1485,7 @@ function TransactionDialogWrapper({
 
       const result = await account.sendCalls(
         transactionCalls,
-        permissionId ? { permissionId } : undefined,
+        { permissionId, from: request.data.from },
         computedPaymasterUrl,
         computedPaymasterContext
       );
@@ -1650,6 +1654,7 @@ function SendTransactionDialogWrapper({
     apiKey,
     feeTokens,
     isSponsored,
+    address: request.data.from,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -1815,7 +1820,12 @@ function SendTransactionDialogWrapper({
         throw new Error('Account not initialized');
       }
 
-      const txHash = await account.sendTransaction(transactionCalls, computedPaymasterUrl, computedPaymasterContext);
+      const txHash = await account.sendTransaction(
+        transactionCalls,
+        computedPaymasterUrl,
+        computedPaymasterContext,
+        request.data.from
+      );
 
       setTransactionStatus('Transaction successful!');
       onApprove(txHash);
@@ -1997,6 +2007,7 @@ function PermissionDialogWrapper({
     apiKey,
     feeTokens,
     isSponsored,
+    address: request.data.address,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -2381,7 +2392,8 @@ function PermissionDialogWrapper({
         request.data.spender as Address,
         permissionsDetail,
         computedPaymasterUrl,
-        computedPaymasterContext
+        computedPaymasterContext,
+        request.data.address
       );
 
       setStatus('Permissions granted successfully!');
@@ -2656,6 +2668,7 @@ function RevokePermissionDialogWrapper({
     apiKey,
     feeTokens,
     isSponsored,
+    address: request.data.address,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -2954,7 +2967,8 @@ function RevokePermissionDialogWrapper({
       await account.revokePermission(
         request.data.permissionId as `0x${string}`,
         computedPaymasterUrl,
-        computedPaymasterContext
+        computedPaymasterContext,
+        request.data.address
       );
 
       setStatus('Permission revoked successfully!');

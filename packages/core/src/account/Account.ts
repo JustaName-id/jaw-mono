@@ -3,6 +3,7 @@ import { isHex, encodeFunctionData, erc20Abi, createPublicClient, http } from 'v
 import { toWebAuthnAccount, type SmartAccount } from 'viem/account-abstraction';
 import {
     createSmartAccount,
+    createSmartAccountForAddress,
     sendTransaction as sendSmartAccountTransaction,
     sendCalls as sendSmartAccountCalls,
     sendCallsWithPermission as sendSmartAccountCallsWithPermission,
@@ -81,6 +82,8 @@ export interface TransactionCall {
 export interface SendCallsOptions {
     /** Permission ID to use for executing the calls through the permission manager */
     permissionId?: Hex;
+    /** Override account address — execute on behalf of a different account this passkey owns */
+    from?: Address;
 }
 
 /**
@@ -609,6 +612,15 @@ export class Account {
     }
 
     /**
+     * Get the SmartAccount for a given address, resolving an override if needed.
+     * If the address matches the connected account (or is omitted), returns the default SmartAccount.
+     * Otherwise, creates a temporary SmartAccount for the target address using the current signer.
+     */
+    async getSmartAccountFor(address?: Address): Promise<SmartAccount> {
+        return this.resolveSmartAccount(address);
+    }
+
+    /**
      * Get the chain configuration
      *
      * @returns The Chain configuration object
@@ -656,8 +668,9 @@ export class Account {
      * const signature = await account.signMessage('Hello, World!');
      * ```
      */
-    async signMessage(message: string): Promise<Hex> {
-        return await this._smartAccount.signMessage({ message });
+    async signMessage(message: string, options?: { address?: Address }): Promise<Hex> {
+        const smartAccount = await this.resolveSmartAccount(options?.address);
+        return await smartAccount.signMessage({ message });
     }
 
     /**
@@ -676,8 +689,12 @@ export class Account {
      * });
      * ```
      */
-    async signTypedData(typedData: TypedDataDefinition<TypedData, string>): Promise<Hex> {
-        return await this._smartAccount.signTypedData(typedData);
+    async signTypedData(
+        typedData: TypedDataDefinition<TypedData, string>,
+        options?: { address?: Address }
+    ): Promise<Hex> {
+        const smartAccount = await this.resolveSmartAccount(options?.address);
+        return await smartAccount.signTypedData(typedData);
     }
 
     // ============================================
@@ -703,8 +720,12 @@ export class Account {
     async sendTransaction(
         calls: TransactionCall[],
         paymasterUrlOverride?: string,
-        paymasterContextOverride?: Record<string, unknown>
+        paymasterContextOverride?: Record<string, unknown>,
+        from?: Address
     ): Promise<Hash> {
+        const smartAccount = await this.resolveSmartAccount(from);
+        const isOverride = this.isAddressOverride(from);
+
         const formattedCalls = calls.map((call) => ({
             to: call.to,
             value: Account.parseValue(call.value),
@@ -715,7 +736,8 @@ export class Account {
         const approvalCall = await this.createErc20ApprovalCall(
             paymasterUrlOverride,
             paymasterContextOverride,
-            formattedCalls
+            formattedCalls,
+            smartAccount
         );
         const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
@@ -723,13 +745,13 @@ export class Account {
         const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
 
         return await sendSmartAccountTransaction(
-            this._smartAccount,
+            smartAccount,
             finalCalls,
             this._chain,
             paymasterUrlOverride,
             Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined,
             this._apiKey,
-            this._localAccount ?? undefined
+            isOverride ? undefined : (this._localAccount ?? undefined)
         );
     }
 
@@ -766,47 +788,59 @@ export class Account {
         paymasterUrlOverride?: string,
         paymasterContextOverride?: Record<string, unknown>
     ): Promise<BundledTransactionResult> {
+        const smartAccount = await this.resolveSmartAccount(options?.from);
+        const isOverride = this.isAddressOverride(options?.from);
+
         const formattedCalls = calls.map((call) => ({
             to: call.to,
             value: Account.parseValue(call.value),
             data: call.data,
         }));
 
-        // If using JAW ERC-20 paymaster, prepend approval call if needed
+        // If using JAW ERC-20 paymaster, create approval call if needed
         const approvalCall = await this.createErc20ApprovalCall(
             paymasterUrlOverride,
             paymasterContextOverride,
-            formattedCalls
+            formattedCalls,
+            smartAccount
         );
-        const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
         // Remove gas field from context (only used for approval logic)
         const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
         const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
+        // Don't pass localAccount when overriding address — target is a standard smart account, not EIP-7702
+        const localAccount = isOverride ? undefined : (this._localAccount ?? undefined);
+
         let result: BundledTransactionResult;
 
         if (options?.permissionId) {
-            // Execute through permission manager
+            // Execute through permission manager.
+            // The approval call must be placed at the spender level (alongside the
+            // permission manager call), not inside the permission batch — the
+            // permission manager validates each call's selector and would reject
+            // the approve selector.
             result = await sendSmartAccountCallsWithPermission(
-                this._smartAccount,
-                finalCalls,
+                smartAccount,
+                formattedCalls,
                 this._chain,
                 options.permissionId,
                 this._apiKey,
                 paymasterUrlOverride,
                 cleanedContext,
-                this._localAccount ?? undefined
+                localAccount,
+                approvalCall ?? undefined
             );
         } else {
             // Standard execution (EIP-7702 handled inside sendSmartAccountCalls)
+            const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
             result = await sendSmartAccountCalls(
-                this._smartAccount,
+                smartAccount,
                 finalCalls,
                 this._chain,
                 paymasterUrlOverride,
                 cleanedContext,
-                this._localAccount ?? undefined
+                localAccount
             );
         }
 
@@ -858,7 +892,9 @@ export class Account {
      * console.log('Estimated gas:', gas.toString());
      * ```
      */
-    async estimateGas(calls: TransactionCall[], options?: { permissionId?: Hex }): Promise<bigint> {
+    async estimateGas(calls: TransactionCall[], options?: { permissionId?: Hex; address?: Address }): Promise<bigint> {
+        const smartAccount = await this.resolveSmartAccount(options?.address);
+
         const formattedCalls = calls.map((call) => ({
             to: call.to,
             value: Account.parseValue(call.value),
@@ -868,7 +904,7 @@ export class Account {
         if (options?.permissionId) {
             // Estimate gas for permission-based execution through the permission manager
             return await estimateUserOpGasWithPermission(
-                this._smartAccount,
+                smartAccount,
                 formattedCalls,
                 this._chain,
                 options.permissionId,
@@ -876,7 +912,7 @@ export class Account {
             );
         }
 
-        return await estimateUserOpGas(this._smartAccount, formattedCalls, this._chain);
+        return await estimateUserOpGas(smartAccount, formattedCalls, this._chain);
     }
 
     /**
@@ -896,7 +932,10 @@ export class Account {
      * console.log('Gas cost:', cost, 'ETH');
      * ```
      */
-    async calculateGasCost(calls: TransactionCall[], options?: { permissionId?: Hex }): Promise<string> {
+    async calculateGasCost(
+        calls: TransactionCall[],
+        options?: { permissionId?: Hex; address?: Address }
+    ): Promise<string> {
         const gas = await this.estimateGas(calls, options);
         return await calculateGas(this._chain, gas);
     }
@@ -933,22 +972,28 @@ export class Account {
         spender: Address,
         permissions: PermissionsDetail,
         paymasterUrlOverride?: string,
-        paymasterContextOverride?: Record<string, unknown>
+        paymasterContextOverride?: Record<string, unknown>,
+        address?: Address
     ): Promise<WalletGrantPermissionsResponse> {
+        const smartAccount = await this.resolveSmartAccount(address);
+
         // Build the permission call for gas estimation
-        const permissionCall = buildGrantPermissionCall(this._smartAccount.address, spender, expiry, permissions);
+        const permissionCall = buildGrantPermissionCall(smartAccount.address, spender, expiry, permissions);
 
         // Check if we need an ERC-20 approval for the paymaster
-        const approvalCall = await this.createErc20ApprovalCall(paymasterUrlOverride, paymasterContextOverride, [
-            permissionCall,
-        ]);
+        const approvalCall = await this.createErc20ApprovalCall(
+            paymasterUrlOverride,
+            paymasterContextOverride,
+            [permissionCall],
+            smartAccount
+        );
 
         // Remove gas field from context (only used for approval logic)
         const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
         const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
         return await grantSmartAccountPermissions(
-            this._smartAccount,
+            smartAccount,
             expiry,
             spender,
             permissions,
@@ -977,8 +1022,11 @@ export class Account {
     async revokePermission(
         permissionId: Hex,
         paymasterUrlOverride?: string,
-        paymasterContextOverride?: Record<string, unknown>
+        paymasterContextOverride?: Record<string, unknown>,
+        address?: Address
     ): Promise<RevokePermissionApiResponse> {
+        const smartAccount = await this.resolveSmartAccount(address);
+
         // Build the revoke call for gas estimation (requires fetching permission from relay)
         let revokeCalls: Array<{ to: Address; data: Hex }> = [];
         try {
@@ -994,7 +1042,8 @@ export class Account {
         const approvalCall = await this.createErc20ApprovalCall(
             paymasterUrlOverride,
             paymasterContextOverride,
-            revokeCalls
+            revokeCalls,
+            smartAccount
         );
 
         // Remove gas field from context (only used for approval logic)
@@ -1002,7 +1051,7 @@ export class Account {
         const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
         return await revokeSmartAccountPermission(
-            this._smartAccount,
+            smartAccount,
             permissionId,
             this._chain,
             this._apiKey,
@@ -1054,6 +1103,57 @@ export class Account {
             permissionId: relayResponse.permissionId as Hex,
             chainId: relayResponse.chainId as Hex,
         };
+    }
+
+    // ============================================
+    // Private Instance Helpers
+    // ============================================
+
+    /**
+     * Resolves which SmartAccount to use for an operation.
+     * If overrideAddress is provided and differs from the default, creates a temporary
+     * SmartAccount for the target address using the current signer.
+     * @internal
+     */
+    private async resolveSmartAccount(overrideAddress?: Address): Promise<SmartAccount> {
+        if (!overrideAddress || overrideAddress.toLowerCase() === this._smartAccount.address.toLowerCase()) {
+            return this._smartAccount;
+        }
+
+        const bundlerClient = getBundlerClient(this._chain);
+
+        if (this._passkeyAccount) {
+            const webAuthnAccount = toWebAuthnAccount({
+                credential: {
+                    id: this._passkeyAccount.credentialId,
+                    publicKey: this._passkeyAccount.publicKey,
+                },
+            });
+
+            return await createSmartAccountForAddress(
+                overrideAddress,
+                webAuthnAccount,
+                bundlerClient as JustanAccountImplementation['client']
+            );
+        }
+
+        if (this._localAccount) {
+            return await createSmartAccountForAddress(
+                overrideAddress,
+                this._localAccount,
+                bundlerClient as JustanAccountImplementation['client']
+            );
+        }
+
+        throw new Error('Address override requires a passkey or local account signer');
+    }
+
+    /**
+     * Returns true if the given address is a valid override (different from the default account).
+     * @internal
+     */
+    private isAddressOverride(address?: Address): boolean {
+        return !!address && address.toLowerCase() !== this._smartAccount.address.toLowerCase();
     }
 
     // ============================================
@@ -1116,8 +1216,10 @@ export class Account {
     private async createErc20ApprovalCall(
         paymasterUrl?: string,
         paymasterContext?: Record<string, unknown>,
-        calls?: Array<{ to: Address; value?: bigint; data?: Hex }>
+        calls?: Array<{ to: Address; value?: bigint; data?: Hex }>,
+        smartAccount?: SmartAccount
     ): Promise<{ to: Address; value?: bigint; data: Hex } | null> {
+        const account = smartAccount ?? this._smartAccount;
         // Only add approval if using JAW ERC-20 paymaster
         if (!Account.isJawErc20Paymaster(paymasterUrl)) {
             return null;
@@ -1164,7 +1266,7 @@ export class Account {
                     const bundlerClient = getBundlerClient(this._chain, paymasterUrl, { token: tokenAddress });
 
                     const userOp = await bundlerClient.prepareUserOperation({
-                        account: this._smartAccount,
+                        account,
                         calls: callsWithApproval,
                     });
 
@@ -1213,7 +1315,7 @@ export class Account {
             address: tokenAddress as Address,
             abi: erc20Abi,
             functionName: 'allowance',
-            args: [this._smartAccount.address, ERC20_PAYMASTER_ADDRESS as Address],
+            args: [account.address, ERC20_PAYMASTER_ADDRESS as Address],
         });
 
         // If current allowance is sufficient, no approval needed

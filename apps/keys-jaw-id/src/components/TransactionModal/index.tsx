@@ -50,6 +50,8 @@ export interface TransactionRequestData {
   callsId?: string;
   // Permission ID for permission-based execution
   permissionId?: `0x${string}`;
+  // Account address to execute from
+  from?: `0x${string}`;
 }
 
 export interface TransactionModalProps {
@@ -208,6 +210,7 @@ export const TransactionModal = ({
     feeTokens,
     isSponsored,
     permissionId,
+    address: transactionRequest?.from,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -259,7 +262,9 @@ export const TransactionModal = ({
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
     // Skip if already sponsored via capabilities or config
-    if (effectivePaymasterUrl || !chain || !walletAddress) return;
+    // Use override address for balance fetching when executing on behalf of another account
+    const balanceAddress = transactionRequest?.from ?? walletAddress;
+    if (effectivePaymasterUrl || !chain || !balanceAddress) return;
 
     let isMounted = true;
 
@@ -288,7 +293,7 @@ export const TransactionModal = ({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, walletAddress, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -339,7 +344,7 @@ export const TransactionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, effectiveApiKey, walletAddress, effectivePaymasterUrl]);
+  }, [chain, effectiveApiKey, walletAddress, transactionRequest?.from, effectivePaymasterUrl]);
 
   // Note: Account initialization is handled by useSessionAccount hook
   // Note: Gas estimation is handled by useGasEstimation hook
@@ -372,9 +377,10 @@ export const TransactionModal = ({
       // Use sendCalls for wallet_sendCalls, sendTransaction for eth_sendTransaction
       if (transactionRequest?.method === 'wallet_sendCalls') {
         // Build options with permissionId if available
-        const options = transactionRequest?.permissionId
-          ? { permissionId: transactionRequest.permissionId }
-          : undefined;
+        const options =
+          transactionRequest?.permissionId || transactionRequest?.from
+            ? { permissionId: transactionRequest?.permissionId, from: transactionRequest?.from }
+            : undefined;
 
         const bundledResult = await account.sendCalls(
           transactionCalls,
@@ -388,7 +394,12 @@ export const TransactionModal = ({
           chainId: bundledResult.chainId,
         };
       } else {
-        const txHash = await account.sendTransaction(transactionCalls, computedPaymasterUrl, computedPaymasterContext);
+        const txHash = await account.sendTransaction(
+          transactionCalls,
+          computedPaymasterUrl,
+          computedPaymasterContext,
+          transactionRequest?.from
+        );
         result = {
           hash: txHash,
         };
@@ -461,7 +472,7 @@ export const TransactionModal = ({
         console.log('onOpenChange');
       }}
       transactions={normalizedTransactions}
-      walletAddress={walletAddress ?? ''}
+      walletAddress={transactionRequest?.from ?? walletAddress ?? ''}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}

@@ -91,12 +91,15 @@ export const Eip712Modal = ({
         throw new Error('Invalid typed data');
       }
 
-      const signature = await account.signTypedData({
-        domain: typedData.domain,
-        types: typedData.types as any,
-        primaryType: typedData.primaryType,
-        message: typedData.message,
-      });
+      const signature = await account.signTypedData(
+        {
+          domain: typedData.domain,
+          types: typedData.types as any,
+          primaryType: typedData.primaryType,
+          message: typedData.message,
+        },
+        { address: address as `0x${string}` | undefined }
+      );
 
       setSignatureStatus('Signature created successfully!');
 

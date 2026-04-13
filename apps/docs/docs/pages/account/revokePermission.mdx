@@ -7,7 +7,12 @@ Revoke a previously granted permission.
 ## Signature
 
 ```typescript
-async revokePermission(permissionId: Hex): Promise<RevokePermissionApiResponse>
+async revokePermission(
+  permissionId: Hex,
+  paymasterUrlOverride?: string,
+  paymasterContextOverride?: Record<string, unknown>,
+  address?: Address
+): Promise<RevokePermissionApiResponse>
 ```
 
 ## Parameters
@@ -17,6 +22,24 @@ async revokePermission(permissionId: Hex): Promise<RevokePermissionApiResponse>
 Type: `Hex`
 
 The permission ID (hash) to revoke. This is the `id` field returned from `grantPermissions()`.
+
+### paymasterUrlOverride (optional)
+
+Type: `string`
+
+Custom paymaster URL for gas sponsorship or ERC-20 token payment.
+
+### paymasterContextOverride (optional)
+
+Type: `Record<string, unknown>`
+
+Custom paymaster context.
+
+### address (optional)
+
+Type: `Address`
+
+Target account address to revoke the permission on. The signer must be a registered owner on that account.
 
 ## Returns
 

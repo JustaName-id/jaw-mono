@@ -12,7 +12,8 @@ async grantPermissions(
   spender: Address,
   permissions: PermissionsDetail,
   paymasterUrlOverride?: string,
-  paymasterContextOverride?: Record<string, unknown>
+  paymasterContextOverride?: Record<string, unknown>,
+  address?: Address
 ): Promise<WalletGrantPermissionsResponse>
 ```
 
@@ -82,6 +83,12 @@ Custom paymaster context. For ERC-20 payment, include the token address:
   token: '0xUSDC_ADDRESS...';
 }
 ```
+
+### address (optional)
+
+Type: `Address`
+
+Target account address to grant permissions on. The signer must be a registered owner on that account.
 
 ## Returns
 
