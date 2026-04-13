@@ -100,7 +100,7 @@ export function extractTransactionData(
       atomicRequired: sendCallsParams.atomicRequired,
       callsId: sendCallsParams.id,
       permissionId,
-      from: (sendCallsParams as unknown as { from?: `0x${string}` }).from,
+      from: sendCallsParams.from,
     };
   }
 
@@ -122,7 +122,7 @@ export function extractTransactionData(
         },
       ],
       chainId: chain.id,
-      from: (txParams as unknown as { from?: `0x${string}` }).from,
+      from: txParams.from,
     };
   }
 
