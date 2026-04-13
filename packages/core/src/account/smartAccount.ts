@@ -386,7 +386,8 @@ export async function sendCallsWithPermission(
     apiKey: string,
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>,
-    localAccount?: LocalAccount
+    localAccount?: LocalAccount,
+    approvalCall?: { to: Address; value?: bigint; data: Hex }
 ): Promise<BundledTransactionResult> {
     // Fetch the permission from the relay
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
@@ -402,19 +403,29 @@ export async function sendCallsWithPermission(
     // Encode the executeBatch call with permission
     const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
 
-    // The permission call routed through the permissions manager
-    const permissionCall: Array<{ to: Address; value: bigint; data: Hex }> = [
-        {
-            to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
-            value: 0n,
-            data: encodedData,
-        },
-    ];
+    // Build the spender-level calls: optional paymaster approval + permission manager call.
+    // The approval must be at this level (not inside the permission batch) because the
+    // permission manager validates each call's selector against the permission.
+    const spenderCalls: Array<{ to: Address; value: bigint; data: Hex }> = [];
+
+    if (approvalCall) {
+        spenderCalls.push({
+            to: approvalCall.to,
+            value: approvalCall.value ?? 0n,
+            data: approvalCall.data,
+        });
+    }
+
+    spenderCalls.push({
+        to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+        value: 0n,
+        data: encodedData,
+    });
 
     // EIP-7702: prepend delegation authorization + owner setup if needed
     const { calls: finalCalls, authorization } = localAccount
-        ? await prepareEip7702Calls(smartAccount, localAccount, permissionCall, chain)
-        : { calls: permissionCall, authorization: undefined };
+        ? await prepareEip7702Calls(smartAccount, localAccount, spenderCalls, chain)
+        : { calls: spenderCalls, authorization: undefined };
 
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 

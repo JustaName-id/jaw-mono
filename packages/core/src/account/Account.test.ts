@@ -470,6 +470,7 @@ describe('Account', () => {
                 'test-api-key',
                 undefined,
                 undefined,
+                undefined,
                 undefined
             );
             expect(storeCallStatus).toHaveBeenCalledWith(mockUserOpHash, 1, 'test-api-key');

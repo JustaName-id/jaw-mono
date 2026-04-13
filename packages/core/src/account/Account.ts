@@ -797,14 +797,13 @@ export class Account {
             data: call.data,
         }));
 
-        // If using JAW ERC-20 paymaster, prepend approval call if needed
+        // If using JAW ERC-20 paymaster, create approval call if needed
         const approvalCall = await this.createErc20ApprovalCall(
             paymasterUrlOverride,
             paymasterContextOverride,
             formattedCalls,
             smartAccount
         );
-        const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
         // Remove gas field from context (only used for approval logic)
         const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
@@ -816,19 +815,25 @@ export class Account {
         let result: BundledTransactionResult;
 
         if (options?.permissionId) {
-            // Execute through permission manager
+            // Execute through permission manager.
+            // The approval call must be placed at the spender level (alongside the
+            // permission manager call), not inside the permission batch — the
+            // permission manager validates each call's selector and would reject
+            // the approve selector.
             result = await sendSmartAccountCallsWithPermission(
                 smartAccount,
-                finalCalls,
+                formattedCalls,
                 this._chain,
                 options.permissionId,
                 this._apiKey,
                 paymasterUrlOverride,
                 cleanedContext,
-                localAccount
+                localAccount,
+                approvalCall ?? undefined
             );
         } else {
             // Standard execution (EIP-7702 handled inside sendSmartAccountCalls)
+            const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
             result = await sendSmartAccountCalls(
                 smartAccount,
                 finalCalls,
