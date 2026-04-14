@@ -2,6 +2,7 @@ import * as fs from 'node:fs';
 import { BaseCommand } from '../../base-command.js';
 import { saveConfig } from '../../lib/config.js';
 import type { JawConfig } from '../../lib/types.js';
+import { isValidKeysUrl, isValidRelayUrl, parsePermissionsConfig } from '../../lib/validation.js';
 
 export default class ConfigWrite extends BaseCommand {
   static override description = 'Write full config from inline JSON or a file path to ~/.jaw/config.json.';
@@ -48,6 +49,20 @@ export default class ConfigWrite extends BaseCommand {
         config = JSON.parse(compact) as JawConfig;
       } catch {
         this.error('Invalid JSON');
+      }
+    }
+
+    if (config.keysUrl && !isValidKeysUrl(config.keysUrl)) {
+      this.error(`Untrusted keysUrl: ${config.keysUrl}. Must be a *.jaw.id domain (HTTPS) or localhost.`);
+    }
+    if (config.relayUrl && !isValidRelayUrl(config.relayUrl)) {
+      this.error(`Untrusted relayUrl: ${config.relayUrl}. Must be wss://*.jaw.id or ws://localhost.`);
+    }
+    if (config.permissions) {
+      try {
+        parsePermissionsConfig(config.permissions);
+      } catch (error) {
+        this.error((error as Error).message);
       }
     }
 

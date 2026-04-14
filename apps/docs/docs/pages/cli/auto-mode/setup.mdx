@@ -138,7 +138,7 @@ Session private key (file permissions `0o600`):
 }
 ```
 
-On-chain PermissionManager is the primary security boundary — even if the key is read from disk, it can only act within its granted permission scope.
+On-chain PermissionManager is the primary security boundary — even if the key is read from disk, it can only act within its granted permission scope. The session key's smart account is never funded, so a compromised key cannot independently hold or transfer assets.
 
 ### `session-config.json`
 

@@ -124,6 +124,13 @@ describe('SessionBridge', () => {
     await expect(bridge.request('eth_accounts')).rejects.toThrow(/Session expired/);
   });
 
+  it('throws on chain mismatch between session and requested chain', async () => {
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 8453 });
+    await expect(bridge.request('eth_accounts')).rejects.toThrow(
+      /Session was created for chain 84532, but --chain 8453 was requested/
+    );
+  });
+
   it('close is a no-op', () => {
     const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
     expect(() => bridge.close()).not.toThrow();

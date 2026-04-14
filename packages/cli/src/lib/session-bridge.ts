@@ -44,6 +44,16 @@ export class SessionBridge {
       return this.session;
     }
 
+    const config = loadSessionConfig();
+    this.checkExpiry(config);
+
+    if (config.chainId !== this.options.chainId) {
+      throw new Error(
+        `Session was created for chain ${config.chainId}, but --chain ${this.options.chainId} was requested. ` +
+          `Run \`jaw session setup --chain ${this.options.chainId}\` to create a session for that chain.`
+      );
+    }
+
     let privateKeyHex: string | null = loadSessionKey();
 
     const { privateKeyToAccount } = await import('viem/accounts');
@@ -60,9 +70,6 @@ export class SessionBridge {
       },
       localAccount
     );
-
-    const config = loadSessionConfig();
-    this.checkExpiry(config);
 
     this.session = { account: account as InitializedSession['account'], config };
     return this.session;

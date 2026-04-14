@@ -44,7 +44,7 @@ Auto mode lets AI agents use a JAW smart account without a browser or passkey fo
 
 ## Security Model
 
-The session key is scoped by **on-chain enforcement** — even if the key is compromised, damage is bounded:
+The session key is scoped by **on-chain enforcement** — even if the key is compromised, damage is bounded. The session key's own smart account is never funded; it cannot hold or transfer assets independently. The only way it can move funds is through the owner's account via PermissionManager, which enforces all constraints below:
 
 | Constraint             | How it works                                        |
 | ---------------------- | --------------------------------------------------- |
@@ -59,6 +59,7 @@ The PermissionManager smart contract validates every transaction at the contract
 
 | Layer                      | Protects against                            |
 | -------------------------- | ------------------------------------------- |
+| Unfunded session account   | Key alone cannot move any assets            |
 | File permissions (`0o600`) | Other users on the same machine             |
 | On-chain permissions       | Compromised key exceeding granted scope     |
 | Expiry                     | Long-term exposure from a forgotten session |

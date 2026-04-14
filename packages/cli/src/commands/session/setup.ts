@@ -3,9 +3,16 @@ import * as fs from 'node:fs';
 import { BaseCommand } from '../../base-command.js';
 import { loadConfig } from '../../lib/config.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
-import { generateSessionKey, saveKeystore, keystoreExists } from '../../lib/keystore.js';
-import { saveSessionConfig } from '../../lib/session-config.js';
+import {
+  generateSessionKey,
+  saveKeystore,
+  keystoreExists,
+  deleteKeystore,
+  loadSessionKey,
+} from '../../lib/keystore.js';
+import { saveSessionConfig, loadSessionConfig, deleteSessionConfig } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
+import { parsePermissionsConfig } from '../../lib/validation.js';
 
 export default class SessionSetup extends BaseCommand {
   static override description =
@@ -35,19 +42,70 @@ export default class SessionSetup extends BaseCommand {
     const chainId = this.resolveChainId(flags);
 
     // 1. Check existing session
+    let reuseKey: string | null = null;
+
     if (keystoreExists()) {
+      const existing = loadSessionConfig();
+      const isActive = existing.expiry > Date.now() / 1000;
+
       if (!flags.yes) {
         const readline = await import('node:readline');
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
-        const answer = await new Promise<string>((resolve) => {
-          rl.question('Existing session found. Overwrite? (y/N) ', resolve);
-        });
-        rl.close();
-        if (answer.toLowerCase() !== 'y') {
-          this.log('Aborted.');
-          return;
+        const ask = (q: string) => new Promise<string>((resolve) => rl.question(q, resolve));
+
+        if (isActive) {
+          const remaining = Math.floor((existing.expiry - Date.now() / 1000) / 86400);
+          this.log('Active session found:\n');
+          this.log(`  Session address:  ${existing.sessionAddress}`);
+          this.log(`  Permission ID:    ${existing.permissionId}`);
+          this.log(`  Chain:            ${existing.chainId}`);
+          this.log(
+            `  Expires:          ${new Date(existing.expiry * 1000).toISOString()} (${remaining} days remaining)`
+          );
+          this.log('\nThe old on-chain permission will NOT be revoked automatically.');
+          this.log('Anyone with the old session key can still use it until expiry.\n');
+
+          const revokeAnswer = await ask('Revoke old permission on-chain first? (Y/n) ');
+          if (revokeAnswer.toLowerCase() !== 'n') {
+            this.log('Opening browser to revoke old permission...');
+            const pm = config.paymasters?.[existing.chainId];
+            const revokeBridge = await getBridge({
+              keysUrl: config.keysUrl,
+              apiKey,
+              chainId: existing.chainId,
+              ens: config.ens,
+              paymasterUrl: pm?.url,
+            });
+            await revokeBridge.request('wallet_revokePermissions', [{ id: existing.permissionId }]);
+            revokeBridge.close();
+            this.log('Old permission revoked.');
+          }
+
+          const reuseAnswer = await ask('Reuse existing session key? (Y/n) ');
+          if (reuseAnswer.toLowerCase() !== 'n') {
+            reuseKey = loadSessionKey();
+          }
+        } else {
+          const overwrite = await ask('Expired session found. Overwrite? (y/N) ');
+          if (overwrite.toLowerCase() !== 'y') {
+            rl.close();
+            this.log('Aborted.');
+            return;
+          }
         }
+
+        rl.close();
+      } else if (isActive) {
+        // --yes mode: log warning but continue
+        this.logToStderr(
+          `Warning: overwriting active session without revoking. ` +
+            `Old permission ${existing.permissionId} on chain ${existing.chainId} ` +
+            `remains live until ${new Date(existing.expiry * 1000).toISOString()}.`
+        );
       }
+
+      deleteKeystore();
+      deleteSessionConfig();
     }
 
     // 2. Resolve permissions
@@ -57,8 +115,8 @@ export default class SessionSetup extends BaseCommand {
     const expiryDays = flags.expiry ?? config.sessionExpiry ?? 7;
     const expiryTimestamp = Math.floor(Date.now() / 1000) + expiryDays * 86400;
 
-    // 4. Generate session key
-    const privateKeyHex = generateSessionKey();
+    // 4. Generate or reuse session key
+    const privateKeyHex = (reuseKey ?? generateSessionKey()) as `0x${string}`;
 
     // 5. Create LocalAccount and derive smart account address
     const { privateKeyToAccount } = await import('viem/accounts');
@@ -138,19 +196,21 @@ export default class SessionSetup extends BaseCommand {
     flagValue: string | undefined,
     configValue: PermissionsConfig | undefined
   ): PermissionsConfig {
+    let raw: unknown;
+
     if (flagValue) {
       if (flagValue.trimStart().startsWith('{')) {
-        return JSON.parse(flagValue) as PermissionsConfig;
+        raw = JSON.parse(flagValue);
+      } else {
+        const content = fs.readFileSync(flagValue, 'utf-8');
+        raw = JSON.parse(content);
       }
-      // File path
-      const content = fs.readFileSync(flagValue, 'utf-8');
-      return JSON.parse(content) as PermissionsConfig;
+    } else if (configValue) {
+      raw = configValue;
+    } else {
+      this.error('Permissions required. Set via --permissions flag or add "permissions" to ~/.jaw/config.json');
     }
 
-    if (configValue) {
-      return configValue;
-    }
-
-    this.error('Permissions required. Set via --permissions flag or add "permissions" to ~/.jaw/config.json');
+    return parsePermissionsConfig(raw);
   }
 }
