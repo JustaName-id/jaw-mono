@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useIsMobile } from '../../hooks';
 import { CopyIcon } from '../../icons';
-import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { SiweDialogProps } from './types';
@@ -39,9 +39,10 @@ export const SiweDialog = ({
           address: accountAddress as `0x${string}`,
           chainId: chainId,
         })
-        .then((result) => {
+        .then(async (result) => {
           if (result) {
-            setResolvedAddress(result);
+            const label = await getChainLabel(chainId, mainnetRpcUrl);
+            setResolvedAddress(label ? `${result}@${label}` : result);
           }
         })
         .catch(() => {
