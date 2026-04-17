@@ -1,3 +1,13 @@
+## 0.2.0 (2026-04-17)
+
+### 🚀 Features
+
+- **ui:** show ENS names in interop format across wallet dialogs ([#166](https://github.com/JustaName-id/jaw-mono/pull/166))
+
+### ❤️ Thank You
+
+- AngeloAyranji @AngeloAyranji
+
 ## 0.1.11 (2026-04-13)
 
 ### 🩹 Fixes
