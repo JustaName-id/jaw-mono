@@ -200,10 +200,18 @@ export default class SessionSetup extends BaseCommand {
 
     if (flagValue) {
       if (flagValue.trimStart().startsWith('{')) {
-        raw = JSON.parse(flagValue);
+        try {
+          raw = JSON.parse(flagValue);
+        } catch {
+          this.error(`--permissions is not valid JSON: ${flagValue}`);
+        }
       } else {
         const content = fs.readFileSync(flagValue, 'utf-8');
-        raw = JSON.parse(content);
+        try {
+          raw = JSON.parse(content);
+        } catch {
+          this.error(`Permissions file at ${flagValue} is not valid JSON.`);
+        }
       }
     } else if (configValue) {
       raw = configValue;

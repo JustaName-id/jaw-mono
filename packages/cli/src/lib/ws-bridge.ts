@@ -294,10 +294,6 @@ export class WSBridge {
     });
   }
 
-  isOpen(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
-  }
-
   async shutdown(): Promise<void> {
     this.disposed = true;
     if (this.ws?.readyState === WebSocket.OPEN && this.sharedSecret) {

@@ -73,42 +73,6 @@ export function parsePermissionsConfig(raw: unknown): PermissionsConfig {
   return raw as PermissionsConfig;
 }
 
-export function isValidAddress(value: string): boolean {
-  return /^0x[0-9a-fA-F]{40}$/.test(value);
-}
-
-export function isValidHex(value: string): boolean {
-  return /^0x[0-9a-fA-F]*$/.test(value);
-}
-
-export function isValidChainId(value: string | number): boolean {
-  const num = typeof value === 'string' ? parseInt(value, 10) : value;
-  return Number.isInteger(num) && num > 0;
-}
-
-export function parseChainId(value: string): number {
-  const num = parseInt(value, 10);
-  if (!isValidChainId(num)) {
-    throw new Error(`Invalid chain ID: ${value}`);
-  }
-  return num;
-}
-
-export function assertAddress(value: string, label = 'address'): `0x${string}` {
-  if (!isValidAddress(value)) {
-    throw new Error(`Invalid ${label}: ${value}`);
-  }
-  return value as `0x${string}`;
-}
-
-export function parseWei(raw: string, label = 'value'): bigint {
-  try {
-    return BigInt(raw);
-  } catch {
-    throw new Error(`Invalid ${label}: "${raw}" is not a valid wei amount`);
-  }
-}
-
 export function isValidKeysUrl(url: string): boolean {
   try {
     const parsed = new URL(url);

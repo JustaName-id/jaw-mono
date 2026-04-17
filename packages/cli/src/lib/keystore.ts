@@ -46,8 +46,14 @@ export function loadSessionKey(): string {
     throw new Error('No session configured. Run `jaw session setup` first.');
   }
 
-  const raw = JSON.parse(fs.readFileSync(PATHS.keystore, 'utf-8')) as KeystoreFile;
-  return raw.privateKey;
+  const contents = fs.readFileSync(PATHS.keystore, 'utf-8');
+  let parsed: KeystoreFile;
+  try {
+    parsed = JSON.parse(contents) as KeystoreFile;
+  } catch {
+    throw new Error(`Keystore at ${PATHS.keystore} is corrupted. Run \`jaw session setup\` to recreate it.`);
+  }
+  return parsed.privateKey;
 }
 
 /**

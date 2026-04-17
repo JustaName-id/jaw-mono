@@ -19,9 +19,7 @@ vi.mock('./paths.js', () => {
   };
 });
 
-const { saveSessionConfig, loadSessionConfig, deleteSessionConfig, isSessionValid } = await import(
-  './session-config.js'
-);
+const { saveSessionConfig, loadSessionConfig, deleteSessionConfig } = await import('./session-config.js');
 const { PATHS } = await import('./paths.js');
 
 beforeEach(() => {
@@ -63,17 +61,8 @@ describe('session-config', () => {
     expect(fs.existsSync(PATHS.sessionConfig)).toBe(false);
   });
 
-  it('isSessionValid returns true for future expiry', () => {
-    saveSessionConfig(SAMPLE_CONFIG);
-    expect(isSessionValid()).toBe(true);
-  });
-
-  it('isSessionValid returns false for past expiry', () => {
-    saveSessionConfig({ ...SAMPLE_CONFIG, expiry: 1000 });
-    expect(isSessionValid()).toBe(false);
-  });
-
-  it('isSessionValid returns false when no config', () => {
-    expect(isSessionValid()).toBe(false);
+  it('loadSessionConfig throws a helpful error on corrupted JSON', () => {
+    fs.writeFileSync(PATHS.sessionConfig, '{ not valid json', { mode: 0o600 });
+    expect(() => loadSessionConfig()).toThrow(/corrupted/);
   });
 });

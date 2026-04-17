@@ -11,7 +11,6 @@ export default defineConfig({
     'lib/config': 'src/lib/config.ts',
     'lib/output': 'src/lib/output.ts',
     'lib/paths': 'src/lib/paths.ts',
-    'lib/session-store': 'src/lib/session-store.ts',
     'lib/types': 'src/lib/types.ts',
     'lib/validation': 'src/lib/validation.ts',
     // session lib
