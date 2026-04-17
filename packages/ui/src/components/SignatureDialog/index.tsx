@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { DefaultDialog } from '../DefaultDialog';
 import { SignatureDialogProps } from './types';
 import { useIsMobile } from '../../hooks';
-import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
 import { useState, useEffect } from 'react';
 
 export const SignatureDialog = ({
@@ -36,9 +36,10 @@ export const SignatureDialog = ({
           address: accountAddress as `0x${string}`,
           chainId: chainId,
         })
-        .then((result) => {
+        .then(async (result) => {
           if (result) {
-            setResolvedAddress(result);
+            const label = await getChainLabel(chainId, mainnetRpcUrl);
+            setResolvedAddress(label ? `${result}@${label}` : result);
           }
         })
         .catch(() => {
