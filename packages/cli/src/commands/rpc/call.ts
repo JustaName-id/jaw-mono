@@ -2,7 +2,7 @@ import { Args, Flags } from '@oclif/core';
 import { BaseCommand } from '../../base-command.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
 import { loadConfig } from '../../lib/config.js';
-import { requiresBrowser } from '../../lib/rpc-classifier.js';
+import { requiresBrowser, supportsSessionMode } from '../../lib/rpc-classifier.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import type { OutputFormat } from '../../lib/types.js';
 
@@ -65,6 +65,13 @@ export default class RpcCall extends BaseCommand {
     let bridge: { request(method: string, params?: unknown): Promise<unknown>; close(): void };
 
     if (flags.session) {
+      if (!supportsSessionMode(method)) {
+        this.error(
+          `Method ${method} is not supported in session mode. ` +
+            'Use without --session to route through the browser bridge.'
+        );
+      }
+
       bridge = new SessionBridge({ apiKey, chainId });
 
       if (!flags.quiet) {
