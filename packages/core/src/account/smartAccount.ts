@@ -462,7 +462,14 @@ export async function estimateUserOpGas(
         })),
     });
 
-    return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;
+    const totalGas = gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;
+    console.log('[estimateUserOpGas] Gas breakdown:', {
+        callGasLimit: gasEstimate.callGasLimit.toString(),
+        preVerificationGas: gasEstimate.preVerificationGas.toString(),
+        verificationGasLimit: gasEstimate.verificationGasLimit.toString(),
+        totalGas: totalGas.toString(),
+    });
+    return totalGas;
 }
 
 /**
@@ -514,7 +521,14 @@ export async function estimateUserOpGasWithPermission(
         ],
     });
 
-    return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;
+    const totalGas = gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;
+    console.log('[estimateUserOpGasWithPermission] Gas breakdown:', {
+        callGasLimit: gasEstimate.callGasLimit.toString(),
+        preVerificationGas: gasEstimate.preVerificationGas.toString(),
+        verificationGasLimit: gasEstimate.verificationGasLimit.toString(),
+        totalGas: totalGas.toString(),
+    });
+    return totalGas;
 }
 
 export async function createSmartAccount(
@@ -661,6 +675,13 @@ export async function createSmartAccountEip7702(
 export async function calculateGas(chain: Chain, gas: bigint, paymasterUrlOverride?: string): Promise<string> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride);
     const gasPrice = await getGasPrice(bundlerClient);
-    const result = formatUnits(gas * gasPrice, 18);
+    const gasCostWei = gas * gasPrice;
+    const result = formatUnits(gasCostWei, 18);
+    console.log('[calculateGas] Gas cost calculation:', {
+        totalGasUnits: gas.toString(),
+        gasPriceWei: gasPrice.toString(),
+        gasCostWei: gasCostWei.toString(),
+        gasCostETH: result,
+    });
     return result;
 }

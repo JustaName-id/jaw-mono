@@ -276,6 +276,7 @@ export function useGasEstimation({
 
       if (erc20Result.status === 'fulfilled') {
         erc20Estimates = erc20Result.value;
+        console.log('[useGasEstimation] ERC-20 token estimates:', erc20Estimates);
         setTokenEstimates(erc20Estimates);
 
         // Update feeTokens with the estimated costs and selectability
@@ -369,6 +370,7 @@ export function useGasEstimation({
       const ethInsufficientFunds = ethResult.status === 'rejected' && isInsufficientFundsError(ethResult.reason);
 
       if (ethSuccess) {
+        console.log('[useGasEstimation] ETH gas estimation result:', ethResult.value);
         handleEthSuccess(ethResult.value, updatedFeeTokens);
       } else if (ethInsufficientFunds) {
         handleEthInsufficientFunds(updatedFeeTokens);
