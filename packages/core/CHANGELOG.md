@@ -1,3 +1,13 @@
+## 0.2.4 (2026-04-22)
+
+### 🩹 Fixes
+
+- **core:** add gnosis support: ([#168](https://github.com/JustaName-id/jaw-mono/pull/168))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.2.3 (2026-04-13)
 
 ### 🩹 Fixes
