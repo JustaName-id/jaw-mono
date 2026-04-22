@@ -39,8 +39,14 @@ export interface UseGasEstimationConfig {
  * Result returned by the useGasEstimation hook
  */
 export interface UseGasEstimationResult {
-  /** Estimated gas fee in ETH (as string) or 'sponsored' */
+  /** Expected gas fee in ETH (from bundler simulation) — likely actual cost. Empty string if unavailable. */
   gasFee: string;
+  /** Max fee in ETH (prefund) — the balance requirement and ceiling. Or 'sponsored'. */
+  maxFee: string;
+  /** Gas price in wei (for details). */
+  gasPriceWei: string;
+  /** Padded gas units (for details). */
+  gasUnits: string;
   /** Whether gas estimation is in progress */
   gasFeeLoading: boolean;
   /** Error message if estimation failed */
@@ -142,6 +148,9 @@ export function useGasEstimation({
   // -------------------------------------------------------------------------
 
   const [gasFee, setGasFee] = useState<string>('');
+  const [maxFee, setMaxFee] = useState<string>('');
+  const [gasPriceWei, setGasPriceWei] = useState<string>('');
+  const [gasUnits, setGasUnits] = useState<string>('');
   const [gasFeeLoading, setGasFeeLoading] = useState<boolean>(true);
   const [gasEstimationError, setGasEstimationError] = useState<string>('');
   const [tokenEstimates, setTokenEstimates] = useState<TokenEstimate[]>([]);
@@ -205,6 +214,7 @@ export function useGasEstimation({
     // Handle sponsored transactions
     if (isSponsored) {
       setGasFee('sponsored');
+      setMaxFee('sponsored');
       setGasFeeLoading(false);
       setGasEstimationError('');
       return;
@@ -402,11 +412,22 @@ export function useGasEstimation({
    * Handle successful ETH gas estimation
    */
   const handleEthSuccess = useCallback(
-    (gasPrice: string, updatedFeeTokens: FeeTokenOption[]) => {
-      setGasFee(gasPrice);
+    (
+      gasResult: {
+        estimatedFee: string;
+        maxFee: string;
+        gasPriceWei: string;
+        totalGasUnits: string;
+      },
+      updatedFeeTokens: FeeTokenOption[]
+    ) => {
+      // Prefer estimated (likely cost); fall back to maxFee (prefund) if bundler didn't provide it.
+      setGasFee(gasResult.estimatedFee || gasResult.maxFee);
+      setMaxFee(gasResult.maxFee);
+      setGasPriceWei(gasResult.gasPriceWei);
+      setGasUnits(gasResult.totalGasUnits);
       setGasEstimationError('');
 
-      // Auto-select native token if not already selected
       if (!selectedFeeToken) {
         const nativeToken = updatedFeeTokens.find((t) => t.isNative && t.isSelectable);
         if (nativeToken) {
@@ -424,13 +445,13 @@ export function useGasEstimation({
     const selectableErc20 = updatedFeeTokens.find((t) => !t.isNative && t.isSelectable);
 
     if (selectableErc20) {
-      // Auto-select first selectable ERC-20 token
       setSelectedFeeToken(selectableErc20);
       setGasFee(FALLBACK_GAS_ESTIMATE_ETH);
+      setMaxFee(FALLBACK_GAS_ESTIMATE_ETH);
       setGasEstimationError('');
     } else {
-      // No selectable payment options (neither ETH nor ERC-20 have sufficient balance)
       setGasFee('');
+      setMaxFee('');
       setGasEstimationError('Insufficient funds');
     }
   }, []);
@@ -441,6 +462,7 @@ export function useGasEstimation({
   const handleEstimationError = useCallback((error: unknown) => {
     console.error('[useGasEstimation] Error:', error);
     setGasFee('');
+    setMaxFee('');
     setGasEstimationError('Failed to estimate gas');
   }, []);
 
@@ -459,6 +481,9 @@ export function useGasEstimation({
 
   return {
     gasFee,
+    maxFee,
+    gasPriceWei,
+    gasUnits,
     gasFeeLoading,
     gasEstimationError,
     tokenEstimates,

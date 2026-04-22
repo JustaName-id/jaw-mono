@@ -58,6 +58,9 @@ export interface PermissionDialogProps {
 
   // Gas estimation props
   gasFee?: string;
+  maxFee?: string;
+  gasPriceWei?: string;
+  gasUnits?: string;
   gasFeeLoading?: boolean;
   gasEstimationError?: string;
   sponsored?: boolean;

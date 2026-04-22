@@ -23,6 +23,9 @@ export interface TransactionDialogProps {
 
   // Gas estimation
   gasFee: string;
+  maxFee?: string;
+  gasPriceWei?: string;
+  gasUnits?: string;
   gasFeeLoading: boolean;
   gasEstimationError: string;
   sponsored: boolean;

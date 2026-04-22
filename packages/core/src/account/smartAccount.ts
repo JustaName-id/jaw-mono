@@ -441,6 +441,13 @@ export async function sendCallsWithPermission(
     };
 }
 
+export type UserOpGasEstimate = {
+    /** Total of padded limits (for prefund calc) */
+    totalGas: bigint;
+    /** Actual expected gas (from Skandha's paid/maxFeePerGas) — undefined if bundler doesn't return it */
+    actualGas?: bigint;
+};
+
 export async function estimateUserOpGas(
     smartAccount: SmartAccount,
     calls: Array<{
@@ -450,9 +457,11 @@ export async function estimateUserOpGas(
     }>,
     chain: Chain,
     paymasterUrlOverride?: string
-): Promise<bigint> {
+): Promise<UserOpGasEstimate> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride);
 
+    // Make the typed viem call — this gives us proper UserOp construction
+    // (stub sig, nonce, etc.) AND the padded limits.
     const gasEstimate = await bundlerClient.estimateUserOperationGas({
         account: smartAccount,
         calls: calls.map((call) => ({
@@ -463,13 +472,46 @@ export async function estimateUserOpGas(
     });
 
     const totalGas = gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;
+
+    // viem strips unknown fields. We patch viem's internal request to NOT strip,
+    // but that's fragile. Simpler: build the same UserOp viem used (known from
+    // the response) and re-request raw. This is a second RPC call but preserves
+    // all fields including Skandha's `actualGas`.
+    let actualGas: bigint | undefined = undefined;
+    try {
+        const [nonce, callData, factoryArgs, stubSignature] = await Promise.all([
+            smartAccount.getNonce(),
+            smartAccount.encodeCalls(calls.map((c) => ({ to: c.to, value: c.value ?? 0n, data: c.data ?? '0x' }))),
+            smartAccount.getFactoryArgs(),
+            smartAccount.getStubSignature(),
+        ]);
+        const userOpForRaw: Record<string, string> = {
+            sender: smartAccount.address,
+            nonce: `0x${nonce.toString(16)}`,
+            callData,
+            signature: stubSignature,
+        };
+        if (factoryArgs?.factory && factoryArgs?.factoryData) {
+            userOpForRaw.factory = factoryArgs.factory;
+            userOpForRaw.factoryData = factoryArgs.factoryData;
+        }
+        const raw = (await bundlerClient.request({
+            method: 'eth_estimateUserOperationGas' as const,
+            params: [userOpForRaw, '0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108'] as never,
+        } as never)) as { actualGas?: string } | undefined;
+        if (raw?.actualGas) actualGas = BigInt(raw.actualGas);
+    } catch {
+        // Raw fetch failed — fall back to prefund silently
+    }
+
     console.log('[estimateUserOpGas] Gas breakdown:', {
         callGasLimit: gasEstimate.callGasLimit.toString(),
         preVerificationGas: gasEstimate.preVerificationGas.toString(),
         verificationGasLimit: gasEstimate.verificationGasLimit.toString(),
         totalGas: totalGas.toString(),
+        actualGas: actualGas?.toString() ?? 'not returned by bundler',
     });
-    return totalGas;
+    return { totalGas, actualGas };
 }
 
 /**
@@ -493,7 +535,7 @@ export async function estimateUserOpGasWithPermission(
     chain: Chain,
     permissionId: Hex,
     apiKey: string
-): Promise<bigint> {
+): Promise<UserOpGasEstimate> {
     // Fetch the permission from the relay
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
     const permission = relayPermissionToPermission(relayPermission);
@@ -522,13 +564,49 @@ export async function estimateUserOpGasWithPermission(
     });
 
     const totalGas = gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;
+
+    // Raw RPC call to capture Skandha's `actualGas` — viem's typed method strips unknown fields.
+    let actualGas: bigint | undefined = undefined;
+    try {
+        const [nonce, callData, factoryArgs, stubSignature] = await Promise.all([
+            smartAccount.getNonce(),
+            smartAccount.encodeCalls([
+                {
+                    to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+                    value: 0n,
+                    data: encodedData,
+                },
+            ]),
+            smartAccount.getFactoryArgs(),
+            smartAccount.getStubSignature(),
+        ]);
+        const userOpForRaw: Record<string, string> = {
+            sender: smartAccount.address,
+            nonce: `0x${nonce.toString(16)}`,
+            callData,
+            signature: stubSignature,
+        };
+        if (factoryArgs?.factory && factoryArgs?.factoryData) {
+            userOpForRaw.factory = factoryArgs.factory;
+            userOpForRaw.factoryData = factoryArgs.factoryData;
+        }
+        const raw = (await bundlerClient.request({
+            method: 'eth_estimateUserOperationGas' as const,
+            params: [userOpForRaw, '0x4337084D9E255Ff0702461CF8895CE9E3b5Ff108'] as never,
+        } as never)) as { actualGas?: string } | undefined;
+        if (raw?.actualGas) actualGas = BigInt(raw.actualGas);
+    } catch {
+        // Silent fallback to prefund
+    }
+
     console.log('[estimateUserOpGasWithPermission] Gas breakdown:', {
         callGasLimit: gasEstimate.callGasLimit.toString(),
         preVerificationGas: gasEstimate.preVerificationGas.toString(),
         verificationGasLimit: gasEstimate.verificationGasLimit.toString(),
         totalGas: totalGas.toString(),
+        actualGas: actualGas?.toString() ?? 'not returned by bundler',
     });
-    return totalGas;
+    return { totalGas, actualGas };
 }
 
 export async function createSmartAccount(
@@ -672,16 +750,45 @@ export async function createSmartAccountEip7702(
     });
 }
 
-export async function calculateGas(chain: Chain, gas: bigint, paymasterUrlOverride?: string): Promise<string> {
+export type GasCostResult = {
+    /** What the user will likely actually pay (in ETH) — from bundler's simulation. Empty string if unavailable. */
+    estimatedFee: string;
+    /** Max fee reserved (prefund in ETH) — always populated. This is what the balance must cover. */
+    maxFee: string;
+    /** Gas price used for cost calculation (wei, string). */
+    gasPriceWei: string;
+    /** Padded gas units (for "Up to" calc). */
+    totalGasUnits: string;
+    /** Actual gas units (if bundler exposed it). */
+    actualGasUnits?: string;
+};
+
+export async function calculateGas(
+    chain: Chain,
+    gas: bigint | UserOpGasEstimate,
+    paymasterUrlOverride?: string
+): Promise<GasCostResult> {
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride);
     const gasPrice = await getGasPrice(bundlerClient);
-    const gasCostWei = gas * gasPrice;
-    const result = formatUnits(gasCostWei, 18);
-    console.log('[calculateGas] Gas cost calculation:', {
-        totalGasUnits: gas.toString(),
+
+    const isObj = typeof gas === 'object' && gas !== null;
+    const actualGas = isObj ? gas.actualGas : undefined;
+    const totalGas = isObj ? gas.totalGas : (gas as bigint);
+
+    const maxCostWei = totalGas * gasPrice;
+    const estimatedCostWei = actualGas !== undefined ? actualGas * gasPrice : 0n;
+
+    const result: GasCostResult = {
+        estimatedFee: actualGas !== undefined ? formatUnits(estimatedCostWei, 18) : '',
+        maxFee: formatUnits(maxCostWei, 18),
         gasPriceWei: gasPrice.toString(),
-        gasCostWei: gasCostWei.toString(),
-        gasCostETH: result,
+        totalGasUnits: totalGas.toString(),
+        actualGasUnits: actualGas?.toString(),
+    };
+
+    console.log('[calculateGas]', {
+        source: actualGas !== undefined ? 'actualGas + prefund' : 'prefund only (no bundler actualGas)',
+        ...result,
     });
     return result;
 }

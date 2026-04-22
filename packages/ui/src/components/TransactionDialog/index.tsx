@@ -20,6 +20,9 @@ export const TransactionDialog = ({
   transactions,
   walletAddress,
   gasFee,
+  maxFee,
+  gasPriceWei,
+  gasUnits,
   gasFeeLoading,
   gasEstimationError,
   sponsored,
@@ -374,7 +377,6 @@ export const TransactionDialog = ({
                           <p className="text-foreground text-base font-normal">
                             {nativeTokenPrice > 0 ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}` : ''}
                           </p>
-                          {/* Inline Fee Token Selector */}
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
@@ -393,9 +395,17 @@ export const TransactionDialog = ({
                             if (gasValue > 0 && gasValue < 0.0001) {
                               return `< 0.0001 ${nativeSymbol}`;
                             }
-                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                            return `${gasValue.toFixed(6)} ${nativeSymbol}`;
                           })()}
                         </p>
+                        {maxFee && maxFee !== 'sponsored' && Number(maxFee) > Number(gasFee) && (
+                          <p className="text-muted-foreground text-xs font-normal">
+                            Up to{' '}
+                            {nativeTokenPrice > 0
+                              ? `$${(nativeTokenPrice * Number(maxFee)).toFixed(4)}`
+                              : `${Number(maxFee).toFixed(6)} ${nativeSymbol}`}
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <p className="text-muted-foreground text-base font-normal">Unable to estimate</p>
@@ -732,7 +742,6 @@ export const TransactionDialog = ({
                           <p className="text-foreground text-base font-normal">
                             {nativeTokenPrice > 0 ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}` : ''}
                           </p>
-                          {/* Inline Fee Token Selector */}
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
@@ -751,9 +760,17 @@ export const TransactionDialog = ({
                             if (gasValue > 0 && gasValue < 0.0001) {
                               return `< 0.0001 ${nativeSymbol}`;
                             }
-                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                            return `${gasValue.toFixed(6)} ${nativeSymbol}`;
                           })()}
                         </p>
+                        {maxFee && maxFee !== 'sponsored' && Number(maxFee) > Number(gasFee) && (
+                          <p className="text-muted-foreground text-xs font-normal">
+                            Up to{' '}
+                            {nativeTokenPrice > 0
+                              ? `$${(nativeTokenPrice * Number(maxFee)).toFixed(4)}`
+                              : `${Number(maxFee).toFixed(6)} ${nativeSymbol}`}
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <p className="text-muted-foreground text-base font-normal">Unable to estimate</p>

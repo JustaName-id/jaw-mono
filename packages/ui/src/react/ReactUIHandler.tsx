@@ -1300,6 +1300,9 @@ function TransactionDialogWrapper({
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
     gasFee,
+    maxFee,
+    gasPriceWei,
+    gasUnits,
     gasFeeLoading,
     gasEstimationError,
     tokenEstimates,
@@ -1538,6 +1541,9 @@ function TransactionDialogWrapper({
       transactions={transactions}
       walletAddress={request.data.from}
       gasFee={gasFee}
+      maxFee={maxFee}
+      gasPriceWei={gasPriceWei}
+      gasUnits={gasUnits}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
@@ -1641,6 +1647,9 @@ function SendTransactionDialogWrapper({
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
     gasFee,
+    maxFee,
+    gasPriceWei,
+    gasUnits,
     gasFeeLoading,
     gasEstimationError,
     tokenEstimates,
@@ -1872,6 +1881,9 @@ function SendTransactionDialogWrapper({
       transactions={transactions}
       walletAddress={request.data.from}
       gasFee={gasFee}
+      maxFee={maxFee}
+      gasPriceWei={gasPriceWei}
+      gasUnits={gasUnits}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
@@ -1994,6 +2006,9 @@ function PermissionDialogWrapper({
   // Use the gas estimation hook for both ETH and ERC-20 cost estimation
   const {
     gasFee,
+    maxFee,
+    gasPriceWei,
+    gasUnits,
     gasFeeLoading,
     gasEstimationError,
     tokenEstimates,
@@ -2443,6 +2458,9 @@ function PermissionDialogWrapper({
       timestamp={new Date(request.timestamp)}
       warningMessage={warningMessage}
       gasFee={gasFee}
+      maxFee={maxFee}
+      gasPriceWei={gasPriceWei}
+      gasUnits={gasUnits}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
@@ -2655,6 +2673,9 @@ function RevokePermissionDialogWrapper({
   // Use the gas estimation hook for both ETH and ERC-20 cost estimation
   const {
     gasFee,
+    maxFee,
+    gasPriceWei,
+    gasUnits,
     gasFeeLoading,
     gasEstimationError,
     tokenEstimates,
@@ -3020,6 +3041,9 @@ function RevokePermissionDialogWrapper({
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Gas estimation props
       gasFee={gasFee}
+      maxFee={maxFee}
+      gasPriceWei={gasPriceWei}
+      gasUnits={gasUnits}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}

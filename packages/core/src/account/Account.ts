@@ -13,6 +13,7 @@ import {
     getBundlerClient,
     createSmartAccountEip7702,
     type BundledTransactionResult,
+    type GasCostResult,
 } from './smartAccount.js';
 import {
     storeCallStatus,
@@ -902,17 +903,18 @@ export class Account {
         }));
 
         if (options?.permissionId) {
-            // Estimate gas for permission-based execution through the permission manager
-            return await estimateUserOpGasWithPermission(
+            const estimate = await estimateUserOpGasWithPermission(
                 smartAccount,
                 formattedCalls,
                 this._chain,
                 options.permissionId,
                 this._apiKey
             );
+            return estimate.totalGas;
         }
 
-        return await estimateUserOpGas(smartAccount, formattedCalls, this._chain);
+        const estimate = await estimateUserOpGas(smartAccount, formattedCalls, this._chain);
+        return estimate.totalGas;
     }
 
     /**
@@ -935,9 +937,25 @@ export class Account {
     async calculateGasCost(
         calls: TransactionCall[],
         options?: { permissionId?: Hex; address?: Address }
-    ): Promise<string> {
-        const gas = await this.estimateGas(calls, options);
-        return await calculateGas(this._chain, gas);
+    ): Promise<GasCostResult> {
+        const smartAccount = await this.resolveSmartAccount(options?.address);
+        const formattedCalls = calls.map((call) => ({
+            to: call.to,
+            value: Account.parseValue(call.value),
+            data: call.data,
+        }));
+
+        const estimate = options?.permissionId
+            ? await estimateUserOpGasWithPermission(
+                  smartAccount,
+                  formattedCalls,
+                  this._chain,
+                  options.permissionId,
+                  this._apiKey
+              )
+            : await estimateUserOpGas(smartAccount, formattedCalls, this._chain);
+
+        return await calculateGas(this._chain, estimate);
     }
 
     // ============================================

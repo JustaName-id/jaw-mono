@@ -34,6 +34,9 @@ export const PermissionDialog = ({
   timestamp = new Date(),
   warningMessage,
   gasFee,
+  maxFee,
+  gasPriceWei,
+  gasUnits,
   gasFeeLoading = false,
   gasEstimationError,
   sponsored = false,
@@ -518,7 +521,6 @@ export const PermissionDialog = ({
                           ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
                         </p>
                       )}
-                      {/* Inline Fee Token Selector (when paying with ETH but selector is available) */}
                       {showFeeTokenSelector && feeTokens && onFeeTokenSelect && selectedFeeToken && (
                         <FeeTokenSelector
                           tokens={feeTokens}
@@ -535,11 +537,19 @@ export const PermissionDialog = ({
                       {(() => {
                         const gasValue = Number(gasFee);
                         if (gasValue > 0 && gasValue < 0.0001) {
-                          return '> 0.0001 ETH';
+                          return '< 0.0001 ETH';
                         }
-                        return gasValue.toFixed(4) + ' ETH';
+                        return gasValue.toFixed(6) + ' ETH';
                       })()}
                     </p>
+                    {maxFee && maxFee !== 'sponsored' && Number(maxFee) > Number(gasFee) && (
+                      <p className="text-muted-foreground text-xs font-normal">
+                        Up to{' '}
+                        {nativeTokenPrice > 0
+                          ? `$${(nativeTokenPrice * Number(maxFee)).toFixed(4)}`
+                          : `${Number(maxFee).toFixed(6)} ETH`}
+                      </p>
+                    )}
                   </div>
                 ) : (
                   <p className="text-muted-foreground text-base font-normal">-</p>
