@@ -1,3 +1,13 @@
+## 0.2.5 (2026-04-25)
+
+### 🩹 Fixes
+
+- **core:** remove 80% discount ([#169](https://github.com/JustaName-id/jaw-mono/pull/169))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.2.4 (2026-04-22)
 
 ### 🩹 Fixes
