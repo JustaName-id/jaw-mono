@@ -69,7 +69,7 @@ export const SignatureModal = ({
         throw new Error('Account not initialized. Please try again.');
       }
 
-      const signature = await account.signMessage(messageToSign);
+      const signature = await account.signMessage(messageToSign, { address: address as `0x${string}` | undefined });
 
       setSignatureStatus('Signature created successfully!');
 

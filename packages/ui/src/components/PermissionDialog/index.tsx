@@ -10,6 +10,7 @@ import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { CopiedIcon, CopyIcon, WalletIcon } from '../../icons';
 import { useState, useEffect, useRef } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { getChainLabel } from '../../utils/resolveChainLabel';
 
 export const PermissionDialog = ({
   open,
@@ -101,7 +102,8 @@ export const PermissionDialog = ({
           chainId: chainId,
         });
         if (result) {
-          return { address, name: result };
+          const label = await getChainLabel(chainId, mainnetRpcUrl);
+          return { address, name: label ? `${result}@${label}` : result };
         }
       } catch {
         // Silently fail if resolution fails
@@ -251,17 +253,17 @@ export const PermissionDialog = ({
           )}
 
           {/* Requesting dApp + Spender Address */}
-          <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
-            <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
+            <div className="text-foreground flex min-w-0 flex-col gap-0.5">
               <p className="text-xs font-bold leading-[133%]">Requesting dApp</p>
-              <p className="overflow-hidden truncate text-base font-normal leading-[150%]">{origin}</p>
+              <p className="break-all text-base font-normal leading-[150%]">{origin}</p>
             </div>
-            <div className="bg-border h-full min-h-[50px] w-[1px] flex-shrink-0 rounded-full" />
-            <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
+            <div className="text-foreground flex min-w-0 flex-col gap-0.5">
               <p className="text-xs font-bold leading-[133%]">Spender Address</p>
               <div className="flex flex-row items-center gap-1">
                 <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
-                <p className="overflow-hidden truncate text-base font-normal leading-[150%]">
+                <p className="break-all text-base font-normal leading-[150%]">
                   {resolvedAddresses[spenderAddress] || truncateAddress(spenderAddress)}
                 </p>
               </div>

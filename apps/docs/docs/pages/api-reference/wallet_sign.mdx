@@ -25,6 +25,7 @@ await jaw.provider.request({
 
 | Name           | Type          | Required | Description                                                             |
 | -------------- | ------------- | -------- | ----------------------------------------------------------------------- |
+| `address`      | `0x${string}` | No       | Account address to sign with                                            |
 | `chainId`      | `0x${string}` | No       | Target chain ID (defaults to connected chain)                           |
 | `request.type` | `string`      | Yes      | Signature type: `"0x45"` (personal_sign) or `"0x01"` (signTypedData_v4) |
 | `request.data` | `object`      | Yes      | For 0x45: `{ message: string }`. For 0x01: TypedData object (EIP-712)   |

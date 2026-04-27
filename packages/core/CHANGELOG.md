@@ -1,3 +1,33 @@
+## 0.2.5 (2026-04-25)
+
+### 🩹 Fixes
+
+- **core:** remove 80% discount ([#169](https://github.com/JustaName-id/jaw-mono/pull/169))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 0.2.4 (2026-04-22)
+
+### 🩹 Fixes
+
+- **core:** add gnosis support: ([#168](https://github.com/JustaName-id/jaw-mono/pull/168))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 0.2.3 (2026-04-13)
+
+### 🩹 Fixes
+
+- **core:** allow signer to pass other smart account address ([#163](https://github.com/JustaName-id/jaw-mono/pull/163))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.2.2 (2026-04-07)
 
 ### 🩹 Fixes

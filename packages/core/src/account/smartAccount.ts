@@ -52,8 +52,10 @@ import {
     ink,
     inkSepolia,
     dosChain,
+    gnosis,
 } from 'viem/chains';
 import { PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS } from '../constants.js';
+import { standardErrors } from '../errors/errors.js';
 import {
     getPermissionFromRelay,
     relayPermissionToPermission,
@@ -87,7 +89,20 @@ export type BundledTransactionResult = {
     chainId: number;
 };
 
-export const MAINNET_CHAINS = [mainnet, base, optimism, arbitrum, linea, avalanche, bsc, celo, flare, ink, dosChain];
+export const MAINNET_CHAINS = [
+    mainnet,
+    base,
+    optimism,
+    arbitrum,
+    linea,
+    avalanche,
+    bsc,
+    celo,
+    flare,
+    ink,
+    dosChain,
+    gnosis,
+];
 
 export const TESTNET_CHAINS = [
     sepolia,
@@ -385,7 +400,8 @@ export async function sendCallsWithPermission(
     apiKey: string,
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>,
-    localAccount?: LocalAccount
+    localAccount?: LocalAccount,
+    approvalCall?: { to: Address; value?: bigint; data: Hex }
 ): Promise<BundledTransactionResult> {
     // Fetch the permission from the relay
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
@@ -401,19 +417,29 @@ export async function sendCallsWithPermission(
     // Encode the executeBatch call with permission
     const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
 
-    // The permission call routed through the permissions manager
-    const permissionCall: Array<{ to: Address; value: bigint; data: Hex }> = [
-        {
-            to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
-            value: 0n,
-            data: encodedData,
-        },
-    ];
+    // Build the spender-level calls: optional paymaster approval + permission manager call.
+    // The approval must be at this level (not inside the permission batch) because the
+    // permission manager validates each call's selector against the permission.
+    const spenderCalls: Array<{ to: Address; value: bigint; data: Hex }> = [];
+
+    if (approvalCall) {
+        spenderCalls.push({
+            to: approvalCall.to,
+            value: approvalCall.value ?? 0n,
+            data: approvalCall.data,
+        });
+    }
+
+    spenderCalls.push({
+        to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+        value: 0n,
+        data: encodedData,
+    });
 
     // EIP-7702: prepend delegation authorization + owner setup if needed
     const { calls: finalCalls, authorization } = localAccount
-        ? await prepareEip7702Calls(smartAccount, localAccount, permissionCall, chain)
-        : { calls: permissionCall, authorization: undefined };
+        ? await prepareEip7702Calls(smartAccount, localAccount, spenderCalls, chain)
+        : { calls: spenderCalls, authorization: undefined };
 
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
@@ -588,6 +614,51 @@ export function formatPublicKey(publicKey: Hex): Hex {
         return pad(publicKey);
     }
     return publicKey;
+}
+
+/**
+ * Create a temporary SmartAccount instance for signing on behalf of a different account.
+ * Verifies the signer is a registered owner on the target account.
+ */
+export async function createSmartAccountForAddress(
+    targetAddress: Address,
+    account: WebAuthnAccount | LocalAccount,
+    bundlerClient: JustanAccountImplementation['client']
+): Promise<SmartAccount> {
+    const ownerBytes: Hex = account.type === 'webAuthn' ? account.publicKey : account.address;
+
+    const code = await getCode(bundlerClient, { address: targetAddress });
+    if (!code) {
+        throw standardErrors.rpc.invalidParams(`Account ${targetAddress} is not deployed`);
+    }
+
+    const ownerCount = await readContract(bundlerClient, {
+        address: targetAddress,
+        abi,
+        functionName: 'ownerCount',
+    });
+
+    const formatted = formatPublicKey(ownerBytes);
+
+    for (let i = 0; i < Number(ownerCount); i++) {
+        const owner = await readContract(bundlerClient, {
+            address: targetAddress,
+            abi,
+            functionName: 'ownerAtIndex',
+            args: [BigInt(i)],
+        });
+
+        if ((owner as string).toLowerCase() === formatted.toLowerCase()) {
+            return await toJustanAccount({
+                client: bundlerClient,
+                owners: [account, PERMISSIONS_MANAGER_ADDRESS],
+                ownerIndex: i,
+                address: targetAddress,
+            });
+        }
+    }
+
+    throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
 }
 
 export async function createSmartAccountEip7702(

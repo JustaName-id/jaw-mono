@@ -11,7 +11,7 @@ import { formatEther } from 'viem';
 import { Info } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
-import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
 import { DecodedCalldata } from './DecodedCalldata';
 
 export const TransactionDialog = ({
@@ -77,11 +77,12 @@ export const TransactionDialog = ({
           address: walletAddress as `0x${string}`,
           chainId: currentTransaction.chainId,
         })
-        .then((result) => {
+        .then(async (result) => {
           if (result) {
+            const label = await getChainLabel(currentTransaction.chainId, mainnetRpcUrl);
             setResolvedAddresses((prev) => ({
               ...prev,
-              [walletAddress]: result,
+              [walletAddress]: label ? `${result}@${label}` : result,
             }));
           }
         })
@@ -98,11 +99,12 @@ export const TransactionDialog = ({
             address: transaction.to as `0x${string}`,
             chainId: transaction.chainId,
           })
-          .then((result) => {
+          .then(async (result) => {
             if (result) {
+              const label = await getChainLabel(transaction.chainId, mainnetRpcUrl);
               setResolvedAddresses((prev) => ({
                 ...prev,
-                [transaction.to]: result,
+                [transaction.to]: label ? `${result}@${label}` : result,
               }));
             }
           })
@@ -218,20 +220,20 @@ export const TransactionDialog = ({
           <>
             <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
               {/* From - To */}
-              <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
-                <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
+              <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
+                <div className="text-foreground flex min-w-0 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">From</p>
                   <div className="flex min-w-0 flex-row items-center gap-1">
                     <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
-                    <p className="text-base font-normal leading-[150%]">{displayWalletAddress}</p>
+                    <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                   </div>
                 </div>
-                <div className="bg-border h-full min-h-[70px] w-[1px] flex-shrink-0 rounded-full" />
-                <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
+                <div className="text-foreground flex min-w-0 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">To</p>
                   <div className="flex min-w-0 flex-row items-center gap-1">
                     <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
-                    <p className="text-base font-normal leading-[150%]">{displayToAddress}</p>
+                    <p className="break-all text-base font-normal leading-[150%]">{displayToAddress}</p>
                     {currentTransaction?.to &&
                       (isAddressCopied['single-to'] ? (
                         <CopiedIcon width={14} height={14} className="flex-shrink-0" />
@@ -403,7 +405,7 @@ export const TransactionDialog = ({
               </div>
 
               {/* Show Data section if data is provided */}
-              {currentTransaction?.data && (
+              {currentTransaction?.data && currentTransaction.data !== '0x' && (
                 <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
                   <div className="flex w-full flex-row items-center justify-between">
                     <p className="text-foreground text-xs font-bold leading-[133%]">Data</p>
@@ -477,7 +479,7 @@ export const TransactionDialog = ({
                 <p className="text-foreground mb-1 text-xs font-bold leading-[133%]">From</p>
                 <div className="flex flex-row items-center gap-1">
                   <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
-                  <p className="text-base font-normal leading-[150%]">{displayWalletAddress}</p>
+                  <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                 </div>
               </div>
 
@@ -566,7 +568,7 @@ export const TransactionDialog = ({
                           )}
 
                           {/* Data */}
-                          {transaction.data && (
+                          {transaction.data && transaction.data !== '0x' && (
                             <div className="border-border flex flex-col gap-1 rounded-[6px] border p-2">
                               <div className="mb-2 flex items-center justify-between">
                                 <p className="text-muted-foreground text-xs font-bold leading-[133%]">Data</p>

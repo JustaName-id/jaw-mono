@@ -966,6 +966,21 @@ const data = encodeFunctionData({
 });`,
     buildParams: () => [],
   },
+  {
+    id: 'resolve_name',
+    name: 'resolveName',
+    method: 'resolve_name',
+    category: 'utility',
+    description: 'Resolve an ENS name to an address on a specific chain (ERC-7828 interop format).',
+    requiresConnection: false,
+    getCodeSnippet: () => `// Resolve vitalik.eth@ethereum via the JustaName records endpoint
+const response = await fetch(
+  'https://api.justaname.id/ens/v1/subname/records?ens=vitalik.eth@ethereum&providerUrl=https://eth.drpc.org'
+);
+const { result } = await response.json();
+const address = result.data?.records?.addresses[0]?.value;`,
+    buildParams: () => [],
+  },
 ];
 
 // Group methods by category

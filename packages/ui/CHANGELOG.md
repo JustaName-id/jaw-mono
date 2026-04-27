@@ -1,3 +1,49 @@
+## 0.2.3 (2026-04-27)
+
+### 🩹 Fixes
+
+- **ui:** remove rendering of empty data in TransactionDialog ([#170](https://github.com/JustaName-id/jaw-mono/pull/170))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 0.2.2 (2026-04-25)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.5
+
+## 0.2.1 (2026-04-22)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.4
+
+## 0.2.0 (2026-04-17)
+
+### 🚀 Features
+
+- **ui:** show ENS names in interop format across wallet dialogs ([#166](https://github.com/JustaName-id/jaw-mono/pull/166))
+
+### ❤️ Thank You
+
+- AngeloAyranji @AngeloAyranji
+
+## 0.1.11 (2026-04-13)
+
+### 🩹 Fixes
+
+- **core:** allow signer to pass other smart account address ([#163](https://github.com/JustaName-id/jaw-mono/pull/163))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.3
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.1.10 (2026-04-08)
 
 ### 🩹 Fixes

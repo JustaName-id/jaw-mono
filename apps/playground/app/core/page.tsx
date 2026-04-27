@@ -13,6 +13,7 @@ import { ThemeToggle } from '../../components/theme-toggle';
 import { MethodCard } from '../../components/method-card';
 import { MethodModal } from '../../components/method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
+import { ResolveNameModal } from '../../components/resolve-name-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import { RPC_METHODS, CATEGORIES, CATEGORY_LABELS, type RpcMethod, type MethodCategory } from '../../lib/rpc-methods';
@@ -56,6 +57,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
   const [selectedMethod, setSelectedMethod] = useState<RpcMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
+  const [isResolveNameModalOpen, setIsResolveNameModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
 
@@ -151,7 +153,11 @@ function CorePageContent({ mode }: { mode: ModeType }) {
 
   const handleMethodClick = (method: RpcMethod) => {
     if (method.category === 'utility') {
-      setIsEncodeModalOpen(true);
+      if (method.id === 'resolve_name') {
+        setIsResolveNameModalOpen(true);
+      } else {
+        setIsEncodeModalOpen(true);
+      }
       return;
     }
     setSelectedMethod(method);
@@ -362,6 +368,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
 
         {/* Encode Data Modal */}
         <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
+        <ResolveNameModal isOpen={isResolveNameModalOpen} onClose={() => setIsResolveNameModalOpen(false)} />
       </div>
     </div>
   );

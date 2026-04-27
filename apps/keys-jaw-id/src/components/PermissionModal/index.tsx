@@ -227,17 +227,18 @@ export const PermissionModal = ({
   const transactionCalls = useMemo(() => {
     if (mode === 'grant') {
       // Grant mode: build grant permission call
-      if (!walletAddress || !permissionRequest) return [];
+      // Use override address if provided, otherwise fall back to connected wallet address
+      const params = permissionRequest?.params as WalletGrantPermissionsRequest['params'] | undefined;
+      const grantParams = params?.[0];
+      const targetAddress = grantParams?.address ?? walletAddress;
+      if (!targetAddress || !permissionRequest) return [];
 
       try {
-        const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
-        const [grantParams] = params;
-
         const permissionCall = buildGrantPermissionCall(
-          walletAddress as Address,
-          grantParams.spender as Address,
-          grantParams.expiry,
-          grantParams.permissions
+          targetAddress as Address,
+          grantParams!.spender as Address,
+          grantParams!.expiry,
+          grantParams!.permissions
         );
         return [permissionCall];
       } catch (error) {
@@ -258,6 +259,32 @@ export const PermissionModal = ({
     }
   }, [mode, walletAddress, permissionRequest, fetchedPermissionData]);
 
+  // Extract permission details from request (needed before gas estimation for address override)
+  const permissionDetails = useMemo(() => {
+    if (!permissionRequest) return null;
+
+    if (mode === 'grant') {
+      const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
+      const [grantParams] = params;
+
+      return {
+        spender: grantParams.spender,
+        expiry: grantParams.expiry,
+        spends: grantParams.permissions.spends || [],
+        calls: grantParams.permissions.calls || [],
+        address: grantParams.address,
+      };
+    } else {
+      const params = permissionRequest.params as WalletRevokePermissionsRequest['params'];
+      const [revokeParams] = params;
+
+      return {
+        permissionId: revokeParams.id,
+        address: revokeParams.address,
+      };
+    }
+  }, [permissionRequest, mode]);
+
   // Use the gas estimation hook for both ETH and ERC-20 cost estimation
   const {
     gasFee,
@@ -274,6 +301,7 @@ export const PermissionModal = ({
     apiKey: extractedApiKey,
     feeTokens,
     isSponsored,
+    address: permissionDetails?.address as Address | undefined,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -318,31 +346,6 @@ export const PermissionModal = ({
     }
     return effectivePaymasterContext;
   }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
-
-  // Extract permission details from request
-  const permissionDetails = useMemo(() => {
-    if (!permissionRequest) return null;
-
-    if (mode === 'grant') {
-      const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
-      const [grantParams] = params;
-
-      return {
-        spender: grantParams.spender,
-        expiry: grantParams.expiry,
-        spends: grantParams.permissions.spends || [],
-        calls: grantParams.permissions.calls || [],
-      };
-    } else {
-      const params = permissionRequest.params as WalletRevokePermissionsRequest['params'];
-      const [revokeParams] = params;
-
-      return {
-        permissionId: revokeParams.id,
-        address: revokeParams.address,
-      };
-    }
-  }, [permissionRequest, mode]);
 
   // Network name and icon
   const networkName = useMemo(() => {
@@ -539,8 +542,10 @@ export const PermissionModal = ({
 
   // Fetch fee tokens (ETH + available ERC-20 tokens from chain config)
   useEffect(() => {
+    // Use override address for balance fetching when operating on behalf of another account
+    const balanceAddress = permissionDetails?.address ?? walletAddress;
     // Skip if already sponsored via capabilities or config, or missing required data
-    if (effectivePaymasterUrl || !chain || !walletAddress) {
+    if (effectivePaymasterUrl || !chain || !balanceAddress) {
       setFeeTokensLoading(false);
       return;
     }
@@ -578,7 +583,7 @@ export const PermissionModal = ({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, walletAddress, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -628,7 +633,7 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, extractedApiKey, viemChain, walletAddress, effectivePaymasterUrl]);
+  }, [chain, extractedApiKey, viemChain, walletAddress, permissionDetails?.address, effectivePaymasterUrl]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
@@ -749,7 +754,8 @@ export const PermissionModal = ({
             calls: permissionDetails.calls,
           },
           computedPaymasterUrl,
-          computedPaymasterContext
+          computedPaymasterContext,
+          permissionDetails.address
         );
 
         console.log('Permissions granted:', result);
@@ -766,7 +772,12 @@ export const PermissionModal = ({
         }
 
         // Account.revokePermission with paymaster URL and context for ERC-20 payment
-        await account.revokePermission(permissionDetails.permissionId, computedPaymasterUrl, computedPaymasterContext);
+        await account.revokePermission(
+          permissionDetails.permissionId,
+          computedPaymasterUrl,
+          computedPaymasterContext,
+          permissionDetails.address
+        );
 
         console.log('Permission revoked');
         setStatus('Permission revoked successfully!');

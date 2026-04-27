@@ -31,7 +31,7 @@ export function createWagmiConfig(
           mode: mode,
           uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler({ theme }) : undefined,
         },
-        ens: 'justan.id',
+        ens: process.env.NEXT_PUBLIC_ENS || 'justan.id',
         paymasters,
         theme,
       }),

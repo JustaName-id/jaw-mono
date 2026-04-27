@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
-import { getJustaNameInstance, formatAddress } from '../../utils';
+import { getJustaNameInstance, formatAddress, getChainLabel } from '../../utils';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -82,9 +82,13 @@ export const DecodedCalldata = ({
           address: address as `0x${string}`,
           chainId,
         })
-        .then((result) => {
+        .then(async (result) => {
           if (result) {
-            setLocalResolved((prev) => ({ ...prev, [address.toLowerCase()]: result }));
+            const label = await getChainLabel(chainId, mainnetRpcUrl);
+            setLocalResolved((prev) => ({
+              ...prev,
+              [address.toLowerCase()]: label ? `${result}@${label}` : result,
+            }));
           }
         })
         .catch(() => {

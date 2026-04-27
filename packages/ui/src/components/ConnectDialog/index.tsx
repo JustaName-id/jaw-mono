@@ -7,6 +7,7 @@ import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { ConnectDialogProps } from './types';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { getChainLabel } from '../../utils/resolveChainLabel';
 
 export const ConnectDialog = ({
   open,
@@ -39,9 +40,10 @@ export const ConnectDialog = ({
           address: walletAddress as `0x${string}`,
           chainId: chainId,
         })
-        .then((result) => {
+        .then(async (result) => {
           if (result) {
-            setResolvedAddress(result);
+            const label = await getChainLabel(chainId, mainnetRpcUrl);
+            setResolvedAddress(label ? `${result}@${label}` : result);
           }
         })
         .catch(() => {
