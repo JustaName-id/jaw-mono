@@ -1386,7 +1386,10 @@ function TransactionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -1726,7 +1729,10 @@ function SendTransactionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -2187,7 +2193,10 @@ function PermissionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -2821,7 +2830,10 @@ function RevokePermissionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(

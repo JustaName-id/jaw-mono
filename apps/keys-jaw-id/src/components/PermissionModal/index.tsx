@@ -577,7 +577,7 @@ export const PermissionModal = ({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || chain?.rpcUrl || `https://eth.llamarpc.com`;
+        const rpcUrl = chain?.rpcUrl || viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
