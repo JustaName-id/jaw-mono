@@ -1,3 +1,13 @@
+## 0.2.3 (2026-04-27)
+
+### 🩹 Fixes
+
+- **ui:** remove rendering of empty data in TransactionDialog ([#170](https://github.com/JustaName-id/jaw-mono/pull/170))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.2.2 (2026-04-25)
 
 ### 🧱 Updated Dependencies
