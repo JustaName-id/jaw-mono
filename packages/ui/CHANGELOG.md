@@ -1,3 +1,13 @@
+## 0.2.6 (2026-04-27)
+
+### 🩹 Fixes
+
+- **ui:** use proxy instead of public rpc in permission dialog ([#173](https://github.com/JustaName-id/jaw-mono/pull/173))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.2.5 (2026-04-27)
 
 ### 🩹 Fixes
