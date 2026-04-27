@@ -28,7 +28,6 @@
   "files": [
     "dist",
     "cjs-error.cjs",
-    "LICENSE",
     "!**/*.tsbuildinfo"
   ],
   "dependencies": {

@@ -20,7 +20,6 @@
   "files": [
     "dist",
     "cjs-error.cjs",
-    "LICENSE",
     "!**/*.tsbuildinfo"
   ],
   "main": "./dist/index.js",
