@@ -1385,8 +1385,12 @@ function TransactionDialogWrapper({
           return;
         }
 
-        // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        // Get RPC URL for balance fetching — prefer the JAW RPC URL (carries API key)
+        // over viem's built-in public default to avoid leaking traffic to public endpoints.
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -1725,8 +1729,12 @@ function SendTransactionDialogWrapper({
           return;
         }
 
-        // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        // Get RPC URL for balance fetching — prefer the JAW RPC URL (carries API key)
+        // over viem's built-in public default to avoid leaking traffic to public endpoints.
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -2186,8 +2194,12 @@ function PermissionDialogWrapper({
           return;
         }
 
-        // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        // Get RPC URL for balance fetching — prefer the JAW RPC URL (carries API key)
+        // over viem's built-in public default to avoid leaking traffic to public endpoints.
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -2820,8 +2832,12 @@ function RevokePermissionDialogWrapper({
           return;
         }
 
-        // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        // Get RPC URL for balance fetching — prefer the JAW RPC URL (carries API key)
+        // over viem's built-in public default to avoid leaking traffic to public endpoints.
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
