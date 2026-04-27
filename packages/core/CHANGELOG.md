@@ -1,3 +1,13 @@
+## 0.2.7 (2026-04-27)
+
+### 🩹 Fixes
+
+- **core:** added MIT license ([#171](https://github.com/JustaName-id/jaw-mono/pull/171))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.2.6 (2026-04-27)
 
 ### 🩹 Fixes
