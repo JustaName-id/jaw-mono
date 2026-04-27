@@ -1,3 +1,13 @@
+## 0.2.6 (2026-04-27)
+
+### 🩹 Fixes
+
+- **core:** erc20 gas estimation with permissionId ([#172](https://github.com/JustaName-id/jaw-mono/pull/172))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.2.5 (2026-04-25)
 
 ### 🩹 Fixes
