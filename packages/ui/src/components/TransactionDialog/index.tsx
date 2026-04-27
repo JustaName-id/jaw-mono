@@ -405,7 +405,7 @@ export const TransactionDialog = ({
               </div>
 
               {/* Show Data section if data is provided */}
-              {currentTransaction?.data && (
+              {currentTransaction?.data && currentTransaction.data !== '0x' && (
                 <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
                   <div className="flex w-full flex-row items-center justify-between">
                     <p className="text-foreground text-xs font-bold leading-[133%]">Data</p>
@@ -568,7 +568,7 @@ export const TransactionDialog = ({
                           )}
 
                           {/* Data */}
-                          {transaction.data && (
+                          {transaction.data && transaction.data !== '0x' && (
                             <div className="border-border flex flex-col gap-1 rounded-[6px] border p-2">
                               <div className="mb-2 flex items-center justify-between">
                                 <p className="text-muted-foreground text-xs font-bold leading-[133%]">Data</p>
