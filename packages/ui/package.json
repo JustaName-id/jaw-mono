@@ -2,6 +2,7 @@
   "name": "@jaw.id/ui",
   "description": "Pre-built React dialogs for JAW.id",
   "version": "0.1.10",
+  "license": "MIT",
   "type": "module",
   "sideEffects": [
     "**/*.css",
@@ -19,6 +20,7 @@
   "files": [
     "dist",
     "cjs-error.cjs",
+    "LICENSE",
     "!**/*.tsbuildinfo"
   ],
   "main": "./dist/index.js",
