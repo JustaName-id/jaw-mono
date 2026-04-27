@@ -1385,8 +1385,7 @@ function TransactionDialogWrapper({
           return;
         }
 
-        // Get RPC URL for balance fetching — prefer the JAW RPC URL (carries API key)
-        // over viem's built-in public default to avoid leaking traffic to public endpoints.
+        // Get RPC URL for balance fetching
         const rpcUrl =
           buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
           viemChain?.rpcUrls?.default?.http?.[0] ||
@@ -1729,8 +1728,7 @@ function SendTransactionDialogWrapper({
           return;
         }
 
-        // Get RPC URL for balance fetching — prefer the JAW RPC URL (carries API key)
-        // over viem's built-in public default to avoid leaking traffic to public endpoints.
+        // Get RPC URL for balance fetching
         const rpcUrl =
           buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
           viemChain?.rpcUrls?.default?.http?.[0] ||
@@ -2194,8 +2192,7 @@ function PermissionDialogWrapper({
           return;
         }
 
-        // Get RPC URL for balance fetching — prefer the JAW RPC URL (carries API key)
-        // over viem's built-in public default to avoid leaking traffic to public endpoints.
+        // Get RPC URL for balance fetching
         const rpcUrl =
           buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
           viemChain?.rpcUrls?.default?.http?.[0] ||
@@ -2832,8 +2829,7 @@ function RevokePermissionDialogWrapper({
           return;
         }
 
-        // Get RPC URL for balance fetching — prefer the JAW RPC URL (carries API key)
-        // over viem's built-in public default to avoid leaking traffic to public endpoints.
+        // Get RPC URL for balance fetching
         const rpcUrl =
           buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
           viemChain?.rpcUrls?.default?.http?.[0] ||

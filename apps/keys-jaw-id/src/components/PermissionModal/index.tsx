@@ -576,8 +576,7 @@ export const PermissionModal = ({
           return;
         }
 
-        // Get RPC URL for balance fetching — prefer the dapp-provided URL (carries API key)
-        // over viem's built-in public default to avoid leaking traffic to public endpoints.
+        // Get RPC URL for balance fetching
         const rpcUrl = chain?.rpcUrl || viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
