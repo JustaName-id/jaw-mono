@@ -1,3 +1,13 @@
+## 0.2.8 (2026-04-28)
+
+### 🩹 Fixes
+
+- **core:** erc20 gas override issue ([#174](https://github.com/JustaName-id/jaw-mono/pull/174))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.2.7 (2026-04-27)
 
 ### 🩹 Fixes
