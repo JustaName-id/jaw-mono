@@ -128,7 +128,7 @@ export function createPaymasterFunctions(
             let maxFeePerGas = userOperation.maxFeePerGas;
             let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
 
-            if (!maxFeePerGas || !maxPriorityFeePerGas) {
+            if (maxFeePerGas === undefined || maxPriorityFeePerGas === undefined) {
                 const gasPrice = await getGasPrice(client);
                 maxFeePerGas = maxFeePerGas || gasPrice;
                 maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
@@ -191,7 +191,7 @@ export function createPaymasterFunctions(
             let maxFeePerGas = userOperation.maxFeePerGas;
             let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
 
-            if (!maxFeePerGas || !maxPriorityFeePerGas) {
+            if (maxFeePerGas === undefined || maxPriorityFeePerGas === undefined) {
                 const gasPrice = await getGasPrice(client);
                 maxFeePerGas = maxFeePerGas || gasPrice;
                 maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
