@@ -4,13 +4,11 @@ Get the currently authenticated account data.
 
 **Type:** `static`
 
-
 ## Signature
 
 ```typescript
 static getCurrentAccount(apiKey?: string): PasskeyAccount | null
 ```
-
 
 ## Parameters
 
@@ -19,7 +17,6 @@ static getCurrentAccount(apiKey?: string): PasskeyAccount | null
 Type: `string | undefined`
 
 Optional API key for JAW services.
-
 
 ## Returns
 
@@ -42,15 +39,14 @@ interface PasskeyAccount {
 }
 ```
 
-
 ## Behavior
 
 Returns the full account data for the currently authenticated session. Unlike `getAuthenticatedAddress()` which only returns the address, this method returns all account metadata including credential information.
 
 Returns `null` if:
+
 - No authenticated session exists
 - The session has expired
-
 
 ## Examples
 
@@ -107,7 +103,6 @@ function AuthStatus() {
   );
 }
 ```
-
 
 ## Related
 

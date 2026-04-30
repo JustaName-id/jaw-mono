@@ -8,18 +8,20 @@ import type { CallsHistoryItem } from '../api/routes/index.js';
 /**
  * Parameters for wallet_getCallsHistory
  */
-export type WalletGetCallsHistoryParams = [{
-    /** Address to fetch call bundles for (required) */
-    address: Address;
-    /** Optional chain ID to filter by */
-    chainId?: number;
-    /** Optional index cursor for pagination */
-    index?: number;
-    /** Maximum number of bundles to return (default: 20) */
-    limit?: number;
-    /** Sort direction based on index (default: 'desc' - newest first) */
-    sort?: 'asc' | 'desc';
-}];
+export type WalletGetCallsHistoryParams = [
+    {
+        /** Address to fetch call bundles for (required) */
+        address: Address;
+        /** Optional chain ID to filter by */
+        chainId?: number;
+        /** Optional index cursor for pagination */
+        index?: number;
+        /** Maximum number of bundles to return (default: 20) */
+        limit?: number;
+        /** Sort direction based on index (default: 'desc' - newest first) */
+        sort?: 'asc' | 'desc';
+    },
+];
 
 /**
  * Response type for wallet_getCallsHistory
@@ -49,10 +51,12 @@ export async function handleGetCallsHistoryRequest(
             // Inject the connected account's address
             modifiedRequest = {
                 ...request,
-                params: [{
-                    ...params?.[0],
-                    address: connectedAddress
-                }]
+                params: [
+                    {
+                        ...params?.[0],
+                        address: connectedAddress,
+                    },
+                ],
             };
         } else {
             // No address provided and no connected address - throw error

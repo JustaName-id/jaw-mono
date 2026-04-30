@@ -4,7 +4,6 @@ Disconnect the current session and clean up all authentication state.
 
 **Authentication Required:** No
 
-
 ## Request
 
 ```typescript
@@ -17,13 +16,11 @@ await jaw.provider.request({
 
 None
 
-
 ## Response
 
 Returns `null` on success.
 
 **Type:** `null`
-
 
 ## Behavior
 
@@ -31,14 +28,13 @@ Returns `null` on success.
 - Emits `disconnect` event
 - Same effect as calling `jaw.disconnect()`
 
-
 ## Example Usage
 
 ### Disconnect Button
 
 ```typescript
 await jaw.provider.request({
-    method: 'wallet_disconnect',
+  method: 'wallet_disconnect',
 });
 ```
 
@@ -54,7 +50,6 @@ await jaw.provider.request({
   method: 'wallet_disconnect',
 });
 ```
-
 
 ## Related Methods
 

@@ -4,18 +4,15 @@ Get account metadata (only available for passkey-based accounts).
 
 **Type:** `instance`
 
-
 ## Signature
 
 ```typescript
 getMetadata(): AccountMetadata | null
 ```
 
-
 ## Parameters
 
 None.
-
 
 ## Returns
 
@@ -36,13 +33,11 @@ interface AccountMetadata {
 }
 ```
 
-
 ## Behavior
 
 - For accounts created via `Account.create()`: Returns full metadata
 - For accounts created via `Account.import()`: Returns metadata with `isImported: true`
 - For accounts created via `Account.fromLocalAccount()`: Returns `null`
-
 
 ## Example
 

@@ -1,9 +1,4 @@
-import {
-  type Config,
-  type Connector,
-  getConnectorClient,
-  disconnect as wagmiDisconnect,
-} from '@wagmi/core';
+import { type Config, type Connector, getConnectorClient, disconnect as wagmiDisconnect } from '@wagmi/core';
 import type { Address, Hex } from 'viem';
 import {
   type PermissionsDetail,
@@ -72,7 +67,7 @@ export namespace connect {
  */
 export async function connect<config extends Config>(
   config: config,
-  parameters: connect.Parameters,
+  parameters: connect.Parameters
 ): Promise<connect.ReturnType> {
   const { connector, chainId, capabilities } = parameters;
 
@@ -111,7 +106,7 @@ export namespace grantPermissions {
  */
 export async function grantPermissions<config extends Config>(
   config: config,
-  parameters: grantPermissions.Parameters<config>,
+  parameters: grantPermissions.Parameters<config>
 ): Promise<grantPermissions.ReturnType> {
   const { address, chainId, connector, expiry, spender, permissions } = parameters;
 
@@ -123,12 +118,14 @@ export async function grantPermissions<config extends Config>(
 
   const result = await client.request({
     method: 'wallet_grantPermissions' as never,
-    params: [{
-      expiry,
-      spender,
-      permissions,
-      chainId: chainId ? `0x${chainId.toString(16)}` : undefined,
-    }] as never,
+    params: [
+      {
+        expiry,
+        spender,
+        permissions,
+        chainId: chainId ? `0x${chainId.toString(16)}` : undefined,
+      },
+    ] as never,
   });
 
   return result as grantPermissions.ReturnType;
@@ -155,7 +152,7 @@ export namespace getPermissions {
  */
 export async function getPermissions<config extends Config>(
   config: config,
-  parameters: getPermissions.Parameters<config> = {},
+  parameters: getPermissions.Parameters<config> = {}
 ): Promise<getPermissions.ReturnType> {
   const { address, chainId, connector } = parameters;
 
@@ -196,7 +193,7 @@ export namespace revokePermissions {
  */
 export async function revokePermissions<config extends Config>(
   config: config,
-  parameters: revokePermissions.Parameters<config>,
+  parameters: revokePermissions.Parameters<config>
 ): Promise<revokePermissions.ReturnType> {
   const { address, chainId, connector, id } = parameters;
 
@@ -242,7 +239,7 @@ export namespace disconnect {
  */
 export async function disconnect<config extends Config>(
   config: config,
-  parameters: disconnect.Parameters = {},
+  parameters: disconnect.Parameters = {}
 ): Promise<disconnect.ReturnType> {
   const { connector } = parameters;
   await wagmiDisconnect(config, { connector });
@@ -283,7 +280,7 @@ export namespace getAssets {
  */
 export async function getAssets<config extends Config>(
   config: config,
-  parameters: getAssets.Parameters<config> = {},
+  parameters: getAssets.Parameters<config> = {}
 ): Promise<getAssets.ReturnType> {
   const { address, chainId, connector, chainFilter, assetTypeFilter, assetFilter } = parameters;
 
@@ -295,12 +292,14 @@ export async function getAssets<config extends Config>(
 
   const result = await client.request({
     method: 'wallet_getAssets' as never,
-    params: [{
-      account: address,
-      chainFilter,
-      assetTypeFilter,
-      assetFilter,
-    }] as never,
+    params: [
+      {
+        account: address,
+        chainFilter,
+        assetTypeFilter,
+        assetFilter,
+      },
+    ] as never,
   });
 
   return result as getAssets.ReturnType;
@@ -350,7 +349,7 @@ export namespace getCapabilities {
  */
 export async function getCapabilities<config extends Config>(
   config: config,
-  parameters: getCapabilities.Parameters<config> = {},
+  parameters: getCapabilities.Parameters<config> = {}
 ): Promise<getCapabilities.ReturnType> {
   const { address, chainId, connector, chainFilter } = parameters;
 
@@ -415,7 +414,7 @@ export namespace sign {
  */
 export async function sign<config extends Config>(
   config: config,
-  parameters: sign.Parameters<config>,
+  parameters: sign.Parameters<config>
 ): Promise<sign.ReturnType> {
   const { address, chainId, connector, request } = parameters;
 
@@ -480,7 +479,7 @@ export namespace getCallsHistory {
  */
 export async function getCallsHistory<config extends Config>(
   config: config,
-  parameters: getCallsHistory.Parameters<config> = {},
+  parameters: getCallsHistory.Parameters<config> = {}
 ): Promise<getCallsHistory.ReturnType> {
   const { address, chainId, connector, index, limit, sort } = parameters;
 
@@ -492,15 +491,16 @@ export async function getCallsHistory<config extends Config>(
 
   const result = await client.request({
     method: 'wallet_getCallsHistory' as never,
-    params: [{
-      address,
-      chainId,
-      index,
-      limit,
-      sort,
-    }] as never,
+    params: [
+      {
+        address,
+        chainId,
+        index,
+        limit,
+        sort,
+      },
+    ] as never,
   });
 
   return result as getCallsHistory.ReturnType;
 }
-

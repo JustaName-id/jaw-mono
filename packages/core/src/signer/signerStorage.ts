@@ -1,5 +1,5 @@
-import { SignerType } from "../messages/index.js";
-import { createLocalStorage } from "../storage-manager/utils.js";
+import { SignerType } from '../messages/index.js';
+import { createLocalStorage } from '../storage-manager/utils.js';
 
 const SIGNER_TYPE_KEY = 'SignerType';
 const storage = createLocalStorage('JAWSDK', 'SignerConfig');

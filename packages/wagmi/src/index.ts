@@ -51,4 +51,9 @@ export {
 } from './lib/Actions.js';
 
 // Also export query keys for convenience
-export { getPermissionsQueryKey, getAssetsQueryKey, getCapabilitiesQueryKey, getCallsHistoryQueryKey } from './lib/Query.js';
+export {
+  getPermissionsQueryKey,
+  getAssetsQueryKey,
+  getCapabilitiesQueryKey,
+  getCallsHistoryQueryKey,
+} from './lib/Query.js';

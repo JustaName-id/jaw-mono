@@ -8,4 +8,4 @@ export interface JawConfig {
   relayUrl?: string;
 }
 
-export type OutputFormat = "json" | "human";
+export type OutputFormat = 'json' | 'human';

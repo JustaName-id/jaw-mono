@@ -6,17 +6,13 @@ export const standardErrors = {
     rpc: {
         parse: <T>(arg?: EthErrorsArg<T>) => getEthJsonRpcError(standardErrorCodes.rpc.parse, arg),
 
-        invalidRequest: <T>(arg?: EthErrorsArg<T>) =>
-            getEthJsonRpcError(standardErrorCodes.rpc.invalidRequest, arg),
+        invalidRequest: <T>(arg?: EthErrorsArg<T>) => getEthJsonRpcError(standardErrorCodes.rpc.invalidRequest, arg),
 
-        invalidParams: <T>(arg?: EthErrorsArg<T>) =>
-            getEthJsonRpcError(standardErrorCodes.rpc.invalidParams, arg),
+        invalidParams: <T>(arg?: EthErrorsArg<T>) => getEthJsonRpcError(standardErrorCodes.rpc.invalidParams, arg),
 
-        methodNotFound: <T>(arg?: EthErrorsArg<T>) =>
-            getEthJsonRpcError(standardErrorCodes.rpc.methodNotFound, arg),
+        methodNotFound: <T>(arg?: EthErrorsArg<T>) => getEthJsonRpcError(standardErrorCodes.rpc.methodNotFound, arg),
 
-        internal: <T>(arg?: EthErrorsArg<T>) =>
-            getEthJsonRpcError(standardErrorCodes.rpc.internal, arg),
+        internal: <T>(arg?: EthErrorsArg<T>) => getEthJsonRpcError(standardErrorCodes.rpc.internal, arg),
 
         server: <T>(opts: ServerErrorOptions<T>) => {
             if (!opts || typeof opts !== 'object' || Array.isArray(opts)) {
@@ -29,8 +25,7 @@ export const standardErrors = {
             return getEthJsonRpcError(code, opts);
         },
 
-        invalidInput: <T>(arg?: EthErrorsArg<T>) =>
-            getEthJsonRpcError(standardErrorCodes.rpc.invalidInput, arg),
+        invalidInput: <T>(arg?: EthErrorsArg<T>) => getEthJsonRpcError(standardErrorCodes.rpc.invalidInput, arg),
 
         resourceNotFound: <T>(arg?: EthErrorsArg<T>) =>
             getEthJsonRpcError(standardErrorCodes.rpc.resourceNotFound, arg),
@@ -44,8 +39,7 @@ export const standardErrors = {
         methodNotSupported: <T>(arg?: EthErrorsArg<T>) =>
             getEthJsonRpcError(standardErrorCodes.rpc.methodNotSupported, arg),
 
-        limitExceeded: <T>(arg?: EthErrorsArg<T>) =>
-            getEthJsonRpcError(standardErrorCodes.rpc.limitExceeded, arg),
+        limitExceeded: <T>(arg?: EthErrorsArg<T>) => getEthJsonRpcError(standardErrorCodes.rpc.limitExceeded, arg),
     },
 
     provider: {
@@ -192,9 +186,7 @@ function isValidEthProviderCode(code: number): boolean {
     return Number.isInteger(code) && code >= 1000 && code <= 4999;
 }
 
-export function isActionableHttpRequestError(
-    errorObject: unknown
-): errorObject is ActionableInsufficientBalanceError {
+export function isActionableHttpRequestError(errorObject: unknown): errorObject is ActionableInsufficientBalanceError {
     return (
         typeof errorObject === 'object' &&
         errorObject !== null &&
@@ -232,14 +224,10 @@ export class InvalidConfigurationException extends Error {
     }
 
     static missingParameters(fields: string[]): InvalidConfigurationException {
-        return new InvalidConfigurationException(
-            `Missing required parameters: ${fields.join(', ')}`
-        );
+        return new InvalidConfigurationException(`Missing required parameters: ${fields.join(', ')}`);
     }
 
     static missingHeaders(headers: string[]): InvalidConfigurationException {
-        return new InvalidConfigurationException(
-            `Missing required headers: ${headers.join(', ')}`
-        );
+        return new InvalidConfigurationException(`Missing required headers: ${headers.join(', ')}`);
     }
 }

@@ -4,23 +4,17 @@ Hook to grant permissions to a spender address, enabling session keys, subscript
 
 **Type:** `hook`
 
-
 ## Import
 
 ```typescript
 import { useGrantPermissions } from '@jaw.id/wagmi';
 ```
 
-
 ## Signature
 
 ```typescript
-function useGrantPermissions(parameters?: {
-  config?: Config;
-  mutation?: UseMutationParameters;
-}): UseMutationResult
+function useGrantPermissions(parameters?: { config?: Config; mutation?: UseMutationParameters }): UseMutationResult;
 ```
-
 
 ## Parameters
 
@@ -36,20 +30,19 @@ Type: `UseMutationParameters` (optional)
 
 TanStack React Query mutation options.
 
-
 ## Returns
 
 Returns a TanStack React Query mutation result:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `mutate` | `function` | Function to grant permissions |
-| `mutateAsync` | `function` | Async version of mutate |
-| `data` | `WalletGrantPermissionsResponse` | Granted permission details |
-| `isPending` | `boolean` | Whether granting is in progress |
-| `isSuccess` | `boolean` | Whether granting succeeded |
-| `isError` | `boolean` | Whether granting failed |
-| `error` | `Error` | Error if granting failed |
+| Property      | Type                             | Description                     |
+| ------------- | -------------------------------- | ------------------------------- |
+| `mutate`      | `function`                       | Function to grant permissions   |
+| `mutateAsync` | `function`                       | Async version of mutate         |
+| `data`        | `WalletGrantPermissionsResponse` | Granted permission details      |
+| `isPending`   | `boolean`                        | Whether granting is in progress |
+| `isSuccess`   | `boolean`                        | Whether granting succeeded      |
+| `isError`     | `boolean`                        | Whether granting failed         |
+| `error`       | `Error`                          | Error if granting failed        |
 
 ### data
 
@@ -78,7 +71,6 @@ interface WalletGrantPermissionsResponse {
 }
 ```
 
-
 ## Mutation Variables
 
 When calling `mutate()`, pass an object with the following properties:
@@ -99,6 +91,7 @@ const expiry = Math.floor(Date.now() / 1000) + 86400 * 7;
 Type: `Address`
 
 The address that will be granted permission to execute calls on behalf of the account. This is typically:
+
 - A session key address
 - A backend service address
 - An automation bot address
@@ -139,21 +132,23 @@ interface CallPermissionDetail {
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `target` | `Address` | Yes | Contract address the spender can call |
-| `selector` | `Hex` | No* | 4-byte function selector (e.g., `'0xa9059cbb'`) |
-| `functionSignature` | `string` | No* | Human-readable signature (e.g., `'transfer(address,uint256)'`) |
+| Field               | Type      | Required | Description                                                    |
+| ------------------- | --------- | -------- | -------------------------------------------------------------- |
+| `target`            | `Address` | Yes      | Contract address the spender can call                          |
+| `selector`          | `Hex`     | No\*     | 4-byte function selector (e.g., `'0xa9059cbb'`)                |
+| `functionSignature` | `string`  | No\*     | Human-readable signature (e.g., `'transfer(address,uint256)'`) |
 
-*Either `selector` or `functionSignature` must be provided.
+\*Either `selector` or `functionSignature` must be provided.
 
 :::tip
 Use `functionSignature` for readability - the SDK computes the selector automatically:
+
 ```typescript
 // These are equivalent:
 { target: USDC, selector: '0xa9059cbb' }
 { target: USDC, functionSignature: 'transfer(address,uint256)' }
 ```
+
 :::
 
 #### permissions.spends
@@ -175,18 +170,20 @@ interface SpendPermissionDetail {
 }
 ```
 
-| Field | Type | Required | Description |
-|-------|------|----------|-------------|
-| `token` | `Address` | Yes | Token contract address. Use `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` for native ETH. |
-| `allowance` | `string` | Yes | Maximum spend amount per period in wei (as string, supports large numbers) |
-| `unit` | `SpendPeriod` | Yes | Time period: `'minute'`, `'hour'`, `'day'`, `'week'`, `'month'`, `'year'`, or `'forever'` |
-| `multiplier` | `number` | No | Period multiplier (1-255). E.g., `unit: 'day', multiplier: 3` = every 3 days. Defaults to 1. |
+| Field        | Type          | Required | Description                                                                                  |
+| ------------ | ------------- | -------- | -------------------------------------------------------------------------------------------- |
+| `token`      | `Address`     | Yes      | Token contract address. Use `0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE` for native ETH.     |
+| `allowance`  | `string`      | Yes      | Maximum spend amount per period in wei (as string, supports large numbers)                   |
+| `unit`       | `SpendPeriod` | Yes      | Time period: `'minute'`, `'hour'`, `'day'`, `'week'`, `'month'`, `'year'`, or `'forever'`    |
+| `multiplier` | `number`      | No       | Period multiplier (1-255). E.g., `unit: 'day', multiplier: 3` = every 3 days. Defaults to 1. |
 
 :::info
 For native ETH spending limits, use the ERC-7528 native token address:
+
 ```typescript
 const NATIVE_TOKEN = '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE';
 ```
+
 :::
 
 ### address (optional)
@@ -206,7 +203,6 @@ Target chain ID. Defaults to the connected chain.
 Type: `Connector`
 
 Specific connector to use. Defaults to the active connector.
-
 
 ## Examples
 
@@ -420,7 +416,6 @@ function GrantWithCallbacks() {
 }
 ```
 
-
 ## Use Cases
 
 - **Session Keys** - Allow a temporary key to perform specific actions without full wallet access
@@ -429,7 +424,6 @@ function GrantWithCallbacks() {
 - **Gaming** - Let a game contract execute moves without transaction prompts
 - **DeFi Automation** - Enable auto-compounding, limit orders, or rebalancing
 - **Payroll** - Allow scheduled payments to employees
-
 
 ## Related
 

@@ -2,7 +2,6 @@
 
 Build your own UI for app-specific mode by implementing the `UIHandler` interface. This is useful for non-React applications or when you need complete control over the user experience.
 
-
 ## Overview
 
 When using `Mode.AppSpecific`, the SDK needs a way to display approval dialogs for wallet operations. The `UIHandler` interface defines how your application handles these UI requests.
@@ -20,16 +19,10 @@ const jaw = JAW.create({
 });
 ```
 
-
 ## UIHandler Interface
 
 ```typescript
-import {
-  UIHandler,
-  UIRequest,
-  UIResponse,
-  UIHandlerConfig,
-} from '@jaw.id/core';
+import { UIHandler, UIRequest, UIResponse, UIHandlerConfig } from '@jaw.id/core';
 
 class MyCustomUIHandler implements UIHandler {
   private config?: UIHandlerConfig;
@@ -69,7 +62,6 @@ class MyCustomUIHandler implements UIHandler {
 }
 ```
 
-
 ## UIHandlerConfig
 
 The SDK passes configuration to your handler via the `init()` method:
@@ -92,7 +84,6 @@ interface UIHandlerConfig {
   showTestnets?: boolean;
 }
 ```
-
 
 ## Request Types
 
@@ -131,7 +122,7 @@ interface SignatureUIRequest {
   timestamp: number;
   correlationId?: string;
   data: {
-    message: string;  // Hex-encoded message
+    message: string; // Hex-encoded message
     address: Address;
   };
 }
@@ -150,7 +141,7 @@ interface TypedDataUIRequest {
   timestamp: number;
   correlationId?: string;
   data: {
-    typedData: string;  // JSON string
+    typedData: string; // JSON string
     address: Address;
   };
 }
@@ -262,17 +253,16 @@ interface WalletSignUIRequest {
 
 **Expected response data:** Signature string (hex).
 
-
 ## UIResponse Structure
 
 Your handler must return a `UIResponse` object:
 
 ```typescript
 interface UIResponse<T> {
-  id: string;        // Must match request.id
+  id: string; // Must match request.id
   approved: boolean; // true if user approved, false if rejected
-  data?: T;          // Result data when approved
-  error?: UIError;   // Error when rejected
+  data?: T; // Result data when approved
+  error?: UIError; // Error when rejected
 }
 ```
 
@@ -282,7 +272,7 @@ interface UIResponse<T> {
 return {
   id: request.id,
   approved: true,
-  data: resultData,  // Type depends on request type
+  data: resultData, // Type depends on request type
 };
 ```
 
@@ -297,7 +287,6 @@ return {
   error: UIError.userRejected('User declined the request'),
 };
 ```
-
 
 ## UIError Class
 
@@ -320,11 +309,11 @@ UIError.handlerNotAvailable();
 ```
 
 Error codes:
+
 - `UIErrorCode.USER_REJECTED` (4001)
 - `UIErrorCode.TIMEOUT` (4002)
 - `UIErrorCode.UNSUPPORTED_REQUEST` (4003)
 - `UIErrorCode.HANDLER_NOT_AVAILABLE` (4004)
-
 
 ## Complete Example
 
@@ -482,7 +471,6 @@ export class VanillaUIHandler implements UIHandler {
 }
 ```
 
-
 ## Best Practices
 
 1. **Always match request.id in response** - The SDK uses this to correlate requests and responses.
@@ -501,7 +489,6 @@ export class VanillaUIHandler implements UIHandler {
    - Show full transaction details before approval
    - Allow users to review typed data structures
    - Clearly indicate when gas will be sponsored vs user-paid
-
 
 ## Related
 

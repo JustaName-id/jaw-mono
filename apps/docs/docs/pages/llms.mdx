@@ -10,24 +10,24 @@ These files are designed to be fetched by AI assistants and coding tools to prov
 
 Start here. This file routes AI assistants to the right domain-specific file based on the user's question.
 
-| File | Description |
-|------|-------------|
+| File                                        | Description                                                             |
+| ------------------------------------------- | ----------------------------------------------------------------------- |
 | [`/llms.txt`](https://docs.jaw.id/llms.txt) | Master routing index — directs AI assistants to the correct domain file |
 
 ### Domain Files
 
 Each file is self-contained with everything an AI needs to answer questions in that area. Fetch only the one that matches your question.
 
-| File | Contents |
-|------|----------|
-| [`/llms-wagmi.txt`](https://docs.jaw.id/llms-wagmi.txt) | Wagmi connector and React hooks for Next.js/React integration |
-| [`/llms-core.txt`](https://docs.jaw.id/llms-core.txt) | EIP-1193 provider and full RPC method reference |
-| [`/llms-account.txt`](https://docs.jaw.id/llms-account.txt) | Account API for headless integration and AI agent wallets |
-| [`/llms-quickstart.txt`](https://docs.jaw.id/llms-quickstart.txt) | Getting started guides and common use cases |
-| [`/llms-configuration.txt`](https://docs.jaw.id/llms-configuration.txt) | Configuration options including gas sponsoring and ENS |
-| [`/llms-advanced.txt`](https://docs.jaw.id/llms-advanced.txt) | Custom UI handlers, passkey server setup, and white-label integration |
-| [`/llms-cli.txt`](https://docs.jaw.id/llms-cli.txt) | CLI commands, MCP server setup, and AI agent integration |
-| [`/llms-full.txt`](https://docs.jaw.id/llms-full.txt) | Redirects to the routing index (for tools that look for this file) |
+| File                                                                    | Contents                                                              |
+| ----------------------------------------------------------------------- | --------------------------------------------------------------------- |
+| [`/llms-wagmi.txt`](https://docs.jaw.id/llms-wagmi.txt)                 | Wagmi connector and React hooks for Next.js/React integration         |
+| [`/llms-core.txt`](https://docs.jaw.id/llms-core.txt)                   | EIP-1193 provider and full RPC method reference                       |
+| [`/llms-account.txt`](https://docs.jaw.id/llms-account.txt)             | Account API for headless integration and AI agent wallets             |
+| [`/llms-quickstart.txt`](https://docs.jaw.id/llms-quickstart.txt)       | Getting started guides and common use cases                           |
+| [`/llms-configuration.txt`](https://docs.jaw.id/llms-configuration.txt) | Configuration options including gas sponsoring and ENS                |
+| [`/llms-advanced.txt`](https://docs.jaw.id/llms-advanced.txt)           | Custom UI handlers, passkey server setup, and white-label integration |
+| [`/llms-cli.txt`](https://docs.jaw.id/llms-cli.txt)                     | CLI commands, MCP server setup, and AI agent integration              |
+| [`/llms-full.txt`](https://docs.jaw.id/llms-full.txt)                   | Redirects to the routing index (for tools that look for this file)    |
 
 :::info
 AI assistants should fetch `/llms.txt` first, then follow its routing table to fetch exactly one domain file. Each domain file is self-contained — there's no need to load multiple files at once.

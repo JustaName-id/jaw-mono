@@ -4,13 +4,11 @@ Get details of a previously granted permission.
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
 async getPermission(permissionId: Hex): Promise<WalletGrantPermissionsResponse>
 ```
-
 
 ## Parameters
 
@@ -19,7 +17,6 @@ async getPermission(permissionId: Hex): Promise<WalletGrantPermissionsResponse>
 Type: `Hex`
 
 The permission ID (hash) to fetch. This is the `permissionId` field returned from `grantPermissions()`.
-
 
 ## Returns
 
@@ -48,13 +45,11 @@ interface WalletGrantPermissionsResponse {
 }
 ```
 
-
 ## Behavior
 
 1. Fetches the permission from the JAW relay by ID
 2. Returns the full permission details in the same format as `grantPermissions()`
 3. Throws if the permission is not found
-
 
 ## Example
 

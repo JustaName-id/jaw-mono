@@ -1,3 +1,59 @@
+## 0.1.14 (2026-04-28)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.8
+
+## 0.1.13 (2026-04-27)
+
+### 🩹 Fixes
+
+- **core:** added MIT license ([#171](https://github.com/JustaName-id/jaw-mono/pull/171))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.7
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
+## 0.1.12 (2026-04-27)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.6
+
+## 0.1.11 (2026-04-25)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.5
+
+## 0.1.10 (2026-04-22)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.4
+
+## 0.1.9 (2026-04-13)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.3
+
+## 0.1.8 (2026-04-07)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.2
+
+## 0.1.7 (2026-04-06)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.2.1
+
 ## 0.1.6 (2026-03-26)
 
 ### 🧱 Updated Dependencies

@@ -4,31 +4,33 @@ Revoke previously granted permissions.
 
 **Authentication Required:** No
 
-
 ## Request
 
 ```typescript
 await jaw.provider.request({
   method: 'wallet_revokePermissions',
-  params: [{
-    id: '0xabc123...', // Permission ID
-  }],
+  params: [
+    {
+      id: '0xabc123...', // Permission ID
+    },
+  ],
 });
 ```
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `id` | `string` | Yes | Permission ID to revoke |
-| `capabilities` | `object` | No | Additional capabilities (see below) |
+| Name           | Type          | Required | Description                         |
+| -------------- | ------------- | -------- | ----------------------------------- |
+| `id`           | `string`      | Yes      | Permission ID to revoke             |
+| `address`      | `0x${string}` | No       | Account address to revoke on        |
+| `capabilities` | `object`      | No       | Additional capabilities (see below) |
 
 ### Capabilities
 
-| Name | Type | Description |
-|------|------|-------------|
-| `capabilities.paymasterService` | `object` | Paymaster service for gas sponsorship |
-| `capabilities.paymasterService.url` | `string` | Paymaster service URL (ERC-7677 compliant) |
+| Name                                    | Type     | Description                                               |
+| --------------------------------------- | -------- | --------------------------------------------------------- |
+| `capabilities.paymasterService`         | `object` | Paymaster service for gas sponsorship                     |
+| `capabilities.paymasterService.url`     | `string` | Paymaster service URL (ERC-7677 compliant)                |
 | `capabilities.paymasterService.context` | `object` | Optional context (e.g., `{ sponsorshipPolicyId: '...' }`) |
 
 :::info
@@ -38,11 +40,12 @@ The `paymasterService` capability allows you to specify a paymaster per-call, ov
 ### Example
 
 ```json
-[{
-  "id": "0xabc123456def789..."
-}]
+[
+  {
+    "id": "0xabc123456def789..."
+  }
+]
 ```
-
 
 ## Response
 
@@ -56,21 +59,18 @@ Returns revocation result.
 }
 ```
 
-
 ## Behavior
 
 - Opens popup for user approval
 - Revokes permission
 
-
 ## Errors
 
-| Code | Description |
-|------|-------------|
-| 4001 | User rejected the request |
-| 4100 | Unauthorized (not authenticated) |
+| Code   | Description                              |
+| ------ | ---------------------------------------- |
+| 4001   | User rejected the request                |
+| 4100   | Unauthorized (not authenticated)         |
 | -32602 | Invalid params (permission ID not found) |
-
 
 ## Example
 
@@ -79,12 +79,13 @@ const permissionId = '0xabc123...';
 
 const result = await jaw.provider.request({
   method: 'wallet_revokePermissions',
-  params: [{
-    id: permissionId,
-  }],
+  params: [
+    {
+      id: permissionId,
+    },
+  ],
 });
 ```
-
 
 ## Related Methods
 

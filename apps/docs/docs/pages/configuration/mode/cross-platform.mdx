@@ -2,7 +2,6 @@
 
 Passkey operations redirect to `keys.jaw.id` in a popup, enabling wallet reuse across multiple applications. This is the default mode.
 
-
 ## Usage
 
 ### With Wagmi (Recommended)
@@ -36,7 +35,6 @@ const jaw = JAW.create({
 Since CrossPlatform is the default mode, you can omit the `preference` object entirely if you don't need to configure other options.
 :::
 
-
 ## How It Works
 
 1. User clicks "Connect" in your dApp
@@ -45,14 +43,12 @@ Since CrossPlatform is the default mode, you can omit the `preference` object en
 4. Popup closes and user is connected to your dApp
 5. The same wallet can be used across any app using CrossPlatform mode
 
-
 ## Benefits
 
 - **Single wallet across multiple dApps** - Users don't need to create separate wallets for each application
 - **Seamless cross-application experience** - Connect once, use everywhere
 - **Consistent authentication flow** - Users see the same familiar interface
 - **No UI implementation required** - Authentication UI is handled by JAW
-
 
 ## User Flow
 
@@ -73,7 +69,6 @@ Your dApp                    keys.jaw.id (popup)
    │  5. User connected           │
    └──────────────────────────────┘
 ```
-
 
 ## Related
 

@@ -14,14 +14,12 @@ Upgrade an existing EOA (Externally Owned Account) to a JAW smart account while 
 EIP-7702 allows EOAs to delegate their code to a smart contract implementation. The delegation happens onchain as part of the first transaction and persists across future transactions. No migration, no asset transfers, no address change.
 :::
 
-
 ## How It Works
 
 1. **First transaction** — JAW signs an EIP-7702 authorization, registers the permissions manager as an owner, and executes your call — all in a single UserOperation.
 2. **Subsequent transactions** — The delegation is already active. JAW skips the authorization and owner setup, and just sends your call.
 
 The developer doesn't need to handle any of this. Pass `{ eip7702: true }` and the SDK handles the rest.
-
 
 ## Prerequisites
 
@@ -49,7 +47,6 @@ bun add @jaw.id/core viem
 
 Get your API key at **[dashboard.jaw.id](https://dashboard.jaw.id/)**.
 
-
 ## Quick Example
 
 ```typescript
@@ -60,21 +57,16 @@ import { parseEther } from 'viem';
 const localAccount = privateKeyToAccount('0x...');
 
 // Create an EIP-7702 account — address is preserved
-const account = await Account.fromLocalAccount(
-  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
-  localAccount,
-  { eip7702: true }
-);
+const account = await Account.fromLocalAccount({ chainId: 8453, apiKey: 'YOUR_API_KEY' }, localAccount, {
+  eip7702: true,
+});
 
 // account.address === localAccount.address
 console.log('Address:', account.address);
 
 // Send a transaction — delegation happens automatically on first call
-const { id } = await account.sendCalls([
-  { to: '0xRecipient...', value: parseEther('0.1') }
-]);
+const { id } = await account.sendCalls([{ to: '0xRecipient...', value: parseEther('0.1') }]);
 ```
-
 
 ## Provider Integrations
 
@@ -88,11 +80,9 @@ import { privateKeyToAccount } from 'viem/accounts';
 
 const localAccount = privateKeyToAccount('0x...');
 
-const account = await Account.fromLocalAccount(
-  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
-  localAccount,
-  { eip7702: true }
-);
+const account = await Account.fromLocalAccount({ chainId: 8453, apiKey: 'YOUR_API_KEY' }, localAccount, {
+  eip7702: true,
+});
 ```
 
 ### Privy (Server)
@@ -111,11 +101,9 @@ const localAccount = await createViemAccount({
   privy,
 });
 
-const account = await Account.fromLocalAccount(
-  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
-  localAccount,
-  { eip7702: true }
-);
+const account = await Account.fromLocalAccount({ chainId: 8453, apiKey: 'YOUR_API_KEY' }, localAccount, {
+  eip7702: true,
+});
 ```
 
 ### Privy (Client)
@@ -128,11 +116,9 @@ import { toViemAccount, getEmbeddedConnectedWallet } from '@privy-io/react-auth'
 const embeddedWallet = getEmbeddedConnectedWallet(wallets);
 const localAccount = await toViemAccount({ wallet: embeddedWallet });
 
-const account = await Account.fromLocalAccount(
-  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
-  localAccount,
-  { eip7702: true }
-);
+const account = await Account.fromLocalAccount({ chainId: 8453, apiKey: 'YOUR_API_KEY' }, localAccount, {
+  eip7702: true,
+});
 ```
 
 ### Turnkey (Server)
@@ -155,13 +141,10 @@ const localAccount = await createAccount({
   signWith: walletAddress,
 });
 
-const account = await Account.fromLocalAccount(
-  { chainId: 8453, apiKey: 'YOUR_API_KEY' },
-  localAccount,
-  { eip7702: true }
-);
+const account = await Account.fromLocalAccount({ chainId: 8453, apiKey: 'YOUR_API_KEY' }, localAccount, {
+  eip7702: true,
+});
 ```
-
 
 ## With Gas Sponsoring
 
@@ -179,13 +162,10 @@ const account = await Account.fromLocalAccount(
 );
 
 // Gas is fully sponsored — user pays nothing
-const { id } = await account.sendCalls([
-  { to: '0xRecipient...', value: parseEther('0.1') }
-]);
+const { id } = await account.sendCalls([{ to: '0xRecipient...', value: parseEther('0.1') }]);
 ```
 
 See [Gas Sponsoring](/guides/gas-sponsoring) for full paymaster setup.
-
 
 ## With Permissions
 
@@ -203,24 +183,21 @@ const response = await ownerAccount.grantPermissions(
 );
 
 // 2. Spender executes using the permission
-const { id } = await spenderAccount.sendCalls(
-  [{ to: USDC_ADDRESS, data: transferCalldata }],
-  { permissionId: response.permissionId }
-);
+const { id } = await spenderAccount.sendCalls([{ to: USDC_ADDRESS, data: transferCalldata }], {
+  permissionId: response.permissionId,
+});
 ```
 
 See [Permissions](/concepts/permissions) for details.
 
-
 ## EIP-7702 vs Regular Smart Account
 
-| | `fromLocalAccount()` | `fromLocalAccount({ eip7702: true })` |
-|---|---|---|
-| **Address** | New counterfactual address | Preserves the EOA address |
-| **First tx** | Deploys smart account via factory | Delegates code via EIP-7702 authorization |
-| **Identity** | New onchain identity | Same address, same history |
-| **Use case** | Backend automation, session keys | Upgrade existing users, preserve reputation |
-
+|              | `fromLocalAccount()`              | `fromLocalAccount({ eip7702: true })`       |
+| ------------ | --------------------------------- | ------------------------------------------- |
+| **Address**  | New counterfactual address        | Preserves the EOA address                   |
+| **First tx** | Deploys smart account via factory | Delegates code via EIP-7702 authorization   |
+| **Identity** | New onchain identity              | Same address, same history                  |
+| **Use case** | Backend automation, session keys  | Upgrade existing users, preserve reputation |
 
 ## Related
 

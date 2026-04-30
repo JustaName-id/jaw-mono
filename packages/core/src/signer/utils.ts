@@ -1,13 +1,14 @@
-import {SignerType} from "../messages/index.js";
-import {AppMetadata, ProviderEventCallback, PaymasterConfig} from "../provider/index.js";
-import {Communicator} from "../communicator/index.js";
-import {Signer} from "./interface.js";
-import {CrossPlatformSigner} from "./cross-platform/CrossPlatformSigner.js";
-import {AppSpecificSigner} from "./app-specific/AppSpecificSigner.js";
-import {UIHandler} from "../ui/interface.js";
+import { SignerType } from '../messages/index.js';
+import { AppMetadata, ProviderEventCallback, PaymasterConfig } from '../provider/index.js';
+import { Communicator } from '../communicator/index.js';
+import { Signer } from './interface.js';
+import { CrossPlatformSigner } from './cross-platform/CrossPlatformSigner.js';
+import { AppSpecificSigner } from './app-specific/AppSpecificSigner.js';
+import { UIHandler } from '../ui/interface.js';
+import type { JawTheme } from '../ui/theme.js';
 
 // Re-export storage functions for backward compatibility
-export { loadSignerType, storeSignerType, clearSignerType } from "./signerStorage.js";
+export { loadSignerType, storeSignerType, clearSignerType } from './signerStorage.js';
 
 export function createSigner(params: {
     signerType: SignerType;
@@ -18,8 +19,9 @@ export function createSigner(params: {
     apiKey: string;
     paymasters?: Record<number, PaymasterConfig>;
     ens?: string;
+    theme?: JawTheme;
 }): Signer {
-    const { signerType, metadata, communicator, uiHandler, callback, apiKey, paymasters, ens } = params;
+    const { signerType, metadata, communicator, uiHandler, callback, apiKey, paymasters, ens, theme } = params;
 
     switch (signerType) {
         case 'crossPlatform': {
@@ -44,6 +46,7 @@ export function createSigner(params: {
                 apiKey,
                 paymasters,
                 ens,
+                theme,
             });
         }
     }

@@ -1,1 +1,6 @@
-export { getPermissionsQueryKey, getAssetsQueryKey, getCapabilitiesQueryKey, getCallsHistoryQueryKey } from './internal/query.js';
+export {
+  getPermissionsQueryKey,
+  getAssetsQueryKey,
+  getCapabilitiesQueryKey,
+  getCallsHistoryQueryKey,
+} from './internal/query.js';

@@ -4,7 +4,6 @@ Grant permissions to a spender.
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
@@ -13,10 +12,10 @@ async grantPermissions(
   spender: Address,
   permissions: PermissionsDetail,
   paymasterUrlOverride?: string,
-  paymasterContextOverride?: Record<string, unknown>
+  paymasterContextOverride?: Record<string, unknown>,
+  address?: Address
 ): Promise<WalletGrantPermissionsResponse>
 ```
-
 
 ## Parameters
 
@@ -80,9 +79,16 @@ Type: `Record<string, unknown>`
 Custom paymaster context. For ERC-20 payment, include the token address:
 
 ```typescript
-{ token: '0xUSDC_ADDRESS...' }
+{
+  token: '0xUSDC_ADDRESS...';
+}
 ```
 
+### address (optional)
+
+Type: `Address`
+
+Target account address to grant permissions on. The signer must be a registered owner on that account.
 
 ## Returns
 
@@ -111,14 +117,12 @@ interface WalletGrantPermissionsResponse {
 }
 ```
 
-
 ## Behavior
 
 1. Creates a permission with the specified constraints
 2. Signs the permission with the smart account
 3. Registers the permission with the JAW relay
 4. Returns the permission details including the unique ID
-
 
 ## Example
 
@@ -136,14 +140,14 @@ const permission = await account.grantPermissions(
       {
         target: ROUTER_ADDRESS,
         selector: '0x7ff36ab5', // swapExactETHForTokens
-      }
+      },
     ],
     spends: [
       {
         token: USDC_ADDRESS,
         limit: '1000000000', // 1000 USDC
         period: 'week',
-      }
+      },
     ],
   }
 );
@@ -158,7 +162,6 @@ console.log('Expires:', new Date(permission.end * 1000));
 - **Subscription services** - Grant recurring spending permissions
 - **Automated trading** - Allow a bot to execute specific trades
 - **Gaming** - Let a game contract execute moves without prompts
-
 
 ## Related
 

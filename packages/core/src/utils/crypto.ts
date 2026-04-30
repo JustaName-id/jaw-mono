@@ -1,4 +1,4 @@
-import {EncryptedData, RPCRequest, RPCResponse} from "../messages/index.js";
+import { EncryptedData, RPCRequest, RPCResponse } from '../messages/index.js';
 
 /**
  * Generate ECDH P-256 key pair
@@ -17,10 +17,7 @@ export async function generateKeyPair(): Promise<CryptoKeyPair> {
 /**
  * Derive shared secret from own private key and peer's public key
  */
-export async function deriveSharedSecret(
-    ownPrivateKey: CryptoKey,
-    peerPublicKey: CryptoKey
-): Promise<CryptoKey> {
+export async function deriveSharedSecret(ownPrivateKey: CryptoKey, peerPublicKey: CryptoKey): Promise<CryptoKey> {
     return crypto.subtle.deriveKey(
         {
             name: 'ECDH',
@@ -50,10 +47,7 @@ export async function encrypt(sharedSecret: CryptoKey, plainText: string): Promi
     return { iv, cipherText };
 }
 
-export async function decrypt(
-    sharedSecret: CryptoKey,
-    { iv, cipherText }: EncryptedData
-): Promise<string> {
+export async function decrypt(sharedSecret: CryptoKey, { iv, cipherText }: EncryptedData): Promise<string> {
     const plainText = await crypto.subtle.decrypt(
         {
             name: 'AES-GCM',
@@ -98,10 +92,7 @@ export async function decryptContent<R extends RPCRequest | RPCResponse>(
 /**
  * Export key to hex string
  */
-export async function exportKeyToHexString(
-    type: 'private' | 'public',
-    key: CryptoKey
-): Promise<string> {
+export async function exportKeyToHexString(type: 'private' | 'public', key: CryptoKey): Promise<string> {
     const format = type === 'private' ? 'pkcs8' : 'spki';
     const exported = await crypto.subtle.exportKey(format, key);
     return bytesToHex(new Uint8Array(exported));
@@ -110,10 +101,7 @@ export async function exportKeyToHexString(
 /**
  * Import key from hex string
  */
-export async function importKeyFromHexString(
-    type: 'private' | 'public',
-    hexString: string
-): Promise<CryptoKey> {
+export async function importKeyFromHexString(type: 'private' | 'public', hexString: string): Promise<CryptoKey> {
     const format = type === 'private' ? 'pkcs8' : 'spki';
     const keyData = hexToBytes(hexString) as BufferSource;
 
@@ -128,7 +116,6 @@ export async function importKeyFromHexString(
         type === 'private' ? ['deriveKey'] : []
     );
 }
-
 
 function bytesToHex(bytes: Uint8Array): string {
     return Array.from(bytes)

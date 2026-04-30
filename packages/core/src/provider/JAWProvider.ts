@@ -13,25 +13,22 @@ import {
     Mode,
     PaymasterConfig,
 } from './interface.js';
+import type { JawTheme } from '../ui/theme.js';
 
-import {
-    hexStringFromNumber,
-    checkErrorForInvalidRequestArgs,
-} from '../utils/index.js';
+import { hexStringFromNumber, checkErrorForInvalidRequestArgs } from '../utils/index.js';
 
 import { correlationIds } from '../store/index.js';
 
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
-import { handleGetPermissionsRequest, handleGetCapabilitiesRequest, handleGetCallsHistoryRequest } from '../rpc/index.js';
+import {
+    handleGetPermissionsRequest,
+    handleGetCapabilitiesRequest,
+    handleGetCallsHistoryRequest,
+} from '../rpc/index.js';
 import { Signer } from '../signer/index.js';
 
-import {
-    createSigner,
-    loadSignerType,
-    storeSignerType,
-    clearSignerType,
-} from '../signer/index.js';
+import { createSigner, loadSignerType, storeSignerType, clearSignerType } from '../signer/index.js';
 import { PasskeyManager } from '../passkey-manager/index.js';
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
@@ -40,24 +37,24 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     private readonly communicator: Communicator;
     private readonly apiKey: string;
     private readonly paymasters?: Record<number, PaymasterConfig>;
+    private readonly theme?: JawTheme;
 
     private signer: Signer | null = null;
 
-    constructor({ metadata, preference, apiKey, paymasters }: Readonly<ConstructorOptions>) {
+    constructor({ metadata, preference, apiKey, paymasters, theme }: Readonly<ConstructorOptions>) {
         super();
         this.metadata = metadata;
         this.preference = preference;
         this.apiKey = apiKey;
         this.paymasters = paymasters;
+        this.theme = theme;
         this.communicator = new Communicator({
             metadata,
             preference,
         });
 
         // Determine the expected signer type from current preference
-        const expectedSignerType: SignerType = preference.mode === Mode.AppSpecific
-            ? 'appSpecific'
-            : 'crossPlatform';
+        const expectedSignerType: SignerType = preference.mode === Mode.AppSpecific ? 'appSpecific' : 'crossPlatform';
 
         const storedSignerType = loadSignerType();
 
@@ -105,9 +102,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     }
 
     private async _request<T>(args: RequestArguments): Promise<T> {
-        const signerType = this.preference.mode === Mode.AppSpecific
-            ? 'appSpecific'
-            : 'crossPlatform';
+        const signerType = this.preference.mode === Mode.AppSpecific ? 'appSpecific' : 'crossPlatform';
 
         try {
             checkErrorForInvalidRequestArgs(args);
@@ -149,7 +144,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                             // The signing UI will be shown immediately after.
                             await ephemeralSigner.handshake({
                                 method: 'wallet_connect',
-                                params: [{ silent: true }]
+                                params: [{ silent: true }],
                             });
                             const result = await ephemeralSigner.request(args);
                             try {
@@ -247,7 +242,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             apiKey: this.apiKey,
             paymasters: signerType === 'appSpecific' ? this.paymasters : undefined,
             ens: signerType === 'appSpecific' ? this.preference.ens : undefined,
+            theme: signerType === 'appSpecific' ? this.theme : undefined,
         });
     }
-
 }

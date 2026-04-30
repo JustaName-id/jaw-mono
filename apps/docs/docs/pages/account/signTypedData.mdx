@@ -4,15 +4,14 @@ Sign EIP-712 typed data.
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
 async signTypedData(
-  typedData: TypedDataDefinition<TypedData, string>
+  typedData: TypedDataDefinition<TypedData, string>,
+  options?: { address?: Address }
 ): Promise<Hex>
 ```
-
 
 ## Parameters
 
@@ -21,6 +20,10 @@ async signTypedData(
 Type: `TypedDataDefinition<TypedData, string>`
 
 The EIP-712 typed data to sign, including domain, types, primary type, and message.
+
+### options (optional)
+
+Type: `{ address?: Address }`
 
 ```typescript
 interface TypedDataDefinition {
@@ -37,18 +40,15 @@ interface TypedDataDefinition {
 }
 ```
 
-
 ## Returns
 
 `Promise<Hex>` - The signature as a hex string.
-
 
 ## Behavior
 
 1. Encodes the typed data according to EIP-712
 2. Signs with the smart account (passkey or local account)
 3. Returns the signature wrapped for smart account validation
-
 
 ## Example
 
@@ -63,19 +63,13 @@ import { Account } from '@jaw.id/core';
 const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 2: Create a new account with passkey
-const account = await Account.create(
-  { chainId: 1, apiKey: 'your-api-key' },
-  { username: 'alice' }
-);
+const account = await Account.create({ chainId: 1, apiKey: 'your-api-key' }, { username: 'alice' });
 
 // Option 3: Import from cloud backup
 const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 4: From a local account (server-side / embedded wallets)
-const account = await Account.fromLocalAccount(
-  { chainId: 1, apiKey: 'your-api-key' },
-  localAccount
-);
+const account = await Account.fromLocalAccount({ chainId: 1, apiKey: 'your-api-key' }, localAccount);
 ```
 
 ### Basic Usage
@@ -102,6 +96,21 @@ const signature = await account.signTypedData({
 });
 ```
 
+### Signing from a Different Account
+
+Target account address to sign from. The signer must be a registered owner on that account.
+
+```typescript
+const signature = await account.signTypedData(
+  {
+    domain: { name: 'MyApp', version: '1', chainId: 1, verifyingContract: '0x...' },
+    types: { Message: [{ name: 'content', type: 'string' }] },
+    primaryType: 'Message',
+    message: { content: 'Hello' },
+  },
+  { address: '0xTargetAccount...' }
+);
+```
 
 ## Related
 

@@ -2,7 +2,6 @@
 
 Passkey operations stay within your dApp with no external redirects. Wallets are specific to your application's origin.
 
-
 ## Usage
 
 AppSpecific mode requires a `uiHandler` to render authentication dialogs within your app.
@@ -68,7 +67,6 @@ const jaw = JAW.create({
 
 For non-React apps or fully custom UI, see the [Custom UI Handler](/advanced/custom-ui-handler) documentation.
 
-
 ## How It Works
 
 1. User clicks "Connect" in your dApp
@@ -77,14 +75,12 @@ For non-React apps or fully custom UI, see the [Custom UI Handler](/advanced/cus
 4. Modal closes and user is connected
 5. The wallet is tied to your application's origin
 
-
 ## Benefits
 
 - **Users never leave your dApp** - No popups or redirects
 - **Full control over UI/UX** - Customize the authentication experience
 - **White-label experience** - Your branding throughout
 - **Origin-bound security** - Passkeys are tied to your domain
-
 
 ## User Flow
 
@@ -107,7 +103,6 @@ Your dApp
    │  5. User connected
    └──────────────────────────────────
 ```
-
 
 ## uiHandler
 
@@ -146,7 +141,6 @@ interface UIHandler {
 ```
 
 See the [Custom UI Handler](/advanced/custom-ui-handler) documentation for the full interface specification and implementation examples.
-
 
 ## Related
 

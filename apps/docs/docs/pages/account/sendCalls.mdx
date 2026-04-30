@@ -4,7 +4,6 @@ Send multiple calls as a bundled user operation without waiting for receipt.
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
@@ -15,7 +14,6 @@ async sendCalls(
   paymasterContextOverride?: Record<string, unknown>
 ): Promise<BundledTransactionResult>
 ```
-
 
 ## Parameters
 
@@ -44,8 +42,8 @@ Optional settings for call execution.
 
 ```typescript
 interface SendCallsOptions {
-  /** Permission ID to use for executing the calls through the permission manager */
   permissionId?: Hex;
+  from?: Address;
 }
 ```
 
@@ -62,9 +60,10 @@ Type: `Record<string, unknown>`
 Custom paymaster context. For ERC-20 payment, include the token address:
 
 ```typescript
-{ token: '0xUSDC_ADDRESS...' }
+{
+  token: '0xUSDC_ADDRESS...';
+}
 ```
-
 
 ## Returns
 
@@ -79,7 +78,6 @@ interface BundledTransactionResult {
 }
 ```
 
-
 ## Behavior
 
 1. Bundles all calls into a single user operation
@@ -88,7 +86,6 @@ interface BundledTransactionResult {
 4. Does not wait for transaction inclusion
 
 For waiting until the transaction is mined, use [`sendTransaction()`](/account/sendTransaction).
-
 
 ## Example
 
@@ -103,19 +100,13 @@ import { Account } from '@jaw.id/core';
 const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 2: Create a new account with passkey
-const account = await Account.create(
-  { chainId: 1, apiKey: 'your-api-key' },
-  { username: 'alice' }
-);
+const account = await Account.create({ chainId: 1, apiKey: 'your-api-key' }, { username: 'alice' });
 
 // Option 3: Import from cloud backup
 const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 4: From a local account (server-side / embedded wallets)
-const account = await Account.fromLocalAccount(
-  { chainId: 1, apiKey: 'your-api-key' },
-  localAccount
-);
+const account = await Account.fromLocalAccount({ chainId: 1, apiKey: 'your-api-key' }, localAccount);
 ```
 
 ### Batch Multiple Calls
@@ -154,28 +145,32 @@ const transferData = encodeFunctionData({
 });
 
 // Execute the transfer using the permission
-const { id } = await account.sendCalls(
-  [{ to: USDC_ADDRESS, data: transferData }],
-  { permissionId }
-);
+const { id } = await account.sendCalls([{ to: USDC_ADDRESS, data: transferData }], { permissionId });
 
 console.log('Batch transfer submitted with permission:', id);
 ```
 
 When using the `permissionId` option:
+
 - The calls are executed through the JustaPermissionManager contract
 - The permission's call and spend limits are enforced
 - The spender must have been granted appropriate permissions for the calls being made
 
+### Sending from a Different Account
+
+Target account address to execute from. The signer must be a registered owner on that account.
+
+```typescript
+const { id } = await account.sendCalls([{ to: '0x...', data: '0x...' }], { from: '0xTargetAccount...' });
+```
 
 ## sendTransaction vs sendCalls
 
-| | `sendTransaction()` | `sendCalls()` |
-|---|---|---|
-| Returns | Transaction hash | User operation ID |
-| Waits | Yes, until mined | No, returns immediately |
-| Use case | Need confirmation | Fire and forget |
-
+|          | `sendTransaction()` | `sendCalls()`           |
+| -------- | ------------------- | ----------------------- |
+| Returns  | Transaction hash    | User operation ID       |
+| Waits    | Yes, until mined    | No, returns immediately |
+| Use case | Need confirmation   | Fire and forget         |
 
 ## Related
 

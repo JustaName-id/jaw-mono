@@ -87,17 +87,21 @@ describe('toJustanAccount unit tests', () => {
             });
 
             expect(viem.encodeAbiParameters).toHaveBeenCalledWith(
-                [{
-                    components: [
-                        { name: 'ownerIndex', type: 'uint8' },
-                        { name: 'signatureData', type: 'bytes' },
-                    ],
-                    type: 'tuple',
-                }],
-                [{
-                    ownerIndex: 0,
-                    signatureData: MOCK_SIGNATURE,
-                }]
+                [
+                    {
+                        components: [
+                            { name: 'ownerIndex', type: 'uint8' },
+                            { name: 'signatureData', type: 'bytes' },
+                        ],
+                        type: 'tuple',
+                    },
+                ],
+                [
+                    {
+                        ownerIndex: 0,
+                        signatureData: MOCK_SIGNATURE,
+                    },
+                ]
             );
             expect(result).toBe(MOCK_ENCODED_RESULT);
         });
@@ -111,18 +115,17 @@ describe('toJustanAccount unit tests', () => {
                 signature: MOCK_SIGNATURE,
             });
 
-            expect(viem.encodeAbiParameters).toHaveBeenCalledWith(
-                expect.anything(),
-                [{
+            expect(viem.encodeAbiParameters).toHaveBeenCalledWith(expect.anything(), [
+                {
                     ownerIndex: 5,
                     signatureData: MOCK_SIGNATURE,
-                }]
-            );
+                },
+            ]);
             expect(result).toBe(MOCK_ENCODED_RESULT);
         });
 
         it('should convert 65-byte signature with parseSignature and encodePacked', () => {
-            const testSignature = '0x' + '11'.repeat(65) as Hex;
+            const testSignature = ('0x' + '11'.repeat(65)) as Hex;
             const mockParsed = {
                 r: '0xaaa' as Hex,
                 s: '0xbbb' as Hex,
@@ -145,13 +148,12 @@ describe('toJustanAccount unit tests', () => {
                 ['bytes32', 'bytes32', 'uint8'],
                 [mockParsed.r, mockParsed.s, 27]
             );
-            expect(viem.encodeAbiParameters).toHaveBeenCalledWith(
-                expect.anything(),
-                [{
+            expect(viem.encodeAbiParameters).toHaveBeenCalledWith(expect.anything(), [
+                {
                     ownerIndex: 0,
                     signatureData: mockPacked,
-                }]
-            );
+                },
+            ]);
             expect(result).toBe(mockEncodedResult);
         });
     });
@@ -166,12 +168,8 @@ describe('toJustanAccount unit tests', () => {
             const mockEncodedResult = '0xencoded' as Hex;
 
             vi.mocked(Signature.fromHex).mockReturnValue({ r: MOCK_R, s: MOCK_S, yParity: 0 });
-            vi.mocked(viem.numberToHex).mockImplementation((n) =>
-                n === MOCK_R ? mockRHex : mockSHex
-            );
-            vi.mocked(viem.padHex).mockImplementation((hex) =>
-                hex === mockRHex ? mockRPadded : mockSPadded
-            );
+            vi.mocked(viem.numberToHex).mockImplementation((n) => (n === MOCK_R ? mockRHex : mockSHex));
+            vi.mocked(viem.padHex).mockImplementation((hex) => (hex === mockRHex ? mockRPadded : mockSPadded));
             vi.mocked(viem.stringToHex).mockReturnValue(mockClientDataHex);
             vi.mocked(viem.encodeAbiParameters).mockReturnValue(mockEncodedResult);
 
@@ -679,7 +677,11 @@ describe('toJustanAccount unit tests', () => {
 
                 vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
                 vi.mocked(toSmartAccount).mockReturnValue({
-                    getStubSignature: vi.fn().mockResolvedValue('0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c'),
+                    getStubSignature: vi
+                        .fn()
+                        .mockResolvedValue(
+                            '0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c'
+                        ),
                 } as any);
 
                 const account = await toJustanAccount({
@@ -690,7 +692,9 @@ describe('toJustanAccount unit tests', () => {
                 });
 
                 const stubSig = await account.getStubSignature();
-                expect(stubSig).toBe('0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c');
+                expect(stubSig).toBe(
+                    '0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c'
+                );
             });
 
             it('should return long signature in non-EIP-7702 mode', async () => {
@@ -704,7 +708,8 @@ describe('toJustanAccount unit tests', () => {
 
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
-                const longSig = "0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000170000000000000000000000000000000000000000000000000000000000000001949fc7c88032b9fcb5f6efc7a7b8c63668eae9871b765e23123bb473ff57aa831a7c0d9276168ebcc29f2875a0239cffdf2a9cd1c2007c5c77c071db9264df1d000000000000000000000000000000000000000000000000000000000000002549960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d9763050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000847b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2273496a396e6164474850596759334b7156384f7a4a666c726275504b474f716d59576f4d57516869467773222c226f726967696e223a2268747470733a2f2f6b6579732e6a61772e6964222c2263726f73734f726967696e223a66616c73657d00000000000000000000000000000000000000000000000000000000";
+                const longSig =
+                    '0x0000000000000000000000000000000000000000000000000000000000000020000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000400000000000000000000000000000000000000000000000000000000000000200000000000000000000000000000000000000000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000c0000000000000000000000000000000000000000000000000000000000000012000000000000000000000000000000000000000000000000000000000000000170000000000000000000000000000000000000000000000000000000000000001949fc7c88032b9fcb5f6efc7a7b8c63668eae9871b765e23123bb473ff57aa831a7c0d9276168ebcc29f2875a0239cffdf2a9cd1c2007c5c77c071db9264df1d000000000000000000000000000000000000000000000000000000000000002549960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d9763050000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000847b2274797065223a22776562617574686e2e676574222c226368616c6c656e6765223a2273496a396e6164474850596759334b7156384f7a4a666c726275504b474f716d59576f4d57516869467773222c226f726967696e223a2268747470733a2f2f6b6579732e6a61772e6964222c2263726f73734f726967696e223a66616c73657d00000000000000000000000000000000000000000000000000000000';
                 vi.mocked(toSmartAccount).mockReturnValue({
                     getStubSignature: vi.fn().mockResolvedValue(longSig),
                 } as any);
@@ -932,8 +937,7 @@ describe('toJustanAccount unit tests', () => {
                     factoryAddress: MOCK_FACTORY_ADDRESS,
                 });
 
-                await expect(account.signMessage({ message: MOCK_MESSAGE }))
-                    .rejects.toThrow('owner cannot sign');
+                await expect(account.signMessage({ message: MOCK_MESSAGE })).rejects.toThrow('owner cannot sign');
             });
         });
 
@@ -1018,8 +1022,7 @@ describe('toJustanAccount unit tests', () => {
                     factoryAddress: MOCK_FACTORY_ADDRESS,
                 });
 
-                await expect(account.signTypedData(MOCK_TYPED_DATA))
-                    .rejects.toThrow('owner cannot sign');
+                await expect(account.signTypedData(MOCK_TYPED_DATA)).rejects.toThrow('owner cannot sign');
             });
         });
 
@@ -1121,14 +1124,16 @@ describe('toJustanAccount unit tests', () => {
                     factoryAddress: MOCK_FACTORY_ADDRESS,
                 });
 
-                await expect(account.signUserOperation({
-                    callData: '0x',
-                    callGasLimit: 100000n,
-                    verificationGasLimit: 100000n,
-                    preVerificationGas: 100000n,
-                    maxFeePerGas: 1n,
-                    maxPriorityFeePerGas: 1n,
-                } as any)).rejects.toThrow('owner cannot sign');
+                await expect(
+                    account.signUserOperation({
+                        callData: '0x',
+                        callGasLimit: 100000n,
+                        verificationGasLimit: 100000n,
+                        preVerificationGas: 100000n,
+                        maxFeePerGas: 1n,
+                        maxPriorityFeePerGas: 1n,
+                    } as any)
+                ).rejects.toThrow('owner cannot sign');
             });
         });
 
@@ -1225,7 +1230,9 @@ describe('toJustanAccount unit tests', () => {
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
 
-                const mockSignAuthorization = vi.fn().mockRejectedValue(new Error('signAuthorization can only be called for EIP-7702 accounts'));
+                const mockSignAuthorization = vi
+                    .fn()
+                    .mockRejectedValue(new Error('signAuthorization can only be called for EIP-7702 accounts'));
                 vi.mocked(toSmartAccount).mockReturnValue({
                     signAuthorization: mockSignAuthorization,
                 } as any);
@@ -1236,8 +1243,9 @@ describe('toJustanAccount unit tests', () => {
                     factoryAddress: MOCK_FACTORY_ADDRESS,
                 });
 
-                await expect(account.signAuthorization())
-                    .rejects.toThrow('signAuthorization can only be called for EIP-7702 accounts');
+                await expect(account.signAuthorization()).rejects.toThrow(
+                    'signAuthorization can only be called for EIP-7702 accounts'
+                );
             });
         });
     });

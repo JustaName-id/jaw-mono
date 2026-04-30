@@ -4,7 +4,6 @@ Get the current chain ID in hexadecimal format.
 
 **Authentication Required:** No (returns default chain if not authenticated)
 
-
 ## Request
 
 ```typescript
@@ -16,7 +15,6 @@ await jaw.provider.request({
 ### Parameters
 
 None
-
 
 ## Response
 
@@ -36,7 +34,6 @@ Returns the chain ID as a hexadecimal string.
 - Returns current active chain ID if authenticated
 - Updates when chain is switched via `wallet_switchEthereumChain`
 
-
 ## Example Usage
 
 ```typescript
@@ -50,7 +47,6 @@ const chainId = await jaw.provider.request({
   method: 'eth_chainId',
 });
 ```
-
 
 ## Related Methods
 

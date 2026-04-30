@@ -4,16 +4,14 @@ Estimate gas for a transaction.
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
 async estimateGas(
   calls: TransactionCall[],
-  options?: { permissionId?: Hex }
+  options?: { permissionId?: Hex; address?: Address }
 ): Promise<bigint>
 ```
-
 
 ## Parameters
 
@@ -36,31 +34,27 @@ interface TransactionCall {
 
 ### options (optional)
 
-Type: `{ permissionId?: Hex }`
+Type: `{ permissionId?: Hex; address?: Address }`
 
 Optional settings for gas estimation.
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `permissionId` | `Hex` | Permission ID for estimating permission-based execution |
-
 When `permissionId` is provided, estimates gas for execution through the JustaPermissionManager contract.
 
+When `address` is provided, estimates gas for the target account instead of the default account.
 
 ## Returns
 
 `Promise<bigint>` - The estimated gas amount in wei.
 
-
 ## Behavior
 
 Estimates the total gas required for the user operation, including:
+
 - Call execution gas
 - Verification gas
 - Pre-verification gas
 
 This estimate is used by the bundler to determine if the operation can be submitted.
-
 
 ## Example
 
@@ -75,19 +69,13 @@ import { Account } from '@jaw.id/core';
 const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 2: Create a new account with passkey
-const account = await Account.create(
-  { chainId: 1, apiKey: 'your-api-key' },
-  { username: 'alice' }
-);
+const account = await Account.create({ chainId: 1, apiKey: 'your-api-key' }, { username: 'alice' });
 
 // Option 3: Import from cloud backup
 const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 4: From a local account (server-side / embedded wallets)
-const account = await Account.fromLocalAccount(
-  { chainId: 1, apiKey: 'your-api-key' },
-  localAccount
-);
+const account = await Account.fromLocalAccount({ chainId: 1, apiKey: 'your-api-key' }, localAccount);
 ```
 
 ### Basic Usage
@@ -95,13 +83,10 @@ const account = await Account.fromLocalAccount(
 ```typescript
 import { parseEther } from 'viem';
 
-const gas = await account.estimateGas([
-  { to: '0x...', value: parseEther('0.1') }
-]);
+const gas = await account.estimateGas([{ to: '0x...', value: parseEther('0.1') }]);
 
 console.log('Estimated gas:', gas.toString());
 ```
-
 
 ## Related
 

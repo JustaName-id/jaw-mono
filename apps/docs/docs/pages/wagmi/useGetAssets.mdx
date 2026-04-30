@@ -4,13 +4,11 @@ Hook to get the assets for the connected account. Fetches token balances across 
 
 **Type:** `hook`
 
-
 ## Import
 
 ```typescript
 import { useGetAssets } from '@jaw.id/wagmi';
 ```
-
 
 ## Signature
 
@@ -24,9 +22,8 @@ function useGetAssets(parameters?: {
   assetFilter?: AssetFilter;
   config?: Config;
   query?: UseQueryParameters;
-}): UseQueryResult
+}): UseQueryResult;
 ```
-
 
 ## Parameters
 
@@ -103,20 +100,19 @@ Type: `UseQueryParameters` (optional)
 
 TanStack React Query options (excluding `gcTime` and `staleTime` which are managed internally).
 
-
 ## Returns
 
 Returns a TanStack React Query result:
 
-| Property | Type | Description |
-|----------|------|-------------|
-| `data` | `WalletGetAssetsResponse` | Assets grouped by chain ID |
-| `isLoading` | `boolean` | Whether initial load is in progress |
-| `isFetching` | `boolean` | Whether any fetch is in progress |
-| `isSuccess` | `boolean` | Whether query succeeded |
-| `isError` | `boolean` | Whether query failed |
-| `error` | `Error` | Error if query failed |
-| `refetch` | `function` | Manually refetch assets |
+| Property     | Type                      | Description                         |
+| ------------ | ------------------------- | ----------------------------------- |
+| `data`       | `WalletGetAssetsResponse` | Assets grouped by chain ID          |
+| `isLoading`  | `boolean`                 | Whether initial load is in progress |
+| `isFetching` | `boolean`                 | Whether any fetch is in progress    |
+| `isSuccess`  | `boolean`                 | Whether query succeeded             |
+| `isError`    | `boolean`                 | Whether query failed                |
+| `error`      | `Error`                   | Error if query failed               |
+| `refetch`    | `function`                | Manually refetch assets             |
 
 ### data
 
@@ -143,14 +139,12 @@ interface Asset {
 }
 ```
 
-
 ## Behavior
 
 1. **Auto-enables** when wallet is connected
 2. **Listens for changes** via `assetsChanged` event
 3. **Auto-refetches** when assets change (e.g., after transactions)
 4. **Caches for 30 seconds** before becoming stale
-
 
 ## Examples
 
@@ -176,11 +170,8 @@ function Portfolio() {
           <ul>
             {chainAssets.map((asset, i) => (
               <li key={i}>
-                {asset.metadata?.symbol || 'Unknown'}: {' '}
-                {formatUnits(
-                  BigInt(asset.balance),
-                  asset.metadata?.decimals || 18
-                )}
+                {asset.metadata?.symbol || 'Unknown'}:{' '}
+                {formatUnits(BigInt(asset.balance), asset.metadata?.decimals || 18)}
               </li>
             ))}
           </ul>
@@ -259,7 +250,6 @@ function ManualAssets() {
   );
 }
 ```
-
 
 ## Related
 

@@ -4,13 +4,11 @@ Get the status of a previously submitted call batch.
 
 **Type:** `instance sync`
 
-
 ## Signature
 
 ```typescript
 getCallStatus(batchId: Hash): CallStatusResponse | undefined
 ```
-
 
 ## Parameters
 
@@ -19,7 +17,6 @@ getCallStatus(batchId: Hash): CallStatusResponse | undefined
 Type: `Hash`
 
 The batch ID (userOpHash) returned from `sendCalls()`.
-
 
 ## Returns
 
@@ -55,16 +52,14 @@ interface CallReceipt {
 }
 ```
 
-
 ## Status Codes
 
-| Code | Name | Description |
-|------|------|-------------|
-| 100 | Pending | Not yet completed onchain |
-| 200 | Completed | Included onchain without reverts |
-| 400 | Offchain Failure | Not included onchain, wallet won't retry |
-| 500 | Complete Revert | Reverted completely, has receipt with status 0x0 |
-
+| Code | Name             | Description                                      |
+| ---- | ---------------- | ------------------------------------------------ |
+| 100  | Pending          | Not yet completed onchain                        |
+| 200  | Completed        | Included onchain without reverts                 |
+| 400  | Offchain Failure | Not included onchain, wallet won't retry         |
+| 500  | Complete Revert  | Reverted completely, has receipt with status 0x0 |
 
 ## Behavior
 
@@ -72,7 +67,6 @@ interface CallReceipt {
 2. Returns the status in EIP-5792 format
 3. Returns `undefined` if the batch ID is not found
 4. Status is automatically updated in the background after `sendCalls()`
-
 
 ## Example
 
@@ -87,33 +81,24 @@ import { Account } from '@jaw.id/core';
 const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 2: Create a new account with passkey
-const account = await Account.create(
-  { chainId: 1, apiKey: 'your-api-key' },
-  { username: 'alice' }
-);
+const account = await Account.create({ chainId: 1, apiKey: 'your-api-key' }, { username: 'alice' });
 
 // Option 3: Import from cloud backup
 const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 4: From a local account (server-side / embedded wallets)
-const account = await Account.fromLocalAccount(
-  { chainId: 1, apiKey: 'your-api-key' },
-  localAccount
-);
+const account = await Account.fromLocalAccount({ chainId: 1, apiKey: 'your-api-key' }, localAccount);
 ```
 
 ### Basic Usage
 
 ```typescript
 // Send calls and get the batch ID
-const { id } = await account.sendCalls([
-  { to: '0x...', value: parseEther('0.1') }
-]);
+const { id } = await account.sendCalls([{ to: '0x...', value: parseEther('0.1') }]);
 
 // Check status immediately
 const status = account.getCallStatus(id);
 ```
-
 
 ## Related
 

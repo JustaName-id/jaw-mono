@@ -3,10 +3,10 @@ import { BaseResponse } from './types.js';
 import { JAW_BASE_URL } from '../constants.js';
 
 export function getBaseUrl(dev = false) {
-  if (dev) {
-    return 'https://api-staging.justaname.id';
-  }
-  return JAW_BASE_URL;
+    if (dev) {
+        return 'https://api-staging.justaname.id';
+    }
+    return JAW_BASE_URL;
 }
 
 /**
@@ -15,17 +15,15 @@ export function getBaseUrl(dev = false) {
  * @param customBaseUrl - Optional custom base URL to override the default
  */
 export const backendInstance = (dev = false, customBaseUrl?: string) =>
-  axios.create({
-    baseURL: customBaseUrl ?? getBaseUrl(dev),
-  });
+    axios.create({
+        baseURL: customBaseUrl ?? getBaseUrl(dev),
+    });
 
 /**
  * Represents the Controlled Axios Promise type.
  * @typeparam T - The type of the data to be returned.
  */
-export type ControlledAxiosPromise<T> = AxiosPromise<
-  BaseResponse<T>
->;
+export type ControlledAxiosPromise<T> = AxiosPromise<BaseResponse<T>>;
 
 /**
  * Represents the controlled axios promise.
@@ -33,23 +31,21 @@ export type ControlledAxiosPromise<T> = AxiosPromise<
  * @param promise
  * @returns The promise of the data.
  */
-export const controlledAxiosPromise = <T>(
-  promise: ControlledAxiosPromise<T>
-): Promise<T> =>
-  promise
-    .then((res) => {
-      if (res.data.result.data === null) {
-        throw new Error(res.data.result.error ?? 'Something went wrong');
-      }
-      return res.data.result.data as T;
-    })
-    .catch((err: AxiosError<BaseResponse<null>>) => {
-      if (err?.response) {
-        if (err?.response?.data?.result) {
-          if (err?.response?.data?.result?.error) {
-            throw new Error(err.response.data.result.error);
-          }
-        }
-      }
-      throw err;
-    });
+export const controlledAxiosPromise = <T>(promise: ControlledAxiosPromise<T>): Promise<T> =>
+    promise
+        .then((res) => {
+            if (res.data.result.data === null) {
+                throw new Error(res.data.result.error ?? 'Something went wrong');
+            }
+            return res.data.result.data as T;
+        })
+        .catch((err: AxiosError<BaseResponse<null>>) => {
+            if (err?.response) {
+                if (err?.response?.data?.result) {
+                    if (err?.response?.data?.result?.error) {
+                        throw new Error(err.response.data.result.error);
+                    }
+                }
+            }
+            throw err;
+        });

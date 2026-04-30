@@ -27,6 +27,7 @@ import {
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
 import { standardErrors } from '../../errors/index.js';
+import type { JawTheme } from '../../ui/theme.js';
 
 type ConstructorOptions = {
     metadata: AppMetadata;
@@ -35,6 +36,7 @@ type ConstructorOptions = {
     apiKey: string;
     paymasters?: Record<number, PaymasterConfig>;
     ens?: string;
+    theme?: JawTheme;
 };
 
 export class AppSpecificSigner extends JAWSigner {
@@ -55,7 +57,8 @@ export class AppSpecificSigner extends JAWSigner {
                 paymasters: params.paymasters,
                 appName: params.metadata.appName,
                 appLogoUrl: params.metadata.appLogoUrl,
-                ens: params.ens
+                ens: params.ens,
+                theme: params.theme,
             });
         }
     }
@@ -216,6 +219,8 @@ export class AppSpecificSigner extends JAWSigner {
             case 'wallet_sign': {
                 // ERC-7871 wallet_sign params structure with optional chainId
                 type WalletSignParams = {
+                    /** Account address to sign with. */
+                    address?: Address;
                     /** Target chain ID in hex format. Defaults to the connected chain. */
                     chainId?: `0x${string}`;
                     request: PersonalSignRequestData | TypedDataRequestData;
@@ -232,7 +237,7 @@ export class AppSpecificSigner extends JAWSigner {
                     timestamp: Date.now(),
                     correlationId,
                     data: {
-                        address: this.accounts[0],
+                        address: signParams.address ?? this.accounts[0],
                         chainId: resolvedChain.id,
                         request: signParams.request,
                     },
@@ -274,7 +279,10 @@ export class AppSpecificSigner extends JAWSigner {
                     },
                 };
 
-                const response = await this.uiHandler.request<{ id: string; chainId: number }>(uiRequest);
+                const response = await this.uiHandler.request<{
+                    id: string;
+                    chainId: number;
+                }>(uiRequest);
 
                 if (!response.approved) {
                     throw response.error || UIError.userRejected();
@@ -331,7 +339,10 @@ export class AppSpecificSigner extends JAWSigner {
 
                 // Handle background receipt tracking using txHash as id
                 if (response.data) {
-                    this.trackSendCallsResult({ id: response.data, chainId: resolvedChain.id });
+                    this.trackSendCallsResult({
+                        id: response.data,
+                        chainId: resolvedChain.id,
+                    });
                 }
 
                 return response.data;
@@ -350,7 +361,7 @@ export class AppSpecificSigner extends JAWSigner {
                     timestamp: Date.now(),
                     correlationId,
                     data: {
-                        address: this.accounts[0],
+                        address: permissionData.address ?? this.accounts[0],
                         chainId: resolvedChain.id,
                         expiry: permissionData.expiry,
                         spender: permissionData.spender,

@@ -1,8 +1,8 @@
-import {standardErrors} from "../errors/index.js";
-import {store} from '../store/index.js';
-import {RequestArguments} from "../provider/index.js";
+import { standardErrors } from '../errors/index.js';
+import { store } from '../store/index.js';
+import { RequestArguments } from '../provider/index.js';
 
-import {isAddress, isHex, hexToString, type Address} from "viem";
+import { isAddress, isHex, hexToString, type Address } from 'viem';
 
 import { WalletConnectResponse } from '../rpc/index.js';
 
@@ -48,9 +48,7 @@ export function decodePersonalSignRequest(request: RequestArguments): RequestArg
     };
 }
 
-export function assertGetCapabilitiesParams(
-    params: unknown
-): asserts params is [`0x${string}`, `0x${string}`[]?] {
+export function assertGetCapabilitiesParams(params: unknown): asserts params is [`0x${string}`, `0x${string}`[]?] {
     if (!params || !Array.isArray(params) || (params.length !== 1 && params.length !== 2)) {
         throw standardErrors.rpc.invalidParams();
     }
@@ -132,7 +130,7 @@ export async function getCachedWalletConnectResponse(): Promise<WalletConnectRes
             return null;
         }
 
-        const expiresAt = connectedAt + (authTTL * 1000);
+        const expiresAt = connectedAt + authTTL * 1000;
         if (Date.now() > expiresAt) {
             // Cache has expired, clear account state and return null
             store.account.clear();

@@ -96,22 +96,23 @@ export async function handleGetAssetsRequest(
     let requestArgs = request;
 
     // Extract the params object (first element in the array)
-    const paramsObj = Array.isArray(request.params) && request.params[0]
-        ? request.params[0] as Record<string, unknown>
-        : undefined;
+    const paramsObj =
+        Array.isArray(request.params) && request.params[0] ? (request.params[0] as Record<string, unknown>) : undefined;
 
     // If chainFilter is not provided, inject it based on showTestnets preference
     if (paramsObj && !('chainFilter' in paramsObj)) {
         const supportedChains = getSupportedChains(showTestnets);
         // Convert chain IDs to hex format as required by EIP-7811
-        const chainFilter = supportedChains.map(chain => hexStringFromNumber(chain.id));
+        const chainFilter = supportedChains.map((chain) => hexStringFromNumber(chain.id));
 
         requestArgs = {
             ...request,
-            params: [{
-                ...paramsObj,
-                chainFilter
-            }]
+            params: [
+                {
+                    ...paramsObj,
+                    chainFilter,
+                },
+            ],
         };
     }
 

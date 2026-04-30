@@ -2,7 +2,6 @@
 
 The `Account` class provides a low-level API for smart account operations. It's the recommended way to interact with JAW smart accounts when building custom UI handlers or server-side applications.
 
-
 ## When to Use Account
 
 Use this for headless integration (No UI) + use this to issue smart wallets for AI Agents.
@@ -17,7 +16,6 @@ The `Account` class is ideal for:
 - **Direct Integration** - When you need fine-grained control over account operations
 
 For standard client-side usage with the built-in UI, use the provider-based API instead.
-
 
 ## Installation
 
@@ -52,71 +50,67 @@ import { Account } from '@jaw.id/core';
 import type { NativePasskeyGetFn, NativePasskeyCreateFn, SyncStorage } from '@jaw.id/core';
 ```
 
-
 ## Static Methods
 
 Factory methods for creating Account instances:
 
-| Method | Description |
-|--------|-------------|
-| [Account.get()](/account/get) | Get account - restores session or triggers login |
-| [Account.create()](/account/create) | Create new account with passkey |
-| [Account.import()](/account/import) | Import passkey from cloud backup |
-| [Account.restore()](/account/restore) | Restore account from credential data (no WebAuthn prompt) |
-| [Account.fromLocalAccount()](/account/fromLocalAccount) | Create from viem LocalAccount (server-side) |
+| Method                                                  | Description                                               |
+| ------------------------------------------------------- | --------------------------------------------------------- |
+| [Account.get()](/account/get)                           | Get account - restores session or triggers login          |
+| [Account.create()](/account/create)                     | Create new account with passkey                           |
+| [Account.import()](/account/import)                     | Import passkey from cloud backup                          |
+| [Account.restore()](/account/restore)                   | Restore account from credential data (no WebAuthn prompt) |
+| [Account.fromLocalAccount()](/account/fromLocalAccount) | Create from viem LocalAccount (server-side)               |
 
 Utility methods:
 
-| Method | Description |
-|--------|-------------|
-| [Account.getAuthenticatedAddress()](/account/getAuthenticatedAddress) | Get current authenticated address |
-| [Account.getCurrentAccount()](/account/getCurrentAccount) | Get current authenticated account data |
-| [Account.getStoredAccounts()](/account/getStoredAccounts) | Get all stored passkey accounts |
-| [Account.logout()](/account/logout) | Clear authentication state |
-
+| Method                                                                | Description                            |
+| --------------------------------------------------------------------- | -------------------------------------- |
+| [Account.getAuthenticatedAddress()](/account/getAuthenticatedAddress) | Get current authenticated address      |
+| [Account.getCurrentAccount()](/account/getCurrentAccount)             | Get current authenticated account data |
+| [Account.getStoredAccounts()](/account/getStoredAccounts)             | Get all stored passkey accounts        |
+| [Account.logout()](/account/logout)                                   | Clear authentication state             |
 
 ## Instance Properties
 
-| Property | Type | Description |
-|----------|------|-------------|
+| Property  | Type      | Description           |
+| --------- | --------- | --------------------- |
 | `address` | `Address` | Smart account address |
-| `chainId` | `number` | Current chain ID |
-
+| `chainId` | `number`  | Current chain ID      |
 
 ## Instance Methods
 
 ### Information
 
-| Method | Description |
-|--------|-------------|
-| [getMetadata()](/account/getMetadata) | Get account metadata (username, creation date) |
-| [getSmartAccount()](/account/getSmartAccount) | Get underlying viem SmartAccount |
-| [getChain()](/account/getChain) | Get chain configuration |
-| [getAddress()](/account/getAddress) | Get address (async, for counterfactual) |
+| Method                                        | Description                                    |
+| --------------------------------------------- | ---------------------------------------------- |
+| [getMetadata()](/account/getMetadata)         | Get account metadata (username, creation date) |
+| [getSmartAccount()](/account/getSmartAccount) | Get underlying viem SmartAccount               |
+| [getChain()](/account/getChain)               | Get chain configuration                        |
+| [getAddress()](/account/getAddress)           | Get address (async, for counterfactual)        |
 
 ### Signing
 
-| Method | Description |
-|--------|-------------|
-| [signMessage()](/account/signMessage) | Sign a personal message (EIP-191) |
-| [signTypedData()](/account/signTypedData) | Sign typed data (EIP-712) |
+| Method                                    | Description                       |
+| ----------------------------------------- | --------------------------------- |
+| [signMessage()](/account/signMessage)     | Sign a personal message (EIP-191) |
+| [signTypedData()](/account/signTypedData) | Sign typed data (EIP-712)         |
 
 ### Transactions
 
-| Method | Description |
-|--------|-------------|
-| [sendTransaction()](/account/sendTransaction) | Send transaction and wait for receipt |
-| [sendCalls()](/account/sendCalls) | Send bundled calls (returns immediately) |
-| [estimateGas()](/account/estimateGas) | Estimate gas for calls |
+| Method                                        | Description                              |
+| --------------------------------------------- | ---------------------------------------- |
+| [sendTransaction()](/account/sendTransaction) | Send transaction and wait for receipt    |
+| [sendCalls()](/account/sendCalls)             | Send bundled calls (returns immediately) |
+| [estimateGas()](/account/estimateGas)         | Estimate gas for calls                   |
 
 ### Permissions
 
-| Method | Description |
-|--------|-------------|
+| Method                                          | Description                    |
+| ----------------------------------------------- | ------------------------------ |
 | [grantPermissions()](/account/grantPermissions) | Grant permissions to a spender |
-| [revokePermission()](/account/revokePermission) | Revoke a permission |
-| [getPermission()](/account/getPermission) | Get permission details |
-
+| [revokePermission()](/account/revokePermission) | Revoke a permission            |
+| [getPermission()](/account/getPermission)       | Get permission details         |
 
 ## Interfaces
 
@@ -190,7 +184,6 @@ interface AccountMetadata {
 }
 ```
 
-
 ## Value Format
 
 The `value` field in `TransactionCall` must be in **wei** (the smallest unit of ETH):
@@ -210,7 +203,6 @@ import { parseEther } from 'viem';
 ```
 
 Use `parseEther()` from viem to convert human-readable ETH amounts to wei.
-
 
 ## Related
 

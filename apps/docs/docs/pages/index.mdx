@@ -5,11 +5,13 @@
 The JAW SDK is a TypeScript library for building identity-first smart accounts on EVM chains: passkey-authenticated, programmable, and extensible through delegated permissions.
 
 **Smart wallets** are blockchain accounts controlled by smart contracts instead of private keys. This enables powerful features like:
+
 - **Gasless transactions** - Users don't need ETH to pay for gas
 - **Batch operations** - Execute multiple actions in a single transaction
 - **Programmable permissions** - Grant limited access to third parties
 
 **Passkeys** replace seed phrases and passwords with biometric authentication (Face ID, fingerprint, or device PIN). Your users get:
+
 - No seed phrases to lose or steal
 - Phishing-resistant authentication
 - Cross-device sync via iCloud/Google
@@ -83,9 +85,7 @@ const queryClient = new QueryClient();
 function App({ children }: { children: React.ReactNode }) {
   return (
     <WagmiProvider config={config}>
-      <QueryClientProvider client={queryClient}>
-        {children}
-      </QueryClientProvider>
+      <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>
     </WagmiProvider>
   );
 }
@@ -109,24 +109,23 @@ function WalletButton() {
     return (
       <div>
         <p>Connected: {address}</p>
-        <button onClick={() => sendTransaction({
-          to: '0x...',
-          value: parseEther('0.01')
-        })}>
+        <button
+          onClick={() =>
+            sendTransaction({
+              to: '0x...',
+              value: parseEther('0.01'),
+            })
+          }
+        >
           Send ETH
         </button>
-        <button onClick={() => disconnect({})}>
-          Disconnect
-        </button>
+        <button onClick={() => disconnect({})}>Disconnect</button>
       </div>
     );
   }
 
   return (
-    <button
-      onClick={() => connect({ connector: config.connectors[0] })}
-      disabled={isPending}
-    >
+    <button onClick={() => connect({ connector: config.connectors[0] })} disabled={isPending}>
       {isPending ? 'Connecting...' : 'Connect Wallet'}
     </button>
   );
@@ -134,7 +133,6 @@ function WalletButton() {
 ```
 
 When users click "Connect Wallet", a popup appears for passkey authentication.
-
 
 ## Using the Provider Directly
 
@@ -155,7 +153,6 @@ const accounts = await jaw.provider.request({
 ```
 
 See the [Provider API Reference](/api-reference) for all available methods.
-
 
 ## Next Steps
 

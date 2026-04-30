@@ -25,5 +25,5 @@ export { create, type CreateJAWSDKOptions } from './createJAWSDK.js';
  * ```
  */
 export const JAW = {
-  create: createJAWSDK
+    create: createJAWSDK,
 };

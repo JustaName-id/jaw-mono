@@ -10,60 +10,68 @@ jaw rpc call <method> [params]
 
 ### Arguments
 
-| Argument | Required | Description |
-|----------|----------|-------------|
-| `method` | Yes | RPC method name (e.g., `wallet_connect`, `wallet_sendCalls`) |
-| `params` | No | JSON string with method parameters |
+| Argument | Required | Description                                                  |
+| -------- | -------- | ------------------------------------------------------------ |
+| `method` | Yes      | RPC method name (e.g., `wallet_connect`, `wallet_sendCalls`) |
+| `params` | No       | JSON string with method parameters                           |
 
 ### Flags
 
-| Flag | Short | Default | Description |
-|------|-------|---------|-------------|
-| `--output` | `-o` | `human` | Output format: `json` or `human` |
-| `--chain` | `-c` | config | Chain ID (e.g., `8453` for Base) |
-| `--api-key` | | config | JAW API key |
-| `--timeout` | `-t` | `120` | Request timeout in seconds |
-| `--yes` | `-y` | `false` | Skip confirmations |
-| `--quiet` | `-q` | `false` | Suppress non-essential output |
+| Flag        | Short | Default | Description                      |
+| ----------- | ----- | ------- | -------------------------------- |
+| `--output`  | `-o`  | `human` | Output format: `json` or `human` |
+| `--chain`   | `-c`  | config  | Chain ID (e.g., `8453` for Base) |
+| `--api-key` |       | config  | JAW API key                      |
+| `--timeout` | `-t`  | `120`   | Request timeout in seconds       |
+| `--yes`     | `-y`  | `false` | Skip confirmations               |
+| `--quiet`   | `-q`  | `false` | Suppress non-essential output    |
 
 ### Examples
 
 **Connect wallet:**
+
 ```bash
 jaw rpc call wallet_connect
 ```
 
 **Get accounts:**
+
 ```bash
 jaw rpc call eth_accounts
 ```
 
 **Send ETH (0.01 ETH on Base):**
+
 ```bash
 jaw rpc call wallet_sendCalls '{"calls":[{"to":"0xRecipient","value":"0x2386F26FC10000"}]}' -c 8453
 ```
 
 **Send ERC-20 tokens:**
+
 ```bash
 jaw rpc call wallet_sendCalls '{"calls":[{"to":"0xTokenAddress","data":"0xa9059cbb000000000000000000000000RECIPIENT0000000000000000000000000000000000000000000000000000000000000000000000000000000DE0B6B3A7640000"}]}' -c 8453
 ```
 
 **Sign a message:**
+
 ```bash
 jaw rpc call personal_sign '["0x48656c6c6f","0xYourAddress"]'
 ```
 
 **Grant permissions:**
+
 ```bash
 jaw rpc call wallet_grantPermissions '{"permissions":[{"type":"call","data":{"to":"0xContractAddress"}},{"type":"spend","data":{"token":"0xUSDCAddress","limit":"1000000","period":"daily"}}],"expiry":1735689600}'
 ```
 
 **Check transaction status:**
+
 ```bash
 jaw rpc call wallet_getCallsStatus '["0xBundleId"]'
 ```
 
 **JSON output (for scripts and AI agents):**
+
 ```bash
 jaw rpc call eth_accounts -o json -y
 ```

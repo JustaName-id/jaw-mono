@@ -35,7 +35,8 @@ async function estimateUserOperationGas(
     paymasterPostOpGasLimit?: bigint;
 }> {
     // Dummy signature for gas estimation (required field but not validated during estimation)
-    const DUMMY_SIGNATURE = '0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c' as Hex;
+    const DUMMY_SIGNATURE =
+        '0xfffffffffffffffffffffffffffffff0000000000000000000000000000000007aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa1c' as Hex;
 
     // Build the user operation object for the RPC call
     // All fields must be present for valid JSON-RPC request
@@ -45,10 +46,16 @@ async function estimateUserOperationGas(
         callData: userOperation.callData,
         // Required fields with defaults for estimation
         callGasLimit: userOperation.callGasLimit ? `0x${userOperation.callGasLimit.toString(16)}` : '0x0',
-        verificationGasLimit: userOperation.verificationGasLimit ? `0x${userOperation.verificationGasLimit.toString(16)}` : '0x0',
-        preVerificationGas: userOperation.preVerificationGas ? `0x${userOperation.preVerificationGas.toString(16)}` : '0x0',
+        verificationGasLimit: userOperation.verificationGasLimit
+            ? `0x${userOperation.verificationGasLimit.toString(16)}`
+            : '0x0',
+        preVerificationGas: userOperation.preVerificationGas
+            ? `0x${userOperation.preVerificationGas.toString(16)}`
+            : '0x0',
         maxFeePerGas: userOperation.maxFeePerGas ? `0x${userOperation.maxFeePerGas.toString(16)}` : '0x0',
-        maxPriorityFeePerGas: userOperation.maxPriorityFeePerGas ? `0x${userOperation.maxPriorityFeePerGas.toString(16)}` : '0x0',
+        maxPriorityFeePerGas: userOperation.maxPriorityFeePerGas
+            ? `0x${userOperation.maxPriorityFeePerGas.toString(16)}`
+            : '0x0',
         signature: userOperation.signature || DUMMY_SIGNATURE,
     };
 
@@ -69,10 +76,10 @@ async function estimateUserOperationGas(
     }
 
     // Call eth_estimateUserOperationGas using the paymaster client transport (Pimlico)
-    const result = await paymasterClient.request({
+    const result = (await paymasterClient.request({
         method: 'eth_estimateUserOperationGas' as any,
         params: [userOpForRpc, entryPointAddress] as any,
-    }) as {
+    })) as {
         preVerificationGas: Hex;
         verificationGasLimit: Hex;
         callGasLimit: Hex;
@@ -87,9 +94,7 @@ async function estimateUserOperationGas(
         paymasterVerificationGasLimit: result.paymasterVerificationGasLimit
             ? BigInt(result.paymasterVerificationGasLimit)
             : undefined,
-        paymasterPostOpGasLimit: result.paymasterPostOpGasLimit
-            ? BigInt(result.paymasterPostOpGasLimit)
-            : undefined,
+        paymasterPostOpGasLimit: result.paymasterPostOpGasLimit ? BigInt(result.paymasterPostOpGasLimit) : undefined,
     };
 }
 
@@ -123,7 +128,7 @@ export function createPaymasterFunctions(
             let maxFeePerGas = userOperation.maxFeePerGas;
             let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
 
-            if (!maxFeePerGas || !maxPriorityFeePerGas) {
+            if (maxFeePerGas === undefined || maxPriorityFeePerGas === undefined) {
                 const gasPrice = await getGasPrice(client);
                 maxFeePerGas = maxFeePerGas || gasPrice;
                 maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
@@ -139,11 +144,10 @@ export function createPaymasterFunctions(
             });
 
             // Check if paymaster returned invalid gas limits (e.g., "0x1")
-            const hasInvalidVerificationGasLimit = !stubData.paymasterVerificationGasLimit ||
-                BigInt(stubData.paymasterVerificationGasLimit) <= 1n;
-            const hasInvalidPostOpGasLimit = !stubData.paymasterPostOpGasLimit ||
-                BigInt(stubData.paymasterPostOpGasLimit) <= 1n;
-
+            const hasInvalidVerificationGasLimit =
+                !stubData.paymasterVerificationGasLimit || BigInt(stubData.paymasterVerificationGasLimit) <= 1n;
+            const hasInvalidPostOpGasLimit =
+                !stubData.paymasterPostOpGasLimit || BigInt(stubData.paymasterPostOpGasLimit) <= 1n;
 
             // If gas limits are invalid, estimate them
             if (hasInvalidVerificationGasLimit || hasInvalidPostOpGasLimit) {
@@ -187,7 +191,7 @@ export function createPaymasterFunctions(
             let maxFeePerGas = userOperation.maxFeePerGas;
             let maxPriorityFeePerGas = userOperation.maxPriorityFeePerGas;
 
-            if (!maxFeePerGas || !maxPriorityFeePerGas) {
+            if (maxFeePerGas === undefined || maxPriorityFeePerGas === undefined) {
                 const gasPrice = await getGasPrice(client);
                 maxFeePerGas = maxFeePerGas || gasPrice;
                 maxPriorityFeePerGas = maxPriorityFeePerGas || gasPrice;
@@ -204,10 +208,11 @@ export function createPaymasterFunctions(
 
             // If paymaster returned invalid gas limits, use values from userOperation (from stub data)
             // No need to re-estimate since stub data already has valid values
-            const hasInvalidVerificationGasLimit = !paymasterData.paymasterVerificationGasLimit ||
+            const hasInvalidVerificationGasLimit =
+                !paymasterData.paymasterVerificationGasLimit ||
                 BigInt(paymasterData.paymasterVerificationGasLimit) <= 1n;
-            const hasInvalidPostOpGasLimit = !paymasterData.paymasterPostOpGasLimit ||
-                BigInt(paymasterData.paymasterPostOpGasLimit) <= 1n;
+            const hasInvalidPostOpGasLimit =
+                !paymasterData.paymasterPostOpGasLimit || BigInt(paymasterData.paymasterPostOpGasLimit) <= 1n;
 
             if (hasInvalidVerificationGasLimit || hasInvalidPostOpGasLimit) {
                 return {
@@ -222,6 +227,6 @@ export function createPaymasterFunctions(
             }
 
             return paymasterData;
-        }
+        },
     };
 }

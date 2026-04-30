@@ -13,28 +13,55 @@ import {
     createPublicClient,
     LocalAccount,
     encodeFunctionData,
-    decodeFunctionResult
-} from "viem";
-import {call, getCode, getGasPrice, readContract} from "viem/actions";
-import {abi, factoryAbi, JustanAccountImplementation, toJustanAccount, type ToJustanAccountReturnType} from "./toJustanAccount.js";
-import {isDelegatedToImplementation} from "./delegation.js";
-import {createPaymasterFunctions} from "./paymaster.js";
+    decodeFunctionResult,
+} from 'viem';
+import { call, getCode, getGasPrice, readContract } from 'viem/actions';
+import {
+    abi,
+    factoryAbi,
+    JustanAccountImplementation,
+    toJustanAccount,
+    type ToJustanAccountReturnType,
+} from './toJustanAccount.js';
+import { isDelegatedToImplementation } from './delegation.js';
+import { createPaymasterFunctions } from './paymaster.js';
 import {
     BundlerClient,
     SmartAccount,
     createBundlerClient,
     createPaymasterClient,
-    WebAuthnAccount
-} from "viem/account-abstraction";
-import {Chain} from "../store/index.js";
-import {arbitrum, arbitrumSepolia, avalancheFuji, base, baseSepolia, celo, celoSepolia, linea, mainnet, optimism, flare, optimismSepolia, sepolia , avalanche, bsc, ink, inkSepolia} from "viem/chains";
-import {PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS} from "../constants.js";
+    WebAuthnAccount,
+} from 'viem/account-abstraction';
+import { Chain } from '../store/index.js';
+import {
+    arbitrum,
+    arbitrumSepolia,
+    avalancheFuji,
+    base,
+    baseSepolia,
+    celo,
+    celoSepolia,
+    linea,
+    mainnet,
+    optimism,
+    flare,
+    optimismSepolia,
+    sepolia,
+    avalanche,
+    bsc,
+    ink,
+    inkSepolia,
+    dosChain,
+    gnosis,
+} from 'viem/chains';
+import { PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS } from '../constants.js';
+import { standardErrors } from '../errors/errors.js';
 import {
     getPermissionFromRelay,
     relayPermissionToPermission,
     encodeExecuteBatchWithPermission,
-} from "../rpc/permissions.js";
-import { notifyReceiptReceived } from "../analytics/index.js";
+} from '../rpc/permissions.js';
+import { notifyReceiptReceived } from '../analytics/index.js';
 
 export type FindOwnerIndexParams = {
     /**
@@ -60,7 +87,7 @@ export type BundledTransactionResult = {
      * The chain id
      */
     chainId: number;
-}
+};
 
 export const MAINNET_CHAINS = [
     mainnet,
@@ -72,8 +99,10 @@ export const MAINNET_CHAINS = [
     bsc,
     celo,
     flare,
-    ink
-]
+    ink,
+    dosChain,
+    gnosis,
+];
 
 export const TESTNET_CHAINS = [
     sepolia,
@@ -83,12 +112,9 @@ export const TESTNET_CHAINS = [
     celoSepolia,
     avalancheFuji,
     inkSepolia,
-]
+];
 
-export const SUPPORTED_CHAINS = [
-    ...MAINNET_CHAINS,
-    ...TESTNET_CHAINS,
-]
+export const SUPPORTED_CHAINS = [...MAINNET_CHAINS, ...TESTNET_CHAINS];
 
 /**
  * Get supported chains based on testnet preference.
@@ -117,7 +143,7 @@ export const getBundlerClient = (
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>
 ): BundlerClient<Transport, ViemChain> => {
-    const viemChain = SUPPORTED_CHAINS.find(c => c.id === chain.id);
+    const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chain.id);
 
     const publicClient = createPublicClient({
         chain: viemChain,
@@ -132,21 +158,21 @@ export const getBundlerClient = (
     if (!effectivePaymasterUrl) {
         return createBundlerClient({
             client: publicClient,
-            transport: http(chain.rpcUrl)
+            transport: http(chain.rpcUrl),
         });
     }
 
     const paymasterClient = createPaymasterClient({
-        transport: http(effectivePaymasterUrl)
+        transport: http(effectivePaymasterUrl),
     });
 
     // Use shared paymaster functions that handle gas price fetching and v0.8 gas limits
     return createBundlerClient({
         client: publicClient,
         paymaster: createPaymasterFunctions(publicClient, paymasterClient, chain.id, effectivePaymasterContext),
-        transport: http(chain.rpcUrl)
+        transport: http(chain.rpcUrl),
     });
-}
+};
 
 type PreparedCalls = {
     calls: Array<{ to: Address; value: bigint; data: Hex }>;
@@ -164,14 +190,14 @@ async function prepareEip7702Calls(
     chain: Chain
 ): Promise<PreparedCalls> {
     const publicClient = createPublicClient({
-        chain: SUPPORTED_CHAINS.find(c => c.id === chain.id),
+        chain: SUPPORTED_CHAINS.find((c) => c.id === chain.id),
         transport: http(chain.rpcUrl),
     });
 
     const implementationAddress = await readContract(publicClient, {
         address: FACTORY_ADDRESS as Address,
         abi: factoryAbi,
-        functionName: "getImplementation",
+        functionName: 'getImplementation',
     });
 
     const delegated = await isDelegatedToImplementation(publicClient, localAccount.address, implementationAddress);
@@ -197,12 +223,16 @@ async function prepareEip7702Calls(
         const { data: resultData } = await call(publicClient, {
             to: localAccount.address,
             data: callData,
-            ...(!delegated ? {
-                stateOverride: [{
-                    address: localAccount.address,
-                    code: `0xef0100${implementationAddress.slice(2)}` as Hex,
-                }],
-            } : {}),
+            ...(!delegated
+                ? {
+                      stateOverride: [
+                          {
+                              address: localAccount.address,
+                              code: `0xef0100${implementationAddress.slice(2)}` as Hex,
+                          },
+                      ],
+                  }
+                : {}),
         });
         if (resultData) {
             isPmOwner = decodeFunctionResult({
@@ -216,15 +246,18 @@ async function prepareEip7702Calls(
     }
 
     if (!isPmOwner) {
-        finalCalls = [{
-            to: getAddress(localAccount.address),
-            value: 0n,
-            data: encodeFunctionData({
-                abi,
-                functionName: 'addOwnerAddress',
-                args: [PERMISSIONS_MANAGER_ADDRESS],
-            }),
-        }, ...finalCalls];
+        finalCalls = [
+            {
+                to: getAddress(localAccount.address),
+                value: 0n,
+                data: encodeFunctionData({
+                    abi,
+                    functionName: 'addOwnerAddress',
+                    args: [PERMISSIONS_MANAGER_ADDRESS],
+                }),
+            },
+            ...finalCalls,
+        ];
     }
 
     return { calls: finalCalls, authorization };
@@ -240,7 +273,7 @@ async function prepareCallsForExecution(
     chain: Chain,
     localAccount?: LocalAccount
 ): Promise<PreparedCalls> {
-    const formatted = calls.map(call => ({
+    const formatted = calls.map((call) => ({
         to: getAddress(call.to),
         value: call.value ?? 0n,
         data: (call.data ?? '0x') as Hex,
@@ -266,22 +299,25 @@ export async function sendTransaction(
     apiKey?: string,
     localAccount?: LocalAccount
 ): Promise<Hash> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
     const { calls: finalCalls, authorization } = await prepareCallsForExecution(
-        smartAccount, calls, chain, localAccount
+        smartAccount,
+        calls,
+        chain,
+        localAccount
     );
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
         calls: finalCalls,
         ...(authorization ? { authorization } : {}),
-    })
+    });
 
     // Wait for the transaction receipt and get the actual transaction hash
     const receipt = await bundlerClient.waitForUserOperationReceipt({
-        hash: userOpHash
-    })
+        hash: userOpHash,
+    });
 
     // Fire-and-forget notification to proxy
     if (apiKey) {
@@ -292,7 +328,8 @@ export async function sendTransaction(
         // Determine if transaction succeeded:
         // - status === '0x1' or 1 means success
         // - If status is undefined but transactionHash exists, assume success (included on-chain)
-        const isSuccess = receiptStatus === '0x1' ||
+        const isSuccess =
+            receiptStatus === '0x1' ||
             receiptStatus === 1 ||
             (receiptStatus === undefined && actualReceipt.transactionHash !== undefined);
 
@@ -304,7 +341,7 @@ export async function sendTransaction(
         });
     }
 
-    return receipt.receipt.transactionHash
+    return receipt.receipt.transactionHash;
 }
 
 export async function sendCalls(
@@ -319,22 +356,25 @@ export async function sendCalls(
     paymasterContextOverride?: Record<string, unknown>,
     localAccount?: LocalAccount
 ): Promise<BundledTransactionResult> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride)
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
     const { calls: finalCalls, authorization } = await prepareCallsForExecution(
-        smartAccount, calls, chain, localAccount
+        smartAccount,
+        calls,
+        chain,
+        localAccount
     );
 
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
         calls: finalCalls,
         ...(authorization ? { authorization } : {}),
-    })
+    });
 
     return {
         id: userOpHash,
-        chainId: chain.id
-    }
+        chainId: chain.id,
+    };
 }
 
 /**
@@ -360,33 +400,46 @@ export async function sendCallsWithPermission(
     apiKey: string,
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>,
-    localAccount?: LocalAccount
+    localAccount?: LocalAccount,
+    approvalCall?: { to: Address; value?: bigint; data: Hex }
 ): Promise<BundledTransactionResult> {
     // Fetch the permission from the relay
     const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
     const permission = relayPermissionToPermission(relayPermission);
 
     // Format calls for the contract
-    const formattedCalls = calls.map(call => ({
+    const formattedCalls = calls.map((call) => ({
         target: getAddress(call.to),
         value: call.value ?? 0n,
-        data: call.data ?? '0x' as Hex,
+        data: call.data ?? ('0x' as Hex),
     }));
 
     // Encode the executeBatch call with permission
     const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
 
-    // The permission call routed through the permissions manager
-    const permissionCall: Array<{ to: Address; value: bigint; data: Hex }> = [{
+    // Build the spender-level calls: optional paymaster approval + permission manager call.
+    // The approval must be at this level (not inside the permission batch) because the
+    // permission manager validates each call's selector against the permission.
+    const spenderCalls: Array<{ to: Address; value: bigint; data: Hex }> = [];
+
+    if (approvalCall) {
+        spenderCalls.push({
+            to: approvalCall.to,
+            value: approvalCall.value ?? 0n,
+            data: approvalCall.data,
+        });
+    }
+
+    spenderCalls.push({
         to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
         value: 0n,
         data: encodedData,
-    }];
+    });
 
     // EIP-7702: prepend delegation authorization + owner setup if needed
     const { calls: finalCalls, authorization } = localAccount
-        ? await prepareEip7702Calls(smartAccount, localAccount, permissionCall, chain)
-        : { calls: permissionCall, authorization: undefined };
+        ? await prepareEip7702Calls(smartAccount, localAccount, spenderCalls, chain)
+        : { calls: spenderCalls, authorization: undefined };
 
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
@@ -398,7 +451,7 @@ export async function sendCallsWithPermission(
 
     return {
         id: userOpHash,
-        chainId: chain.id
+        chainId: chain.id,
     };
 }
 
@@ -416,14 +469,14 @@ export async function estimateUserOpGas(
 
     const gasEstimate = await bundlerClient.estimateUserOperationGas({
         account: smartAccount,
-        calls: calls.map(call => ({
+        calls: calls.map((call) => ({
             to: call.to,
             value: call.value ?? 0n,
-            data: call.data ?? '0x'
+            data: call.data ?? '0x',
         })),
-    })
+    });
 
-    return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit
+    return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;
 }
 
 /**
@@ -453,10 +506,10 @@ export async function estimateUserOpGasWithPermission(
     const permission = relayPermissionToPermission(relayPermission);
 
     // Format calls for the contract
-    const formattedCalls = calls.map(call => ({
+    const formattedCalls = calls.map((call) => ({
         target: getAddress(call.to),
         value: call.value ?? 0n,
-        data: call.data ?? '0x' as Hex,
+        data: call.data ?? ('0x' as Hex),
     }));
 
     // Encode the executeBatch call with permission
@@ -466,52 +519,51 @@ export async function estimateUserOpGasWithPermission(
 
     const gasEstimate = await bundlerClient.estimateUserOperationGas({
         account: smartAccount,
-        calls: [{
-            to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
-            value: 0n,
-            data: encodedData,
-        }],
+        calls: [
+            {
+                to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+                value: 0n,
+                data: encodedData,
+            },
+        ],
     });
 
     return gasEstimate.callGasLimit + gasEstimate.preVerificationGas + gasEstimate.verificationGasLimit;
 }
 
-export async function createSmartAccount(account: WebAuthnAccount | LocalAccount, bundlerClient: JustanAccountImplementation["client"]): Promise<SmartAccount> {
+export async function createSmartAccount(
+    account: WebAuthnAccount | LocalAccount,
+    bundlerClient: JustanAccountImplementation['client']
+): Promise<SmartAccount> {
     // First create a temporary smart account to get the predicted address
     const tempSmartAccount = await toJustanAccount({
         client: bundlerClient,
-        owners: [account, PERMISSIONS_MANAGER_ADDRESS]
-    })
+        owners: [account, PERMISSIONS_MANAGER_ADDRESS],
+    });
 
     // Get the predicted smart account address
-    const smartAccountAddress = await tempSmartAccount.getAddress()
+    const smartAccountAddress = await tempSmartAccount.getAddress();
 
     // Determine the owner bytes to search for based on account type
     // WebAuthn accounts use publicKey, LocalAccounts use padded address
-    const ownerBytes: Hex = account.type === 'webAuthn'
-        ? account.publicKey
-        : pad(account.address);
+    const ownerBytes: Hex = account.type === 'webAuthn' ? account.publicKey : pad(account.address);
 
     // Find the actual owner index for this account
     const ownerIndex = await findOwnerIndex({
         address: smartAccountAddress,
         client: bundlerClient,
         publicKey: ownerBytes,
-    })
+    });
 
     // Create the smart account with the correct owner index
     return await toJustanAccount({
         client: bundlerClient,
         owners: [account, PERMISSIONS_MANAGER_ADDRESS],
-        ownerIndex
-    })
+        ownerIndex,
+    });
 }
 
-export async function findOwnerIndex({
-                                         address,
-                                         client,
-                                         publicKey,
-                                     }: FindOwnerIndexParams): Promise<number> {
+export async function findOwnerIndex({ address, client, publicKey }: FindOwnerIndexParams): Promise<number> {
     const code = await getCode(client, {
         address,
     });
@@ -564,9 +616,54 @@ export function formatPublicKey(publicKey: Hex): Hex {
     return publicKey;
 }
 
+/**
+ * Create a temporary SmartAccount instance for signing on behalf of a different account.
+ * Verifies the signer is a registered owner on the target account.
+ */
+export async function createSmartAccountForAddress(
+    targetAddress: Address,
+    account: WebAuthnAccount | LocalAccount,
+    bundlerClient: JustanAccountImplementation['client']
+): Promise<SmartAccount> {
+    const ownerBytes: Hex = account.type === 'webAuthn' ? account.publicKey : account.address;
+
+    const code = await getCode(bundlerClient, { address: targetAddress });
+    if (!code) {
+        throw standardErrors.rpc.invalidParams(`Account ${targetAddress} is not deployed`);
+    }
+
+    const ownerCount = await readContract(bundlerClient, {
+        address: targetAddress,
+        abi,
+        functionName: 'ownerCount',
+    });
+
+    const formatted = formatPublicKey(ownerBytes);
+
+    for (let i = 0; i < Number(ownerCount); i++) {
+        const owner = await readContract(bundlerClient, {
+            address: targetAddress,
+            abi,
+            functionName: 'ownerAtIndex',
+            args: [BigInt(i)],
+        });
+
+        if ((owner as string).toLowerCase() === formatted.toLowerCase()) {
+            return await toJustanAccount({
+                client: bundlerClient,
+                owners: [account, PERMISSIONS_MANAGER_ADDRESS],
+                ownerIndex: i,
+                address: targetAddress,
+            });
+        }
+    }
+
+    throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
+}
+
 export async function createSmartAccountEip7702(
     localAccount: LocalAccount,
-    bundlerClient: JustanAccountImplementation["client"]
+    bundlerClient: JustanAccountImplementation['client']
 ): Promise<SmartAccount> {
     return await toJustanAccount({
         client: bundlerClient,
@@ -575,14 +672,9 @@ export async function createSmartAccountEip7702(
     });
 }
 
-export async function calculateGas(
-    chain: Chain,
-    gas: bigint,
-    paymasterUrlOverride?: string
-): Promise<string> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride)
-    const gasPrice = await getGasPrice(bundlerClient)
-    const result = formatUnits(gas * gasPrice, 18)
-    return result
+export async function calculateGas(chain: Chain, gas: bigint, paymasterUrlOverride?: string): Promise<string> {
+    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride);
+    const gasPrice = await getGasPrice(bundlerClient);
+    const result = formatUnits(gas * gasPrice, 18);
+    return result;
 }
-

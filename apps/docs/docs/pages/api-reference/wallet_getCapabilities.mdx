@@ -4,7 +4,6 @@ Get wallet capabilities for supported chains. Implements EIP-5792 for capability
 
 **Authentication Required:** No
 
-
 ## Request
 
 ```typescript
@@ -16,10 +15,10 @@ await jaw.provider.request({
 
 ### Parameters
 
-| Name | Type | Required | Description |
-|------|------|----------|-------------|
-| `address` | `string` | No | Account address |
-| `chainIds` | `string[]` | No | Filter by specific chain IDs (hex) |
+| Name       | Type       | Required | Description                        |
+| ---------- | ---------- | -------- | ---------------------------------- |
+| `address`  | `string`   | No       | Account address                    |
+| `chainIds` | `string[]` | No       | Filter by specific chain IDs (hex) |
 
 ### Example
 
@@ -32,7 +31,6 @@ Or without filtering:
 ```json
 []
 ```
-
 
 ## Response
 
@@ -85,7 +83,6 @@ Returns capabilities per chain as an object keyed by chain ID (hex).
 }
 ```
 
-
 ## Capabilities Explained
 
 ### atomicBatch
@@ -118,17 +115,16 @@ Indicates support for the permission system (`wallet_grantPermissions`, `wallet_
 
 Indicates the supported fee tokens for gas payments on each chain.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `supported` | `boolean` | Whether fee token selection is supported |
-| `tokens` | `array` | List of available fee tokens |
-| `tokens[].uid` | `string` | Unique identifier for the token |
-| `tokens[].symbol` | `string` | Token symbol (e.g., "ETH", "USDC") |
-| `tokens[].address` | `string` | Token contract address (zero address for native token) |
-| `tokens[].interop` | `boolean` | Whether the token supports cross-chain interoperability |
-| `tokens[].decimals` | `number` | Token decimal places |
-| `tokens[].feeToken` | `boolean` | Whether this token can be used for gas fees |
-
+| Field               | Type      | Description                                             |
+| ------------------- | --------- | ------------------------------------------------------- |
+| `supported`         | `boolean` | Whether fee token selection is supported                |
+| `tokens`            | `array`   | List of available fee tokens                            |
+| `tokens[].uid`      | `string`  | Unique identifier for the token                         |
+| `tokens[].symbol`   | `string`  | Token symbol (e.g., "ETH", "USDC")                      |
+| `tokens[].address`  | `string`  | Token contract address (zero address for native token)  |
+| `tokens[].interop`  | `boolean` | Whether the token supports cross-chain interoperability |
+| `tokens[].decimals` | `number`  | Token decimal places                                    |
+| `tokens[].feeToken` | `boolean` | Whether this token can be used for gas fees             |
 
 ## Behavior
 
@@ -137,7 +133,6 @@ Indicates the supported fee tokens for gas payments on each chain.
 - Filters by chain IDs if `chainIds` parameter provided
 - When `showTestnets` is disabled (default), only mainnet chains are returned
 
-
 ## Example
 
 ```typescript
@@ -145,7 +140,6 @@ const capabilities = await jaw.provider.request({
   method: 'wallet_getCapabilities',
 });
 ```
-
 
 ## Related Methods
 

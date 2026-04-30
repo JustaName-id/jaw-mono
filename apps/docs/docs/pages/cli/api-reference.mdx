@@ -4,14 +4,14 @@ All RPC methods supported by the JAW CLI via `jaw rpc call <method>`. Methods ma
 
 ## Account Methods
 
-| Method | Browser | Description |
-|--------|---------|-------------|
-| `wallet_connect` | Yes | Connect and authenticate with passkey |
-| `wallet_disconnect` | No | Disconnect the current session |
-| `eth_requestAccounts` | Yes | Request account access (alias for connect) |
-| `eth_accounts` | No | Get connected account addresses |
-| `eth_chainId` | No | Get current chain ID |
-| `wallet_switchEthereumChain` | No | Switch to a different chain |
+| Method                       | Browser | Description                                |
+| ---------------------------- | ------- | ------------------------------------------ |
+| `wallet_connect`             | Yes     | Connect and authenticate with passkey      |
+| `wallet_disconnect`          | No      | Disconnect the current session             |
+| `eth_requestAccounts`        | Yes     | Request account access (alias for connect) |
+| `eth_accounts`               | No      | Get connected account addresses            |
+| `eth_chainId`                | No      | Get current chain ID                       |
+| `wallet_switchEthereumChain` | No      | Switch to a different chain                |
 
 ### wallet_connect
 
@@ -33,12 +33,12 @@ Returns an array of connected addresses. Does not require browser approval.
 
 ## Transaction Methods
 
-| Method | Browser | Description |
-|--------|---------|-------------|
-| `wallet_sendCalls` | Yes | Send one or more calls (recommended) |
-| `eth_sendTransaction` | Yes | Send a single transaction (legacy) |
-| `wallet_getCallsStatus` | No | Check transaction bundle status |
-| `wallet_getCallsHistory` | No | Get transaction history |
+| Method                   | Browser | Description                          |
+| ------------------------ | ------- | ------------------------------------ |
+| `wallet_sendCalls`       | Yes     | Send one or more calls (recommended) |
+| `eth_sendTransaction`    | Yes     | Send a single transaction (legacy)   |
+| `wallet_getCallsStatus`  | No      | Check transaction bundle status      |
+| `wallet_getCallsHistory` | No      | Get transaction history              |
 
 ### wallet_sendCalls
 
@@ -67,11 +67,11 @@ Returns status (`pending`, `confirmed`) and receipts.
 
 ## Signing Methods
 
-| Method | Browser | Description |
-|--------|---------|-------------|
-| `personal_sign` | Yes | Sign a plaintext message |
-| `eth_signTypedData_v4` | Yes | Sign EIP-712 typed data |
-| `wallet_sign` | Yes | Sign using ERC-7871 |
+| Method                 | Browser | Description              |
+| ---------------------- | ------- | ------------------------ |
+| `personal_sign`        | Yes     | Sign a plaintext message |
+| `eth_signTypedData_v4` | Yes     | Sign EIP-712 typed data  |
+| `wallet_sign`          | Yes     | Sign using ERC-7871      |
 
 ### personal_sign
 
@@ -95,11 +95,11 @@ The typed data parameter must be a JSON string within the JSON array — double-
 
 ## Permission Methods
 
-| Method | Browser | Description |
-|--------|---------|-------------|
-| `wallet_grantPermissions` | Yes | Grant delegated permissions |
-| `wallet_revokePermissions` | Yes | Revoke a permission by hash |
-| `wallet_getPermissions` | No | List active permissions |
+| Method                     | Browser | Description                 |
+| -------------------------- | ------- | --------------------------- |
+| `wallet_grantPermissions`  | Yes     | Grant delegated permissions |
+| `wallet_revokePermissions` | Yes     | Revoke a permission by hash |
+| `wallet_getPermissions`    | No      | List active permissions     |
 
 ### wallet_grantPermissions
 
@@ -123,10 +123,10 @@ jaw rpc call wallet_getPermissions
 
 ## Query Methods
 
-| Method | Browser | Description |
-|--------|---------|-------------|
-| `wallet_getCapabilities` | No | Get supported capabilities per chain |
-| `wallet_getAssets` | No | Get token balances |
+| Method                   | Browser | Description                          |
+| ------------------------ | ------- | ------------------------------------ |
+| `wallet_getCapabilities` | No      | Get supported capabilities per chain |
+| `wallet_getAssets`       | No      | Get token balances                   |
 
 ### wallet_getCapabilities
 

@@ -1,5 +1,6 @@
 import { EventEmitter } from 'eventemitter3';
 import { UIHandler } from '../ui/interface.js';
+import type { JawTheme } from '../ui/theme.js';
 
 export interface RequestArguments {
     readonly method: string;
@@ -45,7 +46,7 @@ export const Mode = {
     AppSpecific: 'AppSpecific',
 } as const;
 
-export type ModeType = typeof Mode[keyof typeof Mode];
+export type ModeType = (typeof Mode)[keyof typeof Mode];
 
 export interface JawProviderPreference {
     /**
@@ -88,4 +89,6 @@ export interface ConstructorOptions {
     apiKey: string;
     /** Mapping of chain IDs to paymaster configuration */
     paymasters?: Record<number, PaymasterConfig>;
+    /** Theme configuration for UI appearance */
+    theme?: JawTheme;
 }

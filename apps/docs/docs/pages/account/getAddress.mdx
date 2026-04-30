@@ -4,23 +4,19 @@ Get the smart account address (async).
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
 async getAddress(): Promise<Address>
 ```
 
-
 ## Parameters
 
 None.
 
-
 ## Returns
 
 `Promise<Address>` - The smart account address.
-
 
 ## Behavior
 
@@ -30,7 +26,6 @@ This async method returns the smart account address. It's useful for:
 2. **Address verification** - Confirming the computed address matches expectations
 
 For deployed accounts, this returns the same value as the synchronous `address` property.
-
 
 ## Example
 
@@ -45,7 +40,6 @@ const account = await Account.get({
 const address = await account.getAddress();
 console.log('Address:', address);
 ```
-
 
 ## Related
 

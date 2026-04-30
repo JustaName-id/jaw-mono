@@ -4,13 +4,11 @@ Sign a personal message (EIP-191).
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
-async signMessage(message: string): Promise<Hex>
+async signMessage(message: string, options?: { address?: Address }): Promise<Hex>
 ```
-
 
 ## Parameters
 
@@ -20,18 +18,19 @@ Type: `string`
 
 The message to sign.
 
+### options (optional)
+
+Type: `{ address?: Address }`
 
 ## Returns
 
 `Promise<Hex>` - The signature as a hex string.
-
 
 ## Behavior
 
 1. Creates an EIP-191 personal sign message
 2. Signs with the smart account (passkey or local account)
 3. Returns the signature wrapped for smart account validation
-
 
 ## Example
 
@@ -44,19 +43,13 @@ import { Account } from '@jaw.id/core';
 const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 2: Create a new account with passkey
-const account = await Account.create(
-  { chainId: 1, apiKey: 'your-api-key' },
-  { username: 'alice' }
-);
+const account = await Account.create({ chainId: 1, apiKey: 'your-api-key' }, { username: 'alice' });
 
 // Option 3: Import from cloud backup
 const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 4: From a local account (server-side / embedded wallets)
-const account = await Account.fromLocalAccount(
-  { chainId: 1, apiKey: 'your-api-key' },
-  localAccount
-);
+const account = await Account.fromLocalAccount({ chainId: 1, apiKey: 'your-api-key' }, localAccount);
 ```
 
 ### Basic Usage
@@ -64,6 +57,17 @@ const account = await Account.fromLocalAccount(
 ```typescript
 const signature = await account.signMessage('Hello, World!');
 console.log('Signature:', signature);
+```
+
+### Signing from a Different Account
+
+Target account address to sign from. The signer must be a registered owner on that account.
+
+```typescript
+const targetAccountAddress = '0xTargetAccount...';
+const signature = await account.signMessage('Hello from another account', {
+  address: targetAccountAddress,
+});
 ```
 
 ### Sign-In with Ethereum (SIWE)
@@ -93,7 +97,6 @@ await fetch('/api/verify-siwe', {
   }),
 });
 ```
-
 
 ## Related
 

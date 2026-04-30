@@ -4,17 +4,16 @@ Send a transaction and wait for the receipt.
 
 **Type:** `instance async`
 
-
 ## Signature
 
 ```typescript
 async sendTransaction(
   calls: TransactionCall[],
   paymasterUrlOverride?: string,
-  paymasterContextOverride?: Record<string, unknown>
+  paymasterContextOverride?: Record<string, unknown>,
+  from?: Address
 ): Promise<Hash>
 ```
-
 
 ## Parameters
 
@@ -48,14 +47,20 @@ Type: `Record<string, unknown>`
 Custom paymaster context. For ERC-20 payment, include the token address:
 
 ```typescript
-{ token: '0xUSDC_ADDRESS...' }
+{
+  token: '0xUSDC_ADDRESS...';
+}
 ```
 
+### from (optional)
+
+Type: `Address`
+
+Target account address to execute from. The signer must be a registered owner on that account.
 
 ## Returns
 
 `Promise<Hash>` - The transaction hash after the transaction is included in a block.
-
 
 ## Value Format
 
@@ -75,7 +80,6 @@ import { parseEther } from 'viem';
 { to: '0x...', value: parseEther('0.1') }  // 0.1 ETH
 ```
 
-
 ## Example
 
 ### Getting an Account Instance
@@ -89,19 +93,13 @@ import { Account } from '@jaw.id/core';
 const account = await Account.get({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 2: Create a new account with passkey
-const account = await Account.create(
-  { chainId: 1, apiKey: 'your-api-key' },
-  { username: 'alice' }
-);
+const account = await Account.create({ chainId: 1, apiKey: 'your-api-key' }, { username: 'alice' });
 
 // Option 3: Import from cloud backup
 const account = await Account.import({ chainId: 1, apiKey: 'your-api-key' });
 
 // Option 4: From a local account (server-side / embedded wallets)
-const account = await Account.fromLocalAccount(
-  { chainId: 1, apiKey: 'your-api-key' },
-  localAccount
-);
+const account = await Account.fromLocalAccount({ chainId: 1, apiKey: 'your-api-key' }, localAccount);
 ```
 
 ### Send ETH
@@ -110,9 +108,7 @@ const account = await Account.fromLocalAccount(
 import { parseEther } from 'viem';
 
 // Send 0.1 ETH
-const hash = await account.sendTransaction([
-  { to: '0xRecipient...', value: parseEther('0.1') }
-]);
+const hash = await account.sendTransaction([{ to: '0xRecipient...', value: parseEther('0.1') }]);
 
 console.log('Transaction hash:', hash);
 ```
@@ -129,11 +125,23 @@ const data = encodeFunctionData({
   args: ['0xRecipient...', 1000000n], // 1 USDC (6 decimals)
 });
 
-const hash = await account.sendTransaction([
-  { to: USDC_ADDRESS, data }
-]);
+const hash = await account.sendTransaction([{ to: USDC_ADDRESS, data }]);
 ```
 
+### Sending from a Different Account
+
+Target account address to execute from. The signer must be a registered owner on that account.
+
+```typescript
+import { parseEther } from 'viem';
+
+const hash = await account.sendTransaction(
+  [{ to: '0xRecipient...', value: parseEther('0.1') }],
+  undefined, // paymasterUrlOverride
+  undefined, // paymasterContextOverride
+  '0xTargetAccount...' // from
+);
+```
 
 ## Related
 
