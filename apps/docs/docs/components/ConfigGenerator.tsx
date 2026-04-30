@@ -424,16 +424,31 @@ export function ConfigGenerator() {
     return config;
   }
 
+  function shellQuote(s: string): string {
+    return `'${s.replace(/'/g, "'\\''")}'`;
+  }
+
   function getCommand() {
     const config = buildConfig();
-    const json = JSON.stringify(config);
-    return `jaw config write '${json}'`;
+    return `jaw config write ${shellQuote(JSON.stringify(config))}`;
   }
 
   function copyCommand() {
     navigator.clipboard.writeText(getCommand());
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
+  }
+
+  function downloadConfig() {
+    const blob = new Blob([JSON.stringify(buildConfig(), null, 2) + '\n'], {
+      type: 'application/json',
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'jaw-config.json';
+    a.click();
+    URL.revokeObjectURL(url);
   }
 
   // ── Render ───────────────────────────────────────────────────────────────────
@@ -448,7 +463,9 @@ export function ConfigGenerator() {
             <label style={styles.label}>API Key</label>
             <input
               style={styles.input}
-              type="text"
+              type="password"
+              autoComplete="off"
+              spellCheck={false}
               placeholder="jaw_..."
               value={apiKey}
               onChange={(e) => setApiKey(e.target.value)}
@@ -722,9 +739,14 @@ export function ConfigGenerator() {
       <div style={styles.output}>
         <div style={styles.outputHeader}>
           <div style={styles.sectionTitle}>Generated Command</div>
-          <button style={styles.copyButton} onClick={copyCommand}>
-            {copied ? 'Copied!' : 'Copy'}
-          </button>
+          <div style={{ display: 'flex', gap: '0.5rem' }}>
+            <button style={styles.copyButton} onClick={downloadConfig}>
+              Download config.json
+            </button>
+            <button style={styles.copyButton} onClick={copyCommand}>
+              {copied ? 'Copied!' : 'Copy'}
+            </button>
+          </div>
         </div>
         <pre style={styles.code}>{getCommand()}</pre>
       </div>
