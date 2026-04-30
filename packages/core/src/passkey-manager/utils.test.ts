@@ -79,8 +79,9 @@ describe("passkey-manager/utils — React Native adapter support", () => {
     });
 
     it("should use createFn path when provided (custom WebAuthn create)", async () => {
-      const { createWebAuthnCredential, toWebAuthnAccount } =
-        await import("viem/account-abstraction");
+      const { createWebAuthnCredential, toWebAuthnAccount } = await import(
+        "viem/account-abstraction"
+      );
 
       await createPasskeyUtils(
         "bob",
@@ -336,8 +337,8 @@ describe("passkey-manager/utils — React Native adapter support", () => {
         type: "public-key",
         response: {
           authenticatorData: "AQID", // base64url for [1,2,3]
-          clientDataJSON: "BAUG",   // base64url for [4,5,6]
-          signature: "BwgJ",       // base64url for [7,8,9]
+          clientDataJSON: "BAUG", // base64url for [4,5,6]
+          signature: "BwgJ", // base64url for [7,8,9]
         },
       });
 
@@ -353,7 +354,11 @@ describe("passkey-manager/utils — React Native adapter support", () => {
           userVerification: "preferred",
           timeout: 60000,
         },
-      })) as { id: string; type: string; response: Record<string, ArrayBuffer> };
+      })) as {
+        id: string;
+        type: string;
+        response: Record<string, ArrayBuffer>;
+      };
 
       // Verify the native fn received base64url strings
       const nativeCall = vi.mocked(mockNativeGetFn).mock.calls[0][0];
@@ -414,8 +419,10 @@ describe("passkey-manager/utils — React Native adapter support", () => {
     // 0x21 0x58 0x20 <32-byte x> and 0x22 0x58 0x20 <32-byte y>
     const ATTESTATION_B64URL =
       "oKGiIVggAQIDBAUGBwgJCgsMDQ4PEBESExQVFhcYGRobHB0eHyAiWCAhIiMkJSYnKCkqKywtLi8wMTIzNDU2Nzg5Ojs8PT4_QA";
+    // 64-byte raw P-256 key (x || y), no SEC1 0x04 prefix — matches viem's
+    // browser createWebAuthnCredential and what JustanAccount's MultiOwnable expects.
     const EXPECTED_PUBKEY =
-      "0x040102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40";
+      "0x0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f202122232425262728292a2b2c2d2e2f303132333435363738393a3b3c3d3e3f40";
 
     it("should pass correct options to native create fn and extract public key from attestation", async () => {
       const mockNativeCreateFn: NativePasskeyCreateFn = vi

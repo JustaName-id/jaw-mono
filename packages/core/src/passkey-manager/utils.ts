@@ -214,7 +214,11 @@ function extractPublicKeyFromAttestation(
     ]),
   );
 
-  return PublicKey.toHex(publicKey);
+  // The JAW factory's MultiOwnable expects a raw 64-byte P-256 key (x || y),
+  // not the 65-byte SEC1 uncompressed form (0x04 || x || y). viem's browser
+  // path uses { includePrefix: false } for the same reason — keep them in sync
+  // or the factory's _initializeOwners reverts and the bundler returns AA13.
+  return PublicKey.toHex(publicKey, { includePrefix: false });
 }
 
 /**
@@ -297,7 +301,9 @@ export function resolvePasskeyOptions(options: {
 
   return {
     getFn: nativeGetFn ? wrapNativeGetFn(nativeGetFn) : undefined,
-    internalNativeCreateFn: nativeCreateFn ? wrapNativeCreateFn(nativeCreateFn) : undefined,
+    internalNativeCreateFn: nativeCreateFn
+      ? wrapNativeCreateFn(nativeCreateFn)
+      : undefined,
   };
 }
 
@@ -505,7 +511,12 @@ export async function importPasskeyUtils(
     }
 
     // credential.id is already the base64url-encoded version of rawId
-    const passkeyData = await lookupPasskeyFromBackend(credential.id, apiKey, undefined, serverUrl);
+    const passkeyData = await lookupPasskeyFromBackend(
+      credential.id,
+      apiKey,
+      undefined,
+      serverUrl,
+    );
 
     return {
       name: passkeyData.displayName || "Passkey",
