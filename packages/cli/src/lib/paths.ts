@@ -8,4 +8,6 @@ export const PATHS = {
   config: path.join(JAW_DIR, 'config.json'),
   session: path.join(JAW_DIR, 'session.json'),
   relay: path.join(JAW_DIR, 'relay.json'),
+  keystore: path.join(JAW_DIR, 'keystore.json'),
+  sessionConfig: path.join(JAW_DIR, 'session-config.json'),
 } as const;

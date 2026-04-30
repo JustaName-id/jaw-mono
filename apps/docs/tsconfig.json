@@ -16,5 +16,9 @@
   },
   "include": ["vocs.config.ts", "docs/**/*"],
   "exclude": ["node_modules", "dist", ".vocs"],
-  "references": []
+  "references": [
+    {
+      "path": "../../packages/core"
+    }
+  ]
 }

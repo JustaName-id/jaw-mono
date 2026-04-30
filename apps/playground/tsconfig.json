@@ -50,5 +50,15 @@
     "eslint.config.cjs",
     "eslint.config.mjs"
   ],
-  "references": []
+  "references": [
+    {
+      "path": "../../packages/wagmi"
+    },
+    {
+      "path": "../../packages/ui"
+    },
+    {
+      "path": "../../packages/core"
+    }
+  ]
 }

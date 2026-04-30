@@ -22,3 +22,16 @@ const BROWSER_REQUIRED_METHODS = new Set([
 export function requiresBrowser(method: string): boolean {
   return BROWSER_REQUIRED_METHODS.has(method);
 }
+
+const SESSION_SUPPORTED_METHODS = new Set([
+  'eth_requestAccounts',
+  'eth_accounts',
+  'wallet_sendCalls',
+  'wallet_getCallsStatus',
+  'personal_sign',
+  'eth_signTypedData_v4',
+]);
+
+export function supportsSessionMode(method: string): boolean {
+  return SESSION_SUPPORTED_METHODS.has(method);
+}

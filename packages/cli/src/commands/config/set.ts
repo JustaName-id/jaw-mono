@@ -1,7 +1,7 @@
 import { BaseCommand } from '../../base-command.js';
 import { setConfigValue } from '../../lib/config.js';
 
-const VALID_KEYS = ['apiKey', 'defaultChain', 'keysUrl', 'paymasterUrl', 'ens', 'relayUrl'] as const;
+const VALID_KEYS = ['apiKey', 'defaultChain', 'keysUrl', 'ens', 'relayUrl', 'sessionExpiry'] as const;
 
 type ValidKey = (typeof VALID_KEYS)[number];
 
@@ -14,7 +14,7 @@ export default class ConfigSet extends BaseCommand {
 
   static override examples = [
     '<%= config.bin %> config set apiKey=your-api-key defaultChain=8453',
-    '<%= config.bin %> config set ens=yourdomain.eth paymasterUrl=https://your-paymaster.com',
+    '<%= config.bin %> config set ens=yourdomain.eth sessionExpiry=14',
     '<%= config.bin %> config set apiKey your-api-key',
   ];
 
@@ -42,10 +42,10 @@ export default class ConfigSet extends BaseCommand {
     const results: { key: string; value: string | number }[] = [];
 
     for (const { key, value } of entries) {
-      const parsed = key === 'defaultChain' ? parseInt(value, 10) : value;
+      const parsed = key === 'defaultChain' || key === 'sessionExpiry' ? parseInt(value, 10) : value;
 
-      if (key === 'defaultChain' && isNaN(parsed as number)) {
-        this.error(`Invalid chain ID: ${value}`);
+      if ((key === 'defaultChain' || key === 'sessionExpiry') && isNaN(parsed as number)) {
+        this.error(`Invalid number for ${key}: ${value}`);
       }
 
       setConfigValue(key, parsed as string | number);

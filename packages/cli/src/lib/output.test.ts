@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { formatOutput, printTable } from './output.js';
+import { formatOutput } from './output.js';
 
 describe('output', () => {
   describe('formatOutput', () => {
@@ -26,22 +26,6 @@ describe('output', () => {
 
     it('formats human output for empty array', () => {
       expect(formatOutput([], 'human')).toBe('(empty)');
-    });
-  });
-
-  describe('printTable', () => {
-    it('formats table with rows', () => {
-      const result = printTable([
-        { Name: 'Alice', Age: 30 },
-        { Name: 'Bob', Age: 25 },
-      ]);
-      expect(result).toContain('Name');
-      expect(result).toContain('Alice');
-      expect(result).toContain('Bob');
-    });
-
-    it('returns message for empty rows', () => {
-      expect(printTable([])).toBe('(no results)');
     });
   });
 });

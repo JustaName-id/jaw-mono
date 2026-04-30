@@ -25,12 +25,14 @@ export function registerRpcTool(server: McpServer): void {
     async (params) => {
       const config = loadConfig();
       const apiKey = resolveApiKey();
+      const chainId = params.chainId ?? config.defaultChain ?? 1;
+      const pm = config.paymasters?.[chainId];
       const bridge = await getBridge({
         keysUrl: config.keysUrl,
         apiKey,
-        chainId: params.chainId ?? config.defaultChain,
+        chainId,
         ens: config.ens,
-        paymasterUrl: config.paymasterUrl,
+        paymasterUrl: pm?.url,
       });
       try {
         const result = await bridge.request(params.method, params.params);
