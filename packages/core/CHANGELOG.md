@@ -1,3 +1,53 @@
+## 0.2.8 (2026-04-28)
+
+### 🩹 Fixes
+
+- **core:** erc20 gas override issue ([#174](https://github.com/JustaName-id/jaw-mono/pull/174))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 0.2.7 (2026-04-27)
+
+### 🩹 Fixes
+
+- **core:** added MIT license ([#171](https://github.com/JustaName-id/jaw-mono/pull/171))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
+## 0.2.6 (2026-04-27)
+
+### 🩹 Fixes
+
+- **core:** erc20 gas estimation with permissionId ([#172](https://github.com/JustaName-id/jaw-mono/pull/172))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 0.2.5 (2026-04-25)
+
+### 🩹 Fixes
+
+- **core:** remove 80% discount ([#169](https://github.com/JustaName-id/jaw-mono/pull/169))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 0.2.4 (2026-04-22)
+
+### 🩹 Fixes
+
+- **core:** add gnosis support: ([#168](https://github.com/JustaName-id/jaw-mono/pull/168))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.2.3 (2026-04-13)
 
 ### 🩹 Fixes

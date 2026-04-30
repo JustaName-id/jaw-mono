@@ -260,7 +260,8 @@ export function useGasEstimation({
                 symbol: t.symbol,
                 decimals: t.decimals,
                 balance: t.balance,
-              }))
+              })),
+              permissionId ? { permissionId, apiKey } : undefined
             )
           : Promise.resolve([]),
       ]);

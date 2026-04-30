@@ -52,6 +52,7 @@ import {
     ink,
     inkSepolia,
     dosChain,
+    gnosis,
 } from 'viem/chains';
 import { PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS } from '../constants.js';
 import { standardErrors } from '../errors/errors.js';
@@ -88,7 +89,20 @@ export type BundledTransactionResult = {
     chainId: number;
 };
 
-export const MAINNET_CHAINS = [mainnet, base, optimism, arbitrum, linea, avalanche, bsc, celo, flare, ink, dosChain];
+export const MAINNET_CHAINS = [
+    mainnet,
+    base,
+    optimism,
+    arbitrum,
+    linea,
+    avalanche,
+    bsc,
+    celo,
+    flare,
+    ink,
+    dosChain,
+    gnosis,
+];
 
 export const TESTNET_CHAINS = [
     sepolia,

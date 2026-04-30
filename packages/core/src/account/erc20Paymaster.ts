@@ -1,8 +1,13 @@
-import { Address, Hex, encodeFunctionData, erc20Abi, formatUnits } from 'viem';
+import { Address, Hex, encodeFunctionData, erc20Abi, formatUnits, getAddress } from 'viem';
 import { SmartAccount, entryPoint08Address } from 'viem/account-abstraction';
 import { getBundlerClient } from './smartAccount.js';
 import { Chain } from '../store/index.js';
-import { ERC20_PAYMASTER_ADDRESS } from '../constants.js';
+import { ERC20_PAYMASTER_ADDRESS, PERMISSIONS_MANAGER_ADDRESS } from '../constants.js';
+import {
+    getPermissionFromRelay,
+    relayPermissionToPermission,
+    encodeExecuteBatchWithPermission,
+} from '../rpc/permissions.js';
 
 /**
  * Token quote from Pimlico's ERC-20 paymaster
@@ -112,11 +117,14 @@ export async function fetchTokenQuotes(
  * 2. Prepares a UserOp WITH the paymaster (so estimation works without ETH)
  * 3. Calculates the token cost for each using Pimlico's formula
  *
+ * When `permissionId` is provided, calls are routed through the permissions manager
+ *
  * @param smartAccount - The smart account to estimate for
  * @param calls - Array of transaction calls (user's intended transactions)
  * @param chain - The chain configuration
  * @param paymasterUrl - The ERC-20 paymaster URL
  * @param tokens - Array of tokens to estimate costs for
+ * @param options - Optional permission-based execution context
  * @returns Array of token estimates with costs
  */
 export async function estimateErc20PaymasterCosts(
@@ -124,7 +132,8 @@ export async function estimateErc20PaymasterCosts(
     calls: Array<{ to: Address; value?: bigint; data?: Hex }>,
     chain: Chain,
     paymasterUrl: string,
-    tokens: TokenInfo[]
+    tokens: TokenInfo[],
+    options?: { permissionId?: Hex; apiKey?: string }
 ): Promise<TokenEstimate[]> {
     if (tokens.length === 0) {
         return [];
@@ -157,7 +166,39 @@ export async function estimateErc20PaymasterCosts(
         }),
     };
 
-    const callsWithApproval = [approvalCall, ...calls];
+    // For permission-based execution, the user's calls cannot go to their targets
+    // directly — they must be routed through the permissions manager.
+    let preparedCalls: Array<{ to: Address; value: bigint; data: Hex }>;
+    if (options?.permissionId) {
+        if (!options.apiKey) {
+            throw new Error('apiKey is required when estimating with permissionId');
+        }
+
+        const relayPermission = await getPermissionFromRelay(options.permissionId, options.apiKey);
+        const permission = relayPermissionToPermission(relayPermission);
+
+        const formattedCalls = calls.map((call) => ({
+            target: getAddress(call.to),
+            value: call.value ?? 0n,
+            data: call.data ?? ('0x' as Hex),
+        }));
+
+        const encodedData = encodeExecuteBatchWithPermission(permission, formattedCalls);
+
+        preparedCalls = [
+            approvalCall,
+            {
+                to: getAddress(PERMISSIONS_MANAGER_ADDRESS),
+                value: 0n,
+                data: encodedData,
+            },
+        ];
+    } else {
+        preparedCalls = [
+            approvalCall,
+            ...calls.map((c) => ({ to: c.to, value: c.value ?? 0n, data: c.data ?? ('0x' as Hex) })),
+        ];
+    }
 
     // 3. Prepare UserOp WITH the paymaster configured
     // This is key - the paymaster being included means estimation won't fail with AA21
@@ -165,7 +206,7 @@ export async function estimateErc20PaymasterCosts(
 
     const userOp = await bundlerClient.prepareUserOperation({
         account: smartAccount,
-        calls: callsWithApproval,
+        calls: preparedCalls,
     });
 
     // 4. Extract gas fields from userOp
@@ -224,7 +265,7 @@ export function calculateTokenCostFromGas(gas: UserOpGasFields, quote: TokenQuot
         (gas.paymasterPostOpGasLimit || 0n);
 
     // maxCostInWei = (totalGas + postOpGas) * maxFeePerGas
-    const maxCostWei = ((totalGas + quote.postOpGas) * gas.maxFeePerGas * 80n) / 100n;
+    const maxCostWei = (totalGas + quote.postOpGas) * gas.maxFeePerGas;
 
     // Convert to token using exchange rate
     return (maxCostWei * quote.exchangeRate) / BigInt(1e18);
