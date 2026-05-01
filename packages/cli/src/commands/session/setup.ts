@@ -3,14 +3,8 @@ import * as fs from 'node:fs';
 import { BaseCommand } from '../../base-command.js';
 import { loadConfig } from '../../lib/config.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
-import {
-  generateSessionKey,
-  saveKeystore,
-  keystoreExists,
-  deleteKeystore,
-  loadSessionKey,
-} from '../../lib/keystore.js';
-import { saveSessionConfig, loadSessionConfig, deleteSessionConfig } from '../../lib/session-config.js';
+import { generateSessionKey, saveKeystore, keystoreExists, loadSessionKey } from '../../lib/keystore.js';
+import { saveSessionConfig, loadSessionConfig } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
 
@@ -43,6 +37,7 @@ export default class SessionSetup extends BaseCommand {
 
     // 1. Check existing session
     let reuseKey: string | null = null;
+    let oldPermissionRevoked = false;
 
     if (keystoreExists()) {
       const existing = loadSessionConfig();
@@ -76,8 +71,12 @@ export default class SessionSetup extends BaseCommand {
               ens: config.ens,
               paymasterUrl: pm?.url,
             });
-            await revokeBridge.request('wallet_revokePermissions', [{ id: existing.permissionId }]);
-            revokeBridge.close();
+            try {
+              await revokeBridge.request('wallet_revokePermissions', [{ id: existing.permissionId }]);
+            } finally {
+              revokeBridge.close();
+            }
+            oldPermissionRevoked = true;
             this.log('Old permission revoked.');
           }
 
@@ -104,8 +103,10 @@ export default class SessionSetup extends BaseCommand {
         );
       }
 
-      deleteKeystore();
-      deleteSessionConfig();
+      // Old keystore/session-config are intentionally NOT deleted here.
+      // saveKeystore/saveSessionConfig below overwrite them on success;
+      // leaving them in place means a failed grant doesn't strand the user
+      // with an active on-chain permission and no local key.
     }
 
     // 2. Resolve permissions
@@ -148,16 +149,28 @@ export default class SessionSetup extends BaseCommand {
       paymasterUrl: pm?.url,
     });
 
-    const grantResponse = (await bridge.request('wallet_grantPermissions', [
-      {
-        spender: sessionAddress,
-        expiry: expiryTimestamp,
-        permissions,
-        chainId,
-      },
-    ])) as { permissionId: string; account: string };
-
-    bridge.close();
+    let grantResponse: { permissionId: string; account: string };
+    try {
+      grantResponse = (await bridge.request('wallet_grantPermissions', [
+        {
+          spender: sessionAddress,
+          expiry: expiryTimestamp,
+          permissions,
+          chainId,
+        },
+      ])) as { permissionId: string; account: string };
+    } catch (error) {
+      if (oldPermissionRevoked) {
+        this.logToStderr(
+          'Old permission was revoked on-chain but the new grant failed. ' +
+            'Local session-config still references the revoked permission; ' +
+            'run `jaw session setup` again to create a new session.'
+        );
+      }
+      throw error;
+    } finally {
+      bridge.close();
+    }
 
     // 7. Save keystore
     saveKeystore(privateKeyHex, sessionAddress);

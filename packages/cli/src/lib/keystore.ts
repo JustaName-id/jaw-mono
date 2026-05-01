@@ -36,6 +36,8 @@ export function saveKeystore(privateKeyHex: string, address: string): void {
     encoding: 'utf-8',
     mode: 0o600,
   });
+  // `mode` is only honored on file creation, not overwrite — re-apply explicitly.
+  fs.chmodSync(PATHS.keystore, 0o600);
 }
 
 /**

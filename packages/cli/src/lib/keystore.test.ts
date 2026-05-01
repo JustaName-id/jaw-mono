@@ -75,4 +75,14 @@ describe('keystore', () => {
     expect(raw.address).toBe('0xabc123');
     expect(raw.createdAt).toBeDefined();
   });
+
+  it('saveKeystore enforces 0o600 mode even when overwriting an existing file', () => {
+    saveKeystore(generateSessionKey(), '0xabc123');
+    expect(fs.statSync(PATHS.keystore).mode & 0o777).toBe(0o600);
+    // Loosen the mode behind saveKeystore's back, then save again.
+    fs.chmodSync(PATHS.keystore, 0o644);
+    expect(fs.statSync(PATHS.keystore).mode & 0o777).toBe(0o644);
+    saveKeystore(generateSessionKey(), '0xdef456');
+    expect(fs.statSync(PATHS.keystore).mode & 0o777).toBe(0o600);
+  });
 });

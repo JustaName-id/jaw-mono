@@ -21,6 +21,7 @@ export function saveSessionConfig(input: Omit<SessionConfig, 'createdAt'>): void
     encoding: 'utf-8',
     mode: 0o600,
   });
+  fs.chmodSync(PATHS.sessionConfig, 0o600);
 }
 
 export function loadSessionConfig(): SessionConfig {
