@@ -1,9 +1,9 @@
-"use client";
+'use client';
 
-import { useSearchParams } from "next/navigation";
-import { useEffect, useState, Suspense, useRef, useCallback } from "react";
-import { JAW, Mode } from "@jaw.id/core";
-import { ReactUIHandler } from "@jaw.id/ui";
+import { useSearchParams } from 'next/navigation';
+import { useEffect, useState, Suspense, useRef, useCallback } from 'react';
+import { JAW, Mode } from '@jaw.id/core';
+import { ReactUIHandler } from '@jaw.id/ui';
 import {
   generateKeyPair,
   deriveSharedSecret,
@@ -11,7 +11,7 @@ import {
   decrypt,
   exportKeyToHexString,
   importKeyFromHexString,
-} from "@jaw.id/core";
+} from '@jaw.id/core';
 
 /**
  * CLI Bridge Page — Relay Mode
@@ -29,12 +29,12 @@ import {
  * 7. CLI sends encrypted RPC requests, page executes and sends encrypted responses
  */
 
-type BridgeState = "connecting" | "connected" | "disconnected" | "error";
+type BridgeState = 'connecting' | 'connected' | 'disconnected' | 'error';
 
 /** Base64 encode a Uint8Array or ArrayBuffer */
 function toBase64(buf: Uint8Array | ArrayBuffer): string {
   const bytes = buf instanceof Uint8Array ? buf : new Uint8Array(buf);
-  let binary = "";
+  let binary = '';
   for (let i = 0; i < bytes.length; i++) {
     binary += String.fromCharCode(bytes[i]);
   }
@@ -53,11 +53,11 @@ function fromBase64(b64: string): Uint8Array {
 
 async function encryptAndSerialize(
   sharedSecret: CryptoKey,
-  payload: Record<string, unknown>,
-): Promise<{ type: "encrypted"; iv: string; ciphertext: string }> {
+  payload: Record<string, unknown>
+): Promise<{ type: 'encrypted'; iv: string; ciphertext: string }> {
   const { iv, cipherText } = await encrypt(sharedSecret, JSON.stringify(payload));
   return {
-    type: "encrypted",
+    type: 'encrypted',
     iv: toBase64(iv),
     ciphertext: toBase64(cipherText),
   };
@@ -65,7 +65,7 @@ async function encryptAndSerialize(
 
 async function deserializeAndDecrypt(
   sharedSecret: CryptoKey,
-  msg: { iv: string; ciphertext: string },
+  msg: { iv: string; ciphertext: string }
 ): Promise<Record<string, unknown>> {
   const iv = fromBase64(msg.iv);
   const cipherText = fromBase64(msg.ciphertext);
@@ -75,15 +75,15 @@ async function deserializeAndDecrypt(
 
 function CLIBridgeContent() {
   const searchParams = useSearchParams();
-  const [state, setState] = useState<BridgeState>("connecting");
-  const [error, setError] = useState("");
+  const [state, setState] = useState<BridgeState>('connecting');
+  const [error, setError] = useState('');
   const [lastMethod, setLastMethod] = useState<string | null>(null);
   const sdkRef = useRef<ReturnType<typeof JAW.create> | null>(null);
   const wsRef = useRef<WebSocket | null>(null);
   const sharedSecretRef = useRef<CryptoKey | null>(null);
 
-  const sessionId = searchParams.get("session");
-  const relayUrl = searchParams.get("relay");
+  const sessionId = searchParams.get('session');
+  const relayUrl = searchParams.get('relay');
 
   // Read CLI public key from URL fragment (use ref to survive React Strict Mode double-invoke)
   const cliPublicKeyRef = useRef<string | null>(null);
@@ -97,66 +97,54 @@ function CLIBridgeContent() {
     }
     const hash = window.location.hash.slice(1);
     const hashParams = new URLSearchParams(hash);
-    const pk = hashParams.get("pk");
+    const pk = hashParams.get('pk');
     if (pk) {
       cliPublicKeyRef.current = pk;
       setCliPublicKeyHex(pk);
-      window.history.replaceState(
-        null,
-        "",
-        window.location.pathname + window.location.search,
-      );
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
     }
   }, []);
 
-  const handleRpcRequest = useCallback(
-    async (id: string, method: string, params: unknown) => {
-      if (!sdkRef.current || !sharedSecretRef.current || !wsRef.current) return;
+  const handleRpcRequest = useCallback(async (id: string, method: string, params: unknown) => {
+    if (!sdkRef.current || !sharedSecretRef.current || !wsRef.current) return;
 
-      setLastMethod(method);
+    setLastMethod(method);
 
-      try {
-        const normalizedParams = Array.isArray(params)
-          ? params
-          : params !== undefined
-            ? [params]
-            : [];
+    try {
+      const normalizedParams = Array.isArray(params) ? params : params !== undefined ? [params] : [];
 
-        const result = await sdkRef.current.provider.request({
-          method,
-          params: normalizedParams,
-        });
+      const result = await sdkRef.current.provider.request({
+        method,
+        params: normalizedParams,
+      });
 
-        const address = extractAddress(method, result);
+      const address = extractAddress(method, result);
 
+      const envelope = await encryptAndSerialize(sharedSecretRef.current, {
+        type: 'rpc_response',
+        id,
+        success: true,
+        data: result,
+        ...(address ? { address } : {}),
+      });
+
+      wsRef.current.send(JSON.stringify(envelope));
+    } catch (err) {
+      const errObj = err as { code?: number; message?: string };
+      const errCode = errObj?.code ?? -32000;
+      const errMsg = errObj?.message ?? (err instanceof Error ? err.message : String(err));
+
+      if (sharedSecretRef.current && wsRef.current) {
         const envelope = await encryptAndSerialize(sharedSecretRef.current, {
-          type: "rpc_response",
+          type: 'rpc_response',
           id,
-          success: true,
-          data: result,
-          ...(address ? { address } : {}),
+          success: false,
+          error: { code: errCode, message: errMsg },
         });
-
         wsRef.current.send(JSON.stringify(envelope));
-      } catch (err) {
-        const errObj = err as { code?: number; message?: string };
-        const errCode = errObj?.code ?? -32000;
-        const errMsg =
-          errObj?.message ?? (err instanceof Error ? err.message : String(err));
-
-        if (sharedSecretRef.current && wsRef.current) {
-          const envelope = await encryptAndSerialize(sharedSecretRef.current, {
-            type: "rpc_response",
-            id,
-            success: false,
-            error: { code: errCode, message: errMsg },
-          });
-          wsRef.current.send(JSON.stringify(envelope));
-        }
       }
-    },
-    [],
-  );
+    }
+  }, []);
 
   useEffect(() => {
     if (!sessionId || !relayUrl || !cliPublicKeyHex) return;
@@ -169,10 +157,10 @@ function CLIBridgeContent() {
       try {
         // Generate browser ECDH keypair
         const browserKeyPair = await generateKeyPair();
-        const browserPublicKeyHex = await exportKeyToHexString("public", browserKeyPair.publicKey);
+        const browserPublicKeyHex = await exportKeyToHexString('public', browserKeyPair.publicKey);
 
         // Derive shared secret using CLI's public key
-        const cliPublicKey = await importKeyFromHexString("public", cliPublicKeyHex);
+        const cliPublicKey = await importKeyFromHexString('public', cliPublicKeyHex);
         const sharedSecret = await deriveSharedSecret(browserKeyPair.privateKey, cliPublicKey);
 
         if (cancelled) return;
@@ -186,13 +174,13 @@ function CLIBridgeContent() {
 
         ws.onopen = () => {
           if (cancelled) return;
-          setState("connected");
+          setState('connected');
           // Send key_exchange (unencrypted — contains only our public key)
           ws!.send(
             JSON.stringify({
-              type: "key_exchange",
+              type: 'key_exchange',
               publicKey: browserPublicKeyHex,
-            }),
+            })
           );
         };
 
@@ -205,26 +193,29 @@ function CLIBridgeContent() {
             return;
           }
 
-          if (msg.type === "encrypted" && sharedSecretRef.current) {
+          if (msg.type === 'encrypted' && sharedSecretRef.current) {
             try {
-              const inner = await deserializeAndDecrypt(sharedSecretRef.current, msg as { iv: string; ciphertext: string });
+              const inner = await deserializeAndDecrypt(
+                sharedSecretRef.current,
+                msg as { iv: string; ciphertext: string }
+              );
 
               switch (inner.type) {
-                case "init": {
+                case 'init': {
                   const apiKey = inner.apiKey as string;
                   const chainId = (inner.chainId as number) ?? 1;
                   const ens = inner.ens as string | undefined;
                   const paymasterUrl = inner.paymasterUrl as string | undefined;
 
                   if (!apiKey) {
-                    setState("error");
-                    setError("CLI sent empty API key");
+                    setState('error');
+                    setError('CLI sent empty API key');
                     return;
                   }
 
                   if (!sdkRef.current) {
                     sdkRef.current = JAW.create({
-                      appName: "JAW CLI",
+                      appName: 'JAW CLI',
                       defaultChainId: chainId,
                       preference: {
                         mode: Mode.AppSpecific,
@@ -233,66 +224,64 @@ function CLIBridgeContent() {
                       },
                       apiKey,
                       ...(ens ? { ens } : {}),
-                      ...(paymasterUrl
-                        ? { paymasters: { [chainId]: { url: paymasterUrl } } }
-                        : {}),
+                      ...(paymasterUrl ? { paymasters: { [chainId]: { url: paymasterUrl } } } : {}),
                     });
                   }
 
                   // Send encrypted ready
                   const readyEnvelope = await encryptAndSerialize(sharedSecretRef.current!, {
-                    type: "ready",
+                    type: 'ready',
                     chainId,
                   });
                   ws!.send(JSON.stringify(readyEnvelope));
                   break;
                 }
 
-                case "rpc_request":
+                case 'rpc_request':
                   handleRpcRequest(inner.id as string, inner.method as string, inner.params);
                   break;
 
-                case "shutdown":
+                case 'shutdown':
                   window.close();
                   break;
               }
             } catch (err) {
-              console.error("[cli-bridge] Failed to decrypt/process message:", err);
+              console.error('[cli-bridge] Failed to decrypt/process message:', err);
             }
           }
 
-          if (msg.type === "ping") {
-            ws!.send(JSON.stringify({ type: "pong" }));
+          if (msg.type === 'ping') {
+            ws!.send(JSON.stringify({ type: 'pong' }));
           }
 
-          if (msg.type === "error" && msg.code === "session_expired") {
-            setState("error");
-            setError("Session expired. Run a new CLI command to reconnect.");
+          if (msg.type === 'error' && msg.code === 'session_expired') {
+            setState('error');
+            setError('Session expired. Run a new CLI command to reconnect.');
           }
         };
 
         ws.onclose = () => {
-          if (!cancelled) setState("disconnected");
+          if (!cancelled) setState('disconnected');
         };
 
         ws.onerror = () => {
           if (!cancelled) {
-            setState("error");
-            setError("Relay connection failed");
+            setState('error');
+            setError('Relay connection failed');
           }
         };
 
         beforeUnloadHandler = () => {
           if (ws?.readyState === WebSocket.OPEN) {
-            ws.close(1000, "Browser tab closed");
+            ws.close(1000, 'Browser tab closed');
           }
         };
-        window.addEventListener("beforeunload", beforeUnloadHandler);
+        window.addEventListener('beforeunload', beforeUnloadHandler);
       } catch (err) {
-        console.error("[cli-bridge] Setup failed:", err);
+        console.error('[cli-bridge] Setup failed:', err);
         if (!cancelled) {
-          setState("error");
-          setError(err instanceof Error ? err.message : "Failed to initialize encryption");
+          setState('error');
+          setError(err instanceof Error ? err.message : 'Failed to initialize encryption');
         }
       }
     })();
@@ -300,7 +289,7 @@ function CLIBridgeContent() {
     return () => {
       cancelled = true;
       if (beforeUnloadHandler) {
-        window.removeEventListener("beforeunload", beforeUnloadHandler);
+        window.removeEventListener('beforeunload', beforeUnloadHandler);
       }
       if (ws) {
         ws.close();
@@ -328,11 +317,9 @@ function CLIBridgeContent() {
         <img src="/jaw-logo.png" alt="JAW" style={styles.logo} />
         <h1 style={styles.title}>JAW CLI</h1>
 
-        {state === "connecting" && (
-          <p style={styles.text}>Connecting to relay...</p>
-        )}
+        {state === 'connecting' && <p style={styles.text}>Connecting to relay...</p>}
 
-        {state === "connected" && (
+        {state === 'connected' && (
           <>
             <p style={styles.success}>Connected</p>
             <p style={styles.subtext}>
@@ -340,19 +327,13 @@ function CLIBridgeContent() {
               <br />
               Keep it open while using the CLI.
             </p>
-            {lastMethod && (
-              <p style={styles.method}>Last request: {lastMethod}</p>
-            )}
+            {lastMethod && <p style={styles.method}>Last request: {lastMethod}</p>}
           </>
         )}
 
-        {state === "disconnected" && (
-          <p style={styles.subtext}>
-            CLI disconnected. You can close this tab.
-          </p>
-        )}
+        {state === 'disconnected' && <p style={styles.subtext}>CLI disconnected. You can close this tab.</p>}
 
-        {state === "error" && (
+        {state === 'error' && (
           <>
             <p style={styles.error}>Error</p>
             <p style={styles.subtext}>{error}</p>
@@ -364,17 +345,17 @@ function CLIBridgeContent() {
 }
 
 function extractAddress(method: string, result: unknown): string | undefined {
-  if (method !== "wallet_connect" && method !== "eth_requestAccounts") return;
+  if (method !== 'wallet_connect' && method !== 'eth_requestAccounts') return;
 
-  if (Array.isArray(result) && typeof result[0] === "string") {
+  if (Array.isArray(result) && typeof result[0] === 'string') {
     return result[0];
   }
-  if (result && typeof result === "object" && "accounts" in result) {
+  if (result && typeof result === 'object' && 'accounts' in result) {
     const accounts = (result as Record<string, unknown>).accounts;
     if (Array.isArray(accounts) && accounts.length > 0) {
       const first = accounts[0];
-      if (typeof first === "string") return first;
-      if (first && typeof first === "object" && "address" in first) {
+      if (typeof first === 'string') return first;
+      if (first && typeof first === 'object' && 'address' in first) {
         return (first as Record<string, unknown>).address as string;
       }
     }
@@ -400,61 +381,61 @@ export default function CLIBridgePage() {
 
 const styles: Record<string, React.CSSProperties> = {
   container: {
-    display: "flex",
-    alignItems: "center",
-    justifyContent: "center",
-    minHeight: "100vh",
-    fontFamily: "-apple-system, BlinkMacSystemFont, sans-serif",
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    minHeight: '100vh',
+    fontFamily: '-apple-system, BlinkMacSystemFont, sans-serif',
   },
   card: {
-    textAlign: "center",
-    padding: "3rem",
-    maxWidth: "420px",
+    textAlign: 'center',
+    padding: '3rem',
+    maxWidth: '420px',
   },
   logo: {
-    width: "48px",
-    height: "48px",
-    marginBottom: "1rem",
-    marginLeft: "auto",
-    marginRight: "auto",
-    display: "block",
+    width: '48px',
+    height: '48px',
+    marginBottom: '1rem',
+    marginLeft: 'auto',
+    marginRight: 'auto',
+    display: 'block',
     opacity: 0.8,
   },
   title: {
-    fontSize: "1.25rem",
+    fontSize: '1.25rem',
     fontWeight: 600,
-    marginBottom: "1rem",
-    color: "#111",
+    marginBottom: '1rem',
+    color: '#111',
   },
   text: {
-    color: "#555",
-    fontSize: "0.95rem",
+    color: '#555',
+    fontSize: '0.95rem',
     lineHeight: 1.5,
-    marginBottom: "1rem",
+    marginBottom: '1rem',
   },
   subtext: {
-    color: "#888",
-    fontSize: "0.85rem",
+    color: '#888',
+    fontSize: '0.85rem',
     lineHeight: 1.5,
-    marginTop: "0.5rem",
+    marginTop: '0.5rem',
   },
   method: {
-    color: "#666",
-    fontSize: "0.8rem",
-    fontFamily: "monospace",
-    marginTop: "1rem",
-    padding: "0.5rem",
-    backgroundColor: "#f5f5f5",
-    borderRadius: "4px",
+    color: '#666',
+    fontSize: '0.8rem',
+    fontFamily: 'monospace',
+    marginTop: '1rem',
+    padding: '0.5rem',
+    backgroundColor: '#f5f5f5',
+    borderRadius: '4px',
   },
   success: {
-    color: "#16a34a",
-    fontSize: "1.1rem",
+    color: '#16a34a',
+    fontSize: '1.1rem',
     fontWeight: 600,
   },
   error: {
-    color: "#dc2626",
-    fontSize: "1.1rem",
+    color: '#dc2626',
+    fontSize: '1.1rem',
     fontWeight: 600,
   },
 };

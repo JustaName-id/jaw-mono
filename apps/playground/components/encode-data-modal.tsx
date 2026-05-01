@@ -3,13 +3,7 @@
 import { useState, useCallback } from 'react';
 import { encodeFunctionData, parseAbiItem } from 'viem';
 import type { AbiFunction, AbiParameter } from 'viem';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
 import { Input } from './ui/input';
 import { Label } from './ui/label';
@@ -169,13 +163,11 @@ export function EncodeDataModal({ isOpen, onClose }: EncodeDataModalProps) {
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <DialogTitle className="font-mono">encodeFunctionData</DialogTitle>
-            <span
-              className={`px-2 py-0.5 text-xs font-medium rounded-full ${CATEGORY_COLORS['utility']}`}
-            >
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CATEGORY_COLORS['utility']}`}>
               {CATEGORY_LABELS['utility']}
             </span>
           </div>
@@ -184,17 +176,16 @@ export function EncodeDataModal({ isOpen, onClose }: EncodeDataModalProps) {
           </DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="execute" className="flex-1 flex flex-col min-h-0">
+        <Tabs defaultValue="execute" className="flex min-h-0 flex-1 flex-col">
           <TabsList className="w-fit">
             <TabsTrigger value="execute">Execute</TabsTrigger>
             <TabsTrigger value="code">Code Snippet</TabsTrigger>
           </TabsList>
 
           {/* Execute Tab */}
-          <TabsContent value="execute" className="flex-1 min-h-0 mt-4">
+          <TabsContent value="execute" className="mt-4 min-h-0 flex-1">
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-4 pb-4">
-
                 {/* Function Signature */}
                 <div className="space-y-2">
                   <Label htmlFor="fn-sig">Function Signature</Label>
@@ -205,22 +196,19 @@ export function EncodeDataModal({ isOpen, onClose }: EncodeDataModalProps) {
                       onChange={(e) => handleSignatureChange(e.target.value)}
                       onKeyDown={(e) => e.key === 'Enter' && handleParse(signature)}
                       placeholder="transfer(address to, uint256 amount)"
-                      className="font-mono flex-1"
+                      className="flex-1 font-mono"
                     />
                     <Button variant="outline" onClick={() => handleParse(signature)}>
                       Parse
                     </Button>
                   </div>
-                  {parseError && (
-                    <p className="text-xs text-destructive">{parseError}</p>
-                  )}
-                  <p className="text-xs text-muted-foreground">
-                    Examples:{' '}
-                    <code className="bg-muted px-1 rounded text-xs">transfer(address,uint256)</code>
+                  {parseError && <p className="text-destructive text-xs">{parseError}</p>}
+                  <p className="text-muted-foreground text-xs">
+                    Examples: <code className="bg-muted rounded px-1 text-xs">transfer(address,uint256)</code>
                     {' · '}
-                    <code className="bg-muted px-1 rounded text-xs">approve(address,uint256)</code>
+                    <code className="bg-muted rounded px-1 text-xs">approve(address,uint256)</code>
                     {' · '}
-                    <code className="bg-muted px-1 rounded text-xs">balanceOf(address)</code>
+                    <code className="bg-muted rounded px-1 text-xs">balanceOf(address)</code>
                   </p>
                 </div>
 
@@ -239,11 +227,7 @@ export function EncodeDataModal({ isOpen, onClose }: EncodeDataModalProps) {
                           value={paramValues[i] ?? ''}
                           onChange={(e) => handleParamChange(i, e.target.value)}
                           placeholder={getPlaceholder(input.type)}
-                          className={
-                            input.type === 'address' || input.type.startsWith('bytes')
-                              ? 'font-mono'
-                              : ''
-                          }
+                          className={input.type === 'address' || input.type.startsWith('bytes') ? 'font-mono' : ''}
                         />
                       </div>
                     ))}
@@ -251,9 +235,7 @@ export function EncodeDataModal({ isOpen, onClose }: EncodeDataModalProps) {
                 )}
 
                 {parsedFn && parsedFn.inputs.length === 0 && (
-                  <p className="text-sm text-muted-foreground">
-                    No parameters — this function takes no arguments.
-                  </p>
+                  <p className="text-muted-foreground text-sm">No parameters — this function takes no arguments.</p>
                 )}
 
                 {/* Encode Button */}
@@ -269,24 +251,20 @@ export function EncodeDataModal({ isOpen, onClose }: EncodeDataModalProps) {
                 {(encodedData !== null || encodeError) && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium">
-                        {encodeError ? 'Error' : 'Encoded Calldata'}
-                      </h4>
+                      <h4 className="text-sm font-medium">{encodeError ? 'Error' : 'Encoded Calldata'}</h4>
                       <Button variant="outline" size="sm" onClick={handleCopyResult}>
                         {copied ? 'Copied!' : 'Copy'}
                       </Button>
                     </div>
                     <pre
-                      className={`p-3 rounded-md text-xs font-mono overflow-auto max-h-[160px] break-all whitespace-pre-wrap ${
-                        encodeError
-                          ? 'bg-destructive/10 text-destructive'
-                          : 'bg-muted text-foreground'
+                      className={`max-h-[160px] overflow-auto whitespace-pre-wrap break-all rounded-md p-3 font-mono text-xs ${
+                        encodeError ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
                       }`}
                     >
                       {encodeError ?? encodedData}
                     </pre>
                     {!encodeError && (
-                      <p className="text-xs text-muted-foreground">
+                      <p className="text-muted-foreground text-xs">
                         First 4 bytes = function selector · remaining = ABI-encoded arguments
                       </p>
                     )}
@@ -297,7 +275,7 @@ export function EncodeDataModal({ isOpen, onClose }: EncodeDataModalProps) {
           </TabsContent>
 
           {/* Code Snippet Tab */}
-          <TabsContent value="code" className="flex-1 min-h-0 mt-4">
+          <TabsContent value="code" className="mt-4 min-h-0 flex-1">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-medium">Code Example</h4>
@@ -306,9 +284,7 @@ export function EncodeDataModal({ isOpen, onClose }: EncodeDataModalProps) {
                 </Button>
               </div>
               <ScrollArea className="h-[400px]">
-                <pre className="p-4 rounded-md bg-muted text-xs font-mono overflow-auto">
-                  {CODE_SNIPPET}
-                </pre>
+                <pre className="bg-muted overflow-auto rounded-md p-4 font-mono text-xs">{CODE_SNIPPET}</pre>
               </ScrollArea>
             </div>
           </TabsContent>

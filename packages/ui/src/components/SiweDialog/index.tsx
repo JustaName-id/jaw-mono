@@ -1,12 +1,12 @@
-'use client'
+'use client';
 
-import { useEffect, useState } from "react";
-import { useIsMobile } from "../../hooks";
-import { CopyIcon } from "../../icons";
-import { getJustaNameInstance, getDisplayAddress } from "../../utils";
-import { DefaultDialog } from "../DefaultDialog";
-import { Button } from "../ui/button";
-import { SiweDialogProps } from "./types";
+import { useEffect, useState } from 'react';
+import { useIsMobile } from '../../hooks';
+import { CopyIcon } from '../../icons';
+import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { DefaultDialog } from '../DefaultDialog';
+import { Button } from '../ui/button';
+import { SiweDialogProps } from './types';
 
 export const SiweDialog = ({
   open,
@@ -34,16 +34,19 @@ export const SiweDialog = ({
   useEffect(() => {
     if (accountAddress && chainId) {
       const justaName = getJustaNameInstance(mainnetRpcUrl);
-      justaName.subnames.reverseResolve({
-        address: accountAddress as `0x${string}`,
-        chainId: chainId,
-      }).then((result) => {
-        if (result) {
-          setResolvedAddress(result);
-        }
-      }).catch(() => {
-        // Silently fail if resolution fails
-      });
+      justaName.subnames
+        .reverseResolve({
+          address: accountAddress as `0x${string}`,
+          chainId: chainId,
+        })
+        .then((result) => {
+          if (result) {
+            setResolvedAddress(result);
+          }
+        })
+        .catch(() => {
+          // Silently fail if resolution fails
+        });
     }
   }, [accountAddress, chainId]);
 
@@ -62,7 +65,7 @@ export const SiweDialog = ({
 
   const onCopyMessageHandler = () => {
     navigator.clipboard.writeText(message);
-  }
+  };
 
   return (
     <DefaultDialog
@@ -71,59 +74,57 @@ export const SiweDialog = ({
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
           <div className="flex flex-row items-center justify-between">
-            <p className="text-xs font-bold text-muted-foreground leading-[100%]">
+            <p className="text-muted-foreground text-xs font-bold leading-[100%]">
               {timestamp.toLocaleDateString('en-US', {
                 weekday: 'long',
                 day: 'numeric',
-                month: 'long'
-              })} at {timestamp.toLocaleTimeString('en-US', {
+                month: 'long',
+              })}{' '}
+              at{' '}
+              {timestamp.toLocaleTimeString('en-US', {
                 hour: '2-digit',
                 minute: '2-digit',
                 second: '2-digit',
-                timeZoneName: 'short'
+                timeZoneName: 'short',
               })}
             </p>
             {/* <InfoIcon /> */}
           </div>
-          <p className="text-sm text-muted-foreground">
-            {displayAddress}
-          </p>
+          <p className="text-muted-foreground text-sm">{displayAddress}</p>
         </div>
       }
-      contentStyle={isMobile ? {
-        width: '100%',
-        height: '100%',
-        maxWidth: 'none',
-        maxHeight: 'none',
-      } : {
-        width: '500px',
-        minWidth: '500px',
-      }}
+      contentStyle={
+        isMobile
+          ? {
+              width: '100%',
+              height: '100%',
+              maxWidth: 'none',
+              maxHeight: 'none',
+            }
+          : {
+              width: '500px',
+              minWidth: '500px',
+            }
+      }
     >
-      <div className="flex flex-col h-full min-h-0 gap-3 max-md:pb-2">
-        <div className="flex flex-1 flex-col p-3.5 items-center justify-center">
+      <div className="flex h-full min-h-0 flex-col gap-3 max-md:pb-2">
+        <div className="flex flex-1 flex-col items-center justify-center p-3.5">
           {appLogoUrl && (
-            <img
-              src={appLogoUrl}
-              alt={`${appName} logo`}
-              className="w-[72px] h-[72px] rounded-full mb-3"
-            />
+            <img src={appLogoUrl} alt={`${appName} logo`} className="mb-3 h-[72px] w-[72px] rounded-full" />
           )}
-          <div className="flex flex-col items-center gap-1 text-foreground">
-            <p className="text-2xl font-normal leading-[133%] ">
-              Sign in Request
-            </p>
-            <p className="text-base leading-[150%] font-bold">{appName}</p>
+          <div className="text-foreground flex flex-col items-center gap-1">
+            <p className="text-2xl font-normal leading-[133%]">Sign in Request</p>
+            <p className="text-base font-bold leading-[150%]">{appName}</p>
           </div>
         </div>
         {/* Main Content Area - Large scrollable message box */}
-        <div className="flex-1 p-3.5 bg-white flex flex-col gap-2.5 border border-border rounded-[6px]">
+        <div className="border-border flex flex-1 flex-col gap-2.5 rounded-[6px] border bg-white p-3.5">
           <div className="flex flex-row items-center justify-between">
-            <p className="text-foreground font-bold text-xs leading-[150%]">Message</p>
-            <CopyIcon className="w-4 h-4 cursor-pointer" onClick={onCopyMessageHandler} />
+            <p className="text-foreground text-xs font-bold leading-[150%]">Message</p>
+            <CopyIcon className="h-4 w-4 cursor-pointer" onClick={onCopyMessageHandler} />
           </div>
-          <div className="flex bg-secondary rounded-[6px] p-2.5 max-h-[35vh] overflow-y-auto">
-            <p className="text-sm font-normal text-foreground whitespace-pre-wrap break-words leading-relaxed">
+          <div className="bg-secondary flex max-h-[35vh] overflow-y-auto rounded-[6px] p-2.5">
+            <p className="text-foreground whitespace-pre-wrap break-words text-sm font-normal leading-relaxed">
               {message || 'No message provided'}
             </p>
           </div>
@@ -131,46 +132,40 @@ export const SiweDialog = ({
 
         {/* Footer Information Section */}
         {/* Chain Information */}
-        <div className="flex flex-row gap-4 border border-border rounded-[6px] p-2">
+        <div className="border-border flex flex-row gap-4 rounded-[6px] border p-2">
           {/* Network Column */}
           {chainName && (
             <>
-              <div className="flex flex-col gap-1 flex-1">
-                <p className="text-xs font-bold text-foreground">Network</p>
+              <div className="flex flex-1 flex-col gap-1">
+                <p className="text-foreground text-xs font-bold">Network</p>
                 <div className="flex flex-row items-center gap-2">
                   {chainIcon && (
-                    <div className="w-6 h-6 flex items-center justify-center flex-shrink-0">
-                      {chainIcon}
-                    </div>
+                    <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center">{chainIcon}</div>
                   )}
-                  <p className="text-sm font-normal text-foreground">
-                    {chainName}
-                  </p>
+                  <p className="text-foreground text-sm font-normal">{chainName}</p>
                 </div>
               </div>
               {/* Vertical Separator */}
-              <div className="w-[1px] bg-border min-h-[40px]"></div>
+              <div className="bg-border min-h-[40px] w-[1px]"></div>
             </>
           )}
           {/* URL Column */}
-          <div className="flex flex-col gap-1 flex-1">
-            <p className="text-xs font-bold text-foreground">URL</p>
-            <p className="text-sm font-normal text-foreground">
-              {formatOrigin(origin)}
-            </p>
+          <div className="flex flex-1 flex-col gap-1">
+            <p className="text-foreground text-xs font-bold">URL</p>
+            <p className="text-foreground text-sm font-normal">{formatOrigin(origin)}</p>
           </div>
         </div>
 
         {/* Origin Mismatch Warning */}
         {warningMessage && (
-          <div className="flex items-start gap-2.5 p-3.5 border border-yellow-300 rounded-[6px] bg-yellow-50">
+          <div className="flex items-start gap-2.5 rounded-[6px] border border-yellow-300 bg-yellow-50 p-3.5">
             <svg
               width="16"
               height="16"
               viewBox="0 0 16 16"
               fill="none"
               xmlns="http://www.w3.org/2000/svg"
-              className="flex-shrink-0 mt-0.5"
+              className="mt-0.5 flex-shrink-0"
             >
               <path
                 d="M8 1.5L1 14.5H15L8 1.5Z"
@@ -184,45 +179,38 @@ export const SiweDialog = ({
             </svg>
             <div className="flex flex-col gap-1">
               <p className="text-xs font-bold leading-[133%] text-yellow-800">Security Warning</p>
-              <p className="text-xs font-normal leading-[150%] text-yellow-900">
-                {warningMessage}
-              </p>
+              <p className="text-xs font-normal leading-[150%] text-yellow-900">{warningMessage}</p>
             </div>
           </div>
         )}
 
         {/* Status Message */}
         {siweStatus && (
-          <div className={`text-sm p-3 rounded-lg mt-3 ${siweStatus.includes('Error') ? 'bg-red-50 text-red-600' :
-            siweStatus.includes('successfully') ? 'bg-green-50 text-green-600' :
-              'bg-blue-50 text-blue-600'
-            }`}>
+          <div
+            className={`mt-3 rounded-lg p-3 text-sm ${
+              siweStatus.includes('Error')
+                ? 'bg-red-50 text-red-600'
+                : siweStatus.includes('successfully')
+                  ? 'bg-green-50 text-green-600'
+                  : 'bg-blue-50 text-blue-600'
+            }`}
+          >
             {siweStatus}
           </div>
         )}
 
         {/* Action Buttons */}
-        <div className="flex gap-3 p-3.5 flex-shrink-0">
-          <Button
-            variant="outline"
-            onClick={onCancel}
-            disabled={isProcessing}
-            className="flex-1"
-          >
+        <div className="flex flex-shrink-0 gap-3 p-3.5">
+          <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
             Cancel
           </Button>
-          <Button
-            onClick={onSign}
-            disabled={!canSign}
-            className="flex-1"
-          >
+          <Button onClick={onSign} disabled={!canSign} className="flex-1">
             {isProcessing ? 'Signing...' : 'Sign'}
           </Button>
         </div>
       </div>
     </DefaultDialog>
-  )
-}
+  );
+};
 
 export * from './types';
-

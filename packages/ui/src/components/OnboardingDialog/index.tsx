@@ -1,4 +1,4 @@
-'use client'
+'use client';
 
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -10,7 +10,7 @@ import { OrSeparator } from '../OrSeparator';
 import { OnboardingDialogProps } from './types';
 import { useState, useEffect, useRef } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
-import {toCoinType} from "viem";
+import { toCoinType } from 'viem';
 
 export function OnboardingDialog({
   accounts,
@@ -35,7 +35,7 @@ export function OnboardingDialog({
   const [isValid, setIsValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
-  const [username, setUsername] = useState('')
+  const [username, setUsername] = useState('');
   const [debouncedUsername, setDebouncedUsername] = useState(username);
 
   // Error state
@@ -150,11 +150,10 @@ export function OnboardingDialog({
         try {
           const justaName = getJustaNameInstance(mainnetRpcUrl);
 
-          const addresses = supportedChains.map(chain => ({
+          const addresses = supportedChains.map((chain) => ({
             address: accountData.address,
             coinType: toCoinType(chain.id).toString(),
           }));
-
 
           console.log('subnameTextRecords', subnameTextRecords);
 
@@ -172,10 +171,9 @@ export function OnboardingDialog({
             {
               xApiKey: apiKey,
               xAddress: accountData.address,
-              xMessage: "",
+              xMessage: '',
             }
           );
-
         } catch (subnameError) {
           const errorMessage = `Failed to register subname: ${subnameError instanceof Error ? subnameError.message : 'Unknown error'}`;
           console.error('❌ SUBNAME ERROR:', errorMessage, subnameError);
@@ -196,11 +194,9 @@ export function OnboardingDialog({
   return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="flex flex-col gap-1">
-        <CardTitle className="text-xl font-normal">
-          Sign In
-        </CardTitle>
+        <CardTitle className="text-xl font-normal">Sign In</CardTitle>
 
-        <CardDescription className='text-xs font-medium'>
+        <CardDescription className="text-xs font-medium">
           {`Choose one of your existing accounts below to sign in instantly.
           If you're on a new device or don't see your account listed, you can
           import it from your cloud backup.`}
@@ -209,26 +205,24 @@ export function OnboardingDialog({
 
       <CardContent className="flex flex-col gap-5">
         {/* Existing Accounts */}
-        <div ref={scrollableRef} className="flex flex-col gap-1 max-h-[40vh] overflow-y-auto overscroll-contain">
+        <div ref={scrollableRef} className="flex max-h-[40vh] flex-col gap-1 overflow-y-auto overscroll-contain">
           {accounts.map((account) => (
             <Button
               key={account.credentialId || account.username || Math.random().toString()}
               onClick={() => onAccountSelect(account)}
               variant="ghost"
-              className="w-full h-auto !py-2 !px-3 flex items-center justify-between hover:bg-muted/50"
+              className="hover:bg-muted/50 flex h-auto w-full items-center justify-between !px-3 !py-2"
               disabled={loggingInAccount !== null}
             >
-              <div className="flex items-center flex-row gap-2">
-                <WalletIcon className='!w-6 !h-6' />
+              <div className="flex flex-row items-center gap-2">
+                <WalletIcon className="!h-6 !w-6" />
                 <div className="text-left">
-                  <p className="text-sm font-normal text-foreground">
-                    {account.username || 'Unnamed Account'}
-                  </p>
-                  <p className="text-xs font-semibold text-muted-foreground">
+                  <p className="text-foreground text-sm font-normal">{account.username || 'Unnamed Account'}</p>
+                  <p className="text-muted-foreground text-xs font-semibold">
                     {new Date(account.creationDate).toLocaleDateString('en-US', {
                       year: 'numeric',
                       month: 'short',
-                      day: 'numeric'
+                      day: 'numeric',
                     })}
                   </p>
                 </div>
@@ -246,27 +240,29 @@ export function OnboardingDialog({
         <Button
           onClick={onImportAccount}
           variant="outline"
-          className="w-full h-10 flex items-center flex-row gap-2"
+          className="flex h-10 w-full flex-row items-center gap-2"
           disabled={isImporting}
         >
-          <WalletIcon className='!w-6 !h-6' stroke='black' />
+          <WalletIcon className="!h-6 !w-6" stroke="black" />
           <span>{isImporting ? 'Opening Passkey...' : 'Import an existing account'}</span>
         </Button>
 
         <OrSeparator />
 
         {/* Create New Account */}
-        <div className='flex flex-col gap-2'>
+        <div className="flex flex-col gap-2">
           <div className="flex flex-row items-center gap-2">
             <Input
               placeholder="Username"
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="flex-1"
-              right={ensDomain ? <span className="text-sm font-bold text-foreground">{`.${ensDomain}`}</span> : undefined}
+              right={
+                ensDomain ? <span className="text-foreground text-sm font-bold">{`.${ensDomain}`}</span> : undefined
+              }
             />
             {isCreating ? (
-              <Spinner className="w-10 h-10" />
+              <Spinner className="h-10 w-10" />
             ) : (
               <Button
                 onClick={async () => {
@@ -284,25 +280,22 @@ export function OnboardingDialog({
           </div>
           {username.length > 0 && message && !error && (
             <div className="flex items-center justify-between px-1">
-              <span className={`text-xs font-medium ${isLoading
-                ? 'text-muted-foreground'
-                : isValid
-                  ? 'text-green-600'
-                  : 'text-red-600'
-                }`}>
+              <span
+                className={`text-xs font-medium ${
+                  isLoading ? 'text-muted-foreground' : isValid ? 'text-green-600' : 'text-red-600'
+                }`}
+              >
                 {message}
               </span>
             </div>
           )}
           {error && (
-            <div className="flex flex-col gap-2 px-1 py-2 bg-red-50 border border-red-200 rounded-md overflow-hidden">
-              <span className="text-xs font-medium text-red-600 break-all">
-                {error}
-              </span>
+            <div className="flex flex-col gap-2 overflow-hidden rounded-md border border-red-200 bg-red-50 px-1 py-2">
+              <span className="break-all text-xs font-medium text-red-600">{error}</span>
               <Button
                 onClick={() => setError(null)}
                 variant="ghost"
-                className="h-6 text-xs text-red-600 hover:text-red-700 hover:bg-red-100"
+                className="h-6 text-xs text-red-600 hover:bg-red-100 hover:text-red-700"
               >
                 Dismiss
               </Button>
@@ -311,7 +304,7 @@ export function OnboardingDialog({
         </div>
       </CardContent>
     </Card>
-  )
+  );
 }
 
 export * from './types';

@@ -1,17 +1,13 @@
-import "./global.css";
-import { headers } from "next/headers";
-import { ReactQueryProvider } from "./providers/react-query";
+import './global.css';
+import { headers } from 'next/headers';
+import { ReactQueryProvider } from './providers/react-query';
 
 export const metadata = {
-  title: "Welcome to keys-jaw-id",
-  description: "Keys Jaw ID",
+  title: 'Welcome to keys-jaw-id',
+  description: 'Keys Jaw ID',
 };
 
-export default async function RootLayout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
+export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Reading headers() makes this layout dynamic (no static caching).
   // Next.js 14+ automatically reads the CSP nonce from the response header
   // set by middleware and stamps its own inline <script> tags with it.
@@ -22,16 +18,16 @@ export default async function RootLayout({
   return (
     <html lang="en">
       <ReactQueryProvider>
-        <body style={{ backgroundColor: "#f9fafb" }}>
+        <body style={{ backgroundColor: '#f9fafb' }}>
           <div
             aria-hidden="true"
             style={{
-              position: "fixed",
+              position: 'fixed',
               inset: 0,
-              display: "flex",
-              alignItems: "center",
-              justifyContent: "center",
-              pointerEvents: "none",
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              pointerEvents: 'none',
               zIndex: 0,
             }}
           >
@@ -40,15 +36,15 @@ export default async function RootLayout({
               src="/jaw-logo.png"
               alt=""
               style={{
-                height: "90vh",
-                width: "auto",
+                height: '90vh',
+                width: 'auto',
                 opacity: 0.06,
-                userSelect: "none",
+                userSelect: 'none',
               }}
               draggable={false}
             />
           </div>
-          <div style={{ position: "relative", zIndex: 1 }}>{children}</div>
+          <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>
         </body>
       </ReactQueryProvider>
     </html>

@@ -1,29 +1,16 @@
 'use client';
 
 import { useState, useCallback, useEffect } from 'react';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogDescription,
-} from './ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
 import { Button } from './ui/button';
-import {
-  Tabs,
-  TabsList,
-  TabsTrigger,
-  TabsContent,
-} from './ui/tabs';
+import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { type WagmiMethod, CATEGORY_COLORS, CATEGORY_LABELS } from '../lib/wagmi-methods';
 import { ParameterField } from './parameter-field';
 
 // Helper to serialize results that may contain BigInt values
 function serializeResult(value: unknown): string {
-  return JSON.stringify(value, (_, v) =>
-    typeof v === 'bigint' ? v.toString() : v
-  , 2);
+  return JSON.stringify(value, (_, v) => (typeof v === 'bigint' ? v.toString() : v), 2);
 }
 
 interface WagmiMethodModalProps {
@@ -85,8 +72,8 @@ export function WagmiMethodModal({
         err instanceof Error
           ? err.message
           : typeof err === 'object' && err !== null && 'message' in err
-          ? (err as { message: string }).message
-          : JSON.stringify(err);
+            ? (err as { message: string }).message
+            : JSON.stringify(err);
       setError(errorMessage);
     } finally {
       setIsExecuting(false);
@@ -134,9 +121,10 @@ export function WagmiMethodModal({
   // Filter parameters by showWhen
   const filteredParameters = method.parameters?.filter((param) => {
     if (param.showWhen) {
-      const currentValue = params[param.showWhen.param] ?? (
-        method.parameters?.find(p => p.name === param.showWhen!.param)?.defaultValue ?? ''
-      );
+      const currentValue =
+        params[param.showWhen.param] ??
+        method.parameters?.find((p) => p.name === param.showWhen!.param)?.defaultValue ??
+        '';
       return currentValue === param.showWhen.value;
     }
     return true;
@@ -144,28 +132,24 @@ export function WagmiMethodModal({
 
   return (
     <Dialog open={isOpen} onOpenChange={handleOpenChange}>
-      <DialogContent className="max-w-2xl max-h-[90vh] flex flex-col">
+      <DialogContent className="flex max-h-[90vh] max-w-2xl flex-col">
         <DialogHeader>
           <div className="flex items-center gap-2">
             <DialogTitle className="font-mono">{method.name}</DialogTitle>
-            <span
-              className={`px-2 py-0.5 text-xs font-medium rounded-full ${
-                CATEGORY_COLORS[method.category]
-              }`}
-            >
+            <span className={`rounded-full px-2 py-0.5 text-xs font-medium ${CATEGORY_COLORS[method.category]}`}>
               {CATEGORY_LABELS[method.category]}
             </span>
           </div>
           <DialogDescription>{method.description}</DialogDescription>
         </DialogHeader>
 
-        <Tabs defaultValue="execute" className="flex-1 flex flex-col min-h-0">
+        <Tabs defaultValue="execute" className="flex min-h-0 flex-1 flex-col">
           <TabsList className="w-fit">
             <TabsTrigger value="execute">Execute</TabsTrigger>
             <TabsTrigger value="code">Code Snippet</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="execute" className="flex-1 min-h-0 mt-4">
+          <TabsContent value="execute" className="mt-4 min-h-0 flex-1">
             <ScrollArea className="h-[400px] pr-4">
               <div className="space-y-4 pb-4">
                 {/* Parameters */}
@@ -182,22 +166,16 @@ export function WagmiMethodModal({
                     ))}
                   </div>
                 ) : (
-                  <p className="text-sm text-muted-foreground">
-                    This method has no parameters.
-                  </p>
+                  <p className="text-muted-foreground text-sm">This method has no parameters.</p>
                 )}
 
                 {/* Execute Button */}
                 <div className="pt-2">
-                  <Button
-                    onClick={handleExecute}
-                    disabled={!canExecute || executing}
-                    className="w-full"
-                  >
+                  <Button onClick={handleExecute} disabled={!canExecute || executing} className="w-full">
                     {executing ? 'Executing...' : 'Execute'}
                   </Button>
                   {!canExecute && (
-                    <p className="text-xs text-amber-600 dark:text-amber-400 mt-2">
+                    <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">
                       Connect your wallet first to execute this method.
                     </p>
                   )}
@@ -207,22 +185,14 @@ export function WagmiMethodModal({
                 {(result !== null || error) && (
                   <div className="space-y-2">
                     <div className="flex items-center justify-between">
-                      <h4 className="text-sm font-medium">
-                        {error ? 'Error' : 'Result'}
-                      </h4>
-                      <Button
-                        variant="outline"
-                        size="sm"
-                        onClick={handleCopyResult}
-                      >
+                      <h4 className="text-sm font-medium">{error ? 'Error' : 'Result'}</h4>
+                      <Button variant="outline" size="sm" onClick={handleCopyResult}>
                         {resultCopied ? 'Copied!' : 'Copy'}
                       </Button>
                     </div>
                     <pre
-                      className={`p-3 rounded-md text-xs font-mono overflow-auto max-h-[200px] ${
-                        error
-                          ? 'bg-destructive/10 text-destructive'
-                          : 'bg-muted text-foreground'
+                      className={`max-h-[200px] overflow-auto rounded-md p-3 font-mono text-xs ${
+                        error ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
                       }`}
                     >
                       {error || serializeResult(result)}
@@ -233,22 +203,16 @@ export function WagmiMethodModal({
             </ScrollArea>
           </TabsContent>
 
-          <TabsContent value="code" className="flex-1 min-h-0 mt-4">
+          <TabsContent value="code" className="mt-4 min-h-0 flex-1">
             <div className="space-y-2">
               <div className="flex items-center justify-between">
                 <h4 className="text-sm font-medium">Code Example</h4>
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleCopyCode}
-                >
+                <Button variant="outline" size="sm" onClick={handleCopyCode}>
                   {copied ? 'Copied!' : 'Copy'}
                 </Button>
               </div>
               <ScrollArea className="h-[400px]">
-                <pre className="p-4 rounded-md bg-muted text-xs font-mono overflow-auto">
-                  {codeSnippet}
-                </pre>
+                <pre className="bg-muted overflow-auto rounded-md p-4 font-mono text-xs">{codeSnippet}</pre>
               </ScrollArea>
             </div>
           </TabsContent>

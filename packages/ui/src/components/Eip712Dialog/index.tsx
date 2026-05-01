@@ -1,12 +1,12 @@
-'use client'
+'use client';
 
-import { Button } from "../ui/button";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
-import { DefaultDialog } from "../DefaultDialog";
-import { Eip712DialogProps } from "./types";
-import { useIsMobile } from "../../hooks";
-import { getJustaNameInstance, getDisplayAddress } from "../../utils";
-import { useState, useEffect, useMemo, useRef } from "react";
+import { Button } from '../ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
+import { DefaultDialog } from '../DefaultDialog';
+import { Eip712DialogProps } from './types';
+import { useIsMobile } from '../../hooks';
+import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { useState, useEffect, useMemo, useRef } from 'react';
 
 // EIP-712 TypedData structure
 interface TypedData {
@@ -46,7 +46,7 @@ const PropertyLine = ({
   propertyKey,
   value,
   isLast,
-  depth
+  depth,
 }: {
   propertyKey: string;
   value: unknown;
@@ -57,10 +57,7 @@ const PropertyLine = ({
   const paddingLeft = depth * 16; // 16px per depth level
 
   return (
-    <div
-      className="flex items-start gap-1 py-0.5 font-mono text-sm"
-      style={{ paddingLeft: `${paddingLeft}px` }}
-    >
+    <div className="flex items-start gap-1 py-0.5 font-mono text-sm" style={{ paddingLeft: `${paddingLeft}px` }}>
       <span className="text-muted-foreground">"{propertyKey}":</span>
       <span className={formatted.color}>{formatted.text}</span>
       {!isLast && <span className="text-muted-foreground">,</span>}
@@ -73,7 +70,7 @@ const NestedDataView = ({
   data,
   depth = 0,
   parentKey,
-  isLast = true
+  isLast = true,
 }: {
   data: unknown;
   depth?: number;
@@ -94,26 +91,10 @@ const NestedDataView = ({
               const isLastEntry = index === entries.length - 1;
 
               if (isObject(value) || isArray(value)) {
-                return (
-                  <NestedDataView
-                    key={key}
-                    data={value}
-                    depth={depth + 1}
-                    parentKey={key}
-                    isLast={isLastEntry}
-                  />
-                );
+                return <NestedDataView key={key} data={value} depth={depth + 1} parentKey={key} isLast={isLastEntry} />;
               }
 
-              return (
-                <PropertyLine
-                  key={key}
-                  propertyKey={key}
-                  value={value}
-                  isLast={isLastEntry}
-                  depth={depth}
-                />
-              );
+              return <PropertyLine key={key} propertyKey={key} value={value} isLast={isLastEntry} depth={depth} />;
             })}
           </div>
         </div>
@@ -125,12 +106,12 @@ const NestedDataView = ({
         <Accordion type="multiple" className="w-full" defaultValue={[]}>
           <AccordionItem value={accordionId} className="border-none">
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
-              <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden group">
+              <AccordionTrigger className="group cursor-pointer py-0.5 transition-opacity hover:no-underline hover:opacity-70 [&>svg]:hidden">
                 <span className="flex items-center gap-0.5">
                   {parentKey && <span className="text-muted-foreground">"{parentKey}":</span>}
-                  <span className="text-muted-foreground group-data-[state=closed]:inline hidden">{' {...}'}</span>
-                  <span className="text-muted-foreground group-data-[state=open]:inline hidden">{' {'}</span>
-                  {!isLast && <span className="text-muted-foreground group-data-[state=closed]:inline hidden">,</span>}
+                  <span className="text-muted-foreground hidden group-data-[state=closed]:inline">{' {...}'}</span>
+                  <span className="text-muted-foreground hidden group-data-[state=open]:inline">{' {'}</span>
+                  {!isLast && <span className="text-muted-foreground hidden group-data-[state=closed]:inline">,</span>}
                 </span>
               </AccordionTrigger>
             </div>
@@ -141,30 +122,15 @@ const NestedDataView = ({
 
                   if (isObject(value) || isArray(value)) {
                     return (
-                      <NestedDataView
-                        key={key}
-                        data={value}
-                        depth={depth + 1}
-                        parentKey={key}
-                        isLast={isLastEntry}
-                      />
+                      <NestedDataView key={key} data={value} depth={depth + 1} parentKey={key} isLast={isLastEntry} />
                     );
                   }
 
                   return (
-                    <PropertyLine
-                      key={key}
-                      propertyKey={key}
-                      value={value}
-                      isLast={isLastEntry}
-                      depth={depth + 1}
-                    />
+                    <PropertyLine key={key} propertyKey={key} value={value} isLast={isLastEntry} depth={depth + 1} />
                   );
                 })}
-                <div
-                  className="py-0.5 text-muted-foreground"
-                  style={{ paddingLeft: `${paddingLeft}px` }}
-                >
+                <div className="text-muted-foreground py-0.5" style={{ paddingLeft: `${paddingLeft}px` }}>
                   <span>{'}'}</span>
                   {!isLast && <span>,</span>}
                 </div>
@@ -191,16 +157,12 @@ const NestedDataView = ({
                 return (
                   <div key={index}>
                     <div
-                      className="py-0.5 text-muted-foreground font-mono text-sm"
+                      className="text-muted-foreground py-0.5 font-mono text-sm"
                       style={{ paddingLeft: `${depth * 16}px` }}
                     >
                       {indexKey}:
                     </div>
-                    <NestedDataView
-                      data={item}
-                      depth={depth + 1}
-                      isLast={isLastEntry}
-                    />
+                    <NestedDataView data={item} depth={depth + 1} isLast={isLastEntry} />
                   </div>
                 );
               }
@@ -228,12 +190,12 @@ const NestedDataView = ({
         <Accordion type="multiple" className="w-full" defaultValue={[]}>
           <AccordionItem value={accordionId} className="border-none">
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
-              <AccordionTrigger className="py-0.5 hover:no-underline hover:opacity-70 transition-opacity cursor-pointer [&>svg]:hidden group">
+              <AccordionTrigger className="group cursor-pointer py-0.5 transition-opacity hover:no-underline hover:opacity-70 [&>svg]:hidden">
                 <span className="flex items-center gap-0.5">
                   {parentKey && <span className="text-muted-foreground">"{parentKey}":</span>}
-                  <span className="text-muted-foreground group-data-[state=closed]:inline hidden">{' [...]'}</span>
-                  <span className="text-muted-foreground group-data-[state=open]:inline hidden">{' ['}</span>
-                  {!isLast && <span className="text-muted-foreground group-data-[state=closed]:inline hidden">,</span>}
+                  <span className="text-muted-foreground hidden group-data-[state=closed]:inline">{' [...]'}</span>
+                  <span className="text-muted-foreground hidden group-data-[state=open]:inline">{' ['}</span>
+                  {!isLast && <span className="text-muted-foreground hidden group-data-[state=closed]:inline">,</span>}
                 </span>
               </AccordionTrigger>
             </div>
@@ -247,16 +209,12 @@ const NestedDataView = ({
                     return (
                       <div key={index}>
                         <div
-                          className="py-0.5 text-muted-foreground font-mono text-sm"
+                          className="text-muted-foreground py-0.5 font-mono text-sm"
                           style={{ paddingLeft: `${(depth + 1) * 16}px` }}
                         >
                           {indexKey}:
                         </div>
-                        <NestedDataView
-                          data={item}
-                          depth={depth + 2}
-                          isLast={isLastEntry}
-                        />
+                        <NestedDataView data={item} depth={depth + 2} isLast={isLastEntry} />
                       </div>
                     );
                   }
@@ -274,10 +232,7 @@ const NestedDataView = ({
                     </div>
                   );
                 })}
-                <div
-                  className="py-0.5 text-muted-foreground"
-                  style={{ paddingLeft: `${paddingLeft}px` }}
-                >
+                <div className="text-muted-foreground py-0.5" style={{ paddingLeft: `${paddingLeft}px` }}>
                   <span>{']'}</span>
                   {!isLast && <span>,</span>}
                 </div>
@@ -334,16 +289,19 @@ export const Eip712Dialog = ({
   useEffect(() => {
     if (accountAddress && chainId) {
       const justaName = getJustaNameInstance(mainnetRpcUrl);
-      justaName.subnames.reverseResolve({
-        address: accountAddress as `0x${string}`,
-        chainId: chainId,
-      }).then((result) => {
-        if (result) {
-          setResolvedAddress(result);
-        }
-      }).catch(() => {
-        // Silently fail if resolution fails
-      });
+      justaName.subnames
+        .reverseResolve({
+          address: accountAddress as `0x${string}`,
+          chainId: chainId,
+        })
+        .then((result) => {
+          if (result) {
+            setResolvedAddress(result);
+          }
+        })
+        .catch(() => {
+          // Silently fail if resolution fails
+        });
     }
   }, [accountAddress, chainId]);
 
@@ -399,88 +357,84 @@ export const Eip712Dialog = ({
       onOpenChange={!isProcessing ? onOpenChange : undefined}
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
-          <p className="text-xs font-bold text-muted-foreground leading-[100%]">
+          <p className="text-muted-foreground text-xs font-bold leading-[100%]">
             {timestamp.toLocaleDateString('en-US', {
               weekday: 'long',
               day: 'numeric',
-              month: 'long'
-            })} at {timestamp.toLocaleTimeString('en-US', {
+              month: 'long',
+            })}{' '}
+            at{' '}
+            {timestamp.toLocaleTimeString('en-US', {
               hour: '2-digit',
               minute: '2-digit',
               second: '2-digit',
-              timeZoneName: 'short'
+              timeZoneName: 'short',
             })}
           </p>
-          <p className="text-[30px] font-normal leading-[100%] text-foreground">
-            Review
-          </p>
-          <p className="text-xs font-normal leading-[100%] text-foreground">{displayAddress}</p>
+          <p className="text-foreground text-[30px] font-normal leading-[100%]">Review</p>
+          <p className="text-foreground text-xs font-normal leading-[100%]">{displayAddress}</p>
         </div>
       }
-      contentStyle={isMobile ? {
-        width: '100%',
-        height: '100%',
-        maxWidth: 'none',
-        maxHeight: 'none',
-        overflowY: 'auto',
-      } : {
-        width: '500px',
-        minWidth: '500px',
-      }}
+      contentStyle={
+        isMobile
+          ? {
+              width: '100%',
+              height: '100%',
+              maxWidth: 'none',
+              maxHeight: 'none',
+              overflowY: 'auto',
+            }
+          : {
+              width: '500px',
+              minWidth: '500px',
+            }
+      }
     >
-      <div className="flex flex-col gap-6 justify-between max-md:h-full">
+      <div className="flex flex-col justify-between gap-6 max-md:h-full">
         {/* Main Content - Typed Data Tree View */}
-        <div className="flex flex-col gap-3 max-md:flex-1 max-h-[60vh] overflow-y-auto min-h-0">
+        <div className="flex max-h-[60vh] min-h-0 flex-col gap-3 overflow-y-auto max-md:flex-1">
           {typedData ? (
-            <div ref={scrollableRef} className="max-h-[50vh] flex flex-1 overflow-y-auto bg-muted/30 dark:bg-muted/10 rounded-[6px] p-3 border border-border">
+            <div
+              ref={scrollableRef}
+              className="bg-muted/30 dark:bg-muted/10 border-border flex max-h-[50vh] flex-1 overflow-y-auto rounded-[6px] border p-3"
+            >
               {/* Combine domain and message into single tree */}
-              <NestedDataView
-                data={
-                  typedData
-                }
-                depth={0}
-              />
+              <NestedDataView data={typedData} depth={0} />
             </div>
           ) : (
-            <div className="p-4 bg-red-50 border border-red-200 rounded-[6px]">
+            <div className="rounded-[6px] border border-red-200 bg-red-50 p-4">
               <p className="text-sm text-red-600">Failed to parse typed data</p>
             </div>
           )}
 
           {/* URL and Domain Information */}
-          <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px] max-md:mt-auto">
-            <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
+          <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5 max-md:mt-auto">
+            <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
               <p className="text-xs font-bold leading-[133%]">URL</p>
-              <p className="text-base font-normal leading-[150%] truncate">
-                {formatOrigin(origin)}
-              </p>
+              <p className="truncate text-base font-normal leading-[150%]">{formatOrigin(origin)}</p>
             </div>
-            <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[50px]" />
-            <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
+            <div className="bg-border h-full min-h-[50px] w-[1px] flex-shrink-0 rounded-full" />
+            <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
               <p className="text-xs font-bold leading-[133%]">Domain</p>
-              <p className="text-base font-normal leading-[150%] truncate">
-                {domainName || formatOrigin(origin)}
-              </p>
+              <p className="truncate text-base font-normal leading-[150%]">{domainName || formatOrigin(origin)}</p>
             </div>
           </div>
 
           {/* Contract Address if available */}
           {contractAddress && (
-            <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
-              <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
+            <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
+              <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
                 <p className="text-xs font-bold leading-[133%]">Contract</p>
-                <p className="text-base font-normal leading-[150%] truncate">
-                  {contractAddress}
-                </p>
+                <p className="truncate text-base font-normal leading-[150%]">{contractAddress}</p>
               </div>
               {chainName && (
                 <>
-                  <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[50px]" />
-                  <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
+                  <div className="bg-border h-full min-h-[50px] w-[1px] flex-shrink-0 rounded-full" />
+                  <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
                     <p className="text-xs font-bold leading-[133%]">Network</p>
-                    <div className="flex flex-row items-center gap-1 min-w-0">
-                      {chainIcon && <div className="w-6 h-6 flex-shrink-0">{chainIcon}</div>}
-                      <p className="text-base font-normal leading-[150%] truncate">{chainName}</p>
+                    <div className="flex min-w-0 flex-row items-center gap-1">
+                      {chainIcon && <div className="h-6 w-6 flex-shrink-0">{chainIcon}</div>}
+                      <p className="truncate text-base font-normal leading-[150%]">{chainName}</p>
                     </div>
                   </div>
                 </>
@@ -490,36 +444,32 @@ export const Eip712Dialog = ({
 
           {/* Status Message */}
           {signatureStatus && (
-            <div className={`text-sm p-3 rounded-lg ${signatureStatus.includes('Error') ? 'bg-red-50 text-red-600' :
-              signatureStatus.includes('successfully') ? 'bg-green-50 text-green-600' :
-                'bg-blue-50 text-blue-600'
-              }`}>
+            <div
+              className={`rounded-lg p-3 text-sm ${
+                signatureStatus.includes('Error')
+                  ? 'bg-red-50 text-red-600'
+                  : signatureStatus.includes('successfully')
+                    ? 'bg-green-50 text-green-600'
+                    : 'bg-blue-50 text-blue-600'
+              }`}
+            >
               {signatureStatus}
             </div>
           )}
         </div>
 
         {/* Action Buttons */}
-        <div className="flex gap-3 p-3.5 flex-shrink-0">
-          <Button
-            variant="outline"
-            onClick={onCancel}
-            disabled={isProcessing}
-            className="flex-1"
-          >
+        <div className="flex flex-shrink-0 gap-3 p-3.5">
+          <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
             Cancel
           </Button>
-          <Button
-            onClick={onSign}
-            disabled={!canSign}
-            className="flex-1"
-          >
+          <Button onClick={onSign} disabled={!canSign} className="flex-1">
             {isProcessing ? 'Processing...' : 'Sign'}
           </Button>
         </div>
       </div>
     </DefaultDialog>
-  )
-}
+  );
+};
 
 export * from './types';

@@ -1,18 +1,18 @@
-'use client'
+'use client';
 
-import { Button } from "../ui/button";
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "../ui/accordion";
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "../ui/tooltip";
-import { DefaultDialog } from "../DefaultDialog";
-import { FeeTokenSelector } from "../FeeTokenSelector";
-import { CopiedIcon, CopyIcon, WalletIcon } from "../../icons";
-import { useState, useEffect } from "react";
-import { formatEther } from "viem";
-import { Info } from "lucide-react";
-import { TransactionDialogProps } from "./types";
-import { useIsMobile, useChainIconURI, useFeeTokenPrice } from "../../hooks";
-import { getJustaNameInstance, getDisplayAddress } from "../../utils";
-import { DecodedCalldata } from "./DecodedCalldata";
+import { Button } from '../ui/button';
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { DefaultDialog } from '../DefaultDialog';
+import { FeeTokenSelector } from '../FeeTokenSelector';
+import { CopiedIcon, CopyIcon, WalletIcon } from '../../icons';
+import { useState, useEffect } from 'react';
+import { formatEther } from 'viem';
+import { Info } from 'lucide-react';
+import { TransactionDialogProps } from './types';
+import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
+import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { DecodedCalldata } from './DecodedCalldata';
 
 export const TransactionDialog = ({
   // open,
@@ -53,7 +53,7 @@ export const TransactionDialog = ({
   const chainIcon = useChainIconURI(currentTransaction?.chainId || 1, apiKey, 24);
 
   // Get native token symbol from feeTokens, falling back to chain's native currency
-  const nativeToken = feeTokens?.find(t => t.isNative);
+  const nativeToken = feeTokens?.find((t) => t.isNative);
   const nativeSymbol = nativeToken?.symbol || nativeCurrencySymbol || 'ETH';
 
   // Fetch native token price dynamically based on the chain's native token symbol
@@ -61,9 +61,8 @@ export const TransactionDialog = ({
 
   // Check if there are any selectable payment options
   // If feeTokens is not loaded yet (null/undefined/empty), assume there are selectable options
-  const hasSelectablePaymentOption = !feeTokens || feeTokens.length === 0
-    ? true
-    : feeTokens.some(t => t.isSelectable);
+  const hasSelectablePaymentOption =
+    !feeTokens || feeTokens.length === 0 ? true : feeTokens.some((t) => t.isSelectable);
 
   // Initialize JustaName and resolve addresses
   useEffect(() => {
@@ -71,31 +70,37 @@ export const TransactionDialog = ({
 
     // Resolve wallet address
     if (walletAddress && currentTransaction?.chainId) {
-      justaName.subnames.reverseResolve({
-        address: walletAddress as `0x${string}`,
-        chainId: currentTransaction.chainId,
-      }).then((result) => {
-        if (result) {
-          setResolvedAddresses(prev => ({ ...prev, [walletAddress]: result }));
-        }
-      }).catch(() => {
-        // Silently fail if resolution fails
-      });
+      justaName.subnames
+        .reverseResolve({
+          address: walletAddress as `0x${string}`,
+          chainId: currentTransaction.chainId,
+        })
+        .then((result) => {
+          if (result) {
+            setResolvedAddresses((prev) => ({ ...prev, [walletAddress]: result }));
+          }
+        })
+        .catch(() => {
+          // Silently fail if resolution fails
+        });
     }
 
     // Resolve transaction 'to' addresses
     transactions.forEach((transaction) => {
       if (transaction.to && transaction.chainId) {
-        justaName.subnames.reverseResolve({
-          address: transaction.to as `0x${string}`,
-          chainId: transaction.chainId,
-        }).then((result) => {
-          if (result) {
-            setResolvedAddresses(prev => ({ ...prev, [transaction.to]: result }));
-          }
-        }).catch(() => {
-          // Silently fail if resolution fails
-        });
+        justaName.subnames
+          .reverseResolve({
+            address: transaction.to as `0x${string}`,
+            chainId: transaction.chainId,
+          })
+          .then((result) => {
+            if (result) {
+              setResolvedAddresses((prev) => ({ ...prev, [transaction.to]: result }));
+            }
+          })
+          .catch(() => {
+            // Silently fail if resolution fails
+          });
       }
     });
   }, [walletAddress, transactions, currentTransaction?.chainId]);
@@ -150,153 +155,172 @@ export const TransactionDialog = ({
       // open={open}
       // onOpenChange={!isProcessing ? onOpenChange : undefined}
       open={true}
-      onOpenChange={isProcessing ? undefined : () => {
-        // Empty handler to prevent dialog close
-      }}
+      onOpenChange={
+        isProcessing
+          ? undefined
+          : () => {
+              // Empty handler to prevent dialog close
+            }
+      }
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
-          <p className="text-xs font-bold text-muted-foreground leading-[100%]">
+          <p className="text-muted-foreground text-xs font-bold leading-[100%]">
             {new Date().toLocaleDateString('en-US', {
               weekday: 'long',
               day: 'numeric',
-              month: 'long'
-            })} at {new Date().toLocaleTimeString('en-US', {
+              month: 'long',
+            })}{' '}
+            at{' '}
+            {new Date().toLocaleTimeString('en-US', {
               hour: '2-digit',
               minute: '2-digit',
               second: '2-digit',
-              timeZoneName: 'short'
+              timeZoneName: 'short',
             })}
           </p>
-          <p className="text-[30px] font-normal leading-[100%] text-foreground">
-            {'Review Transaction'}
-          </p>
+          <p className="text-foreground text-[30px] font-normal leading-[100%]">{'Review Transaction'}</p>
           {totalTransactions > 1 && currentTransaction?.description && (
-            <p className="text-sm text-muted-foreground">
+            <p className="text-muted-foreground text-sm">
               {currentTransaction.action}: {currentTransaction.description}
             </p>
           )}
         </div>
       }
-      contentStyle={isMobile ? {
-        width: '100%',
-        height: '100%',
-        maxWidth: 'none',
-        maxHeight: 'none',
-        overflowY: 'auto',
-      } : {
-        width: '500px',
-        minWidth: '500px',
-        maxHeight: !isSingleTransaction ? '85vh' : undefined,
-      }}
+      contentStyle={
+        isMobile
+          ? {
+              width: '100%',
+              height: '100%',
+              maxWidth: 'none',
+              maxHeight: 'none',
+              overflowY: 'auto',
+            }
+          : {
+              width: '500px',
+              minWidth: '500px',
+              maxHeight: !isSingleTransaction ? '85vh' : undefined,
+            }
+      }
     >
-      <div className={`flex flex-col gap-6 justify-between max-md:h-full ${!isSingleTransaction ? 'overflow-hidden h-full' : ''}`}>
+      <div
+        className={`flex flex-col justify-between gap-6 max-md:h-full ${!isSingleTransaction ? 'h-full overflow-hidden' : ''}`}
+      >
         {isSingleTransaction ? (
           // Single Transaction Layout
           <>
-            <div className="flex flex-col gap-3 flex-1 overflow-y-auto min-h-0 max-h-[60vh]">
+            <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
               {/* From - To */}
-              <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
-                <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
+              <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
+                <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">From</p>
-                  <div className="flex flex-row items-center gap-1 min-w-0">
-                    <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
+                  <div className="flex min-w-0 flex-row items-center gap-1">
+                    <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="black" />
                     <p className="text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                   </div>
                 </div>
-                <div className="w-[1px] rounded-full bg-border h-full flex-shrink-0 min-h-[70px]" />
-                <div className="flex flex-col text-foreground gap-0.5 min-w-0 flex-1">
+                <div className="bg-border h-full min-h-[70px] w-[1px] flex-shrink-0 rounded-full" />
+                <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">To</p>
-                  <div className="flex flex-row items-center gap-1 min-w-0">
-                    <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
-                    <p className="text-base font-normal leading-[150%]">
-                      {displayToAddress}
-                    </p>
-                    {currentTransaction?.to && (
-                      isAddressCopied['single-to'] ? (
+                  <div className="flex min-w-0 flex-row items-center gap-1">
+                    <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="black" />
+                    <p className="text-base font-normal leading-[150%]">{displayToAddress}</p>
+                    {currentTransaction?.to &&
+                      (isAddressCopied['single-to'] ? (
                         <CopiedIcon width={14} height={14} className="flex-shrink-0" />
                       ) : (
-                        <CopyIcon width={14} height={14} onClick={() => {
-                          if (typeof window !== 'undefined' && navigator?.clipboard) {
-                            navigator.clipboard.writeText(currentTransaction.to);
-                            setIsAddressCopied(prev => ({ ...prev, 'single-to': true }));
-                            setTimeout(() => setIsAddressCopied(prev => ({ ...prev, 'single-to': false })), 3000);
-                          }
-                        }} className="cursor-pointer flex-shrink-0" />
-                      )
-                    )}
+                        <CopyIcon
+                          width={14}
+                          height={14}
+                          onClick={() => {
+                            if (typeof window !== 'undefined' && navigator?.clipboard) {
+                              navigator.clipboard.writeText(currentTransaction.to);
+                              setIsAddressCopied((prev) => ({ ...prev, 'single-to': true }));
+                              setTimeout(() => setIsAddressCopied((prev) => ({ ...prev, 'single-to': false })), 3000);
+                            }
+                          }}
+                          className="flex-shrink-0 cursor-pointer"
+                        />
+                      ))}
                   </div>
                 </div>
               </div>
 
               {/* Value */}
               {formatTransactionValue(currentTransaction?.value) && (
-                <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
-                  <div className="flex flex-col text-foreground gap-0.5">
+                <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
+                  <div className="text-foreground flex flex-col gap-0.5">
                     <p className="text-xs font-bold leading-[133%]">Value</p>
-                    <p className="text-base font-normal leading-[150%]">{formatTransactionValue(currentTransaction?.value)} {nativeSymbol}</p>
+                    <p className="text-base font-normal leading-[150%]">
+                      {formatTransactionValue(currentTransaction?.value)} {nativeSymbol}
+                    </p>
                   </div>
                 </div>
               )}
 
               {/* Network - Fees */}
-              <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
-                <div className="flex flex-col text-foreground flex-1 gap-0.5">
+              <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
+                <div className="text-foreground flex flex-1 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">Network</p>
                   <div className="flex flex-row items-center gap-1">
                     {chainIcon}
-                    <p className="text-base font-normal text-ellipsis leading-[150%] truncate">{networkName || 'Ethereum'}</p>
+                    <p className="truncate text-ellipsis text-base font-normal leading-[150%]">
+                      {networkName || 'Ethereum'}
+                    </p>
                   </div>
                 </div>
-                <div className="w-[1px] rounded-full bg-border h-full min-h-[50px]" />
-                <div className="flex flex-col text-foreground flex-1 gap-0.5">
+                <div className="bg-border h-full min-h-[50px] w-[1px] rounded-full" />
+                <div className="text-foreground flex flex-1 flex-col gap-0.5">
                   <div className="flex items-center gap-1">
                     <p className="text-xs font-bold leading-[133%]">Network Fees</p>
                     <TooltipProvider delayDuration={0}>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Info className="size-3 text-muted-foreground cursor-help" />
+                          <Info className="text-muted-foreground size-3 cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[200px] text-xs">
-                          <p>Gas fees paid to network validators to process your transaction. You can pay with {nativeSymbol} or supported tokens.</p>
+                          <p>
+                            Gas fees paid to network validators to process your transaction. You can pay with{' '}
+                            {nativeSymbol} or supported tokens.
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <div className="flex flex-row items-center w-full justify-between gap-1">
+                  <div className="flex w-full flex-row items-center justify-between gap-1">
                     {gasFeeLoading && !isPayingWithErc20 ? (
-                      <p className="text-base font-normal text-muted-foreground">Estimating...</p>
+                      <p className="text-muted-foreground text-base font-normal">Estimating...</p>
                     ) : gasEstimationError && !sponsored ? (
                       <div className="flex flex-col">
-                        <p className="text-sm text-red-600 font-medium">{gasEstimationError}</p>
+                        <p className="text-sm font-medium text-red-600">{gasEstimationError}</p>
                       </div>
                     ) : sponsored ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
                           {gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
-                            <div className="flex flex-col line-through text-muted-foreground">
-                              <p className="text-base font-normal">
-                                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
-                              </p>
+                            <div className="text-muted-foreground flex flex-col line-through">
+                              <p className="text-base font-normal">${(nativeTokenPrice * Number(gasFee)).toFixed(4)}</p>
                             </div>
                           )}
-                          <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded">
+                          <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-600">
                             Sponsored
                           </span>
                         </div>
-                        <p className="text-xs font-normal text-muted-foreground">
-                          {gasFee && gasFee !== 'sponsored' ? (() => {
-                            const gasValue = Number(gasFee);
-                            if (gasValue > 0 && gasValue < 0.0001) {
-                              return `< 0.0001 ${nativeSymbol}`;
-                            }
-                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                          })() : 'Gas fees covered'}
+                        <p className="text-muted-foreground text-xs font-normal">
+                          {gasFee && gasFee !== 'sponsored'
+                            ? (() => {
+                                const gasValue = Number(gasFee);
+                                if (gasValue > 0 && gasValue < 0.0001) {
+                                  return `< 0.0001 ${nativeSymbol}`;
+                                }
+                                return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                              })()
+                            : 'Gas fees covered'}
                         </p>
                       </div>
                     ) : isPayingWithErc20 && selectedFeeToken ? (
-                      <div className="flex flex-col gap-0.5 w-full">
-                        <div className="flex items-center justify-between w-full">
-                          <p className="text-base font-normal text-foreground">
+                      <div className="flex w-full flex-col gap-0.5">
+                        <div className="flex w-full items-center justify-between">
+                          <p className="text-foreground text-base font-normal">
                             {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
                             {selectedFeeToken.gasCostFormatted ? (
                               // For stablecoins like USDC/USDT, the value is approximately USD
@@ -319,15 +343,15 @@ export const TransactionDialog = ({
                           )}
                         </div>
                         {selectedFeeToken.gasCostFormatted && (
-                          <p className="text-xs font-normal text-muted-foreground">
+                          <p className="text-muted-foreground text-xs font-normal">
                             Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
                           </p>
                         )}
                       </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
-                      <div className="flex flex-col gap-0.5 w-full">
-                        <div className="flex items-center justify-between w-full">
-                          <p className="text-base font-normal text-foreground">
+                      <div className="flex w-full flex-col gap-0.5">
+                        <div className="flex w-full items-center justify-between">
+                          <p className="text-foreground text-base font-normal">
                             {nativeTokenPrice > 0 ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}` : ''}
                           </p>
                           {/* Inline Fee Token Selector */}
@@ -343,7 +367,7 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
-                        <p className="text-xs font-normal text-muted-foreground">
+                        <p className="text-muted-foreground text-xs font-normal">
                           {(() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
@@ -354,7 +378,7 @@ export const TransactionDialog = ({
                         </p>
                       </div>
                     ) : (
-                      <p className="text-base font-normal text-muted-foreground">Unable to estimate</p>
+                      <p className="text-muted-foreground text-base font-normal">Unable to estimate</p>
                     )}
                   </div>
                 </div>
@@ -362,19 +386,24 @@ export const TransactionDialog = ({
 
               {/* Show Data section if data is provided */}
               {currentTransaction?.data && (
-                <div className="flex flex-col p-3.5 gap-2.5 border border-border rounded-[6px]">
-                  <div className="flex flex-row items-center justify-between w-full">
-                    <p className="text-xs font-bold leading-[133%] text-foreground">Data</p>
+                <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
+                  <div className="flex w-full flex-row items-center justify-between">
+                    <p className="text-foreground text-xs font-bold leading-[133%]">Data</p>
                     {isDataCopied[0] ? (
                       <CopiedIcon width={16} height={16} />
                     ) : (
-                      <CopyIcon width={16} height={16} onClick={() => {
-                        if (typeof window !== 'undefined' && navigator?.clipboard) {
-                          navigator.clipboard.writeText(currentTransaction?.data ?? '');
-                          setIsDataCopied({ ...isDataCopied, 0: true });
-                          setTimeout(() => setIsDataCopied(prev => ({ ...prev, 0: false })), 3000);
-                        }
-                      }} className="cursor-pointer" />
+                      <CopyIcon
+                        width={16}
+                        height={16}
+                        onClick={() => {
+                          if (typeof window !== 'undefined' && navigator?.clipboard) {
+                            navigator.clipboard.writeText(currentTransaction?.data ?? '');
+                            setIsDataCopied({ ...isDataCopied, 0: true });
+                            setTimeout(() => setIsDataCopied((prev) => ({ ...prev, 0: false })), 3000);
+                          }
+                        }}
+                        className="cursor-pointer"
+                      />
                     )}
                   </div>
                   <DecodedCalldata
@@ -390,76 +419,87 @@ export const TransactionDialog = ({
 
               {/* Transaction Status */}
               {transactionStatus && (
-                <div className={`text-sm p-3 rounded-lg ${transactionStatus.includes('Error') ? 'bg-red-50 text-red-600' :
-                  transactionStatus.includes('successfully') ? 'bg-green-50 text-green-600' :
-                    'bg-blue-50 text-blue-600'
-                  }`}>
+                <div
+                  className={`rounded-lg p-3 text-sm ${
+                    transactionStatus.includes('Error')
+                      ? 'bg-red-50 text-red-600'
+                      : transactionStatus.includes('successfully')
+                        ? 'bg-green-50 text-green-600'
+                        : 'bg-blue-50 text-blue-600'
+                  }`}
+                >
                   {transactionStatus}
                 </div>
               )}
             </div>
 
             {/* Action Buttons */}
-            <div className="flex gap-3 p-3.5 max-md:mt-auto flex-shrink-0">
-              <Button
-                variant="outline"
-                onClick={onCancel}
-                disabled={isProcessing}
-                className="flex-1"
-              >
+            <div className="flex flex-shrink-0 gap-3 p-3.5 max-md:mt-auto">
+              <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
                 Cancel
               </Button>
-              <Button
-                onClick={onConfirm}
-                disabled={!canConfirm}
-                className="flex-1"
-              >
-                {hasInsufficientFunds ? 'Insufficient Funds' :
-                  isProcessing ? 'Processing...' : 'Transact'}
+              <Button onClick={onConfirm} disabled={!canConfirm} className="flex-1">
+                {hasInsufficientFunds ? 'Insufficient Funds' : isProcessing ? 'Processing...' : 'Transact'}
               </Button>
             </div>
           </>
         ) : (
           // Multiple Transactions Layout with Accordion
           <>
-            <div className="flex flex-col gap-3 flex-1 min-h-0 overflow-y-auto max-h-[60vh]">
+            <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
               {/* From Address */}
-              <div className="p-3.5 border border-border rounded-[6px] flex-shrink-0">
-                <p className="text-xs font-bold leading-[133%] text-foreground mb-1">From</p>
+              <div className="border-border flex-shrink-0 rounded-[6px] border p-3.5">
+                <p className="text-foreground mb-1 text-xs font-bold leading-[133%]">From</p>
                 <div className="flex flex-row items-center gap-1">
-                  <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
+                  <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="black" />
                   <p className="text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                 </div>
               </div>
 
               {/* Accordion for Transactions */}
-              <div className="flex-1 overflow-y-auto min-h-0">
-                <Accordion type="multiple" className="w-full space-y-3" defaultValue={transactions.map((_, index) => `transaction-${index}`)}>
+              <div className="min-h-0 flex-1 overflow-y-auto">
+                <Accordion
+                  type="multiple"
+                  className="w-full space-y-3"
+                  defaultValue={transactions.map((_, index) => `transaction-${index}`)}
+                >
                   {transactions.map((transaction, index) => (
-                    <AccordionItem key={index} value={`transaction-${index}`} className="border border-border rounded-[6px] overflow-hidden">
+                    <AccordionItem
+                      key={index}
+                      value={`transaction-${index}`}
+                      className="border-border overflow-hidden rounded-[6px] border"
+                    >
                       <AccordionTrigger className="px-3.5 py-2.5 hover:no-underline">
                         <span className="text-base font-medium">Call {index + 1}</span>
                       </AccordionTrigger>
                       <AccordionContent className="px-3.5 pb-3.5">
                         <div className="flex flex-col gap-3">
                           {/* Interacting with (To) */}
-                          <div className="flex flex-col gap-1 border border-border rounded-[6px] p-2">
+                          <div className="border-border flex flex-col gap-1 rounded-[6px] border p-2">
                             <div className="flex items-center justify-between">
                               <p className="text-xs font-bold leading-[133%] text-black">Interacting with (to)</p>
                               {isAddressCopied[`to-${index}`] ? (
                                 <CopiedIcon width={14} height={14} />
                               ) : (
-                                <CopyIcon width={14} height={14} onClick={() => {
-                                  if (typeof window !== 'undefined' && navigator?.clipboard) {
-                                    navigator.clipboard.writeText(transaction.to);
-                                    setIsAddressCopied(prev => ({ ...prev, [`to-${index}`]: true }));
-                                    setTimeout(() => setIsAddressCopied(prev => ({ ...prev, [`to-${index}`]: false })), 3000);
-                                  }
-                                }} className="cursor-pointer" />
+                                <CopyIcon
+                                  width={14}
+                                  height={14}
+                                  onClick={() => {
+                                    if (typeof window !== 'undefined' && navigator?.clipboard) {
+                                      navigator.clipboard.writeText(transaction.to);
+                                      setIsAddressCopied((prev) => ({ ...prev, [`to-${index}`]: true }));
+                                      setTimeout(
+                                        () => setIsAddressCopied((prev) => ({ ...prev, [`to-${index}`]: false })),
+                                        3000
+                                      );
+                                    }
+                                  }}
+                                  className="cursor-pointer"
+                                />
                               )}
                             </div>
                             <div className="flex flex-row items-center gap-1">
-                              <WalletIcon className="w-3 h-3 flex-shrink-0" stroke="black" />
+                              <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="black" />
                               <p className="text-sm font-normal leading-[150%]">
                                 {getDisplayAddress(resolvedAddresses[transaction.to], transaction.to)}
                               </p>
@@ -468,19 +508,24 @@ export const TransactionDialog = ({
 
                           {/* Value */}
                           {formatTransactionValue(transaction.value) && (
-                            <div className="flex items-center gap-2 border border-border rounded-[6px] p-2">
-                              <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center flex-shrink-0">
+                            <div className="border-border flex items-center gap-2 rounded-[6px] border p-2">
+                              <div className="bg-primary/10 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full">
                                 <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
                                   <path d="M10 2L3 10L10 14L17 10L10 2Z" fill="currentColor" className="text-primary" />
                                 </svg>
                               </div>
                               <div className="flex-1">
-                                <p className="text-xs font-bold leading-[133%] text-muted-foreground">Value</p>
+                                <p className="text-muted-foreground text-xs font-bold leading-[133%]">Value</p>
                                 <div className="flex items-baseline gap-2">
-                                  <p className="text-base font-normal">{formatTransactionValue(transaction.value)} {nativeSymbol}</p>
+                                  <p className="text-base font-normal">
+                                    {formatTransactionValue(transaction.value)} {nativeSymbol}
+                                  </p>
                                   {nativeTokenPrice > 0 && (
-                                    <p className="text-sm text-muted-foreground">
-                                      ${(Number(formatTransactionValue(transaction.value)) * nativeTokenPrice).toFixed(2)}
+                                    <p className="text-muted-foreground text-sm">
+                                      $
+                                      {(Number(formatTransactionValue(transaction.value)) * nativeTokenPrice).toFixed(
+                                        2
+                                      )}
                                     </p>
                                   )}
                                 </div>
@@ -490,9 +535,9 @@ export const TransactionDialog = ({
 
                           {/* Data */}
                           {transaction.data && (
-                            <div className="flex flex-col gap-1 border border-border rounded-[6px] p-2">
-                              <div className="flex items-center justify-between mb-2">
-                                <p className="text-xs font-bold leading-[133%] text-muted-foreground">Data</p>
+                            <div className="border-border flex flex-col gap-1 rounded-[6px] border p-2">
+                              <div className="mb-2 flex items-center justify-between">
+                                <p className="text-muted-foreground text-xs font-bold leading-[133%]">Data</p>
                                 {isDataCopied[index] ? (
                                   <CopiedIcon width={16} height={16} />
                                 ) : (
@@ -504,7 +549,10 @@ export const TransactionDialog = ({
                                       if (typeof window !== 'undefined' && navigator?.clipboard) {
                                         navigator.clipboard.writeText(transaction.data ?? '');
                                         setIsDataCopied({ ...isDataCopied, [index]: true });
-                                        setTimeout(() => setIsDataCopied(prev => ({ ...prev, [index]: false })), 3000);
+                                        setTimeout(
+                                          () => setIsDataCopied((prev) => ({ ...prev, [index]: false })),
+                                          3000
+                                        );
                                       }
                                     }}
                                     className="cursor-pointer"
@@ -530,76 +578,86 @@ export const TransactionDialog = ({
 
               {/* Transaction Status */}
               {transactionStatus && (
-                <div className={`text-sm p-3 rounded-lg ${transactionStatus.includes('Error') ? 'bg-red-50 text-red-600' :
-                  transactionStatus.includes('successfully') ? 'bg-green-50 text-green-600' :
-                    'bg-blue-50 text-blue-600'
-                  }`}>
+                <div
+                  className={`rounded-lg p-3 text-sm ${
+                    transactionStatus.includes('Error')
+                      ? 'bg-red-50 text-red-600'
+                      : transactionStatus.includes('successfully')
+                        ? 'bg-green-50 text-green-600'
+                        : 'bg-blue-50 text-blue-600'
+                  }`}
+                >
                   {transactionStatus}
                 </div>
               )}
             </div>
 
             {/* Fixed Bottom Section */}
-            <div className="border-t pt-3 space-y-3 flex-shrink-0">
+            <div className="flex-shrink-0 space-y-3 border-t pt-3">
               {/* Network and Fees */}
-              <div className="flex flex-row justify-between items-center gap-2.5 p-3.5 border border-border rounded-[6px]">
-                <div className="flex flex-col text-foreground flex-1 gap-0.5">
+              <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
+                <div className="text-foreground flex flex-1 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">Network</p>
                   <div className="flex flex-row items-center gap-1">
                     {chainIcon}
-                    <p className="text-base font-normal text-ellipsis leading-[150%] truncate">{networkName || 'Ethereum'}</p>
+                    <p className="truncate text-ellipsis text-base font-normal leading-[150%]">
+                      {networkName || 'Ethereum'}
+                    </p>
                   </div>
                 </div>
-                <div className="w-[1px] rounded-full bg-border h-full min-h-[50px]" />
-                <div className="flex flex-col text-foreground flex-1 gap-0.5">
+                <div className="bg-border h-full min-h-[50px] w-[1px] rounded-full" />
+                <div className="text-foreground flex flex-1 flex-col gap-0.5">
                   <div className="flex items-center gap-1">
                     <p className="text-xs font-bold leading-[133%]">Network Fees</p>
                     <TooltipProvider delayDuration={0}>
                       <Tooltip>
                         <TooltipTrigger asChild>
-                          <Info className="size-3 text-muted-foreground cursor-help" />
+                          <Info className="text-muted-foreground size-3 cursor-help" />
                         </TooltipTrigger>
                         <TooltipContent side="top" className="max-w-[200px] text-xs">
-                          <p>Gas fees paid to network validators to process your transaction. You can pay with {nativeSymbol} or supported tokens.</p>
+                          <p>
+                            Gas fees paid to network validators to process your transaction. You can pay with{' '}
+                            {nativeSymbol} or supported tokens.
+                          </p>
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
                   </div>
-                  <div className="flex flex-row items-center w-full justify-between gap-1">
+                  <div className="flex w-full flex-row items-center justify-between gap-1">
                     {gasFeeLoading && !isPayingWithErc20 ? (
-                      <p className="text-base font-normal text-muted-foreground">Estimating...</p>
+                      <p className="text-muted-foreground text-base font-normal">Estimating...</p>
                     ) : gasEstimationError && !sponsored ? (
                       <div className="flex flex-col">
-                        <p className="text-sm text-red-600 font-medium">{gasEstimationError}</p>
+                        <p className="text-sm font-medium text-red-600">{gasEstimationError}</p>
                       </div>
                     ) : sponsored ? (
                       <div className="flex flex-col">
                         <div className="flex items-center gap-2">
                           {gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
-                            <div className="flex flex-col line-through text-muted-foreground">
-                              <p className="text-base font-normal">
-                                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
-                              </p>
+                            <div className="text-muted-foreground flex flex-col line-through">
+                              <p className="text-base font-normal">${(nativeTokenPrice * Number(gasFee)).toFixed(4)}</p>
                             </div>
                           )}
-                          <span className="text-xs font-semibold text-green-600 bg-green-100 px-2 py-0.5 rounded">
+                          <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-600">
                             Sponsored
                           </span>
                         </div>
-                        <p className="text-xs font-normal text-muted-foreground">
-                          {gasFee && gasFee !== 'sponsored' ? (() => {
-                            const gasValue = Number(gasFee);
-                            if (gasValue > 0 && gasValue < 0.0001) {
-                              return `< 0.0001 ${nativeSymbol}`;
-                            }
-                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                          })() : 'Gas fees covered'}
+                        <p className="text-muted-foreground text-xs font-normal">
+                          {gasFee && gasFee !== 'sponsored'
+                            ? (() => {
+                                const gasValue = Number(gasFee);
+                                if (gasValue > 0 && gasValue < 0.0001) {
+                                  return `< 0.0001 ${nativeSymbol}`;
+                                }
+                                return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                              })()
+                            : 'Gas fees covered'}
                         </p>
                       </div>
                     ) : isPayingWithErc20 && selectedFeeToken ? (
-                      <div className="flex flex-col gap-0.5 w-full">
-                        <div className="flex items-center justify-between w-full">
-                          <p className="text-base font-normal text-foreground">
+                      <div className="flex w-full flex-col gap-0.5">
+                        <div className="flex w-full items-center justify-between">
+                          <p className="text-foreground text-base font-normal">
                             {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
                             {selectedFeeToken.gasCostFormatted ? (
                               // For stablecoins like USDC/USDT, the value is approximately USD
@@ -622,15 +680,15 @@ export const TransactionDialog = ({
                           )}
                         </div>
                         {selectedFeeToken.gasCostFormatted && (
-                          <p className="text-xs font-normal text-muted-foreground">
+                          <p className="text-muted-foreground text-xs font-normal">
                             Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
                           </p>
                         )}
                       </div>
                     ) : gasFee && gasFee !== 'sponsored' ? (
-                      <div className="flex flex-col gap-0.5 w-full">
-                        <div className="flex items-center justify-between w-full">
-                          <p className="text-base font-normal text-foreground">
+                      <div className="flex w-full flex-col gap-0.5">
+                        <div className="flex w-full items-center justify-between">
+                          <p className="text-foreground text-base font-normal">
                             {nativeTokenPrice > 0 ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}` : ''}
                           </p>
                           {/* Inline Fee Token Selector */}
@@ -646,7 +704,7 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
-                        <p className="text-xs font-normal text-muted-foreground">
+                        <p className="text-muted-foreground text-xs font-normal">
                           {(() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
@@ -657,29 +715,23 @@ export const TransactionDialog = ({
                         </p>
                       </div>
                     ) : (
-                      <p className="text-base font-normal text-muted-foreground">Unable to estimate</p>
+                      <p className="text-muted-foreground text-base font-normal">Unable to estimate</p>
                     )}
                   </div>
                 </div>
               </div>
 
               {/* Action Buttons */}
-              <div className="flex gap-3 px-3.5 flex-shrink-0">
-                <Button
-                  variant="outline"
-                  onClick={onCancel}
-                  disabled={isProcessing}
-                  className="flex-1"
-                >
+              <div className="flex flex-shrink-0 gap-3 px-3.5">
+                <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
                   Cancel
                 </Button>
-                <Button
-                  onClick={onConfirm}
-                  disabled={!canConfirm}
-                  className="flex-1"
-                >
-                  {gasEstimationError && !sponsored ? 'Insufficient Funds' :
-                    isProcessing ? 'Processing...' : 'Transact'}
+                <Button onClick={onConfirm} disabled={!canConfirm} className="flex-1">
+                  {gasEstimationError && !sponsored
+                    ? 'Insufficient Funds'
+                    : isProcessing
+                      ? 'Processing...'
+                      : 'Transact'}
                 </Button>
               </div>
             </div>
@@ -687,7 +739,7 @@ export const TransactionDialog = ({
         )}
       </div>
     </DefaultDialog>
-  )
-}
+  );
+};
 
 export * from './types';

@@ -17,11 +17,7 @@ export function isNativeToken(tokenAddress: string): boolean {
  * Fetches the balance of a token for a given wallet address.
  * Supports both native ETH (address = 0x0...0 or 0xeee...eee) and ERC-20 tokens.
  */
-export async function fetchTokenBalance(
-  tokenAddress: string,
-  walletAddress: string,
-  rpcUrl: string
-): Promise<bigint> {
+export async function fetchTokenBalance(tokenAddress: string, walletAddress: string, rpcUrl: string): Promise<bigint> {
   const client = createPublicClient({
     transport: http(rpcUrl),
   });

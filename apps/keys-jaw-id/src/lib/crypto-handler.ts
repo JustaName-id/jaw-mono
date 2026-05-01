@@ -11,16 +11,8 @@
  * - Automatic session management
  */
 
-import {
-  encryptContent,
-  decryptContent,
-} from '@jaw.id/core';
-import type {
-  RPCResponseMessage,
-  RPCRequestMessage,
-  RPCRequest,
-  MessageID,
-} from '@jaw.id/core';
+import { encryptContent, decryptContent } from '@jaw.id/core';
+import type { RPCResponseMessage, RPCRequestMessage, RPCRequest, MessageID } from '@jaw.id/core';
 import {
   SessionManager,
   sessionManager as defaultSessionManager,
@@ -210,11 +202,7 @@ export class CryptoHandler {
    * @param authState - The authState to associate with the session
    * @returns The session (existing or newly created)
    */
-  async ensureSession(
-    origin: string,
-    peerPublicKey: string,
-    authState?: SessionAuthState
-  ): Promise<AppSession> {
+  async ensureSession(origin: string, peerPublicKey: string, authState?: SessionAuthState): Promise<AppSession> {
     this.currentOrigin = origin;
 
     let session = await this.sessionManager.getSession(origin);
@@ -344,10 +332,7 @@ export class CryptoHandler {
    * @param data - The response data (accounts and capabilities)
    * @returns The encrypted response message
    */
-  async createHandshakeResponse(
-    requestId: MessageID,
-    data: HandshakeResponseData
-  ): Promise<RPCResponseMessage> {
+  async createHandshakeResponse(requestId: MessageID, data: HandshakeResponseData): Promise<RPCResponseMessage> {
     const sharedSecret = await this.getSharedSecret();
     if (!sharedSecret) {
       throw new Error('No session available for encryption');

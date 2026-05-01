@@ -1,11 +1,11 @@
-'use client'
+'use client';
 
-import { SiweDialog, useChainIconURI } from "@jaw.id/ui";
-import { useSessionAccount } from "../../hooks";
-import { useCallback, useMemo, useState } from "react";
-import type { chain } from "../../lib/sdk-types";
-import { getChainNameFromId } from "../../lib/chain-handlers";
-import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
+import { SiweDialog, useChainIconURI } from '@jaw.id/ui';
+import { useSessionAccount } from '../../hooks';
+import { useCallback, useMemo, useState } from 'react';
+import type { chain } from '../../lib/sdk-types';
+import { getChainNameFromId } from '../../lib/chain-handlers';
+import { standardErrorCodes, JAW_RPC_URL } from '@jaw.id/core';
 
 export interface SiweModalProps {
   origin: string;
@@ -28,7 +28,7 @@ export const SiweModal = ({
   appName,
   appLogoUrl,
   onSuccess,
-  onError
+  onError,
 }: SiweModalProps) => {
   // Single hook handles session lookup + account restoration
   const { account, isLoading: isAccountLoading } = useSessionAccount({
@@ -61,7 +61,7 @@ export const SiweModal = ({
   }, [effectiveApiKey]);
 
   // Get chain name and icon
-  const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
+  const chainName = useMemo(() => (chain ? getChainNameFromId(chain.id) : undefined), [chain]);
   const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
 
   const signMessage = useCallback(async () => {
@@ -79,15 +79,15 @@ export const SiweModal = ({
 
       // Call onSuccess immediately - parent will handle closing
       onSuccess(signature, messageToSign);
-
     } catch (error) {
-      console.error("Error signing SIWE message:", error);
+      console.error('Error signing SIWE message:', error);
       setSiweStatus(`Error: ${error instanceof Error ? error.message : 'Sign in failed'}`);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       // Check if user cancelled passkey prompt (NotAllowedError)
-      const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-        ? standardErrorCodes.provider.userRejectedRequest
-        : standardErrorCodes.rpc.internal;
+      const errorCode =
+        error instanceof Error && error.name === 'NotAllowedError'
+          ? standardErrorCodes.provider.userRejectedRequest
+          : standardErrorCodes.rpc.internal;
       onError(errorObj, errorCode);
       setIsProcessing(false);
     }
@@ -106,7 +106,9 @@ export const SiweModal = ({
   return (
     <SiweDialog
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {
+        console.log('onOpenChange');
+      }}
       message={messageToSign}
       origin={origin}
       timestamp={timestamp}
@@ -124,4 +126,4 @@ export const SiweModal = ({
       canSign={canSign}
     />
   );
-}
+};

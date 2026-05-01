@@ -4,7 +4,7 @@ import { jaw } from '@jaw.id/wagmi';
 import { Mode, type PaymasterConfig } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
 
-export type ModeType = typeof Mode[keyof typeof Mode];
+export type ModeType = (typeof Mode)[keyof typeof Mode];
 
 export function createWagmiConfig(mode: ModeType, paymasters?: Record<number, PaymasterConfig>): Config {
   const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
@@ -25,7 +25,7 @@ export function createWagmiConfig(mode: ModeType, paymasters?: Record<number, Pa
           mode: mode,
           uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
         },
-        ens: "justan.id",
+        ens: 'justan.id',
         paymasters,
       }),
     ],

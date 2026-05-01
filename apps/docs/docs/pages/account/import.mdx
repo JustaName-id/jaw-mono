@@ -4,7 +4,6 @@ Import a passkey from cloud backup.
 
 **Type:** `static async`
 
-
 ## Signature
 
 ```typescript
@@ -13,28 +12,25 @@ static async import(
 ): Promise<Account>
 ```
 
-
 ## Parameters
 
 ### config
 
 Type: `AccountConfig`
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `chainId` | `number` | Yes | Chain ID for the account |
-| `apiKey` | `string` | Yes | API key for JAW services |
-| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
-| `paymasterContext` | `Record<string, unknown>` | No | Custom paymaster context for gas sponsorship |
-| `storage` | `SyncStorage` | No | Custom storage implementation (defaults to localStorage on web, in-memory fallback in React Native) |
-| `nativeGetFn` | `NativePasskeyGetFn` | No | Native passkey get function for React Native (e.g. `Passkey.get`). |
-| `rpId` | `string` | No | Relying party identifier. **Required in React Native.** |
-
+| Property           | Type                      | Required | Description                                                                                         |
+| ------------------ | ------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `chainId`          | `number`                  | Yes      | Chain ID for the account                                                                            |
+| `apiKey`           | `string`                  | Yes      | API key for JAW services                                                                            |
+| `paymasterUrl`     | `string`                  | No       | Custom paymaster URL for gas sponsorship                                                            |
+| `paymasterContext` | `Record<string, unknown>` | No       | Custom paymaster context for gas sponsorship                                                        |
+| `storage`          | `SyncStorage`             | No       | Custom storage implementation (defaults to localStorage on web, in-memory fallback in React Native) |
+| `nativeGetFn`      | `NativePasskeyGetFn`      | No       | Native passkey get function for React Native (e.g. `Passkey.get`).                                  |
+| `rpId`             | `string`                  | No       | Relying party identifier. **Required in React Native.**                                             |
 
 ## Returns
 
 `Promise<Account>` - The imported Account instance
-
 
 ## Behavior
 
@@ -44,14 +40,12 @@ Type: `AccountConfig`
 4. Stores the passkey account marked as imported
 5. Returns the ready-to-use Account instance
 
-
 ## Errors
 
-| Error | Description |
-|-------|-------------|
-| WebAuthn errors | User cancelled or browser doesn't support WebAuthn |
-| `Failed to retrieve imported passkey account` | Backend lookup failed |
-
+| Error                                         | Description                                        |
+| --------------------------------------------- | -------------------------------------------------- |
+| WebAuthn errors                               | User cancelled or browser doesn't support WebAuthn |
+| `Failed to retrieve imported passkey account` | Backend lookup failed                              |
 
 ## Examples
 
@@ -98,7 +92,6 @@ class MyUIHandler implements UIHandler {
 }
 ```
 
-
 ## Cloud Sync Providers
 
 Passkeys can be synced via:
@@ -109,7 +102,6 @@ Passkeys can be synced via:
 - **1Password, Dashlane, etc.**: Third-party password managers
 
 The import flow allows users to access their JAW account on any device where their passkeys are synced.
-
 
 ## React Native Usage
 
@@ -127,7 +119,6 @@ const account = await Account.import({
   rpId: 'myapp.com',
 });
 ```
-
 
 ## Related
 

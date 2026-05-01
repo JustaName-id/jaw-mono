@@ -91,11 +91,9 @@ export function useDecodedCalldata(
         const { functionName, args } = decodeFunctionData({ abi, data: data as Hex });
 
         // Find the matching ABI entry to get parameter names/types
-        const abiItem = abi.find(
-          (item) => 'name' in item && item.name === functionName && item.type === 'function'
-        );
+        const abiItem = abi.find((item) => 'name' in item && item.name === functionName && item.type === 'function');
 
-        const inputs = abiItem && 'inputs' in abiItem ? abiItem.inputs ?? [] : [];
+        const inputs = abiItem && 'inputs' in abiItem ? (abiItem.inputs ?? []) : [];
 
         const params: DecodedParam[] = (args ?? []).map((arg, i) => ({
           name: inputs[i]?.name || `param${i}`,

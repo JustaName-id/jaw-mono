@@ -78,22 +78,42 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
   const [capabilitiesAddress, setCapabilitiesAddress] = useState<string | undefined>();
   const [callsHistoryAddress, setCallsHistoryAddress] = useState<string | undefined>();
 
-  const { data: permissions, refetch: refetchPermissions, isLoading: isLoadingPermissions } = usePermissions({
+  const {
+    data: permissions,
+    refetch: refetchPermissions,
+    isLoading: isLoadingPermissions,
+  } = usePermissions({
     address: (permissionsAddress || address) as Address | undefined,
   });
-  const { data: assets, refetch: refetchAssets, isLoading: isLoadingAssets } = useGetAssets({
+  const {
+    data: assets,
+    refetch: refetchAssets,
+    isLoading: isLoadingAssets,
+  } = useGetAssets({
     address: (assetsAddress || address) as Address | undefined,
   });
-  const { data: capabilities, refetch: refetchCapabilities, isLoading: isLoadingCapabilities } = useCapabilities({
+  const {
+    data: capabilities,
+    refetch: refetchCapabilities,
+    isLoading: isLoadingCapabilities,
+  } = useCapabilities({
     address: (capabilitiesAddress || address) as Address | undefined,
   });
-  const { data: callsHistory, refetch: refetchCallsHistory, isLoading: isLoadingCallsHistory } = useGetCallsHistory({
+  const {
+    data: callsHistory,
+    refetch: refetchCallsHistory,
+    isLoading: isLoadingCallsHistory,
+  } = useGetCallsHistory({
     address: (callsHistoryAddress || address) as Address | undefined,
   });
 
   // Calls status state
   const [lastBatchId, setLastBatchId] = useState<string>('');
-  const { data: callsStatus, refetch: refetchCallsStatus, isLoading: isLoadingCallsStatus } = useCallsStatus({
+  const {
+    data: callsStatus,
+    refetch: refetchCallsStatus,
+    isLoading: isLoadingCallsStatus,
+  } = useCallsStatus({
     id: lastBatchId as `0x${string}`,
     query: { enabled: !!lastBatchId },
   });
@@ -242,8 +262,8 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
           error instanceof Error
             ? error.message
             : typeof error === 'object' && error !== null && 'message' in error
-            ? (error as { message: string }).message
-            : JSON.stringify(error);
+              ? (error as { message: string }).message
+              : JSON.stringify(error);
         addLog('error', method.name, errorMessage);
         throw error;
       } finally {
@@ -297,9 +317,7 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
   };
 
   const filteredMethods =
-    selectedCategory === 'all'
-      ? WAGMI_METHODS
-      : WAGMI_METHODS.filter((m) => m.category === selectedCategory);
+    selectedCategory === 'all' ? WAGMI_METHODS : WAGMI_METHODS.filter((m) => m.category === selectedCategory);
 
   // Check if any operation is pending
   // Using isExecuting as the primary state since we use async versions of hooks
@@ -315,22 +333,20 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
     isExecuting;
 
   return (
-    <div className="min-h-screen p-4 md:p-8 bg-background">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="bg-background min-h-screen p-4 md:p-8">
+      <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            JAW.id Playground - Wagmi
-          </h1>
+          <h1 className="text-foreground text-2xl font-bold md:text-3xl">JAW.id Playground - Wagmi</h1>
         </div>
 
         {/* Mode Toggle */}
         <Card className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-muted-foreground">Mode:</span>
+              <span className="text-muted-foreground text-sm font-medium">Mode:</span>
               <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                className={`rounded-full px-3 py-1 text-sm font-medium ${
                   mode === Mode.AppSpecific
                     ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
                     : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
@@ -340,15 +356,10 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <ConfigSnippet
-                type="wagmi"
-                mode={mode}
-                paymasters={pmConfig}
-                onPaymasterApply={onPaymasterApply}
-              />
+              <ConfigSnippet type="wagmi" mode={mode} paymasters={pmConfig} onPaymasterApply={onPaymasterApply} />
               <a
                 href="/wagmi"
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
                   mode === Mode.CrossPlatform
                     ? 'bg-blue-600 text-white'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -358,7 +369,7 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
               </a>
               <a
                 href="/wagmi?mode=app-specific"
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
                   mode === Mode.AppSpecific
                     ? 'bg-purple-600 text-white'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -368,7 +379,7 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
               </a>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
+          <p className="text-muted-foreground mt-2 text-xs">
             {mode === Mode.AppSpecific
               ? 'Direct signing with UI handled by UIHandler in your app'
               : 'Passkey operations handled via keys.jaw.id'}
@@ -377,17 +388,13 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
 
         {/* Connection Status */}
         <Card className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold mb-3">Connection Status</h2>
+              <h2 className="mb-3 text-lg font-semibold">Connection Status</h2>
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">Status:</span>
-                  <span
-                    className={`font-medium ${
-                      isConnected ? 'text-green-600' : 'text-red-600'
-                    }`}
-                  >
+                  <span className={`font-medium ${isConnected ? 'text-green-600' : 'text-red-600'}`}>
                     {isConnected ? 'Connected' : 'Disconnected'}
                   </span>
                 </div>
@@ -396,12 +403,22 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
                     <span className="text-muted-foreground">Account:</span>
                     <button
                       onClick={() => navigator.clipboard.writeText(address)}
-                      className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
+                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
                       title="Click to copy"
                     >
                       {address.slice(0, 6)}...{address.slice(-4)}
-                      <svg className="w-3 h-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      <svg
+                        className="text-muted-foreground h-3 w-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -411,12 +428,22 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
                     <span className="text-muted-foreground">Chain:</span>
                     <button
                       onClick={() => navigator.clipboard.writeText(chainId.toString())}
-                      className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
+                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
                       title="Click to copy"
                     >
                       {chainId}
-                      <svg className="w-3 h-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      <svg
+                        className="text-muted-foreground h-3 w-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -424,7 +451,7 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
                 {balance && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Balance:</span>
-                    <span className="bg-muted px-2 py-0.5 rounded text-xs font-mono">
+                    <span className="bg-muted rounded px-2 py-0.5 font-mono text-xs">
                       {parseFloat(formatUnits(balance.value, balance.decimals)).toFixed(4)} {balance.symbol}
                     </span>
                   </div>
@@ -482,7 +509,7 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
         </div>
 
         {/* Method Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredMethods.map((method) => (
             <MethodCard
               key={method.id}
@@ -504,10 +531,7 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
         <ExecutionLog logs={logs} onClear={() => setLogs([])} />
 
         {/* Encode Data Modal */}
-        <EncodeDataModal
-          isOpen={isEncodeModalOpen}
-          onClose={() => setIsEncodeModalOpen(false)}
-        />
+        <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
 
         {/* Method Modal */}
         <WagmiMethodModal
@@ -528,8 +552,7 @@ function WagmiPageInner() {
   const searchParams = useSearchParams();
   const modeParam = searchParams.get('mode');
 
-  const mode: ModeType =
-    modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
+  const mode: ModeType = modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
 
   const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
@@ -550,12 +573,7 @@ function WagmiPageInner() {
 
   return (
     <WagmiProviders mode={mode} paymasters={paymasters}>
-      <WagmiPageContent
-        key={mode}
-        mode={mode}
-        pmConfig={pmConfig}
-        onPaymasterApply={handlePaymasterApply}
-      />
+      <WagmiPageContent key={mode} mode={mode} pmConfig={pmConfig} onPaymasterApply={handlePaymasterApply} />
     </WagmiProviders>
   );
 }
@@ -564,7 +582,7 @@ export default function WagmiPage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen p-8 bg-background flex items-center justify-center">
+        <div className="bg-background flex min-h-screen items-center justify-center p-8">
           <p className="text-muted-foreground">Loading...</p>
         </div>
       }

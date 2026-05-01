@@ -13,12 +13,7 @@
  * connect simultaneously with different accounts and isolated encryption keys.
  */
 
-import {
-  generateKeyPair,
-  exportKeyToHexString,
-  importKeyFromHexString,
-  deriveSharedSecret,
-} from '@jaw.id/core';
+import { generateKeyPair, exportKeyToHexString, importKeyFromHexString, deriveSharedSecret } from '@jaw.id/core';
 
 // ============================================================================
 // Types
@@ -118,7 +113,7 @@ async function hashOrigin(origin: string): Promise<string> {
   const data = encoder.encode(origin);
   const hashBuffer = await crypto.subtle.digest('SHA-256', data);
   const hashArray = Array.from(new Uint8Array(hashBuffer));
-  const hash = hashArray.map(b => b.toString(16).padStart(2, '0')).join('');
+  const hash = hashArray.map((b) => b.toString(16).padStart(2, '0')).join('');
 
   // Cache and return
   originHashCache.set(origin, hash);
@@ -406,7 +401,11 @@ export class SessionManager {
       throw new Error('Invalid account data');
     }
 
-    console.log(`${LOG_PREFIX} Creating session for:`, origin, account ? `with account ${account.address}` : '(pending account)');
+    console.log(
+      `${LOG_PREFIX} Creating session for:`,
+      origin,
+      account ? `with account ${account.address}` : '(pending account)'
+    );
 
     // Hash the origin for storage
     const hashedOrigin = await hashOrigin(origin);

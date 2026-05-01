@@ -15,7 +15,16 @@ export type ParameterDefinition = {
   showWhen?: { param: string; value: string };
 };
 
-export type MethodCategory = 'account' | 'chain' | 'transaction' | 'signing' | 'wallet' | 'capability' | 'permission' | 'asset' | 'utility';
+export type MethodCategory =
+  | 'account'
+  | 'chain'
+  | 'transaction'
+  | 'signing'
+  | 'wallet'
+  | 'capability'
+  | 'permission'
+  | 'asset'
+  | 'utility';
 
 export type RpcMethod = {
   id: string;
@@ -56,7 +65,7 @@ export const CATEGORY_LABELS: Record<MethodCategory, string> = {
 // Generate chain options dynamically from SUPPORTED_CHAINS
 export const CHAIN_OPTIONS = [
   { label: 'Default (current chain)', value: 'default' },
-  ...SUPPORTED_CHAINS.map(chain => ({
+  ...SUPPORTED_CHAINS.map((chain) => ({
     label: `${chain.name} (${chain.id})`,
     value: `0x${chain.id.toString(16)}`,
   })),
@@ -128,7 +137,7 @@ console.log('Chain ID:', chainId);`,
         label: 'Chain',
         description: 'The chain to switch to',
         required: true,
-        options: CHAIN_OPTIONS.filter(opt => opt.value !== 'default'),
+        options: CHAIN_OPTIONS.filter((opt) => opt.value !== 'default'),
       },
     ],
     getCodeSnippet: (params) => `await jaw.provider.request({
@@ -235,13 +244,17 @@ console.log('Transaction hash:', txHash);`;
         label: 'Calls (JSON)',
         description: 'Array of call objects: [{ to, value, data }]',
         required: true,
-        defaultValue: JSON.stringify([
-          {
-            to: '0x0000000000000000000000000000000000000000',
-            value: '0x2386F26FC10000',
-            data: '0x'
-          },
-        ], null, 2),
+        defaultValue: JSON.stringify(
+          [
+            {
+              to: '0x0000000000000000000000000000000000000000',
+              value: '0x2386F26FC10000',
+              data: '0x',
+            },
+          ],
+          null,
+          2
+        ),
       },
       {
         name: 'permissionId',
@@ -352,11 +365,13 @@ console.log('Receipts:', status.receipts);`,
 
 // History contains bundles with calls and receipts
 console.log('History:', history);`,
-    buildParams: (params, context) => [{
-      address: params.address || context.address,
-      limit: params.limit ? parseInt(params.limit) : undefined,
-      sort: params.sort || undefined,
-    }],
+    buildParams: (params, context) => [
+      {
+        address: params.address || context.address,
+        limit: params.limit ? parseInt(params.limit) : undefined,
+        sort: params.sort || undefined,
+      },
+    ],
   },
 
   // ===== Signing Methods =====
@@ -404,29 +419,33 @@ console.log('Signature:', signature);`,
         label: 'Typed Data (JSON)',
         description: 'EIP-712 typed data object',
         required: true,
-        defaultValue: JSON.stringify({
-          types: {
-            EIP712Domain: [
-              { name: 'name', type: 'string' },
-              { name: 'version', type: 'string' },
-              { name: 'chainId', type: 'uint256' },
-            ],
-            Person: [
-              { name: 'name', type: 'string' },
-              { name: 'wallet', type: 'address' },
-            ],
+        defaultValue: JSON.stringify(
+          {
+            types: {
+              EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+              ],
+              Person: [
+                { name: 'name', type: 'string' },
+                { name: 'wallet', type: 'address' },
+              ],
+            },
+            primaryType: 'Person',
+            domain: {
+              name: 'My DApp',
+              version: '1',
+              chainId: 1,
+            },
+            message: {
+              name: 'Alice',
+              wallet: '0x0000000000000000000000000000000000000000',
+            },
           },
-          primaryType: 'Person',
-          domain: {
-            name: 'My DApp',
-            version: '1',
-            chainId: 1,
-          },
-          message: {
-            name: 'Alice',
-            wallet: '0x0000000000000000000000000000000000000000',
-          },
-        }, null, 2),
+          null,
+          2
+        ),
       },
     ],
     getCodeSnippet: (params) => `const typedData = ${params.typedData || '{}'};
@@ -491,29 +510,33 @@ console.log('Signature:', signature);`,
         label: 'Typed Data (for 0x01)',
         description: 'EIP-712 typed data object',
         required: false,
-        defaultValue: JSON.stringify({
-          types: {
-            EIP712Domain: [
-              { name: 'name', type: 'string' },
-              { name: 'version', type: 'string' },
-              { name: 'chainId', type: 'uint256' },
-            ],
-            Person: [
-              { name: 'name', type: 'string' },
-              { name: 'wallet', type: 'address' },
-            ],
+        defaultValue: JSON.stringify(
+          {
+            types: {
+              EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+              ],
+              Person: [
+                { name: 'name', type: 'string' },
+                { name: 'wallet', type: 'address' },
+              ],
+            },
+            primaryType: 'Person',
+            domain: {
+              name: 'My DApp',
+              version: '1',
+              chainId: 1,
+            },
+            message: {
+              name: 'Alice',
+              wallet: '0x0000000000000000000000000000000000000000',
+            },
           },
-          primaryType: 'Person',
-          domain: {
-            name: 'My DApp',
-            version: '1',
-            chainId: 1,
-          },
-          message: {
-            name: 'Alice',
-            wallet: '0x0000000000000000000000000000000000000000',
-          },
-        }, null, 2),
+          null,
+          2
+        ),
       },
     ],
     getCodeSnippet: (params) => {
@@ -554,9 +577,7 @@ console.log('Signature:', signature);`;
       const result: { chainId?: string; request: { type: string; data: unknown } } = {
         request: {
           type,
-          data: type === '0x45'
-            ? { message: params.message || 'Hello, World!' }
-            : JSON.parse(params.typedData || '{}'),
+          data: type === '0x45' ? { message: params.message || 'Hello, World!' } : JSON.parse(params.typedData || '{}'),
         },
       };
       if (params.chainId && params.chainId !== 'default') {
@@ -606,10 +627,14 @@ console.log('Signature:', signature);`;
         label: 'Text Records (JSON)',
         description: 'Array of { key, value } records to set on the subname',
         required: false,
-        defaultValue: JSON.stringify([
-          { key: 'com.twitter', value: '@myhandle' },
-          { key: 'com.github', value: 'myusername' },
-        ], null, 2),
+        defaultValue: JSON.stringify(
+          [
+            { key: 'com.twitter', value: '@myhandle' },
+            { key: 'com.github', value: 'myusername' },
+          ],
+          null,
+          2
+        ),
         showWhen: { param: 'enableSubnameTextRecords', value: 'true' },
       },
     ],
@@ -643,9 +668,17 @@ ${capabilities.join(',\n')}
   }],
 });
 
-console.log('Connected:', result.accounts);${enableSiwe ? `
-console.log('SIWE:', result.accounts[0]?.capabilities?.signInWithEthereum);` : ''}${enableSubnameTextRecords ? `
-console.log('Subname:', result.accounts[0]?.capabilities?.subnameTextRecords);` : ''}`;
+console.log('Connected:', result.accounts);${
+          enableSiwe
+            ? `
+console.log('SIWE:', result.accounts[0]?.capabilities?.signInWithEthereum);`
+            : ''
+        }${
+          enableSubnameTextRecords
+            ? `
+console.log('Subname:', result.accounts[0]?.capabilities?.subnameTextRecords);`
+            : ''
+        }`;
       }
 
       return `const result = await jaw.provider.request({
@@ -767,22 +800,26 @@ console.log('Capabilities:', capabilities);`,
         type: 'json',
         label: 'Permissions (JSON)',
         required: true,
-        defaultValue: JSON.stringify({
-          calls: [
-            {
-              target: '0x3232323232323232323232323232323232323232', // ANY_TARGET - wildcard
-              selector: '0xe0e0e0e0', // EMPTY_CALLDATA_FN_SEL - for ETH transfers
-            },
-          ],
-          spends: [
-            {
-              token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // NATIVE_TOKEN - native ETH
-              allowance: '0x16345785d8a0000', // 0.1 ETH
-              unit: 'day',
-              multiplier: 1,
-            },
-          ],
-        }, null, 2),
+        defaultValue: JSON.stringify(
+          {
+            calls: [
+              {
+                target: '0x3232323232323232323232323232323232323232', // ANY_TARGET - wildcard
+                selector: '0xe0e0e0e0', // EMPTY_CALLDATA_FN_SEL - for ETH transfers
+              },
+            ],
+            spends: [
+              {
+                token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE', // NATIVE_TOKEN - native ETH
+                allowance: '0x16345785d8a0000', // 0.1 ETH
+                unit: 'day',
+                multiplier: 1,
+              },
+            ],
+          },
+          null,
+          2
+        ),
       },
     ],
     getCodeSnippet: (params) => {
@@ -803,7 +840,7 @@ console.log('Permission ID:', result.permissionId);`;
     },
     buildParams: (params) => {
       const expiryDays = parseInt(params.expiryDays || '30');
-      const expiry = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
+      const expiry = Math.floor(Date.now() / 1000) + expiryDays * 24 * 60 * 60;
       const permissions = JSON.parse(params.permissions || '{}');
       const result: { expiry: number; spender: string; permissions: unknown; chainId?: string } = {
         expiry,
@@ -840,10 +877,12 @@ console.log('Permission ID:', result.permissionId);`;
 });
 
 console.log('Permission revoked');`,
-    buildParams: (params, context) => [{
-      address: context.address,
-      id: params.permissionId,
-    }],
+    buildParams: (params, context) => [
+      {
+        address: context.address,
+        id: params.permissionId,
+      },
+    ],
   },
   {
     id: 'wallet_getPermissions',
@@ -870,9 +909,11 @@ console.log('Permission revoked');`,
 });
 
 console.log('Permissions:', permissions);`,
-    buildParams: (params, context) => [{
-      address: params.address || context.address,
-    }],
+    buildParams: (params, context) => [
+      {
+        address: params.address || context.address,
+      },
+    ],
   },
 
   // ===== Asset Methods =====
@@ -901,9 +942,11 @@ console.log('Permissions:', permissions);`,
 });
 
 console.log('Assets:', assets);`,
-    buildParams: (params, context) => [{
-      account: params.address || context.address,
-    }],
+    buildParams: (params, context) => [
+      {
+        account: params.address || context.address,
+      },
+    ],
   },
 
   // ===== Utility Tools =====
@@ -926,13 +969,16 @@ const data = encodeFunctionData({
 ];
 
 // Group methods by category
-export const METHODS_BY_CATEGORY = RPC_METHODS.reduce((acc, method) => {
-  if (!acc[method.category]) {
-    acc[method.category] = [];
-  }
-  acc[method.category].push(method);
-  return acc;
-}, {} as Record<MethodCategory, RpcMethod[]>);
+export const METHODS_BY_CATEGORY = RPC_METHODS.reduce(
+  (acc, method) => {
+    if (!acc[method.category]) {
+      acc[method.category] = [];
+    }
+    acc[method.category].push(method);
+    return acc;
+  },
+  {} as Record<MethodCategory, RpcMethod[]>
+);
 
 // Get all categories in order
 export const CATEGORIES: MethodCategory[] = [

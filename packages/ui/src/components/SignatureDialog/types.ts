@@ -1,4 +1,4 @@
-import { JSX } from "react";
+import { JSX } from 'react';
 export interface SignatureDialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

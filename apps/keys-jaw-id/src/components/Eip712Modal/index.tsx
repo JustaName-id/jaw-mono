@@ -1,11 +1,11 @@
-'use client'
+'use client';
 
-import { Eip712Dialog, useChainIconURI } from "@jaw.id/ui";
-import { useSessionAccount } from "../../hooks";
-import { useCallback, useMemo, useState } from "react";
-import type { chain } from "../../lib/sdk-types";
-import { getChainNameFromId } from "../../lib/chain-handlers";
-import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
+import { Eip712Dialog, useChainIconURI } from '@jaw.id/ui';
+import { useSessionAccount } from '../../hooks';
+import { useCallback, useMemo, useState } from 'react';
+import type { chain } from '../../lib/sdk-types';
+import { getChainNameFromId } from '../../lib/chain-handlers';
+import { standardErrorCodes, JAW_RPC_URL } from '@jaw.id/core';
 
 export interface Eip712ModalProps {
   origin: string;
@@ -32,7 +32,7 @@ export const Eip712Modal = ({
   chain,
   apiKey,
   onSuccess,
-  onError
+  onError,
 }: Eip712ModalProps) => {
   // Single hook handles session lookup + account restoration
   const { account, isLoading: isAccountLoading } = useSessionAccount({
@@ -65,7 +65,7 @@ export const Eip712Modal = ({
   }, [effectiveApiKey]);
 
   // Get chain name and icon
-  const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
+  const chainName = useMemo(() => (chain ? getChainNameFromId(chain.id) : undefined), [chain]);
   const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
 
   // Parse typed data
@@ -102,15 +102,15 @@ export const Eip712Modal = ({
 
       // Call onSuccess immediately - parent will handle closing
       onSuccess(signature);
-
     } catch (error) {
-      console.error("Error signing typed data:", error);
+      console.error('Error signing typed data:', error);
       setSignatureStatus(`Error: ${error instanceof Error ? error.message : 'Signature failed'}`);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       // Check if user cancelled passkey prompt (NotAllowedError)
-      const errorCode = error instanceof Error && error.name === 'NotAllowedError'
-        ? standardErrorCodes.provider.userRejectedRequest
-        : standardErrorCodes.rpc.internal;
+      const errorCode =
+        error instanceof Error && error.name === 'NotAllowedError'
+          ? standardErrorCodes.provider.userRejectedRequest
+          : standardErrorCodes.rpc.internal;
       onError(errorObj, errorCode);
       setIsProcessing(false);
     }
@@ -129,7 +129,9 @@ export const Eip712Modal = ({
   return (
     <Eip712Dialog
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {
+        console.log('onOpenChange');
+      }}
       typedDataJson={typedDataJson}
       origin={origin}
       timestamp={timestamp}
@@ -145,4 +147,4 @@ export const Eip712Modal = ({
       canSign={canSign}
     />
   );
-}
+};

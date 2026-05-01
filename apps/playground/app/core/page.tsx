@@ -12,13 +12,7 @@ import { MethodModal } from '../../components/method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
-import {
-  RPC_METHODS,
-  CATEGORIES,
-  CATEGORY_LABELS,
-  type RpcMethod,
-  type MethodCategory,
-} from '../../lib/rpc-methods';
+import { RPC_METHODS, CATEGORIES, CATEGORY_LABELS, type RpcMethod, type MethodCategory } from '../../lib/rpc-methods';
 
 type ModeType = (typeof Mode)[keyof typeof Mode];
 
@@ -113,8 +107,8 @@ function CorePageContent({ mode }: { mode: ModeType }) {
           error instanceof Error
             ? error.message
             : typeof error === 'object' && error !== null && 'message' in error
-            ? (error as { message: string }).message
-            : JSON.stringify(error);
+              ? (error as { message: string }).message
+              : JSON.stringify(error);
         addLog('error', method, errorMessage);
         throw error;
       }
@@ -137,27 +131,23 @@ function CorePageContent({ mode }: { mode: ModeType }) {
   };
 
   const filteredMethods =
-    selectedCategory === 'all'
-      ? RPC_METHODS
-      : RPC_METHODS.filter((m) => m.category === selectedCategory);
+    selectedCategory === 'all' ? RPC_METHODS : RPC_METHODS.filter((m) => m.category === selectedCategory);
 
   return (
-    <div className="min-h-screen p-4 md:p-8 bg-background">
-      <div className="max-w-6xl mx-auto space-y-6">
+    <div className="bg-background min-h-screen p-4 md:p-8">
+      <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
         <div className="space-y-2">
-          <h1 className="text-2xl md:text-3xl font-bold text-foreground">
-            JAW.id Playground - Core
-          </h1>
+          <h1 className="text-foreground text-2xl font-bold md:text-3xl">JAW.id Playground - Core</h1>
         </div>
 
         {/* Mode Toggle */}
         <Card className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div className="flex items-center gap-3">
-              <span className="text-sm font-medium text-muted-foreground">Mode:</span>
+              <span className="text-muted-foreground text-sm font-medium">Mode:</span>
               <span
-                className={`px-3 py-1 rounded-full text-sm font-medium ${
+                className={`rounded-full px-3 py-1 text-sm font-medium ${
                   mode === Mode.AppSpecific
                     ? 'bg-purple-100 text-purple-800 dark:bg-purple-900 dark:text-purple-200'
                     : 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-200'
@@ -167,15 +157,10 @@ function CorePageContent({ mode }: { mode: ModeType }) {
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <ConfigSnippet
-                type="core"
-                mode={mode}
-                paymasters={pmConfig}
-                onPaymasterApply={handlePaymasterApply}
-              />
+              <ConfigSnippet type="core" mode={mode} paymasters={pmConfig} onPaymasterApply={handlePaymasterApply} />
               <a
                 href="/core"
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
                   mode === Mode.CrossPlatform
                     ? 'bg-blue-600 text-white'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -185,7 +170,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
               </a>
               <a
                 href="/core?mode=app-specific"
-                className={`px-3 py-1.5 text-sm rounded-md transition-colors ${
+                className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
                   mode === Mode.AppSpecific
                     ? 'bg-purple-600 text-white'
                     : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -195,7 +180,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
               </a>
             </div>
           </div>
-          <p className="text-xs text-muted-foreground mt-2">
+          <p className="text-muted-foreground mt-2 text-xs">
             {mode === Mode.AppSpecific
               ? 'Direct signing with UI handled by UIHandler in your app'
               : 'Passkey operations handled via keys.jaw.id'}
@@ -204,9 +189,9 @@ function CorePageContent({ mode }: { mode: ModeType }) {
 
         {/* Connection Status */}
         <Card className="p-4">
-          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <div>
-              <h2 className="text-lg font-semibold mb-3">Connection Status</h2>
+              <h2 className="mb-3 text-lg font-semibold">Connection Status</h2>
               <div className="flex flex-wrap items-center gap-x-6 gap-y-2 text-sm">
                 <div className="flex items-center gap-2">
                   <span className="text-muted-foreground">Status:</span>
@@ -219,12 +204,22 @@ function CorePageContent({ mode }: { mode: ModeType }) {
                     <span className="text-muted-foreground">Account:</span>
                     <button
                       onClick={() => navigator.clipboard.writeText(accounts[0] || '')}
-                      className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
+                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
                       title="Click to copy"
                     >
                       {accounts[0]?.slice(0, 6)}...{accounts[0]?.slice(-4)}
-                      <svg className="w-3 h-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                      <svg
+                        className="text-muted-foreground h-3 w-3"
+                        fill="none"
+                        viewBox="0 0 24 24"
+                        stroke="currentColor"
+                      >
+                        <path
+                          strokeLinecap="round"
+                          strokeLinejoin="round"
+                          strokeWidth={2}
+                          d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                        />
                       </svg>
                     </button>
                   </div>
@@ -233,12 +228,22 @@ function CorePageContent({ mode }: { mode: ModeType }) {
                   <span className="text-muted-foreground">Chain:</span>
                   <button
                     onClick={() => navigator.clipboard.writeText(String(chainId))}
-                    className="bg-muted px-2 py-0.5 rounded text-xs font-mono hover:bg-muted/80 transition-colors cursor-pointer flex items-center gap-1"
+                    className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
                     title="Click to copy"
                   >
                     {chainId}
-                    <svg className="w-3 h-3 text-muted-foreground" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
+                    <svg
+                      className="text-muted-foreground h-3 w-3"
+                      fill="none"
+                      viewBox="0 0 24 24"
+                      stroke="currentColor"
+                    >
+                      <path
+                        strokeLinecap="round"
+                        strokeLinejoin="round"
+                        strokeWidth={2}
+                        d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z"
+                      />
                     </svg>
                   </button>
                 </div>
@@ -294,7 +299,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         </div>
 
         {/* Method Grid */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+        <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {filteredMethods.map((method) => (
             <MethodCard
               key={method.id}
@@ -319,10 +324,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
         />
 
         {/* Encode Data Modal */}
-        <EncodeDataModal
-          isOpen={isEncodeModalOpen}
-          onClose={() => setIsEncodeModalOpen(false)}
-        />
+        <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
       </div>
     </div>
   );
@@ -332,8 +334,7 @@ function CorePageInner() {
   const searchParams = useSearchParams();
   const modeParam = searchParams.get('mode');
 
-  const mode: ModeType =
-    modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
+  const mode: ModeType = modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
 
   return <CorePageContent key={mode} mode={mode} />;
 }
@@ -342,7 +343,7 @@ export default function CorePage() {
   return (
     <Suspense
       fallback={
-        <div className="min-h-screen p-8 bg-background flex items-center justify-center">
+        <div className="bg-background flex min-h-screen items-center justify-center p-8">
           <p className="text-muted-foreground">Loading...</p>
         </div>
       }

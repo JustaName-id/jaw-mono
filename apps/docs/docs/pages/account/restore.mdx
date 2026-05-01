@@ -4,7 +4,6 @@ Restore an account from existing credential data without triggering a WebAuthn p
 
 **Type:** `static async`
 
-
 ## Signature
 
 ```typescript
@@ -15,22 +14,21 @@ static async restore(
 ): Promise<Account>
 ```
 
-
 ## Parameters
 
 ### config
 
 Type: `AccountConfig`
 
-| Property | Type | Required | Description |
-|----------|------|----------|-------------|
-| `chainId` | `number` | Yes | Chain ID for the account |
-| `apiKey` | `string` | Yes | API key for JAW services |
-| `paymasterUrl` | `string` | No | Custom paymaster URL for gas sponsorship |
-| `paymasterContext` | `Record<string, unknown>` | No | Custom paymaster context |
-| `storage` | `SyncStorage` | No | Custom storage implementation (defaults to localStorage on web, in-memory fallback in React Native) |
-| `nativeGetFn` | `NativePasskeyGetFn` | No | Native passkey get function for React Native (e.g. `Passkey.get`). |
-| `rpId` | `string` | No | Relying party identifier. **Required in React Native.** |
+| Property           | Type                      | Required | Description                                                                                         |
+| ------------------ | ------------------------- | -------- | --------------------------------------------------------------------------------------------------- |
+| `chainId`          | `number`                  | Yes      | Chain ID for the account                                                                            |
+| `apiKey`           | `string`                  | Yes      | API key for JAW services                                                                            |
+| `paymasterUrl`     | `string`                  | No       | Custom paymaster URL for gas sponsorship                                                            |
+| `paymasterContext` | `Record<string, unknown>` | No       | Custom paymaster context                                                                            |
+| `storage`          | `SyncStorage`             | No       | Custom storage implementation (defaults to localStorage on web, in-memory fallback in React Native) |
+| `nativeGetFn`      | `NativePasskeyGetFn`      | No       | Native passkey get function for React Native (e.g. `Passkey.get`).                                  |
+| `rpId`             | `string`                  | No       | Relying party identifier. **Required in React Native.**                                             |
 
 ### credentialId
 
@@ -44,28 +42,25 @@ Type: `` `0x${string}` ``
 
 The public key of the passkey (hex encoded).
 
-
 ## Returns
 
 `Promise<Account>` - The Account instance
-
 
 ## Behavior
 
 This method restores an Account instance from credential data **without triggering a WebAuthn prompt**. The actual signing operations will trigger their own WebAuthn prompts when needed.
 
 Use this method when:
+
 - The user has already authenticated (e.g., during connection)
 - You have the credential data stored in your session
 - You want to avoid redundant WebAuthn prompts
 
-
 ## Errors
 
-| Error | Description |
-|-------|-------------|
+| Error                                     | Description                 |
+| ----------------------------------------- | --------------------------- |
 | `credentialId and publicKey are required` | Missing required parameters |
-
 
 ## Examples
 
@@ -92,16 +87,11 @@ import { Account } from '@jaw.id/core';
 
 // In your UI handler, restore account from stored credentials
 async function handleSignRequest(credentialId: string, publicKey: `0x${string}`) {
-  const account = await Account.restore(
-    { chainId: 8453, apiKey: 'your-api-key' },
-    credentialId,
-    publicKey
-  );
+  const account = await Account.restore({ chainId: 8453, apiKey: 'your-api-key' }, credentialId, publicKey);
 
   return account;
 }
 ```
-
 
 ## React Native Usage
 
@@ -120,13 +110,12 @@ const account = await Account.restore(
     rpId: 'myapp.com',
   },
   credentialId,
-  publicKey,
+  publicKey
 );
 
 // Signing triggers the native passkey prompt via nativeGetFn
 const signature = await account.signMessage('Hello');
 ```
-
 
 ## Related
 

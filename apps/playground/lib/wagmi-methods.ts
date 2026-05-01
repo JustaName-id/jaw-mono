@@ -92,7 +92,10 @@ export type WagmiMethod = {
   requiresConnection: boolean;
   parameters?: ParameterDefinition[];
   getCodeSnippet: (params: Record<string, string>) => string;
-  buildParams: (params: Record<string, string>, context: { address?: string; chainId?: number }) => Record<string, unknown>;
+  buildParams: (
+    params: Record<string, string>,
+    context: { address?: string; chainId?: number }
+  ) => Record<string, unknown>;
 };
 
 export const WAGMI_METHODS: WagmiMethod[] = [
@@ -207,8 +210,12 @@ const { sendTransaction } = useSendTransaction();
 
 sendTransaction({
   to: '${params.to || '0x...'}',
-  value: parseEther('${params.value || '0.001'}'),${params.data ? `
-  data: '${params.data}',` : ''}
+  value: parseEther('${params.value || '0.001'}'),${
+    params.data
+      ? `
+  data: '${params.data}',`
+      : ''
+  }
 });`,
     buildParams: (params) => ({
       to: params.to,
@@ -230,12 +237,16 @@ sendTransaction({
         type: 'json',
         label: 'Calls (JSON Array)',
         required: true,
-        defaultValue: JSON.stringify([
-          {
-            to: '0x0000000000000000000000000000000000000000',
-            value: '0x16345785d8a0000',
-          },
-        ], null, 2),
+        defaultValue: JSON.stringify(
+          [
+            {
+              to: '0x0000000000000000000000000000000000000000',
+              value: '0x16345785d8a0000',
+            },
+          ],
+          null,
+          2
+        ),
       },
     ],
     getCodeSnippet: (params) => `import { useSendCalls } from 'wagmi';
@@ -323,11 +334,15 @@ console.log('Receipts:', callsStatus?.receipts);`,
     getCodeSnippet: (params) => `import { useGetCallsHistory } from '@jaw.id/wagmi';
 
 // Works without wallet connection when address is provided
-const { data: history, isLoading, refetch } = useGetCallsHistory(${params.address ? `{
+const { data: history, isLoading, refetch } = useGetCallsHistory(${
+      params.address
+        ? `{
   address: '${params.address}',
   limit: ${params.limit || 20},
   sort: '${params.sort || 'desc'}',
-}` : ''});
+}`
+        : ''
+    });
 
 // History contains bundles with calls and receipts
 console.log('History:', history);`,
@@ -381,29 +396,33 @@ console.log('Signature:', signature);`,
         type: 'json',
         label: 'Typed Data (JSON)',
         required: true,
-        defaultValue: JSON.stringify({
-          domain: {
-            name: 'JAW Demo',
-            version: '1',
+        defaultValue: JSON.stringify(
+          {
+            domain: {
+              name: 'JAW Demo',
+              version: '1',
+            },
+            types: {
+              Person: [
+                { name: 'name', type: 'string' },
+                { name: 'wallet', type: 'address' },
+              ],
+              Mail: [
+                { name: 'from', type: 'Person' },
+                { name: 'to', type: 'Person' },
+                { name: 'contents', type: 'string' },
+              ],
+            },
+            primaryType: 'Mail',
+            message: {
+              from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000000' },
+              to: { name: 'Bob', wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB' },
+              contents: 'Hello, Bob!',
+            },
           },
-          types: {
-            Person: [
-              { name: 'name', type: 'string' },
-              { name: 'wallet', type: 'address' },
-            ],
-            Mail: [
-              { name: 'from', type: 'Person' },
-              { name: 'to', type: 'Person' },
-              { name: 'contents', type: 'string' },
-            ],
-          },
-          primaryType: 'Mail',
-          message: {
-            from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000000' },
-            to: { name: 'Bob', wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB' },
-            contents: 'Hello, Bob!',
-          },
-        }, null, 2),
+          null,
+          2
+        ),
       },
     ],
     getCodeSnippet: (params) => {
@@ -465,29 +484,33 @@ console.log('Signature:', signature);`;
         label: 'Typed Data (for EIP-712)',
         description: 'Typed data object (only used when type is 0x01)',
         required: false,
-        defaultValue: JSON.stringify({
-          domain: {
-            name: 'JAW Demo',
-            version: '1',
+        defaultValue: JSON.stringify(
+          {
+            domain: {
+              name: 'JAW Demo',
+              version: '1',
+            },
+            types: {
+              Person: [
+                { name: 'name', type: 'string' },
+                { name: 'wallet', type: 'address' },
+              ],
+              Mail: [
+                { name: 'from', type: 'Person' },
+                { name: 'to', type: 'Person' },
+                { name: 'contents', type: 'string' },
+              ],
+            },
+            primaryType: 'Mail',
+            message: {
+              from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000000' },
+              to: { name: 'Bob', wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB' },
+              contents: 'Hello, Bob!',
+            },
           },
-          types: {
-            Person: [
-              { name: 'name', type: 'string' },
-              { name: 'wallet', type: 'address' },
-            ],
-            Mail: [
-              { name: 'from', type: 'Person' },
-              { name: 'to', type: 'Person' },
-              { name: 'contents', type: 'string' },
-            ],
-          },
-          primaryType: 'Mail',
-          message: {
-            from: { name: 'Alice', wallet: '0x0000000000000000000000000000000000000000' },
-            to: { name: 'Bob', wallet: '0xbBbBBBBbbBBBbbbBbbBbbbbBBbBbbbbBbBbbBBbB' },
-            contents: 'Hello, Bob!',
-          },
-        }, null, 2),
+          null,
+          2
+        ),
       },
     ],
     getCodeSnippet: (params) => {
@@ -576,9 +599,13 @@ console.log('Signature:', signature);`;
     getCodeSnippet: (params) => `import { useCapabilities } from '@jaw.id/wagmi';
 
 // Works without wallet connection when address is provided
-const { data: capabilities, isLoading, refetch } = useCapabilities(${params.address ? `{
+const { data: capabilities, isLoading, refetch } = useCapabilities(${
+      params.address
+        ? `{
   address: '${params.address}',
-}` : ''});
+}`
+        : ''
+    });
 
 // Capabilities are keyed by chain ID (hex)
 // e.g., { '0x14a34': { atomicBatch: { supported: true }, ... } }
@@ -618,22 +645,26 @@ console.log('Capabilities:', capabilities);`,
         type: 'json',
         label: 'Permissions (JSON)',
         required: true,
-        defaultValue: JSON.stringify({
-          calls: [
-            {
-              target: '0x3232323232323232323232323232323232323232',
-              selector: '0xe0e0e0e0',
-            },
-          ],
-          spends: [
-            {
-              token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
-              allowance: '0x16345785d8a0000',
-              unit: 'day',
-              multiplier: 1,
-            },
-          ],
-        }, null, 2),
+        defaultValue: JSON.stringify(
+          {
+            calls: [
+              {
+                target: '0x3232323232323232323232323232323232323232',
+                selector: '0xe0e0e0e0',
+              },
+            ],
+            spends: [
+              {
+                token: '0xEeeeeEeeeEeEeeEeEeEeeEEEeeeeEeeeeeeeEEeE',
+                allowance: '0x16345785d8a0000',
+                unit: 'day',
+                multiplier: 1,
+              },
+            ],
+          },
+          null,
+          2
+        ),
       },
     ],
     getCodeSnippet: (params) => `import { useGrantPermissions } from '@jaw.id/wagmi';
@@ -650,7 +681,7 @@ grantPermissions({
 });`,
     buildParams: (params) => {
       const expiryDays = parseInt(params.expiryDays || '7');
-      const expiry = Math.floor(Date.now() / 1000) + (expiryDays * 24 * 60 * 60);
+      const expiry = Math.floor(Date.now() / 1000) + expiryDays * 24 * 60 * 60;
       try {
         return {
           spender: params.spender,
@@ -711,9 +742,13 @@ revokePermissions({
     getCodeSnippet: (params) => `import { usePermissions } from '@jaw.id/wagmi';
 
 // Works without wallet connection when address is provided
-const { data: permissions, isLoading, refetch } = usePermissions(${params.address ? `{
+const { data: permissions, isLoading, refetch } = usePermissions(${
+      params.address
+        ? `{
   address: '${params.address}',
-}` : ''});
+}`
+        : ''
+    });
 
 console.log('Permissions:', permissions);`,
     buildParams: (params) => ({
@@ -743,9 +778,13 @@ console.log('Permissions:', permissions);`,
     getCodeSnippet: (params) => `import { useGetAssets } from '@jaw.id/wagmi';
 
 // Works without wallet connection when address is provided
-const { data: assets, isLoading, refetch } = useGetAssets(${params.address ? `{
+const { data: assets, isLoading, refetch } = useGetAssets(${
+      params.address
+        ? `{
   address: '${params.address}',
-}` : ''});
+}`
+        : ''
+    });
 
 // Assets are grouped by chain ID (hex)
 // e.g., { '0x14a34': [{ address: '0x...', symbol: 'ETH', ... }] }

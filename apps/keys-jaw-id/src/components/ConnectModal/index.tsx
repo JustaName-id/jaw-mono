@@ -1,12 +1,10 @@
-'use client'
+'use client';
 
-import { ConnectDialog, useChainIconURI } from "@jaw.id/ui";
-import { useMemo, useState } from "react";
-import type { chain } from "../../lib/sdk-types";
-import { getChainNameFromId } from "../../lib/chain-handlers";
-import { standardErrorCodes, JAW_RPC_URL } from "@jaw.id/core";
-
-
+import { ConnectDialog, useChainIconURI } from '@jaw.id/ui';
+import { useMemo, useState } from 'react';
+import type { chain } from '../../lib/sdk-types';
+import { getChainNameFromId } from '../../lib/chain-handlers';
+import { standardErrorCodes, JAW_RPC_URL } from '@jaw.id/core';
 
 export interface ConnectModalProps {
   origin: string;
@@ -29,7 +27,7 @@ export const ConnectModal = ({
   chain,
   apiKey,
   onSuccess,
-  onError
+  onError,
 }: ConnectModalProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [timestamp] = useState(() => new Date());
@@ -49,7 +47,7 @@ export const ConnectModal = ({
   }, [apiKey, chain?.rpcUrl]);
 
   // Get chain name and icon
-  const chainName = useMemo(() => chain ? getChainNameFromId(chain.id) : undefined, [chain]);
+  const chainName = useMemo(() => (chain ? getChainNameFromId(chain.id) : undefined), [chain]);
   const chainIcon = useChainIconURI(chain?.id || 1, effectiveApiKey, 24);
 
   // Extract API key from chain.rpcUrl for mainnet RPC URL
@@ -72,7 +70,7 @@ export const ConnectModal = ({
       console.log('🔗 User approved connection to', appName);
       onSuccess();
     } catch (error) {
-      console.error("Error connecting:", error);
+      console.error('Error connecting:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       // Internal error during connection
       onError(errorObj, standardErrorCodes.rpc.internal);
@@ -91,7 +89,9 @@ export const ConnectModal = ({
   return (
     <ConnectDialog
       open={true}
-      onOpenChange={() => { console.log('onOpenChange') }}
+      onOpenChange={() => {
+        console.log('onOpenChange');
+      }}
       appName={appName}
       appLogoUrl={appLogoUrl}
       origin={origin}
@@ -107,4 +107,4 @@ export const ConnectModal = ({
       isProcessing={isProcessing}
     />
   );
-}
+};

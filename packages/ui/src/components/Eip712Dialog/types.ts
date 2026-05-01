@@ -1,4 +1,4 @@
-import { JSX } from "react";
+import { JSX } from 'react';
 export interface Eip712DialogProps {
   open: boolean;
   onOpenChange: (open: boolean) => void;

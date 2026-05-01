@@ -24,9 +24,7 @@ export async function fetchTokenPrice(symbol: string): Promise<number> {
   }
 
   try {
-    const response = await fetch(
-      `https://min-api.cryptocompare.com/data/price?fsym=${normalizedSymbol}&tsyms=USD`
-    );
+    const response = await fetch(`https://min-api.cryptocompare.com/data/price?fsym=${normalizedSymbol}&tsyms=USD`);
 
     if (!response.ok) {
       throw new Error(`CryptoCompare API error: ${response.status}`);
