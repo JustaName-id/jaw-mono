@@ -14,7 +14,7 @@ interface InitializedSession {
   account: {
     address: string;
     sendCalls: (...args: unknown[]) => Promise<unknown>;
-    getCallStatus: (batchId: `0x${string}`) => unknown;
+    getCallStatus: (batchId: `0x${string}`) => Promise<unknown>;
     signMessage: (message: string) => Promise<`0x${string}`>;
     signTypedData: (typedData: unknown) => Promise<`0x${string}`>;
   };

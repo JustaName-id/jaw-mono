@@ -25,7 +25,10 @@ vi.mock('./smartAccount.js', () => ({
     sendCallsWithPermission: vi.fn(),
     estimateUserOpGas: vi.fn(),
     calculateGas: vi.fn(),
-    getBundlerClient: vi.fn().mockReturnValue({ client: 'mockBundlerClient' }),
+    getBundlerClient: vi.fn().mockReturnValue({
+        client: 'mockBundlerClient',
+        getUserOperationReceipt: vi.fn().mockResolvedValue(null),
+    }),
     SUPPORTED_CHAINS: [
         { id: 1, name: 'Ethereum' },
         { id: 11155111, name: 'Sepolia' },
@@ -42,6 +45,7 @@ vi.mock('../rpc/wallet_sendCalls.js', () => ({
     storeCallStatus: vi.fn(),
     waitForReceiptInBackground: vi.fn(),
     getCallStatusEIP5792: vi.fn(),
+    transformReceiptsToEIP5792: vi.fn().mockReturnValue([]),
 }));
 
 vi.mock('viem', async () => {
@@ -376,7 +380,7 @@ describe('Account', () => {
                 mockLocalAccount as never
             );
 
-            const status = account.getCallStatus(mockBatchId as `0x${string}`);
+            const status = await account.getCallStatus(mockBatchId as `0x${string}`);
 
             expect(getCallStatusEIP5792).toHaveBeenCalledWith(mockBatchId);
             expect(status).toEqual(mockStatus);
@@ -414,9 +418,85 @@ describe('Account', () => {
                 mockLocalAccount as never
             );
 
-            const status = account.getCallStatus('0xnonexistent' as `0x${string}`);
+            const status = await account.getCallStatus('0xnonexistent' as `0x${string}`);
 
             expect(status).toBeUndefined();
+        });
+
+        it('getCallStatus should fall back to bundler RPC when the in-memory store misses', async () => {
+            const { createSmartAccount, getBundlerClient } = await import('./smartAccount.js');
+            const { getCallStatusEIP5792, transformReceiptsToEIP5792 } = await import('../rpc/wallet_sendCalls.js');
+
+            const mockSmartAccount = {
+                address: '0x1234567890123456789012345678901234567890',
+                signMessage: vi.fn(),
+                signTypedData: vi.fn(),
+                getAddress: vi.fn().mockResolvedValue('0x1234567890123456789012345678901234567890'),
+            };
+            vi.mocked(createSmartAccount).mockResolvedValue(mockSmartAccount as never);
+
+            // In-memory store has nothing for this batch.
+            vi.mocked(getCallStatusEIP5792).mockReturnValue(undefined);
+
+            // Bundler returns a real receipt.
+            const mockBatchId = '0xfeec0a41f83ec816f6df368c10bd4eb1c08e1dcb85e254e621fb9ee4d22729e1' as `0x${string}`;
+            const mockBundlerReceipt = {
+                success: true,
+                receipt: {
+                    transactionHash: '0xbc079b60838eca1a0379185124dc2878729ec28585a5e6f4d8f45eb3f87d1d95',
+                    blockNumber: '0x26fff07',
+                    blockHash: '0xabc',
+                    gasUsed: '0x61878',
+                    status: 'success',
+                    logs: [],
+                },
+            };
+            const mockGetUserOperationReceipt = vi.fn().mockResolvedValue(mockBundlerReceipt);
+            vi.mocked(getBundlerClient).mockReturnValue({
+                getUserOperationReceipt: mockGetUserOperationReceipt,
+            } as never);
+
+            // Stub the receipt transformer; we just need to assert it's invoked
+            // with the bundler payload.
+            const transformedReceipts = [
+                {
+                    logs: [],
+                    status: '0x1',
+                    blockHash: '0xabc',
+                    blockNumber: '0x26fff07',
+                    gasUsed: '0x61878',
+                    transactionHash: mockBundlerReceipt.receipt.transactionHash,
+                },
+            ];
+            vi.mocked(transformReceiptsToEIP5792).mockReturnValue(transformedReceipts as never);
+
+            const mockLocalAccount = {
+                address: '0xabcdef1234567890abcdef1234567890abcdef12',
+                type: 'local',
+                publicKey: '0x04abc123',
+                sign: vi.fn(),
+                signMessage: vi.fn(),
+                signTypedData: vi.fn(),
+                signTransaction: vi.fn(),
+                source: 'privateKey',
+            };
+            const account = await Account.fromLocalAccount(
+                { chainId: 1, apiKey: 'test-api-key' },
+                mockLocalAccount as never
+            );
+
+            const status = await account.getCallStatus(mockBatchId);
+
+            expect(mockGetUserOperationReceipt).toHaveBeenCalledWith({ hash: mockBatchId });
+            expect(transformReceiptsToEIP5792).toHaveBeenCalledWith([mockBundlerReceipt]);
+            expect(status).toEqual({
+                version: '2.0.0',
+                id: mockBatchId,
+                chainId: '0x1',
+                status: 200,
+                atomic: true,
+                receipts: transformedReceipts,
+            });
         });
 
         it('sendCalls with permissionId should use sendCallsWithPermission', async () => {
