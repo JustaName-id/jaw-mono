@@ -133,7 +133,7 @@ The SDK automatically handles the USDC approval for gas payment - no extra step 
 Poll for transaction confirmation:
 
 ```typescript
-const status = account.getCallStatus(id);
+const status = await account.getCallStatus(id);
 
 if (status) {
   switch (status.status) {

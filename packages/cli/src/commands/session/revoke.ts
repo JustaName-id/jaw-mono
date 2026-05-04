@@ -53,8 +53,11 @@ export default class SessionRevoke extends BaseCommand {
       paymasterUrl: pm?.url,
     });
 
-    await bridge.request('wallet_revokePermissions', [{ id: sessionConfig.permissionId }]);
-    bridge.close();
+    try {
+      await bridge.request('wallet_revokePermissions', [{ id: sessionConfig.permissionId }]);
+    } finally {
+      bridge.close();
+    }
 
     deleteKeystore();
     deleteSessionConfig();

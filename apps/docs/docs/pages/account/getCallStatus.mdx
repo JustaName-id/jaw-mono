@@ -2,12 +2,12 @@
 
 Get the status of a previously submitted call batch.
 
-**Type:** `instance sync`
+**Type:** `instance async`
 
 ## Signature
 
 ```typescript
-getCallStatus(batchId: Hash): CallStatusResponse | undefined
+getCallStatus(batchId: Hash): Promise<CallStatusResponse | undefined>
 ```
 
 ## Parameters
@@ -63,10 +63,10 @@ interface CallReceipt {
 
 ## Behavior
 
-1. Looks up the batch ID in the internal call status store
-2. Returns the status in EIP-5792 format
-3. Returns `undefined` if the batch ID is not found
-4. Status is automatically updated in the background after `sendCalls()`
+1. Looks up the batch ID in the internal call status store first (fast path; populated by `sendCalls()` in the same process and updated in the background).
+2. On a miss — typical for short-lived processes like the CLI, or for browsers after a page reload — falls back to querying the bundler directly via `eth_getUserOperationReceipt` so the chain stays the source of truth.
+3. Returns the status in EIP-5792 format.
+4. Returns `undefined` if neither the in-memory store nor the bundler knows the batch.
 
 ## Example
 
@@ -97,7 +97,7 @@ const account = await Account.fromLocalAccount({ chainId: 1, apiKey: 'your-api-k
 const { id } = await account.sendCalls([{ to: '0x...', value: parseEther('0.1') }]);
 
 // Check status immediately
-const status = account.getCallStatus(id);
+const status = await account.getCallStatus(id);
 ```
 
 ## Related

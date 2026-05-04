@@ -65,4 +65,13 @@ describe('session-config', () => {
     fs.writeFileSync(PATHS.sessionConfig, '{ not valid json', { mode: 0o600 });
     expect(() => loadSessionConfig()).toThrow(/corrupted/);
   });
+
+  it('saveSessionConfig enforces 0o600 mode even when overwriting an existing file', () => {
+    saveSessionConfig(SAMPLE_CONFIG);
+    expect(fs.statSync(PATHS.sessionConfig).mode & 0o777).toBe(0o600);
+    fs.chmodSync(PATHS.sessionConfig, 0o644);
+    expect(fs.statSync(PATHS.sessionConfig).mode & 0o777).toBe(0o644);
+    saveSessionConfig({ ...SAMPLE_CONFIG, permissionId: '0xPerm2' });
+    expect(fs.statSync(PATHS.sessionConfig).mode & 0o777).toBe(0o600);
+  });
 });
