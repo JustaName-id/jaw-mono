@@ -191,7 +191,7 @@ export function WagmiMethodModal({
                       </Button>
                     </div>
                     <pre
-                      className={`max-h-[200px] overflow-auto rounded-md p-3 font-mono text-xs ${
+                      className={`max-h-[200px] overflow-auto whitespace-pre-wrap break-all rounded-md p-3 font-mono text-xs ${
                         error ? 'bg-destructive/10 text-destructive' : 'bg-muted text-foreground'
                       }`}
                     >

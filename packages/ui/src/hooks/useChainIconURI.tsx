@@ -43,7 +43,10 @@ export const useChainIconURI = (chainId: number, apiKey?: string, size?: number)
       try {
         const chainIdHex = `0x${chainId.toString(16)}` as `0x${string}`;
         const capabilities = await handleGetCapabilitiesRequest(
-          { method: 'wallet_getCapabilities', params: [undefined, [chainIdHex]] },
+          {
+            method: 'wallet_getCapabilities',
+            params: [undefined, [chainIdHex]],
+          },
           apiKey,
           true // showTestnets to get all chains
         );
@@ -84,7 +87,12 @@ export const useChainIconURI = (chainId: number, apiKey?: string, size?: number)
         <img
           src={iconURI}
           alt={`Chain ${chainId} icon`}
-          style={{ width: iconSize, height: iconSize, minWidth: iconSize, borderRadius: '50%' }}
+          style={{
+            width: iconSize,
+            height: iconSize,
+            minWidth: iconSize,
+            borderRadius: '50%',
+          }}
         />
       );
     }
@@ -93,9 +101,8 @@ export const useChainIconURI = (chainId: number, apiKey?: string, size?: number)
     return (
       <div
         style={{
-          backgroundColor: isLoading ? '#f0f0f0' : '#e0e0e0',
-          borderColor: '#ccc',
-          border: '1px solid #ccc',
+          backgroundColor: isLoading ? 'var(--muted)' : 'var(--secondary)',
+          border: '1px solid var(--border)',
           display: 'flex',
           height: `${iconSize}px`,
           width: `${iconSize}px`,
@@ -105,7 +112,7 @@ export const useChainIconURI = (chainId: number, apiKey?: string, size?: number)
           textAlign: 'center',
           borderRadius: '50%',
           fontSize: `${Math.max(10, iconSize / 3)}px`,
-          color: '#666',
+          color: 'var(--muted-foreground)',
         }}
       >
         {isLoading ? '...' : '?'}

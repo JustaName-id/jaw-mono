@@ -17,6 +17,9 @@ export { SUPPORTED_CHAINS, MAINNET_CHAINS, TESTNET_CHAINS, getSupportedChains } 
 // Advanced: Low-level smart account creation (for custom implementations)
 export { toJustanAccount, type ToJustanAccountParameters, type ToJustanAccountReturnType } from './toJustanAccount.js';
 
+// Advanced: Temporary smart account for signing on behalf of another account
+export { createSmartAccountForAddress } from './smartAccount.js';
+
 // EIP-7702 delegation utilities
 export { isDelegatedToImplementation } from './delegation.js';
 

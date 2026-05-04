@@ -155,8 +155,6 @@ export function OnboardingDialog({
             coinType: toCoinType(chain.id).toString(),
           }));
 
-          console.log('subnameTextRecords', subnameTextRecords);
-
           // Use subnameTextRecords from capabilities if provided (only used during new account creation)
           // If not provided or empty, use empty array (no text records will be set)
           await justaName.subnames.addSubname(
@@ -230,7 +228,7 @@ export function OnboardingDialog({
               {loggingInAccount === account.username ? (
                 <Spinner className="!h-5 !w-5" />
               ) : (
-                <ChevronRight className="!h-5 !w-5 text-black" />
+                <ChevronRight className="text-foreground !h-5 !w-5" />
               )}
             </Button>
           ))}
@@ -243,7 +241,7 @@ export function OnboardingDialog({
           className="flex h-10 w-full flex-row items-center gap-2"
           disabled={isImporting}
         >
-          <WalletIcon className="!h-6 !w-6" stroke="black" />
+          <WalletIcon className="!h-6 !w-6" stroke="currentColor" />
           <span>{isImporting ? 'Opening Passkey...' : 'Import an existing account'}</span>
         </Button>
 
@@ -282,7 +280,7 @@ export function OnboardingDialog({
             <div className="flex items-center justify-between px-1">
               <span
                 className={`text-xs font-medium ${
-                  isLoading ? 'text-muted-foreground' : isValid ? 'text-green-600' : 'text-red-600'
+                  isLoading ? 'text-muted-foreground' : isValid ? 'text-success' : 'text-destructive'
                 }`}
               >
                 {message}
@@ -290,12 +288,12 @@ export function OnboardingDialog({
             </div>
           )}
           {error && (
-            <div className="flex flex-col gap-2 overflow-hidden rounded-md border border-red-200 bg-red-50 px-1 py-2">
-              <span className="break-all text-xs font-medium text-red-600">{error}</span>
+            <div className="bg-destructive/10 border-destructive/20 flex flex-col gap-2 overflow-hidden rounded-md border px-1 py-2">
+              <span className="text-destructive break-all text-xs font-medium">{error}</span>
               <Button
                 onClick={() => setError(null)}
                 variant="ghost"
-                className="h-6 text-xs text-red-600 hover:bg-red-100 hover:text-red-700"
+                className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-6 text-xs"
               >
                 Dismiss
               </Button>

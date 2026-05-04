@@ -1,12 +1,16 @@
 import { http, createConfig, type Config } from 'wagmi';
 import { mainnet, sepolia, baseSepolia } from 'wagmi/chains';
 import { jaw } from '@jaw.id/wagmi';
-import { Mode, type PaymasterConfig } from '@jaw.id/core';
+import { Mode, type PaymasterConfig, type JawTheme } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
 
 export type ModeType = (typeof Mode)[keyof typeof Mode];
 
-export function createWagmiConfig(mode: ModeType, paymasters?: Record<number, PaymasterConfig>): Config {
+export function createWagmiConfig(
+  mode: ModeType,
+  paymasters?: Record<number, PaymasterConfig>,
+  theme?: JawTheme
+): Config {
   const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
     ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
     : 84532; // Base Sepolia
@@ -20,13 +24,16 @@ export function createWagmiConfig(mode: ModeType, paymasters?: Record<number, Pa
         appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
         defaultChainId,
         preference: {
-          ...(process.env.NEXT_PUBLIC_KEYS_URL && { keysUrl: process.env.NEXT_PUBLIC_KEYS_URL }),
+          ...(process.env.NEXT_PUBLIC_KEYS_URL && {
+            keysUrl: process.env.NEXT_PUBLIC_KEYS_URL,
+          }),
           showTestnets: true,
           mode: mode,
-          uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
+          uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler({ theme }) : undefined,
         },
-        ens: 'justan.id',
+        ens: process.env.NEXT_PUBLIC_ENS || 'justan.id',
         paymasters,
+        theme,
       }),
     ],
     transports: {

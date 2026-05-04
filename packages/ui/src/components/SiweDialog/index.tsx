@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useIsMobile } from '../../hooks';
 import { CopyIcon } from '../../icons';
-import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { SiweDialogProps } from './types';
@@ -39,9 +39,10 @@ export const SiweDialog = ({
           address: accountAddress as `0x${string}`,
           chainId: chainId,
         })
-        .then((result) => {
+        .then(async (result) => {
           if (result) {
-            setResolvedAddress(result);
+            const label = await getChainLabel(chainId, mainnetRpcUrl);
+            setResolvedAddress(label ? `${result}@${label}` : result);
           }
         })
         .catch(() => {
@@ -118,7 +119,7 @@ export const SiweDialog = ({
           </div>
         </div>
         {/* Main Content Area - Large scrollable message box */}
-        <div className="border-border flex flex-1 flex-col gap-2.5 rounded-[6px] border bg-white p-3.5">
+        <div className="bg-card border-border flex flex-1 flex-col gap-2.5 rounded-[6px] border p-3.5">
           <div className="flex flex-row items-center justify-between">
             <p className="text-foreground text-xs font-bold leading-[150%]">Message</p>
             <CopyIcon className="h-4 w-4 cursor-pointer" onClick={onCopyMessageHandler} />
@@ -158,28 +159,23 @@ export const SiweDialog = ({
 
         {/* Origin Mismatch Warning */}
         {warningMessage && (
-          <div className="flex items-start gap-2.5 rounded-[6px] border border-yellow-300 bg-yellow-50 p-3.5">
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 16 16"
-              fill="none"
-              xmlns="http://www.w3.org/2000/svg"
-              className="mt-0.5 flex-shrink-0"
-            >
-              <path
-                d="M8 1.5L1 14.5H15L8 1.5Z"
-                stroke="#F59E0B"
-                strokeWidth="1.5"
-                strokeLinecap="round"
-                strokeLinejoin="round"
-              />
-              <path d="M8 6V9" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
-              <circle cx="8" cy="11.5" r="0.5" fill="#F59E0B" />
-            </svg>
+          <div className="border-warning/30 bg-warning/10 flex items-start gap-2.5 rounded-[6px] border p-3.5">
+            <div className="text-warning mt-0.5 flex-shrink-0">
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                <path
+                  d="M8 1.5L1 14.5H15L8 1.5Z"
+                  stroke="currentColor"
+                  strokeWidth="1.5"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                />
+                <path d="M8 6V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                <circle cx="8" cy="11.5" r="0.5" fill="currentColor" />
+              </svg>
+            </div>
             <div className="flex flex-col gap-1">
-              <p className="text-xs font-bold leading-[133%] text-yellow-800">Security Warning</p>
-              <p className="text-xs font-normal leading-[150%] text-yellow-900">{warningMessage}</p>
+              <p className="text-warning-foreground text-xs font-bold leading-[133%]">Security Warning</p>
+              <p className="text-warning-foreground text-xs font-normal leading-[150%]">{warningMessage}</p>
             </div>
           </div>
         )}
@@ -189,10 +185,10 @@ export const SiweDialog = ({
           <div
             className={`mt-3 rounded-lg p-3 text-sm ${
               siweStatus.includes('Error')
-                ? 'bg-red-50 text-red-600'
+                ? 'bg-destructive/10 text-destructive'
                 : siweStatus.includes('successfully')
-                  ? 'bg-green-50 text-green-600'
-                  : 'bg-blue-50 text-blue-600'
+                  ? 'bg-success/10 text-success'
+                  : 'bg-info/10 text-info'
             }`}
           >
             {siweStatus}

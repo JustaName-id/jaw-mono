@@ -11,7 +11,7 @@ import { formatEther } from 'viem';
 import { Info } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
-import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
 import { DecodedCalldata } from './DecodedCalldata';
 
 export const TransactionDialog = ({
@@ -42,7 +42,9 @@ export const TransactionDialog = ({
 }: TransactionDialogProps) => {
   const isMobile = useIsMobile();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
-  const [isAddressCopied, setIsAddressCopied] = useState<{ [key: string]: boolean }>({});
+  const [isAddressCopied, setIsAddressCopied] = useState<{
+    [key: string]: boolean;
+  }>({});
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
 
   const totalTransactions = transactions.length;
@@ -75,9 +77,13 @@ export const TransactionDialog = ({
           address: walletAddress as `0x${string}`,
           chainId: currentTransaction.chainId,
         })
-        .then((result) => {
+        .then(async (result) => {
           if (result) {
-            setResolvedAddresses((prev) => ({ ...prev, [walletAddress]: result }));
+            const label = await getChainLabel(currentTransaction.chainId, mainnetRpcUrl);
+            setResolvedAddresses((prev) => ({
+              ...prev,
+              [walletAddress]: label ? `${result}@${label}` : result,
+            }));
           }
         })
         .catch(() => {
@@ -93,9 +99,13 @@ export const TransactionDialog = ({
             address: transaction.to as `0x${string}`,
             chainId: transaction.chainId,
           })
-          .then((result) => {
+          .then(async (result) => {
             if (result) {
-              setResolvedAddresses((prev) => ({ ...prev, [transaction.to]: result }));
+              const label = await getChainLabel(transaction.chainId, mainnetRpcUrl);
+              setResolvedAddresses((prev) => ({
+                ...prev,
+                [transaction.to]: label ? `${result}@${label}` : result,
+              }));
             }
           })
           .catch(() => {
@@ -210,20 +220,20 @@ export const TransactionDialog = ({
           <>
             <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
               {/* From - To */}
-              <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
-                <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
+              <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
+                <div className="text-foreground flex min-w-0 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">From</p>
                   <div className="flex min-w-0 flex-row items-center gap-1">
-                    <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="black" />
-                    <p className="text-base font-normal leading-[150%]">{displayWalletAddress}</p>
+                    <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                    <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                   </div>
                 </div>
-                <div className="bg-border h-full min-h-[70px] w-[1px] flex-shrink-0 rounded-full" />
-                <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
+                <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
+                <div className="text-foreground flex min-w-0 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">To</p>
                   <div className="flex min-w-0 flex-row items-center gap-1">
-                    <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="black" />
-                    <p className="text-base font-normal leading-[150%]">{displayToAddress}</p>
+                    <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                    <p className="break-all text-base font-normal leading-[150%]">{displayToAddress}</p>
                     {currentTransaction?.to &&
                       (isAddressCopied['single-to'] ? (
                         <CopiedIcon width={14} height={14} className="flex-shrink-0" />
@@ -234,8 +244,18 @@ export const TransactionDialog = ({
                           onClick={() => {
                             if (typeof window !== 'undefined' && navigator?.clipboard) {
                               navigator.clipboard.writeText(currentTransaction.to);
-                              setIsAddressCopied((prev) => ({ ...prev, 'single-to': true }));
-                              setTimeout(() => setIsAddressCopied((prev) => ({ ...prev, 'single-to': false })), 3000);
+                              setIsAddressCopied((prev) => ({
+                                ...prev,
+                                'single-to': true,
+                              }));
+                              setTimeout(
+                                () =>
+                                  setIsAddressCopied((prev) => ({
+                                    ...prev,
+                                    'single-to': false,
+                                  })),
+                                3000
+                              );
                             }
                           }}
                           className="flex-shrink-0 cursor-pointer"
@@ -291,7 +311,7 @@ export const TransactionDialog = ({
                       <p className="text-muted-foreground text-base font-normal">Estimating...</p>
                     ) : gasEstimationError && !sponsored ? (
                       <div className="flex flex-col">
-                        <p className="text-sm font-medium text-red-600">{gasEstimationError}</p>
+                        <p className="text-destructive text-sm font-medium">{gasEstimationError}</p>
                       </div>
                     ) : sponsored ? (
                       <div className="flex flex-col">
@@ -301,7 +321,7 @@ export const TransactionDialog = ({
                               <p className="text-base font-normal">${(nativeTokenPrice * Number(gasFee)).toFixed(4)}</p>
                             </div>
                           )}
-                          <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-600">
+                          <span className="text-success bg-success/10 rounded px-2 py-0.5 text-xs font-semibold">
                             Sponsored
                           </span>
                         </div>
@@ -385,7 +405,7 @@ export const TransactionDialog = ({
               </div>
 
               {/* Show Data section if data is provided */}
-              {currentTransaction?.data && (
+              {currentTransaction?.data && currentTransaction.data !== '0x' && (
                 <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
                   <div className="flex w-full flex-row items-center justify-between">
                     <p className="text-foreground text-xs font-bold leading-[133%]">Data</p>
@@ -399,7 +419,14 @@ export const TransactionDialog = ({
                           if (typeof window !== 'undefined' && navigator?.clipboard) {
                             navigator.clipboard.writeText(currentTransaction?.data ?? '');
                             setIsDataCopied({ ...isDataCopied, 0: true });
-                            setTimeout(() => setIsDataCopied((prev) => ({ ...prev, 0: false })), 3000);
+                            setTimeout(
+                              () =>
+                                setIsDataCopied((prev) => ({
+                                  ...prev,
+                                  0: false,
+                                })),
+                              3000
+                            );
                           }
                         }}
                         className="cursor-pointer"
@@ -422,10 +449,10 @@ export const TransactionDialog = ({
                 <div
                   className={`rounded-lg p-3 text-sm ${
                     transactionStatus.includes('Error')
-                      ? 'bg-red-50 text-red-600'
+                      ? 'bg-destructive/10 text-destructive'
                       : transactionStatus.includes('successfully')
-                        ? 'bg-green-50 text-green-600'
-                        : 'bg-blue-50 text-blue-600'
+                        ? 'bg-success/10 text-success'
+                        : 'bg-info/10 text-info'
                   }`}
                 >
                   {transactionStatus}
@@ -451,8 +478,8 @@ export const TransactionDialog = ({
               <div className="border-border flex-shrink-0 rounded-[6px] border p-3.5">
                 <p className="text-foreground mb-1 text-xs font-bold leading-[133%]">From</p>
                 <div className="flex flex-row items-center gap-1">
-                  <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="black" />
-                  <p className="text-base font-normal leading-[150%]">{displayWalletAddress}</p>
+                  <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                  <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                 </div>
               </div>
 
@@ -477,7 +504,7 @@ export const TransactionDialog = ({
                           {/* Interacting with (To) */}
                           <div className="border-border flex flex-col gap-1 rounded-[6px] border p-2">
                             <div className="flex items-center justify-between">
-                              <p className="text-xs font-bold leading-[133%] text-black">Interacting with (to)</p>
+                              <p className="text-foreground text-xs font-bold leading-[133%]">Interacting with (to)</p>
                               {isAddressCopied[`to-${index}`] ? (
                                 <CopiedIcon width={14} height={14} />
                               ) : (
@@ -487,9 +514,16 @@ export const TransactionDialog = ({
                                   onClick={() => {
                                     if (typeof window !== 'undefined' && navigator?.clipboard) {
                                       navigator.clipboard.writeText(transaction.to);
-                                      setIsAddressCopied((prev) => ({ ...prev, [`to-${index}`]: true }));
+                                      setIsAddressCopied((prev) => ({
+                                        ...prev,
+                                        [`to-${index}`]: true,
+                                      }));
                                       setTimeout(
-                                        () => setIsAddressCopied((prev) => ({ ...prev, [`to-${index}`]: false })),
+                                        () =>
+                                          setIsAddressCopied((prev) => ({
+                                            ...prev,
+                                            [`to-${index}`]: false,
+                                          })),
                                         3000
                                       );
                                     }
@@ -499,7 +533,7 @@ export const TransactionDialog = ({
                               )}
                             </div>
                             <div className="flex flex-row items-center gap-1">
-                              <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="black" />
+                              <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
                               <p className="text-sm font-normal leading-[150%]">
                                 {getDisplayAddress(resolvedAddresses[transaction.to], transaction.to)}
                               </p>
@@ -534,7 +568,7 @@ export const TransactionDialog = ({
                           )}
 
                           {/* Data */}
-                          {transaction.data && (
+                          {transaction.data && transaction.data !== '0x' && (
                             <div className="border-border flex flex-col gap-1 rounded-[6px] border p-2">
                               <div className="mb-2 flex items-center justify-between">
                                 <p className="text-muted-foreground text-xs font-bold leading-[133%]">Data</p>
@@ -548,9 +582,16 @@ export const TransactionDialog = ({
                                       e.stopPropagation();
                                       if (typeof window !== 'undefined' && navigator?.clipboard) {
                                         navigator.clipboard.writeText(transaction.data ?? '');
-                                        setIsDataCopied({ ...isDataCopied, [index]: true });
+                                        setIsDataCopied({
+                                          ...isDataCopied,
+                                          [index]: true,
+                                        });
                                         setTimeout(
-                                          () => setIsDataCopied((prev) => ({ ...prev, [index]: false })),
+                                          () =>
+                                            setIsDataCopied((prev) => ({
+                                              ...prev,
+                                              [index]: false,
+                                            })),
                                           3000
                                         );
                                       }
@@ -581,10 +622,10 @@ export const TransactionDialog = ({
                 <div
                   className={`rounded-lg p-3 text-sm ${
                     transactionStatus.includes('Error')
-                      ? 'bg-red-50 text-red-600'
+                      ? 'bg-destructive/10 text-destructive'
                       : transactionStatus.includes('successfully')
-                        ? 'bg-green-50 text-green-600'
-                        : 'bg-blue-50 text-blue-600'
+                        ? 'bg-success/10 text-success'
+                        : 'bg-info/10 text-info'
                   }`}
                 >
                   {transactionStatus}
@@ -628,7 +669,7 @@ export const TransactionDialog = ({
                       <p className="text-muted-foreground text-base font-normal">Estimating...</p>
                     ) : gasEstimationError && !sponsored ? (
                       <div className="flex flex-col">
-                        <p className="text-sm font-medium text-red-600">{gasEstimationError}</p>
+                        <p className="text-destructive text-sm font-medium">{gasEstimationError}</p>
                       </div>
                     ) : sponsored ? (
                       <div className="flex flex-col">
@@ -638,7 +679,7 @@ export const TransactionDialog = ({
                               <p className="text-base font-normal">${(nativeTokenPrice * Number(gasFee)).toFixed(4)}</p>
                             </div>
                           )}
-                          <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-600">
+                          <span className="text-success bg-success/10 rounded px-2 py-0.5 text-xs font-semibold">
                             Sponsored
                           </span>
                         </div>

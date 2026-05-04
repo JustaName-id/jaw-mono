@@ -10,6 +10,7 @@ import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { CopiedIcon, CopyIcon, WalletIcon } from '../../icons';
 import { useState, useEffect, useRef } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { getChainLabel } from '../../utils/resolveChainLabel';
 
 export const PermissionDialog = ({
   open,
@@ -101,7 +102,8 @@ export const PermissionDialog = ({
           chainId: chainId,
         });
         if (result) {
-          return { address, name: result };
+          const label = await getChainLabel(chainId, mainnetRpcUrl);
+          return { address, name: label ? `${result}@${label}` : result };
         }
       } catch {
         // Silently fail if resolution fails
@@ -251,17 +253,17 @@ export const PermissionDialog = ({
           )}
 
           {/* Requesting dApp + Spender Address */}
-          <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
-            <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
+          <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
+            <div className="text-foreground flex min-w-0 flex-col gap-0.5">
               <p className="text-xs font-bold leading-[133%]">Requesting dApp</p>
-              <p className="overflow-hidden truncate text-base font-normal leading-[150%]">{origin}</p>
+              <p className="break-all text-base font-normal leading-[150%]">{origin}</p>
             </div>
-            <div className="bg-border h-full min-h-[50px] w-[1px] flex-shrink-0 rounded-full" />
-            <div className="text-foreground flex min-w-0 flex-1 flex-col gap-0.5">
+            <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
+            <div className="text-foreground flex min-w-0 flex-col gap-0.5">
               <p className="text-xs font-bold leading-[133%]">Spender Address</p>
               <div className="flex flex-row items-center gap-1">
-                <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="black" />
-                <p className="overflow-hidden truncate text-base font-normal leading-[150%]">
+                <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                <p className="break-all text-base font-normal leading-[150%]">
                   {resolvedAddresses[spenderAddress] || truncateAddress(spenderAddress)}
                 </p>
               </div>
@@ -359,50 +361,40 @@ export const PermissionDialog = ({
 
           {/* Warning (Grant) / Info (Revoke) Card */}
           {mode === 'grant' ? (
-            <div className="border-border flex items-start gap-2.5 rounded-[6px] border bg-yellow-50 p-3.5">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="mt-0.5 flex-shrink-0"
-              >
-                <path
-                  d="M8 1.5L1 14.5H15L8 1.5Z"
-                  stroke="#F59E0B"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path d="M8 6V9" stroke="#F59E0B" strokeWidth="1.5" strokeLinecap="round" />
-                <circle cx="8" cy="11.5" r="0.5" fill="#F59E0B" />
-              </svg>
+            <div className="border-border bg-warning/10 flex items-start gap-2.5 rounded-[6px] border p-3.5">
+              <div className="text-warning mt-0.5 flex-shrink-0">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M8 1.5L1 14.5H15L8 1.5Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path d="M8 6V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="8" cy="11.5" r="0.5" fill="currentColor" />
+                </svg>
+              </div>
               <div className="flex flex-col gap-1">
-                <p className="text-xs font-bold leading-[133%] text-yellow-800">Warning</p>
-                <p className="text-xs font-normal leading-[150%] text-yellow-900">
+                <p className="text-warning-foreground text-xs font-bold leading-[133%]">Warning</p>
+                <p className="text-warning-foreground text-xs font-normal leading-[150%]">
                   {warningMessage ||
                     `You are granting ${totalPermissions} permission${totalPermissions > 1 ? 's' : ''} to this dApp until ${expiryDate}. Only approve if you trust this dApp.`}
                 </p>
               </div>
             </div>
           ) : (
-            <div className="border-border flex items-start gap-2.5 rounded-[6px] border bg-blue-50 p-3.5">
-              <svg
-                width="16"
-                height="16"
-                viewBox="0 0 16 16"
-                fill="none"
-                xmlns="http://www.w3.org/2000/svg"
-                className="mt-0.5 flex-shrink-0"
-              >
-                <circle cx="8" cy="8" r="6.5" stroke="#3B82F6" strokeWidth="1.5" />
-                <path d="M8 7V11" stroke="#3B82F6" strokeWidth="1.5" strokeLinecap="round" />
-                <circle cx="8" cy="5" r="0.5" fill="#3B82F6" />
-              </svg>
+            <div className="border-border bg-info/10 flex items-start gap-2.5 rounded-[6px] border p-3.5">
+              <div className="text-info mt-0.5 flex-shrink-0">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="8" cy="8" r="6.5" stroke="currentColor" strokeWidth="1.5" />
+                  <path d="M8 7V11" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="8" cy="5" r="0.5" fill="currentColor" />
+                </svg>
+              </div>
               <div className="flex flex-col gap-1">
-                <p className="text-xs font-bold leading-[133%] text-blue-800">Info</p>
-                <p className="text-xs font-normal leading-[150%] text-blue-900">
+                <p className="text-info-foreground text-xs font-bold leading-[133%]">Info</p>
+                <p className="text-info-foreground text-xs font-normal leading-[150%]">
                   This will revoke all permissions and prevent the spender from making any further transactions on your
                   behalf.
                 </p>
@@ -415,10 +407,10 @@ export const PermissionDialog = ({
             <div
               className={`rounded-lg p-3 text-sm ${
                 status.includes('Error')
-                  ? 'bg-red-50 text-red-600'
+                  ? 'bg-destructive/10 text-destructive'
                   : status.includes('successfully')
-                    ? 'bg-green-50 text-green-600'
-                    : 'bg-blue-50 text-blue-600'
+                    ? 'bg-success/10 text-success'
+                    : 'bg-info/10 text-info'
               }`}
             >
               {status}
@@ -447,8 +439,8 @@ export const PermissionDialog = ({
                   <div className="flex w-full flex-col gap-0.5">
                     <div className="flex w-full items-center justify-between">
                       <div className="flex flex-col">
-                        <p className="text-sm font-medium text-red-600">Gas Estimation Failed</p>
-                        <p className="text-xs text-red-500">{gasEstimationError}</p>
+                        <p className="text-destructive text-sm font-medium">Gas Estimation Failed</p>
+                        <p className="text-destructive text-xs">{gasEstimationError}</p>
                       </div>
                       {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
                         <FeeTokenSelector
@@ -471,7 +463,7 @@ export const PermissionDialog = ({
                           <p className="text-base font-normal">${(nativeTokenPrice * Number(gasFee)).toFixed(4)}</p>
                         </div>
                       )}
-                      <span className="rounded bg-green-100 px-2 py-0.5 text-xs font-semibold text-green-600">
+                      <span className="text-success bg-success/10 rounded px-2 py-0.5 text-xs font-semibold">
                         Sponsored
                       </span>
                     </div>

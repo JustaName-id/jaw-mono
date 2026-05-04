@@ -3,9 +3,11 @@
 import { useState, useCallback, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
-import { Mode, type PaymasterConfig } from '@jaw.id/core';
+import { Mode, type PaymasterConfig, type JawTheme } from '@jaw.id/core';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
+import { ThemePicker } from '../../components/theme-picker';
+import { ThemeToggle } from '../../components/theme-toggle';
 import { parseEther, formatUnits, type Address } from 'viem';
 import {
   useAccount,
@@ -38,6 +40,7 @@ import { type ModeType } from './config';
 import { MethodCard } from '../../components/method-card';
 import { WagmiMethodModal } from '../../components/wagmi-method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
+import { ResolveNameModal } from '../../components/resolve-name-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import {
@@ -52,9 +55,11 @@ interface WagmiPageContentProps {
   mode: ModeType;
   pmConfig: PaymasterApplyConfig | undefined;
   onPaymasterApply: (config: PaymasterApplyConfig | null) => void;
+  theme: JawTheme;
+  onThemeChange: (theme: JawTheme) => void;
 }
 
-function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContentProps) {
+function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChange }: WagmiPageContentProps) {
   const { address, isConnected, connector } = useAccount();
   const chainId = useChainId();
   const { data: balance } = useBalance({ address });
@@ -121,6 +126,7 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
   const [selectedMethod, setSelectedMethod] = useState<WagmiMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
+  const [isResolveNameModalOpen, setIsResolveNameModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
   const [isExecuting, setIsExecuting] = useState(false);
@@ -141,7 +147,11 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
         switch (method.hookType) {
           case 'jawConnect': {
             if (jawConnector) {
-              result = await jawConnect({ connector: jawConnector });
+              const connectParams: Parameters<typeof jawConnect>[0] = { connector: jawConnector };
+              if (params.capabilities) {
+                connectParams.capabilities = params.capabilities as import('@jaw.id/core').WalletConnectCapabilities;
+              }
+              result = await jawConnect(connectParams);
             }
             break;
           }
@@ -151,7 +161,9 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
             break;
 
           case 'useSwitchChain':
-            result = await switchChainAsync({ chainId: params.chainId as number });
+            result = await switchChainAsync({
+              chainId: params.chainId as number,
+            });
             break;
 
           case 'useSendTransaction':
@@ -163,7 +175,9 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
             break;
 
           case 'useSignMessage':
-            result = await signMessageAsync({ message: params.message as string });
+            result = await signMessageAsync({
+              message: params.message as string,
+            });
             break;
 
           case 'useSignTypedData':
@@ -184,7 +198,11 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
 
           case 'useSendCalls': {
             const sendCallsResult = await sendCallsAsync({
-              calls: params.calls as Array<{ to: Address; value?: bigint; data?: `0x${string}` }>,
+              calls: params.calls as Array<{
+                to: Address;
+                value?: bigint;
+                data?: `0x${string}`;
+              }>,
             });
             setLastBatchId(sendCallsResult.id);
             result = sendCallsResult;
@@ -304,7 +322,11 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
 
   const handleMethodClick = (method: WagmiMethod) => {
     if (method.category === 'utility') {
-      setIsEncodeModalOpen(true);
+      if (method.id === 'resolve_name') {
+        setIsResolveNameModalOpen(true);
+      } else {
+        setIsEncodeModalOpen(true);
+      }
       return;
     }
     setSelectedMethod(method);
@@ -336,8 +358,9 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
     <div className="bg-background min-h-screen p-4 md:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
-        <div className="space-y-2">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="text-foreground text-2xl font-bold md:text-3xl">JAW.id Playground - Wagmi</h1>
+          <ThemeToggle />
         </div>
 
         {/* Mode Toggle */}
@@ -385,6 +408,9 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
               : 'Passkey operations handled via keys.jaw.id'}
           </p>
         </Card>
+
+        {/* Theme Picker (only for AppSpecific mode which uses ReactUIHandler) */}
+        {mode === Mode.AppSpecific && <ThemePicker theme={theme} onThemeChange={onThemeChange} />}
 
         {/* Connection Status */}
         <Card className="p-4">
@@ -533,6 +559,9 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply }: WagmiPageContent
         {/* Encode Data Modal */}
         <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
 
+        {/* Resolve Name Modal */}
+        <ResolveNameModal isOpen={isResolveNameModalOpen} onClose={() => setIsResolveNameModalOpen(false)} />
+
         {/* Method Modal */}
         <WagmiMethodModal
           method={selectedMethod}
@@ -556,12 +585,16 @@ function WagmiPageInner() {
 
   const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
+  const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
 
   const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
     if (config) {
       const record: Record<number, PaymasterConfig> = {};
       for (const chain of config.chains) {
-        record[chain.chainId] = { url: chain.url, ...(chain.context && { context: chain.context }) };
+        record[chain.chainId] = {
+          url: chain.url,
+          ...(chain.context && { context: chain.context }),
+        };
       }
       setPaymasters(record);
       setPmConfig(config);
@@ -572,8 +605,15 @@ function WagmiPageInner() {
   };
 
   return (
-    <WagmiProviders mode={mode} paymasters={paymasters}>
-      <WagmiPageContent key={mode} mode={mode} pmConfig={pmConfig} onPaymasterApply={handlePaymasterApply} />
+    <WagmiProviders mode={mode} paymasters={paymasters} theme={theme}>
+      <WagmiPageContent
+        key={`${mode}-${JSON.stringify(theme)}`}
+        mode={mode}
+        pmConfig={pmConfig}
+        onPaymasterApply={handlePaymasterApply}
+        theme={theme}
+        onThemeChange={setTheme}
+      />
     </WagmiProviders>
   );
 }

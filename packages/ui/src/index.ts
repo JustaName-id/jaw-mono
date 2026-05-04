@@ -17,3 +17,6 @@ export * from './utils';
 
 // React integration
 export * from './react';
+
+// Theme engine
+export * from './theme';

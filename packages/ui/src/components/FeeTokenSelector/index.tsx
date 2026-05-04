@@ -212,7 +212,7 @@ export const FeeTokenSelector = ({
         className={cn(
           'flex w-full items-center gap-2 rounded-md px-2 py-2 transition-colors',
           'hover:bg-muted/60',
-          isSelected && 'bg-zinc-200',
+          isSelected && 'bg-secondary',
           !token.isSelectable && 'cursor-not-allowed opacity-50',
           token.isSelectable && 'cursor-pointer'
         )}
@@ -246,7 +246,7 @@ export const FeeTokenSelector = ({
   };
 
   return (
-    <Popover open={open} onOpenChange={setOpen}>
+    <Popover open={open} onOpenChange={setOpen} modal>
       <PopoverTrigger asChild>
         <Button
           variant="outline"

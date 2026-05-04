@@ -5,7 +5,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '..
 import { DefaultDialog } from '../DefaultDialog';
 import { Eip712DialogProps } from './types';
 import { useIsMobile } from '../../hooks';
-import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
 import { useState, useEffect, useMemo, useRef } from 'react';
 
 // EIP-712 TypedData structure
@@ -26,9 +26,9 @@ const isArray = (value: unknown): value is unknown[] => {
 
 const getValueColor = (value: unknown): string => {
   if (typeof value === 'string') return 'text-foreground';
-  if (typeof value === 'number') return 'text-blue-600 dark:text-blue-400';
-  if (typeof value === 'boolean') return 'text-purple-600 dark:text-purple-400';
-  if (value === null || value === undefined) return 'text-gray-500 dark:text-gray-400';
+  if (typeof value === 'number') return 'text-info dark:text-info';
+  if (typeof value === 'boolean') return 'text-info';
+  if (value === null || value === undefined) return 'text-muted-foreground';
   return 'text-foreground';
 };
 
@@ -294,9 +294,10 @@ export const Eip712Dialog = ({
           address: accountAddress as `0x${string}`,
           chainId: chainId,
         })
-        .then((result) => {
+        .then(async (result) => {
           if (result) {
-            setResolvedAddress(result);
+            const label = await getChainLabel(chainId, mainnetRpcUrl);
+            setResolvedAddress(label ? `${result}@${label}` : result);
           }
         })
         .catch(() => {
@@ -402,8 +403,8 @@ export const Eip712Dialog = ({
               <NestedDataView data={typedData} depth={0} />
             </div>
           ) : (
-            <div className="rounded-[6px] border border-red-200 bg-red-50 p-4">
-              <p className="text-sm text-red-600">Failed to parse typed data</p>
+            <div className="bg-destructive/10 border-destructive/20 rounded-[6px] border p-4">
+              <p className="text-destructive text-sm">Failed to parse typed data</p>
             </div>
           )}
 
@@ -447,10 +448,10 @@ export const Eip712Dialog = ({
             <div
               className={`rounded-lg p-3 text-sm ${
                 signatureStatus.includes('Error')
-                  ? 'bg-red-50 text-red-600'
+                  ? 'bg-destructive/10 text-destructive'
                   : signatureStatus.includes('successfully')
-                    ? 'bg-green-50 text-green-600'
-                    : 'bg-blue-50 text-blue-600'
+                    ? 'bg-success/10 text-success'
+                    : 'bg-info/10 text-info'
               }`}
             >
               {signatureStatus}

@@ -1,15 +1,19 @@
 'use client';
 
-import { useState, useCallback, Suspense } from 'react';
+import { useState, useCallback, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { JAW, Mode } from '@jaw.id/core';
+import type { JawTheme } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
 import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
+import { ThemePicker } from '../../components/theme-picker';
+import { ThemeToggle } from '../../components/theme-toggle';
 
 import { MethodCard } from '../../components/method-card';
 import { MethodModal } from '../../components/method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
+import { ResolveNameModal } from '../../components/resolve-name-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import { RPC_METHODS, CATEGORIES, CATEGORY_LABELS, type RpcMethod, type MethodCategory } from '../../lib/rpc-methods';
@@ -20,20 +24,28 @@ const DEFAULT_CHAIN_ID_NUM = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
   ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
   : 84532;
 
-function buildSdk(mode: ModeType, paymasters?: Record<number, { url: string; context?: Record<string, unknown> }>) {
+function buildSdk(
+  mode: ModeType,
+  uiHandler?: ReactUIHandler,
+  paymasters?: Record<number, { url: string; context?: Record<string, unknown> }>,
+  theme?: JawTheme
+) {
   return JAW.create({
     appName: 'JAW Playground',
     appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
     defaultChainId: DEFAULT_CHAIN_ID_NUM,
     preference: {
-      ...(process.env.NEXT_PUBLIC_KEYS_URL && { keysUrl: process.env.NEXT_PUBLIC_KEYS_URL }),
+      ...(process.env.NEXT_PUBLIC_KEYS_URL && {
+        keysUrl: process.env.NEXT_PUBLIC_KEYS_URL,
+      }),
       showTestnets: true,
       mode,
-      uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler() : undefined,
+      uiHandler: mode === Mode.AppSpecific ? uiHandler : undefined,
     },
     apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
     ens: process.env.NEXT_PUBLIC_ENS_NAME,
     paymasters,
+    theme,
   });
 }
 
@@ -45,25 +57,40 @@ function CorePageContent({ mode }: { mode: ModeType }) {
   const [selectedMethod, setSelectedMethod] = useState<RpcMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
+  const [isResolveNameModalOpen, setIsResolveNameModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
 
-  const [sdk, setSdk] = useState(() => buildSdk(mode));
+  const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
+  const uiHandlerRef = useRef<ReactUIHandler>(new ReactUIHandler({ theme }));
+  const [sdk, setSdk] = useState(() => buildSdk(mode, uiHandlerRef.current, undefined, theme));
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
 
-  const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
-    if (config) {
-      const paymasters: Record<number, { url: string; context?: Record<string, unknown> }> = {};
-      for (const chain of config.chains) {
-        paymasters[chain.chainId] = { url: chain.url, ...(chain.context && { context: chain.context }) };
+  // Theme changes update the handler in-place — no SDK recreation, no disconnect
+  const handleThemeChange = useCallback((newTheme: JawTheme) => {
+    setTheme(newTheme);
+    uiHandlerRef.current.setTheme(newTheme);
+  }, []);
+
+  const handlePaymasterApply = useCallback(
+    (config: PaymasterApplyConfig | null) => {
+      if (config) {
+        const paymasters: Record<number, { url: string; context?: Record<string, unknown> }> = {};
+        for (const chain of config.chains) {
+          paymasters[chain.chainId] = {
+            url: chain.url,
+            ...(chain.context && { context: chain.context }),
+          };
+        }
+        setSdk(buildSdk(mode, uiHandlerRef.current, paymasters, theme));
+        setPmConfig(config);
+      } else {
+        setSdk(buildSdk(mode, uiHandlerRef.current, undefined, theme));
+        setPmConfig(undefined);
       }
-      setSdk(buildSdk(mode, paymasters));
-      setPmConfig(config);
-    } else {
-      setSdk(buildSdk(mode));
-      setPmConfig(undefined);
-    }
-  };
+    },
+    [theme, mode]
+  );
 
   const addLog = useCallback((type: LogEntry['type'], method: string, data: unknown) => {
     setLogs((prev) => [...prev, { timestamp: new Date(), type, method, data }]);
@@ -83,13 +110,18 @@ function CorePageContent({ mode }: { mode: ModeType }) {
           if (Array.isArray(result)) {
             connectedAccounts = result as string[];
           } else if (result && typeof result === 'object' && 'accounts' in result) {
-            const walletConnectResponse = result as { accounts: { address: string }[] };
+            const walletConnectResponse = result as {
+              accounts: { address: string }[];
+            };
             connectedAccounts = walletConnectResponse.accounts.map((acc) => acc.address);
           }
           if (connectedAccounts.length > 0) {
             setAccounts(connectedAccounts);
             setIsConnected(true);
-            const chainIdResult = await sdk.provider.request({ method: 'eth_chainId', params: [] });
+            const chainIdResult = await sdk.provider.request({
+              method: 'eth_chainId',
+              params: [],
+            });
             setChainId(chainIdResult as string);
           }
         } else if (method === 'wallet_disconnect') {
@@ -97,7 +129,10 @@ function CorePageContent({ mode }: { mode: ModeType }) {
           setAccounts([]);
           setChainId(defaultChainId);
         } else if (method === 'wallet_switchEthereumChain') {
-          const chainIdResult = await sdk.provider.request({ method: 'eth_chainId', params: [] });
+          const chainIdResult = await sdk.provider.request({
+            method: 'eth_chainId',
+            params: [],
+          });
           setChainId(chainIdResult as string);
         }
 
@@ -118,7 +153,11 @@ function CorePageContent({ mode }: { mode: ModeType }) {
 
   const handleMethodClick = (method: RpcMethod) => {
     if (method.category === 'utility') {
-      setIsEncodeModalOpen(true);
+      if (method.id === 'resolve_name') {
+        setIsResolveNameModalOpen(true);
+      } else {
+        setIsEncodeModalOpen(true);
+      }
       return;
     }
     setSelectedMethod(method);
@@ -137,8 +176,9 @@ function CorePageContent({ mode }: { mode: ModeType }) {
     <div className="bg-background min-h-screen p-4 md:p-8">
       <div className="mx-auto max-w-6xl space-y-6">
         {/* Header */}
-        <div className="space-y-2">
+        <div className="flex items-center justify-between gap-4">
           <h1 className="text-foreground text-2xl font-bold md:text-3xl">JAW.id Playground - Core</h1>
+          <ThemeToggle />
         </div>
 
         {/* Mode Toggle */}
@@ -186,6 +226,9 @@ function CorePageContent({ mode }: { mode: ModeType }) {
               : 'Passkey operations handled via keys.jaw.id'}
           </p>
         </Card>
+
+        {/* Theme Picker (only for AppSpecific mode which uses ReactUIHandler) */}
+        {mode === Mode.AppSpecific && <ThemePicker theme={theme} onThemeChange={handleThemeChange} />}
 
         {/* Connection Status */}
         <Card className="p-4">
@@ -325,6 +368,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
 
         {/* Encode Data Modal */}
         <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
+        <ResolveNameModal isOpen={isResolveNameModalOpen} onClose={() => setIsResolveNameModalOpen(false)} />
       </div>
     </div>
   );

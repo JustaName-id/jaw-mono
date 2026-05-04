@@ -145,3 +145,6 @@ export type {
 } from './ui/interface.js';
 
 export { UIError, UIErrorCode } from './ui/interface.js';
+
+/** Theme types **/
+export type { JawTheme, JawThemeMode, JawBorderRadius, JawFontStack } from './ui/theme.js';

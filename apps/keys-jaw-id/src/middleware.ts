@@ -67,7 +67,16 @@ export function middleware(request: NextRequest) {
     ...(isDev ? [] : ['upgrade-insecure-requests']),
   ].join('; ');
 
-  const response = NextResponse.next();
+  // Forward the nonce to the request so the layout can read it via headers()
+  // and stamp user-authored inline <script> tags (e.g. the theme detection
+  // script in app/layout.tsx). Without this, those scripts get blocked in
+  // production by the `strict-dynamic` CSP because they have no matching nonce.
+  const requestHeaders = new Headers(request.headers);
+  requestHeaders.set('x-nonce', nonce);
+
+  const response = NextResponse.next({
+    request: { headers: requestHeaders },
+  });
 
   response.headers.set('Content-Security-Policy', csp);
   response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');

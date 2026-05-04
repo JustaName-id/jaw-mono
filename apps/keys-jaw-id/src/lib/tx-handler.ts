@@ -100,6 +100,7 @@ export function extractTransactionData(
       atomicRequired: sendCallsParams.atomicRequired,
       callsId: sendCallsParams.id,
       permissionId,
+      from: sendCallsParams.from,
     };
   }
 
@@ -121,6 +122,7 @@ export function extractTransactionData(
         },
       ],
       chainId: chain.id,
+      from: txParams.from,
     };
   }
 

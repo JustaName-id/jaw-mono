@@ -52,13 +52,13 @@
   ],
   "references": [
     {
-      "path": "../../packages/core"
+      "path": "../../packages/wagmi"
     },
     {
       "path": "../../packages/ui"
     },
     {
-      "path": "../../packages/wagmi"
+      "path": "../../packages/core"
     }
   ]
 }

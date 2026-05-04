@@ -53,6 +53,10 @@ import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { PortalContainerContext } from '../lib/utils';
+import type { JawTheme } from '@jaw.id/core';
+import { resolveTheme } from '../theme/resolve-theme.js';
+import { applyThemeToContainer } from '../theme/apply-theme.js';
+import { getSystemColorScheme, useColorScheme } from '../theme/use-color-scheme.js';
 
 /**
  * Converts hex string to UTF-8 string
@@ -139,6 +143,32 @@ const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> =
   DefaultDialog as React.ComponentType<DefaultDialogProps>;
 
 /**
+ * Internal component that watches for system color scheme changes
+ * and re-applies theme variables when mode is 'auto'.
+ */
+function ThemeWatcher({ theme, container }: { theme: JawTheme; container: HTMLElement }): null {
+  const systemScheme = useColorScheme();
+
+  useEffect(() => {
+    // Only re-apply when mode is 'auto' (or unset, which defaults to auto)
+    if (!theme.mode || theme.mode === 'auto') {
+      const resolved = resolveTheme(theme, systemScheme);
+      applyThemeToContainer(container, resolved);
+    }
+  }, [systemScheme, theme, container]);
+
+  return null;
+}
+
+/**
+ * Options for ReactUIHandler constructor.
+ */
+export interface ReactUIHandlerOptions {
+  /** Theme configuration. Takes precedence over theme provided via JAW.create(). */
+  readonly theme?: JawTheme;
+}
+
+/**
  * React UI handler for app-specific mode
  *
  * This handler is automatically initialized by the SDK with the necessary configuration.
@@ -157,10 +187,27 @@ const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> =
  *     uiHandler: new ReactUIHandler(),
  *   },
  * });
+ *
+ * // With theme:
+ * const jaw2 = JAW.create({
+ *   apiKey: 'your-api-key',
+ *   theme: { mode: 'dark', accentColor: '#6366f1' },
+ *   preference: {
+ *     mode: Mode.AppSpecific,
+ *     uiHandler: new ReactUIHandler({
+ *       theme: { accentColor: '#7b3fe4', borderRadius: 'lg' },
+ *     }),
+ *   },
+ * });
  * ```
  */
 export class ReactUIHandler implements UIHandler {
   private config: UIHandlerConfig = {} as UIHandlerConfig;
+  private localTheme?: JawTheme;
+
+  constructor(options?: ReactUIHandlerOptions) {
+    this.localTheme = options?.theme;
+  }
 
   /**
    * Initialize the handler with SDK configuration
@@ -168,6 +215,21 @@ export class ReactUIHandler implements UIHandler {
    */
   init(config: UIHandlerConfig): void {
     this.config = config;
+  }
+
+  /**
+   * Update the theme without recreating the SDK or disconnecting.
+   * Takes effect on the next dialog that opens.
+   */
+  setTheme(theme: JawTheme): void {
+    this.localTheme = theme;
+  }
+
+  /** Merged theme: local theme wins over init-provided theme */
+  private get effectiveTheme(): JawTheme {
+    const initTheme = this.config.theme;
+    if (!initTheme && !this.localTheme) return {};
+    return { ...initTheme, ...this.localTheme };
   }
 
   async request<T = unknown>(request: UIRequest): Promise<UIResponse<T>> {
@@ -179,8 +241,6 @@ export class ReactUIHandler implements UIHandler {
         // Style isolation: prevent consumer app CSS from leaking into SDK modals.
         // Inline styles guarantee isolation regardless of CSS load order or specificity.
         Object.assign(container.style, {
-          fontFamily:
-            'ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
           fontSize: '16px',
           fontStyle: 'normal',
           fontWeight: '400',
@@ -197,11 +257,15 @@ export class ReactUIHandler implements UIHandler {
           wordBreak: 'normal',
           overflowWrap: 'normal',
           direction: 'ltr',
-          color: 'var(--foreground)',
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale',
           WebkitTapHighlightColor: 'transparent',
         });
+
+        // Apply theme: resolves --jaw-* CSS variables onto the container.
+        // fontFamily and color are set by the theme via --jaw-font-family and --jaw-color-foreground.
+        const resolved = resolveTheme(this.effectiveTheme, getSystemColorScheme());
+        applyThemeToContainer(container, resolved);
 
         // Append to body - Radix UI Dialog will handle all positioning
         document.body.appendChild(container);
@@ -241,10 +305,19 @@ export class ReactUIHandler implements UIHandler {
         };
 
         // Render appropriate dialog based on request type
-        console.log('[ReactUIHandler] Rendering dialog for request type:', request.type);
         const dialog = this.renderDialog(request, handleApprove, handleReject);
-        root.render(React.createElement(PortalContainerContext.Provider, { value: container }, dialog));
-        console.log('[ReactUIHandler] Dialog rendered');
+        const effectiveTheme = this.effectiveTheme;
+        root.render(
+          React.createElement(
+            PortalContainerContext.Provider,
+            { value: container },
+            React.createElement(ThemeWatcher, {
+              theme: effectiveTheme,
+              container,
+            }),
+            dialog
+          )
+        );
       } catch (error) {
         console.error('[ReactUIHandler] Error in request:', error);
         reject(error);
@@ -573,7 +646,6 @@ function OnboardingDialogWrapper({
     if (authenticatedAddress) {
       // User is already authenticated - approve immediately without showing any UI
       // Use setTimeout to defer the call and avoid unmounting during render
-      console.log('🔇 Silent mode: using existing auth state, address:', authenticatedAddress);
       setTimeout(() => {
         onApprove({
           accounts: [{ address: authenticatedAddress }],
@@ -594,7 +666,6 @@ function OnboardingDialogWrapper({
   const handleConnectConfirm = () => {
     if (authenticatedWalletAddress) {
       setIsConnecting(true);
-      console.log('🔗 User approved connection');
       onApprove({
         accounts: [{ address: authenticatedWalletAddress }],
       });
@@ -635,7 +706,6 @@ function OnboardingDialogWrapper({
 
       // If silent mode, skip ConnectDialog and approve immediately
       if (request.data.silent) {
-        console.log('🔇 Silent mode: skipping connect confirmation');
         onApprove({
           accounts: [{ address: accountInstance.address }],
         });
@@ -679,7 +749,6 @@ function OnboardingDialogWrapper({
 
       // If silent mode, skip ConnectDialog and approve immediately
       if (request.data.silent) {
-        console.log('🔇 Silent mode: skipping connect confirmation');
         setIsImporting(false);
         onApprove({
           accounts: [{ address: accountInstance.address }],
@@ -726,9 +795,9 @@ function OnboardingDialogWrapper({
         {
           chainId: createChainId,
           apiKey,
+          paymasterUrl: paymasters?.[createChainId]?.url,
           rpId,
           rpName,
-          paymasterUrl: paymasters?.[createChainId]?.url,
         },
         {
           username: fullUsername,
@@ -762,7 +831,6 @@ function OnboardingDialogWrapper({
   const handleAccountCreationComplete = async (accountData: CreatedAccountData) => {
     // If silent mode, skip ConnectDialog and approve immediately
     if (request.data.silent) {
-      console.log('🔇 Silent mode: skipping connect confirmation');
       setIsCreating(false);
       onApprove({
         accounts: [{ address: accountData.address }],
@@ -788,7 +856,6 @@ function OnboardingDialogWrapper({
 
   // Get config from request - capabilities is Record<string, unknown>
   const ensDomain = ens as string | undefined;
-  console.log('🔗 ENS domain:', ensDomain);
   const chainId = request.data.chainId || defaultChainId || 1;
   const subnameTextRecords = request.data.capabilities?.subnameTextRecords as
     | SubnameTextRecordCapabilityRequest
@@ -859,7 +926,6 @@ function OnboardingDialogWrapper({
       const signature = await account.signMessage(siweMessage);
 
       setSiweStatus('Sign-in successful!');
-      console.log('🔗 User signed SIWE message');
 
       // Build response per ERC-7846 format with SIWE capability
       onApprove({
@@ -1018,7 +1084,7 @@ function SignatureDialogWrapper({
       const account = await getAccountForSigning(apiKey, chainId, paymasters?.[chainId]?.url);
 
       // Sign the message
-      const signature = await account.signMessage(request.data.message);
+      const signature = await account.signMessage(request.data.message, { address: request.data.address });
 
       setSignatureStatus('Signature successful!');
       onApprove(signature);
@@ -1101,12 +1167,15 @@ function Eip712DialogWrapper({
         typeof request.data.typedData === 'string' ? JSON.parse(request.data.typedData) : request.data.typedData;
 
       // Sign the typed data
-      const signature = await account.signTypedData({
-        domain: typedData.domain,
-        types: typedData.types,
-        primaryType: typedData.primaryType,
-        message: typedData.message,
-      });
+      const signature = await account.signTypedData(
+        {
+          domain: typedData.domain,
+          types: typedData.types,
+          primaryType: typedData.primaryType,
+          message: typedData.message,
+        },
+        { address: request.data.address }
+      );
 
       setSignatureStatus('Signature successful!');
       onApprove(signature);
@@ -1245,6 +1314,7 @@ function TransactionDialogWrapper({
     feeTokens,
     isSponsored,
     permissionId,
+    address: request.data.from,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -1316,7 +1386,10 @@ function TransactionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -1415,7 +1488,7 @@ function TransactionDialogWrapper({
 
       const result = await account.sendCalls(
         transactionCalls,
-        permissionId ? { permissionId } : undefined,
+        { permissionId, from: request.data.from },
         computedPaymasterUrl,
         computedPaymasterContext
       );
@@ -1584,6 +1657,7 @@ function SendTransactionDialogWrapper({
     apiKey,
     feeTokens,
     isSponsored,
+    address: request.data.from,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -1655,7 +1729,10 @@ function SendTransactionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -1749,7 +1826,12 @@ function SendTransactionDialogWrapper({
         throw new Error('Account not initialized');
       }
 
-      const txHash = await account.sendTransaction(transactionCalls, computedPaymasterUrl, computedPaymasterContext);
+      const txHash = await account.sendTransaction(
+        transactionCalls,
+        computedPaymasterUrl,
+        computedPaymasterContext,
+        request.data.from
+      );
 
       setTransactionStatus('Transaction successful!');
       onApprove(txHash);
@@ -1931,6 +2013,7 @@ function PermissionDialogWrapper({
     apiKey,
     feeTokens,
     isSponsored,
+    address: request.data.address,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -2110,7 +2193,10 @@ function PermissionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -2315,7 +2401,8 @@ function PermissionDialogWrapper({
         request.data.spender as Address,
         permissionsDetail,
         computedPaymasterUrl,
-        computedPaymasterContext
+        computedPaymasterContext,
+        request.data.address
       );
 
       setStatus('Permissions granted successfully!');
@@ -2590,6 +2677,7 @@ function RevokePermissionDialogWrapper({
     apiKey,
     feeTokens,
     isSponsored,
+    address: request.data.address,
     onFeeTokensUpdate: setFeeTokens,
   });
 
@@ -2650,7 +2738,6 @@ function RevokePermissionDialogWrapper({
     const fetchPermissionDetails = async () => {
       try {
         const permData = await getPermissionFromRelay(request.data.permissionId as `0x${string}`, apiKey);
-        console.log('✅ Fetched permission details from relay:', permData);
         setFetchedPermissionData(permData);
 
         // Fetch token info for spends
@@ -2743,7 +2830,10 @@ function RevokePermissionDialogWrapper({
         }
 
         // Get RPC URL for balance fetching
-        const rpcUrl = viemChain?.rpcUrls?.default?.http?.[0] || `https://eth.llamarpc.com`;
+        const rpcUrl =
+          buildChainConfigFromApiKey(chainId, apiKey).rpcUrl ||
+          viemChain?.rpcUrls?.default?.http?.[0] ||
+          `https://eth.llamarpc.com`;
 
         // Fetch balances in parallel
         const tokensWithBalances = await Promise.all(
@@ -2889,10 +2979,10 @@ function RevokePermissionDialogWrapper({
       await account.revokePermission(
         request.data.permissionId as `0x${string}`,
         computedPaymasterUrl,
-        computedPaymasterContext
+        computedPaymasterContext,
+        request.data.address
       );
 
-      console.log('Permission revoked');
       setStatus('Permission revoked successfully!');
       onApprove({ success: true });
     } catch (error) {
@@ -2967,7 +3057,6 @@ function UnsupportedMethodDialogWrapper({ method, onReject }: { method: string; 
   const handleClose = () => {
     if (!isClosing) {
       setIsClosing(true);
-      console.log('❌ Unsupported method:', method);
       setOpen(false);
       // Use UIError.unsupportedRequest which has proper error code
       onReject(UIError.unsupportedRequest(method));
@@ -3003,21 +3092,21 @@ function UnsupportedMethodDialogWrapper({ method, onReject }: { method: string; 
 
         {/* Content */}
         <div className="text-center">
-          <h3 className="mb-2 text-xl font-bold text-gray-900">Unsupported Method</h3>
-          <p className="mb-4 text-sm text-gray-600">This wallet does not support the following method:</p>
-          <div className="rounded-lg bg-gray-100 p-4">
-            <code className="break-all font-mono text-sm text-gray-900">{method}</code>
+          <h3 className="text-foreground mb-2 text-xl font-bold">Unsupported Method</h3>
+          <p className="text-muted-foreground mb-4 text-sm">This wallet does not support the following method:</p>
+          <div className="bg-muted rounded-lg p-4">
+            <code className="text-foreground break-all font-mono text-sm">{method}</code>
           </div>
         </div>
 
         {/* Origin */}
-        <p className="text-center text-xs text-gray-500">Origin: {origin}</p>
+        <p className="text-muted-foreground text-center text-xs">Origin: {origin}</p>
 
         {/* Close Button */}
         <button
           onClick={handleClose}
           disabled={isClosing}
-          className="w-full rounded-lg bg-blue-600 px-6 py-3 font-semibold text-white transition-colors hover:bg-blue-700 disabled:bg-gray-400"
+          className="bg-primary text-primary-foreground hover:bg-primary/90 disabled:bg-muted disabled:text-muted-foreground w-full rounded-lg px-6 py-3 font-semibold transition-colors"
         >
           {isClosing ? 'Closing...' : 'Close'}
         </button>

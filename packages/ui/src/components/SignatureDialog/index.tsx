@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { DefaultDialog } from '../DefaultDialog';
 import { SignatureDialogProps } from './types';
 import { useIsMobile } from '../../hooks';
-import { getJustaNameInstance, getDisplayAddress } from '../../utils';
+import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
 import { useState, useEffect } from 'react';
 
 export const SignatureDialog = ({
@@ -36,9 +36,10 @@ export const SignatureDialog = ({
           address: accountAddress as `0x${string}`,
           chainId: chainId,
         })
-        .then((result) => {
+        .then(async (result) => {
           if (result) {
-            setResolvedAddress(result);
+            const label = await getChainLabel(chainId, mainnetRpcUrl);
+            setResolvedAddress(label ? `${result}@${label}` : result);
           }
         })
         .catch(() => {
@@ -104,14 +105,14 @@ export const SignatureDialog = ({
     >
       <div className="flex h-full min-h-0 flex-col max-md:pb-2">
         {/* Main Content Area - Large scrollable message box */}
-        <div className="border-border max-h-[50vh] min-h-[300px] flex-1 overflow-y-auto rounded-[6px] border bg-white p-4">
+        <div className="bg-card border-border max-h-[50vh] min-h-[300px] flex-1 overflow-y-auto rounded-[6px] border p-4">
           <p className="text-foreground whitespace-pre-wrap break-words text-sm font-normal leading-relaxed">
             {message || 'No message provided'}
           </p>
         </div>
 
         {/* Footer Information Section - Network and URL */}
-        <div className="border-border mt-3 rounded-[6px] border bg-white p-2">
+        <div className="bg-card border-border mt-3 rounded-[6px] border p-2">
           <div className="flex flex-row gap-4">
             {/* Network Column */}
             {chainName && (
@@ -142,10 +143,10 @@ export const SignatureDialog = ({
           <div
             className={`mt-3 rounded-lg p-3 text-sm ${
               signatureStatus.includes('Error')
-                ? 'bg-red-50 text-red-600'
+                ? 'bg-destructive/10 text-destructive'
                 : signatureStatus.includes('successfully')
-                  ? 'bg-green-50 text-green-600'
-                  : 'bg-blue-50 text-blue-600'
+                  ? 'bg-success/10 text-success'
+                  : 'bg-info/10 text-info'
             }`}
           >
             {signatureStatus}
