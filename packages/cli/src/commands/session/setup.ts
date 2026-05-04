@@ -43,6 +43,19 @@ export default class SessionSetup extends BaseCommand {
       const existing = loadSessionConfig();
       const isActive = existing.expiry > Date.now() / 1000;
 
+      // The prompt path uses readline against process.stdin. With non-TTY stdin
+      // (pipes, heredocs, CI), readline races against the awaited bridge call
+      // below: stdin EOFs while the browser approval is pending, readline auto-
+      // closes, and the second `ask` throws ERR_USE_AFTER_CLOSE *after* on-chain
+      // state has already mutated. Require --yes for non-interactive use.
+      if (!flags.yes && !process.stdin.isTTY) {
+        this.error(
+          'Existing session found, but stdin is not a terminal ' +
+            '(piped, redirected, or running in CI). ' +
+            'Re-run with --yes to overwrite the existing session non-interactively.'
+        );
+      }
+
       if (!flags.yes) {
         const readline = await import('node:readline');
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
@@ -109,99 +122,104 @@ export default class SessionSetup extends BaseCommand {
       // with an active on-chain permission and no local key.
     }
 
-    // 2. Resolve permissions
-    const permissions = this.resolvePermissions(flags.permissions, config.permissions);
-
-    // 3. Resolve expiry
-    const expiryDays = flags.expiry ?? config.sessionExpiry ?? 7;
-    const expiryTimestamp = Math.floor(Date.now() / 1000) + expiryDays * 86400;
-
-    // 4. Generate or reuse session key
-    const privateKeyHex = (reuseKey ?? generateSessionKey()) as `0x${string}`;
-
-    // 5. Create LocalAccount and derive smart account address
-    const { privateKeyToAccount } = await import('viem/accounts');
-    const localAccount = privateKeyToAccount(privateKeyHex);
-
-    const { Account } = await import('@jaw.id/core');
-    const pm = config.paymasters?.[chainId];
-    const account = await Account.fromLocalAccount(
-      {
-        chainId,
-        apiKey,
-        paymasterUrl: pm?.url,
-        paymasterContext: pm?.context,
-      },
-      localAccount
-    );
-    const sessionAddress = account.address;
-
-    // 6. Open browser bridge to grant permissions
-    if (!flags.quiet) {
-      this.log('Opening browser to approve permissions...');
-    }
-
-    const bridge = await getBridge({
-      keysUrl: config.keysUrl,
-      apiKey,
-      chainId,
-      ens: config.ens,
-      paymasterUrl: pm?.url,
-    });
-
-    let grantResponse: { permissionId: string; account: string };
+    // Anything below can throw. If the inner revoke above already mutated
+    // on-chain state, surface a recovery hint before re-throwing so the user
+    // knows their local session-config now references a revoked permission.
     try {
-      grantResponse = (await bridge.request('wallet_grantPermissions', [
+      // 2. Resolve permissions
+      const permissions = this.resolvePermissions(flags.permissions, config.permissions);
+
+      // 3. Resolve expiry
+      const expiryDays = flags.expiry ?? config.sessionExpiry ?? 7;
+      const expiryTimestamp = Math.floor(Date.now() / 1000) + expiryDays * 86400;
+
+      // 4. Generate or reuse session key
+      const privateKeyHex = (reuseKey ?? generateSessionKey()) as `0x${string}`;
+
+      // 5. Create LocalAccount and derive smart account address
+      const { privateKeyToAccount } = await import('viem/accounts');
+      const localAccount = privateKeyToAccount(privateKeyHex);
+
+      const { Account } = await import('@jaw.id/core');
+      const pm = config.paymasters?.[chainId];
+      const account = await Account.fromLocalAccount(
         {
-          spender: sessionAddress,
-          expiry: expiryTimestamp,
-          permissions,
           chainId,
+          apiKey,
+          paymasterUrl: pm?.url,
+          paymasterContext: pm?.context,
         },
-      ])) as { permissionId: string; account: string };
+        localAccount
+      );
+      const sessionAddress = account.address;
+
+      // 6. Open browser bridge to grant permissions
+      if (!flags.quiet) {
+        this.log('Opening browser to approve permissions...');
+      }
+
+      const bridge = await getBridge({
+        keysUrl: config.keysUrl,
+        apiKey,
+        chainId,
+        ens: config.ens,
+        paymasterUrl: pm?.url,
+      });
+
+      let grantResponse: { permissionId: string; account: string };
+      try {
+        grantResponse = (await bridge.request('wallet_grantPermissions', [
+          {
+            spender: sessionAddress,
+            expiry: expiryTimestamp,
+            permissions,
+            chainId,
+          },
+        ])) as { permissionId: string; account: string };
+      } finally {
+        bridge.close();
+      }
+
+      // 7. Save keystore
+      saveKeystore(privateKeyHex, sessionAddress);
+
+      // 8. Save session config
+      saveSessionConfig({
+        ownerAddress: grantResponse.account,
+        sessionAddress,
+        permissionId: grantResponse.permissionId,
+        chainId,
+        expiry: expiryTimestamp,
+      });
+
+      // 9. Output
+      const summary = {
+        ownerAddress: grantResponse.account,
+        sessionAddress,
+        permissionId: grantResponse.permissionId,
+        expiry: expiryTimestamp,
+      };
+
+      if (flags.quiet) {
+        this.outputResult(summary, format);
+      } else {
+        this.log('\nSession created successfully.\n');
+        this.log(`  Session address:  ${sessionAddress}`);
+        this.log(`  Owner address:    ${grantResponse.account}`);
+        this.log(`  Permission ID:    ${grantResponse.permissionId}`);
+        this.log(`  Chain:            ${chainId}`);
+        this.log(`  Expires:          ${new Date(expiryTimestamp * 1000).toISOString()} (${expiryDays} days)`);
+        this.log('\nUse --session flag to execute RPC calls in auto mode.');
+      }
     } catch (error) {
       if (oldPermissionRevoked) {
         this.logToStderr(
-          'Old permission was revoked on-chain but the new grant failed. ' +
+          'Old permission was revoked on-chain but setup did not complete. ' +
             'Local session-config still references the revoked permission; ' +
             'run `jaw session setup` again to create a new session.'
         );
       }
       throw error;
-    } finally {
-      bridge.close();
-    }
-
-    // 7. Save keystore
-    saveKeystore(privateKeyHex, sessionAddress);
-
-    // 8. Save session config
-    saveSessionConfig({
-      ownerAddress: grantResponse.account,
-      sessionAddress,
-      permissionId: grantResponse.permissionId,
-      chainId,
-      expiry: expiryTimestamp,
-    });
-
-    // 9. Output
-    const summary = {
-      ownerAddress: grantResponse.account,
-      sessionAddress,
-      permissionId: grantResponse.permissionId,
-      expiry: expiryTimestamp,
-    };
-
-    if (flags.quiet) {
-      this.outputResult(summary, format);
-    } else {
-      this.log('\nSession created successfully.\n');
-      this.log(`  Session address:  ${sessionAddress}`);
-      this.log(`  Owner address:    ${grantResponse.account}`);
-      this.log(`  Permission ID:    ${grantResponse.permissionId}`);
-      this.log(`  Chain:            ${chainId}`);
-      this.log(`  Expires:          ${new Date(expiryTimestamp * 1000).toISOString()} (${expiryDays} days)`);
-      this.log('\nUse --session flag to execute RPC calls in auto mode.');
     }
   }
 
