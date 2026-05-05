@@ -1,0 +1,136 @@
+# Usage and Lifecycle
+
+## The `--session` Flag
+
+Add `--session` (or `-s`) to any `jaw rpc call` command to use the local session key instead of the browser:
+
+```bash
+jaw rpc call eth_requestAccounts --session --chain 84532
+jaw rpc call wallet_sendCalls '{"calls":[...]}' --session --chain 84532
+jaw rpc call personal_sign '"Hello"' --session --chain 84532
+```
+
+Also available as an environment variable:
+
+```bash
+export JAW_SESSION=true
+jaw rpc call eth_requestAccounts --chain 84532
+```
+
+## Supported Methods
+
+| Method                  | What happens in session mode                                            |
+| ----------------------- | ----------------------------------------------------------------------- |
+| `eth_requestAccounts`   | Returns session key's smart account address                             |
+| `eth_accounts`          | Same as above                                                           |
+| `wallet_sendCalls`      | Signs locally, auto-injects `permissionId`, sends via PermissionManager |
+| `wallet_getCallsStatus` | Queries transaction status                                              |
+| `personal_sign`         | Signs message with session key                                          |
+| `eth_signTypedData_v4`  | Signs typed data with session key                                       |
+
+### Blocked Methods
+
+These require a browser and passkey — they cannot run in session mode:
+
+| Method                     | Error                                         |
+| -------------------------- | --------------------------------------------- |
+| `wallet_grantPermissions`  | "Requires browser — run `jaw session setup`"  |
+| `wallet_revokePermissions` | "Requires browser — run `jaw session revoke`" |
+| Any other method           | `Method <name> is not supported in auto mode` |
+
+## Session Management
+
+### Check Status
+
+```bash
+jaw session status
+```
+
+```
+Session active.
+
+  Session address:  0xee3EC45...
+  Owner address:    0x810440...
+  Permission ID:    0x60a8d6...
+  Chain:            84532
+  Expires:          2026-04-16T09:15:18.000Z
+  Status:           Valid (6 days remaining)
+```
+
+JSON output for programmatic use:
+
+```bash
+jaw session status -o json
+```
+
+### Revoke a Session
+
+```bash
+jaw session revoke
+```
+
+This will:
+
+1. Open browser for passkey approval of `wallet_revokePermissions`
+2. Revoke the permission on-chain (session key becomes immediately useless)
+3. Delete `keystore.json` and `session-config.json`
+
+If the session is already expired, revoke skips the browser and just cleans up local files.
+
+### Overwrite a Session
+
+Running `jaw session setup` when a session already exists will prompt:
+
+```
+Existing session found. Overwrite? (y/N)
+```
+
+Use `--yes` to skip the prompt (useful for scripts):
+
+```bash
+jaw session setup --chain 84532 --yes
+```
+
+This creates a new session key and permission. The old permission remains on-chain until it expires — revoke it first if you want to clean up.
+
+## Typical Agent Workflow
+
+```bash
+# 1. Human configures (once)
+jaw config write '{"apiKey":"...","defaultChain":84532,"paymasters":{...},"permissions":{...}}'
+
+# 2. Human sets up session (once, opens browser)
+jaw session setup --chain 84532
+
+# 3. Agent operates autonomously
+jaw rpc call eth_requestAccounts --session -o json
+# → ["0xSessionAddress"]
+
+jaw rpc call wallet_sendCalls '{"calls":[{"to":"0x...","data":"0x..."}]}' --session -o json
+# → {"id":"0x...","chainId":84532}
+
+jaw rpc call wallet_getCallsStatus '"0xBatchId"' --session -o json
+# → {"status":200,"receipts":[...]}
+
+# 4. Human tears down (when done)
+jaw session revoke
+```
+
+## Error Handling
+
+| Scenario                                | Error message                                                               |
+| --------------------------------------- | --------------------------------------------------------------------------- |
+| `--session` but no keystore             | "No session configured. Run `jaw session setup` first."                     |
+| `--session` but session expired         | `Session expired on <date>. Run jaw session setup to create a new session.` |
+| Unsupported method with `--session`     | `Method <name> is not supported in auto mode.`                              |
+| Transaction exceeds spend limit         | On-chain revert from PermissionManager                                      |
+| Transaction calls unauthorized contract | On-chain revert from PermissionManager                                      |
+
+## Expiry
+
+Sessions expire after the configured `sessionExpiry` days (default: 7). When expired:
+
+- `--session` commands fail with a clear error message
+- The on-chain permission is already inert (PermissionManager rejects expired permissions)
+- `jaw session revoke` skips the browser and just cleans up local files
+- Run `jaw session setup` to create a new session

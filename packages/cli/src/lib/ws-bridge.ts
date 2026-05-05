@@ -204,6 +204,15 @@ export class WSBridge {
             onBrowserNeeded().catch(() => {
               /* best effort */
             });
+          } else if (!onBrowserNeeded) {
+            // Reuse path (bridge-singleton.ts called connectBridge with
+            // openBrowser=false): the relay reports no browser connected and
+            // we have no callback to open one. Bail immediately so the
+            // caller can fall through to a fresh session, instead of waiting
+            // out the 30s connect-timer.
+            clearTimeout(timer);
+            ws.close();
+            reject(new Error('Browser not connected — relay session is stale.'));
           }
         } else if (msg.type === 'browser_connected') {
           expectingKeyExchange = true;
@@ -292,10 +301,6 @@ export class WSBridge {
       ws.on('message', onMessage);
       this.sendRaw(ws, serialized);
     });
-  }
-
-  isOpen(): boolean {
-    return this.ws?.readyState === WebSocket.OPEN;
   }
 
   async shutdown(): Promise<void> {

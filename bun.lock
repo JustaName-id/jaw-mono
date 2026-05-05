@@ -113,9 +113,11 @@
         "jaw": "./bin/run.js",
       },
       "dependencies": {
+        "@jaw.id/core": "workspace:*",
         "@modelcontextprotocol/sdk": "^1.12.1",
         "@oclif/core": "^4.3.0",
         "open": "^10.1.0",
+        "viem": "^2.38.2",
         "ws": "^8.18.0",
         "zod": "^3.24.0",
       },
@@ -147,7 +149,7 @@
     },
     "packages/ui": {
       "name": "@jaw.id/ui",
-      "version": "0.2.7",
+      "version": "0.2.8",
       "dependencies": {
         "@hookform/resolvers": "^5.2.2",
         "@jaw.id/core": "0.2.8",

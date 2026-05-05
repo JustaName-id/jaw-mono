@@ -1,3 +1,17 @@
+## 0.1.0 (2026-05-05)
+
+### 🚀 Features
+
+- **cli:** added auto mode ([#164](https://github.com/JustaName-id/jaw-mono/pull/164), [#175](https://github.com/JustaName-id/jaw-mono/issues/175))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.3.0
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.0.8 (2026-04-27)
 
 ### 🩹 Fixes
