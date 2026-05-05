@@ -502,12 +502,6 @@ export class Account {
 
         const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
 
-        // Register chain in global store for background operations
-        const existingChains = chainStore.get() ?? [];
-        if (!existingChains.some((c) => c.id === chain.id)) {
-            chainStore.set([...existingChains, chain]);
-        }
-
         const bundlerClient = getBundlerClient(chain);
         const smartAccount = isEip7702
             ? await createSmartAccountEip7702(localAccount, bundlerClient as JustanAccountImplementation['client'])
@@ -1218,7 +1212,10 @@ export class Account {
     // ============================================
 
     /**
-     * Build chain configuration with RPC URL
+     * Build chain configuration with RPC URL and register it in the global
+     * chain store. Registration is required so background ops (e.g. receipt
+     * polling in waitForReceiptInBackground) can resolve a bundler client by
+     * chainId without needing the original Account instance.
      * @internal
      */
     private static buildChainConfig(chainId: number, apiKey?: string, paymasterUrl?: string): Chain {
@@ -1226,11 +1223,18 @@ export class Account {
             ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`
             : `${JAW_RPC_URL}?chainId=${chainId}`;
 
-        return {
+        const chain: Chain = {
             id: chainId,
             rpcUrl,
             ...(paymasterUrl && { paymaster: { url: paymasterUrl } }),
         };
+
+        const existingChains = chainStore.get() ?? [];
+        if (!existingChains.some((c) => c.id === chain.id)) {
+            chainStore.set([...existingChains, chain]);
+        }
+
+        return chain;
     }
 
     /**
