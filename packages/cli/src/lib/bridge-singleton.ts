@@ -83,23 +83,27 @@ export async function getBridge(options: BridgeOptions): Promise<WSBridge> {
     throw new Error(`Untrusted relayUrl: ${relayUrl}. Must be wss://*.jaw.id or ws://localhost.`);
   }
 
-  // Try existing session first
+  // Try existing session first — but never open a browser for a stale session.
+  // If the browser is already connected, reuse it. If not, fall through to a new session.
   let relaySession = loadRelaySession();
-  if (relaySession && relaySession.relayUrl === relayUrl) {
+  if (relaySession && relaySession.relayUrl === relayUrl && relaySession.peerPublicKey) {
     try {
-      return await connectBridge(relaySession, options, chainId, keysUrl, relayUrl);
+      return await connectBridge(relaySession, options, chainId, keysUrl, relayUrl, false);
     } catch {
       // Connection failed — stale session or relay restarted.
       // Delete and fall through to create a new one.
       deleteRelaySession();
       relaySession = null;
     }
+  } else if (relaySession) {
+    // Incomplete session (no peer key) — discard
+    deleteRelaySession();
   }
 
-  // New session
+  // New session — this is the only path that opens a browser
   const session = await createNewSession(relayUrl);
   saveRelaySession(session);
-  return await connectBridge(session, options, chainId, keysUrl, relayUrl);
+  return await connectBridge(session, options, chainId, keysUrl, relayUrl, true);
 }
 
 async function createNewSession(relayUrl: string): Promise<RelaySession> {
@@ -122,7 +126,8 @@ async function connectBridge(
   options: BridgeOptions,
   chainId: number,
   keysUrl: string,
-  relayUrl: string
+  relayUrl: string,
+  openBrowser: boolean
 ): Promise<WSBridge> {
   const config = loadConfig();
   const bridge = new WSBridge({
@@ -133,7 +138,7 @@ async function connectBridge(
       apiKey: options.apiKey,
       chainId,
       ens: options.ens ?? config.ens,
-      paymasterUrl: options.paymasterUrl ?? config.paymasterUrl,
+      paymasterUrl: options.paymasterUrl ?? config.paymasters?.[chainId]?.url,
     },
     privateKeyHex: relaySession.privateKey,
     publicKeyHex: relaySession.publicKey,
@@ -141,12 +146,14 @@ async function connectBridge(
   });
 
   await bridge.connect(
-    // onBrowserNeeded
-    async () => {
-      const bridgeUrl = buildBridgeUrl(keysUrl, relaySession.session, relayUrl, relaySession.publicKey);
-      const { default: open } = await import('open');
-      await open(bridgeUrl);
-    },
+    // onBrowserNeeded — only open a browser for new sessions
+    openBrowser
+      ? async () => {
+          const bridgeUrl = buildBridgeUrl(keysUrl, relaySession.session, relayUrl, relaySession.publicKey);
+          const { default: open } = await import('open');
+          await open(bridgeUrl);
+        }
+      : undefined,
     // onPeerKeyChanged
     (newPeerKey) => {
       relaySession.peerPublicKey = newPeerKey;

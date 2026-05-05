@@ -2,18 +2,20 @@ import { Args, Flags } from '@oclif/core';
 import { BaseCommand } from '../../base-command.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
 import { loadConfig } from '../../lib/config.js';
-import { requiresBrowser } from '../../lib/rpc-classifier.js';
+import { requiresBrowser, supportsSessionMode } from '../../lib/rpc-classifier.js';
+import { SessionBridge } from '../../lib/session-bridge.js';
 import type { OutputFormat } from '../../lib/types.js';
 
 export default class RpcCall extends BaseCommand {
-  static override description = 'Execute any JAW.id RPC method via the browser bridge.';
+  static override description = 'Execute any JAW.id RPC method via the browser bridge or local session key.';
 
   static override examples = [
     '<%= config.bin %> rpc call wallet_sendCalls \'{"calls":[{"to":"0x...","value":"0x0"}]}\'',
     '<%= config.bin %> rpc call personal_sign \'"Hello World"\'',
-    '<%= config.bin %> rp' + 'c call wallet_getAssets',
+    '<%= config.bin %> rpc call wallet_getAssets',
     '<%= config.bin %> rpc call eth_requestAccounts',
     '<%= config.bin %> rpc call wallet_getCallsStatus \'"0x..."\'',
+    '<%= config.bin %> rpc call wallet_sendCalls \'{"calls":[...]}\' --session',
   ];
 
   static override args = {
@@ -34,6 +36,12 @@ export default class RpcCall extends BaseCommand {
       description: 'Request timeout in seconds',
       default: 120,
     }),
+    session: Flags.boolean({
+      char: 's',
+      description: 'Use local session key (auto mode)',
+      default: false,
+      env: 'JAW_SESSION',
+    }),
   };
 
   async run(): Promise<void> {
@@ -52,21 +60,40 @@ export default class RpcCall extends BaseCommand {
     const format = flags.output as OutputFormat;
     const config = loadConfig();
     const apiKey = this.resolveApiKey(flags);
+    const chainId = flags.chain ?? config.defaultChain ?? 1;
 
-    const bridge = await getBridge({
-      keysUrl: config.keysUrl,
-      apiKey,
-      chainId: flags.chain ?? config.defaultChain,
-      ens: config.ens,
-      paymasterUrl: config.paymasterUrl,
-      timeout: flags.timeout * 1000,
-    });
+    let bridge: { request(method: string, params?: unknown): Promise<unknown>; close(): void };
 
-    if (!flags.quiet) {
-      if (requiresBrowser(method)) {
-        this.log(`Sending ${method}... Check your browser to approve the request.`);
-      } else {
-        this.log(`Sending ${method}...`);
+    if (flags.session) {
+      if (!supportsSessionMode(method)) {
+        this.error(
+          `Method ${method} is not supported in session mode. ` +
+            'Use without --session to route through the browser bridge.'
+        );
+      }
+
+      bridge = new SessionBridge({ apiKey, chainId });
+
+      if (!flags.quiet) {
+        this.log(`Sending ${method} (session mode)...`);
+      }
+    } else {
+      const pm = config.paymasters?.[chainId];
+      bridge = await getBridge({
+        keysUrl: config.keysUrl,
+        apiKey,
+        chainId,
+        ens: config.ens,
+        paymasterUrl: pm?.url,
+        timeout: flags.timeout * 1000,
+      });
+
+      if (!flags.quiet) {
+        if (requiresBrowser(method)) {
+          this.log(`Sending ${method}... Check your browser to approve the request.`);
+        } else {
+          this.log(`Sending ${method}...`);
+        }
       }
     }
 

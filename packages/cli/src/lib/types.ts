@@ -1,11 +1,29 @@
+export type PaymasterConfig = {
+  url: string;
+  context?: Record<string, unknown>;
+};
+
+export interface PermissionsConfig {
+  calls?: Array<{ target: string; selector?: string }>;
+  spends?: Array<{
+    token: string;
+    allowance: string;
+    unit: string;
+    multiplier?: number;
+  }>;
+}
+
 export interface JawConfig {
   apiKey?: string;
   defaultChain?: number;
   keysUrl?: string;
-  paymasterUrl?: string;
   ens?: string;
-  /** Relay WebSocket URL (e.g. wss://relay.jaw.id). Defaults to wss://relay.jaw.id. */
   relayUrl?: string;
+  paymasters?: Record<number, PaymasterConfig>;
+  permissions?: PermissionsConfig;
+  sessionExpiry?: number;
+  /** @deprecated Use `paymasters` instead. Auto-migrated on load. */
+  paymasterUrl?: string;
 }
 
 export type OutputFormat = 'json' | 'human';

@@ -297,6 +297,18 @@ export default defineConfig({
         link: '/cli',
       },
       {
+        text: 'Configuration',
+        link: '/cli/configuration',
+      },
+      {
+        text: 'Auto Mode',
+        items: [
+          { text: 'Overview', link: '/cli/auto-mode' },
+          { text: 'Setup', link: '/cli/auto-mode/setup' },
+          { text: 'Usage', link: '/cli/auto-mode/usage' },
+        ],
+      },
+      {
         text: 'Commands',
         link: '/cli/commands',
       },

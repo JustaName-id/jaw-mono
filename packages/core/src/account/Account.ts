@@ -1,5 +1,5 @@
 import type { Address, Hash, Hex, TypedDataDefinition, TypedData, LocalAccount } from 'viem';
-import { isHex, encodeFunctionData, erc20Abi, createPublicClient, http } from 'viem';
+import { isHex, encodeFunctionData, erc20Abi, createPublicClient, http, numberToHex } from 'viem';
 import { toWebAuthnAccount, type SmartAccount } from 'viem/account-abstraction';
 import {
     createSmartAccount,
@@ -18,6 +18,7 @@ import {
     storeCallStatus,
     waitForReceiptInBackground,
     getCallStatusEIP5792,
+    transformReceiptsToEIP5792,
     type CallStatusResponse,
 } from '../rpc/wallet_sendCalls.js';
 import type { JustanAccountImplementation } from './toJustanAccount.js';
@@ -779,7 +780,7 @@ export class Account {
      * );
      *
      * // Check status later
-     * const status = account.getCallStatus(id);
+     * const status = await account.getCallStatus(id);
      * ```
      */
     async sendCalls(
@@ -854,15 +855,22 @@ export class Account {
     /**
      * Get the status of a previously submitted call batch
      *
+     * Resolves the in-memory store first (populated by `sendCalls` in the same
+     * process). On a miss — typical for short-lived processes like the CLI, or
+     * for browsers after a page reload — falls back to querying the bundler
+     * directly via `eth_getUserOperationReceipt` so the chain stays the source
+     * of truth.
+     *
      * @param batchId - The batch ID (userOpHash) returned from sendCalls
-     * @returns The call status in EIP-5792 format, or undefined if not found
+     * @returns The call status in EIP-5792 format, or undefined if neither the
+     *          in-memory store nor the bundler knows the batch.
      *
      * @example
      * ```typescript
      * const { id } = await account.sendCalls([{ to: '0x...', value: '0.1' }]);
      *
      * // Check status
-     * const status = account.getCallStatus(id);
+     * const status = await account.getCallStatus(id);
      * if (status) {
      *   console.log('Status code:', status.status); // 100=pending, 200=completed, 400=failed, 500=reverted
      *   if (status.receipts) {
@@ -871,8 +879,33 @@ export class Account {
      * }
      * ```
      */
-    getCallStatus(batchId: Hash): CallStatusResponse | undefined {
-        return getCallStatusEIP5792(batchId);
+    async getCallStatus(batchId: Hash): Promise<CallStatusResponse | undefined> {
+        const cached = getCallStatusEIP5792(batchId);
+        if (cached) {
+            return cached;
+        }
+
+        let receipt;
+        try {
+            const bundlerClient = getBundlerClient(this._chain);
+            receipt = await bundlerClient.getUserOperationReceipt({ hash: batchId });
+        } catch {
+            return undefined;
+        }
+
+        if (!receipt) {
+            return undefined;
+        }
+
+        const success = receipt.success === true;
+        return {
+            version: '2.0.0',
+            id: batchId,
+            chainId: numberToHex(this._chain.id) as `0x${string}`,
+            status: success ? 200 : 500,
+            atomic: true,
+            receipts: transformReceiptsToEIP5792([receipt]),
+        };
     }
 
     /**
