@@ -780,7 +780,7 @@ export class Account {
      * );
      *
      * // Check status later
-     * const status = account.getCallStatus(id);
+     * const status = await account.getCallStatus(id);
      * ```
      */
     async sendCalls(
