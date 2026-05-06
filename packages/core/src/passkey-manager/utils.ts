@@ -91,6 +91,12 @@ export interface NativePasskeyCreateOptions {
     rp: { id: string; name: string };
     user: { id: string; name: string; displayName: string };
     pubKeyCredParams: Array<{ type: string; alg: number }>;
+    authenticatorSelection?: {
+        residentKey?: 'discouraged' | 'preferred' | 'required';
+        requireResidentKey?: boolean;
+        userVerification?: 'discouraged' | 'preferred' | 'required';
+        authenticatorAttachment?: 'platform' | 'cross-platform';
+    };
 }
 
 /**
@@ -259,6 +265,16 @@ export function wrapNativeCreateFn(nativeCreateFn: NativePasskeyCreateFn): Inter
                 displayName: username,
             },
             pubKeyCredParams: [{ type: 'public-key', alg: -7 }],
+            // Force a discoverable, synced credential so it shows in Google
+            // Password Manager / iCloud Keychain. Without this, Android
+            // Credential Manager may create a non-discoverable credential
+            // (still authenticates via allowCredentials but never appears
+            // in the password-manager UI).
+            authenticatorSelection: {
+                residentKey: 'required',
+                requireResidentKey: true,
+                userVerification: 'preferred',
+            },
         });
 
         const publicKey = extractPublicKeyFromAttestation(result.response.attestationObject);
