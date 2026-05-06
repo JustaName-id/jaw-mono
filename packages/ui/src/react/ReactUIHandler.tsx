@@ -796,11 +796,11 @@ function OnboardingDialogWrapper({
           chainId: createChainId,
           apiKey,
           paymasterUrl: paymasters?.[createChainId]?.url,
+          rpId,
+          rpName,
         },
         {
           username: fullUsername,
-          rpId,
-          rpName,
         }
       );
 

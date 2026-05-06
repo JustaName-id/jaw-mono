@@ -16,19 +16,29 @@ export type SyncStorage = {
 };
 
 /**
- * Create localStorage-based storage
- * Handles SSR by checking if localStorage is available
+ * Check if localStorage is available in the current environment
  */
+function hasLocalStorage(): boolean {
+    try {
+        return typeof window !== 'undefined' && typeof localStorage !== 'undefined';
+    } catch {
+        return false;
+    }
+}
+
+/**
+ * Create localStorage-based storage with in-memory fallback
+ * Falls back to in-memory storage when localStorage is unavailable (e.g., React Native, SSR)
+ */
+const globalMemoryStore = new Map<string, string>();
+
 export function createLocalStorage(scope: string, name: string): SyncStorage {
     const prefix = `${scope}:${name}`;
 
     return {
         getItem: <T>(key: string): T | null => {
-            if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-                return null;
-            }
             const fullKey = `${prefix}:${key}`;
-            const value = localStorage.getItem(fullKey);
+            const value = hasLocalStorage() ? localStorage.getItem(fullKey) : (globalMemoryStore.get(fullKey) ?? null);
             if (!value) return null;
             try {
                 return JSON.parse(value) as T;
@@ -37,19 +47,21 @@ export function createLocalStorage(scope: string, name: string): SyncStorage {
             }
         },
         removeItem: (key: string): void => {
-            if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-                return;
-            }
             const fullKey = `${prefix}:${key}`;
-            localStorage.removeItem(fullKey);
+            if (hasLocalStorage()) {
+                localStorage.removeItem(fullKey);
+            } else {
+                globalMemoryStore.delete(fullKey);
+            }
         },
         setItem: (key: string, value: unknown): void => {
-            if (typeof window === 'undefined' || typeof localStorage === 'undefined') {
-                return;
-            }
             const fullKey = `${prefix}:${key}`;
             const serialized = typeof value === 'string' ? value : JSON.stringify(value);
-            localStorage.setItem(fullKey, serialized);
+            if (hasLocalStorage()) {
+                localStorage.setItem(fullKey, serialized);
+            } else {
+                globalMemoryStore.set(fullKey, serialized);
+            }
         },
     };
 }

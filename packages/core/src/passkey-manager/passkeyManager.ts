@@ -10,6 +10,9 @@ import {
     createPasskeyUtils,
     ImportWebAuthnAuthenticationResult,
     importPasskeyUtils,
+    type PasskeyCreateFn,
+    type PasskeyGetFn,
+    type InternalNativeCreateFn,
 } from './utils.js';
 import { JAW_BASE_URL } from '../constants.js';
 import type { WebAuthnAccount } from 'viem/account-abstraction';
@@ -125,14 +128,14 @@ export class PasskeyManager {
         );
 
         if (existingIndex === -1) {
-            console.log('Adding account to list:', account);
-            existingAccounts.push(account);
-            this.storage.setItem('accounts', existingAccounts);
+            const updated = [...existingAccounts, account];
+            this.storage.setItem('accounts', updated);
         } else if (account.isImported && !existingAccounts[existingIndex].isImported) {
             // Update existing account's isImported flag if importing an existing local account
-            console.log('Updating account isImported flag:', account.credentialId);
-            existingAccounts[existingIndex].isImported = true;
-            this.storage.setItem('accounts', existingAccounts);
+            const updated = existingAccounts.map((acc, i) =>
+                i === existingIndex ? { ...acc, isImported: true } : acc
+            );
+            this.storage.setItem('accounts', updated);
         }
     }
 
@@ -147,14 +150,24 @@ export class PasskeyManager {
     async createPasskey(
         username: string,
         rpId: string,
-        rpName: string
+        rpName: string,
+        createFn?: PasskeyCreateFn,
+        nativeCreateFn?: InternalNativeCreateFn,
+        getFn?: PasskeyGetFn
     ): Promise<{
         credentialId: string;
         publicKey: `0x${string}`;
         webAuthnAccount: WebAuthnAccount;
         passkeyAccount: PasskeyAccount;
     }> {
-        const { credentialId, publicKey, webAuthnAccount } = await createPasskeyUtils(username, rpId, rpName);
+        const { credentialId, publicKey, webAuthnAccount } = await createPasskeyUtils(
+            username,
+            rpId,
+            rpName,
+            createFn,
+            nativeCreateFn,
+            getFn
+        );
         const passkeyAccount: PasskeyAccount = {
             username,
             credentialId,
@@ -163,7 +176,6 @@ export class PasskeyManager {
             isImported: false,
         };
         this.addAccountToList(passkeyAccount);
-        console.log('Accounts list:', this.fetchAccounts());
         return { credentialId, publicKey, webAuthnAccount, passkeyAccount };
     }
 
@@ -183,18 +195,22 @@ export class PasskeyManager {
             userVerification?: UserVerificationRequirement;
             timeout?: number;
             transports?: AuthenticatorTransport[];
-        }
+        },
+        getFn?: PasskeyGetFn
     ): Promise<WebAuthnAuthenticationResult> {
-        return authenticateWithWebAuthnUtils(rpId, credentialId, options);
+        return authenticateWithWebAuthnUtils(rpId, credentialId, options, getFn);
     }
 
     /**
      * Import a passkey account from the backend
+     * @param getFn - Optional custom WebAuthn get function (React Native adapter)
+     * @param rpId - Optional relying party identifier
      * @returns ImportWebAuthnAuthenticationResult
      * @throws {PasskeyLookupError} If backend lookup fails or passkey not found
      */
-    async importPasskeyAccount(): Promise<ImportWebAuthnAuthenticationResult> {
-        return importPasskeyUtils();
+    async importPasskeyAccount(getFn?: PasskeyGetFn, rpId?: string): Promise<ImportWebAuthnAuthenticationResult> {
+        const serverUrl = this.preference.serverUrl ?? JAW_BASE_URL;
+        return importPasskeyUtils(getFn, rpId, this.apiKey, serverUrl);
     }
 
     /**
@@ -262,10 +278,11 @@ export class PasskeyManager {
         // Store auth state (validates inputs)
         this.storeAuthState(address, credentialId);
 
-        // Create account metadata (marked as imported) using backend data
+        // Create account metadata (marked as imported)
+        // Use WebAuthn's credentialId param (not backend's) to prevent encoding mismatches
         const newAccount: PasskeyAccount = {
             username: passkeyData.displayName.trim(),
-            credentialId: passkeyData.credentialId,
+            credentialId,
             publicKey: passkeyData.publicKey as `0x${string}`,
             creationDate: new Date().toISOString(),
             isImported: true,

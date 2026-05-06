@@ -679,4 +679,98 @@ describe('PasskeyManager', () => {
             expect(manager.fetchAccounts().length).toBe(2);
         });
     });
+
+    describe('React Native adapter support', () => {
+        it('createPasskey should forward createFn, nativeCreateFn, and getFn to utils', async () => {
+            const mockCreateFn = vi.fn();
+            const mockNativeCreateFn = vi.fn().mockResolvedValue({
+                id: 'native-cred',
+                publicKey: '0x04native' as `0x${string}`,
+            });
+            const mockGetFn = vi.fn();
+
+            vi.spyOn(utils, 'createPasskeyUtils').mockResolvedValue({
+                credentialId: 'native-cred',
+                publicKey: '0x04native' as `0x${string}`,
+                webAuthnAccount: { type: 'webAuthn' } as never,
+            });
+
+            await manager.createPasskey('alice', 'example.com', 'MyApp', mockCreateFn, mockNativeCreateFn, mockGetFn);
+
+            expect(utils.createPasskeyUtils).toHaveBeenCalledWith(
+                'alice',
+                'example.com',
+                'MyApp',
+                mockCreateFn,
+                mockNativeCreateFn,
+                mockGetFn
+            );
+        });
+
+        it('createPasskey should store the account locally after native creation', async () => {
+            vi.spyOn(utils, 'createPasskeyUtils').mockResolvedValue({
+                credentialId: 'rn-cred-id',
+                publicKey: '0x04rnpub' as `0x${string}`,
+                webAuthnAccount: { type: 'webAuthn' } as never,
+            });
+
+            const result = await manager.createPasskey(
+                'bob',
+                'example.com',
+                'MyApp',
+                undefined,
+                vi.fn().mockResolvedValue({ id: 'rn-cred-id', publicKey: '0x04rnpub' })
+            );
+
+            expect(result.passkeyAccount.username).toBe('bob');
+            expect(result.passkeyAccount.credentialId).toBe('rn-cred-id');
+            expect(result.passkeyAccount.publicKey).toBe('0x04rnpub');
+            expect(result.passkeyAccount.isImported).toBe(false);
+
+            // Should be stored
+            const accounts = manager.fetchAccounts();
+            expect(accounts).toHaveLength(1);
+            expect(accounts[0].credentialId).toBe('rn-cred-id');
+        });
+
+        it('authenticateWithWebAuthn should forward getFn to utils', async () => {
+            const mockGetFn = vi.fn();
+            const mockResult = {
+                credential: { id: 'cred-123', type: 'public-key' },
+                challenge: new Uint8Array(32),
+            };
+
+            vi.spyOn(utils, 'authenticateWithWebAuthnUtils').mockResolvedValue(mockResult);
+
+            const result = await manager.authenticateWithWebAuthn('example.com', 'cred-123', undefined, mockGetFn);
+
+            expect(utils.authenticateWithWebAuthnUtils).toHaveBeenCalledWith(
+                'example.com',
+                'cred-123',
+                undefined,
+                mockGetFn
+            );
+            expect(result).toBe(mockResult);
+        });
+
+        it('importPasskeyAccount should forward getFn and rpId to utils', async () => {
+            const mockGetFn = vi.fn();
+            const mockResult = {
+                name: 'imported',
+                credential: { id: 'imp-cred', publicKey: '0x04imp' as `0x${string}` },
+            };
+
+            vi.spyOn(utils, 'importPasskeyUtils').mockResolvedValue(mockResult);
+
+            const result = await manager.importPasskeyAccount(mockGetFn, 'myapp.com');
+
+            expect(utils.importPasskeyUtils).toHaveBeenCalledWith(
+                mockGetFn,
+                'myapp.com',
+                undefined,
+                'https://api.justaname.id'
+            );
+            expect(result).toBe(mockResult);
+        });
+    });
 });
