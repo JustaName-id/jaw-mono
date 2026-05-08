@@ -1,3 +1,13 @@
+## 0.4.0 (2026-05-08)
+
+### 🚀 Features
+
+- **core:** add React Native passkey adapter support for Account class ([#120](https://github.com/JustaName-id/jaw-mono/pull/120), [#133](https://github.com/JustaName-id/jaw-mono/issues/133))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.3.0 (2026-05-05)
 
 ### 🚀 Features
