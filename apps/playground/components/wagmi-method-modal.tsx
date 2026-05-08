@@ -7,6 +7,7 @@ import { Tabs, TabsList, TabsTrigger, TabsContent } from './ui/tabs';
 import { ScrollArea } from './ui/scroll-area';
 import { type WagmiMethod, CATEGORY_COLORS, CATEGORY_LABELS } from '../lib/wagmi-methods';
 import { ParameterField } from './parameter-field';
+import { isLikelyEnsName, resolveEnsToAddress, resolveEnsToAddresses } from '../lib/ens-resolver';
 
 // Helper to serialize results that may contain BigInt values
 function serializeResult(value: unknown): string {
@@ -36,6 +37,7 @@ export function WagmiMethodModal({
   const [result, setResult] = useState<unknown>(null);
   const [error, setError] = useState<string | null>(null);
   const [isExecuting, setIsExecuting] = useState(false);
+  const [isResolving, setIsResolving] = useState(false);
   const [copied, setCopied] = useState(false);
   const [resultCopied, setResultCopied] = useState(false);
 
@@ -56,15 +58,69 @@ export function WagmiMethodModal({
     setParams((prev) => ({ ...prev, [name]: value }));
   }, []);
 
+  const determineTargetChainId = (): number => {
+    // Wagmi address-bearing methods don't expose a chainId param;
+    // fall back to context.chainId, then mainnet.
+    if (typeof context.chainId === 'number') return context.chainId;
+    return 1;
+  };
+
+  const resolveParamsForExecution = async (): Promise<Record<string, string>> => {
+    const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL ?? '';
+    const targetChainId = determineTargetChainId();
+    const next: Record<string, string> = { ...params };
+
+    for (const param of method?.parameters ?? []) {
+      if (param.type !== 'address') continue;
+      const value = next[param.name];
+      if (!value || !isLikelyEnsName(value)) continue;
+      next[param.name] = await resolveEnsToAddress(value, targetChainId, rpcUrl);
+    }
+
+    if (method?.id === 'wallet_sendCalls' && next.calls) {
+      const calls = JSON.parse(next.calls) as Array<{ to?: string; [k: string]: unknown }>;
+      const ensIndices: number[] = [];
+      const ensNames: string[] = [];
+      calls.forEach((call, i) => {
+        if (typeof call.to === 'string' && isLikelyEnsName(call.to)) {
+          ensIndices.push(i);
+          ensNames.push(call.to);
+        }
+      });
+
+      if (ensNames.length > 0) {
+        const resolved = await resolveEnsToAddresses(ensNames, targetChainId, rpcUrl);
+        ensIndices.forEach((idx, i) => {
+          calls[idx].to = resolved[i];
+        });
+      }
+      next.calls = JSON.stringify(calls, null, 2);
+    }
+
+    return next;
+  };
+
   const handleExecute = async () => {
     if (!method) return;
 
-    setIsExecuting(true);
     setError(null);
     setResult(null);
+    setIsResolving(true);
 
+    let resolvedParams: Record<string, string>;
     try {
-      const builtParams = method.buildParams(params, context);
+      resolvedParams = await resolveParamsForExecution();
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : JSON.stringify(err);
+      setError(errorMessage);
+      setIsResolving(false);
+      return;
+    }
+    setIsResolving(false);
+
+    setIsExecuting(true);
+    try {
+      const builtParams = method.buildParams(resolvedParams, context);
       const response = await onExecute(method, builtParams);
       setResult(response);
     } catch (err) {
@@ -104,10 +160,10 @@ export function WagmiMethodModal({
 
   const handleOpenChange = (open: boolean) => {
     if (!open) {
-      // Reset state when closing
       setParams({});
       setResult(null);
       setError(null);
+      setIsResolving(false);
       onClose();
     }
   };
@@ -171,8 +227,8 @@ export function WagmiMethodModal({
 
                 {/* Execute Button */}
                 <div className="pt-2">
-                  <Button onClick={handleExecute} disabled={!canExecute || executing} className="w-full">
-                    {executing ? 'Executing...' : 'Execute'}
+                  <Button onClick={handleExecute} disabled={!canExecute || executing || isResolving} className="w-full">
+                    {isResolving ? 'Resolving...' : executing ? 'Executing...' : 'Execute'}
                   </Button>
                   {!canExecute && (
                     <p className="mt-2 text-xs text-amber-600 dark:text-amber-400">

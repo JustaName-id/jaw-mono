@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, useRef, Suspense } from 'react';
+import { useState, useCallback, useEffect, useRef, Suspense } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { JAW, Mode } from '@jaw.id/core';
 import type { JawTheme } from '@jaw.id/core';
@@ -13,10 +13,10 @@ import { ThemeToggle } from '../../components/theme-toggle';
 import { MethodCard } from '../../components/method-card';
 import { MethodModal } from '../../components/method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
-import { ResolveNameModal } from '../../components/resolve-name-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import { RPC_METHODS, CATEGORIES, CATEGORY_LABELS, type RpcMethod, type MethodCategory } from '../../lib/rpc-methods';
+import { reverseResolveEnsName } from '../../lib/ens-resolver';
 
 type ModeType = (typeof Mode)[keyof typeof Mode];
 
@@ -54,10 +54,10 @@ function CorePageContent({ mode }: { mode: ModeType }) {
   const [accounts, setAccounts] = useState<string[]>([]);
   const defaultChainId = String(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || 84532);
   const [chainId, setChainId] = useState<string>(defaultChainId);
+  const [ensName, setEnsName] = useState<string | null>(null);
   const [selectedMethod, setSelectedMethod] = useState<RpcMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
-  const [isResolveNameModalOpen, setIsResolveNameModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
 
@@ -91,6 +91,27 @@ function CorePageContent({ mode }: { mode: ModeType }) {
     },
     [theme, mode]
   );
+
+  useEffect(() => {
+    const address = accounts[0];
+    if (!address || !chainId) {
+      setEnsName(null);
+      return;
+    }
+    const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL ?? '';
+    const chainIdNum = chainId.startsWith('0x') ? parseInt(chainId, 16) : parseInt(chainId, 10);
+    if (Number.isNaN(chainIdNum)) {
+      setEnsName(null);
+      return;
+    }
+    let cancelled = false;
+    reverseResolveEnsName(address, chainIdNum, rpcUrl).then((name) => {
+      if (!cancelled) setEnsName(name);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [accounts, chainId]);
 
   const addLog = useCallback((type: LogEntry['type'], method: string, data: unknown) => {
     setLogs((prev) => [...prev, { timestamp: new Date(), type, method, data }]);
@@ -153,11 +174,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
 
   const handleMethodClick = (method: RpcMethod) => {
     if (method.category === 'utility') {
-      if (method.id === 'resolve_name') {
-        setIsResolveNameModalOpen(true);
-      } else {
-        setIsEncodeModalOpen(true);
-      }
+      setIsEncodeModalOpen(true);
       return;
     }
     setSelectedMethod(method);
@@ -242,6 +259,18 @@ function CorePageContent({ mode }: { mode: ModeType }) {
                     {isConnected ? 'Connected' : 'Disconnected'}
                   </span>
                 </div>
+                {ensName && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">ENS:</span>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(ensName)}
+                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
+                      title="Click to copy"
+                    >
+                      {ensName}
+                    </button>
+                  </div>
+                )}
                 {accounts.length > 0 && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Account:</span>
@@ -368,7 +397,6 @@ function CorePageContent({ mode }: { mode: ModeType }) {
 
         {/* Encode Data Modal */}
         <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
-        <ResolveNameModal isOpen={isResolveNameModalOpen} onClose={() => setIsResolveNameModalOpen(false)} />
       </div>
     </div>
   );

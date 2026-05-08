@@ -445,7 +445,7 @@ console.log('Receipts:', callsStatus?.receipts);`,
       {
         name: 'address',
         type: 'address',
-        label: 'Address',
+        label: 'ENS or Address',
         description: 'Account address (optional if connected)',
         required: false,
         autoFill: 'address',
@@ -730,7 +730,7 @@ console.log('Signature:', signature);`;
       {
         name: 'address',
         type: 'address',
-        label: 'Address',
+        label: 'ENS or Address',
         description: 'Account address (optional)',
         required: false,
         autoFill: 'address',
@@ -768,7 +768,7 @@ console.log('Capabilities:', capabilities);`,
       {
         name: 'spender',
         type: 'address',
-        label: 'Spender Address',
+        label: 'Spender',
         description: 'Address receiving permissions',
         required: true,
       },
@@ -873,7 +873,7 @@ revokePermissions({
       {
         name: 'address',
         type: 'address',
-        label: 'Address',
+        label: 'ENS or Address',
         description: 'Account address (optional if connected)',
         required: false,
         autoFill: 'address',
@@ -909,7 +909,7 @@ console.log('Permissions:', permissions);`,
       {
         name: 'address',
         type: 'address',
-        label: 'Address',
+        label: 'ENS or Address',
         description: 'Account address (optional if connected)',
         required: false,
         autoFill: 'address',
@@ -995,22 +995,6 @@ const data = encodeFunctionData({
   functionName: 'transfer',
   args: ['0xRecipient...', 1000000000000000000n],
 });`,
-    buildParams: () => ({}),
-  },
-  {
-    id: 'resolve_name',
-    name: 'resolveName',
-    method: 'resolve_name',
-    hookType: 'utility' as const,
-    category: 'utility',
-    description: 'Resolve an ENS name to an address on a specific chain (ERC-7828 interop format).',
-    requiresConnection: false,
-    getCodeSnippet: () => `// Resolve vitalik.eth@ethereum via the JustaName records endpoint
-const response = await fetch(
-  'https://api.justaname.id/ens/v1/subname/records?ens=vitalik.eth@ethereum&providerUrl=https://eth.drpc.org'
-);
-const { result } = await response.json();
-const address = result.data?.records?.addresses[0]?.value;`,
     buildParams: () => ({}),
   },
 ];

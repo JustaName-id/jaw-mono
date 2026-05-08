@@ -105,7 +105,9 @@ export function ParameterField({ param, value, onChange, context }: ParameterFie
         type={param.type === 'number' ? 'text' : 'text'}
         value={inputValue}
         onChange={(e) => onChange(e.target.value)}
-        placeholder={param.type === 'address' ? '0x...' : param.type === 'hex' ? '0x...' : param.description}
+        placeholder={
+          param.type === 'address' ? '0x... or vitalik.eth' : param.type === 'hex' ? '0x...' : param.description
+        }
         className={param.type === 'address' || param.type === 'hex' ? 'font-mono' : ''}
       />
       {param.description && <p className="text-muted-foreground text-xs">{param.description}</p>}

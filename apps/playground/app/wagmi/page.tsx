@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useCallback, Suspense } from 'react';
+import { useState, useCallback, useEffect, Suspense } from 'react';
 import { flushSync } from 'react-dom';
 import { useSearchParams } from 'next/navigation';
 import { Mode, type PaymasterConfig, type JawTheme } from '@jaw.id/core';
@@ -40,7 +40,6 @@ import { type ModeType } from './config';
 import { MethodCard } from '../../components/method-card';
 import { WagmiMethodModal } from '../../components/wagmi-method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
-import { ResolveNameModal } from '../../components/resolve-name-modal';
 import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import {
@@ -50,6 +49,7 @@ import {
   type WagmiMethod,
   type MethodCategory,
 } from '../../lib/wagmi-methods';
+import { reverseResolveEnsName } from '../../lib/ens-resolver';
 
 interface WagmiPageContentProps {
   mode: ModeType;
@@ -126,10 +126,25 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
   const [selectedMethod, setSelectedMethod] = useState<WagmiMethod | null>(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isEncodeModalOpen, setIsEncodeModalOpen] = useState(false);
-  const [isResolveNameModalOpen, setIsResolveNameModalOpen] = useState(false);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [selectedCategory, setSelectedCategory] = useState<MethodCategory | 'all'>('all');
   const [isExecuting, setIsExecuting] = useState(false);
+  const [ensName, setEnsName] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!address || !chainId) {
+      setEnsName(null);
+      return;
+    }
+    const rpcUrl = process.env.NEXT_PUBLIC_RPC_URL ?? '';
+    let cancelled = false;
+    reverseResolveEnsName(address, chainId, rpcUrl).then((name) => {
+      if (!cancelled) setEnsName(name);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [address, chainId]);
 
   const addLog = useCallback((type: LogEntry['type'], method: string, data: unknown) => {
     setLogs((prev) => [...prev, { timestamp: new Date(), type, method, data }]);
@@ -322,11 +337,7 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
 
   const handleMethodClick = (method: WagmiMethod) => {
     if (method.category === 'utility') {
-      if (method.id === 'resolve_name') {
-        setIsResolveNameModalOpen(true);
-      } else {
-        setIsEncodeModalOpen(true);
-      }
+      setIsEncodeModalOpen(true);
       return;
     }
     setSelectedMethod(method);
@@ -424,6 +435,18 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
                     {isConnected ? 'Connected' : 'Disconnected'}
                   </span>
                 </div>
+                {ensName && (
+                  <div className="flex items-center gap-2">
+                    <span className="text-muted-foreground">ENS:</span>
+                    <button
+                      onClick={() => navigator.clipboard.writeText(ensName)}
+                      className="bg-muted hover:bg-muted/80 flex cursor-pointer items-center gap-1 rounded px-2 py-0.5 font-mono text-xs transition-colors"
+                      title="Click to copy"
+                    >
+                      {ensName}
+                    </button>
+                  </div>
+                )}
                 {address && (
                   <div className="flex items-center gap-2">
                     <span className="text-muted-foreground">Account:</span>
@@ -560,7 +583,6 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
         <EncodeDataModal isOpen={isEncodeModalOpen} onClose={() => setIsEncodeModalOpen(false)} />
 
         {/* Resolve Name Modal */}
-        <ResolveNameModal isOpen={isResolveNameModalOpen} onClose={() => setIsResolveNameModalOpen(false)} />
 
         {/* Method Modal */}
         <WagmiMethodModal
