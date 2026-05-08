@@ -3,6 +3,27 @@
  * Maps RPC methods to their wagmi hook implementations
  */
 
+import { SUPPORTED_CHAINS } from '@jaw.id/core';
+
+export const CHAIN_FILTER_OPTIONS = [
+  { label: 'All chains', value: 'all' },
+  ...SUPPORTED_CHAINS.map((chain) => ({
+    label: `${chain.name} (${chain.id})`,
+    value: `0x${chain.id.toString(16)}`,
+  })),
+];
+
+const _DEFAULT_CHAIN_ID_NUM = parseInt(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || '84532', 10);
+export const DEFAULT_CHAIN_FILTER_VALUE = SUPPORTED_CHAINS.some((c) => c.id === _DEFAULT_CHAIN_ID_NUM)
+  ? `0x${_DEFAULT_CHAIN_ID_NUM.toString(16)}`
+  : 'all';
+
+export const ASSET_TYPE_FILTER_OPTIONS = [
+  { label: 'All types', value: 'all' },
+  { label: 'Native', value: 'native' },
+  { label: 'ERC-20', value: 'erc20' },
+];
+
 export type MethodCategory =
   | 'account'
   | 'chain'
@@ -893,24 +914,69 @@ console.log('Permissions:', permissions);`,
         required: false,
         autoFill: 'address',
       },
+      {
+        name: 'chainFilter',
+        type: 'select',
+        label: 'Chain Filter',
+        description: 'Narrow results to a specific chain',
+        required: false,
+        defaultValue: DEFAULT_CHAIN_FILTER_VALUE,
+        options: CHAIN_FILTER_OPTIONS,
+      },
+      {
+        name: 'assetTypeFilter',
+        type: 'select',
+        label: 'Asset Type Filter',
+        description: 'Restrict results by asset category',
+        required: false,
+        defaultValue: 'all',
+        options: ASSET_TYPE_FILTER_OPTIONS,
+      },
+      {
+        name: 'assetFilter',
+        type: 'json',
+        label: 'Asset Filter (JSON)',
+        description: 'Filter by specific assets per chain, e.g. {"0x1":[{"address":"0x...","type":"erc20"}]}',
+        required: false,
+      },
     ],
-    getCodeSnippet: (params) => `import { useGetAssets } from '@jaw.id/wagmi';
+    getCodeSnippet: (params) => {
+      const entries: string[] = [];
+      if (params.address) entries.push(`  address: '${params.address}',`);
+      if (params.chainFilter && params.chainFilter !== 'all') {
+        entries.push(`  chainFilter: ['${params.chainFilter}'],`);
+      }
+      if (params.assetTypeFilter && params.assetTypeFilter !== 'all') {
+        entries.push(`  assetTypeFilter: ['${params.assetTypeFilter}'],`);
+      }
+      if (params.assetFilter && params.assetFilter.trim()) {
+        entries.push(`  assetFilter: ${params.assetFilter.trim()},`);
+      }
+      const arg = entries.length ? `{\n${entries.join('\n')}\n}` : '';
+      return `import { useGetAssets } from '@jaw.id/wagmi';
 
 // Works without wallet connection when address is provided
-const { data: assets, isLoading, refetch } = useGetAssets(${
-      params.address
-        ? `{
-  address: '${params.address}',
-}`
-        : ''
-    });
+const { data: assets, isLoading, refetch } = useGetAssets(${arg});
 
 // Assets are grouped by chain ID (hex)
 // e.g., { '0x14a34': [{ address: '0x...', symbol: 'ETH', ... }] }
-console.log('Assets:', assets);`,
-    buildParams: (params) => ({
-      address: params.address || undefined,
-    }),
+console.log('Assets:', assets);`;
+    },
+    buildParams: (params) => {
+      const args: Record<string, unknown> = {
+        address: params.address || undefined,
+      };
+      if (params.chainFilter && params.chainFilter !== 'all') {
+        args.chainFilter = [params.chainFilter];
+      }
+      if (params.assetTypeFilter && params.assetTypeFilter !== 'all') {
+        args.assetTypeFilter = [params.assetTypeFilter];
+      }
+      if (params.assetFilter && params.assetFilter.trim()) {
+        args.assetFilter = JSON.parse(params.assetFilter);
+      }
+      return args;
+    },
   },
 
   // ===== Utility Tools =====
