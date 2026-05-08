@@ -71,6 +71,25 @@ export const CHAIN_OPTIONS = [
   })),
 ];
 
+export const CHAIN_FILTER_OPTIONS = [
+  { label: 'All chains', value: 'all' },
+  ...SUPPORTED_CHAINS.map((chain) => ({
+    label: `${chain.name} (${chain.id})`,
+    value: `0x${chain.id.toString(16)}`,
+  })),
+];
+
+const _DEFAULT_CHAIN_ID_NUM = parseInt(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || '84532', 10);
+export const DEFAULT_CHAIN_FILTER_VALUE = SUPPORTED_CHAINS.some((c) => c.id === _DEFAULT_CHAIN_ID_NUM)
+  ? `0x${_DEFAULT_CHAIN_ID_NUM.toString(16)}`
+  : 'all';
+
+export const ASSET_TYPE_FILTER_OPTIONS = [
+  { label: 'All types', value: 'all' },
+  { label: 'Native', value: 'native' },
+  { label: 'ERC-20', value: 'erc20' },
+];
+
 export const RPC_METHODS: RpcMethod[] = [
   // ===== Account Methods =====
   {
@@ -168,8 +187,8 @@ console.log('Chain ID:', chainId);`,
       {
         name: 'to',
         type: 'address',
-        label: 'To Address',
-        description: 'Recipient address',
+        label: 'To',
+        description: 'Recipient name or address',
         required: true,
         defaultValue: '0x',
       },
@@ -328,7 +347,7 @@ console.log('Receipts:', status.receipts);`,
       {
         name: 'address',
         type: 'address',
-        label: 'Address',
+        label: 'ENS or Address',
         description: 'Account address (optional if connected)',
         required: false,
         autoFill: 'address',
@@ -747,7 +766,7 @@ console.log('Disconnected');`,
       {
         name: 'address',
         type: 'address',
-        label: 'Address',
+        label: 'ENS or Address',
         description: 'Account address (optional)',
         required: false,
         autoFill: 'address',
@@ -783,7 +802,7 @@ console.log('Capabilities:', capabilities);`,
       {
         name: 'spender',
         type: 'address',
-        label: 'Spender Address',
+        label: 'Spender',
         description: 'Address receiving permissions',
         required: true,
       },
@@ -895,7 +914,7 @@ console.log('Permission revoked');`,
       {
         name: 'address',
         type: 'address',
-        label: 'Address',
+        label: 'ENS or Address',
         description: 'Account address (optional if connected)',
         required: false,
         autoFill: 'address',
@@ -928,25 +947,72 @@ console.log('Permissions:', permissions);`,
       {
         name: 'address',
         type: 'address',
-        label: 'Address',
+        label: 'ENS or Address',
         description: 'Account address',
         required: false,
         autoFill: 'address',
       },
+      {
+        name: 'chainFilter',
+        type: 'select',
+        label: 'Chain Filter',
+        description: 'Narrow results to a specific chain',
+        required: false,
+        defaultValue: DEFAULT_CHAIN_FILTER_VALUE,
+        options: CHAIN_FILTER_OPTIONS,
+      },
+      {
+        name: 'assetTypeFilter',
+        type: 'select',
+        label: 'Asset Type Filter',
+        description: 'Restrict results by asset category',
+        required: false,
+        defaultValue: 'all',
+        options: ASSET_TYPE_FILTER_OPTIONS,
+      },
+      {
+        name: 'assetFilter',
+        type: 'json',
+        label: 'Asset Filter (JSON)',
+        description: 'Filter by specific assets per chain, e.g. {"0x1":[{"address":"0x...","type":"erc20"}]}',
+        required: false,
+      },
     ],
-    getCodeSnippet: (params) => `const assets = await jaw.provider.request({
+    getCodeSnippet: (params) => {
+      const lines = [`    account: '${params.address || 'account'}',`];
+      if (params.chainFilter && params.chainFilter !== 'all') {
+        lines.push(`    chainFilter: ['${params.chainFilter}'],`);
+      }
+      if (params.assetTypeFilter && params.assetTypeFilter !== 'all') {
+        lines.push(`    assetTypeFilter: ['${params.assetTypeFilter}'],`);
+      }
+      if (params.assetFilter && params.assetFilter.trim()) {
+        lines.push(`    assetFilter: ${params.assetFilter.trim()},`);
+      }
+      return `const assets = await jaw.provider.request({
   method: 'wallet_getAssets',
   params: [{
-    account: '${params.address || 'account'}',
+${lines.join('\n')}
   }],
 });
 
-console.log('Assets:', assets);`,
-    buildParams: (params, context) => [
-      {
+console.log('Assets:', assets);`;
+    },
+    buildParams: (params, context) => {
+      const args: Record<string, unknown> = {
         account: params.address || context.address,
-      },
-    ],
+      };
+      if (params.chainFilter && params.chainFilter !== 'all') {
+        args.chainFilter = [params.chainFilter];
+      }
+      if (params.assetTypeFilter && params.assetTypeFilter !== 'all') {
+        args.assetTypeFilter = [params.assetTypeFilter];
+      }
+      if (params.assetFilter && params.assetFilter.trim()) {
+        args.assetFilter = JSON.parse(params.assetFilter);
+      }
+      return [args];
+    },
   },
 
   // ===== Utility Tools =====
@@ -964,21 +1030,6 @@ const data = encodeFunctionData({
   functionName: 'transfer',
   args: ['0xRecipient...', 1000000000000000000n],
 });`,
-    buildParams: () => [],
-  },
-  {
-    id: 'resolve_name',
-    name: 'resolveName',
-    method: 'resolve_name',
-    category: 'utility',
-    description: 'Resolve an ENS name to an address on a specific chain (ERC-7828 interop format).',
-    requiresConnection: false,
-    getCodeSnippet: () => `// Resolve vitalik.eth@ethereum via the JustaName records endpoint
-const response = await fetch(
-  'https://api.justaname.id/ens/v1/subname/records?ens=vitalik.eth@ethereum&providerUrl=https://eth.drpc.org'
-);
-const { result } = await response.json();
-const address = result.data?.records?.addresses[0]?.value;`,
     buildParams: () => [],
   },
 ];
