@@ -4,8 +4,8 @@ import type { AnyMessage } from '../shared/messages.js';
 // Per-tab secret. Page-world scripts can read the script tag's `src` attribute
 // (which carries the nonce in its hash fragment), so this is best-effort —
 // the real security boundary is the keys.jaw.id passkey prompt.
-const NONCE: string = crypto.randomUUID();
-const EVENT_NAME: string = `jaw-${crypto.randomUUID()}`;
+const NONCE = crypto.randomUUID();
+const EVENT_NAME = `jaw-${crypto.randomUUID()}`;
 
 // Inject the bundled inpage as `<script type="module" src="chrome-extension://.../assets/inpage.js#nonce=...&event=...">`.
 // WAR resources injected this way bypass page CSP — same pattern MetaMask et al. use.

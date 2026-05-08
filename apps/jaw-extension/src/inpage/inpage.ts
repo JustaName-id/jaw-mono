@@ -198,8 +198,12 @@ class JawInpageProvider {
   };
 
   on = (event: string, listener: Listener): this => {
-    if (!this.listeners.has(event)) this.listeners.set(event, new Set());
-    this.listeners.get(event)!.add(listener);
+    let set = this.listeners.get(event);
+    if (!set) {
+      set = new Set();
+      this.listeners.set(event, set);
+    }
+    set.add(listener);
     return this;
   };
 

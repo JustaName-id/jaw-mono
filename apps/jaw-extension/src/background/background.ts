@@ -189,9 +189,7 @@ async function closeBridgedWindow(id: string): Promise<void> {
 //   { requestId, data: { version, metadata, preference, location } }
 // (packages/core/src/communicator/communicator.ts:60-70). `version` only
 // appears on this config payload, so it's a safe sentinel.
-function isSdkConfigMessage(
-  data: unknown
-): data is {
+function isSdkConfigMessage(data: unknown): data is {
   requestId: string;
   data: { version: unknown; location?: string; metadata?: unknown; preference?: unknown };
 } {
@@ -402,7 +400,7 @@ function handleOffscreenPort(port: chrome.runtime.Port): void {
     for (const [id, bridged] of bridgedWindows) {
       if (bridged.ownerPort === port) {
         bridgedWindows.delete(id);
-        chrome.windows.remove(bridged.windowId).catch(() => {});
+        chrome.windows.remove(bridged.windowId).catch(() => undefined);
       }
     }
   });

@@ -5,7 +5,11 @@ import manifest from './manifest.config.js';
 
 export default defineConfig(({ mode }) => {
   const apiKey = process.env.JAW_EXTENSION_API_KEY ?? '';
-  if (mode === 'production' && !apiKey) {
+  // Only hard-fail when a release is actually being cut. CI sets CI=true; local
+  // builds (incl. the pre-push hook running `nx run-many -t build`) bake in an
+  // empty placeholder, which the offscreen SDK rejects at runtime — fine for
+  // typecheck/lint passes that just need the bundle to compile.
+  if (mode === 'production' && !apiKey && process.env.CI === 'true') {
     throw new Error(
       'JAW_EXTENSION_API_KEY env var must be set for production builds. ' + 'Set it via your shell or CI secret store.'
     );
