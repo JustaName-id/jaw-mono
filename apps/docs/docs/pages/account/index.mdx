@@ -10,6 +10,7 @@ The `Account` class is ideal for:
 
 - **AI Agents** - Issue programmable smart wallets for AI agents
 - **Headless Integration** - No UI required, direct programmatic access
+- **React Native** - Native mobile passkey support via `nativeGetFn` and `nativeCreateFn`
 - **Server-side Applications** - Using `fromLocalAccount()` with embedded wallets (Privy, Dynamic, Turnkey)
 - **Custom UI Handlers** - When implementing your own `UIHandler` for app-specific mode
 - **Direct Integration** - When you need fine-grained control over account operations
@@ -44,6 +45,9 @@ The `Account` class is exported from `@jaw.id/core`:
 
 ```typescript
 import { Account } from '@jaw.id/core';
+
+// React Native: also import adapter types
+import type { NativePasskeyGetFn, NativePasskeyCreateFn, SyncStorage } from '@jaw.id/core';
 ```
 
 ## Static Methods
@@ -112,7 +116,7 @@ Utility methods:
 
 ### AccountConfig
 
-Configuration for creating or loading an account:
+Configuration for creating or loading an account. React Native options (`nativeGetFn`, `nativeCreateFn`, `rpId`) are configured once here and shared across all static methods.
 
 ```typescript
 interface AccountConfig {
@@ -124,6 +128,16 @@ interface AccountConfig {
   paymasterUrl?: string;
   /** Custom paymaster context for gas sponsorship */
   paymasterContext?: Record<string, unknown>;
+  /** Custom storage implementation (defaults to localStorage on web, in-memory fallback in React Native) */
+  storage?: SyncStorage;
+  /** Native passkey get function for React Native (e.g. Passkey.get) */
+  nativeGetFn?: NativePasskeyGetFn;
+  /** Native passkey create function for React Native (e.g. Passkey.create) */
+  nativeCreateFn?: NativePasskeyCreateFn;
+  /** Relying party identifier (defaults to window.location.hostname). Required in React Native. */
+  rpId?: string;
+  /** Relying party name (defaults to 'JAW') */
+  rpName?: string;
 }
 ```
 
@@ -135,10 +149,6 @@ Options for creating a new account:
 interface CreateAccountOptions {
   /** Username/display name for the passkey */
   username: string;
-  /** Relying party identifier (defaults to window.location.hostname) */
-  rpId?: string;
-  /** Relying party name (defaults to 'JAW') */
-  rpName?: string;
 }
 ```
 
@@ -165,6 +175,8 @@ Account metadata returned by `getMetadata()`:
 interface AccountMetadata {
   /** Username/display name */
   username: string;
+  /** Credential ID of the passkey */
+  credentialId: string;
   /** ISO date string when created */
   creationDate: string;
   /** Whether imported from cloud */

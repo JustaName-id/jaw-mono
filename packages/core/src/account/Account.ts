@@ -22,7 +22,15 @@ import {
     type CallStatusResponse,
 } from '../rpc/wallet_sendCalls.js';
 import type { JustanAccountImplementation } from './toJustanAccount.js';
-import { PasskeyManager, type PasskeyAccount } from '../passkey-manager/index.js';
+import {
+    PasskeyManager,
+    type PasskeyAccount,
+    type NativePasskeyGetFn,
+    type NativePasskeyCreateFn,
+    resolvePasskeyOptions,
+    resolveRpId,
+} from '../passkey-manager/index.js';
+import type { SyncStorage } from '../storage-manager/index.js';
 import {
     grantPermissions as grantSmartAccountPermissions,
     revokePermission as revokeSmartAccountPermission,
@@ -51,6 +59,16 @@ export interface AccountConfig {
     paymasterUrl?: string;
     /** Custom paymaster context for gas sponsorship */
     paymasterContext?: Record<string, unknown>;
+    /** Custom storage implementation (defaults to localStorage on web, in-memory in RN) */
+    storage?: SyncStorage;
+    /** Native passkey get function for React Native (e.g. Passkey.get from react-native-passkey) */
+    nativeGetFn?: NativePasskeyGetFn;
+    /** Native passkey create function for React Native (e.g. Passkey.create from react-native-passkey) */
+    nativeCreateFn?: NativePasskeyCreateFn;
+    /** Relying party identifier (defaults to window.location.hostname). Required in React Native. */
+    rpId?: string;
+    /** Relying party name (defaults to 'JAW') */
+    rpName?: string;
 }
 
 /**
@@ -59,10 +77,6 @@ export interface AccountConfig {
 export interface CreateAccountOptions {
     /** Username/display name for the passkey */
     username: string;
-    /** Relying party identifier (defaults to window.location.hostname) */
-    rpId?: string;
-    /** Relying party name (defaults to 'JAW') */
-    rpName?: string;
 }
 
 /**
@@ -184,7 +198,14 @@ export class Account {
     static async get(config: AccountConfig, credentialId?: string): Promise<Account> {
         const { chainId, apiKey, paymasterUrl } = config;
 
-        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+        // Resolve native passkey functions into viem-compatible getFn
+        const resolved = resolvePasskeyOptions({
+            nativeGetFn: config.nativeGetFn,
+        });
+        const getFn = resolved.getFn;
+        const rpIdOption = config.rpId;
+
+        const passkeyManager = new PasskeyManager(config.storage, undefined, apiKey);
         const authResult = passkeyManager.checkAuth();
 
         // If credentialId is explicitly provided, always require WebAuthn authentication
@@ -195,16 +216,18 @@ export class Account {
                 throw new Error(`No account found for credential ID: ${credentialId}`);
             }
 
-            const rpId = typeof window !== 'undefined' ? window.location.hostname : 'localhost';
+            const rpId = resolveRpId(rpIdOption);
 
             // Authenticate with WebAuthn
-            await passkeyManager.authenticateWithWebAuthn(rpId, credentialId);
+            await passkeyManager.authenticateWithWebAuthn(rpId, credentialId, undefined, getFn);
 
             const webAuthnAccount = toWebAuthnAccount({
                 credential: {
                     id: credentialId,
                     publicKey: passkeyAccount.publicKey,
                 },
+                getFn,
+                rpId,
             });
 
             const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
@@ -225,11 +248,14 @@ export class Account {
         if (authResult.isAuthenticated && authResult.address) {
             const currentAccount = passkeyManager.getCurrentAccount();
             if (currentAccount) {
+                const rpId = resolveRpId(rpIdOption);
                 const webAuthnAccount = toWebAuthnAccount({
                     credential: {
                         id: currentAccount.credentialId,
                         publicKey: currentAccount.publicKey,
                     },
+                    getFn,
+                    rpId,
                 });
 
                 const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
@@ -279,8 +305,20 @@ export class Account {
             throw new Error('credentialId and publicKey are required to restore an account');
         }
 
-        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+        const resolved = resolvePasskeyOptions({
+            nativeGetFn: config.nativeGetFn,
+        });
+
+        const passkeyManager = new PasskeyManager(config.storage, undefined, apiKey);
         const passkeyAccount = passkeyManager.getAccountByCredentialId(credentialId);
+
+        // validates publicKey against the locally cached entry when present; not a primary defense
+        if (passkeyAccount && passkeyAccount.publicKey !== publicKey) {
+            throw new Error(
+                'Provided publicKey does not match the stored publicKey for this credential. ' +
+                    'Use the publicKey from Account.getStoredAccounts() or Account.getCurrentAccount().'
+            );
+        }
 
         // Create WebAuthn account from credential info (no WebAuthn prompt)
         const webAuthnAccount = toWebAuthnAccount({
@@ -288,6 +326,8 @@ export class Account {
                 id: credentialId,
                 publicKey: publicKey,
             },
+            getFn: resolved.getFn,
+            ...(config.rpId ? { rpId: config.rpId } : {}),
         });
 
         const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
@@ -326,18 +366,26 @@ export class Account {
      */
     static async create(config: AccountConfig, options: CreateAccountOptions): Promise<Account> {
         const { chainId, apiKey, paymasterUrl } = config;
-        const { username, rpId, rpName } = options;
+        const { username } = options;
 
-        const resolvedRpId = rpId ?? (typeof window !== 'undefined' ? window.location.hostname : 'localhost');
-        const resolvedRpName = rpName ?? 'JAW';
+        const resolved = resolvePasskeyOptions({
+            nativeGetFn: config.nativeGetFn,
+            nativeCreateFn: config.nativeCreateFn,
+        });
 
-        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+        const resolvedRpId = resolveRpId(config.rpId);
+        const resolvedRpName = config.rpName ?? 'JAW';
+
+        const passkeyManager = new PasskeyManager(config.storage, undefined, apiKey);
 
         // Create the passkey
         const { credentialId, publicKey, webAuthnAccount, passkeyAccount } = await passkeyManager.createPasskey(
             username,
             resolvedRpId,
-            resolvedRpName
+            resolvedRpName,
+            undefined, // createFn — browser uses default, native path uses internalNativeCreateFn
+            resolved.internalNativeCreateFn,
+            resolved.getFn
         );
 
         const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
@@ -372,16 +420,22 @@ export class Account {
     static async import(config: AccountConfig): Promise<Account> {
         const { chainId, apiKey, paymasterUrl } = config;
 
-        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+        const resolved = resolvePasskeyOptions({
+            nativeGetFn: config.nativeGetFn,
+        });
+
+        const passkeyManager = new PasskeyManager(config.storage, undefined, apiKey);
 
         // Import passkey from cloud backup
-        const importResult = await passkeyManager.importPasskeyAccount();
+        const importResult = await passkeyManager.importPasskeyAccount(resolved.getFn, config.rpId);
 
         const webAuthnAccount = toWebAuthnAccount({
             credential: {
                 id: importResult.credential.id,
                 publicKey: importResult.credential.publicKey,
             },
+            getFn: resolved.getFn,
+            ...(config.rpId ? { rpId: config.rpId } : {}),
         });
 
         const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
@@ -449,12 +503,6 @@ export class Account {
 
         const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
 
-        // Register chain in global store for background operations
-        const existingChains = chainStore.get() ?? [];
-        if (!existingChains.some((c) => c.id === chain.id)) {
-            chainStore.set([...existingChains, chain]);
-        }
-
         const bundlerClient = getBundlerClient(chain);
         const smartAccount = isEip7702
             ? await createSmartAccountEip7702(localAccount, bundlerClient as JustanAccountImplementation['client'])
@@ -489,8 +537,8 @@ export class Account {
      * }
      * ```
      */
-    static getAuthenticatedAddress(apiKey?: string): Address | null {
-        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    static getAuthenticatedAddress(apiKey?: string, storage?: SyncStorage): Address | null {
+        const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
         const authResult = passkeyManager.checkAuth();
         return authResult.isAuthenticated && authResult.address ? (authResult.address as Address) : null;
     }
@@ -499,6 +547,7 @@ export class Account {
      * Get all stored passkey accounts
      *
      * @param apiKey - Optional API key
+     * @param storage - Optional custom storage (defaults to localStorage on web, in-memory in RN)
      * @returns Array of stored passkey accounts
      *
      * @example
@@ -507,8 +556,8 @@ export class Account {
      * console.log(`Found ${accounts.length} stored accounts`);
      * ```
      */
-    static getStoredAccounts(apiKey?: string): PasskeyAccount[] {
-        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    static getStoredAccounts(apiKey?: string, storage?: SyncStorage): PasskeyAccount[] {
+        const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
         return passkeyManager.fetchAccounts();
     }
 
@@ -516,6 +565,7 @@ export class Account {
      * Get the currently authenticated account data
      *
      * @param apiKey - Optional API key
+     * @param storage - Optional custom storage (defaults to localStorage on web, in-memory in RN)
      * @returns The current account data if authenticated, null otherwise
      *
      * @example
@@ -526,8 +576,8 @@ export class Account {
      * }
      * ```
      */
-    static getCurrentAccount(apiKey?: string): PasskeyAccount | null {
-        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    static getCurrentAccount(apiKey?: string, storage?: SyncStorage): PasskeyAccount | null {
+        const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
         return passkeyManager.getCurrentAccount() || null;
     }
 
@@ -535,14 +585,15 @@ export class Account {
      * Clear authentication state (logout)
      *
      * @param apiKey - Optional API key
+     * @param storage - Optional custom storage (defaults to localStorage on web, in-memory in RN)
      *
      * @example
      * ```typescript
      * Account.logout('your-api-key');
      * ```
      */
-    static logout(apiKey?: string): void {
-        const passkeyManager = new PasskeyManager(undefined, undefined, apiKey);
+    static logout(apiKey?: string, storage?: SyncStorage): void {
+        const passkeyManager = new PasskeyManager(storage, undefined, apiKey);
         passkeyManager.logout();
     }
 
@@ -1194,7 +1245,10 @@ export class Account {
     // ============================================
 
     /**
-     * Build chain configuration with RPC URL
+     * Build chain configuration with RPC URL and register it in the global
+     * chain store. Registration is required so background ops (e.g. receipt
+     * polling in waitForReceiptInBackground) can resolve a bundler client by
+     * chainId without needing the original Account instance.
      * @internal
      */
     private static buildChainConfig(chainId: number, apiKey?: string, paymasterUrl?: string): Chain {
@@ -1202,11 +1256,18 @@ export class Account {
             ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`
             : `${JAW_RPC_URL}?chainId=${chainId}`;
 
-        return {
+        const chain: Chain = {
             id: chainId,
             rpcUrl,
             ...(paymasterUrl && { paymaster: { url: paymasterUrl } }),
         };
+
+        const existingChains = chainStore.get() ?? [];
+        if (!existingChains.some((c) => c.id === chain.id)) {
+            chainStore.set([...existingChains, chain]);
+        }
+
+        return chain;
     }
 
     /**
