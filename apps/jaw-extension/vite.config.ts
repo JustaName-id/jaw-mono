@@ -1,6 +1,7 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { crx } from '@crxjs/vite-plugin';
+import { nxViteTsPaths } from '@nx/vite/plugins/nx-tsconfig-paths.plugin';
 import manifest from './manifest.config.js';
 
 export default defineConfig(({ mode }) => {
@@ -15,7 +16,11 @@ export default defineConfig(({ mode }) => {
     );
   }
   return {
-    plugins: [react(), crx({ manifest })],
+    // nxViteTsPaths must come BEFORE crx so workspace `@jaw.id/*` imports
+    // resolve via tsconfig paths (to source) — the package.json `exports`
+    // map's `@jaw-mono/source` condition would otherwise hand Rollup a `.ts`
+    // file it can't load as a package entry in production builds.
+    plugins: [nxViteTsPaths(), react(), crx({ manifest })],
     define: {
       __JAW_EXTENSION_API_KEY__: JSON.stringify(apiKey),
       __JAW_KEYS_URL__: JSON.stringify(process.env.JAW_KEYS_URL ?? 'https://keys.jaw.id'),
