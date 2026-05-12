@@ -327,6 +327,18 @@ export async function toJustanAccount(parameters: ToJustanAccountParameters): Pr
 
             return { address: delegationContract, chainId, nonce, r, s, yParity };
         },
+
+        userOperation: {
+            async estimateGas(userOperation) {
+                if (owner.type !== 'webAuthn') return;
+                // WebAuthn validation + account creation can exceed bundler estimates on chains
+                // without the RIP-7212 P-256 precompile or when bundlers return stub estimates
+                // (observed on Arc Testnet: bundler returned ~455k, actual validation needed ~1M+).
+                return {
+                    verificationGasLimit: BigInt(Math.max(Number(userOperation.verificationGasLimit ?? 0n), 1_200_000)),
+                };
+            },
+        },
     });
 }
 

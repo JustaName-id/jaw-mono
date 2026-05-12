@@ -121,32 +121,15 @@ export const TransactionDialog = ({
     ? getDisplayAddress(resolvedAddresses[currentTransaction.to], currentTransaction.to)
     : '';
 
-  // Helper function to format value for display
+  // Format a transaction value for display. `value` is always the on-chain atomic-units
+  // amount (per EIP-5792 / eth_sendTransaction: a hex string like "0x1", or a decimal-form
+  // bigint string like "1"). Native gas tokens on every supported chain are 18-decimal
+  // (including Arc Testnet's native USDC — distinct from the USDC ERC-20 token at 6 dec).
   const formatTransactionValue = (value?: string) => {
     if (!value || value === '0' || value === '0x0') return null;
-
     try {
-      // Handle hex strings (0x...)
-      if (value.startsWith('0x')) {
-        const bigIntValue = BigInt(value);
-        return formatEther(bigIntValue);
-      }
-
-      // If value looks like wei (long number, no decimals), format it from wei to ETH
-      if (/^\d+$/.test(value) && value.length > 10) {
-        return formatEther(BigInt(value));
-      }
-
-      // If it's already a decimal string (like "0.001"), return as is
-      if (/^\d+\.?\d*$/.test(value) && value.length <= 20) {
-        return value;
-      }
-
-      // Try to parse as BigInt and format
-      const bigIntValue = BigInt(value);
-      return formatEther(bigIntValue);
+      return formatEther(BigInt(value));
     } catch (error) {
-      // If parsing fails, return null to hide the value
       console.warn('Failed to format transaction value:', value, error);
       return null;
     }
