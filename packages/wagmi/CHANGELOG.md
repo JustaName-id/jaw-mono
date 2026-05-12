@@ -1,3 +1,13 @@
+## 0.1.17 (2026-05-12)
+
+### 🩹 Fixes
+
+- **playground:** tanstack vulnerability ([#178](https://github.com/JustaName-id/jaw-mono/pull/178))
+
+### ❤️ Thank You
+
+- Anthony Khoury @anthony23991
+
 ## 0.1.16 (2026-05-08)
 
 ### 🧱 Updated Dependencies
