@@ -72,6 +72,14 @@
     "packages/*",
     "apps/*"
   ],
+  "overrides": {
+    "@tanstack/react-query": "5.90.21",
+    "@tanstack/query-core": "5.90.20"
+  },
+  "resolutions": {
+    "@tanstack/react-query": "5.90.21",
+    "@tanstack/query-core": "5.90.20"
+  },
   "nx": {
     "includedScripts": [],
     "targets": {
