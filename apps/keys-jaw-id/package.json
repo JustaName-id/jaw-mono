@@ -5,7 +5,7 @@
   "dependencies": {
     "@jaw.id/core": "workspace:*",
     "@jaw.id/ui": "workspace:*",
-    "@tanstack/react-query": "^5.62.16",
+    "@tanstack/react-query": "5.90.21",
     "next": "~15.5.10",
     "react": "19.0.1",
     "react-dom": "19.0.1",
