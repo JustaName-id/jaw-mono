@@ -98,9 +98,10 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
 
   // Calls status state
   const [lastBatchId, setLastBatchId] = useState<string>('');
-  const { data: callsStatus, refetch: refetchCallsStatus } = useCallsStatus({
+  const { refetch: refetchCallsStatus } = useCallsStatus({
     id: lastBatchId as `0x${string}`,
-    query: { enabled: !!lastBatchId },
+    connector,
+    query: { enabled: !!lastBatchId, retry: false },
   });
 
   const [selectedMethod, setSelectedMethod] = useState<WagmiMethod | null>(null);
@@ -204,11 +205,13 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
             break;
           }
 
-          case 'useCallsStatus':
-            setLastBatchId(params.id as string);
-            await refetchCallsStatus();
-            result = callsStatus || { status: 'pending' };
+          case 'useCallsStatus': {
+            const targetId = params.id as string;
+            flushSync(() => setLastBatchId(targetId));
+            const { data } = await refetchCallsStatus();
+            result = data || { status: 'pending' };
             break;
+          }
 
           case 'useCapabilities': {
             const targetAddress = params.address as string | undefined;
@@ -307,7 +310,6 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
       setCapabilitiesAddress,
       refetchCapabilities,
       refetchCallsStatus,
-      callsStatus,
       setCallsHistoryAddress,
       refetchCallsHistory,
       callsHistory,
