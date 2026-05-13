@@ -83,44 +83,25 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
   const [capabilitiesAddress, setCapabilitiesAddress] = useState<string | undefined>();
   const [callsHistoryAddress, setCallsHistoryAddress] = useState<string | undefined>();
 
-  const {
-    data: permissions,
-    refetch: refetchPermissions,
-    isLoading: isLoadingPermissions,
-  } = usePermissions({
+  const { data: permissions, refetch: refetchPermissions } = usePermissions({
     address: (permissionsAddress || address) as Address | undefined,
   });
-  const {
-    data: assets,
-    refetch: refetchAssets,
-    isLoading: isLoadingAssets,
-  } = useGetAssets({
+  const { data: assets, refetch: refetchAssets } = useGetAssets({
     address: (assetsAddress || address) as Address | undefined,
   });
-  const {
-    data: capabilities,
-    refetch: refetchCapabilities,
-    isLoading: isLoadingCapabilities,
-  } = useCapabilities({
+  const { data: capabilities, refetch: refetchCapabilities } = useCapabilities({
     address: (capabilitiesAddress || address) as Address | undefined,
   });
-  const {
-    data: callsHistory,
-    refetch: refetchCallsHistory,
-    isLoading: isLoadingCallsHistory,
-  } = useGetCallsHistory({
+  const { data: callsHistory, refetch: refetchCallsHistory } = useGetCallsHistory({
     address: (callsHistoryAddress || address) as Address | undefined,
   });
 
   // Calls status state
   const [lastBatchId, setLastBatchId] = useState<string>('');
-  const {
-    data: callsStatus,
-    refetch: refetchCallsStatus,
-    isLoading: isLoadingCallsStatus,
-  } = useCallsStatus({
+  const { refetch: refetchCallsStatus } = useCallsStatus({
     id: lastBatchId as `0x${string}`,
-    query: { enabled: !!lastBatchId },
+    connector,
+    query: { enabled: !!lastBatchId, retry: false },
   });
 
   const [selectedMethod, setSelectedMethod] = useState<WagmiMethod | null>(null);
@@ -224,11 +205,13 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
             break;
           }
 
-          case 'useCallsStatus':
-            setLastBatchId(params.id as string);
-            await refetchCallsStatus();
-            result = callsStatus || { status: 'pending' };
+          case 'useCallsStatus': {
+            const targetId = params.id as string;
+            flushSync(() => setLastBatchId(targetId));
+            const { data } = await refetchCallsStatus();
+            result = data || { status: 'pending' };
             break;
+          }
 
           case 'useCapabilities': {
             const targetAddress = params.address as string | undefined;
@@ -327,7 +310,6 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
       setCapabilitiesAddress,
       refetchCapabilities,
       refetchCallsStatus,
-      callsStatus,
       setCallsHistoryAddress,
       refetchCallsHistory,
       callsHistory,
@@ -352,18 +334,7 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
   const filteredMethods =
     selectedCategory === 'all' ? WAGMI_METHODS : WAGMI_METHODS.filter((m) => m.category === selectedCategory);
 
-  // Check if any operation is pending
-  // Using isExecuting as the primary state since we use async versions of hooks
-  const isPending =
-    isGrantingPermissions ||
-    isRevokingPermissions ||
-    isSigning ||
-    isLoadingPermissions ||
-    isLoadingAssets ||
-    isLoadingCapabilities ||
-    isLoadingCallsStatus ||
-    isLoadingCallsHistory ||
-    isExecuting;
+  const isPending = isGrantingPermissions || isRevokingPermissions || isSigning || isExecuting;
 
   return (
     <div className="bg-background min-h-screen p-4 md:p-8">
