@@ -26,7 +26,7 @@ import {
   type AbiFunction,
   type Hex,
 } from 'viem';
-import { JAW_RPC_URL } from '@jaw.id/core';
+import { JAW_RPC_URL, SUPPORTED_CHAINS } from '@jaw.id/core';
 
 // ============================================================================
 //  Types
@@ -811,14 +811,7 @@ export function createTokenResolver(chainId: number, apiKey?: string) {
   };
 }
 
-export const NATIVE_SYMBOLS: Record<number, string> = {
-  1: 'ETH',
-  10: 'ETH',
-  8453: 'ETH',
-  42161: 'ETH',
-  137: 'MATIC',
-  100: 'xDAI',
-  56: 'BNB',
-  43114: 'AVAX',
-  11155111: 'ETH',
-};
+/** Native-coin symbol for a chain, sourced from viem's chain config via `SUPPORTED_CHAINS`. */
+export function getNativeSymbol(chainId: number): string {
+  return SUPPORTED_CHAINS.find((c) => c.id === chainId)?.nativeCurrency?.symbol ?? 'ETH';
+}

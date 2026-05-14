@@ -7,7 +7,7 @@ import {
   createTokenResolver,
   decodeCalldataWithSignature,
   getDefaultDescriptorSource,
-  NATIVE_SYMBOLS,
+  getNativeSymbol,
   resolveCalldataDescriptor,
   type ClearSigningDisplay,
 } from '../utils/clearSigning';
@@ -114,7 +114,7 @@ async function clearSignedDecode(
     args: decoded.args,
     tx: { to: to.toLowerCase(), chainId },
     chainId,
-    nativeSymbol: NATIVE_SYMBOLS[chainId] ?? 'ETH',
+    nativeSymbol: getNativeSymbol(chainId),
     resolveToken: createTokenResolver(chainId, apiKey),
   });
 }

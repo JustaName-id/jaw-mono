@@ -3,7 +3,7 @@ import {
   applyFormat,
   createTokenResolver,
   getDefaultDescriptorSource,
-  NATIVE_SYMBOLS,
+  getNativeSymbol,
   resolveEip712Descriptor,
   type ClearSigningDisplay,
 } from '../utils/clearSigning';
@@ -84,7 +84,7 @@ export function useClearSigningTypedData(
           // rows to surface dApp-controlled spelling.
           tx: { ...parsed.domain, chainId, verifyingContract: verifyingContract.toLowerCase() },
           chainId,
-          nativeSymbol: NATIVE_SYMBOLS[chainId] ?? 'ETH',
+          nativeSymbol: getNativeSymbol(chainId),
           resolveToken: createTokenResolver(chainId, apiKey),
         });
 
