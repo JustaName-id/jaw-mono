@@ -18,7 +18,9 @@ import {
   formatUnits,
   http,
   isAddress,
+  keccak256,
   parseAbiItem,
+  stringToHex,
   toFunctionSelector,
   type Abi,
   type AbiFunction,
@@ -456,11 +458,45 @@ export interface Eip712Match {
   format: DescriptorFormat;
 }
 
+export type Eip712Types = Record<string, ReadonlyArray<{ name: string; type: string }>>;
+
+/**
+ * EIP-712 canonical type encoding.
+ * Algorithm: `primaryType(fields...) + dep1(...) + dep2(...)` where deps are
+ * the struct types referenced (recursively), sorted alphabetically, deduped,
+ * with `primaryType` first.
+ */
+function encodeEip712Type(types: Eip712Types, primaryType: string): string | null {
+  if (!types[primaryType]) return null;
+  const deps = new Set<string>();
+  const visit = (t: string) => {
+    if (deps.has(t) || !types[t]) return;
+    deps.add(t);
+    for (const f of types[t]) {
+      // Strip array suffixes (`Foo[]`, `Foo[2]`) — the base type is what matters for dep walking.
+      const base = f.type.replace(/(\[[^\]]*\])+$/, '');
+      if (types[base]) visit(base);
+    }
+  };
+  visit(primaryType);
+  deps.delete(primaryType);
+  const ordered = [primaryType, ...Array.from(deps).sort()];
+  return ordered.map((name) => `${name}(${types[name].map((f) => `${f.type} ${f.name}`).join(',')})`).join('');
+}
+
+/** Compute the 32-byte EIP-712 type hash for a primaryType, or null if undefined. */
+export function eip712TypeHash(types: Eip712Types, primaryType: string): Hex | null {
+  const encoded = encodeEip712Type(types, primaryType);
+  if (!encoded) return null;
+  return keccak256(stringToHex(encoded));
+}
+
 export async function resolveEip712Descriptor(
   source: DescriptorSource,
   chainId: number,
   verifyingContract: string,
-  primaryType: string
+  primaryType: string,
+  types: Eip712Types
 ): Promise<Eip712Match | null> {
   let index: Eip712Index;
   try {
@@ -473,13 +509,27 @@ export async function resolveEip712Descriptor(
   const candidates = entry?.[primaryType];
   if (!candidates || candidates.length === 0) return null;
 
-  // v1: take the first candidate. Multi-candidate disambiguation via
-  // encodeTypeHashes is a follow-up (requires hashing the typed-data struct).
-  const { path } = candidates[0];
+  // Disambiguate by hashing the typed-data struct and matching against each candidate's
+  // `encodeTypeHashes`. Without this, an attacker could craft a message that reuses a
+  // legitimate primaryType + verifyingContract with a different struct shape and have the
+  // legitimate descriptor's labels rendered against the wrong fields.
+  const messageTypeHash = eip712TypeHash(types, primaryType);
+  let chosen = candidates.find(
+    (c) =>
+      c.encodeTypeHashes &&
+      messageTypeHash &&
+      c.encodeTypeHashes.map((h) => h.toLowerCase()).includes(messageTypeHash.toLowerCase())
+  );
+  // If a candidate has no encodeTypeHashes at all, that's a registry data oddity — only allow
+  // it through when it's the single candidate (no disambiguation ambiguity to exploit).
+  if (!chosen && candidates.length === 1 && !candidates[0].encodeTypeHashes) {
+    chosen = candidates[0];
+  }
+  if (!chosen) return null;
 
   let descriptor: Descriptor;
   try {
-    descriptor = await source.getDescriptor(path);
+    descriptor = await source.getDescriptor(chosen.path);
   } catch {
     return null;
   }
@@ -651,13 +701,15 @@ async function formatField(
         };
       }
 
+      // Token denomination unknown (decimals/symbol read failed or token addr missing).
+      // Render the raw wei as kind='raw' with no symbol — never pretend we know the unit, since
+      // a malicious token could revert decimals() and have the wallet display "1e18" as a tidy
+      // "amount" with a token-icon styling.
       return {
         label,
         value: amount !== null ? amount.toString() : asString(value),
-        kind: 'tokenAmount',
-        symbol: tokenAddr ? `${tokenAddr.slice(0, 6)}…` : '?',
+        kind: 'raw',
         rawValue: amount?.toString(),
-        tokenAddress: tokenAddr,
       };
     }
 

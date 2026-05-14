@@ -66,7 +66,8 @@ export function useClearSigningTypedData(
           getDefaultDescriptorSource(),
           chainId,
           verifyingContract,
-          primaryType
+          primaryType,
+          parsed.types
         );
         if (cancelled) return;
         if (!match) {
