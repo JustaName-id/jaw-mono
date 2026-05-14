@@ -5,6 +5,7 @@ import {
   PORT_NAME_OFFSCREEN,
   PORT_NAME_POPUP,
 } from '../shared/constants.js';
+import { getSettings } from '../shared/settings.js';
 import type { AnyMessage, WindowClose, WindowOpen, WindowPostMessage } from '../shared/messages.js';
 
 // ---------- Offscreen document lifecycle ----------
@@ -23,8 +24,17 @@ async function ensureOffscreen(): Promise<void> {
 
   try {
     if (!(await hasOffscreenDocument())) {
+      // Offscreen documents don't have access to chrome.storage in many Chrome
+      // versions (only chrome.runtime + chrome.offscreen). Read settings here
+      // in the service worker (where storage IS available) and pass them via
+      // URL params. Offscreen parses its own location.search at boot.
+      const settings = await getSettings();
+      const params = new URLSearchParams();
+      if (settings.showTestnets !== null) params.set('showTestnets', String(settings.showTestnets));
+      if (settings.defaultChainId !== null) params.set('defaultChainId', String(settings.defaultChainId));
+      const url = params.toString() ? `${OFFSCREEN_PATH}?${params.toString()}` : OFFSCREEN_PATH;
       await chrome.offscreen.createDocument({
-        url: OFFSCREEN_PATH,
+        url,
         reasons: [
           chrome.offscreen.Reason.IFRAME_SCRIPTING,
           chrome.offscreen.Reason.DOM_PARSER,
@@ -279,7 +289,6 @@ chrome.runtime.onMessage.addListener((message: unknown, sender, sendResponse) =>
   if (typeof tabId !== 'number') return false;
   for (const [id, bridged] of bridgedWindows) {
     if (bridged.tabId === tabId) {
-      console.log('[JAW bg] forwarding to offscreen, windowId', id);
       try {
         bridged.ownerPort.postMessage({
           kind: 'window-incoming-message',
@@ -444,8 +453,14 @@ function handlePopupPort(port: chrome.runtime.Port): void {
   });
 }
 
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener((details) => {
   ensureOffscreen().catch((err) => console.error('[JAW] offscreen init failed', err));
+  // Open the onboarding page on FIRST install only — not on update or browser
+  // restart. Matches MetaMask / Rabby convention; gives users a clear entry
+  // point to create / import their JAW account.
+  if (details.reason === 'install') {
+    chrome.tabs.create({ url: JAW_KEYS_URL }).catch(() => undefined);
+  }
 });
 chrome.runtime.onStartup.addListener(() => {
   ensureOffscreen().catch((err) => console.error('[JAW] offscreen init failed', err));

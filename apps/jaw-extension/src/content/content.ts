@@ -21,7 +21,6 @@ function injectInpage(): void {
     script.src = url + hash;
     script.dataset.jaw = '1';
     script.onload = () => {
-      console.log('[JAW] inpage loaded');
       script.remove();
     };
     script.onerror = (e) => console.error('[JAW] inpage failed to load', e);
@@ -31,13 +30,11 @@ function injectInpage(): void {
       return;
     }
     parent.insertBefore(script, parent.firstChild);
-    console.log('[JAW] inpage script tag injected', script.src);
   } catch (err) {
     console.error('[JAW] inpage injection failed', err);
   }
 }
 
-console.log('[JAW] content script loaded on', window.location.origin);
 injectInpage();
 
 let port: chrome.runtime.Port | null = null;

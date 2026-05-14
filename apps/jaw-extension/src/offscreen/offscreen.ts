@@ -150,15 +150,32 @@ try {
   const { JAW } = await import('@jaw.id/core');
   const { JAW_EXTENSION_API_KEY, JAW_KEYS_URL } = await import('../shared/constants.js');
 
+  // Build-time default for which chains the SDK seeds. Vite gotcha:
+  // `import.meta.env.DEV` is `false` during `vite build` even with
+  // --mode development; MODE reflects --mode reliably.
+  const buildShowTestnets = import.meta.env.MODE === 'development';
+
+  // Settings arrive via URL params because chrome.storage is NOT exposed to
+  // offscreen documents in many Chrome versions (a known platform limitation
+  // — only chrome.runtime + chrome.offscreen are available). The background
+  // service worker reads chrome.storage on our behalf at offscreen-creation
+  // time and bakes the user's prefs into the URL.
+  const urlParams = new URLSearchParams(window.location.search);
+  const showTestnetsParam = urlParams.get('showTestnets');
+  const defaultChainIdParam = urlParams.get('defaultChainId');
+  const userShowTestnets = showTestnetsParam === null ? null : showTestnetsParam === 'true';
+  const userDefaultChainId = defaultChainIdParam === null ? null : Number.parseInt(defaultChainIdParam, 10);
+
   const sdk = JAW.create({
     apiKey: JAW_EXTENSION_API_KEY,
     appName: 'JAW Extension',
     appLogoUrl: null,
+    // User setting overrides build-time default. Falls back to build mode
+    // (testnets in dev, mainnet-only in prod) when the user hasn't customized.
+    defaultChainId: Number.isFinite(userDefaultChainId as number) ? (userDefaultChainId as number) : undefined,
     preference: {
       keysUrl: JAW_KEYS_URL,
-      // Dev builds expose Sepolia + L2 testnets so the extension can be tested
-      // without spending real funds. Production builds default to mainnet-only.
-      showTestnets: import.meta.env.DEV,
+      showTestnets: userShowTestnets ?? buildShowTestnets,
     },
   });
 
@@ -177,7 +194,6 @@ try {
 }
 
 async function handleRpc(message: RpcEnvelope): Promise<void> {
-  console.log('[JAW offscreen] rpc', message.method);
   if (!provider) {
     safePost({
       kind: 'rpc-response',
@@ -234,11 +250,35 @@ async function handleStatus(message: StatusRequest): Promise<void> {
 
 function toRpcError(err: unknown): { code: number; message: string; data?: unknown } {
   if (err && typeof err === 'object') {
-    const e = err as { code?: number; message?: string; data?: unknown };
+    const e = err as {
+      code?: number;
+      message?: string;
+      shortMessage?: string;
+      details?: string;
+      metaMessages?: string[];
+      data?: unknown;
+      cause?: unknown;
+    };
+    // Prefer viem's `shortMessage` for the EIP-1474 message field — it's the
+    // user-facing reason (e.g. "User rejected the request") whereas `message`
+    // is often a noisy multi-line dump that breaks dApp error UIs.
+    const message = e.shortMessage ?? (typeof e.message === 'string' ? e.message : 'Unknown error');
+    // Preserve viem's rich context under `data` so dApps that introspect it
+    // (e.g. RainbowKit's transaction modal) keep working. EIP-1474 allows any
+    // value for `data`. We merge with the original `data` if the SDK set one.
+    const richData: Record<string, unknown> = {};
+    if (typeof e.shortMessage === 'string') richData.shortMessage = e.shortMessage;
+    if (typeof e.details === 'string') richData.details = e.details;
+    if (Array.isArray(e.metaMessages)) richData.metaMessages = e.metaMessages;
+    if (e.cause && typeof e.cause === 'object') {
+      const c = e.cause as { shortMessage?: string; details?: string };
+      richData.cause = { shortMessage: c.shortMessage, details: c.details };
+    }
+    if (e.data !== undefined && e.data !== null) richData.original = e.data;
     return {
       code: typeof e.code === 'number' ? e.code : -32603,
-      message: typeof e.message === 'string' ? e.message : 'Unknown error',
-      data: e.data,
+      message,
+      data: Object.keys(richData).length > 0 ? richData : undefined,
     };
   }
   return { code: -32603, message: String(err) };

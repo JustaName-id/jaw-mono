@@ -32,8 +32,6 @@ const ISO_MARKER_IN = '__jaw_bridge_iso_to_main__';
     return;
   }
 
-  console.log('[JAW iso] keys-bridge-isolated active');
-
   // MAIN → ISO: receive bridge-tagged messages and forward to background.
   // Uses window.postMessage (structured clone) so Uint8Arrays are preserved.
   window.addEventListener('message', (event: MessageEvent) => {

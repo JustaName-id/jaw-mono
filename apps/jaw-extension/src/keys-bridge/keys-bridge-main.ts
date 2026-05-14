@@ -65,7 +65,6 @@ const BRIDGE_MARKER_IN = '__jaw_bridge_iso_to_main__';
       writable: true,
       configurable: true,
     });
-    console.log('[JAW main] synthetic opener installed');
   } catch (err) {
     console.warn('[JAW main] could not set window.opener', err);
     return;
