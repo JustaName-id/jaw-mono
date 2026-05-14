@@ -2,6 +2,7 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
 import { getJustaNameInstance, formatAddress, getChainLabel } from '../../utils';
+import { ClearSignedView } from './ClearSignedView';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
@@ -22,7 +23,9 @@ export const DecodedCalldata = ({
   resolvedAddresses,
   mainnetRpcUrl,
 }: DecodedCalldataProps) => {
-  const { decoded, isLoading } = useDecodedCalldata(to, data, chainId, apiKey);
+  // One hook handles both pipelines: ERC-7730 clear-signing (preferred view) and
+  // whatsabi raw decode (fallback / "Show raw details" disclosure).
+  const { clearSigned, decoded, isLoading } = useDecodedCalldata(to, data, chainId, apiKey);
   const [localResolved, setLocalResolved] = useState<Record<string, string>>({});
   const attemptedRef = useRef<Set<string>>(new Set());
 
@@ -96,6 +99,46 @@ export const DecodedCalldata = ({
         });
     });
   }, [decoded, mainnetRpcUrl, chainId]);
+
+  // Clear-signing hit: render the formatted view, with raw whatsabi details collapsed underneath.
+  if (clearSigned && clearSigned.rows.length > 0) {
+    return (
+      <div className="flex flex-col gap-2">
+        <ClearSignedView display={clearSigned} chainId={chainId} mainnetRpcUrl={mainnetRpcUrl} />
+        <details className="text-xs">
+          <summary className="text-muted-foreground hover:text-foreground cursor-pointer">Show raw details</summary>
+          <div className="mt-1 flex flex-col gap-2">
+            {decoded ? (
+              <>
+                <div className="flex items-center gap-2">
+                  <span className="text-foreground bg-primary/10 rounded px-2 py-0.5 text-xs font-semibold">
+                    {decoded.functionName}
+                  </span>
+                  <span className="text-muted-foreground font-mono text-xs">{decoded.signature}</span>
+                </div>
+                {decoded.params.length > 0 && (
+                  <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
+                    {decoded.params.map((param, i) => (
+                      <div key={i} className="flex flex-col gap-0.5">
+                        <div className="flex items-baseline gap-1.5">
+                          <span className="text-muted-foreground text-xs font-semibold">{param.name}</span>
+                          <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
+                        </div>
+                        <p className="text-foreground break-all font-mono text-xs leading-[150%]">{param.value}</p>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </>
+            ) : null}
+            <div className="bg-secondary max-h-[20vh] overflow-y-auto rounded-[6px] p-2">
+              <p className="text-foreground break-all font-mono text-xs leading-[150%]">{data}</p>
+            </div>
+          </div>
+        </details>
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (
