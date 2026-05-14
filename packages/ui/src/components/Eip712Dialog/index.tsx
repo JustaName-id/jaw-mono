@@ -4,8 +4,9 @@ import { Button } from '../ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { DefaultDialog } from '../DefaultDialog';
 import { Eip712DialogProps } from './types';
-import { useIsMobile } from '../../hooks';
+import { useIsMobile, useClearSigningTypedData } from '../../hooks';
 import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
+import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
 import { useState, useEffect, useMemo, useRef } from 'react';
 
 // EIP-712 TypedData structure
@@ -285,6 +286,18 @@ export const Eip712Dialog = ({
     }
   }, [typedDataJson]);
 
+  // Extract apiKey from the mainnet RPC URL so the clear-signing hook can authenticate
+  // its token-info reads on the target chain.
+  const apiKey = useMemo(() => {
+    try {
+      return new URL(mainnetRpcUrl).searchParams.get('api-key') ?? undefined;
+    } catch {
+      return undefined;
+    }
+  }, [mainnetRpcUrl]);
+
+  const { display: clearSigned } = useClearSigningTypedData(typedDataJson, chainId ?? 1, apiKey);
+
   // Resolve account address to human-readable name
   useEffect(() => {
     if (accountAddress && chainId) {
@@ -394,19 +407,39 @@ export const Eip712Dialog = ({
       <div className="flex flex-col justify-between gap-6 max-md:h-full">
         {/* Main Content - Typed Data Tree View */}
         <div className="flex max-h-[60vh] min-h-0 flex-col gap-3 overflow-y-auto max-md:flex-1">
-          {typedData ? (
-            <div
-              ref={scrollableRef}
-              className="bg-muted/30 dark:bg-muted/10 border-border flex max-h-[50vh] flex-1 overflow-y-auto rounded-[6px] border p-3"
-            >
-              {/* Combine domain and message into single tree */}
-              <NestedDataView data={typedData} depth={0} />
-            </div>
-          ) : (
-            <div className="bg-destructive/10 border-destructive/20 rounded-[6px] border p-4">
-              <p className="text-destructive text-sm">Failed to parse typed data</p>
-            </div>
-          )}
+          {(() => {
+            if (!typedData) {
+              return (
+                <div className="bg-destructive/10 border-destructive/20 rounded-[6px] border p-4">
+                  <p className="text-destructive text-sm">Failed to parse typed data</p>
+                </div>
+              );
+            }
+            const rawTree = (
+              <div
+                ref={scrollableRef}
+                className="bg-muted/30 dark:bg-muted/10 border-border flex overflow-y-auto rounded-[6px] border p-3"
+              >
+                <NestedDataView data={typedData} depth={0} />
+              </div>
+            );
+            if (!clearSigned || clearSigned.rows.length === 0) {
+              return <div className="max-h-[50vh] flex-1">{rawTree}</div>;
+            }
+            return (
+              <div className="flex flex-col gap-2">
+                <div className="bg-muted/30 dark:bg-muted/10 border-border rounded-[6px] border p-3">
+                  <ClearSignedView display={clearSigned} chainId={chainId ?? 1} mainnetRpcUrl={mainnetRpcUrl} />
+                </div>
+                <details className="text-xs">
+                  <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
+                    Show raw details
+                  </summary>
+                  <div className="mt-1 max-h-[40vh]">{rawTree}</div>
+                </details>
+              </div>
+            );
+          })()}
 
           {/* URL and Domain Information */}
           <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5 max-md:mt-auto">

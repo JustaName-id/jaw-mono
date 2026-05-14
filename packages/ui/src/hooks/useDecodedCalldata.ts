@@ -1,13 +1,22 @@
-import { useState, useEffect } from 'react';
-import { createPublicClient, http, decodeFunctionData, type Abi, type Hex } from 'viem';
+import { useEffect, useState } from 'react';
+import { createPublicClient, decodeFunctionData, http, type Abi, type Hex } from 'viem';
 import { whatsabi } from '@shazow/whatsabi';
 import { JAW_RPC_URL } from '@jaw.id/core';
+import {
+  applyFormat,
+  createTokenResolver,
+  decodeCalldataWithSignature,
+  getDefaultDescriptorSource,
+  getNativeSymbol,
+  resolveCalldataDescriptor,
+  type ClearSigningDisplay,
+} from '../utils/clearSigning';
 
 export interface DecodedParam {
   name: string;
   type: string;
   value: string;
-  rawValue?: string; // raw address hex for type === 'address'
+  rawValue?: string;
 }
 
 export interface DecodedCalldata {
@@ -16,20 +25,29 @@ export interface DecodedCalldata {
   params: DecodedParam[];
 }
 
-// Module-level ABI cache keyed by lowercase address
-const abiCache = new Map<string, Abi>();
+/**
+ * Result of attempting to decode calldata.
+ * - `clearSigned` is set when the contract has an ERC-7730 descriptor in the public registry.
+ * - `decoded` is set when whatsabi's bytecode-based ABI extraction succeeds.
+ * Both may be set: the clear-signed view renders on top, the raw view sits under "Show raw details".
+ * Neither may be set if the contract is unknown to both pipelines.
+ */
+export interface DecodeResult {
+  clearSigned: ClearSigningDisplay | null;
+  decoded: DecodedCalldata | null;
+  isLoading: boolean;
+}
 
-// Deduplicates concurrent fetches for the same contract
-const inflightRequests = new Map<string, Promise<Abi>>();
+const abiCache = new Map<string, Abi>();
+const abiInflight = new Map<string, Promise<Abi>>();
 
 async function fetchAbi(address: string, rpcUrl: string): Promise<Abi> {
   const key = address.toLowerCase();
-
   const cached = abiCache.get(key);
   if (cached) return cached;
 
-  const inflight = inflightRequests.get(key);
-  if (inflight) return inflight;
+  const existing = abiInflight.get(key);
+  if (existing) return existing;
 
   const promise = (async () => {
     const client = createPublicClient({ transport: http(rpcUrl) });
@@ -44,11 +62,11 @@ async function fetchAbi(address: string, rpcUrl: string): Promise<Abi> {
     return abi;
   })();
 
-  inflightRequests.set(key, promise);
+  abiInflight.set(key, promise);
   try {
     return await promise;
   } finally {
-    inflightRequests.delete(key);
+    abiInflight.delete(key);
   }
 }
 
@@ -59,70 +77,84 @@ function formatParamValue(value: unknown): string {
   return String(value);
 }
 
+async function rawDecode(to: string, data: string, rpcUrl: string): Promise<DecodedCalldata | null> {
+  try {
+    const abi = await fetchAbi(to, rpcUrl);
+    const { functionName, args } = decodeFunctionData({ abi, data: data as Hex });
+    const abiItem = abi.find((item) => 'name' in item && item.name === functionName && item.type === 'function');
+    const inputs = abiItem && 'inputs' in abiItem ? (abiItem.inputs ?? []) : [];
+    const params: DecodedParam[] = (args ?? []).map((arg, i) => ({
+      name: inputs[i]?.name || `param${i}`,
+      type: inputs[i]?.type || 'unknown',
+      value: formatParamValue(arg),
+      ...(inputs[i]?.type === 'address' && typeof arg === 'string' ? { rawValue: arg } : {}),
+    }));
+    return {
+      functionName,
+      signature: `${functionName}(${inputs.map((inp) => inp.type).join(', ')})`,
+      params,
+    };
+  } catch (err) {
+    console.debug('[useDecodedCalldata] raw decode failed:', err);
+    return null;
+  }
+}
+
+async function clearSignedDecode(
+  to: string,
+  data: string,
+  chainId: number,
+  apiKey: string | undefined
+): Promise<ClearSigningDisplay | null> {
+  const match = await resolveCalldataDescriptor(getDefaultDescriptorSource(), chainId, to, data);
+  if (!match) return null;
+  const decoded = decodeCalldataWithSignature(match.formatKey, data);
+  if (!decoded) return null;
+  return applyFormat(match.descriptor, match.format, {
+    args: decoded.args,
+    tx: { to: to.toLowerCase(), chainId },
+    chainId,
+    nativeSymbol: getNativeSymbol(chainId),
+    resolveToken: createTokenResolver(chainId, apiKey),
+  });
+}
+
+const EMPTY: DecodeResult = { clearSigned: null, decoded: null, isLoading: false };
+const LOADING: DecodeResult = { clearSigned: null, decoded: null, isLoading: true };
+
 export function useDecodedCalldata(
   to: string | undefined,
   data: string | undefined,
   chainId: number,
   apiKey?: string
-): { decoded: DecodedCalldata | null; isLoading: boolean } {
-  const [decoded, setDecoded] = useState<DecodedCalldata | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+): DecodeResult {
+  const [result, setResult] = useState<DecodeResult>(EMPTY);
 
-  // Early return conditions checked inside useEffect to keep hook call order stable
   useEffect(() => {
     if (!to || !data || data === '0x' || data.length < 10) {
-      setDecoded(null);
-      setIsLoading(false);
+      setResult(EMPTY);
       return;
     }
 
-    let isMounted = true;
+    let cancelled = false;
+    setResult(LOADING);
 
-    const decode = async () => {
-      setIsLoading(true);
-      try {
-        const rpcUrl = apiKey
-          ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`
-          : `${JAW_RPC_URL}?chainId=${chainId}`;
+    const rpcUrl = apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`;
 
-        const abi = await fetchAbi(to, rpcUrl);
-        if (!isMounted) return;
-
-        const { functionName, args } = decodeFunctionData({ abi, data: data as Hex });
-
-        // Find the matching ABI entry to get parameter names/types
-        const abiItem = abi.find((item) => 'name' in item && item.name === functionName && item.type === 'function');
-
-        const inputs = abiItem && 'inputs' in abiItem ? (abiItem.inputs ?? []) : [];
-
-        const params: DecodedParam[] = (args ?? []).map((arg, i) => ({
-          name: inputs[i]?.name || `param${i}`,
-          type: inputs[i]?.type || 'unknown',
-          value: formatParamValue(arg),
-          ...(inputs[i]?.type === 'address' && typeof arg === 'string' ? { rawValue: arg } : {}),
-        }));
-
-        const signature = `${functionName}(${inputs.map((inp) => inp.type).join(', ')})`;
-
-        if (isMounted) {
-          setDecoded({ functionName, signature, params });
-          setIsLoading(false);
-        }
-      } catch (err) {
-        console.debug('[useDecodedCalldata] Failed to decode:', err);
-        if (isMounted) {
-          setDecoded(null);
-          setIsLoading(false);
-        }
-      }
-    };
-
-    decode();
+    // Both pipelines run in parallel so the "Show raw details" disclosure is instant when opened.
+    Promise.all([clearSignedDecode(to, data, chainId, apiKey), rawDecode(to, data, rpcUrl)])
+      .then(([clearSigned, decoded]) => {
+        if (!cancelled) setResult({ clearSigned, decoded, isLoading: false });
+      })
+      .catch((err) => {
+        console.debug('[useDecodedCalldata] decode failed:', err);
+        if (!cancelled) setResult(EMPTY);
+      });
 
     return () => {
-      isMounted = false;
+      cancelled = true;
     };
   }, [to, data, chainId, apiKey]);
 
-  return { decoded, isLoading };
+  return result;
 }
