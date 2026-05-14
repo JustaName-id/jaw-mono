@@ -1,3 +1,13 @@
+## 0.4.0 (2026-05-14)
+
+### 🚀 Features
+
+- **ui:** implement ERC-7730 clear signing ([#181](https://github.com/JustaName-id/jaw-mono/pull/181))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.3.0 (2026-05-08)
 
 ### 🚀 Features
