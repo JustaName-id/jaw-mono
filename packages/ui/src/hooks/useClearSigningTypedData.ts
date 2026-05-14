@@ -78,7 +78,11 @@ export function useClearSigningTypedData(
 
         const result = await applyFormat(match.descriptor, match.format, {
           args: { ...parsed.message },
-          tx: { chainId, verifyingContract: verifyingContract.toLowerCase(), ...parsed.domain },
+          // Spread parsed.domain first so the hook's normalized values (lower-cased
+          // verifyingContract, numeric chainId) win when a dApp ships a differently-cased
+          // address or a hex chainId. Renderer reads from this; we don't want descriptor
+          // rows to surface dApp-controlled spelling.
+          tx: { ...parsed.domain, chainId, verifyingContract: verifyingContract.toLowerCase() },
           chainId,
           nativeSymbol: NATIVE_SYMBOLS[chainId] ?? 'ETH',
           resolveToken: createTokenResolver(chainId, apiKey),

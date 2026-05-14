@@ -288,37 +288,19 @@ async function fetchJson<T>(url: string): Promise<T> {
   return (await res.json()) as T;
 }
 
+// No application-level cache or inflight dedup — every call hits GitHub raw fresh.
+// (The browser still honours GitHub's HTTP Cache-Control: max-age=300 on the response
+// itself; that's outside our control. If even that's undesirable, callers can add
+// `cache: 'no-store'` to the fetch.)
 class GithubDescriptorSource implements DescriptorSource {
-  private cache = new Map<string, unknown>();
-  private inflight = new Map<string, Promise<unknown>>();
-
-  private memoize<T>(key: string, fetcher: () => Promise<T>): Promise<T> {
-    const cached = this.cache.get(key) as T | undefined;
-    if (cached !== undefined) return Promise.resolve(cached);
-
-    const existing = this.inflight.get(key) as Promise<T> | undefined;
-    if (existing) return existing;
-
-    const promise = fetcher()
-      .then((value) => {
-        this.cache.set(key, value);
-        return value;
-      })
-      .finally(() => {
-        this.inflight.delete(key);
-      });
-    this.inflight.set(key, promise);
-    return promise;
-  }
-
   getCalldataIndex() {
-    return this.memoize('index:calldata', () => fetchJson<CalldataIndex>(`${REGISTRY_BASE}/index.calldata.json`));
+    return fetchJson<CalldataIndex>(`${REGISTRY_BASE}/index.calldata.json`);
   }
   getEip712Index() {
-    return this.memoize('index:eip712', () => fetchJson<Eip712Index>(`${REGISTRY_BASE}/index.eip712.json`));
+    return fetchJson<Eip712Index>(`${REGISTRY_BASE}/index.eip712.json`);
   }
   getDescriptor(path: string) {
-    return this.memoize(`desc:${path}`, () => fetchJson<Descriptor>(`${REGISTRY_BASE}/${path}`));
+    return fetchJson<Descriptor>(`${REGISTRY_BASE}/${path}`);
   }
 }
 
@@ -339,70 +321,19 @@ export function getDefaultDescriptorSource(): DescriptorSource {
 export const caip10 = (chainId: number, address: string) => `eip155:${chainId}:${address.toLowerCase()}`;
 
 /**
- * Strip parameter names from a function signature so viem's selector hasher accepts it.
- *   `transfer(address recipient, uint256 amount)` → `transfer(address,uint256)`
- *   `exactInput((bytes path, uint256 amountIn) params)` → `exactInput((bytes,uint256))`
+ * Compute the 4-byte selector for a descriptor's `display.formats` key.
+ *
+ * Uses viem's `parseAbiItem` as the single source of truth for parsing — the same
+ * parser the downstream `decodeCalldataWithSignature` will use to build the AbiFunction
+ * that feeds `decodeFunctionData`. Sharing one parser guarantees the selector match
+ * and the decode step agree on what the descriptor says: no risk of one accepting an
+ * input the other rejects (silent clear-signing drop) or, worse, both accepting it
+ * but reaching different parameter shapes (silent type confusion).
  */
-function canonicalizeSignature(named: string): string {
-  const parts: string[] = [];
-  let buf = '';
-  let depth = 0;
-  let i = 0;
-
-  // Capture function name + opening paren.
-  while (i < named.length && named[i] !== '(') buf += named[i++];
-  parts.push(buf);
-  buf = '';
-
-  const flushSegment = () => {
-    const seg = buf.trim();
-    buf = '';
-    if (!seg) return;
-    // Strip trailing identifier: find last top-level whitespace.
-    let d = 0;
-    let cutIdx = -1;
-    for (let k = seg.length - 1; k >= 0; k--) {
-      const c = seg[k];
-      if (c === ')' || c === ']') d++;
-      else if (c === '(' || c === '[') d--;
-      else if (d === 0 && /\s/.test(c)) {
-        cutIdx = k;
-        break;
-      }
-    }
-    parts.push(cutIdx === -1 ? seg : seg.slice(0, cutIdx).trim());
-  };
-
-  for (; i < named.length; i++) {
-    const ch = named[i];
-    if (ch === '(') {
-      depth++;
-      // Skip the outermost `(`; inner ones (tuple types) stay in buf.
-      if (depth > 1) buf += ch;
-    } else if (ch === ')') {
-      depth--;
-      if (depth === 0) {
-        flushSegment();
-        parts.push(')');
-      } else {
-        buf += ch;
-      }
-    } else if (ch === ',' && depth === 1) {
-      flushSegment();
-      parts.push(',');
-    } else {
-      buf += ch;
-    }
-  }
-
-  let out = parts[0] + '(';
-  for (let k = 1; k < parts.length; k++) out += parts[k];
-  return out;
-}
-
 function selectorForKey(formatKey: string): Hex | null {
   try {
-    return toFunctionSelector(canonicalizeSignature(formatKey));
+    const abiItem = parseAbiItem(`function ${formatKey}`) as AbiFunction;
+    return toFunctionSelector(abiItem);
   } catch {
     return null;
   }
@@ -513,18 +444,15 @@ export async function resolveEip712Descriptor(
   // `encodeTypeHashes`. Without this, an attacker could craft a message that reuses a
   // legitimate primaryType + verifyingContract with a different struct shape and have the
   // legitimate descriptor's labels rendered against the wrong fields.
+  //
+  // Policy: REQUIRE a computable message typehash AND a candidate that publishes a matching
+  // hash. Refuse otherwise. Audit (May 2026) showed 538/538 registry slots publish
+  // encodeTypeHashes today; we deliberately refuse hashless entries so a future
+  // registry-data regression can't silently downgrade verification.
   const messageTypeHash = eip712TypeHash(types, primaryType);
-  let chosen = candidates.find(
-    (c) =>
-      c.encodeTypeHashes &&
-      messageTypeHash &&
-      c.encodeTypeHashes.map((h) => h.toLowerCase()).includes(messageTypeHash.toLowerCase())
-  );
-  // If a candidate has no encodeTypeHashes at all, that's a registry data oddity — only allow
-  // it through when it's the single candidate (no disambiguation ambiguity to exploit).
-  if (!chosen && candidates.length === 1 && !candidates[0].encodeTypeHashes) {
-    chosen = candidates[0];
-  }
+  if (!messageTypeHash) return null;
+  const target = messageTypeHash.toLowerCase();
+  const chosen = candidates.find((c) => c.encodeTypeHashes?.some((h) => h.toLowerCase() === target));
   if (!chosen) return null;
 
   let descriptor: Descriptor;
