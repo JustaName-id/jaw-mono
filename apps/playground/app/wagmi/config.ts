@@ -1,7 +1,7 @@
 import { http, createConfig, type Config } from 'wagmi';
-import { mainnet, sepolia, baseSepolia } from 'wagmi/chains';
+import type { Chain } from 'viem';
 import { jaw } from '@jaw.id/wagmi';
-import { Mode, type PaymasterConfig, type JawTheme } from '@jaw.id/core';
+import { Mode, SUPPORTED_CHAINS, type PaymasterConfig, type JawTheme } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
 
 export type ModeType = (typeof Mode)[keyof typeof Mode];
@@ -15,8 +15,10 @@ export function createWagmiConfig(
     ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
     : 84532; // Base Sepolia
 
+  const transports = Object.fromEntries(SUPPORTED_CHAINS.map((chain) => [chain.id, http()]));
+
   return createConfig({
-    chains: [mainnet, sepolia, baseSepolia],
+    chains: SUPPORTED_CHAINS as unknown as readonly [Chain, ...Chain[]],
     connectors: [
       jaw({
         apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
@@ -36,11 +38,7 @@ export function createWagmiConfig(
         theme,
       }),
     ],
-    transports: {
-      [mainnet.id]: http(),
-      [sepolia.id]: http(),
-      [baseSepolia.id]: http(),
-    },
+    transports,
   });
 }
 

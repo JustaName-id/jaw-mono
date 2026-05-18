@@ -293,21 +293,20 @@ disconnect({ connector });`,
         type: 'select',
         label: 'Target Chain',
         required: true,
-        defaultValue: '1',
-        options: [
-          { label: 'Ethereum Mainnet (1)', value: '1' },
-          { label: 'Sepolia (11155111)', value: '11155111' },
-          { label: 'Base Sepolia (84532)', value: '84532' },
-        ],
+        defaultValue: String(_DEFAULT_CHAIN_ID_NUM),
+        options: SUPPORTED_CHAINS.map((chain) => ({
+          label: `${chain.name} (${chain.id})`,
+          value: String(chain.id),
+        })),
       },
     ],
     getCodeSnippet: (params) => `import { useSwitchChain } from 'wagmi';
 
 const { switchChain } = useSwitchChain();
 
-switchChain({ chainId: ${params.chainId || 1} });`,
+switchChain({ chainId: ${params.chainId || _DEFAULT_CHAIN_ID_NUM} });`,
     buildParams: (params) => ({
-      chainId: parseInt(params.chainId || '1'),
+      chainId: parseInt(params.chainId || String(_DEFAULT_CHAIN_ID_NUM)),
     }),
   },
 
