@@ -1,3 +1,13 @@
+## 0.4.2 (2026-05-18)
+
+### 🩹 Fixes
+
+- **ui:** republish after token renewal ([843d820](https://github.com/JustaName-id/jaw-mono/commit/843d820))
+
+### ❤️ Thank You
+
+- anthony @anthony23991
+
 ## 0.4.1 (2026-05-18)
 
 ### 🩹 Fixes
