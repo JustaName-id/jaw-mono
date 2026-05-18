@@ -1,3 +1,13 @@
+## 0.4.1 (2026-05-18)
+
+### 🩹 Fixes
+
+- **ui:** enhance EIP-712 descriptor handling for ERC-7730 compliance ([#182](https://github.com/JustaName-id/jaw-mono/pull/182))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.0 (2026-05-14)
 
 ### 🚀 Features
