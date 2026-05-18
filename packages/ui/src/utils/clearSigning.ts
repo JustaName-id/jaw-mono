@@ -407,6 +407,14 @@ export async function resolveCalldataDescriptor(
     return null;
   }
 
+  // Defense-in-depth: CAIP-10 index pointed us here, but verify the descriptor's own
+  // `deployments` agrees. Catches a registry-data regression where the index maps
+  // (chainId, to) to a descriptor whose deployments array doesn't include them.
+  const contractDeployments = descriptor.context?.contract?.deployments;
+  if (contractDeployments && !contractDeployments.some((d) => d.chainId === chainId && eqHex(d.address, to))) {
+    return null;
+  }
+
   const formats = descriptor?.display?.formats;
   if (!formats) return null;
 
@@ -557,6 +565,18 @@ export async function resolveEip712Descriptor(
   try {
     descriptor = await source.getDescriptor(chosen.path);
   } catch {
+    return null;
+  }
+
+  // Defense-in-depth: when the descriptor binds via `eip712.deployments` (rather than
+  // inlining chainId/verifyingContract in `context.eip712.domain`), verify the message's
+  // (chainId, verifyingContract) is in that array — same registry-data regression class
+  // as the calldata-side check.
+  const eip712Deployments = descriptor.context?.eip712?.deployments;
+  if (
+    eip712Deployments &&
+    !eip712Deployments.some((d) => d.chainId === chainId && eqHex(d.address, verifyingContract))
+  ) {
     return null;
   }
 
