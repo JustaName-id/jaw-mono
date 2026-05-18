@@ -15,6 +15,7 @@
 import {
   createPublicClient,
   decodeFunctionData,
+  domainSeparator,
   formatUnits,
   http,
   isAddress,
@@ -25,6 +26,7 @@ import {
   type Abi,
   type AbiFunction,
   type Hex,
+  type TypedDataDomain,
 } from 'viem';
 import { JAW_RPC_URL, SUPPORTED_CHAINS } from '@jaw.id/core';
 
@@ -66,6 +68,8 @@ export interface DescriptorField {
   $ref?: string;
   visible?: boolean | 'always' | 'never';
   fields?: DescriptorField[];
+  mustMatch?: string[];
+  ifNotIn?: string[];
 }
 
 export interface DescriptorFormat {
@@ -98,7 +102,14 @@ export interface Descriptor {
     $id?: string;
     contract?: { deployments?: DescriptorDeployment[]; abi?: unknown };
     eip712?: {
-      domain?: { name?: string; chainId?: number; verifyingContract?: string; version?: string };
+      domain?: {
+        name?: string;
+        chainId?: number;
+        verifyingContract?: string;
+        version?: string;
+        salt?: string;
+      };
+      domainSeparator?: Hex;
       schemas?: unknown;
       deployments?: DescriptorDeployment[];
     };
@@ -345,6 +356,31 @@ export interface CalldataMatch {
   format: DescriptorFormat;
 }
 
+/**
+ * Build a selector → formatKey map for a descriptor's `display.formats`, refusing
+ * the descriptor entirely if two keys collapse to the same 4-byte selector.
+ *
+ * ERC-7730 MUST: "If multiple keys share the same type-only signature, wallets MUST
+ * treat this as an invalid descriptor." Function selectors are 4 bytes (≈4.3B values);
+ * a malicious descriptor can mine a colliding key whose display rule shadows the
+ * legitimate one, so insertion-order iteration would silently render attacker labels
+ * for legitimate calldata. Detecting the collision means we can't disambiguate either
+ * key, so we abort clear-signing for this contract and fall back to raw decode.
+ */
+function buildSelectorMap(
+  formats: Record<string, DescriptorFormat>
+): Map<string, { formatKey: string; format: DescriptorFormat }> | null {
+  const map = new Map<string, { formatKey: string; format: DescriptorFormat }>();
+  for (const [formatKey, format] of Object.entries(formats)) {
+    const sel = selectorForKey(formatKey);
+    if (!sel) continue;
+    const key = sel.toLowerCase();
+    if (map.has(key)) return null;
+    map.set(key, { formatKey, format });
+  }
+  return map;
+}
+
 export async function resolveCalldataDescriptor(
   source: DescriptorSource,
   chainId: number,
@@ -371,16 +407,22 @@ export async function resolveCalldataDescriptor(
     return null;
   }
 
+  // Defense-in-depth: CAIP-10 index pointed us here, but verify the descriptor's own
+  // `deployments` agrees. Catches a registry-data regression where the index maps
+  // (chainId, to) to a descriptor whose deployments array doesn't include them.
+  const contractDeployments = descriptor.context?.contract?.deployments;
+  if (contractDeployments && !contractDeployments.some((d) => d.chainId === chainId && eqHex(d.address, to))) {
+    return null;
+  }
+
   const formats = descriptor?.display?.formats;
   if (!formats) return null;
 
-  for (const [formatKey, format] of Object.entries(formats)) {
-    const sel = selectorForKey(formatKey);
-    if (sel && sel.toLowerCase() === selector) {
-      return { descriptor, formatKey, format };
-    }
-  }
-  return null;
+  const selectorMap = buildSelectorMap(formats);
+  if (!selectorMap) return null;
+  const hit = selectorMap.get(selector);
+  if (!hit) return null;
+  return { descriptor, formatKey: hit.formatKey, format: hit.format };
 }
 
 export interface Eip712Match {
@@ -422,12 +464,76 @@ export function eip712TypeHash(types: Eip712Types, primaryType: string): Hex | n
   return keccak256(stringToHex(encoded));
 }
 
+/** Normalize a chainId that may arrive as a number, hex string, or decimal string. */
+function normalizeChainId(v: unknown): number | undefined {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'bigint') return Number(v);
+  if (typeof v === 'string' && v.length > 0) {
+    const n = v.startsWith('0x') ? Number.parseInt(v, 16) : Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
+/** Lowercase comparator for hex strings (addresses, bytes32 salt). */
+function eqHex(a: unknown, b: unknown): boolean {
+  if (typeof a !== 'string' || typeof b !== 'string') return false;
+  return a.toLowerCase() === b.toLowerCase();
+}
+
+/**
+ * Verify every key declared in the descriptor's `context.eip712.domain` matches the
+ * message domain. ERC-7730 MUST: "each key-value pair in this `domain` binding must
+ * match the values of the domain key-value pairs of the message."
+ *
+ * Why all five fields matter: the same `verifyingContract` address can serve different
+ * protocol versions over time, so a descriptor authored against `version: "2"` rendering
+ * for a `version: "1"` message is a stale-signature replay vector. Even though CAIP-10
+ * lookup uses chainId + verifyingContract, we re-check them here against the *message's*
+ * domain — the CAIP-10 inputs are caller-supplied, not the message's own claims.
+ */
+function descriptorDomainMatches(
+  descDomain: NonNullable<NonNullable<Descriptor['context']['eip712']>['domain']> | undefined,
+  msgDomain: Record<string, unknown> | undefined
+): boolean {
+  if (!descDomain) return true;
+  if (descDomain.name !== undefined && descDomain.name !== msgDomain?.name) return false;
+  if (descDomain.version !== undefined && descDomain.version !== msgDomain?.version) return false;
+  if (descDomain.chainId !== undefined && descDomain.chainId !== normalizeChainId(msgDomain?.chainId)) return false;
+  if (descDomain.verifyingContract !== undefined && !eqHex(descDomain.verifyingContract, msgDomain?.verifyingContract))
+    return false;
+  if (descDomain.salt !== undefined && !eqHex(descDomain.salt, msgDomain?.salt)) return false;
+  return true;
+}
+
+/**
+ * Recompute the EIP-712 domain separator from the message domain and verify equality
+ * with the descriptor's declared `domainSeparator`. ERC-7730 MUST when declared.
+ *
+ * Cryptographic backstop to the field-by-field check: catches mismatches in non-standard
+ * domain fields the descriptor's `domain` block doesn't enumerate (e.g. a custom `subdomain`
+ * slot). Uses viem's `domainSeparator` so the verifier and signer share one canonical
+ * encoder — no risk of divergence. Any malformed input (e.g. chainId as hex string viem
+ * can't coerce) trips the catch and returns `false`: fail closed.
+ */
+function domainSeparatorMatches(declared: Hex | undefined, msgDomain: Record<string, unknown> | undefined): boolean {
+  if (!declared) return true;
+  if (!msgDomain) return false;
+  try {
+    const computed = domainSeparator({ domain: msgDomain as TypedDataDomain });
+    return computed.toLowerCase() === declared.toLowerCase();
+  } catch {
+    return false;
+  }
+}
+
 export async function resolveEip712Descriptor(
   source: DescriptorSource,
   chainId: number,
   verifyingContract: string,
   primaryType: string,
-  types: Eip712Types
+  types: Eip712Types,
+  messageDomain?: Record<string, unknown>
 ): Promise<Eip712Match | null> {
   let index: Eip712Index;
   try {
@@ -461,6 +567,24 @@ export async function resolveEip712Descriptor(
   } catch {
     return null;
   }
+
+  // Defense-in-depth: when the descriptor binds via `eip712.deployments` (rather than
+  // inlining chainId/verifyingContract in `context.eip712.domain`), verify the message's
+  // (chainId, verifyingContract) is in that array — same registry-data regression class
+  // as the calldata-side check.
+  const eip712Deployments = descriptor.context?.eip712?.deployments;
+  if (
+    eip712Deployments &&
+    !eip712Deployments.some((d) => d.chainId === chainId && eqHex(d.address, verifyingContract))
+  ) {
+    return null;
+  }
+
+  // ERC-7730 MUST: every key in `context.eip712.domain` must match the message domain.
+  if (!descriptorDomainMatches(descriptor.context?.eip712?.domain, messageDomain)) return null;
+
+  // ERC-7730 MUST when declared: recompute the message's domain separator and compare.
+  if (!domainSeparatorMatches(descriptor.context?.eip712?.domainSeparator, messageDomain)) return null;
 
   const formats = descriptor?.display?.formats;
   if (!formats) return null;
@@ -571,6 +695,31 @@ function rawRow(label: string, value: unknown): DisplayRow {
   };
 }
 
+/**
+ * Thrown when a field's `mustMatch` rule fails. ERC-7730 treats this as a vetting
+ * failure (not a display hint) — the descriptor's author scoped their labels to a
+ * specific value set and we observed something outside it. Caught in `applyFormat`
+ * to abort clear-signing for the whole transaction; the UI then falls back to raw
+ * decode rather than presenting the descriptor's labels for an interaction the
+ * author didn't vouch for.
+ */
+class MustMatchViolation extends Error {
+  constructor(public readonly field: string) {
+    super(`mustMatch violation on field ${field}`);
+    this.name = 'MustMatchViolation';
+  }
+}
+
+/**
+ * Case-insensitive (for hex addresses) membership check used by `mustMatch` / `ifNotIn`.
+ * Values can be addresses, enum strings, or numeric strings; we normalize both sides to
+ * lowercase so descriptor authors don't have to pick a casing convention.
+ */
+function valueInList(value: unknown, list: string[]): boolean {
+  const v = asString(value).toLowerCase();
+  return list.some((item) => item.toLowerCase() === v);
+}
+
 async function formatField(
   descriptor: Descriptor,
   rawField: DescriptorField,
@@ -583,6 +732,15 @@ async function formatField(
   const label = defaultLabel(field);
   const value = resolvePath(field.path, ctx);
   if (value === undefined) return null;
+
+  // ERC-7730 MUST: `mustMatch` violation invalidates the descriptor for this tx.
+  // Thrown — `applyFormat` catches and aborts so the UI can fall back to raw decode.
+  if (field.mustMatch && field.mustMatch.length > 0 && !valueInList(value, field.mustMatch)) {
+    throw new MustMatchViolation(field.path);
+  }
+
+  // ERC-7730 visibility filter: `ifNotIn` shows the row only when value is NOT in list.
+  if (field.ifNotIn && field.ifNotIn.length > 0 && valueInList(value, field.ifNotIn)) return null;
 
   switch (field.format ?? 'raw') {
     case 'addressName': {
@@ -694,17 +852,25 @@ export async function applyFormat(
   descriptor: Descriptor,
   format: DescriptorFormat,
   ctx: FormatterContext
-): Promise<ClearSigningDisplay> {
+): Promise<ClearSigningDisplay | null> {
   const rows: DisplayRow[] = [];
-  for (const f of format.fields ?? []) {
-    // v1: array-iteration fields render as raw (the underlying array literal).
-    if (f.path.endsWith('.[]')) {
-      const val = resolvePath(f.path, ctx);
-      rows.push(rawRow(defaultLabel(mergeField(descriptor, f)), val));
-      continue;
+  try {
+    for (const f of format.fields ?? []) {
+      // v1: array-iteration fields render as raw (the underlying array literal).
+      if (f.path.endsWith('.[]')) {
+        const val = resolvePath(f.path, ctx);
+        rows.push(rawRow(defaultLabel(mergeField(descriptor, f)), val));
+        continue;
+      }
+      const row = await formatField(descriptor, f, ctx);
+      if (row) rows.push(row);
     }
-    const row = await formatField(descriptor, f, ctx);
-    if (row) rows.push(row);
+  } catch (err) {
+    // ERC-7730: a `mustMatch` violation invalidates the descriptor for this tx.
+    // Return null so the hook falls back to raw-decode UI instead of rendering
+    // descriptor labels for an interaction the author didn't vouch for.
+    if (err instanceof MustMatchViolation) return null;
+    throw err;
   }
 
   const meta = descriptor.metadata ?? {};

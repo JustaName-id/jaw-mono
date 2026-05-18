@@ -67,7 +67,8 @@ export function useClearSigningTypedData(
           chainId,
           verifyingContract,
           primaryType,
-          parsed.types
+          parsed.types,
+          parsed.domain
         );
         if (cancelled) return;
         if (!match) {
@@ -89,6 +90,8 @@ export function useClearSigningTypedData(
         });
 
         if (!cancelled) {
+          // applyFormat → null means a mustMatch violation; surface as "no descriptor"
+          // so the dialog falls back to raw decode.
           setDisplay(result);
           setIsLoading(false);
         }
