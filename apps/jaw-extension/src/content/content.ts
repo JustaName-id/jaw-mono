@@ -46,6 +46,10 @@ function connect(): chrome.runtime.Port {
   });
   p.onDisconnect.addListener(() => {
     port = null;
+    // No eager reconnect — that creates a poll loop that keeps the SW
+    // alive forever (wasteful) and doesn't fix the real problem. Push
+    // events from the SW arrive via chrome.runtime.onMessage (see below)
+    // even when the port is dead, so the port can stay lazy.
   });
   return p;
 }
@@ -54,6 +58,28 @@ function getPort(): chrome.runtime.Port {
   if (!port) port = connect();
   return port;
 }
+
+// SW-initiated push events (revoke notifications) come in via
+// chrome.runtime.onMessage instead of the long-lived port. This bypasses
+// the "port dead after SW suspension" problem entirely — onMessage
+// reaches the content script regardless of port state.
+chrome.runtime.onMessage.addListener((message: unknown, _sender, sendResponse) => {
+  const msg = message as { kind?: string; origin?: string; events?: AnyMessage[] } | null;
+  if (!msg || msg.kind !== 'jaw-push-events') return false;
+  // Filter by target origin so a message broadcast to every tab only acts
+  // on tabs matching the revoked origin.
+  if (msg.origin !== window.location.origin) {
+    sendResponse({ ok: false, reason: 'origin-mismatch' });
+    return false;
+  }
+  if (Array.isArray(msg.events)) {
+    for (const evt of msg.events) {
+      forwardToInpage(evt);
+    }
+  }
+  sendResponse({ ok: true });
+  return false;
+});
 
 function forwardToInpage(message: AnyMessage): void {
   const detail = { nonce: NONCE, payload: message };

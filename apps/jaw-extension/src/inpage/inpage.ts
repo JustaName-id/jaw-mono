@@ -29,8 +29,20 @@ function announceEip6963(detail: EIP6963ProviderDetail): void {
 // `web_accessible_resources`, so any import would force exposing the imported
 // chunk too. Constants are kept in sync with `packages/core/src/constants.ts`.
 const JAW_WALLET_ICON: `data:image/${string}` = `data:image/svg+xml;base64,PHN2ZyB3aWR0aD0iMzgiIGhlaWdodD0iMzgiIHZpZXdCb3g9IjAgMCAzOCAzOCIgZmlsbD0ibm9uZSIgeG1sbnM9Imh0dHA6Ly93d3cudzMub3JnLzIwMDAvc3ZnIj4KPHJlY3Qgd2lkdGg9IjM4IiBoZWlnaHQ9IjM4IiByeD0iNCIgZmlsbD0id2hpdGUiLz4KPGcgdHJhbnNmb3JtPSJ0cmFuc2xhdGUoLTMsIDApIj4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDIxLjk5NDYgMjkuMzAxNCkiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDIxLjk5NDYgMjAuODYwMykiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDM0Ljc5MDMgMjkuMzAxNCkiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDM0Ljc5MDMgMjAuODYwMykiIGZpbGw9IiMwMjA2MTciLz4KPHJlY3Qgd2lkdGg9IjcuMzk3MDQiIGhlaWdodD0iNy4zOTcwNCIgdHJhbnNmb3JtPSJtYXRyaXgoLTAuODY2MDI1IDAuNSAwIC0xIDM0Ljc5MDMgMTIuMzk3KSIgZmlsbD0iIzAyMDYxNyIvPgo8cmVjdCB3aWR0aD0iNy4zOTcwNCIgaGVpZ2h0PSI3LjM5NzA0IiB0cmFuc2Zvcm09Im1hdHJpeCgtMC44NjYwMjUgLTAuNSAwIDEgMTUuNjA2IDI1LjYwMjkpIiBmaWxsPSIjMDIwNjE3Ii8+CjxyZWN0IHdpZHRoPSI3LjM5NzA0IiBoZWlnaHQ9IjcuMzk3MDQiIHRyYW5zZm9ybT0ibWF0cml4KC0wLjg2NjAyNSAtMC41IDAgMSAyOC40MDE0IDI1LjYwMjkpIiBmaWxsPSIjMDIwNjE3Ii8+CjxyZWN0IHdpZHRoPSI3LjM5NzA0IiBoZWlnaHQ9IjcuMzk3MDQiIHRyYW5zZm9ybT0ibWF0cml4KC0wLjg2NjAyNSAtMC41IDAgMSAyOC40MDE0IDE3LjE2MTgpIiBmaWxsPSIjMDIwNjE3Ii8+CjwvZz4KPC9zdmc+`;
-const JAW_WALLET_NAME = 'JAW';
-const JAW_WALLET_RDNS = 'keys.jaw.id';
+// EIP-6963 distinguishes the extension from the in-page JAW SDK.
+// `@jaw.id/core` already announces `{ name: 'JAW', rdns: 'keys.jaw.id' }`
+// from the dApp's page context when integrated directly. If we used the
+// same identity here, dApps with the SDK installed AND the extension
+// installed would see two identical "JAW" entries in the wallet picker —
+// no way to tell them apart, double-connect bugs, mismatched per-origin
+// permission state. By taking a distinct `name` + `rdns` we keep mipd's
+// dedup honest and let users pick which path they want.
+//
+// Long-term: the SDK should also detect the extension (via a window flag
+// the inpage sets) and skip its own announcement. Tracked in AUDIT.md
+// under "SDK gaps" since core changes are out of scope on this branch.
+const JAW_WALLET_NAME = 'JAW Wallet';
+const JAW_WALLET_RDNS = 'id.jaw.extension';
 
 // Wire-format types — duplicated locally to keep inpage self-contained.
 type ProviderEventName = 'connect' | 'disconnect' | 'chainChanged' | 'accountsChanged';
@@ -114,6 +126,10 @@ class JawInpageProvider {
       if (typeof chainId === 'string') this.cachedChainId = chainId;
     } else if (event === 'disconnect') {
       this.cachedAccounts = [];
+      // Audit MEDIUM-1: chainId is stale after disconnect. Clear it so a
+      // synchronous eth_chainId between disconnect and the next connect
+      // doesn't return a stale chain.
+      this.cachedChainId = undefined;
     }
   }
 
@@ -254,6 +270,20 @@ function readBootstrapArgs(): { nonce: string; eventName: string } | null {
 const args = readBootstrapArgs();
 if (args) {
   const provider = new JawInpageProvider(args.nonce, args.eventName);
+
+  // Flag for the SDK to detect the extension's presence. A future
+  // `@jaw.id/core` update can read this synchronously at module init and
+  // skip its own EIP-6963 announce — eliminating the duplicate-picker
+  // problem at the source instead of relying on rdns differentiation alone.
+  try {
+    Object.defineProperty(window, '__jawExtension__', {
+      value: { version: 1 },
+      writable: false,
+      configurable: false,
+    });
+  } catch {
+    /* page already defined it; harmless */
+  }
 
   announceEip6963({ info: PROVIDER_INFO, provider });
 

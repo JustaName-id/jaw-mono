@@ -1,7 +1,13 @@
 import * as Select from '@radix-ui/react-select';
 import type React from 'react';
-import { useEffect, useState } from 'react';
-import { DEFAULT_SETTINGS, getSettings, setSettings, type Settings as SettingsType } from '../../shared/settings.js';
+import { useEffect, useRef, useState } from 'react';
+import {
+  DEFAULT_SETTINGS,
+  getSettings,
+  setSettings,
+  subscribeSettings,
+  type Settings as SettingsType,
+} from '../../shared/settings.js';
 import { listChains } from '../lib/chains.js';
 
 interface SettingsProps {
@@ -12,12 +18,36 @@ export function Settings({ onBack }: SettingsProps): React.JSX.Element {
   const [draft, setDraft] = useState<SettingsType>(DEFAULT_SETTINGS);
   const [original, setOriginal] = useState<SettingsType>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
+  const [saveError, setSaveError] = useState<string | null>(null);
+  // Ref kept in sync with `original` so the subscriber closure (mounted once)
+  // always sees the latest stored snapshot without needing to re-subscribe.
+  const originalRef = useRef<SettingsType>(DEFAULT_SETTINGS);
 
   useEffect(() => {
+    let cancelled = false;
     getSettings().then((s) => {
+      if (cancelled) return;
       setDraft(s);
       setOriginal(s);
+      originalRef.current = s;
     });
+    // Keep `original` in sync if a second popup writes settings concurrently.
+    // We refresh `draft` ONLY if the user hasn't started editing yet (i.e.
+    // draft still equals original) — otherwise we'd clobber an in-flight edit.
+    const unsubscribe = subscribeSettings((next) => {
+      if (cancelled) return;
+      const prev = originalRef.current;
+      setDraft((d) => {
+        const dirty = d.showTestnets !== prev.showTestnets || d.defaultChainId !== prev.defaultChainId;
+        return dirty ? d : next;
+      });
+      setOriginal(next);
+      originalRef.current = next;
+    });
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
   }, []);
 
   // For the default-chain dropdown we ALWAYS show every supported chain
@@ -30,6 +60,7 @@ export function Settings({ onBack }: SettingsProps): React.JSX.Element {
   const save = async (): Promise<void> => {
     if (!dirty || saving) return;
     setSaving(true);
+    setSaveError(null);
     try {
       await setSettings({
         showTestnets: draft.showTestnets,
@@ -41,7 +72,7 @@ export function Settings({ onBack }: SettingsProps): React.JSX.Element {
       chrome.runtime.reload();
     } catch (err) {
       setSaving(false);
-      console.error('[JAW popup] settings save failed', err);
+      setSaveError(err instanceof Error ? err.message : 'Failed to save settings');
     }
   };
 
@@ -102,7 +133,8 @@ export function Settings({ onBack }: SettingsProps): React.JSX.Element {
       </section>
 
       <footer style={styles.footer}>
-        {dirty && <p style={styles.warn}>Changes apply after the extension reloads.</p>}
+        {saveError && <p style={styles.err}>{saveError}</p>}
+        {dirty && !saveError && <p style={styles.warn}>Changes apply after the extension reloads.</p>}
         <div style={styles.btnRow}>
           <button type="button" onClick={onBack} style={styles.btn}>
             Cancel
@@ -259,6 +291,7 @@ const styles: Record<string, React.CSSProperties> = {
     marginTop: 'auto',
   },
   warn: { fontSize: 11, color: '#f59e0b', margin: '0 0 8px' },
+  err: { fontSize: 11, color: '#ef4444', margin: '0 0 8px' },
   btnRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 6 },
   btn: {
     padding: '8px 10px',

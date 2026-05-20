@@ -1,14 +1,15 @@
 import type React from 'react';
 import { useEffect, useRef, useState } from 'react';
-import { JAW_KEYS_URL, PORT_NAME_POPUP } from '../shared/constants.js';
+import { PORT_NAME_POPUP } from '../shared/constants.js';
 import type { AnyMessage } from '../shared/messages.js';
 import { newId } from '../shared/messages.js';
 import { getSettings, subscribeSettings } from '../shared/settings.js';
 import { Header } from './components/Header.js';
 import { AccountCard } from './components/AccountCard.js';
 import { ActionRow } from './components/ActionRow.js';
+import { ConnectedDapps } from './components/ConnectedDapps.js';
 import { Settings } from './components/Settings.js';
-import { installRpcListener } from './lib/rpc.js';
+import { installRpcListener, sendRpc } from './lib/rpc.js';
 
 interface Status {
   connected: boolean;
@@ -84,8 +85,10 @@ export function App(): React.JSX.Element {
     p.postMessage({ kind: 'status-request', id: newId() });
 
     // Defensive timeout: if the offscreen never replies, stop spinning so
-    // the user at least sees the disconnected state.
-    const failsafe = window.setTimeout(() => setLoading(false), 3000);
+    // the user at least sees the disconnected state. 1.5s strikes a balance —
+    // long enough for the SW to respawn from suspension, short enough that
+    // a stuck offscreen doesn't make the popup feel broken (audit LOW-3).
+    const failsafe = window.setTimeout(() => setLoading(false), 1500);
 
     return () => {
       window.clearTimeout(failsafe);
@@ -96,19 +99,17 @@ export function App(): React.JSX.Element {
     };
   }, []);
 
-  const openKeys = (path: string): void => {
-    chrome.tabs.create({ url: `${JAW_KEYS_URL}${path}` });
-  };
-
   const handleLock = async (): Promise<void> => {
     // Same path as ActionRow's Disconnect; surfacing it on the header lock
     // icon matches MetaMask/Rabby's UX where the lock button drops the
-    // active connection.
+    // active connection. Goes through sendRpc so the response is routed
+    // by `installRpcListener` and any error from the background surfaces
+    // (instead of being silently dropped by a raw port.postMessage).
     if (!port) return;
     try {
-      port.postMessage({ kind: 'rpc-request', id: newId(), method: 'wallet_disconnect' });
+      await sendRpc(port, 'wallet_disconnect');
     } catch {
-      /* port may already be closed */
+      /* UI state will reset via the disconnect event broadcast either way */
     }
   };
 
@@ -138,22 +139,15 @@ export function App(): React.JSX.Element {
       ) : status.connected ? (
         <>
           <AccountCard address={address} chainIdHex={status.chainId} port={port} refreshSeq={refreshSeq} />
-          <ActionRow
-            connected={status.connected}
-            port={port}
-            onRefresh={() => setRefreshSeq((n) => n + 1)}
-            onManage={() => openKeys('/')}
-          />
+          <ActionRow connected={status.connected} port={port} onRefresh={() => setRefreshSeq((n) => n + 1)} />
+          <ConnectedDapps />
         </>
       ) : (
         <section style={styles.empty}>
           <p style={styles.emptyTitle}>Not connected</p>
           <p style={styles.emptyBody}>
-            Visit a dApp and pick <strong>JAW</strong> from the wallet picker to connect.
+            Visit a dApp and pick <strong>JAW Wallet</strong> from the wallet picker to connect.
           </p>
-          <button type="button" onClick={() => openKeys('/')} style={styles.linkBtn}>
-            Open keys.jaw.id
-          </button>
         </section>
       )}
     </div>
@@ -170,14 +164,5 @@ const styles: Record<string, React.CSSProperties> = {
   },
   empty: { padding: '24px 16px', textAlign: 'center' },
   emptyTitle: { margin: 0, fontSize: 14, fontWeight: 600 },
-  emptyBody: { margin: '6px 0 14px', fontSize: 12, opacity: 0.7, lineHeight: 1.5 },
-  linkBtn: {
-    padding: '8px 14px',
-    border: '1px solid rgba(128,128,128,0.3)',
-    borderRadius: 6,
-    background: 'transparent',
-    color: 'inherit',
-    cursor: 'pointer',
-    fontSize: 12,
-  },
+  emptyBody: { margin: '6px 0 0', fontSize: 12, opacity: 0.7, lineHeight: 1.5 },
 };

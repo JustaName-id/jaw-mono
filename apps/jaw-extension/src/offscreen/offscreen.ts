@@ -193,6 +193,37 @@ try {
   // rather than letting promises hang forever.
 }
 
+// Methods that may open the keys.jaw.id popup via window.open. Closes audit
+// #4: under concurrent signing across tabs, the module-level `currentRpcId`
+// would race; serializing here means each signing flow sees its own rpcId
+// from start to finish, so origin attribution stays correct.
+const SIGNING_METHODS_OFFSCREEN: ReadonlySet<string> = new Set([
+  'personal_sign',
+  'eth_sign',
+  'eth_signTypedData',
+  'eth_signTypedData_v1',
+  'eth_signTypedData_v3',
+  'eth_signTypedData_v4',
+  'eth_sendTransaction',
+  'wallet_sendCalls',
+  'wallet_sign',
+  'wallet_grantPermissions',
+  'wallet_revokePermissions',
+  'wallet_switchEthereumChain',
+  'wallet_connect',
+  'eth_requestAccounts',
+]);
+
+let signingChain: Promise<void> = Promise.resolve();
+
+// Watchdog: if a prior signing op never resolves (e.g. user closed the
+// keys.jaw.id popup without finishing AND the SDK's internal timeout hasn't
+// fired yet), don't deadlock the whole wallet. After this many ms, the new
+// signing call starts even if the previous link is still pending. Worst
+// case: two signing flows briefly overlap — better than a frozen extension
+// that requires a manual reload.
+const SIGNING_CHAIN_WAIT_MS = 30_000;
+
 async function handleRpc(message: RpcEnvelope): Promise<void> {
   if (!provider) {
     safePost({
@@ -202,17 +233,41 @@ async function handleRpc(message: RpcEnvelope): Promise<void> {
     });
     return;
   }
-  // Stack-style save/restore: nested concurrent RPCs would otherwise leak the
-  // outer RPC's id to inner window.open calls.
-  const previousRpcId = currentRpcId;
-  currentRpcId = message.id;
+
+  if (SIGNING_METHODS_OFFSCREEN.has(message.method)) {
+    // Wait behind any prior signing RPC. Reads still run concurrently.
+    const previous = signingChain;
+    let release!: () => void;
+    signingChain = new Promise<void>((r) => {
+      release = r;
+    });
+    try {
+      // Race the chain wait against a watchdog. Either previous completes
+      // or we proceed after the timeout — we never block forever.
+      await Promise.race([previous, new Promise<void>((resolve) => setTimeout(resolve, SIGNING_CHAIN_WAIT_MS))]);
+      const previousRpcId = currentRpcId;
+      currentRpcId = message.id;
+      try {
+        const result = await provider.request({ method: message.method, params: message.params });
+        safePost({ kind: 'rpc-response', id: message.id, result });
+      } catch (err) {
+        safePost({ kind: 'rpc-response', id: message.id, error: toRpcError(err) });
+      } finally {
+        currentRpcId = previousRpcId;
+      }
+    } finally {
+      release();
+    }
+    return;
+  }
+
+  // Read-only / non-signing methods: run concurrently and never touch
+  // currentRpcId. window.open won't fire for these.
   try {
     const result = await provider.request({ method: message.method, params: message.params });
     safePost({ kind: 'rpc-response', id: message.id, result });
   } catch (err) {
     safePost({ kind: 'rpc-response', id: message.id, error: toRpcError(err) });
-  } finally {
-    currentRpcId = previousRpcId;
   }
 }
 

@@ -46,57 +46,59 @@ export function Header({
 
   return (
     <header style={styles.root}>
-      <div style={styles.left}>
-        <span style={{ ...styles.dot, background: connected ? '#22c55e' : '#9ca3af' }} aria-hidden />
-        <strong style={styles.brand}>JAW</strong>
+      <div style={styles.bar}>
+        <div style={styles.left}>
+          <span style={{ ...styles.dot, background: connected ? '#22c55e' : '#9ca3af' }} aria-hidden />
+          <strong style={styles.brand}>JAW</strong>
+        </div>
+
+        <Select.Root
+          value={active ? String(active.id) : undefined}
+          onValueChange={handleSwitch}
+          disabled={!connected || switching !== null}
+        >
+          <Select.Trigger style={styles.trigger} aria-label="Select chain">
+            <Select.Value placeholder={connected ? 'Select chain' : '—'}>
+              {active ? (
+                <span style={styles.triggerLabel}>
+                  {active.shortName}
+                  {active.isTestnet && <span style={styles.testnetBadge}>test</span>}
+                </span>
+              ) : null}
+            </Select.Value>
+            <Select.Icon style={styles.triggerIcon}>▾</Select.Icon>
+          </Select.Trigger>
+
+          <Select.Portal>
+            <Select.Content position="popper" sideOffset={6} style={styles.content}>
+              <Select.ScrollUpButton style={styles.scrollBtn}>▲</Select.ScrollUpButton>
+              <Select.Viewport style={styles.viewport}>
+                {chains.map((chain) => (
+                  <Select.Item key={chain.id} value={String(chain.id)} style={styles.item}>
+                    <Select.ItemText>{chain.name}</Select.ItemText>
+                    {chain.isTestnet && <span style={styles.testnetBadgeMuted}>test</span>}
+                  </Select.Item>
+                ))}
+              </Select.Viewport>
+              <Select.ScrollDownButton style={styles.scrollBtn}>▼</Select.ScrollDownButton>
+            </Select.Content>
+          </Select.Portal>
+        </Select.Root>
+
+        <button type="button" onClick={onOpenSettings} style={styles.lockBtn} aria-label="Settings" title="Settings">
+          ⚙
+        </button>
+        <button
+          type="button"
+          onClick={onLock}
+          style={styles.lockBtn}
+          aria-label="Lock / disconnect"
+          title="Disconnect"
+          disabled={!connected}
+        >
+          ⏻
+        </button>
       </div>
-
-      <Select.Root
-        value={active ? String(active.id) : undefined}
-        onValueChange={handleSwitch}
-        disabled={!connected || switching !== null}
-      >
-        <Select.Trigger style={styles.trigger} aria-label="Select chain">
-          <Select.Value placeholder={connected ? 'Select chain' : '—'}>
-            {active ? (
-              <span style={styles.triggerLabel}>
-                {active.shortName}
-                {active.isTestnet && <span style={styles.testnetBadge}>test</span>}
-              </span>
-            ) : null}
-          </Select.Value>
-          <Select.Icon style={styles.triggerIcon}>▾</Select.Icon>
-        </Select.Trigger>
-
-        <Select.Portal>
-          <Select.Content position="popper" sideOffset={6} style={styles.content}>
-            <Select.ScrollUpButton style={styles.scrollBtn}>▲</Select.ScrollUpButton>
-            <Select.Viewport style={styles.viewport}>
-              {chains.map((chain) => (
-                <Select.Item key={chain.id} value={String(chain.id)} style={styles.item}>
-                  <Select.ItemText>{chain.name}</Select.ItemText>
-                  {chain.isTestnet && <span style={styles.testnetBadgeMuted}>test</span>}
-                </Select.Item>
-              ))}
-            </Select.Viewport>
-            <Select.ScrollDownButton style={styles.scrollBtn}>▼</Select.ScrollDownButton>
-          </Select.Content>
-        </Select.Portal>
-      </Select.Root>
-
-      <button type="button" onClick={onOpenSettings} style={styles.lockBtn} aria-label="Settings" title="Settings">
-        ⚙
-      </button>
-      <button
-        type="button"
-        onClick={onLock}
-        style={styles.lockBtn}
-        aria-label="Lock / disconnect"
-        title="Disconnect"
-        disabled={!connected}
-      >
-        ⏻
-      </button>
 
       {error && (
         <div role="alert" style={styles.error}>
@@ -110,12 +112,11 @@ export function Header({
 const styles: Record<string, React.CSSProperties> = {
   root: {
     display: 'flex',
-    alignItems: 'center',
-    gap: 8,
+    flexDirection: 'column',
     padding: '12px 16px',
     borderBottom: '1px solid rgba(128,128,128,0.18)',
-    position: 'relative',
   },
+  bar: { display: 'flex', alignItems: 'center', gap: 8 },
   left: { display: 'flex', alignItems: 'center', gap: 8, flex: 1 },
   dot: {
     width: 8,
@@ -212,11 +213,9 @@ const styles: Record<string, React.CSSProperties> = {
     fontSize: 12,
   },
   error: {
-    position: 'absolute',
-    top: '100%',
-    left: 16,
-    right: 16,
-    marginTop: 4,
+    // In-flow inside the column header — pushes AccountCard down instead
+    // of overlapping it (audit M4).
+    marginTop: 6,
     padding: '6px 8px',
     fontSize: 11,
     color: '#ef4444',

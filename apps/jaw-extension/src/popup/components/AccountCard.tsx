@@ -1,6 +1,7 @@
 import type React from 'react';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { getChainMeta } from '../lib/chains.js';
+import { resolveEnsName } from '../lib/ens.js';
 import { sendRpc } from '../lib/rpc.js';
 import { formatBalanceFromHex, truncateAddress } from '../lib/format.js';
 
@@ -15,7 +16,32 @@ export function AccountCard({ address, chainIdHex, port, refreshSeq }: AccountCa
   const chain = getChainMeta(chainIdHex);
   const [balance, setBalance] = useState<string | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
+  const [ensName, setEnsName] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const copyTimerRef = useRef<number | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current);
+        copyTimerRef.current = null;
+      }
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!address) {
+      setEnsName(null);
+      return;
+    }
+    let cancelled = false;
+    resolveEnsName(address).then((name) => {
+      if (!cancelled) setEnsName(name);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [address]);
 
   useEffect(() => {
     if (!address || !port) {
@@ -47,7 +73,11 @@ export function AccountCard({ address, chainIdHex, port, refreshSeq }: AccountCa
     try {
       await navigator.clipboard.writeText(address);
       setCopied(true);
-      window.setTimeout(() => setCopied(false), 1500);
+      if (copyTimerRef.current !== null) window.clearTimeout(copyTimerRef.current);
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopied(false);
+        copyTimerRef.current = null;
+      }, 1500);
     } catch {
       /* clipboard denied — fall through silently; user can still see the address */
     }
@@ -63,7 +93,14 @@ export function AccountCard({ address, chainIdHex, port, refreshSeq }: AccountCa
       <div style={styles.row}>
         <div style={styles.addrBlock}>
           <span style={styles.label}>Account</span>
-          <code style={styles.addr}>{truncateAddress(address)}</code>
+          {ensName ? (
+            <>
+              <span style={styles.ens}>{ensName}</span>
+              <code style={styles.addrSmall}>{truncateAddress(address)}</code>
+            </>
+          ) : (
+            <code style={styles.addr}>{truncateAddress(address)}</code>
+          )}
         </div>
         <div style={styles.actions}>
           <button type="button" onClick={copy} style={styles.iconBtn} aria-label="Copy address" title="Copy">
@@ -115,6 +152,12 @@ const styles: Record<string, React.CSSProperties> = {
   addrBlock: { display: 'flex', flexDirection: 'column', gap: 2 },
   label: { fontSize: 10, opacity: 0.6, textTransform: 'uppercase', letterSpacing: 0.5 },
   addr: { fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace', fontSize: 13 },
+  addrSmall: {
+    fontFamily: 'ui-monospace, SFMono-Regular, Menlo, monospace',
+    fontSize: 10,
+    opacity: 0.6,
+  },
+  ens: { fontSize: 14, fontWeight: 500 },
   actions: { display: 'flex', gap: 6 },
   iconBtn: {
     width: 28,

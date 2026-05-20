@@ -6,10 +6,9 @@ interface ActionRowProps {
   connected: boolean;
   port: chrome.runtime.Port | null;
   onRefresh: () => void;
-  onManage: () => void;
 }
 
-export function ActionRow({ connected, port, onRefresh, onManage }: ActionRowProps): React.JSX.Element {
+export function ActionRow({ connected, port, onRefresh }: ActionRowProps): React.JSX.Element {
   const [disconnecting, setDisconnecting] = useState(false);
 
   const disconnect = async (): Promise<void> => {
@@ -46,9 +45,6 @@ export function ActionRow({ connected, port, onRefresh, onManage }: ActionRowPro
       >
         Refresh
       </button>
-      <button type="button" onClick={onManage} style={styles.btn}>
-        Manage
-      </button>
     </div>
   );
 }
@@ -56,7 +52,7 @@ export function ActionRow({ connected, port, onRefresh, onManage }: ActionRowPro
 const styles: Record<string, React.CSSProperties> = {
   row: {
     display: 'grid',
-    gridTemplateColumns: '1fr 1fr 1fr',
+    gridTemplateColumns: '1fr 1fr',
     gap: 6,
     margin: '12px 16px',
   },
