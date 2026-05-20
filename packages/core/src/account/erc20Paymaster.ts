@@ -63,8 +63,8 @@ export interface UserOpGasFields {
 // and callGasLimit/verificationGasLimit are ~2.2-2.7x actualGasUsed.
 // These factors shrink the on-wire reservation so the approval amount and
 // displayed cost track actual paid cost, while leaving ~30-50% safety margin.
-const ERC20_PAYMASTER_MAX_FEE_BASE_BPS = 13_000n; // 1.30x baseFee
-const ERC20_PAYMASTER_GAS_LIMIT_BPS = 7_500n; // 0.75x bundler estimate
+const ERC20_PAYMASTER_MAX_FEE_BASE_BPS = 15_000n; // 1.50x baseFee
+const ERC20_PAYMASTER_GAS_LIMIT_BPS = 8_500n; // 0.85x bundler estimate
 const BPS_DENOMINATOR = 10_000n;
 
 /**
