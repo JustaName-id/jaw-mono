@@ -180,6 +180,65 @@ type PreparedCalls = {
 };
 
 /**
+ * When an ERC-20 paymaster is in use, prepare the userOp once, tighten its
+ * reservation fields, and return them as overrides for sendUserOperation.
+ * Returns undefined for native ETH gas (no tightening applied).
+ *
+ * Kept here so the wire-bound userOp uses the same tightened values that
+ * estimateErc20PaymasterCosts (display) and createErc20ApprovalCall (approval
+ * amount) use — otherwise approval/displayed cost won't match what's actually paid.
+ */
+async function buildErc20PaymasterOverrides(
+    bundlerClient: BundlerClient<Transport, ViemChain>,
+    chain: Chain,
+    smartAccount: SmartAccount,
+    finalCalls: Array<{ to: Address; value: bigint; data: Hex }>,
+    authorization: Awaited<ReturnType<ToJustanAccountReturnType['signAuthorization']>> | undefined,
+    paymasterContextOverride?: Record<string, unknown>
+): Promise<
+    | {
+          maxFeePerGas: bigint;
+          maxPriorityFeePerGas: bigint;
+          callGasLimit: bigint;
+          verificationGasLimit: bigint;
+      }
+    | undefined
+> {
+    const effectiveContext = paymasterContextOverride || chain.paymaster?.context;
+    if (typeof effectiveContext?.token !== 'string') return undefined;
+
+    const { tightenErc20UserOpGas } = await import('./erc20Paymaster.js');
+
+    const prep = await bundlerClient.prepareUserOperation({
+        account: smartAccount,
+        calls: finalCalls,
+        ...(authorization ? { authorization } : {}),
+    });
+
+    const publicClient = createPublicClient({
+        chain: SUPPORTED_CHAINS.find((c) => c.id === chain.id),
+        transport: http(chain.rpcUrl),
+    });
+    const latestBlock = await publicClient.getBlock({ blockTag: 'latest' });
+    const tightened = tightenErc20UserOpGas(
+        {
+            maxFeePerGas: prep.maxFeePerGas,
+            maxPriorityFeePerGas: prep.maxPriorityFeePerGas,
+            callGasLimit: prep.callGasLimit,
+            verificationGasLimit: prep.verificationGasLimit,
+        },
+        latestBlock.baseFeePerGas ?? 0n
+    );
+
+    return {
+        maxFeePerGas: tightened.maxFeePerGas,
+        maxPriorityFeePerGas: prep.maxPriorityFeePerGas,
+        callGasLimit: tightened.callGasLimit,
+        verificationGasLimit: tightened.verificationGasLimit,
+    };
+}
+
+/**
  * Prepares calls for EIP-7702 execution by checking delegation status
  * and prepending owner setup if needed.
  */
@@ -308,10 +367,20 @@ export async function sendTransaction(
         localAccount
     );
 
+    const erc20Overrides = await buildErc20PaymasterOverrides(
+        bundlerClient,
+        chain,
+        smartAccount,
+        finalCalls,
+        authorization,
+        paymasterContextOverride
+    );
+
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
         calls: finalCalls,
         ...(authorization ? { authorization } : {}),
+        ...(erc20Overrides ?? {}),
     });
 
     // Wait for the transaction receipt and get the actual transaction hash
@@ -365,10 +434,20 @@ export async function sendCalls(
         localAccount
     );
 
+    const erc20Overrides = await buildErc20PaymasterOverrides(
+        bundlerClient,
+        chain,
+        smartAccount,
+        finalCalls,
+        authorization,
+        paymasterContextOverride
+    );
+
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
         calls: finalCalls,
         ...(authorization ? { authorization } : {}),
+        ...(erc20Overrides ?? {}),
     });
 
     return {
@@ -443,10 +522,20 @@ export async function sendCallsWithPermission(
 
     const bundlerClient = getBundlerClient(chain, paymasterUrlOverride, paymasterContextOverride);
 
+    const erc20Overrides = await buildErc20PaymasterOverrides(
+        bundlerClient,
+        chain,
+        smartAccount,
+        finalCalls,
+        authorization,
+        paymasterContextOverride
+    );
+
     const userOpHash = await bundlerClient.sendUserOperation({
         account: smartAccount,
         calls: finalCalls,
         ...(authorization ? { authorization } : {}),
+        ...(erc20Overrides ?? {}),
     });
 
     return {

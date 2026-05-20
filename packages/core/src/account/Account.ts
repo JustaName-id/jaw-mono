@@ -1330,7 +1330,9 @@ export class Account {
         // If gasAmount is undefined, estimate it using the paymaster
         if (gasAmount === undefined && paymasterUrl && calls && calls.length > 0) {
             try {
-                const { fetchTokenQuotes, calculateTokenCostFromGas } = await import('./erc20Paymaster.js');
+                const { fetchTokenQuotes, calculateTokenCostFromGas, tightenErc20UserOpGas } = await import(
+                    './erc20Paymaster.js'
+                );
                 const { getBundlerClient } = await import('./smartAccount.js');
 
                 // Get token quote for exchange rate
@@ -1364,11 +1366,29 @@ export class Account {
                         calls: callsWithApproval,
                     });
 
-                    // Extract gas fields
+                    // Tighten the userOp reservation to match the displayed cost and
+                    // the on-wire send. Without this, the approval amount would cover
+                    // the bundler's max reservation, which is ~4-5x the actual paid cost.
+                    const publicClientForBaseFee = createPublicClient({
+                        chain: { id: this._chain.id } as Parameters<typeof createPublicClient>[0]['chain'],
+                        transport: http(this._chain.rpcUrl),
+                    });
+                    const latestBlock = await publicClientForBaseFee.getBlock({ blockTag: 'latest' });
+                    const tightened = tightenErc20UserOpGas(
+                        {
+                            maxFeePerGas: userOp.maxFeePerGas,
+                            maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
+                            callGasLimit: userOp.callGasLimit,
+                            verificationGasLimit: userOp.verificationGasLimit,
+                        },
+                        latestBlock.baseFeePerGas ?? 0n
+                    );
+
+                    // Extract gas fields from the tightened userOp
                     const gas = {
                         preVerificationGas: userOp.preVerificationGas,
-                        verificationGasLimit: userOp.verificationGasLimit,
-                        callGasLimit: userOp.callGasLimit,
+                        verificationGasLimit: tightened.verificationGasLimit,
+                        callGasLimit: tightened.callGasLimit,
                         paymasterVerificationGasLimit:
                             'paymasterVerificationGasLimit' in userOp
                                 ? (userOp as { paymasterVerificationGasLimit?: bigint }).paymasterVerificationGasLimit
@@ -1377,7 +1397,8 @@ export class Account {
                             'paymasterPostOpGasLimit' in userOp
                                 ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit
                                 : undefined,
-                        maxFeePerGas: userOp.maxFeePerGas,
+                        maxFeePerGas: tightened.maxFeePerGas,
+                        maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
                     };
 
                     // Calculate token cost

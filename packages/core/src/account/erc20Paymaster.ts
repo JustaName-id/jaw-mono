@@ -1,4 +1,4 @@
-import { Address, Hex, encodeFunctionData, erc20Abi, formatUnits, getAddress } from 'viem';
+import { Address, Hex, createPublicClient, encodeFunctionData, erc20Abi, formatUnits, getAddress, http } from 'viem';
 import { SmartAccount, entryPoint08Address } from 'viem/account-abstraction';
 import { getBundlerClient } from './smartAccount.js';
 import { Chain } from '../store/index.js';
@@ -55,6 +55,60 @@ export interface UserOpGasFields {
     paymasterVerificationGasLimit?: bigint;
     paymasterPostOpGasLimit?: bigint;
     maxFeePerGas: bigint;
+    maxPriorityFeePerGas?: bigint;
+}
+
+// Empirically tuned against bundler/paymaster receipts: bundler-returned
+// maxFeePerGas is ~2x the actual effective price (viem default baseFee*2 + tip),
+// and callGasLimit/verificationGasLimit are ~2.2-2.7x actualGasUsed.
+// These factors shrink the on-wire reservation so the approval amount and
+// displayed cost track actual paid cost, while leaving ~30-50% safety margin.
+const ERC20_PAYMASTER_MAX_FEE_BASE_BPS = 13_000n; // 1.30x baseFee
+const ERC20_PAYMASTER_GAS_LIMIT_BPS = 7_500n; // 0.75x bundler estimate
+const BPS_DENOMINATOR = 10_000n;
+
+/**
+ * Tightened gas fields for an ERC-20 paymaster userOp.
+ * Only includes the fields we shrink; callers should spread these over the
+ * bundler-prepared userOp.
+ */
+export interface TightenedErc20Gas {
+    maxFeePerGas: bigint;
+    callGasLimit: bigint;
+    verificationGasLimit: bigint;
+}
+
+/**
+ * Tightens an ERC-20-paymaster userOp's reservation fields so the on-wire
+ * `maxFeePerGas` is `baseFee * 1.30 + maxPriorityFeePerGas` (or the bundler's
+ * value if already tighter), and `callGasLimit` / `verificationGasLimit`
+ * are scaled to 0.75x the bundler estimate.
+ *
+ * Returns values that are always <= the original userOp values — we never
+ * raise a reservation, only shrink it.
+ *
+ * Paymaster-side limits (paymasterVerificationGasLimit, paymasterPostOpGasLimit)
+ * and preVerificationGas are intentionally untouched: shrinking them risks an
+ * AA50 postOp revert from the paymaster.
+ */
+export function tightenErc20UserOpGas(
+    userOp: {
+        maxFeePerGas: bigint;
+        maxPriorityFeePerGas: bigint;
+        callGasLimit: bigint;
+        verificationGasLimit: bigint;
+    },
+    baseFeePerGas: bigint
+): TightenedErc20Gas {
+    const candidateMaxFee =
+        (baseFeePerGas * ERC20_PAYMASTER_MAX_FEE_BASE_BPS) / BPS_DENOMINATOR + userOp.maxPriorityFeePerGas;
+    const maxFeePerGas = candidateMaxFee < userOp.maxFeePerGas ? candidateMaxFee : userOp.maxFeePerGas;
+
+    return {
+        maxFeePerGas,
+        callGasLimit: (userOp.callGasLimit * ERC20_PAYMASTER_GAS_LIMIT_BPS) / BPS_DENOMINATOR,
+        verificationGasLimit: (userOp.verificationGasLimit * ERC20_PAYMASTER_GAS_LIMIT_BPS) / BPS_DENOMINATOR,
+    };
 }
 
 /**
@@ -209,11 +263,29 @@ export async function estimateErc20PaymasterCosts(
         calls: preparedCalls,
     });
 
-    // 4. Extract gas fields from userOp
+    // Tighten reservation so the displayed cost matches what the user actually pays.
+    // Must use the same tightening as createErc20ApprovalCall and the send path so
+    // approval amount, displayed cost, and on-wire reservation all agree.
+    const publicClient = createPublicClient({
+        chain: { id: chain.id } as Parameters<typeof createPublicClient>[0]['chain'],
+        transport: http(chain.rpcUrl),
+    });
+    const latestBlock = await publicClient.getBlock({ blockTag: 'latest' });
+    const tightened = tightenErc20UserOpGas(
+        {
+            maxFeePerGas: userOp.maxFeePerGas,
+            maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
+            callGasLimit: userOp.callGasLimit,
+            verificationGasLimit: userOp.verificationGasLimit,
+        },
+        latestBlock.baseFeePerGas ?? 0n
+    );
+
+    // 4. Extract gas fields from the tightened userOp
     const gas: UserOpGasFields = {
         preVerificationGas: userOp.preVerificationGas,
-        verificationGasLimit: userOp.verificationGasLimit,
-        callGasLimit: userOp.callGasLimit,
+        verificationGasLimit: tightened.verificationGasLimit,
+        callGasLimit: tightened.callGasLimit,
         paymasterVerificationGasLimit:
             'paymasterVerificationGasLimit' in userOp
                 ? (userOp as { paymasterVerificationGasLimit?: bigint }).paymasterVerificationGasLimit
@@ -222,7 +294,8 @@ export async function estimateErc20PaymasterCosts(
             'paymasterPostOpGasLimit' in userOp
                 ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit
                 : undefined,
-        maxFeePerGas: userOp.maxFeePerGas,
+        maxFeePerGas: tightened.maxFeePerGas,
+        maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
     };
 
     // 5. Calculate cost for each token using the utility function
