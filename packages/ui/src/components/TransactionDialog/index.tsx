@@ -11,6 +11,7 @@ import { formatEther } from 'viem';
 import { Info } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
+import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
 import { DecodedCalldata } from './DecodedCalldata';
 
@@ -115,11 +116,75 @@ export const TransactionDialog = ({
     });
   }, [walletAddress, transactions, currentTransaction?.chainId]);
 
+  // Resolve ERC-7730 `metadata.contractName` for every unique `to` in the batch.
+  // Kept inline (single usage site) — mirrors the ENS reverse-resolve effect above.
+  const [contractNames, setContractNames] = useState<Record<string, string>>({});
+  const txSignature = transactions
+    .filter((t) => !!t.to)
+    .map((t) => caip10(t.chainId, t.to))
+    .sort()
+    .join('|');
+  useEffect(() => {
+    if (!txSignature) return;
+    let cancelled = false;
+    (async () => {
+      const source = getDefaultDescriptorSource();
+      let index;
+      try {
+        index = await source.getCalldataIndex();
+      } catch (err) {
+        console.debug('[TransactionDialog] calldata index fetch failed:', err);
+        return;
+      }
+
+      // Collect unique (address, descriptor path) pairs, then fetch in parallel.
+      const lookups = new Map<string, string>();
+      for (const t of transactions) {
+        if (!t.to) continue;
+        const key = t.to.toLowerCase();
+        if (lookups.has(key)) continue;
+        const path = index[caip10(t.chainId, t.to)];
+        if (path) lookups.set(key, path);
+      }
+
+      const results = await Promise.all(
+        Array.from(lookups, async ([addr, path]) => {
+          try {
+            const desc = await source.getDescriptor(path);
+            const name = desc.metadata?.contractName ?? desc.context?.$id;
+            return name ? ([addr, name] as const) : null;
+          } catch (err) {
+            console.debug('[TransactionDialog] descriptor fetch failed:', path, err);
+            return null;
+          }
+        })
+      );
+
+      if (cancelled) return;
+      const updates: Record<string, string> = {};
+      for (const r of results) if (r) updates[r[0]] = r[1];
+      if (Object.keys(updates).length > 0) {
+        setContractNames((prev) => ({ ...prev, ...updates }));
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [txSignature]);
+
+  // Prefer ENS reverse-resolved name, then ERC-7730 contractName, then truncated address.
+  const displayContractAddress = (address: string | undefined): string => {
+    if (!address) return '';
+    const ens = resolvedAddresses[address];
+    if (ens) return ens;
+    const cn = contractNames[address.toLowerCase()];
+    if (cn) return cn;
+    return getDisplayAddress(undefined, address);
+  };
+
   // Get display addresses - use resolved name or formatted address
   const displayWalletAddress = getDisplayAddress(resolvedAddresses[walletAddress], walletAddress);
-  const displayToAddress = currentTransaction?.to
-    ? getDisplayAddress(resolvedAddresses[currentTransaction.to], currentTransaction.to)
-    : '';
+  const displayToAddress = displayContractAddress(currentTransaction?.to);
 
   // Helper function to format value for display
   const formatTransactionValue = (value?: string) => {
@@ -535,7 +600,7 @@ export const TransactionDialog = ({
                             <div className="flex flex-row items-center gap-1">
                               <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
                               <p className="text-sm font-normal leading-[150%]">
-                                {getDisplayAddress(resolvedAddresses[transaction.to], transaction.to)}
+                                {displayContractAddress(transaction.to)}
                               </p>
                             </div>
                           </div>

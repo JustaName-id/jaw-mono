@@ -52,7 +52,7 @@ export const ConnectDialog = ({
     }
   }, [walletAddress, chainId]);
 
-  // Use resolved address, then accountName prop, then truncated address
+  // Use resolved address, then accountName prop, then truncated address.
   const displayName = resolvedAddress || accountName;
 
   // Format origin to display only domain (remove protocol)

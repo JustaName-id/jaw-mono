@@ -1,3 +1,33 @@
+## 0.4.2 (2026-05-18)
+
+### 🩹 Fixes
+
+- **ui:** republish after token renewal ([843d820](https://github.com/JustaName-id/jaw-mono/commit/843d820))
+
+### ❤️ Thank You
+
+- anthony @anthony23991
+
+## 0.4.1 (2026-05-18)
+
+### 🩹 Fixes
+
+- **ui:** enhance EIP-712 descriptor handling for ERC-7730 compliance ([#182](https://github.com/JustaName-id/jaw-mono/pull/182))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 0.4.0 (2026-05-14)
+
+### 🚀 Features
+
+- **ui:** implement ERC-7730 clear signing ([#181](https://github.com/JustaName-id/jaw-mono/pull/181))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.3.0 (2026-05-08)
 
 ### 🚀 Features

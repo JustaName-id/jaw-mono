@@ -1,7 +1,7 @@
 {
   "name": "@jaw.id/wagmi",
   "description": "Wagmi connector and React hooks for JAW.id.",
-  "version": "0.1.16",
+  "version": "0.1.17",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -37,7 +37,7 @@
     "viem": "^2.38.2"
   },
   "peerDependencies": {
-    "@tanstack/react-query": ">=5.0.0",
+    "@tanstack/react-query": ">=5.0.0 <5.100.10",
     "react": ">=18.0.0",
     "wagmi": ">=3.0.0"
   },
