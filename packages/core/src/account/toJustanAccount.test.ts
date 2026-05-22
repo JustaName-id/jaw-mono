@@ -788,7 +788,7 @@ describe('toJustanAccount unit tests', () => {
         });
 
         describe('userOperation.estimateGas()', () => {
-            it('should set minimum 800k verificationGasLimit for WebAuthn owner', async () => {
+            it('should set minimum 1.2M verificationGasLimit for WebAuthn owner', async () => {
                 const mockPublicKey = '0xpublickey1234567890' as Hex;
                 const mockWebAuthnOwner = {
                     type: 'webAuthn' as const,
@@ -799,13 +799,9 @@ describe('toJustanAccount unit tests', () => {
                 const { toSmartAccount } = await import('viem/account-abstraction');
 
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
-                vi.mocked(toSmartAccount).mockReturnValue({
-                    userOperation: {
-                        estimateGas: vi.fn().mockResolvedValue({
-                            verificationGasLimit: 800_000n,
-                        }),
-                    },
-                } as any);
+                // Passthrough: capture the params so we can invoke the real userOperation.estimateGas
+                // defined in toJustanAccount.ts (rather than a mock that fakes its return value).
+                vi.mocked(toSmartAccount).mockImplementation((params: any) => params);
 
                 const account = await toJustanAccount({
                     client: MOCK_PUBLIC_CLIENT,
@@ -816,12 +812,17 @@ describe('toJustanAccount unit tests', () => {
                 expect(account.userOperation).toBeDefined();
                 expect(account.userOperation!.estimateGas).toBeDefined();
 
-                const gasEstimate = await account.userOperation!.estimateGas!({
-                    verificationGasLimit: 500_000n,
+                // Bundler-returned estimate below the floor — must be lifted.
+                const liftedEstimate = await account.userOperation!.estimateGas!({
+                    verificationGasLimit: 455_779n,
                 } as any);
+                expect(liftedEstimate?.verificationGasLimit).toBe(1_200_000n);
 
-                expect(gasEstimate).toBeDefined();
-                expect(gasEstimate?.verificationGasLimit).toBeGreaterThanOrEqual(800_000n);
+                // Bundler-returned estimate above the floor — must be preserved.
+                const preservedEstimate = await account.userOperation!.estimateGas!({
+                    verificationGasLimit: 2_000_000n,
+                } as any);
+                expect(preservedEstimate?.verificationGasLimit).toBe(2_000_000n);
             });
 
             it('should return undefined for non-WebAuthn owner', async () => {
@@ -835,11 +836,7 @@ describe('toJustanAccount unit tests', () => {
 
                 vi.mocked(viem.pad).mockReturnValue('0xpadded' as Hex);
                 vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
-                vi.mocked(toSmartAccount).mockReturnValue({
-                    userOperation: {
-                        estimateGas: vi.fn().mockResolvedValue(undefined),
-                    },
-                } as any);
+                vi.mocked(toSmartAccount).mockImplementation((params: any) => params);
 
                 const account = await toJustanAccount({
                     client: MOCK_PUBLIC_CLIENT,
