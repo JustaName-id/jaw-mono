@@ -7,15 +7,19 @@
     "resolveJsonModule": true,
     "lib": ["dom", "dom.iterable", "esnext"],
     "allowJs": true,
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
     "allowSyntheticDefaultImports": true,
     "esModuleInterop": true,
     "forceConsistentCasingInFileNames": true,
     "strict": true,
     "noEmit": true,
-    "skipLibCheck": true
+    "skipLibCheck": true,
+    "noUncheckedSideEffectImports": true
   },
   "include": ["vocs.config.ts", "docs/**/*"],
-  "exclude": ["node_modules", "dist", ".vocs"],
+  "exclude": ["node_modules", "dist", ".vocs", "docs/pages.gen.ts"],
   "references": [
     {
       "path": "../../packages/core"
