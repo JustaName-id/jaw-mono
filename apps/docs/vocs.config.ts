@@ -1,21 +1,10 @@
-import { defineConfig } from 'vocs';
-import { fileURLToPath } from 'url';
-import { dirname, resolve } from 'path';
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+import { defineConfig } from 'vocs/config';
 
 export default defineConfig({
-  vite: {
-    resolve: {
-      alias: {
-        '@jaw.id/core': resolve(__dirname, '../../packages/core/dist/index.js'),
-      },
-    },
-    build: {
-      outDir: resolve(__dirname, 'docs/dist'),
-    },
-  },
+  srcDir: 'docs',
+  outDir: 'docs/dist',
+  // Full static site generation (v1 deployed as static HTML; Vocs v2 defaults to 'dynamic'/SSR).
+  renderStrategy: 'full-static',
   // Set to 'warn' to allow build to succeed with dead links (they'll be logged as warnings)
   checkDeadlinks: 'warn',
   title: 'JAW.id Documentation',

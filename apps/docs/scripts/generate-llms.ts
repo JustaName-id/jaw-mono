@@ -19,11 +19,15 @@ const __dirname = dirname(__filename);
 const DOCS_APP_ROOT = join(__dirname, '..');
 const PAGES_DIR = join(DOCS_APP_ROOT, 'docs/pages');
 
-// Find the dist directory - Vocs outputs to different locations locally vs Vercel
+// Find the served web root - Vocs outputs to different locations locally vs Vercel.
+// Vocs v2 (full-static) emits the static site into `<outDir>/public`, so the llms
+// files must land there to be served at the site root and to overwrite Vocs's
+// native llms.txt/llms-full.txt.
 function findDistDir(): string {
   const candidates = [
-    join(DOCS_APP_ROOT, 'docs/dist'), // Local: Vocs default
+    join(DOCS_APP_ROOT, 'docs/dist/public'), // Vocs v2: full-static web root
     join(DOCS_APP_ROOT, '.vercel/output/static'), // Vercel: static output
+    join(DOCS_APP_ROOT, 'docs/dist'), // Fallback: non-static / older layout
   ];
 
   for (const candidate of candidates) {
