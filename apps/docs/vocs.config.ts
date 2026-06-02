@@ -52,6 +52,7 @@ export default defineConfig({
         collapsed: false,
         items: [
           { text: 'Smart Accounts vs EOAs', link: '/concepts/smart-accounts' },
+          { text: 'ENS for Every Account', link: '/concepts/ens' },
           { text: 'Passkeys & WebAuthn', link: '/concepts/passkeys' },
           { text: 'The Permission Layer', link: '/concepts/permissions' },
         ],
