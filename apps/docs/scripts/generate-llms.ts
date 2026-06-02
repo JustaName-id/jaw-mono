@@ -19,28 +19,38 @@ const __dirname = dirname(__filename);
 const DOCS_APP_ROOT = join(__dirname, '..');
 const PAGES_DIR = join(DOCS_APP_ROOT, 'docs/pages');
 
-// Find the served web root - Vocs outputs to different locations locally vs Vercel.
-// Vocs v2 (full-static) emits the static site into `<outDir>/public`, so the llms
-// files must land there to be served at the site root and to overwrite Vocs's
-// native llms.txt/llms-full.txt.
-function findDistDir(): string {
+// Find the served web root(s) - Vocs outputs to different locations locally vs Vercel.
+// Vocs v2's Vercel adapter copies `<outDir>/public` -> `.vercel/output/static` DURING
+// `vocs build`, i.e. BEFORE this script runs. So overwriting only `<outDir>/public`
+// (as a single-dir lookup did) never reaches the deployed site: Vercel ships
+// `.vercel/output/static`, which already holds Vocs's native llms.txt. We therefore
+// write to EVERY served root that exists so both local preview (`docs/dist/public`)
+// and the Vercel deployment (`.vercel/output/static`) get the custom files.
+//
+// `.vercel/output` is created by the adapter relative to the build command's cwd,
+// which in CI (`vercel build`) can be the project root directory (apps/docs) OR the
+// monorepo root depending on the project's Root Directory setting. We probe both the
+// script-relative location and process.cwd() so the path resolves regardless.
+function findDistDirs(): string[] {
   const candidates = [
+    join(DOCS_APP_ROOT, '.vercel/output/static'), // Vercel served root (cwd = apps/docs)
+    join(process.cwd(), '.vercel/output/static'), // Vercel served root (cwd = monorepo root)
     join(DOCS_APP_ROOT, 'docs/dist/public'), // Vocs v2: full-static web root
-    join(DOCS_APP_ROOT, '.vercel/output/static'), // Vercel: static output
     join(DOCS_APP_ROOT, 'docs/dist'), // Fallback: non-static / older layout
   ];
 
-  for (const candidate of candidates) {
-    if (existsSync(candidate)) {
-      return candidate;
-    }
+  // De-dupe (cwd may equal DOCS_APP_ROOT) and keep only roots that actually exist.
+  const found = [...new Set(candidates)].filter((candidate) => existsSync(candidate));
+
+  if (found.length === 0) {
+    throw new Error(`Dist directory not found. Checked: ${candidates.join(', ')}`);
   }
 
-  throw new Error(`Dist directory not found. Checked: ${candidates.join(', ')}`);
+  return found;
 }
 
-// DIST_DIR is resolved lazily inside main() to ensure vocs build has completed
-let DIST_DIR: string;
+// DIST_DIRS is resolved lazily inside main() to ensure vocs build has completed
+let DIST_DIRS: string[];
 
 const BASE_URL = 'https://docs.jaw.id';
 
@@ -467,40 +477,48 @@ The routing index will direct you to the specific documentation file you need ba
 }
 
 async function main() {
-  // Resolve DIST_DIR at runtime (after vocs build has completed)
-  DIST_DIR = findDistDir();
-  console.log('Generating llms.txt files to:', DIST_DIR);
+  // Resolve served roots at runtime (after vocs build has completed). On Vercel both
+  // `.vercel/output/static` and `docs/dist/public` exist; we must write to all of them.
+  DIST_DIRS = findDistDirs();
+  console.log('Generating llms.txt files to:', DIST_DIRS.join(', '));
 
-  // Generate domain-specific files
-  for (const [key, domain] of Object.entries(DOMAINS)) {
-    const content = generateDomainFile(key, domain);
-    const outputPath = join(DIST_DIR, `llms-${key}.txt`);
-    writeFileSync(outputPath, content);
-    console.log(`  Generated: llms-${key}.txt (${content.length} bytes)`);
-  }
-
-  // Generate routing index (overwrites Vocs-generated llms.txt)
+  // Pre-compute content once, then write the same output to every served root.
+  const domainFiles = Object.entries(DOMAINS).map(([key, domain]) => ({
+    key,
+    content: generateDomainFile(key, domain),
+  }));
   const routingIndex = generateRoutingIndex();
-  const llmsPath = join(DIST_DIR, 'llms.txt');
-  writeFileSync(llmsPath, routingIndex);
-  console.log(`  Generated: llms.txt (routing index, ${routingIndex.length} bytes)`);
+  const fullTxt = generateFullTxt();
 
-  // Verify the file was written correctly
-  const written = readFileSync(llmsPath, 'utf-8');
-  if (written.includes('# JAW Documentation')) {
-    console.log('  Verified: llms.txt contains custom routing index');
-  } else {
-    console.error('ERROR: llms.txt does not contain expected content');
-    console.error('First 100 chars:', written.slice(0, 100));
+  for (const distDir of DIST_DIRS) {
+    console.log(`\nWriting to ${distDir}`);
+
+    // Generate domain-specific files
+    for (const { key, content } of domainFiles) {
+      writeFileSync(join(distDir, `llms-${key}.txt`), content);
+      console.log(`  Generated: llms-${key}.txt (${content.length} bytes)`);
+    }
+
+    // Generate routing index (overwrites Vocs-generated llms.txt)
+    const llmsPath = join(distDir, 'llms.txt');
+    writeFileSync(llmsPath, routingIndex);
+    console.log(`  Generated: llms.txt (routing index, ${routingIndex.length} bytes)`);
+
+    // Verify the file was written correctly
+    const written = readFileSync(llmsPath, 'utf-8');
+    if (written.includes('# JAW Documentation')) {
+      console.log('  Verified: llms.txt contains custom routing index');
+    } else {
+      console.error('ERROR: llms.txt does not contain expected content');
+      console.error('First 100 chars:', written.slice(0, 100));
+    }
+
+    // Generate llms-full.txt (redirects to router - some tools look for this file)
+    writeFileSync(join(distDir, 'llms-full.txt'), fullTxt);
+    console.log(`  Generated: llms-full.txt (redirect, ${fullTxt.length} bytes)`);
   }
 
-  // Generate llms-full.txt (redirects to router - some tools look for this file)
-  const fullTxt = generateFullTxt();
-  const fullPath = join(DIST_DIR, 'llms-full.txt');
-  writeFileSync(fullPath, fullTxt);
-  console.log(`  Generated: llms-full.txt (redirect, ${fullTxt.length} bytes)`);
-
-  console.log('Done!');
+  console.log('\nDone!');
 }
 
 main().catch((err) => {
