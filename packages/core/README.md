@@ -4,7 +4,7 @@ Core SDK for [JAW.id](https://jaw.id): embed smart account wallets into any app 
 
 ## Documentation
 
-For documentation and guides, visit [docs.jaw.id](https://docs.jaw.id).
+For documentation and guides, visit [docs.jaw.id](https://docs.jaw.id)
 
 ## Installation
 
