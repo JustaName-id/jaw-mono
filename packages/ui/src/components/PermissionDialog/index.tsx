@@ -472,9 +472,9 @@ export const PermissionDialog = ({
                         ? (() => {
                             const gasValue = Number(gasFee);
                             if (gasValue > 0 && gasValue < 0.0001) {
-                              return '> 0.0001 ETH';
+                              return `< 0.0001 ${nativeSymbol}`;
                             }
-                            return gasValue.toFixed(4) + ' ETH';
+                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
                           })()
                         : 'Gas fees covered'}
                     </p>
@@ -535,9 +535,9 @@ export const PermissionDialog = ({
                       {(() => {
                         const gasValue = Number(gasFee);
                         if (gasValue > 0 && gasValue < 0.0001) {
-                          return '> 0.0001 ETH';
+                          return `< 0.0001 ${nativeSymbol}`;
                         }
-                        return gasValue.toFixed(4) + ' ETH';
+                        return `${gasValue.toFixed(4)} ${nativeSymbol}`;
                       })()}
                     </p>
                   </div>

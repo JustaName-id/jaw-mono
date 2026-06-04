@@ -53,6 +53,7 @@ import {
     inkSepolia,
     dosChain,
     gnosis,
+    arcTestnet,
 } from 'viem/chains';
 import { PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS } from '../constants.js';
 import { standardErrors } from '../errors/errors.js';
@@ -112,6 +113,7 @@ export const TESTNET_CHAINS = [
     celoSepolia,
     avalancheFuji,
     inkSepolia,
+    arcTestnet,
 ];
 
 export const SUPPORTED_CHAINS = [...MAINNET_CHAINS, ...TESTNET_CHAINS];
