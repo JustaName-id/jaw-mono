@@ -1,3 +1,17 @@
+## 0.4.3 (2026-06-04)
+
+### 🩹 Fixes
+
+- **core:** add support for arc testnet ([#177](https://github.com/JustaName-id/jaw-mono/pull/177))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.4.1
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.4.2 (2026-05-18)
 
 ### 🩹 Fixes
