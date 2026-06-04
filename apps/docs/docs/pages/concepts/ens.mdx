@@ -1,0 +1,61 @@
+# ENS for Every Account
+
+What ENS is, and how JAW issues a name with a full record set to every account it creates.
+
+## What ENS Is
+
+ENS is the naming and resolution layer for the onchain ecosystem. A name like `alice.eth` maps to an address, but the name is more than a pointer, it resolves to a set of _records_: addresses across multiple chains, an avatar, and arbitrary text records like a description, a URL, or a social handle.
+
+Those records are what consumers read. Wallets resolve names to display them, dapps show them in place of addresses, indexers index them, and agents read them to identify accounts.
+
+## Subnames
+
+A subname is an ENS name issued under a parent the issuer owns — alice.myapp.eth under myapp.eth. It carries its own records, resolves on its own, and has its own owner. Nothing about it
+reads differently to a consumer than a second-level .eth name like alice.eth.
+
+This is the unit JAW issues. The application owns a parent ENS name, and every account JAW creates is given a subname under it.
+
+## How JAW Issues ENS
+
+The application declares a parent ENS name through the `ens` config field. From there, the subname is provisioned _during authentication_, in the same flow that creates the smart account — records populated, ownership handled, and the multichain address surface set.
+
+```typescript
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  ens: 'myapp.eth',
+});
+```
+
+For the user, the username field is suffixed with the parent the application declared. They pick a name, authenticate with a passkey, and the account exists with its name already attached — no seed phrase, and no separate "now set up your ENS name" step. The name and the account are created together. Returning users see their names instead of addresses.
+
+See [`ens` configuration](/configuration/ens) for setup details, including the dashboard prerequisite.
+
+## Offchain & Onchain Issuance
+
+JAW supports two issuance models. The integration surface is identical for both — the application chooses the one that fits its cost structure.
+
+| Model        | How it works                                                                                                         | Availability  |
+| ------------ | -------------------------------------------------------------------------------------------------------------------- | ------------- |
+| **Offchain** | Subnames issued through JustaName and resolved via a CCIP-Read gateway (ENSIP-10). No onchain registration per name. | Default today |
+| **Onchain**  | Subnames registered onchain, with issuance gas covered by an application-configured paymaster.                       | With ENSv2    |
+
+In both cases the records returned are real ENS records, served through the standard resolver interface. Standard ENS clients resolve them without needing to know how they were issued — an offchain subname is indistinguishable from an onchain one to the consumer.
+
+## Multichain Addresses by Default
+
+Every account JAW creates gets a complete multichain address record set at creation, automatically. This follows from the smart account architecture: accounts deployed through deterministic factories have the _same address on every EVM chain_ — the address is a function of the implementation, the factory, and the salt, not of any per-chain transaction or key.
+
+That makes the multichain address record a compute-once value rather than a per-chain configuration. Every chain JAW supports has a valid address record the moment the account exists, all resolving to the same smart account.
+
+:::info
+Every JAW account is a real, fully-populated ENS profile — multichain addresses, avatar, and text records — served through standard resolver infrastructure and readable by any ENS-aware wallet, dapp, or indexer.
+:::
+
+## Related
+
+- [`ens`](/configuration/ens) — Set up subname issuance for your app
+- [Smart Accounts vs EOAs](/concepts/smart-accounts) — Why accounts have the same address across chains
+- [Why JAW](/why-jaw) — The full picture: smart accounts + passkeys + permissions
+- [Passkeys & WebAuthn](/concepts/passkeys) — How the signer layer works

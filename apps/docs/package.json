@@ -20,11 +20,16 @@
   },
   "dependencies": {
     "@jaw.id/core": "workspace:*",
-    "react": "19.0.1",
-    "react-dom": "19.0.1",
-    "vocs": "^1.0.0-alpha.62"
+    "react": "19.2.6",
+    "react-dom": "19.2.6",
+    "vocs": "^2.0.10",
+    "waku": "^1.0.0-beta.0"
   },
   "devDependencies": {
-    "@types/react": "^18.3.12"
+    "@types/node": "^22",
+    "@types/react": "^19",
+    "@types/react-dom": "^19",
+    "@vitejs/plugin-react": "^6",
+    "vite": "^8"
   }
 }

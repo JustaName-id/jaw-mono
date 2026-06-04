@@ -1,0 +1,6 @@
+# Vocs v2 generated artifacts
+docs/pages.gen.ts
+.vocs
+
+# Vercel build output (created by local `VERCEL=1` builds)
+.vercel
