@@ -1,3 +1,13 @@
+## 0.4.2 (2026-06-04)
+
+### 🩹 Fixes
+
+- **core:** new npm token ([eabc965](https://github.com/JustaName-id/jaw-mono/commit/eabc965))
+
+### ❤️ Thank You
+
+- anthony @anthony23991
+
 ## 0.4.1 (2026-06-04)
 
 ### 🩹 Fixes
