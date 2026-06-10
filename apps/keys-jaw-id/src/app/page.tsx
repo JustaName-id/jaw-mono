@@ -19,7 +19,7 @@ import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
-import { isSiweMessage } from '../lib/siwe-handler';
+import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from '../lib/siwe-handler';
 import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
 import type { PopupConfig, PendingRequest } from '../utils/types';
@@ -530,6 +530,11 @@ export default function KeysJawIdApp() {
 
       // Render SiweModal for SIWE messages, SignatureModal for regular messages
       if (isSiwe) {
+        const parsedSiwe = parseSiweMessage(messageToSign);
+        const siweWarning = getSiweOriginWarning(pendingRequest.origin, {
+          domain: parsedSiwe?.domain,
+          uri: parsedSiwe?.uri,
+        });
         return (
           <SiweModal
             origin={pendingRequest.origin}
@@ -539,6 +544,7 @@ export default function KeysJawIdApp() {
             apiKey={apiKey}
             appName={pendingRequest.metadata?.appName || 'dApp'}
             appLogoUrl={pendingRequest.metadata?.appLogoUrl}
+            warningMessage={siweWarning}
             onSuccess={async (signature, message) => {
               setState('processing');
               try {
@@ -1090,6 +1096,10 @@ export default function KeysJawIdApp() {
         };
 
         const siweMessage = buildSiweMessageFromCapability();
+        const siweWarning = getSiweOriginWarning(pendingRequest.origin, {
+          domain: signInWithEthereumCapability.domain,
+          uri: signInWithEthereumCapability.uri,
+        });
 
         return (
           <SiweModal
@@ -1099,6 +1109,7 @@ export default function KeysJawIdApp() {
             chain={pendingRequest.chain}
             appName={pendingRequest.metadata?.appName}
             appLogoUrl={pendingRequest.metadata?.appLogoUrl}
+            warningMessage={siweWarning}
             onSuccess={async (signature: string, message: string) => {
               setState('processing');
               try {

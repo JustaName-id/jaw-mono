@@ -12,6 +12,7 @@ export const SiweDialog = ({
   open,
   onOpenChange,
   message,
+  origin,
   timestamp,
   appName,
   appLogoUrl,
@@ -60,7 +61,7 @@ export const SiweDialog = ({
       const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
       return urlObj.hostname.replace('www.', '');
     } catch {
-      return origin;
+      return url;
     }
   };
 

@@ -150,3 +150,32 @@ export interface SiweMessageFields {
   requestId?: string;
   resources?: string[];
 }
+
+/**
+ * Resolves the lowercased host from a SIWE `domain` (a bare authority) or `uri`.
+ * @returns the host, or null if empty/unparseable.
+ */
+function parseSiweHost(value?: string | null): string | null {
+  if (!value?.trim()) return null;
+  try {
+    return new URL(value.includes('://') ? value : `https://${value}`).host.toLowerCase() || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Per EIP-4361 the SIWE `domain` must be the origin requesting the signature.
+ * Returns a warning when the asserted domain/uri host differs from the origin
+ * that opened the popup (cross-domain phishing), or undefined when they match
+ * or cannot be compared.
+ */
+export function getSiweOriginWarning(
+  requestOrigin: string,
+  siwe: { domain?: string; uri?: string }
+): string | undefined {
+  const originHost = parseSiweHost(requestOrigin);
+  const siweHost = parseSiweHost(siwe.domain) ?? parseSiweHost(siwe.uri);
+  if (!originHost || !siweHost || originHost === siweHost) return undefined;
+  return `The site that opened this window (${originHost}) is requesting sign-in for a different domain (${siweHost}). Only continue if you trust it.`;
+}
