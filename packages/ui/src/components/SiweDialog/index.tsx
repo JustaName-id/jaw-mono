@@ -1,11 +1,12 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { useIsMobile } from '../../hooks';
 import { CopyIcon } from '../../icons';
 import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
+import { Checkbox } from '../ui/checkbox';
 import { SiweDialogProps } from './types';
 
 export const SiweDialog = ({
@@ -30,6 +31,13 @@ export const SiweDialog = ({
 }: SiweDialogProps) => {
   const isMobile = useIsMobile();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+
+  // Require fresh acknowledgement of the phishing warning for each request
+  const ackId = useId();
+  const [acknowledged, setAcknowledged] = useState(false);
+  useEffect(() => {
+    setAcknowledged(false);
+  }, [message, warningMessage]);
 
   // Resolve account address to human-readable name
   useEffect(() => {
@@ -160,24 +168,36 @@ export const SiweDialog = ({
 
         {/* Origin Mismatch Warning */}
         {warningMessage && (
-          <div className="border-warning/30 bg-warning/10 flex items-start gap-2.5 rounded-[6px] border p-3.5">
-            <div className="text-warning mt-0.5 flex-shrink-0">
-              <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                <path
-                  d="M8 1.5L1 14.5H15L8 1.5Z"
-                  stroke="currentColor"
-                  strokeWidth="1.5"
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                />
-                <path d="M8 6V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                <circle cx="8" cy="11.5" r="0.5" fill="currentColor" />
-              </svg>
+          <div className="border-destructive/30 bg-destructive/10 flex flex-col gap-3 rounded-[6px] border p-3.5">
+            <div className="flex items-start gap-2.5">
+              <div className="text-destructive mt-0.5 flex-shrink-0">
+                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <path
+                    d="M8 1.5L1 14.5H15L8 1.5Z"
+                    stroke="currentColor"
+                    strokeWidth="1.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  />
+                  <path d="M8 6V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+                  <circle cx="8" cy="11.5" r="0.5" fill="currentColor" />
+                </svg>
+              </div>
+              <div className="flex flex-col gap-1">
+                <p className="text-destructive text-xs font-bold leading-[133%]">Security Warning</p>
+                <p className="text-foreground text-xs font-normal leading-[150%]">{warningMessage}</p>
+              </div>
             </div>
-            <div className="flex flex-col gap-1">
-              <p className="text-warning-foreground text-xs font-bold leading-[133%]">Security Warning</p>
-              <p className="text-warning-foreground text-xs font-normal leading-[150%]">{warningMessage}</p>
-            </div>
+            <label htmlFor={ackId} className="flex cursor-pointer items-center gap-2">
+              <Checkbox
+                id={ackId}
+                checked={acknowledged}
+                onCheckedChange={(checked) => setAcknowledged(checked === true)}
+              />
+              <span className="text-foreground text-xs font-medium leading-[150%]">
+                I understand the risk and want to continue
+              </span>
+            </label>
           </div>
         )}
 
@@ -201,7 +221,7 @@ export const SiweDialog = ({
           <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
             Cancel
           </Button>
-          <Button onClick={onSign} disabled={!canSign} className="flex-1">
+          <Button onClick={onSign} disabled={!canSign || (!!warningMessage && !acknowledged)} className="flex-1">
             {isProcessing ? 'Signing...' : 'Sign'}
           </Button>
         </div>

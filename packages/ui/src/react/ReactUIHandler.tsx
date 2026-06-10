@@ -52,58 +52,12 @@ import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
+import { getSiweOriginWarning, isSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
 import type { JawTheme } from '@jaw.id/core';
 import { resolveTheme } from '../theme/resolve-theme.js';
 import { applyThemeToContainer } from '../theme/apply-theme.js';
 import { getSystemColorScheme, useColorScheme } from '../theme/use-color-scheme.js';
-
-/**
- * Converts hex string to UTF-8 string
- */
-function hexToUtf8(hex: string): string {
-  const hexString = hex.startsWith('0x') ? hex.slice(2) : hex;
-  const bytes = new Uint8Array(hexString.length / 2);
-  for (let i = 0; i < hexString.length; i += 2) {
-    bytes[i / 2] = parseInt(hexString.slice(i, i + 2), 16);
-  }
-  return new TextDecoder().decode(bytes);
-}
-
-/**
- * Detects if a message is a SIWE (Sign-In with Ethereum) message
- * according to EIP-4361 specification
- */
-function isSiweMessage(message: string): boolean {
-  if (!message) return false;
-
-  try {
-    // If message is hex-encoded, decode it first
-    let decodedMessage = message;
-    if (message.startsWith('0x')) {
-      decodedMessage = hexToUtf8(message);
-    }
-
-    // Primary detection: Check for the SIWE signature phrase
-    const hasSiwePhrase = decodedMessage.includes('wants you to sign in with your Ethereum account');
-
-    if (!hasSiwePhrase) {
-      return false;
-    }
-
-    // Additional validation: Check for required SIWE fields
-    const hasUri = /URI:\s*.+/.test(decodedMessage);
-    const hasVersion = /Version:\s*1/.test(decodedMessage);
-    const hasChainId = /Chain ID:\s*\d+/.test(decodedMessage);
-    const hasNonce = /Nonce:\s*[a-zA-Z0-9]{8,}/.test(decodedMessage);
-    const hasIssuedAt = /Issued At:\s*.+/.test(decodedMessage);
-
-    return hasSiwePhrase && hasUri && hasVersion && hasChainId && hasNonce && hasIssuedAt;
-  } catch (error) {
-    console.error('Error checking if message is SIWE:', error);
-    return false;
-  }
-}
 
 // ============================================================================
 // Chain Utilities
@@ -911,6 +865,15 @@ function OnboardingDialogWrapper({
     }
   }, [signInWithEthereumCapability, authenticatedWalletAddress, origin]);
 
+  const siweWarning = useMemo(
+    () =>
+      getSiweOriginWarning(origin, {
+        domain: signInWithEthereumCapability?.domain,
+        uri: signInWithEthereumCapability?.uri,
+      }),
+    [origin, signInWithEthereumCapability]
+  );
+
   // Handle SIWE sign action
   const handleSiweSign = async () => {
     if (!authenticatedWalletAddress || !siweMessage) return;
@@ -989,6 +952,7 @@ function OnboardingDialogWrapper({
           isProcessing={isSiweSigning}
           siweStatus={siweStatus}
           canSign={!isSiweSigning}
+          warningMessage={siweWarning}
         />
       );
     }
@@ -2513,25 +2477,12 @@ function SiweDialogWrapper({
     return match ? match[1] : 'dApp';
   }, [decodedMessage]);
 
-  // Generate warning if URI in SIWE message doesn't match current origin
+  // Warn if the SIWE domain/uri doesn't match the origin the user is on
   const warningMessage = useMemo(() => {
-    try {
-      // Extract URI from SIWE message
-      const uriMatch = decodedMessage.match(/URI:\s*(.+)/);
-      if (!uriMatch) return undefined;
-
-      const siweUri = uriMatch[1].trim();
-      const siweOrigin = new URL(siweUri).origin;
-      const currentOrigin = typeof window !== 'undefined' ? window.location.origin : '';
-
-      if (siweOrigin !== currentOrigin) {
-        return `The sign-in request is for "${siweUri}" but you are currently on "${currentOrigin}". This may be a phishing attempt.`;
-      }
-    } catch {
-      // If URI parsing fails, don't show warning
-    }
-    return undefined;
-  }, [decodedMessage]);
+    const domain = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/)?.[1];
+    const uri = decodedMessage.match(/URI:\s*(.+)/)?.[1]?.trim();
+    return getSiweOriginWarning(origin, { domain, uri });
+  }, [decodedMessage, origin]);
 
   const handleSign = async () => {
     setIsProcessing(true);

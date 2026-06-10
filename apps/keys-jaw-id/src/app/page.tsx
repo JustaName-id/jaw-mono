@@ -19,7 +19,7 @@ import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
-import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from '../lib/siwe-handler';
+import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from '@jaw.id/ui';
 import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
 import type { PopupConfig, PendingRequest } from '../utils/types';
