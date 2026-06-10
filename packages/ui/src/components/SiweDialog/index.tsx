@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useIsMobile } from '../../hooks';
 import { CopyIcon } from '../../icons';
-import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
+import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { SiweDialogProps } from './types';
@@ -33,16 +33,12 @@ export const SiweDialog = ({
   // Resolve account address to human-readable name
   useEffect(() => {
     if (accountAddress && chainId) {
-      const justaName = getJustaNameInstance(mainnetRpcUrl);
-      justaName.subnames
-        .reverseResolve({
-          address: accountAddress as `0x${string}`,
-          chainId: chainId,
-        })
-        .then(async (result) => {
-          if (result) {
+      reverseResolveAddresses([{ address: accountAddress, chainId }], mainnetRpcUrl)
+        .then(async (resolved) => {
+          const name = resolved[accountAddress.toLowerCase()];
+          if (name) {
             const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setResolvedAddress(label ? `${result}@${label}` : result);
+            setResolvedAddress(label ? `${name}@${label}` : name);
           }
         })
         .catch(() => {

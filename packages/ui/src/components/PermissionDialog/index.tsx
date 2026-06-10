@@ -9,7 +9,7 @@ import { PermissionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { CopiedIcon, CopyIcon, WalletIcon } from '../../icons';
 import { useState, useEffect, useRef } from 'react';
-import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { reverseResolveAddresses } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
 
 export const PermissionDialog = ({
@@ -71,7 +71,6 @@ export const PermissionDialog = ({
       return;
     }
 
-    const justaName = getJustaNameInstance(mainnetRpcUrl);
     const addressesToResolve: string[] = [];
 
     if (spenderAddress) {
@@ -95,32 +94,26 @@ export const PermissionDialog = ({
 
     setIsResolvingAddresses(true);
 
-    const resolvePromises = addressesToResolve.map(async (address) => {
-      try {
-        const result = await justaName.subnames.reverseResolve({
-          address: address as `0x${string}`,
-          chainId: chainId,
-        });
-        if (result) {
+    reverseResolveAddresses(
+      addressesToResolve.map((address) => ({ address, chainId })),
+      mainnetRpcUrl
+    )
+      .then(async (resolved) => {
+        const newResolved: Record<string, string> = {};
+        for (const address of addressesToResolve) {
+          const name = resolved[address.toLowerCase()];
+          if (!name) continue;
           const label = await getChainLabel(chainId, mainnetRpcUrl);
-          return { address, name: label ? `${result}@${label}` : result };
+          newResolved[address] = label ? `${name}@${label}` : name;
         }
-      } catch {
+        setResolvedAddresses((prev) => ({ ...prev, ...newResolved }));
+      })
+      .catch(() => {
         // Silently fail if resolution fails
-      }
-      return null;
-    });
-
-    Promise.all(resolvePromises).then((results) => {
-      const newResolved: Record<string, string> = {};
-      results.forEach((result) => {
-        if (result) {
-          newResolved[result.address] = result.name;
-        }
+      })
+      .finally(() => {
+        setIsResolvingAddresses(false);
       });
-      setResolvedAddresses((prev) => ({ ...prev, ...newResolved }));
-      setIsResolvingAddresses(false);
-    });
   }, [spenderAddress, calls, chainId]);
 
   // Handle wheel events for smooth scrolling over content

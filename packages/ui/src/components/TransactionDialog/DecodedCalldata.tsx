@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
-import { getJustaNameInstance, formatAddress, getChainLabel } from '../../utils';
+import { reverseResolveAddresses, formatAddress, getChainLabel } from '../../utils';
 import { ClearSignedView } from './ClearSignedView';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
@@ -77,27 +77,25 @@ export const DecodedCalldata = ({
     // Mark as attempted immediately to prevent re-fetching
     unique.forEach((addr) => attemptedRef.current.add(addr.toLowerCase()));
 
-    const justaName = getJustaNameInstance(mainnetRpcUrl);
-
-    unique.forEach((address) => {
-      justaName.subnames
-        .reverseResolve({
-          address: address as `0x${string}`,
-          chainId,
-        })
-        .then(async (result) => {
-          if (result) {
-            const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setLocalResolved((prev) => ({
-              ...prev,
-              [address.toLowerCase()]: label ? `${result}@${label}` : result,
-            }));
-          }
-        })
-        .catch(() => {
-          // Silently fail - will show raw address
-        });
-    });
+    reverseResolveAddresses(
+      unique.map((address) => ({ address, chainId })),
+      mainnetRpcUrl
+    )
+      .then(async (resolved) => {
+        const next: Record<string, string> = {};
+        for (const address of unique) {
+          const name = resolved[address.toLowerCase()];
+          if (!name) continue;
+          const label = await getChainLabel(chainId, mainnetRpcUrl);
+          next[address.toLowerCase()] = label ? `${name}@${label}` : name;
+        }
+        if (Object.keys(next).length > 0) {
+          setLocalResolved((prev) => ({ ...prev, ...next }));
+        }
+      })
+      .catch(() => {
+        // Silently fail - will show raw address
+      });
   }, [decoded, mainnetRpcUrl, chainId]);
 
   // Clear-signing hit: render the formatted view, with raw whatsabi details collapsed underneath.

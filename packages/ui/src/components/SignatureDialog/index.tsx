@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { DefaultDialog } from '../DefaultDialog';
 import { SignatureDialogProps } from './types';
 import { useIsMobile } from '../../hooks';
-import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
+import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
 import { useState, useEffect } from 'react';
 
 export const SignatureDialog = ({
@@ -30,16 +30,12 @@ export const SignatureDialog = ({
   // Resolve account address to human-readable name
   useEffect(() => {
     if (accountAddress && chainId) {
-      const justaName = getJustaNameInstance(mainnetRpcUrl);
-      justaName.subnames
-        .reverseResolve({
-          address: accountAddress as `0x${string}`,
-          chainId: chainId,
-        })
-        .then(async (result) => {
-          if (result) {
+      reverseResolveAddresses([{ address: accountAddress, chainId }], mainnetRpcUrl)
+        .then(async (resolved) => {
+          const name = resolved[accountAddress.toLowerCase()];
+          if (name) {
             const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setResolvedAddress(label ? `${result}@${label}` : result);
+            setResolvedAddress(label ? `${name}@${label}` : name);
           }
         })
         .catch(() => {

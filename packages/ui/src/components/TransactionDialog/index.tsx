@@ -12,7 +12,7 @@ import { Info } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
-import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
+import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
 import { DecodedCalldata } from './DecodedCalldata';
 
 export const TransactionDialog = ({
@@ -67,53 +67,35 @@ export const TransactionDialog = ({
   const hasSelectablePaymentOption =
     !feeTokens || feeTokens.length === 0 ? true : feeTokens.some((t) => t.isSelectable);
 
-  // Initialize JustaName and resolve addresses
+  // Resolve wallet + transaction 'to' addresses to ENS names in one batched request
   useEffect(() => {
-    const justaName = getJustaNameInstance(mainnetRpcUrl);
-
-    // Resolve wallet address
+    const inputs: { address: string; chainId: number }[] = [];
     if (walletAddress && currentTransaction?.chainId) {
-      justaName.subnames
-        .reverseResolve({
-          address: walletAddress as `0x${string}`,
-          chainId: currentTransaction.chainId,
-        })
-        .then(async (result) => {
-          if (result) {
-            const label = await getChainLabel(currentTransaction.chainId, mainnetRpcUrl);
-            setResolvedAddresses((prev) => ({
-              ...prev,
-              [walletAddress]: label ? `${result}@${label}` : result,
-            }));
-          }
-        })
-        .catch(() => {
-          // Silently fail if resolution fails
-        });
+      inputs.push({ address: walletAddress, chainId: currentTransaction.chainId });
     }
-
-    // Resolve transaction 'to' addresses
     transactions.forEach((transaction) => {
       if (transaction.to && transaction.chainId) {
-        justaName.subnames
-          .reverseResolve({
-            address: transaction.to as `0x${string}`,
-            chainId: transaction.chainId,
-          })
-          .then(async (result) => {
-            if (result) {
-              const label = await getChainLabel(transaction.chainId, mainnetRpcUrl);
-              setResolvedAddresses((prev) => ({
-                ...prev,
-                [transaction.to]: label ? `${result}@${label}` : result,
-              }));
-            }
-          })
-          .catch(() => {
-            // Silently fail if resolution fails
-          });
+        inputs.push({ address: transaction.to, chainId: transaction.chainId });
       }
     });
+    if (inputs.length === 0) return;
+
+    reverseResolveAddresses(inputs, mainnetRpcUrl)
+      .then(async (resolved) => {
+        const next: Record<string, string> = {};
+        for (const { address, chainId } of inputs) {
+          const name = resolved[address.toLowerCase()];
+          if (!name) continue;
+          const label = await getChainLabel(chainId, mainnetRpcUrl);
+          next[address] = label ? `${name}@${label}` : name;
+        }
+        if (Object.keys(next).length > 0) {
+          setResolvedAddresses((prev) => ({ ...prev, ...next }));
+        }
+      })
+      .catch(() => {
+        // Silently fail if resolution fails
+      });
   }, [walletAddress, transactions, currentTransaction?.chainId]);
 
   // Resolve ERC-7730 `metadata.contractName` for every unique `to` in the batch.

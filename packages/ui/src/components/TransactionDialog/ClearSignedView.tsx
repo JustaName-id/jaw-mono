@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ClearSigningDisplay, DisplayRow } from '../../utils/clearSigning';
-import { getJustaNameInstance, formatAddress, getChainLabel } from '../../utils';
+import { reverseResolveAddresses, formatAddress, getChainLabel } from '../../utils';
 
 interface ClearSignedViewProps {
   display: ClearSigningDisplay;
@@ -47,20 +47,31 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
     unique.forEach((a) => attemptedRef.current.add(a));
 
     let cancelled = false;
-    const justaName = getJustaNameInstance(mainnetRpcUrl);
-    unique.forEach((address) => {
-      justaName.subnames
-        .reverseResolve({ address: address as `0x${string}`, chainId })
-        .then(async (result) => {
-          if (cancelled || !result) return;
-          const label = await getChainLabel(chainId, mainnetRpcUrl);
-          const next = label ? `${result}@${label}` : result;
-          setResolved((prev) => (prev[address] === next ? prev : { ...prev, [address]: next }));
-        })
-        .catch(() => {
-          /* silent */
+    reverseResolveAddresses(
+      unique.map((address) => ({ address, chainId })),
+      mainnetRpcUrl
+    )
+      .then(async (resolved) => {
+        if (cancelled) return;
+        const label = await getChainLabel(chainId, mainnetRpcUrl);
+        setResolved((prev) => {
+          const next = { ...prev };
+          let changed = false;
+          for (const address of unique) {
+            const name = resolved[address];
+            if (!name) continue;
+            const value = label ? `${name}@${label}` : name;
+            if (next[address] !== value) {
+              next[address] = value;
+              changed = true;
+            }
+          }
+          return changed ? next : prev;
         });
-    });
+      })
+      .catch(() => {
+        /* silent */
+      });
     return () => {
       cancelled = true;
     };
