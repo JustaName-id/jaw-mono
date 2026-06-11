@@ -63,7 +63,7 @@ type RouterEnv = {
     safari?: boolean;
     iov2?: boolean;
     trusted?: boolean;
-    protocol?: string;
+    secureContext?: boolean;
     hostname?: string;
 };
 
@@ -87,8 +87,8 @@ function createRouter(env: RouterEnv = {}) {
         isSafariFn: () => env.safari ?? false,
         supportsIOv2Fn: () => env.iov2 ?? true,
         isTrustedHostFn: () => env.trusted ?? false,
+        isSecureContextFn: () => env.secureContext ?? true,
         getLocation: () => ({
-            protocol: env.protocol ?? 'https:',
             hostname: env.hostname ?? 'dapp.example.com',
         }),
     };
@@ -124,8 +124,8 @@ describe('TransportRouter.route', () => {
         expect(router.route({})).toBe('iframe');
     });
 
-    it('routes to popup on non-HTTPS hosts regardless of other conditions (AC-3)', () => {
-        const { router } = createRouter({ mode: 'iframe', protocol: 'http:' });
+    it('routes to popup on insecure contexts regardless of other conditions (AC-3)', () => {
+        const { router } = createRouter({ mode: 'iframe', secureContext: false });
         expect(router.route({})).toBe('popup');
     });
 
@@ -191,7 +191,7 @@ describe('TransportRouter.acquire', () => {
 
     it('warns exactly once on insecure-protocol fallback (AC-3)', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
-        const { router } = createRouter({ mode: 'iframe', protocol: 'http:' });
+        const { router } = createRouter({ mode: 'iframe', secureContext: false });
 
         await router.acquire({});
         await router.acquire({});

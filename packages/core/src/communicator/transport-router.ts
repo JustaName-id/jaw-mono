@@ -31,7 +31,9 @@ export type TransportRouterConfig = TransportOptions & {
     isSafariFn?: () => boolean;
     supportsIOv2Fn?: () => boolean;
     isTrustedHostFn?: (hostname: string) => boolean;
-    getLocation?: () => { protocol: string; hostname: string };
+    /** Secure-context check (true on HTTPS and localhost — WebAuthn requirement). */
+    isSecureContextFn?: () => boolean;
+    getLocation?: () => { hostname: string };
 };
 
 /**
@@ -52,7 +54,8 @@ export class TransportRouter implements TransportRouterContract {
     private readonly isSafariFn: () => boolean;
     private readonly supportsIOv2Fn: () => boolean;
     private readonly isTrustedHostFn: (hostname: string) => boolean;
-    private readonly getLocation: () => { protocol: string; hostname: string };
+    private readonly isSecureContextFn: () => boolean;
+    private readonly getLocation: () => { hostname: string };
 
     private popup: PopupTransport | null = null;
     private iframe: IframeTransport | null = null;
@@ -74,9 +77,8 @@ export class TransportRouter implements TransportRouterContract {
         this.isSafariFn = config.isSafariFn ?? isSafari;
         this.supportsIOv2Fn = config.supportsIOv2Fn ?? supportsIOv2;
         this.isTrustedHostFn = config.isTrustedHostFn ?? isTrustedHost;
-        this.getLocation =
-            config.getLocation ??
-            (() => ({ protocol: window.location.protocol, hostname: window.location.hostname }));
+        this.isSecureContextFn = config.isSecureContextFn ?? (() => window.isSecureContext);
+        this.getLocation = config.getLocation ?? (() => ({ hostname: window.location.hostname }));
     }
 
     /**
@@ -135,7 +137,7 @@ export class TransportRouter implements TransportRouterContract {
         if (this.mode !== 'iframe' && this.mode !== 'auto') {
             return { kind: 'popup', reason: 'mode-popup' };
         }
-        if (this.getLocation().protocol !== 'https:') {
+        if (!this.isSecureContextFn()) {
             return { kind: 'popup', reason: 'insecure-protocol' };
         }
         if (this.isSafariFn() && ctx.method !== undefined && CREDENTIAL_CREATING_METHODS.includes(ctx.method)) {
