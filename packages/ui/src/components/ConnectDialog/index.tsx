@@ -6,7 +6,7 @@ import { useIsMobile } from '../../hooks';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { ConnectDialogProps } from './types';
-import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { reverseResolveAddresses } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
 
 export const ConnectDialog = ({
@@ -34,16 +34,12 @@ export const ConnectDialog = ({
   // Resolve wallet address to human-readable name
   useEffect(() => {
     if (walletAddress && chainId) {
-      const justaName = getJustaNameInstance(mainnetRpcUrl);
-      justaName.subnames
-        .reverseResolve({
-          address: walletAddress as `0x${string}`,
-          chainId: chainId,
-        })
-        .then(async (result) => {
-          if (result) {
+      reverseResolveAddresses([{ address: walletAddress, chainId }], mainnetRpcUrl)
+        .then(async (resolved) => {
+          const name = resolved[walletAddress.toLowerCase()];
+          if (name) {
             const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setResolvedAddress(label ? `${result}@${label}` : result);
+            setResolvedAddress(label ? `${name}@${label}` : name);
           }
         })
         .catch(() => {

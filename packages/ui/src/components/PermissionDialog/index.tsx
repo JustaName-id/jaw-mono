@@ -7,10 +7,11 @@ import { DefaultDialog } from '../DefaultDialog';
 import { FeeTokenSelector } from '../FeeTokenSelector';
 import { PermissionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
-import { CopiedIcon, CopyIcon, WalletIcon } from '../../icons';
+import { CopiedIcon, CopyIcon } from '../../icons';
 import { useState, useEffect, useRef } from 'react';
-import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
+import { IdentityAvatar } from '../IdentityAvatar';
 
 export const PermissionDialog = ({
   open,
@@ -62,6 +63,7 @@ export const PermissionDialog = ({
 
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
+  const [resolvedAvatars, setResolvedAvatars] = useState<Record<string, string>>({});
   const [isResolvingAddresses, setIsResolvingAddresses] = useState(true); // Start true to prevent early clicks
 
   // Resolve addresses to human-readable names
@@ -71,7 +73,6 @@ export const PermissionDialog = ({
       return;
     }
 
-    const justaName = getJustaNameInstance(mainnetRpcUrl);
     const addressesToResolve: string[] = [];
 
     if (spenderAddress) {
@@ -95,32 +96,35 @@ export const PermissionDialog = ({
 
     setIsResolvingAddresses(true);
 
-    const resolvePromises = addressesToResolve.map(async (address) => {
-      try {
-        const result = await justaName.subnames.reverseResolve({
-          address: address as `0x${string}`,
-          chainId: chainId,
-        });
-        if (result) {
-          const label = await getChainLabel(chainId, mainnetRpcUrl);
-          return { address, name: label ? `${result}@${label}` : result };
+    let cancelled = false;
+    reverseResolveWithAvatars(
+      addressesToResolve.map((address) => ({ address, chainId })),
+      mainnetRpcUrl
+    )
+      .then(async (resolved) => {
+        if (cancelled) return;
+        const label = await getChainLabel(chainId, mainnetRpcUrl);
+        if (cancelled) return;
+        const newResolved: Record<string, string> = {};
+        const avatarByAddress: Record<string, string> = {};
+        for (const address of addressesToResolve) {
+          const identity = resolved[address.toLowerCase()];
+          if (!identity) continue;
+          newResolved[address] = label ? `${identity.name}@${label}` : identity.name;
+          if (identity.avatar) avatarByAddress[address] = identity.avatar;
         }
-      } catch {
-        // Silently fail if resolution fails
-      }
-      return null;
-    });
-
-    Promise.all(resolvePromises).then((results) => {
-      const newResolved: Record<string, string> = {};
-      results.forEach((result) => {
-        if (result) {
-          newResolved[result.address] = result.name;
+        setResolvedAddresses((prev) => ({ ...prev, ...newResolved }));
+        if (Object.keys(avatarByAddress).length > 0) {
+          setResolvedAvatars((prev) => ({ ...prev, ...avatarByAddress }));
         }
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (!cancelled) setIsResolvingAddresses(false);
       });
-      setResolvedAddresses((prev) => ({ ...prev, ...newResolved }));
-      setIsResolvingAddresses(false);
-    });
+    return () => {
+      cancelled = true;
+    };
   }, [spenderAddress, calls, chainId]);
 
   // Handle wheel events for smooth scrolling over content
@@ -262,7 +266,7 @@ export const PermissionDialog = ({
             <div className="text-foreground flex min-w-0 flex-col gap-0.5">
               <p className="text-xs font-bold leading-[133%]">Spender Address</p>
               <div className="flex flex-row items-center gap-1">
-                <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                <IdentityAvatar src={resolvedAvatars[spenderAddress]} />
                 <p className="break-all text-base font-normal leading-[150%]">
                   {resolvedAddresses[spenderAddress] || truncateAddress(spenderAddress)}
                 </p>
@@ -349,9 +353,12 @@ export const PermissionDialog = ({
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <p className="text-muted-foreground text-xs font-bold leading-[133%]">Contract</p>
-                      <p className="text-foreground break-all font-mono text-sm leading-[150%]">
-                        {getContractDisplayName(call.target) || resolvedAddresses[call.target] || call.target}
-                      </p>
+                      <div className="flex flex-row items-center gap-1">
+                        <IdentityAvatar src={resolvedAvatars[call.target]} fallback={null} />
+                        <p className="text-foreground break-all font-mono text-sm leading-[150%]">
+                          {getContractDisplayName(call.target) || resolvedAddresses[call.target] || call.target}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 ))}

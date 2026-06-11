@@ -5,7 +5,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '..
 import { DefaultDialog } from '../DefaultDialog';
 import { Eip712DialogProps } from './types';
 import { useIsMobile, useClearSigningTypedData } from '../../hooks';
-import { getJustaNameInstance, getDisplayAddress, getChainLabel } from '../../utils';
+import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
 import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
 import { useState, useEffect, useMemo, useRef } from 'react';
 
@@ -301,16 +301,12 @@ export const Eip712Dialog = ({
   // Resolve account address to human-readable name
   useEffect(() => {
     if (accountAddress && chainId) {
-      const justaName = getJustaNameInstance(mainnetRpcUrl);
-      justaName.subnames
-        .reverseResolve({
-          address: accountAddress as `0x${string}`,
-          chainId: chainId,
-        })
-        .then(async (result) => {
-          if (result) {
+      reverseResolveAddresses([{ address: accountAddress, chainId }], mainnetRpcUrl)
+        .then(async (resolved) => {
+          const name = resolved[accountAddress.toLowerCase()];
+          if (name) {
             const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setResolvedAddress(label ? `${result}@${label}` : result);
+            setResolvedAddress(label ? `${name}@${label}` : name);
           }
         })
         .catch(() => {

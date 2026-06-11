@@ -1,10 +1,22 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
-import { getJustaNameInstance, formatAddress, getChainLabel } from '../../utils';
+import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
+import { IdentityAvatar } from '../IdentityAvatar';
 import { ClearSignedView } from './ClearSignedView';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+/** Merge parent-resolved and locally-resolved maps, normalizing all keys to lowercase. */
+function mergeLowercased(
+  parent: Record<string, string> | undefined,
+  local: Record<string, string>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parent ?? {})) out[key.toLowerCase()] = value;
+  for (const [key, value] of Object.entries(local)) out[key.toLowerCase()] = value;
+  return out;
+}
 
 interface DecodedCalldataProps {
   to: string;
@@ -12,6 +24,7 @@ interface DecodedCalldataProps {
   chainId: number;
   apiKey?: string;
   resolvedAddresses?: Record<string, string>;
+  resolvedAvatars?: Record<string, string>;
   mainnetRpcUrl?: string;
 }
 
@@ -21,12 +34,14 @@ export const DecodedCalldata = ({
   chainId,
   apiKey,
   resolvedAddresses,
+  resolvedAvatars,
   mainnetRpcUrl,
 }: DecodedCalldataProps) => {
   // One hook handles both pipelines: ERC-7730 clear-signing (preferred view) and
   // whatsabi raw decode (fallback / "Show raw details" disclosure).
   const { clearSigned, decoded, isLoading } = useDecodedCalldata(to, data, chainId, apiKey);
   const [localResolved, setLocalResolved] = useState<Record<string, string>>({});
+  const [localAvatars, setLocalAvatars] = useState<Record<string, string>>({});
   const attemptedRef = useRef<Set<string>>(new Set());
 
   // Reset local state when decoded data changes identity (new transaction)
@@ -35,23 +50,16 @@ export const DecodedCalldata = ({
     if (decodedIdRef.current !== decoded) {
       decodedIdRef.current = decoded;
       setLocalResolved({});
+      setLocalAvatars({});
       attemptedRef.current = new Set();
     }
   }, [decoded]);
 
-  // Normalize parent-resolved addresses to lowercase keys, then merge with local
-  const allResolved = useMemo(() => {
-    const normalized: Record<string, string> = {};
-    if (resolvedAddresses) {
-      for (const [key, value] of Object.entries(resolvedAddresses)) {
-        normalized[key.toLowerCase()] = value;
-      }
-    }
-    for (const [key, value] of Object.entries(localResolved)) {
-      normalized[key.toLowerCase()] = value;
-    }
-    return normalized;
-  }, [resolvedAddresses, localResolved]);
+  const allResolved = useMemo(
+    () => mergeLowercased(resolvedAddresses, localResolved),
+    [resolvedAddresses, localResolved]
+  );
+  const allAvatars = useMemo(() => mergeLowercased(resolvedAvatars, localAvatars), [resolvedAvatars, localAvatars]);
 
   // Keep a ref to allResolved so the effect can read it without re-triggering
   const allResolvedRef = useRef(allResolved);
@@ -77,27 +85,34 @@ export const DecodedCalldata = ({
     // Mark as attempted immediately to prevent re-fetching
     unique.forEach((addr) => attemptedRef.current.add(addr.toLowerCase()));
 
-    const justaName = getJustaNameInstance(mainnetRpcUrl);
-
-    unique.forEach((address) => {
-      justaName.subnames
-        .reverseResolve({
-          address: address as `0x${string}`,
-          chainId,
-        })
-        .then(async (result) => {
-          if (result) {
-            const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setLocalResolved((prev) => ({
-              ...prev,
-              [address.toLowerCase()]: label ? `${result}@${label}` : result,
-            }));
-          }
-        })
-        .catch(() => {
-          // Silently fail - will show raw address
-        });
-    });
+    let cancelled = false;
+    reverseResolveWithAvatars(
+      unique.map((address) => ({ address, chainId })),
+      mainnetRpcUrl
+    )
+      .then(async (resolved) => {
+        if (cancelled) return;
+        const label = await getChainLabel(chainId, mainnetRpcUrl);
+        if (cancelled) return;
+        const next: Record<string, string> = {};
+        const avatarByAddress: Record<string, string> = {};
+        for (const address of unique) {
+          const identity = resolved[address.toLowerCase()];
+          if (!identity) continue;
+          next[address.toLowerCase()] = label ? `${identity.name}@${label}` : identity.name;
+          if (identity.avatar) avatarByAddress[address.toLowerCase()] = identity.avatar;
+        }
+        if (Object.keys(next).length > 0) {
+          setLocalResolved((prev) => ({ ...prev, ...next }));
+        }
+        if (Object.keys(avatarByAddress).length > 0) {
+          setLocalAvatars((prev) => ({ ...prev, ...avatarByAddress }));
+        }
+      })
+      .catch(() => undefined);
+    return () => {
+      cancelled = true;
+    };
   }, [decoded, mainnetRpcUrl, chainId]);
 
   // Clear-signing hit: render the formatted view, with raw whatsabi details collapsed underneath.
@@ -175,15 +190,19 @@ export const DecodedCalldata = ({
         <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
           {decoded.params.map((param, i) => {
             const resolvedName = param.rawValue ? allResolved[param.rawValue.toLowerCase()] : undefined;
+            const resolvedAvatar = param.rawValue ? allAvatars[param.rawValue.toLowerCase()] : undefined;
             return (
               <div key={i} className="flex flex-col gap-0.5">
                 <div className="flex items-baseline gap-1.5">
                   <span className="text-muted-foreground text-xs font-semibold">{param.name}</span>
                   <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
                 </div>
-                <p className="text-foreground break-all font-mono text-xs leading-[150%]">
-                  {resolvedName ? `${resolvedName} (${formatAddress(param.rawValue!)})` : param.value}
-                </p>
+                <div className="flex flex-row items-center gap-1">
+                  <IdentityAvatar src={resolvedAvatar} fallback={null} />
+                  <p className="text-foreground break-all font-mono text-xs leading-[150%]">
+                    {resolvedName ? `${resolvedName} (${formatAddress(param.rawValue!)})` : param.value}
+                  </p>
+                </div>
               </div>
             );
           })}
