@@ -69,13 +69,17 @@ export class AppSpecificSigner extends JAWSigner {
      * Capabilities validation only happens in handleWalletConnect/handleWalletConnectUnauthenticated.
      */
     async handshake(args: RequestArguments): Promise<void> {
-        await this.performWalletConnect(args, { skipCapabilitiesValidation: true });
+        // Record the response so the follow-up signer.request(wallet_connect) returns it
+        // from cache instead of re-running performWalletConnect (a second account dialog).
+        const response = await this.performWalletConnect(args, { skipCapabilitiesValidation: true });
+        this.pendingWalletConnectResponse = response;
     }
 
     protected async handleWalletConnect(request: RequestArguments): Promise<unknown> {
         // Return cached wallet connect response if available (same as CrossPlatformSigner)
         const cachedResponse = await this.getCachedWalletConnectResponse(request);
         if (cachedResponse) {
+            this.emitConnect();
             return cachedResponse;
         }
 

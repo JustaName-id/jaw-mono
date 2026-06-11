@@ -850,6 +850,10 @@ describe('AppSpecificSigner', () => {
 
             (mockUIHandler.request as Mock).mockResolvedValue(mockResponse);
 
+            // The initial connect already consumed its cached handshake response (JAWProvider
+            // pairs handshake with signer.request); a fresh SIWE wallet_connect must re-prompt.
+            (signer as unknown as { pendingWalletConnectResponse: unknown }).pendingWalletConnectResponse = null;
+
             // Act
             const result = await signer.request(request);
 
