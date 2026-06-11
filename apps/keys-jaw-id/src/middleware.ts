@@ -1,9 +1,17 @@
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
 
+// Routes that third-party dApps may embed in an iframe (the SDK dialog).
+// Everything NOT in this list keeps frame-ancestors 'none' + X-Frame-Options
+// DENY — embeddability is opt-in per route, never inherited. Adding a route
+// here requires security review.
+// See dev-specs keys-iframe-transport/contracts/keys-headers.md.
+const EMBEDDABLE_ROUTES: readonly string[] = ['/'];
+
 export function middleware(request: NextRequest) {
   const isDev = process.env.NODE_ENV === 'development';
   const nonce = Buffer.from(crypto.randomUUID()).toString('base64');
+  const isEmbeddable = EMBEDDABLE_ROUTES.includes(request.nextUrl.pathname);
 
   // --- connect-src ---
   // api.justaname.id: JAW RPC proxy, paymaster, passkey endpoints
@@ -51,7 +59,10 @@ export function middleware(request: NextRequest) {
     `img-src ${imgSrc}`,
     "font-src 'self' data:",
     `connect-src ${connectSrc}`,
-    "frame-ancestors 'none'",
+    // Clickjacking protection for the embeddable dialog route is handled by
+    // the in-dialog visibility guard (IntersectionObserver v2) + popup
+    // routing, not by framing headers.
+    ...(isEmbeddable ? [] : ["frame-ancestors 'none'"]),
     "base-uri 'self'",
     "form-action 'self'",
     "object-src 'none'",
@@ -81,7 +92,9 @@ export function middleware(request: NextRequest) {
   response.headers.set('Content-Security-Policy', csp);
   response.headers.set('Strict-Transport-Security', 'max-age=63072000; includeSubDomains; preload');
   response.headers.set('X-Content-Type-Options', 'nosniff');
-  response.headers.set('X-Frame-Options', 'DENY');
+  if (!isEmbeddable) {
+    response.headers.set('X-Frame-Options', 'DENY');
+  }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
   response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
   response.headers.set('X-DNS-Prefetch-Control', 'off');
