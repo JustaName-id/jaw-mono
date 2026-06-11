@@ -1,0 +1,384 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { JSDOM } from 'jsdom';
+
+import type { AppMetadata, JawProviderPreference } from '../provider/interface.js';
+import { SDK_VERSION } from '../sdk-info.js';
+import type { Message } from '../messages/message.js';
+import { IframeTransport } from './iframe-transport.js';
+import { JAW_KEYS_URL } from '../constants.js';
+
+// Set up jsdom environment
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+    url: 'http://localhost:3000/',
+});
+global.window = dom.window as unknown as Window & typeof globalThis;
+global.document = dom.window.document;
+global.MessageEvent = dom.window.MessageEvent;
+global.MutationObserver = dom.window.MutationObserver;
+global.HTMLElement = dom.window.HTMLElement;
+
+function dispatchMessageEvent({ data, origin }: { data: unknown; origin: string }) {
+    const messageEvent = new MessageEvent('message', {
+        data,
+        origin,
+    });
+    window.dispatchEvent(messageEvent);
+}
+
+const popupLoadedMessage = {
+    data: { event: 'PopupLoaded', id: 'popup-loaded-id' },
+};
+
+const popupReadyMessage = {
+    data: { event: 'PopupReady' },
+};
+
+/** Queues a message event simulating the keys app (see communicator.test.ts). */
+function queueMessageEvent({
+    data,
+    origin = new URL(JAW_KEYS_URL).origin,
+}: {
+    data: Record<string, unknown>;
+    origin?: string;
+}) {
+    setTimeout(() => dispatchMessageEvent({ data, origin }), 200);
+}
+
+const appMetadata: AppMetadata = {
+    appName: 'Test App',
+    appLogoUrl: null,
+    defaultChainId: 1,
+};
+
+const preference: JawProviderPreference = { keysUrl: JAW_KEYS_URL };
+
+const urlOrigin = new URL(JAW_KEYS_URL).origin;
+
+function createTransport(handshakeTimeoutMs = 2000): IframeTransport {
+    return new IframeTransport({
+        url: new URL(JAW_KEYS_URL),
+        metadata: appMetadata,
+        preference,
+        handshakeTimeoutMs,
+    });
+}
+
+function getDialog(): HTMLDialogElement | null {
+    return document.querySelector('dialog[data-jaw]');
+}
+
+function getIframe(): HTMLIFrameElement | null {
+    return document.querySelector('dialog[data-jaw] iframe');
+}
+
+/** jsdom does not load remote iframes — inject a mock contentWindow. */
+function mockContentWindow(): { postMessage: ReturnType<typeof vi.fn> } {
+    const iframe = getIframe();
+    if (!iframe) throw new Error('iframe not mounted');
+    const mockTarget = { postMessage: vi.fn() };
+    Object.defineProperty(iframe, 'contentWindow', {
+        value: mockTarget,
+        configurable: true,
+    });
+    return mockTarget;
+}
+
+/** Starts the handshake, mocks the target window and queues the keys events. */
+function startHandshake(transport: IframeTransport) {
+    const readyPromise = transport.ensureReady();
+    const target = mockContentWindow();
+    queueMessageEvent(popupLoadedMessage);
+    queueMessageEvent(popupReadyMessage);
+    return { readyPromise, target };
+}
+
+describe('IframeTransport', () => {
+    let transport: IframeTransport;
+
+    beforeEach(() => {
+        transport = createTransport();
+    });
+
+    afterEach(() => {
+        transport.destroy();
+        document.body.innerHTML = '';
+        document.head.innerHTML = '';
+    });
+
+    describe('kind', () => {
+        it('is "iframe"', () => {
+            expect(transport.kind).toBe('iframe');
+        });
+    });
+
+    describe('mount', () => {
+        it('creates a hidden dialog/iframe with the exact security attributes', async () => {
+            const pending = transport.ensureReady().catch(() => {
+                /* handshake never completes in this test */
+            });
+
+            const dialog = getDialog();
+            const iframe = getIframe();
+
+            expect(dialog).toBeTruthy();
+            expect(dialog?.hasAttribute('open')).toBe(false);
+            expect(dialog?.getAttribute('aria-label')).toBe('JAW Wallet');
+
+            expect(iframe).toBeTruthy();
+            expect(iframe?.getAttribute('allow')).toBe(
+                `publickey-credentials-get ${urlOrigin}; publickey-credentials-create ${urlOrigin}`
+            );
+            expect(iframe?.getAttribute('sandbox')).toBe(
+                'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox'
+            );
+            expect(iframe?.getAttribute('title')).toBe('JAW');
+            expect(iframe?.getAttribute('tabindex')).toBe('0');
+            expect(iframe?.style.visibility).toBe('hidden');
+            expect(iframe?.src).toMatch(/^https:\/\/keys\.jaw\.id\/?$/);
+
+            transport.destroy();
+            await pending;
+        });
+
+        it('injects the transparent-backdrop style once', async () => {
+            const pending = transport.ensureReady().catch(() => {
+                /* noop */
+            });
+
+            const styles = document.querySelectorAll('#jaw-dialog-backdrop-style');
+            expect(styles.length).toBe(1);
+            expect(styles[0].textContent).toContain('::backdrop');
+
+            transport.destroy();
+            await pending;
+        });
+
+        it('reverts the `inert` attribute set by extensions (1Password workaround)', async () => {
+            const pending = transport.ensureReady().catch(() => {
+                /* noop */
+            });
+
+            const dialog = getDialog();
+            dialog?.setAttribute('inert', '');
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(dialog?.hasAttribute('inert')).toBe(false);
+
+            transport.destroy();
+            await pending;
+        });
+    });
+
+    describe('ensureReady', () => {
+        it('completes the handshake over the iframe contentWindow', async () => {
+            const { readyPromise, target } = startHandshake(transport);
+
+            const resolved = await readyPromise;
+
+            expect(target.postMessage.mock.calls[0]).toEqual([
+                {
+                    requestId: 'popup-loaded-id',
+                    data: {
+                        version: SDK_VERSION,
+                        metadata: appMetadata,
+                        preference,
+                        location: 'http://localhost:3000/',
+                    },
+                },
+                urlOrigin,
+            ]);
+            expect(resolved).toBe(target as unknown as Window);
+            expect(transport.isAlive()).toBe(true);
+        });
+
+        it('does not show the dialog during the handshake', async () => {
+            const { readyPromise } = startHandshake(transport);
+            await readyPromise;
+
+            expect(getDialog()?.hasAttribute('open')).toBe(false);
+            expect(getIframe()?.style.visibility).toBe('hidden');
+        });
+
+        it('rejects when the handshake times out (AC-E2)', async () => {
+            transport = createTransport(50);
+            const promise = transport.ensureReady();
+            mockContentWindow();
+            // No PopupLoaded/PopupReady dispatched
+
+            await expect(promise).rejects.toThrow(/timed out/i);
+            expect(transport.isAlive()).toBe(false);
+        });
+
+        it('ignores handshake messages from other origins', async () => {
+            transport = createTransport(400);
+            const promise = transport.ensureReady();
+            const target = mockContentWindow();
+
+            queueMessageEvent({ ...popupLoadedMessage, origin: 'https://evil.example.com' });
+
+            await expect(promise).rejects.toThrow(/timed out/i);
+            expect(target.postMessage).not.toHaveBeenCalled();
+        });
+    });
+
+    describe('prewarm (AC-9)', () => {
+        it('completes the handshake without showing UI and is idempotent', async () => {
+            const prewarmPromise = transport.prewarm();
+            mockContentWindow();
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await prewarmPromise;
+
+            expect(transport.isAlive()).toBe(true);
+            expect(getDialog()?.hasAttribute('open')).toBe(false);
+
+            await transport.prewarm();
+            expect(document.querySelectorAll('dialog[data-jaw]').length).toBe(1);
+        });
+    });
+
+    describe('postMessage', () => {
+        it('shows the dialog, reveals the iframe and posts to the keys origin (AC-1, AC-10)', async () => {
+            const { target } = startHandshake(transport);
+            const message: Message = { requestId: 'req-id-1-1-1', data: {} };
+
+            await transport.postMessage(message);
+
+            expect(getDialog()?.hasAttribute('open')).toBe(true);
+            expect(getIframe()?.style.visibility).toBe('visible');
+            expect(document.body.style.overflow).toBe('hidden');
+            expect(target.postMessage.mock.calls[1]).toEqual([message, urlOrigin]);
+        });
+    });
+
+    describe('dismissal (AC-8)', () => {
+        it('Escape rejects pending requests with 4001 and hides, keeping the iframe alive', async () => {
+            startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+
+            const pending = transport.onMessage(() => false);
+
+            getDialog()?.dispatchEvent(new dom.window.Event('cancel', { cancelable: true }));
+
+            await expect(pending).rejects.toThrow(/Request rejected/);
+            expect(getDialog()?.hasAttribute('open')).toBe(false);
+            expect(document.body.style.overflow).toBe('');
+            expect(transport.isAlive()).toBe(true);
+        });
+
+        it('reopens successfully after a dismissal', async () => {
+            const { target } = startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+
+            getDialog()?.dispatchEvent(new dom.window.Event('cancel', { cancelable: true }));
+            expect(getDialog()?.hasAttribute('open')).toBe(false);
+
+            await transport.postMessage({ requestId: 'req-id-2-2-2', data: {} });
+
+            expect(getDialog()?.hasAttribute('open')).toBe(true);
+            expect(target.postMessage.mock.calls.length).toBe(3); // config + req-1 + req-2
+        });
+    });
+
+    describe('DialogClose (AC-5b)', () => {
+        it('hides on reason "completed" without rejecting pending listeners', async () => {
+            startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+
+            let rejected = false;
+            transport.onMessage(() => false).catch(() => {
+                rejected = true;
+            });
+
+            dispatchMessageEvent({
+                data: { event: 'DialogClose', data: { reason: 'completed' } },
+                origin: urlOrigin,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(getDialog()?.hasAttribute('open')).toBe(false);
+            expect(transport.isAlive()).toBe(true);
+            expect(rejected).toBe(false);
+        });
+
+        it('rejects pending listeners on reason "cancelled" and hides', async () => {
+            startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+
+            const pending = transport.onMessage(() => false);
+
+            dispatchMessageEvent({
+                data: { event: 'DialogClose', data: { reason: 'cancelled' } },
+                origin: urlOrigin,
+            });
+
+            await expect(pending).rejects.toThrow(/Request rejected/);
+            expect(getDialog()?.hasAttribute('open')).toBe(false);
+        });
+
+        it('ignores DialogClose from other origins (AC-E3)', async () => {
+            startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+
+            dispatchMessageEvent({
+                data: { event: 'DialogClose', data: { reason: 'cancelled' } },
+                origin: 'https://evil.example.com',
+            });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(getDialog()?.hasAttribute('open')).toBe(true);
+        });
+    });
+
+    describe('PopupUnload', () => {
+        it('marks the transport not alive and hides when the iframe unloads', async () => {
+            startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+
+            dispatchMessageEvent({
+                data: { event: 'PopupUnload', id: 'unload-id' },
+                origin: urlOrigin,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(transport.isAlive()).toBe(false);
+            expect(getDialog()?.hasAttribute('open')).toBe(false);
+        });
+    });
+
+    describe('reload (AC-2)', () => {
+        it('re-runs the handshake and becomes alive again', async () => {
+            const { readyPromise } = startHandshake(transport);
+            await readyPromise;
+            expect(transport.isAlive()).toBe(true);
+
+            const reloadPromise = transport.reload();
+            expect(transport.isAlive()).toBe(false);
+
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await reloadPromise;
+
+            expect(transport.isAlive()).toBe(true);
+        });
+    });
+
+    describe('destroy', () => {
+        it('removes the dialog, rejects pending listeners and is not alive', async () => {
+            const { readyPromise } = startHandshake(transport);
+            await readyPromise;
+
+            const pending = transport.onMessage(() => false);
+
+            transport.destroy();
+
+            await expect(pending).rejects.toThrow(/Request rejected/);
+            expect(getDialog()).toBeNull();
+            expect(transport.isAlive()).toBe(false);
+        });
+
+        it('is safe to call before mounting', () => {
+            expect(() => createTransport().destroy()).not.toThrow();
+        });
+    });
+});
