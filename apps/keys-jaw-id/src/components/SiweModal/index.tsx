@@ -15,6 +15,7 @@ export interface SiweModalProps {
   apiKey?: string;
   appName?: string;
   appLogoUrl?: string;
+  warningMessage?: string;
   onSuccess: (signature: string, message: string) => void;
   onError: (error: Error, errorCode?: number) => void;
 }
@@ -27,6 +28,7 @@ export const SiweModal = ({
   apiKey,
   appName,
   appLogoUrl,
+  warningMessage,
   onSuccess,
   onError,
 }: SiweModalProps) => {
@@ -124,6 +126,7 @@ export const SiweModal = ({
       isProcessing={isProcessing}
       siweStatus={siweStatus}
       canSign={canSign}
+      warningMessage={warningMessage}
     />
   );
 };

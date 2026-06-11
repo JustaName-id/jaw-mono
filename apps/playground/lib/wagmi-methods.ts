@@ -148,6 +148,15 @@ export const WAGMI_METHODS: WagmiMethod[] = [
         showWhen: { param: 'enableSiwe', value: 'true' },
       },
       {
+        name: 'siweDomain',
+        type: 'string',
+        label: 'SIWE Domain (optional)',
+        description:
+          'Domain asserted in the SIWE message. Blank = this app origin. Set a foreign host (e.g. bank.com) to test cross-domain phishing detection.',
+        required: false,
+        showWhen: { param: 'enableSiwe', value: 'true' },
+      },
+      {
         name: 'enableSubnameTextRecords',
         type: 'toggle',
         label: 'Enable Subname Text Records',
@@ -179,10 +188,11 @@ export const WAGMI_METHODS: WagmiMethod[] = [
       const capabilities: string[] = [];
 
       if (enableSiwe) {
+        const domainLine = params.siweDomain ? `\n        domain: '${params.siweDomain}',` : '';
         capabilities.push(`      signInWithEthereum: {
         nonce,
         chainId: '0x1',
-        statement: '${params.siweStatement || 'Sign in with your JAW account'}',
+        statement: '${params.siweStatement || 'Sign in with your JAW account'}',${domainLine}
       }`);
       }
 
@@ -245,6 +255,7 @@ connect({ connector: jawConnector });`;
           nonce,
           chainId: '0x1',
           statement: params.siweStatement || 'Sign in with your JAW account',
+          ...(params.siweDomain ? { domain: params.siweDomain } : {}),
         };
       }
 
@@ -519,6 +530,47 @@ signMessage({ message: '${params.message ?? 'Hello, World!'}' });
 console.log('Signature:', signature);`,
     buildParams: (params) => ({
       message: params.message ?? 'Hello, World!',
+    }),
+  },
+  {
+    id: 'siwe_personal_sign',
+    name: 'SIWE Sign-In (test)',
+    method: 'personal_sign',
+    hookType: 'useSignMessage',
+    category: 'signing',
+    description:
+      'Sign a SIWE message. Edit the domain/URI to a host other than this app to test cross-domain phishing detection.',
+    requiresConnection: true,
+    parameters: [
+      {
+        name: 'message',
+        type: 'json',
+        label: 'SIWE Message',
+        description: 'EIP-4361 message. The domain (first line) and URI assert who you are signing in to.',
+        required: true,
+        defaultValue: [
+          'bank.com wants you to sign in with your Ethereum account:',
+          '0x0000000000000000000000000000000000000000',
+          '',
+          'Sign in to bank.com',
+          '',
+          'URI: https://bank.com',
+          'Version: 1',
+          'Chain ID: 1',
+          'Nonce: abc12345def67890',
+          'Issued At: 2025-01-01T00:00:00.000Z',
+        ].join('\n'),
+      },
+    ],
+    getCodeSnippet: (params) => `import { useSignMessage } from 'wagmi';
+
+const { signMessage, data: signature } = useSignMessage();
+
+const siweMessage = ${JSON.stringify(params.message ?? '')};
+
+signMessage({ message: siweMessage });`,
+    buildParams: (params) => ({
+      message: params.message ?? '',
     }),
   },
   {
