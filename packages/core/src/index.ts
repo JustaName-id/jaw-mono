@@ -14,6 +14,9 @@ export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
 /** SDK exports **/
 export { create, JAW, type CreateJAWSDKOptions } from './sdk/index.js';
 
+/** Transport layer (keys communication) **/
+export { Communicator, type CommunicatorOptions } from './communicator/index.js';
+
 /**  RPC types and utilities **/
 export {
     // Capability types
