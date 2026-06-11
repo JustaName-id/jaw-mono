@@ -1,3 +1,17 @@
+## 0.4.6 (2026-06-11)
+
+### 🩹 Fixes
+
+- phishing host injection in SIWE ([#189](https://github.com/JustaName-id/jaw-mono/pull/189))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.4.3
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.5 (2026-06-11)
 
 ### 🩹 Fixes

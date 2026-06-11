@@ -1,3 +1,13 @@
+## 0.4.3 (2026-06-11)
+
+### 🩹 Fixes
+
+- phishing host injection in SIWE ([#189](https://github.com/JustaName-id/jaw-mono/pull/189))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.2 (2026-06-04)
 
 ### 🩹 Fixes
