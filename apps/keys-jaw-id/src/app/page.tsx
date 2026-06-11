@@ -14,6 +14,7 @@ import { PermissionModal, type PermissionRequestData } from '../components/Permi
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
+import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
 import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage } from '@jaw.id/core';
@@ -40,6 +41,18 @@ type PopupState =
   | 'error';
 
 export default function KeysJawIdApp() {
+  // Single communicator instance, shared by the embedded shell (presentation
+  // + iframe escape hatches) and the app content (message flow).
+  const [communicator] = useState(() => new PopupCommunicator());
+
+  return (
+    <EmbeddedShell communicator={communicator}>
+      <KeysJawIdAppContent communicator={communicator} />
+    </EmbeddedShell>
+  );
+}
+
+function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator }) {
   // Current origin for session-based auth
   const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
 
@@ -48,7 +61,6 @@ export default function KeysJawIdApp() {
   const passkeyQuery = usePasskeys();
 
   // Service instances (created once)
-  const [communicator] = useState(() => new PopupCommunicator());
   const [cryptoHandler] = useState(() => new CryptoHandler());
 
   // Simple state
