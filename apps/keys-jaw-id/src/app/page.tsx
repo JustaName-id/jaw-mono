@@ -159,14 +159,14 @@ export default function KeysJawIdApp() {
           const chainId = pendingRequest.chain?.id ?? 1;
           const chainIdHex = `0x${chainId.toString(16)}`;
           await pendingRequest.onApprove(chainIdHex);
-          setTimeout(() => window.close(), 100);
+          setTimeout(() => communicator.requestClose(), 100);
         } catch (error) {
           console.error('❌ Failed to handle eth_chainId:', error);
           await pendingRequest.onReject(
             error instanceof Error ? error.message : 'Failed to get chain ID',
             standardErrorCodes.rpc.internal
           );
-          setTimeout(() => window.close(), 100);
+          setTimeout(() => communicator.requestClose(), 100);
         }
       };
       handleChainId();
@@ -287,7 +287,7 @@ export default function KeysJawIdApp() {
             communicator.sendMessage(response as any);
           },
           onReject: async () => {
-            window.close();
+            communicator.requestClose();
           },
         });
 
@@ -395,10 +395,10 @@ export default function KeysJawIdApp() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(errorResponse as any);
             // Close window after sending error
-            setTimeout(() => window.close(), 100);
+            setTimeout(() => communicator.requestClose(), 100);
           } catch (err) {
             console.error('❌ Failed to send rejection response:', err);
-            window.close();
+            communicator.requestClose();
           }
         },
       });
@@ -473,7 +473,7 @@ export default function KeysJawIdApp() {
               console.log('✅ Transaction response:', response);
               await pendingRequest.onApprove(response);
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
               console.error('❌ Failed to send transaction:', err);
               setError(err instanceof Error ? err.message : 'Failed to send transaction');
@@ -487,10 +487,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -551,7 +551,7 @@ export default function KeysJawIdApp() {
                 await pendingRequest.onApprove(signature);
                 console.log('✅ SIWE signature sent successfully');
                 setState('success');
-                setTimeout(() => window.close(), 1500);
+                setTimeout(() => communicator.requestClose(), 1500);
               } catch (err) {
                 console.error('❌ Failed to send SIWE signature:', err);
                 setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -565,10 +565,10 @@ export default function KeysJawIdApp() {
                   error.message,
                   errorCode ?? standardErrorCodes.provider.userRejectedRequest
                 );
-                window.close();
+                communicator.requestClose();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
-                window.close();
+                communicator.requestClose();
               }
             }}
           />
@@ -590,7 +590,7 @@ export default function KeysJawIdApp() {
               await pendingRequest.onApprove(signature);
               console.log('✅ Signature sent successfully');
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -604,10 +604,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -661,7 +661,7 @@ export default function KeysJawIdApp() {
               await pendingRequest.onApprove(signature);
               console.log('✅ Typed data signature sent successfully');
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -675,10 +675,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -709,7 +709,7 @@ export default function KeysJawIdApp() {
               await pendingRequest.onApprove(result);
               console.log('✅ Permission granted successfully');
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
               console.error('❌ Failed to grant permission:', err);
               setError(err instanceof Error ? err.message : 'Failed to grant permission');
@@ -723,10 +723,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -757,7 +757,7 @@ export default function KeysJawIdApp() {
               await pendingRequest.onApprove(result);
               console.log('✅ Permission revoked successfully');
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
               console.error('❌ Failed to revoke permission:', err);
               setError(err instanceof Error ? err.message : 'Failed to revoke permission');
@@ -771,10 +771,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -793,10 +793,10 @@ export default function KeysJawIdApp() {
             try {
               // Forward error and code directly from modal
               await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.rpc.methodNotFound);
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject unsupported method:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -887,7 +887,7 @@ export default function KeysJawIdApp() {
               <button
                 onClick={() => {
                   communicator.sendPopupUnload();
-                  window.close();
+                  communicator.requestClose();
                 }}
                 className="bg-secondary text-secondary-foreground hover:bg-secondary/80 w-full rounded-lg px-6 py-2 font-semibold transition-colors"
               >
@@ -1133,7 +1133,7 @@ export default function KeysJawIdApp() {
                 console.log('✅ SIWE response:', response);
                 await pendingRequest.onApprove(response);
                 setState('success');
-                setTimeout(() => window.close(), 1500);
+                setTimeout(() => communicator.requestClose(), 1500);
               } catch (err) {
                 console.error('❌ Failed to approve connection with SIWE:', err);
                 setError(err instanceof Error ? err.message : 'Failed to approve connection');
@@ -1147,10 +1147,10 @@ export default function KeysJawIdApp() {
                   error.message,
                   errorCode ?? standardErrorCodes.provider.userRejectedRequest
                 );
-                window.close();
+                communicator.requestClose();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
-                window.close();
+                communicator.requestClose();
               }
             }}
           />
@@ -1182,7 +1182,7 @@ export default function KeysJawIdApp() {
 
               await pendingRequest.onApprove(response);
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
               console.error('❌ Failed to approve connection:', err);
               setError(err instanceof Error ? err.message : 'Failed to approve connection');
@@ -1196,10 +1196,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
