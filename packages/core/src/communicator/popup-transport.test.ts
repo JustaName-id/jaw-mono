@@ -1,0 +1,385 @@
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { JSDOM } from 'jsdom';
+
+import type { AppMetadata, JawProviderPreference } from '../provider/interface.js';
+import { SDK_VERSION } from '../sdk-info.js';
+import type { Message, MessageID } from '../messages/message.js';
+import { PopupTransport } from './popup-transport.js';
+import { JAW_KEYS_URL } from '../constants.js';
+
+// Set up jsdom environment
+const dom = new JSDOM('<!DOCTYPE html><html><body></body></html>', {
+    url: 'http://localhost:3000/',
+});
+global.window = dom.window as unknown as Window & typeof globalThis;
+global.document = dom.window.document;
+global.MessageEvent = dom.window.MessageEvent;
+
+// Dispatches a message event to simulate postMessage calls from the popup
+function dispatchMessageEvent({ data, origin }: { data: unknown; origin: string }) {
+    const messageEvent = new MessageEvent('message', {
+        data,
+        origin,
+    });
+    window.dispatchEvent(messageEvent);
+}
+
+const popupLoadedMessage = {
+    data: { event: 'PopupLoaded', id: 'popup-loaded-id' },
+};
+
+const popupReadyMessage = {
+    data: { event: 'PopupReady' },
+};
+
+/**
+ * Queues a message event to be dispatched after a delay, simulating
+ * messages sent by the popup (see communicator.test.ts).
+ */
+function queueMessageEvent({
+    data,
+    origin = new URL(JAW_KEYS_URL).origin,
+}: {
+    data: Record<string, unknown>;
+    origin?: string;
+}) {
+    setTimeout(() => dispatchMessageEvent({ data, origin }), 200);
+}
+
+const appMetadata: AppMetadata = {
+    appName: 'Test App',
+    appLogoUrl: null,
+    defaultChainId: 1,
+};
+
+const preference: JawProviderPreference = { keysUrl: JAW_KEYS_URL };
+
+function createTransport(): PopupTransport {
+    return new PopupTransport({
+        url: new URL(JAW_KEYS_URL),
+        metadata: appMetadata,
+        preference,
+    });
+}
+
+describe('PopupTransport', () => {
+    let urlOrigin: string;
+    let transport: PopupTransport;
+    let mockPopup: Pick<Window, 'postMessage' | 'close' | 'closed' | 'focus'>;
+    let originalWindowOpen: typeof window.open;
+    let originalAddEventListener: typeof window.addEventListener;
+    let originalRemoveEventListener: typeof window.removeEventListener;
+    let addEventListenerCallCount: number;
+    let removeEventListenerCallCount: number;
+
+    beforeEach(() => {
+        addEventListenerCallCount = 0;
+        removeEventListenerCallCount = 0;
+
+        originalWindowOpen = window.open;
+        originalAddEventListener = window.addEventListener;
+        originalRemoveEventListener = window.removeEventListener;
+
+        window.addEventListener = ((event: string, listener: EventListener) => {
+            addEventListenerCallCount++;
+            return originalAddEventListener.call(window, event, listener);
+        }) as typeof window.addEventListener;
+
+        window.removeEventListener = ((event: string, listener: EventListener) => {
+            removeEventListenerCallCount++;
+            return originalRemoveEventListener.call(window, event, listener);
+        }) as typeof window.removeEventListener;
+
+        transport = createTransport();
+        urlOrigin = new URL(JAW_KEYS_URL).origin;
+
+        mockPopup = {
+            postMessage: vi.fn(() => {
+                // Mock implementation
+            }),
+            close: vi.fn(() => {
+                // Mock implementation
+            }),
+            closed: false,
+            focus: vi.fn(() => {
+                // Mock implementation
+            }),
+        };
+
+        window.open = vi.fn(() => mockPopup as Window);
+    });
+
+    afterEach(() => {
+        window.open = originalWindowOpen;
+        window.addEventListener = originalAddEventListener;
+        window.removeEventListener = originalRemoveEventListener;
+    });
+
+    describe('kind', () => {
+        it('is "popup"', () => {
+            expect(transport.kind).toBe('popup');
+        });
+    });
+
+    describe('onMessage', () => {
+        it('should add and remove event listener', async () => {
+            const mockRequest: Message = {
+                requestId: 'mock-request-id-1-2',
+                data: 'test',
+            };
+
+            queueMessageEvent({ data: mockRequest as unknown as Record<string, unknown> });
+
+            const promise = transport.onMessage(() => true);
+
+            expect(addEventListenerCallCount).toBe(1);
+            expect(await promise).toEqual(mockRequest);
+            expect(removeEventListenerCallCount).toBe(1);
+        });
+
+        it('should ignore messages from other origins', async () => {
+            queueMessageEvent({
+                data: { requestId: 'spoofed' },
+                origin: 'https://evil.example.com',
+            });
+            queueMessageEvent({ data: { requestId: 'legit' } });
+
+            const message = await transport.onMessage(() => true);
+
+            expect(message).toEqual({ requestId: 'legit' });
+        });
+    });
+
+    describe('postRequestAndWaitForResponse', () => {
+        it('should post a message to the popup window and wait for response', async () => {
+            const mockRequest: Message & { id: MessageID } = { id: 'mock-request-id-1-2', data: {} };
+
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            queueMessageEvent({
+                data: {
+                    requestId: mockRequest.id,
+                },
+            });
+
+            const response = await transport.postRequestAndWaitForResponse(mockRequest);
+
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
+                {
+                    requestId: 'popup-loaded-id',
+                    data: {
+                        version: SDK_VERSION,
+                        metadata: appMetadata,
+                        preference,
+                        location: 'http://localhost:3000/',
+                    },
+                },
+                urlOrigin,
+            ]);
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([mockRequest, urlOrigin]);
+
+            expect(response).toEqual({
+                requestId: mockRequest.id,
+            });
+        });
+    });
+
+    describe('postMessage', () => {
+        it('should post a response to the popup window', async () => {
+            const mockResponse: Message = { requestId: 'mock-request-id-1-2', data: {} };
+
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+
+            await transport.postMessage(mockResponse);
+
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
+                {
+                    requestId: 'popup-loaded-id',
+                    data: {
+                        version: SDK_VERSION,
+                        metadata: appMetadata,
+                        preference,
+                        location: 'http://localhost:3000/',
+                    },
+                },
+                urlOrigin,
+            ]);
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[1]).toEqual([
+                mockResponse,
+                urlOrigin,
+            ]);
+        });
+    });
+
+    describe('ensureReady', () => {
+        it('should open a popup window and finish handshake', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+
+            const popup = await transport.ensureReady();
+
+            expect(window.open).toHaveBeenCalled();
+            const openCall = (window.open as ReturnType<typeof vi.fn>).mock.calls[0];
+            // URL might have a trailing slash when converted to string
+            expect(openCall[0]).toMatch(/^https:\/\/keys\.jaw\.id\/?$/);
+
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0]).toEqual([
+                {
+                    requestId: 'popup-loaded-id',
+                    data: {
+                        version: SDK_VERSION,
+                        metadata: appMetadata,
+                        preference,
+                        location: 'http://localhost:3000/',
+                    },
+                },
+                urlOrigin,
+            ]);
+            expect(popup).toBeTruthy();
+        });
+
+        it('should re-focus and return the existing popup window if one is already open', async () => {
+            let callCount = 0;
+            window.open = vi.fn(() => {
+                callCount++;
+                return mockPopup as Window;
+            });
+
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            // Call again - should reuse existing popup
+            await transport.ensureReady();
+
+            expect((mockPopup.focus as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1);
+            expect(callCount).toBe(1);
+        });
+
+        it('should open a popup window if an existing one is defined but closed', async () => {
+            let callCount = 0;
+            let currentPopup = mockPopup;
+
+            window.open = vi.fn(() => {
+                callCount++;
+                const newPopup = {
+                    postMessage: vi.fn(() => {
+                        // Mock implementation
+                    }),
+                    close: vi.fn(() => {
+                        // Mock implementation
+                    }),
+                    closed: false,
+                    focus: vi.fn(() => {
+                        // Mock implementation
+                    }),
+                };
+                currentPopup = newPopup;
+                return newPopup as unknown as Window;
+            });
+
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            (currentPopup as { closed: boolean }).closed = true;
+
+            transport = createTransport();
+
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            expect(callCount).toBe(2);
+        });
+
+        it('should reject when the popup is blocked (window.open returns null)', async () => {
+            window.open = vi.fn(() => null);
+
+            await expect(transport.ensureReady()).rejects.toThrow(/allow popups/i);
+        });
+    });
+
+    describe('isAlive', () => {
+        it('is false before opening, true after handshake, false after destroy', async () => {
+            expect(transport.isAlive()).toBe(false);
+
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            expect(transport.isAlive()).toBe(true);
+
+            transport.destroy();
+
+            expect(transport.isAlive()).toBe(false);
+        });
+    });
+
+    describe('destroy', () => {
+        it('should close the popup window and clear all listeners', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            const messagePromise = transport.onMessage(() => false);
+
+            transport.destroy();
+
+            expect((mockPopup.close as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+
+            try {
+                await messagePromise;
+                expect(true).toBe(false); // Should not reach here
+            } catch (error) {
+                expect((error as Error).message).toContain('Request rejected');
+            }
+
+            expect(removeEventListenerCallCount).toBeGreaterThan(0);
+        });
+
+        it('should handle destroy when no popup was opened', () => {
+            expect(() => transport.destroy()).not.toThrow();
+        });
+
+        it('should reject all pending listeners on destroy', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            const messagePromise1 = transport.onMessage(() => false);
+            const messagePromise2 = transport.onMessage(() => false);
+            const messagePromise3 = transport.onMessage(() => false);
+
+            transport.destroy();
+
+            const results = await Promise.allSettled([messagePromise1, messagePromise2, messagePromise3]);
+
+            results.forEach((result) => {
+                expect(result.status).toBe('rejected');
+                if (result.status === 'rejected') {
+                    expect(result.reason.message).toContain('Request rejected');
+                }
+            });
+        });
+    });
+
+    describe('PopupUnload event', () => {
+        it('should destroy the transport when PopupUnload is received', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            queueMessageEvent({
+                data: { event: 'PopupUnload', id: 'unload-id' },
+            });
+
+            await transport.ensureReady();
+
+            // Wait a bit for the PopupUnload event to be processed
+            await new Promise((resolve) => setTimeout(resolve, 300));
+
+            expect((mockPopup.close as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1);
+            expect(transport.isAlive()).toBe(false);
+        });
+    });
+});
