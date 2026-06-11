@@ -305,6 +305,32 @@ describe('TransportRouter.acquire', () => {
     });
 });
 
+describe('TransportRouter.forcePopupOnce (AC-11)', () => {
+    it('forces the next acquire onto popup even when routing picks iframe', async () => {
+        const { router, popupMock, iframeMock } = createRouter({ mode: 'iframe' });
+
+        await router.acquire({}); // iframe established
+        router.forcePopupOnce();
+
+        const transport = await router.acquire({});
+        expect(transport.kind).toBe('popup');
+        expect(popupMock.ensureReady).toHaveBeenCalledTimes(1);
+        expect(iframeMock.hide).toHaveBeenCalledTimes(1);
+    });
+
+    it('is consumed once and schedules an iframe resync', async () => {
+        const { router, iframeMock } = createRouter({ mode: 'iframe' });
+
+        await router.acquire({}); // iframe established
+        router.forcePopupOnce();
+        await router.acquire({}); // popup (forced)
+
+        const next = await router.acquire({});
+        expect(next.kind).toBe('iframe');
+        expect(iframeMock.reload).toHaveBeenCalledTimes(1);
+    });
+});
+
 describe('TransportRouter.prewarm', () => {
     it('prewarms the iframe when routing would pick it (AC-9)', async () => {
         const { router, iframeMock } = createRouter({ mode: 'iframe' });

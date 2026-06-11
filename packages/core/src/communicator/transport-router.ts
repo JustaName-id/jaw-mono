@@ -59,6 +59,8 @@ export class TransportRouter implements TransportRouterContract {
 
     /** Iframe must resync (reload) before its next use after a popup-fallback flow (AC-2). */
     private pendingIframeReload = false;
+    /** Next acquire is forced to popup (user/dialog requested a transport switch, AC-11). */
+    private popupForced = false;
     private warnedInsecure = false;
 
     /** Serializes acquires: no parallel popup + iframe setup races (AC-E4). */
@@ -114,6 +116,19 @@ export class TransportRouter implements TransportRouterContract {
         await this.getOrCreateIframe().prewarm();
     }
 
+    /**
+     * Force the next acquire onto the popup transport (AC-11 — the dialog
+     * or the user asked to continue in a new window). The iframe hides and
+     * resyncs before its next use.
+     */
+    forcePopupOnce(): void {
+        this.popupForced = true;
+        if (this.iframe) {
+            this.iframe.hide();
+            this.pendingIframeReload = true;
+        }
+    }
+
     // ------------------------------------------------------------------ //
 
     private decide(ctx: RouteContext): { kind: TransportKind; reason: RouteReason } {
@@ -133,6 +148,13 @@ export class TransportRouter implements TransportRouterContract {
     }
 
     private async doAcquire(ctx: RouteContext): Promise<Transport> {
+        if (this.popupForced) {
+            this.popupForced = false;
+            const popup = this.getOrCreatePopup();
+            await popup.ensureReady();
+            return popup;
+        }
+
         const { kind, reason } = this.decide(ctx);
 
         if (kind === 'popup') {

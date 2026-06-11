@@ -53,6 +53,10 @@ export class Communicator {
     private readonly url: URL;
     private readonly router: TransportRouter;
     private listeners = new Map<(_: MessageEvent) => void, { reject: (_: Error) => void }>();
+    /** Requests awaiting a response, replayed if the dialog switches transports (AC-11). */
+    private inflight = new Map<MessageID, Message & { id: MessageID }>();
+
+    private switchListenerArmed = false;
 
     constructor({ metadata, preference }: CommunicatorOptions) {
         this.url = new URL(preference.keysUrl ?? JAW_KEYS_URL);
@@ -63,6 +67,40 @@ export class Communicator {
             mode: normalizeTransportMode(preference.transportMode),
         });
     }
+
+    /**
+     * The keys dialog can ask to continue the flow in a popup (occluded UI,
+     * WebAuthn-in-iframe limitations, or the user's choice). Armed lazily on
+     * first business traffic.
+     */
+    private ensureSwitchListener(): void {
+        if (this.switchListenerArmed || typeof window === 'undefined') return;
+        this.switchListenerArmed = true;
+        window.addEventListener('message', this.handleSwitchTransport);
+    }
+
+    /** Visible for tests. Routes SwitchTransport requests from the keys dialog. */
+    handleSwitchTransport = (event: MessageEvent): void => {
+        if (event.origin !== this.url.origin) return;
+        const message = event.data as { event?: string } | undefined;
+        if (message?.event !== 'SwitchTransport') return;
+
+        this.router.forcePopupOnce();
+
+        // Replay in-flight requests on the popup; their response listeners
+        // are transport-agnostic (matched by requestId), so they stay armed.
+        void (async () => {
+            for (const request of this.inflight.values()) {
+                try {
+                    const transport = await this.router.acquire(getRouteContext(request));
+                    await transport.postMessage(request);
+                } catch {
+                    // Popup blocked or failed — the original listener will
+                    // surface the rejection through the normal error path.
+                }
+            }
+        })();
+    };
 
     /**
      * Wait for the keys app to load and complete the handshake.
@@ -83,6 +121,7 @@ export class Communicator {
      * Posts a message to the keys app.
      */
     postMessage = async (message: Message) => {
+        this.ensureSwitchListener();
         const transport = await this.router.acquire(getRouteContext(message));
         await transport.postMessage(message);
     };
@@ -94,8 +133,13 @@ export class Communicator {
      */
     async postRequestAndWaitForResponse<M extends Message>(request: Message & { id: MessageID }): Promise<M> {
         const responsePromise = this.onMessage<M>(({ requestId }) => requestId === request.id);
-        await this.postMessage(request);
-        return await responsePromise;
+        this.inflight.set(request.id, request);
+        try {
+            await this.postMessage(request);
+            return await responsePromise;
+        } finally {
+            this.inflight.delete(request.id);
+        }
     }
 
     /**
@@ -127,6 +171,7 @@ export class Communicator {
      */
     disconnect(): void {
         this.router.destroyAll();
+        this.inflight.clear();
 
         // Clean up all listeners and their timeouts
         this.listeners.forEach(({ reject }, listener) => {
