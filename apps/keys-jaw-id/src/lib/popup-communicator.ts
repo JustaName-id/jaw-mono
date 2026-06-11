@@ -1,6 +1,17 @@
 /**
  * PopupCommunicator
- * Simple wrapper for postMessage communication with the opener window
+ *
+ * postMessage wrapper for talking to the SDK, context-aware:
+ * - 'popup':    opened via window.open — counterpart is window.opener
+ * - 'embedded': loaded inside an iframe — counterpart is window.parent
+ * - 'standalone': direct navigation — communicator is inert
+ *
+ * Security rules (normative — see dev-specs keys-iframe-transport/contracts/wire-messages.md):
+ * - Every inbound message must come from the counterpart window (event.source check).
+ * - The counterpart origin is locked from the frame ancestry / referrer at
+ *   startup — never from an inbound message in embedded mode (lock poisoning).
+ * - Outbound messages are never posted with a '*' target origin; they queue
+ *   until the origin is locked.
  */
 
 export type MessageID = string;
@@ -13,115 +24,203 @@ export interface Message {
   [key: string]: unknown;
 }
 
+export type CommunicatorContext = 'popup' | 'embedded' | 'standalone';
+
+export type CloseReason = 'completed' | 'cancelled';
+
 export class PopupCommunicator {
-  private opener: Window | null = null;
+  private readonly win: Window | null;
+  private readonly context: CommunicatorContext;
+  private counterpart: Window | null = null;
   private origin: string | null = null;
+  /** Messages queued until the origin lock is established (never sent to '*'). */
+  private outbox: Message[] = [];
 
-  constructor() {
-    // Get opener reference
-    if (typeof window !== 'undefined') {
-      this.opener = window.opener;
+  constructor(win: Window | null = typeof window !== 'undefined' ? window : null) {
+    this.win = win;
 
-      // Auto-send PopupUnload when window closes (handles browser X button)
-      if (this.opener) {
-        window.addEventListener('beforeunload', () => {
-          this.sendPopupUnload();
-        });
-      }
+    if (!win) {
+      this.context = 'standalone';
+      return;
     }
+
+    if (win.opener) {
+      this.context = 'popup';
+      this.counterpart = win.opener;
+    } else if (win.parent && win.parent !== win) {
+      this.context = 'embedded';
+      this.counterpart = win.parent;
+    } else {
+      this.context = 'standalone';
+      return;
+    }
+
+    this.origin = this.resolveCounterpartOrigin();
+
+    // Notify the SDK when this window goes away. `beforeunload` does not
+    // fire reliably inside iframes — embedded mode uses `pagehide`.
+    const unloadEvent = this.context === 'embedded' ? 'pagehide' : 'beforeunload';
+    win.addEventListener(unloadEvent, () => {
+      this.sendPopupUnload();
+    });
   }
 
   /**
-   * Send PopupLoaded event to opener
+   * Resolve the counterpart origin from tamper-proof browser state.
+   * - embedded: location.ancestorOrigins (Chromium/WebKit), referrer fallback (Firefox)
+   * - popup:    document.referrer (the page that called window.open)
+   * Never derived from an inbound message in embedded mode.
+   */
+  private resolveCounterpartOrigin(): string | null {
+    if (!this.win) return null;
+
+    if (this.context === 'embedded') {
+      const ancestor = this.win.location?.ancestorOrigins?.[0];
+      if (ancestor) return ancestor;
+    }
+
+    try {
+      const referrer = this.win.document?.referrer;
+      if (referrer) return new URL(referrer).origin;
+    } catch {
+      /* malformed referrer */
+    }
+    return null;
+  }
+
+  /**
+   * Send PopupLoaded event to the counterpart
    */
   sendPopupLoaded(): void {
-    console.log('📤 Sending PopupLoaded event');
-    const message: Message = {
+    this.postMessage({
       id: crypto.randomUUID(),
       event: 'PopupLoaded',
-    };
-    this.postMessage(message);
+    });
   }
 
   /**
-   * Send PopupUnload event to opener
+   * Send PopupUnload event to the counterpart
    */
   sendPopupUnload(): void {
-    console.log('📤 Sending PopupUnload event');
-    const message: Message = {
+    this.postMessage({
       id: crypto.randomUUID(),
       event: 'PopupUnload',
-    };
-    this.postMessage(message);
+    });
   }
 
   /**
-   * Send PopupReady event to opener
-   * Signals that popup is fully initialized and ready to receive business messages
+   * Send PopupReady event to the counterpart
+   * Signals that the app is fully initialized and ready for business messages
    */
   sendPopupReady(): void {
-    const message: Message = {
+    this.postMessage({
       id: crypto.randomUUID(),
       event: 'PopupReady',
-    };
-    this.postMessage(message);
+    });
   }
 
   /**
    * Send a response to a specific request
    */
   sendResponse(requestId: MessageID, data: unknown): void {
-    console.log('📤 Sending response:', { requestId, data });
-    const message: Message = {
+    this.postMessage({
       requestId,
       data,
-    };
-    this.postMessage(message);
+    });
   }
 
   /**
-   * Send a raw message to the opener
+   * Send a raw message to the counterpart
    */
   sendMessage(message: Message): void {
     this.postMessage(message);
   }
 
   /**
-   * Listen for messages from the opener
-   * Returns cleanup function
+   * Close the current flow in a transport-aware way. window.close() is a
+   * no-op inside an iframe — embedded mode tells the SDK to hide the dialog
+   * instead. ALL flow-ending close calls must go through here.
    */
-  onMessage<T = unknown>(callback: (message: Message & { data?: T }) => void): () => void {
-    const handler = (event: MessageEvent) => {
-      // Ignore messages not from opener
-      if (this.opener && event.source !== this.opener) {
-        return;
-      }
-
-      // Lock origin on first valid message
-      if (!this.origin && event.origin) {
-        console.log('🔒 Locking origin to:', event.origin);
-        this.origin = event.origin;
-      }
-
-      // Verify origin matches
-      if (this.origin && event.origin !== this.origin) {
-        console.warn('⚠️ Message from different origin, ignoring:', event.origin);
-        return;
-      }
-
-      console.log('📥 Received message:', event.data);
-      callback(event.data);
-    };
-
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
+  requestClose(reason: CloseReason = 'completed'): void {
+    if (this.context === 'embedded') {
+      this.postMessage({
+        id: crypto.randomUUID(),
+        event: 'DialogClose',
+        data: { reason },
+      });
+      return;
+    }
+    if (this.context === 'popup') {
+      this.win?.close();
+    }
+    // standalone: nothing to close
   }
 
   /**
-   * Check if popup has an opener
+   * Ask the SDK to continue the current flow in a popup (iframe escape
+   * hatch: occluded UI, WebAuthn limitations).
+   */
+  requestSwitchToPopup(reason: 'user' | 'visibility' | 'webauthn-unsupported'): void {
+    if (this.context !== 'embedded') return;
+    this.postMessage({
+      id: crypto.randomUUID(),
+      event: 'SwitchTransport',
+      data: { to: 'popup', reason },
+    });
+  }
+
+  /**
+   * Listen for messages from the counterpart
+   * Returns cleanup function
+   */
+  onMessage<T = unknown>(callback: (message: Message & { data?: T }) => void): () => void {
+    if (!this.win || this.context === 'standalone') {
+      return () => undefined;
+    }
+
+    const handler = (event: MessageEvent) => {
+      // Source check is unconditional: only the counterpart window is valid
+      if (!this.counterpart || event.source !== this.counterpart) {
+        return;
+      }
+
+      if (!this.origin) {
+        if (this.context === 'popup' && event.origin) {
+          // Popup fallback only (opener page sent no referrer): lock from
+          // the first source-validated message. Embedded mode never locks
+          // from inbound messages (lock poisoning).
+          this.origin = event.origin;
+          this.flushOutbox();
+        } else {
+          return;
+        }
+      }
+
+      // Verify origin matches the lock
+      if (event.origin !== this.origin) {
+        console.warn('⚠️ Message from unexpected origin, ignoring:', event.origin);
+        return;
+      }
+
+      callback(event.data);
+    };
+
+    this.win.addEventListener('message', handler);
+    return () => this.win?.removeEventListener('message', handler);
+  }
+
+  /**
+   * Whether a counterpart window exists (popup opener or iframe parent)
    */
   hasOpener(): boolean {
-    return this.opener !== null;
+    return this.counterpart !== null;
+  }
+
+  /**
+   * Get the detected context
+   */
+  getContext(): CommunicatorContext {
+    return this.context;
   }
 
   /**
@@ -132,21 +231,30 @@ export class PopupCommunicator {
   }
 
   /**
-   * Internal method to post message to opener
+   * Internal method to post a message to the counterpart. Messages are
+   * queued (not sent to '*') until the origin lock is established.
    */
   private postMessage(message: Message): void {
-    if (!this.opener) {
-      console.error('❌ No opener window available');
+    if (!this.counterpart) {
+      console.error('❌ No counterpart window available');
       return;
     }
 
-    // Use locked origin if available, otherwise '*'
-    const targetOrigin = this.origin || '*';
+    if (!this.origin) {
+      this.outbox.push(message);
+      return;
+    }
 
     try {
-      this.opener.postMessage(message, targetOrigin);
+      this.counterpart.postMessage(message, this.origin);
     } catch (error) {
       console.error('❌ Failed to send message:', error);
     }
+  }
+
+  private flushOutbox(): void {
+    const pending = this.outbox;
+    this.outbox = [];
+    pending.forEach((message) => this.postMessage(message));
   }
 }
