@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ClearSigningDisplay, DisplayRow } from '../../utils/clearSigning';
-import { reverseResolveAddresses, formatAddress, getChainLabel } from '../../utils';
+import { reverseResolveAddresses, resolveAvatars, formatAddress, getChainLabel } from '../../utils';
+import { IdentityAvatar } from '../IdentityAvatar';
 
 interface ClearSignedViewProps {
   display: ClearSigningDisplay;
@@ -23,17 +24,29 @@ function TokenAmountValue({ row }: { row: DisplayRow }) {
   );
 }
 
-function AddressValue({ row, resolvedName }: { row: DisplayRow; resolvedName?: string }) {
+function AddressValue({
+  row,
+  resolvedName,
+  avatarSrc,
+}: {
+  row: DisplayRow;
+  resolvedName?: string;
+  avatarSrc?: string;
+}) {
   const addr = row.rawValue ?? row.value;
   return (
-    <p className="text-foreground break-all font-mono text-xs leading-[150%]">
-      {resolvedName ? `${resolvedName} (${formatAddress(addr)})` : addr}
-    </p>
+    <div className="flex flex-row items-center gap-1">
+      <IdentityAvatar src={avatarSrc} fallback={null} />
+      <p className="text-foreground break-all font-mono text-xs leading-[150%]">
+        {resolvedName ? `${resolvedName} (${formatAddress(addr)})` : addr}
+      </p>
+    </div>
   );
 }
 
 export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSignedViewProps) => {
   const [resolved, setResolved] = useState<Record<string, string>>({});
+  const [avatars, setAvatars] = useState<Record<string, string>>({});
   const attemptedRef = useRef<Set<string>>(new Set());
 
   useEffect(() => {
@@ -54,12 +67,16 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
       .then(async (resolved) => {
         if (cancelled) return;
         const label = await getChainLabel(chainId, mainnetRpcUrl);
+        if (cancelled) return;
+        const nameByAddress: Record<string, string> = {};
+        for (const address of unique) {
+          const name = resolved[address];
+          if (name) nameByAddress[address] = name;
+        }
         setResolved((prev) => {
           const next = { ...prev };
           let changed = false;
-          for (const address of unique) {
-            const name = resolved[address];
-            if (!name) continue;
+          for (const [address, name] of Object.entries(nameByAddress)) {
             const value = label ? `${name}@${label}` : name;
             if (next[address] !== value) {
               next[address] = value;
@@ -68,6 +85,19 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
           }
           return changed ? next : prev;
         });
+
+        // Fetch ENS avatars for the resolved address rows
+        const names = Object.values(nameByAddress);
+        if (names.length === 0) return;
+        const av = await resolveAvatars(names, mainnetRpcUrl);
+        if (cancelled) return;
+        const avByAddress: Record<string, string> = {};
+        for (const [address, name] of Object.entries(nameByAddress)) {
+          if (av[name]) avByAddress[address] = av[name];
+        }
+        if (Object.keys(avByAddress).length > 0) {
+          setAvatars((prev) => ({ ...prev, ...avByAddress }));
+        }
       })
       .catch(() => {
         /* silent */
@@ -93,13 +123,14 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
           {display.rows.map((row, i) => {
             const lookup = row.rawValue?.toLowerCase();
             const resolvedName = lookup ? resolved[lookup] : undefined;
+            const avatarSrc = lookup ? avatars[lookup] : undefined;
             return (
               <div key={i} className="flex flex-col gap-0.5">
                 <span className="text-muted-foreground text-xs font-semibold">{row.label}</span>
                 {row.kind === 'tokenAmount' || row.kind === 'amount' ? (
                   <TokenAmountValue row={row} />
                 ) : row.kind === 'address' ? (
-                  <AddressValue row={row} resolvedName={resolvedName} />
+                  <AddressValue row={row} resolvedName={resolvedName} avatarSrc={avatarSrc} />
                 ) : (
                   <p className="text-foreground break-all font-mono text-xs leading-[150%]">{row.value}</p>
                 )}

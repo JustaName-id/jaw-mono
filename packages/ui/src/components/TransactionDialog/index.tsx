@@ -5,14 +5,15 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '..
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { DefaultDialog } from '../DefaultDialog';
 import { FeeTokenSelector } from '../FeeTokenSelector';
-import { CopiedIcon, CopyIcon, WalletIcon } from '../../icons';
+import { CopiedIcon, CopyIcon } from '../../icons';
 import { useState, useEffect } from 'react';
 import { formatEther } from 'viem';
 import { Info } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
-import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
+import { reverseResolveAddresses, resolveAvatars, getDisplayAddress, getChainLabel } from '../../utils';
+import { IdentityAvatar } from '../IdentityAvatar';
 import { DecodedCalldata } from './DecodedCalldata';
 
 export const TransactionDialog = ({
@@ -47,6 +48,7 @@ export const TransactionDialog = ({
     [key: string]: boolean;
   }>({});
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
+  const [resolvedAvatars, setResolvedAvatars] = useState<Record<string, string>>({});
 
   const totalTransactions = transactions.length;
   const isSingleTransaction = totalTransactions === 1;
@@ -80,22 +82,43 @@ export const TransactionDialog = ({
     });
     if (inputs.length === 0) return;
 
+    let cancelled = false;
     reverseResolveAddresses(inputs, mainnetRpcUrl)
       .then(async (resolved) => {
+        if (cancelled) return;
         const next: Record<string, string> = {};
+        const nameByAddress: Record<string, string> = {};
         for (const { address, chainId } of inputs) {
           const name = resolved[address.toLowerCase()];
           if (!name) continue;
+          nameByAddress[address] = name;
           const label = await getChainLabel(chainId, mainnetRpcUrl);
           next[address] = label ? `${name}@${label}` : name;
         }
+        if (cancelled) return;
         if (Object.keys(next).length > 0) {
           setResolvedAddresses((prev) => ({ ...prev, ...next }));
+        }
+
+        // Fetch ENS avatars for the resolved names, keyed back to their address
+        const names = Object.values(nameByAddress);
+        if (names.length === 0) return;
+        const avatars = await resolveAvatars(names, mainnetRpcUrl);
+        if (cancelled) return;
+        const avatarByAddress: Record<string, string> = {};
+        for (const [address, name] of Object.entries(nameByAddress)) {
+          if (avatars[name]) avatarByAddress[address] = avatars[name];
+        }
+        if (Object.keys(avatarByAddress).length > 0) {
+          setResolvedAvatars((prev) => ({ ...prev, ...avatarByAddress }));
         }
       })
       .catch(() => {
         // Silently fail if resolution fails
       });
+    return () => {
+      cancelled = true;
+    };
   }, [walletAddress, transactions, currentTransaction?.chainId]);
 
   // Resolve ERC-7730 `metadata.contractName` for every unique `to` in the batch.
@@ -271,7 +294,7 @@ export const TransactionDialog = ({
                 <div className="text-foreground flex min-w-0 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">From</p>
                   <div className="flex min-w-0 flex-row items-center gap-1">
-                    <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                    <IdentityAvatar src={resolvedAvatars[walletAddress]} />
                     <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                   </div>
                 </div>
@@ -279,7 +302,7 @@ export const TransactionDialog = ({
                 <div className="text-foreground flex min-w-0 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">To</p>
                   <div className="flex min-w-0 flex-row items-center gap-1">
-                    <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                    <IdentityAvatar src={currentTransaction?.to ? resolvedAvatars[currentTransaction.to] : undefined} />
                     <p className="break-all text-base font-normal leading-[150%]">{displayToAddress}</p>
                     {currentTransaction?.to &&
                       (isAddressCopied['single-to'] ? (
@@ -486,6 +509,7 @@ export const TransactionDialog = ({
                     chainId={currentTransaction.chainId}
                     apiKey={apiKey}
                     resolvedAddresses={resolvedAddresses}
+                    resolvedAvatars={resolvedAvatars}
                     mainnetRpcUrl={mainnetRpcUrl}
                   />
                 </div>
@@ -525,7 +549,7 @@ export const TransactionDialog = ({
               <div className="border-border flex-shrink-0 rounded-[6px] border p-3.5">
                 <p className="text-foreground mb-1 text-xs font-bold leading-[133%]">From</p>
                 <div className="flex flex-row items-center gap-1">
-                  <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                  <IdentityAvatar src={resolvedAvatars[walletAddress]} />
                   <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                 </div>
               </div>
@@ -580,7 +604,7 @@ export const TransactionDialog = ({
                               )}
                             </div>
                             <div className="flex flex-row items-center gap-1">
-                              <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                              <IdentityAvatar src={transaction.to ? resolvedAvatars[transaction.to] : undefined} />
                               <p className="text-sm font-normal leading-[150%]">
                                 {displayContractAddress(transaction.to)}
                               </p>
@@ -653,6 +677,7 @@ export const TransactionDialog = ({
                                 chainId={transaction.chainId}
                                 apiKey={apiKey}
                                 resolvedAddresses={resolvedAddresses}
+                                resolvedAvatars={resolvedAvatars}
                                 mainnetRpcUrl={mainnetRpcUrl}
                               />
                             </div>

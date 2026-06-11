@@ -7,10 +7,12 @@ import { DefaultDialog } from '../DefaultDialog';
 import { FeeTokenSelector } from '../FeeTokenSelector';
 import { PermissionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
-import { CopiedIcon, CopyIcon, WalletIcon } from '../../icons';
+import { CopiedIcon, CopyIcon } from '../../icons';
 import { useState, useEffect, useRef } from 'react';
 import { reverseResolveAddresses } from '../../utils/reverseResolve';
+import { resolveAvatars } from '../../utils/resolveAvatar';
 import { getChainLabel } from '../../utils/resolveChainLabel';
+import { IdentityAvatar } from '../IdentityAvatar';
 
 export const PermissionDialog = ({
   open,
@@ -62,6 +64,7 @@ export const PermissionDialog = ({
 
   const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
+  const [resolvedAvatars, setResolvedAvatars] = useState<Record<string, string>>({});
   const [isResolvingAddresses, setIsResolvingAddresses] = useState(true); // Start true to prevent early clicks
 
   // Resolve addresses to human-readable names
@@ -94,26 +97,47 @@ export const PermissionDialog = ({
 
     setIsResolvingAddresses(true);
 
+    let cancelled = false;
     reverseResolveAddresses(
       addressesToResolve.map((address) => ({ address, chainId })),
       mainnetRpcUrl
     )
       .then(async (resolved) => {
+        if (cancelled) return;
         const newResolved: Record<string, string> = {};
+        const nameByAddress: Record<string, string> = {};
         for (const address of addressesToResolve) {
           const name = resolved[address.toLowerCase()];
           if (!name) continue;
+          nameByAddress[address] = name;
           const label = await getChainLabel(chainId, mainnetRpcUrl);
           newResolved[address] = label ? `${name}@${label}` : name;
         }
+        if (cancelled) return;
         setResolvedAddresses((prev) => ({ ...prev, ...newResolved }));
+
+        // Fetch ENS avatars for the resolved names, keyed back to their address
+        const names = Object.values(nameByAddress);
+        if (names.length === 0) return;
+        const avatars = await resolveAvatars(names, mainnetRpcUrl);
+        if (cancelled) return;
+        const avatarByAddress: Record<string, string> = {};
+        for (const [address, name] of Object.entries(nameByAddress)) {
+          if (avatars[name]) avatarByAddress[address] = avatars[name];
+        }
+        if (Object.keys(avatarByAddress).length > 0) {
+          setResolvedAvatars((prev) => ({ ...prev, ...avatarByAddress }));
+        }
       })
       .catch(() => {
         // Silently fail if resolution fails
       })
       .finally(() => {
-        setIsResolvingAddresses(false);
+        if (!cancelled) setIsResolvingAddresses(false);
       });
+    return () => {
+      cancelled = true;
+    };
   }, [spenderAddress, calls, chainId]);
 
   // Handle wheel events for smooth scrolling over content
@@ -255,7 +279,7 @@ export const PermissionDialog = ({
             <div className="text-foreground flex min-w-0 flex-col gap-0.5">
               <p className="text-xs font-bold leading-[133%]">Spender Address</p>
               <div className="flex flex-row items-center gap-1">
-                <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />
+                <IdentityAvatar src={resolvedAvatars[spenderAddress]} />
                 <p className="break-all text-base font-normal leading-[150%]">
                   {resolvedAddresses[spenderAddress] || truncateAddress(spenderAddress)}
                 </p>
@@ -342,9 +366,12 @@ export const PermissionDialog = ({
                     </div>
                     <div className="flex flex-col gap-0.5">
                       <p className="text-muted-foreground text-xs font-bold leading-[133%]">Contract</p>
-                      <p className="text-foreground break-all font-mono text-sm leading-[150%]">
-                        {getContractDisplayName(call.target) || resolvedAddresses[call.target] || call.target}
-                      </p>
+                      <div className="flex flex-row items-center gap-1">
+                        <IdentityAvatar src={resolvedAvatars[call.target]} fallback={null} />
+                        <p className="text-foreground break-all font-mono text-sm leading-[150%]">
+                          {getContractDisplayName(call.target) || resolvedAddresses[call.target] || call.target}
+                        </p>
+                      </div>
                     </div>
                   </div>
                 ))}
