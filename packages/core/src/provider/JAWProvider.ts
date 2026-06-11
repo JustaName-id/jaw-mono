@@ -56,6 +56,19 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         // Determine the expected signer type from current preference
         const expectedSignerType: SignerType = preference.mode === Mode.AppSpecific ? 'appSpecific' : 'crossPlatform';
 
+        // Iframe transport: mount and handshake in the background so the
+        // dialog opens instantly on the first request. Failures are not
+        // fatal — the transport retries (or falls back) on first use.
+        if (
+            expectedSignerType === 'crossPlatform' &&
+            (preference.transportMode === 'iframe' || preference.transportMode === 'auto') &&
+            typeof window !== 'undefined'
+        ) {
+            void this.communicator.prewarm().catch(() => {
+                /* handled on first acquire */
+            });
+        }
+
         const storedSignerType = loadSignerType();
 
         // Only restore signer if the stored type matches the current preference
