@@ -1,3 +1,13 @@
+## 0.4.5 (2026-06-11)
+
+### 🩹 Fixes
+
+- resolve with avatars on transaction and permission screens ([#190](https://github.com/JustaName-id/jaw-mono/pull/190))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.4 (2026-06-04)
 
 ### 🧱 Updated Dependencies
