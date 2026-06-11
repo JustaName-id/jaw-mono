@@ -67,6 +67,17 @@ export interface JawProviderPreference {
     uiHandler?: UIHandler;
     /** Session cache TTL in seconds. Default: 86400 (24 hours). Set to 0 to disable caching. */
     authTTL?: number;
+    /**
+     * Transport for CrossPlatform mode (default: 'popup').
+     * - 'popup':  current behavior, window.open to keysUrl.
+     * - 'iframe': embedded dialog primary; automatic popup fallback where
+     *             iframes cannot work (Safari passkey creation, HTTP hosts,
+     *             unverifiable visibility).
+     * - 'auto':   alias of 'iframe' in v1; reserved to become the default
+     *             in a future minor release.
+     * Ignored when mode is Mode.AppSpecific.
+     */
+    transportMode?: 'popup' | 'iframe' | 'auto';
 }
 
 export type ProviderEventCallback = ProviderInterface['emit'];

@@ -1,116 +1,90 @@
 import { JAW_KEYS_URL } from '../constants.js';
-import { SDK_VERSION } from '../sdk-info.js';
 import { Message, MessageID } from '../messages/message.js';
 import { standardErrors } from '../errors/errors.js';
 
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
-import { ConfigMessage } from '../messages/configMessage.js';
+import { RouteContext, TransportMode } from './transport.js';
+import { TransportRouter } from './transport-router.js';
 
 export type CommunicatorOptions = {
     metadata: AppMetadata;
     preference: JawProviderPreference;
 };
 
-// Constants
-const POPUP_WIDTH = 420;
-const POPUP_HEIGHT = 730;
+const VALID_TRANSPORT_MODES: readonly TransportMode[] = ['popup', 'iframe', 'auto'];
 
 /**
- * Communicates with a popup window for JAW keys.jaw.id (or another url)
- * to send and receive messages.
+ * Normalize the transport preference: unset or invalid values fall back to
+ * 'popup' (the v1 default), warning once on invalid input.
+ */
+export function normalizeTransportMode(mode: unknown, warn: (message: string) => void = console.warn): TransportMode {
+    if (mode === undefined) return 'popup';
+    if (VALID_TRANSPORT_MODES.includes(mode as TransportMode)) return mode as TransportMode;
+    warn(`[JAW] Invalid transportMode "${String(mode)}" — falling back to 'popup'.`);
+    return 'popup';
+}
+
+/**
+ * Extract the routing context from an outbound message. Only unencrypted
+ * handshake messages carry a visible method (eth_requestAccounts /
+ * wallet_connect — exactly the ones that may create a credential);
+ * encrypted business requests route with no method, which is correct.
+ */
+export function getRouteContext(message: Message): RouteContext {
+    const content = (message as { content?: unknown }).content;
+    if (content && typeof content === 'object' && 'handshake' in content) {
+        const handshake = (content as { handshake?: { method?: unknown } }).handshake;
+        if (typeof handshake?.method === 'string') {
+            return { method: handshake.method };
+        }
+    }
+    return {};
+}
+
+/**
+ * Communicates with the keys app (keys.jaw.id or another url) to send and
+ * receive messages.
  *
- * This class is responsible for opening a popup window, posting messages to it,
- * and listening for responses.
- *
- * It also handles cleanup of event listeners and the popup window itself when necessary.
+ * Facade over the transport layer: the TransportRouter decides per request
+ * whether the keys app is reached through a popup window or an embedded
+ * iframe dialog. The message protocol is identical on both carriers.
  */
 export class Communicator {
-    private readonly metadata: AppMetadata;
-    private readonly preference: JawProviderPreference;
     private readonly url: URL;
-    private popup: Window | null = null;
+    private readonly router: TransportRouter;
     private listeners = new Map<(_: MessageEvent) => void, { reject: (_: Error) => void }>();
 
     constructor({ metadata, preference }: CommunicatorOptions) {
         this.url = new URL(preference.keysUrl ?? JAW_KEYS_URL);
-        this.metadata = metadata;
-        this.preference = preference;
+        this.router = new TransportRouter({
+            url: this.url,
+            metadata,
+            preference,
+            mode: normalizeTransportMode(preference.transportMode),
+        });
     }
 
     /**
-     * Wait for popup to load
+     * Wait for the keys app to load and complete the handshake.
      */
     async waitForPopupLoaded(): Promise<Window> {
-        // If popup exists and is not closed, return it
-        if (this.popup && !this.popup.closed) {
-            this.popup.focus();
-            return this.popup;
-        }
-
-        this.popup = await this.openPopup();
-
-        this.onMessage<ConfigMessage>(({ event }) => event === 'PopupUnload')
-            .then(() => {
-                this.disconnect();
-            })
-            .catch(() => {
-                /* empty */
-            });
-
-        return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded')
-            .then((message) => {
-                this.postMessage({
-                    requestId: message.id,
-                    data: {
-                        version: SDK_VERSION,
-                        metadata: this.metadata,
-                        preference: this.preference,
-                        location: window.location.toString(),
-                    },
-                });
-            })
-            .then(() => {
-                // Wait for popup to signal it's ready
-                return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupReady');
-            })
-            .then(() => {
-                if (!this.popup) throw standardErrors.rpc.internal();
-                return this.popup;
-            });
+        const transport = await this.router.acquire({});
+        return transport.ensureReady();
     }
 
     /**
-     * Open popup window
+     * Mount and handshake the iframe in the background (no-op in popup mode).
      */
-    private async openPopup(): Promise<Window> {
-        const left = Math.max(0, (window.screen.width - POPUP_WIDTH) / 2);
-        const top = Math.max(0, (window.screen.height - POPUP_HEIGHT) / 2);
-
-        const popupId = `jaw_${crypto.randomUUID()}`;
-
-        const popup = window.open(
-            this.url.toString(),
-            popupId,
-            `width=${POPUP_WIDTH},height=${POPUP_HEIGHT},left=${left},top=${top}`
-        );
-
-        if (!popup) {
-            throw standardErrors.provider.userRejectedRequest(
-                'Failed to open popup. Please allow popups for this site.'
-            );
-        }
-
-        popup.focus();
-        return popup;
+    async prewarm(): Promise<void> {
+        await this.router.prewarm();
     }
 
     /**
-     * Posts a message to the popup window
+     * Posts a message to the keys app.
      */
     postMessage = async (message: Message) => {
-        const popup = await this.waitForPopupLoaded();
-
-        popup.postMessage(message, this.url.origin);
+        const transport = await this.router.acquire(getRouteContext(message));
+        await transport.postMessage(message);
     };
 
     /**
@@ -127,7 +101,6 @@ export class Communicator {
     /**
      * Listen for messages matching predicate
      * @param predicate - Function to test if a message matches
-     * @param timeout - Timeout in milliseconds (default: defaultTimeout)
      * @returns Promise resolving to the matching message
      */
     async onMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): Promise<M> {
@@ -153,10 +126,7 @@ export class Communicator {
      * Cleanup all resources
      */
     disconnect(): void {
-        if (this.popup && !this.popup.closed) {
-            this.popup.close();
-        }
-        this.popup = null;
+        this.router.destroyAll();
 
         // Clean up all listeners and their timeouts
         this.listeners.forEach(({ reject }, listener) => {
