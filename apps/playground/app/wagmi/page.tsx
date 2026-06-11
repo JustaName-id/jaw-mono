@@ -36,7 +36,7 @@ import {
 } from '@jaw.id/wagmi';
 
 import { WagmiProviders } from './providers';
-import { type ModeType } from './config';
+import { type ModeType, type TransportModeType } from './config';
 import { MethodCard } from '../../components/method-card';
 import { WagmiMethodModal } from '../../components/wagmi-method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
@@ -53,13 +53,21 @@ import { reverseResolveEnsName } from '../../lib/ens-resolver';
 
 interface WagmiPageContentProps {
   mode: ModeType;
+  transportMode: TransportModeType;
   pmConfig: PaymasterApplyConfig | undefined;
   onPaymasterApply: (config: PaymasterApplyConfig | null) => void;
   theme: JawTheme;
   onThemeChange: (theme: JawTheme) => void;
 }
 
-function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChange }: WagmiPageContentProps) {
+function WagmiPageContent({
+  mode,
+  transportMode,
+  pmConfig,
+  onPaymasterApply,
+  theme,
+  onThemeChange,
+}: WagmiPageContentProps) {
   const { address, isConnected, connector } = useAccount();
   const chainId = useChainId();
   const { data: balance } = useBalance({ address });
@@ -391,6 +399,53 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
           </p>
         </Card>
 
+        {/* Transport Toggle (CrossPlatform only — how keys.jaw.id is reached) */}
+        {mode === Mode.CrossPlatform && (
+          <Card className="p-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground text-sm font-medium">Transport:</span>
+                <span
+                  className={`rounded-full px-3 py-1 text-sm font-medium ${
+                    transportMode === 'popup'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                  }`}
+                >
+                  {transportMode === 'popup' ? 'Popup' : `Iframe (${transportMode})`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href="/wagmi"
+                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    transportMode === 'popup'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Popup
+                </a>
+                <a
+                  href="/wagmi?transport=iframe"
+                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    transportMode !== 'popup'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Iframe
+                </a>
+              </div>
+            </div>
+            <p className="text-muted-foreground mt-2 text-xs">
+              {transportMode === 'popup'
+                ? 'Current default: keys.jaw.id opens in a popup window'
+                : 'Embedded dialog with automatic popup fallback (Safari passkey creation, HTTP, occluded UI)'}
+            </p>
+          </Card>
+        )}
+
         {/* Theme Picker (only for AppSpecific mode which uses ReactUIHandler) */}
         {mode === Mode.AppSpecific && <ThemePicker theme={theme} onThemeChange={onThemeChange} />}
 
@@ -573,8 +628,11 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
 function WagmiPageInner() {
   const searchParams = useSearchParams();
   const modeParam = searchParams.get('mode');
+  const transportParam = searchParams.get('transport');
 
   const mode: ModeType = modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
+  const transportMode: TransportModeType =
+    transportParam === 'iframe' ? 'iframe' : transportParam === 'auto' ? 'auto' : 'popup';
 
   const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
@@ -598,10 +656,11 @@ function WagmiPageInner() {
   };
 
   return (
-    <WagmiProviders mode={mode} paymasters={paymasters} theme={theme}>
+    <WagmiProviders mode={mode} paymasters={paymasters} theme={theme} transportMode={transportMode}>
       <WagmiPageContent
-        key={`${mode}-${JSON.stringify(theme)}`}
+        key={`${mode}-${transportMode}-${JSON.stringify(theme)}`}
         mode={mode}
+        transportMode={transportMode}
         pmConfig={pmConfig}
         onPaymasterApply={handlePaymasterApply}
         theme={theme}
