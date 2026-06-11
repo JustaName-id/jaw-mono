@@ -83,6 +83,7 @@ export default defineConfig({
               { text: 'AppSpecific', link: '/configuration/mode/app-specific' },
             ],
           },
+          { text: 'transportMode', link: '/configuration/transportMode' },
           { text: 'paymasters', link: '/configuration/paymasters' },
           { text: 'theme', link: '/configuration/theme' },
         ],

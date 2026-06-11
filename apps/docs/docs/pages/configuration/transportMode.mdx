@@ -1,0 +1,93 @@
+# transportMode
+
+How the SDK reaches `keys.jaw.id` in **CrossPlatform** mode: a popup window (current default) or an embedded iframe dialog with automatic popup fallback.
+
+**Type:** `'popup' | 'iframe' | 'auto'`
+**Required:** No
+**Default:** `'popup'`
+**Applies to:** CrossPlatform mode only (ignored in AppSpecific mode)
+
+## Values
+
+| Value | Behavior |
+| --- | --- |
+| `'popup'` | Opens `keys.jaw.id` in a popup window. The current, default behavior. |
+| `'iframe'` | Embeds `keys.jaw.id` as an in-page dialog, with automatic popup fallback where iframes can't work (see below). |
+| `'auto'` | Alias of `'iframe'` today. Reserved to become the default in a future minor release — set it explicitly to opt into "best available transport". |
+
+Not setting `transportMode` keeps the exact popup behavior you have today — this is a fully backwards-compatible, opt-in feature.
+
+## Usage
+
+### With Wagmi (Recommended)
+
+```typescript
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  appName: 'My App',
+  preference: {
+    transportMode: 'iframe',
+  },
+});
+```
+
+### With Provider Directly
+
+```typescript
+import { JAW } from '@jaw.id/core';
+
+const sdk = JAW.create({
+  apiKey: 'your-api-key',
+  appName: 'My App',
+  preference: {
+    transportMode: 'iframe',
+  },
+});
+```
+
+## Why an iframe?
+
+The popup flow opens a separate window for sign-in and transaction confirmation, which interrupts the user and is easy to lose behind the main window. The iframe renders the same `keys.jaw.id` UI inline — a bottom drawer on mobile, a centered dialog on desktop — so the user never leaves the page.
+
+The wallet, passkeys, and message protocol are identical across both transports; only the carrier changes.
+
+## Automatic popup fallback
+
+Even with `transportMode: 'iframe'`, the SDK falls back to a popup **per request** when an iframe cannot do the job:
+
+| Condition | Why |
+| --- | --- |
+| **Safari + passkey creation** (`eth_requestAccounts`, `wallet_connect`) | Safari does not support creating passkeys inside cross-origin iframes. Sign-in still happens in the iframe; only first-time credential creation uses a popup. |
+| **Insecure context** | WebAuthn requires a secure context (HTTPS or `localhost`). On insecure origins the SDK uses a popup. |
+| **Occluded / untrusted embedding** | If the dialog's visibility can't be verified (no IntersectionObserver v2) and the embedder isn't a trusted host, the SDK uses a popup to prevent clickjacking. The user can also choose "Continue in new window" at any time. |
+
+In the worst case, `'iframe'` degrades to exactly the popup behavior — it never does worse than today.
+
+## Embedding requirements
+
+When you use the iframe transport, the SDK creates the iframe for you with the correct WebAuthn permissions (`allow="publickey-credentials-get …; publickey-credentials-create …"` scoped to the keys origin) and sandbox attributes. **You don't need to configure anything in your app** — no headers, no `allow` attribute, no CSP changes on your side.
+
+Requirements that must already hold:
+
+- Your app is served over **HTTPS** (or `localhost` in development).
+- The user interacts with the dialog directly (WebAuthn in an iframe requires a user gesture).
+
+## Browser support
+
+| Capability | Chrome / Edge | Firefox | Safari |
+| --- | --- | --- | --- |
+| Passkey sign-in in iframe (`get`) | 84+ | 118+ | 15.5+ |
+| Passkey creation in iframe (`create`) | 123+ | 123+ | Not supported → popup fallback |
+
+Anything older falls back to the popup transport automatically.
+
+## Notes for Safari users
+
+On Safari, browser storage inside a third-party iframe is partitioned per embedding app. A returning user may need to re-authenticate with their passkey (a single tap) rather than being silently reconnected. Sign-in, signing, and transactions all work in the iframe; only first-time passkey **creation** uses a popup.
+
+## See also
+
+- [mode](/configuration/mode) — CrossPlatform vs AppSpecific
+- [CrossPlatform mode](/configuration/mode/cross-platform)
