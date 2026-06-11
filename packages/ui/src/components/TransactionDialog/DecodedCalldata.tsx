@@ -1,11 +1,22 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
-import { reverseResolveAddresses, resolveAvatars, formatAddress, getChainLabel } from '../../utils';
+import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { ClearSignedView } from './ClearSignedView';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+/** Merge parent-resolved and locally-resolved maps, normalizing all keys to lowercase. */
+function mergeLowercased(
+  parent: Record<string, string> | undefined,
+  local: Record<string, string>
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(parent ?? {})) out[key.toLowerCase()] = value;
+  for (const [key, value] of Object.entries(local)) out[key.toLowerCase()] = value;
+  return out;
+}
 
 interface DecodedCalldataProps {
   to: string;
@@ -44,33 +55,11 @@ export const DecodedCalldata = ({
     }
   }, [decoded]);
 
-  // Normalize parent-resolved addresses to lowercase keys, then merge with local
-  const allResolved = useMemo(() => {
-    const normalized: Record<string, string> = {};
-    if (resolvedAddresses) {
-      for (const [key, value] of Object.entries(resolvedAddresses)) {
-        normalized[key.toLowerCase()] = value;
-      }
-    }
-    for (const [key, value] of Object.entries(localResolved)) {
-      normalized[key.toLowerCase()] = value;
-    }
-    return normalized;
-  }, [resolvedAddresses, localResolved]);
-
-  // Same merge for avatars: parent-resolved (tx-level) addresses + locally-resolved params
-  const allAvatars = useMemo(() => {
-    const normalized: Record<string, string> = {};
-    if (resolvedAvatars) {
-      for (const [key, value] of Object.entries(resolvedAvatars)) {
-        normalized[key.toLowerCase()] = value;
-      }
-    }
-    for (const [key, value] of Object.entries(localAvatars)) {
-      normalized[key.toLowerCase()] = value;
-    }
-    return normalized;
-  }, [resolvedAvatars, localAvatars]);
+  const allResolved = useMemo(
+    () => mergeLowercased(resolvedAddresses, localResolved),
+    [resolvedAddresses, localResolved]
+  );
+  const allAvatars = useMemo(() => mergeLowercased(resolvedAvatars, localAvatars), [resolvedAvatars, localAvatars]);
 
   // Keep a ref to allResolved so the effect can read it without re-triggering
   const allResolvedRef = useRef(allResolved);
@@ -97,42 +86,30 @@ export const DecodedCalldata = ({
     unique.forEach((addr) => attemptedRef.current.add(addr.toLowerCase()));
 
     let cancelled = false;
-    reverseResolveAddresses(
+    reverseResolveWithAvatars(
       unique.map((address) => ({ address, chainId })),
       mainnetRpcUrl
     )
       .then(async (resolved) => {
         if (cancelled) return;
-        const next: Record<string, string> = {};
-        const nameByAddress: Record<string, string> = {};
-        for (const address of unique) {
-          const name = resolved[address.toLowerCase()];
-          if (!name) continue;
-          nameByAddress[address.toLowerCase()] = name;
-          const label = await getChainLabel(chainId, mainnetRpcUrl);
-          next[address.toLowerCase()] = label ? `${name}@${label}` : name;
-        }
+        const label = await getChainLabel(chainId, mainnetRpcUrl);
         if (cancelled) return;
+        const next: Record<string, string> = {};
+        const avatarByAddress: Record<string, string> = {};
+        for (const address of unique) {
+          const identity = resolved[address.toLowerCase()];
+          if (!identity) continue;
+          next[address.toLowerCase()] = label ? `${identity.name}@${label}` : identity.name;
+          if (identity.avatar) avatarByAddress[address.toLowerCase()] = identity.avatar;
+        }
         if (Object.keys(next).length > 0) {
           setLocalResolved((prev) => ({ ...prev, ...next }));
-        }
-
-        // Fetch ENS avatars for the resolved params, keyed by lowercased address
-        const names = Object.values(nameByAddress);
-        if (names.length === 0) return;
-        const avatars = await resolveAvatars(names, mainnetRpcUrl);
-        if (cancelled) return;
-        const avatarByAddress: Record<string, string> = {};
-        for (const [address, name] of Object.entries(nameByAddress)) {
-          if (avatars[name]) avatarByAddress[address] = avatars[name];
         }
         if (Object.keys(avatarByAddress).length > 0) {
           setLocalAvatars((prev) => ({ ...prev, ...avatarByAddress }));
         }
       })
-      .catch(() => {
-        // Silently fail - will show raw address
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };

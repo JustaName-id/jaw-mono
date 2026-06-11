@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { ClearSigningDisplay, DisplayRow } from '../../utils/clearSigning';
-import { reverseResolveAddresses, resolveAvatars, formatAddress, getChainLabel } from '../../utils';
+import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
 
 interface ClearSignedViewProps {
@@ -60,7 +60,7 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
     unique.forEach((a) => attemptedRef.current.add(a));
 
     let cancelled = false;
-    reverseResolveAddresses(
+    reverseResolveWithAvatars(
       unique.map((address) => ({ address, chainId })),
       mainnetRpcUrl
     )
@@ -68,16 +68,18 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
         if (cancelled) return;
         const label = await getChainLabel(chainId, mainnetRpcUrl);
         if (cancelled) return;
-        const nameByAddress: Record<string, string> = {};
+        const nextResolved: Record<string, string> = {};
+        const nextAvatars: Record<string, string> = {};
         for (const address of unique) {
-          const name = resolved[address];
-          if (name) nameByAddress[address] = name;
+          const identity = resolved[address];
+          if (!identity) continue;
+          nextResolved[address] = label ? `${identity.name}@${label}` : identity.name;
+          if (identity.avatar) nextAvatars[address] = identity.avatar;
         }
         setResolved((prev) => {
           const next = { ...prev };
           let changed = false;
-          for (const [address, name] of Object.entries(nameByAddress)) {
-            const value = label ? `${name}@${label}` : name;
+          for (const [address, value] of Object.entries(nextResolved)) {
             if (next[address] !== value) {
               next[address] = value;
               changed = true;
@@ -85,23 +87,11 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
           }
           return changed ? next : prev;
         });
-
-        // Fetch ENS avatars for the resolved address rows
-        const names = Object.values(nameByAddress);
-        if (names.length === 0) return;
-        const av = await resolveAvatars(names, mainnetRpcUrl);
-        if (cancelled) return;
-        const avByAddress: Record<string, string> = {};
-        for (const [address, name] of Object.entries(nameByAddress)) {
-          if (av[name]) avByAddress[address] = av[name];
-        }
-        if (Object.keys(avByAddress).length > 0) {
-          setAvatars((prev) => ({ ...prev, ...avByAddress }));
+        if (Object.keys(nextAvatars).length > 0) {
+          setAvatars((prev) => ({ ...prev, ...nextAvatars }));
         }
       })
-      .catch(() => {
-        /* silent */
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };

@@ -12,7 +12,7 @@ import { Info } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
-import { reverseResolveAddresses, resolveAvatars, getDisplayAddress, getChainLabel } from '../../utils';
+import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { DecodedCalldata } from './DecodedCalldata';
 
@@ -83,39 +83,27 @@ export const TransactionDialog = ({
     if (inputs.length === 0) return;
 
     let cancelled = false;
-    reverseResolveAddresses(inputs, mainnetRpcUrl)
+    reverseResolveWithAvatars(inputs, mainnetRpcUrl)
       .then(async (resolved) => {
         if (cancelled) return;
         const next: Record<string, string> = {};
-        const nameByAddress: Record<string, string> = {};
+        const avatarByAddress: Record<string, string> = {};
         for (const { address, chainId } of inputs) {
-          const name = resolved[address.toLowerCase()];
-          if (!name) continue;
-          nameByAddress[address] = name;
+          const identity = resolved[address.toLowerCase()];
+          if (!identity) continue;
           const label = await getChainLabel(chainId, mainnetRpcUrl);
-          next[address] = label ? `${name}@${label}` : name;
+          next[address] = label ? `${identity.name}@${label}` : identity.name;
+          if (identity.avatar) avatarByAddress[address] = identity.avatar;
         }
         if (cancelled) return;
         if (Object.keys(next).length > 0) {
           setResolvedAddresses((prev) => ({ ...prev, ...next }));
         }
-
-        // Fetch ENS avatars for the resolved names, keyed back to their address
-        const names = Object.values(nameByAddress);
-        if (names.length === 0) return;
-        const avatars = await resolveAvatars(names, mainnetRpcUrl);
-        if (cancelled) return;
-        const avatarByAddress: Record<string, string> = {};
-        for (const [address, name] of Object.entries(nameByAddress)) {
-          if (avatars[name]) avatarByAddress[address] = avatars[name];
-        }
         if (Object.keys(avatarByAddress).length > 0) {
           setResolvedAvatars((prev) => ({ ...prev, ...avatarByAddress }));
         }
       })
-      .catch(() => {
-        // Silently fail if resolution fails
-      });
+      .catch(() => undefined);
     return () => {
       cancelled = true;
     };

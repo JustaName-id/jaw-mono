@@ -9,8 +9,7 @@ import { PermissionDialogProps } from './types';
 import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { CopiedIcon, CopyIcon } from '../../icons';
 import { useState, useEffect, useRef } from 'react';
-import { reverseResolveAddresses } from '../../utils/reverseResolve';
-import { resolveAvatars } from '../../utils/resolveAvatar';
+import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
 import { IdentityAvatar } from '../IdentityAvatar';
 
@@ -98,40 +97,28 @@ export const PermissionDialog = ({
     setIsResolvingAddresses(true);
 
     let cancelled = false;
-    reverseResolveAddresses(
+    reverseResolveWithAvatars(
       addressesToResolve.map((address) => ({ address, chainId })),
       mainnetRpcUrl
     )
       .then(async (resolved) => {
         if (cancelled) return;
+        const label = await getChainLabel(chainId, mainnetRpcUrl);
+        if (cancelled) return;
         const newResolved: Record<string, string> = {};
-        const nameByAddress: Record<string, string> = {};
-        for (const address of addressesToResolve) {
-          const name = resolved[address.toLowerCase()];
-          if (!name) continue;
-          nameByAddress[address] = name;
-          const label = await getChainLabel(chainId, mainnetRpcUrl);
-          newResolved[address] = label ? `${name}@${label}` : name;
-        }
-        if (cancelled) return;
-        setResolvedAddresses((prev) => ({ ...prev, ...newResolved }));
-
-        // Fetch ENS avatars for the resolved names, keyed back to their address
-        const names = Object.values(nameByAddress);
-        if (names.length === 0) return;
-        const avatars = await resolveAvatars(names, mainnetRpcUrl);
-        if (cancelled) return;
         const avatarByAddress: Record<string, string> = {};
-        for (const [address, name] of Object.entries(nameByAddress)) {
-          if (avatars[name]) avatarByAddress[address] = avatars[name];
+        for (const address of addressesToResolve) {
+          const identity = resolved[address.toLowerCase()];
+          if (!identity) continue;
+          newResolved[address] = label ? `${identity.name}@${label}` : identity.name;
+          if (identity.avatar) avatarByAddress[address] = identity.avatar;
         }
+        setResolvedAddresses((prev) => ({ ...prev, ...newResolved }));
         if (Object.keys(avatarByAddress).length > 0) {
           setResolvedAvatars((prev) => ({ ...prev, ...avatarByAddress }));
         }
       })
-      .catch(() => {
-        // Silently fail if resolution fails
-      })
+      .catch(() => undefined)
       .finally(() => {
         if (!cancelled) setIsResolvingAddresses(false);
       });
