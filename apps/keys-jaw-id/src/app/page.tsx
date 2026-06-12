@@ -1012,12 +1012,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                       publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
-                    console.log(
-                      '✅ Session auth state updated for origin:',
-                      currentOrigin,
-                      'with credentialId:',
-                      authenticatedAccount.credentialId
-                    );
+                    // Do not log credentialId (constitution §Security: Secrets/PII)
+                    console.log('✅ Session auth state updated for origin:', currentOrigin);
                   }
 
                   await authQuery.refetch();

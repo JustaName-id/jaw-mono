@@ -179,9 +179,10 @@ export class IframeTransport implements IframeTransportContract {
         }
 
         // destroy() may have run during the await above, nulling the iframe.
+        // Don't resurrect a destroyed transport (the router has already
+        // dropped its reference) — fail cleanly and let the caller re-route.
         if (!this.iframe) {
-            await this.ensureReady();
-            return;
+            throw standardErrors.rpc.internal('Iframe transport was destroyed during reload');
         }
 
         this.ready = false;
