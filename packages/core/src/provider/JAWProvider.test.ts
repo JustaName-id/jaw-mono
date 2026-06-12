@@ -649,8 +649,8 @@ describe('JAWProvider', () => {
             const result = await provider.request(request);
 
             // Assert
-            expect(buildHandleJawRpcUrl).toHaveBeenCalledWith(expect.any(String), 'test-api-key');
-            expect(fetchRPCRequest).toHaveBeenCalledWith(request, mockRpcUrl);
+            expect(buildHandleJawRpcUrl).toHaveBeenCalledWith(expect.any(String));
+            expect(fetchRPCRequest).toHaveBeenCalledWith(request, mockRpcUrl, 'test-api-key');
             expect(result).toEqual(mockAssets);
         });
 
@@ -667,7 +667,7 @@ describe('JAWProvider', () => {
 
             // Act & Assert
             await expect(provider.request(request)).rejects.toThrow('RPC request failed');
-            expect(fetchRPCRequest).toHaveBeenCalledWith(request, mockRpcUrl);
+            expect(fetchRPCRequest).toHaveBeenCalledWith(request, mockRpcUrl, 'test-api-key');
         });
     });
 
@@ -1961,8 +1961,8 @@ describe('JAWProvider', () => {
             await provider.request(request);
 
             // Assert
-            expect(buildHandleJawRpcUrl).toHaveBeenCalledWith(expect.any(String), 'test-api-key');
-            expect(fetchRPCRequest).toHaveBeenCalledWith(expect.any(Object), 'https://rpc.test.com');
+            expect(buildHandleJawRpcUrl).toHaveBeenCalledWith(expect.any(String));
+            expect(fetchRPCRequest).toHaveBeenCalledWith(expect.any(Object), 'https://rpc.test.com', 'test-api-key');
         });
 
         it('should handle fetchRPCRequest errors', async () => {

@@ -64,7 +64,7 @@ export async function handleGetCallsHistoryRequest(
         }
     }
 
-    const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, apiKey);
-    const result = await fetchRPCRequest(modifiedRequest, rpcUrl);
+    const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL);
+    const result = await fetchRPCRequest(modifiedRequest, rpcUrl, apiKey);
     return result as WalletGetCallsHistoryResponse;
 }

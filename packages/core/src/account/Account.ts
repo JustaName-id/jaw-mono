@@ -44,7 +44,7 @@ import {
     type SpendPermissionDetail,
 } from '../rpc/permissions.js';
 import { JAW_RPC_URL, JAW_PAYMASTER_URL, ERC20_PAYMASTER_ADDRESS } from '../constants.js';
-import { type Chain, chains as chainStore } from '../store/index.js';
+import { type Chain, chains as chainStore, config as configStore } from '../store/index.js';
 import { logAccountIssuance } from '../analytics/index.js';
 
 /**
@@ -1252,9 +1252,11 @@ export class Account {
      * @internal
      */
     private static buildChainConfig(chainId: number, apiKey?: string, paymasterUrl?: string): Chain {
-        const rpcUrl = apiKey
-            ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`
-            : `${JAW_RPC_URL}?chainId=${chainId}`;
+        // The api key is sent as the x-api-key header at client creation (see
+        // createClientForChain), not embedded in the URL. Make sure it is available
+        // in the in-memory config store for the standalone Account flow.
+        if (apiKey) configStore.set({ apiKey });
+        const rpcUrl = `${JAW_RPC_URL}?chainId=${chainId}`;
 
         const chain: Chain = {
             id: chainId,

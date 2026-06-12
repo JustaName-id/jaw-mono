@@ -90,7 +90,7 @@ export async function handleGetAssetsRequest(
     apiKey: string,
     showTestnets = false
 ): Promise<unknown> {
-    const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, apiKey);
+    const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL);
 
     // If chainFilter is not provided in params, inject default chains based on showTestnets preference
     let requestArgs = request;
@@ -116,6 +116,6 @@ export async function handleGetAssetsRequest(
         };
     }
 
-    const result = await fetchRPCRequest(requestArgs, rpcUrl);
+    const result = await fetchRPCRequest(requestArgs, rpcUrl, apiKey);
     return result;
 }

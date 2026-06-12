@@ -254,7 +254,7 @@ export abstract class JAWSigner implements Signer {
                 if (!chain.rpcUrl) {
                     throw standardErrors.rpc.internal('No RPC URL set for chain');
                 }
-                return fetchRPCRequest(request, chain.rpcUrl);
+                return fetchRPCRequest(request, chain.rpcUrl, store.config.get()?.apiKey);
             }
         }
     }

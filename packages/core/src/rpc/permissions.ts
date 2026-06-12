@@ -499,8 +499,8 @@ export async function handleGetPermissionsRequest(
         }
     }
 
-    const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, apiKey);
-    return await fetchRPCRequest(modifiedRequest, rpcUrl);
+    const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL);
+    return await fetchRPCRequest(modifiedRequest, rpcUrl, apiKey);
 }
 
 /**

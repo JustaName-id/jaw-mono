@@ -686,7 +686,7 @@ describe('AppSpecificSigner', () => {
 
             // Assert
             expect(result).toBe('0x1000');
-            expect(fetchRPCRequest).toHaveBeenCalledWith(rpcRequest, 'https://eth-mainnet.rpc.com');
+            expect(fetchRPCRequest).toHaveBeenCalledWith(rpcRequest, 'https://eth-mainnet.rpc.com', 'test-api-key');
         });
     });
 

@@ -33,7 +33,7 @@ export async function handleGetCapabilitiesRequest(
     apiKey: string,
     showTestnets = false
 ): Promise<Record<`0x${string}`, Record<string, unknown>>> {
-    const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, apiKey);
+    const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL);
 
     // EIP-5792 format: params[0] is account address, params[1] is optional array of chain IDs to filter by
     const params = request.params as [Address?, `0x${string}`[]?] | undefined;
@@ -54,6 +54,6 @@ export async function handleGetCapabilitiesRequest(
         // If showTestnets is true, don't modify params - let proxy return all chains
     }
 
-    const result = await fetchRPCRequest(requestArgs, rpcUrl);
+    const result = await fetchRPCRequest(requestArgs, rpcUrl, apiKey);
     return result as Record<`0x${string}`, Record<string, unknown>>;
 }

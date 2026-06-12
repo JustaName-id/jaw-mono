@@ -2,16 +2,16 @@ import { standardErrors } from '../errors/index.js';
 import { RequestArguments } from '../provider/index.js';
 
 /**
- * Constructs the JAW RPC URL with the provided API key as a query parameter
+ * Constructs the JAW handle RPC URL. The API key is sent as the `x-api-key`
+ * request header by fetchRPCRequest, not as a query parameter.
  * @param baseUrl The base RPC URL
- * @param apiKey The API key to append to the URL
- * @returns The constructed URL with the API key query parameter
+ * @returns The constructed handle URL
  */
-export function buildHandleJawRpcUrl(baseUrl: string, apiKey: string): string {
-    return `${baseUrl}/handle?api-key=${apiKey}`;
+export function buildHandleJawRpcUrl(baseUrl: string): string {
+    return `${baseUrl}/handle`;
 }
 
-export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string) {
+export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string, apiKey?: string) {
     const requestBody = {
         ...request,
         jsonrpc: '2.0',
@@ -23,6 +23,7 @@ export async function fetchRPCRequest(request: RequestArguments, rpcUrl: string)
         mode: 'cors',
         headers: {
             'Content-Type': 'application/json',
+            ...(apiKey ? { 'x-api-key': apiKey } : {}),
         },
     });
     const { result, error } = await res.json();

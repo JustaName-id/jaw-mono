@@ -54,9 +54,17 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
         },
     });
 
+    // The JAW RPC URL no longer carries the api key as a query param; it is sent
+    // as the x-api-key header instead (kept out of URLs and persisted storage).
+    const apiKey = store.config.get()?.apiKey;
+    const rpcTransport = http(
+        chain.rpcUrl,
+        apiKey ? { fetchOptions: { headers: { 'x-api-key': apiKey } } } : undefined
+    );
+
     const client = createPublicClient({
         chain: viemchain,
-        transport: http(chain.rpcUrl),
+        transport: rpcTransport,
     });
 
     // If no paymaster URL, return bundler client without paymaster
@@ -64,7 +72,7 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
         const bundlerClient = createBundlerClient({
             chain: viemchain,
             client,
-            transport: http(chain.rpcUrl),
+            transport: rpcTransport,
         });
         return { client, bundlerClient };
     }
@@ -78,7 +86,7 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
         chain: viemchain,
         client,
         paymaster: createPaymasterFunctions(client, paymasterClient, chain.id, chain.paymaster.context),
-        transport: http(chain.rpcUrl),
+        transport: rpcTransport,
     });
 
     return { client, bundlerClient };
@@ -196,9 +204,13 @@ export function createInitialChains(
     showTestnets = false
 ): SDKChain[] {
     const chains = getSupportedChains(showTestnets);
+    // Note: api key is intentionally NOT embedded in the URL. It is injected as
+    // the x-api-key header at client creation, so it never lands in persisted
+    // chain state (localStorage) or in request URLs.
+    void apiKey;
     return chains.map((chain) => ({
         id: chain.id,
-        rpcUrl: `${JAW_RPC_URL}?chainId=${chain.id}&api-key=${apiKey}`,
+        rpcUrl: `${JAW_RPC_URL}?chainId=${chain.id}`,
         ...(paymasters?.[chain.id] ? { paymaster: paymasters[chain.id] } : {}),
     }));
 }

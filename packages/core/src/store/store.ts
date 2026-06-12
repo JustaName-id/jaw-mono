@@ -114,7 +114,9 @@ export const sdkstore = createStore(
                     chains: state.chains,
                     keys: state.keys,
                     account: state.account,
-                    config: state.config,
+                    // Do not persist the api key. It is re-supplied on every SDK
+                    // creation and injected as the x-api-key header at runtime.
+                    config: { ...state.config, apiKey: undefined },
                     callStatuses: serializedCallStatuses,
                 } as StoreState;
             },
