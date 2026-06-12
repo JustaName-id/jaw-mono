@@ -68,13 +68,14 @@ export interface JawProviderPreference {
     /** Session cache TTL in seconds. Default: 86400 (24 hours). Set to 0 to disable caching. */
     authTTL?: number;
     /**
-     * Transport for CrossPlatform mode (default: 'popup').
-     * - 'popup':  current behavior, window.open to keysUrl.
-     * - 'iframe': embedded dialog primary; automatic popup fallback where
-     *             iframes cannot work (Safari passkey creation, HTTP hosts,
-     *             unverifiable visibility).
-     * - 'auto':   alias of 'iframe' in v1; reserved to become the default
-     *             in a future minor release.
+     * Transport for CrossPlatform mode (default: 'auto' — embedded iframe
+     * primary).
+     * - 'auto':   embedded dialog primary with automatic popup fallback where
+     *             iframes cannot work (Safari passkey creation, insecure
+     *             contexts, unverifiable visibility). The default.
+     * - 'iframe': same as 'auto' in this release.
+     * - 'popup':  legacy behavior — always window.open to keysUrl. Set this
+     *             explicitly to opt out of the embedded dialog.
      * Ignored when mode is Mode.AppSpecific.
      */
     transportMode?: 'popup' | 'iframe' | 'auto';

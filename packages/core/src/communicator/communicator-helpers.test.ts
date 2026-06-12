@@ -3,8 +3,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { normalizeTransportMode, getRouteContext } from './communicator.js';
 
 describe('normalizeTransportMode', () => {
-    it('defaults to popup when unset (AC-7)', () => {
-        expect(normalizeTransportMode(undefined)).toBe('popup');
+    it('defaults to auto (iframe primary) when unset', () => {
+        expect(normalizeTransportMode(undefined)).toBe('auto');
     });
 
     it('passes through valid modes', () => {

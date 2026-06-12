@@ -1,23 +1,25 @@
 # transportMode
 
-How the SDK reaches `keys.jaw.id` in **CrossPlatform** mode: a popup window (current default) or an embedded iframe dialog with automatic popup fallback.
+How the SDK reaches `keys.jaw.id` in **CrossPlatform** mode: an embedded iframe dialog with automatic popup fallback (default), or a popup window.
 
 **Type:** `'popup' | 'iframe' | 'auto'`
 **Required:** No
-**Default:** `'popup'`
+**Default:** `'auto'` (embedded iframe primary)
 **Applies to:** CrossPlatform mode only (ignored in AppSpecific mode)
 
 ## Values
 
 | Value | Behavior |
 | --- | --- |
-| `'popup'` | Opens `keys.jaw.id` in a popup window. The current, default behavior. |
-| `'iframe'` | Embeds `keys.jaw.id` as an in-page dialog, with automatic popup fallback where iframes can't work (see below). |
-| `'auto'` | Alias of `'iframe'` today. Reserved to become the default in a future minor release — set it explicitly to opt into "best available transport". |
+| `'auto'` | **Default.** Embeds `keys.jaw.id` as an in-page dialog, with automatic popup fallback where iframes can't work (see below). |
+| `'iframe'` | Same as `'auto'` in this release. |
+| `'popup'` | Legacy behavior: always opens `keys.jaw.id` in a popup window. Set this explicitly to opt out of the embedded dialog. |
 
-Not setting `transportMode` keeps the exact popup behavior you have today — this is a fully backwards-compatible, opt-in feature.
+The fallback matrix below means `'auto'` never does worse than the popup: on browsers or pages where the iframe can't work, the SDK opens a popup exactly as before. If you need the popup unconditionally, set `transportMode: 'popup'`.
 
 ## Usage
+
+No configuration is needed for the default embedded dialog. To opt out and force the legacy popup:
 
 ### With Wagmi (Recommended)
 
@@ -28,7 +30,7 @@ const connector = jaw({
   apiKey: 'your-api-key',
   appName: 'My App',
   preference: {
-    transportMode: 'iframe',
+    transportMode: 'popup', // opt out of the embedded dialog
   },
 });
 ```
@@ -42,7 +44,7 @@ const sdk = JAW.create({
   apiKey: 'your-api-key',
   appName: 'My App',
   preference: {
-    transportMode: 'iframe',
+    transportMode: 'popup', // opt out of the embedded dialog
   },
 });
 ```

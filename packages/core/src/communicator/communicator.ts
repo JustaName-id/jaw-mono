@@ -14,11 +14,13 @@ export type CommunicatorOptions = {
 const VALID_TRANSPORT_MODES: readonly TransportMode[] = ['popup', 'iframe', 'auto'];
 
 /**
- * Normalize the transport preference: unset or invalid values fall back to
- * 'popup' (the v1 default), warning once on invalid input.
+ * Normalize the transport preference. Unset defaults to 'auto' (iframe
+ * primary with automatic popup fallback); set 'popup' explicitly to keep the
+ * legacy popup-only behavior. Invalid values fall back to 'popup' (the most
+ * conservative transport), warning once.
  */
 export function normalizeTransportMode(mode: unknown, warn: (message: string) => void = console.warn): TransportMode {
-    if (mode === undefined) return 'popup';
+    if (mode === undefined) return 'auto';
     if (VALID_TRANSPORT_MODES.includes(mode as TransportMode)) return mode as TransportMode;
     warn(`[JAW] Invalid transportMode "${String(mode)}" — falling back to 'popup'.`);
     return 'popup';

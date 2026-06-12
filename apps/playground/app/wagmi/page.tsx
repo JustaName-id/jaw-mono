@@ -419,6 +419,16 @@ function WagmiPageContent({
                 <a
                   href="/wagmi"
                   className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    transportMode !== 'popup'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Iframe (default)
+                </a>
+                <a
+                  href="/wagmi?transport=popup"
+                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
                     transportMode === 'popup'
                       ? 'bg-amber-600 text-white'
                       : 'bg-muted text-muted-foreground hover:bg-muted/80'
@@ -426,22 +436,12 @@ function WagmiPageContent({
                 >
                   Popup
                 </a>
-                <a
-                  href="/wagmi?transport=iframe"
-                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
-                    transportMode !== 'popup'
-                      ? 'bg-emerald-600 text-white'
-                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
-                  }`}
-                >
-                  Iframe
-                </a>
               </div>
             </div>
             <p className="text-muted-foreground mt-2 text-xs">
               {transportMode === 'popup'
-                ? 'Current default: keys.jaw.id opens in a popup window'
-                : 'Embedded dialog with automatic popup fallback (Safari passkey creation, HTTP, occluded UI)'}
+                ? 'Legacy opt-out: keys.jaw.id opens in a popup window'
+                : 'Default: embedded dialog with automatic popup fallback (Safari passkey creation, insecure contexts, occluded UI)'}
             </p>
           </Card>
         )}
@@ -631,8 +631,9 @@ function WagmiPageInner() {
   const transportParam = searchParams.get('transport');
 
   const mode: ModeType = modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
+  // SDK default is 'auto' (iframe primary); ?transport=popup is the opt-out.
   const transportMode: TransportModeType =
-    transportParam === 'iframe' ? 'iframe' : transportParam === 'auto' ? 'auto' : 'popup';
+    transportParam === 'popup' ? 'popup' : transportParam === 'iframe' ? 'iframe' : 'auto';
 
   const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();

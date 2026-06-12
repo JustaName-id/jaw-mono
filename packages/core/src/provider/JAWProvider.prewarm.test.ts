@@ -48,12 +48,12 @@ describe('JAWProvider transportMode prewarm wiring (AC-9)', () => {
         expect(prewarm).toHaveBeenCalledTimes(1);
     });
 
-    it('does not prewarm when transportMode is unset (AC-7)', () => {
+    it('prewarms when transportMode is unset (iframe is the default)', () => {
         new JAWProvider(createOptions({}));
-        expect(prewarm).not.toHaveBeenCalled();
+        expect(prewarm).toHaveBeenCalledTimes(1);
     });
 
-    it('does not prewarm when transportMode is "popup"', () => {
+    it('does not prewarm on the explicit "popup" opt-out', () => {
         new JAWProvider(createOptions({ transportMode: 'popup' }));
         expect(prewarm).not.toHaveBeenCalled();
     });
