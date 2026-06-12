@@ -68,9 +68,14 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     return () => window.removeEventListener(WEBAUTHN_IFRAME_UNSUPPORTED_EVENT, onUnsupported);
   }, [embedded, communicator]);
 
-  if (!embedded || !mounted) {
-    return <>{children}</>;
-  }
+  // Active only after mount in an embedded context. The wrapper structure is
+  // CONSTANT across this transition: when inactive the wrappers use
+  // `display: contents` so they have no visual/layout effect (popup,
+  // standalone, SSR and the first client render all look like plain
+  // children). Toggling `active` only changes classNames — children never
+  // change tree position, so they are never remounted (they hold the keys
+  // session/crypto state, which a remount would reset and break the connect).
+  const active = embedded && mounted;
 
   const card =
     presentation === 'drawer'
@@ -81,17 +86,25 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
 
   return (
     <div
-      className={`fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ${
-        entered ? 'opacity-100' : 'opacity-0'
-      }`}
+      className={
+        active
+          ? `fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ${entered ? 'opacity-100' : 'opacity-0'}`
+          : 'contents'
+      }
     >
       {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
           which must not stretch the card to the full viewport */}
       <div
-        role="document"
-        className={`bg-background overflow-y-auto shadow-xl transition-all duration-200 [&_.min-h-screen]:min-h-0 ${card}`}
+        role={active ? 'document' : undefined}
+        className={
+          active
+            ? `bg-background overflow-y-auto shadow-xl transition-all duration-200 [&_.min-h-screen]:min-h-0 ${card}`
+            : 'contents'
+        }
       >
-        <EnsureVisibility communicator={communicator}>{children}</EnsureVisibility>
+        <EnsureVisibility communicator={communicator} active={active}>
+          {children}
+        </EnsureVisibility>
       </div>
     </div>
   );
