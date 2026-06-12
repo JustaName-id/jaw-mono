@@ -384,6 +384,23 @@ describe('IframeTransport', () => {
 
             expect(transport.isAlive()).toBe(true);
         });
+
+        it('does not throw when destroy() runs during a reload triggered mid-handshake (E7 race)', async () => {
+            // Start a handshake that never completes, then reload (which awaits
+            // the in-flight readyPromise) and destroy concurrently.
+            transport = createTransport(120);
+            const ready = transport.ensureReady();
+            mockContentWindow();
+
+            const reloadPromise = transport.reload().catch((e) => e);
+            transport.destroy(); // nulls the iframe while reload awaits
+
+            await expect(ready).rejects.toThrow();
+            // reload must not throw a null-deref; it re-mounts via ensureReady,
+            // which will time out (no handshake) — but never a TypeError.
+            const result = await reloadPromise;
+            expect(result === undefined || /timed out/i.test(String(result?.message))).toBe(true);
+        });
     });
 
     describe('destroy', () => {

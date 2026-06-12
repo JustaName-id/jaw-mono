@@ -192,6 +192,12 @@ export class IframeTransport implements IframeTransportContract {
             await this.readyPromise.catch(() => undefined);
         }
 
+        // destroy() may have run during the await above, nulling the iframe.
+        if (!this.iframe) {
+            await this.ensureReady();
+            return;
+        }
+
         this.ready = false;
         this.reloading = true;
         try {

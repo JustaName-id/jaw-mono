@@ -101,9 +101,17 @@ export class TransportRouter implements TransportRouterContract {
         return result;
     }
 
-    /** Whether a message's source belongs to any currently-owned transport window. */
+    /**
+     * Whether a message's source belongs to any currently-owned transport
+     * window. A non-null source (always present on a real cross-window
+     * postMessage) must match a transport — this is what rejects a second,
+     * same-origin keys iframe trying to spoof control messages. A null source
+     * is tolerated: it only occurs for synthetic events (tests) or a source
+     * window destroyed in flight; crafting one requires same-page script
+     * execution (XSS), which already implies full host compromise.
+     */
     ownsSource(source: MessageEventSource | null): boolean {
-        if (!source) return true; // tolerant of synthetic events without a source
+        if (!source) return true;
         return (this.popup?.matchesSource(source) ?? false) || (this.iframe?.matchesSource(source) ?? false);
     }
 

@@ -6,7 +6,6 @@ import type { PopupCommunicator } from '../../lib/popup-communicator';
 import {
   EMBEDDED_BREAKPOINT_PX,
   WEBAUTHN_IFRAME_UNSUPPORTED_EVENT,
-  pickPresentation,
   type EmbeddedPresentation,
 } from '../../lib/embedded-ui';
 import { EnsureVisibility } from '../EnsureVisibility';
@@ -36,10 +35,13 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   useEffect(() => {
     if (!embedded) return;
     const query = window.matchMedia(`(max-width: ${EMBEDDED_BREAKPOINT_PX}px)`);
-    const update = () => setPresentation(pickPresentation(window.innerWidth));
-    update();
-    query.addEventListener('change', update);
-    return () => query.removeEventListener('change', update);
+    // Drive presentation off the media query result itself (`matches`), not a
+    // separate window.innerWidth read — the two can disagree on mobile.
+    const update = (matches: boolean) => setPresentation(matches ? 'drawer' : 'floating');
+    update(query.matches);
+    const onChange = (event: MediaQueryListEvent) => update(event.matches);
+    query.addEventListener('change', onChange);
+    return () => query.removeEventListener('change', onChange);
   }, [embedded]);
 
   useEffect(() => {
