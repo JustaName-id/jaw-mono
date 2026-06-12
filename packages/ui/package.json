@@ -35,6 +35,23 @@
       "default": "./dist/index.js"
     }
   },
+  "nx": {
+    "targets": {
+      "test": {
+        "cache": true,
+        "inputs": [
+          "default",
+          "^production",
+          "{projectRoot}/vitest.config.ts"
+        ],
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "bunx vitest run"
+        }
+      }
+    }
+  },
   "peerDependencies": {
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
