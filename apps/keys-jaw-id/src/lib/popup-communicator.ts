@@ -57,6 +57,17 @@ export class PopupCommunicator {
 
     this.origin = this.resolveCounterpartOrigin();
 
+    if (this.context === 'embedded' && !this.origin) {
+      // No ancestorOrigins (non-Chromium) and no referrer (embedder sent
+      // `Referrer-Policy: no-referrer`): we cannot safely lock the parent
+      // origin, so the communicator stays inert and the SDK handshake will
+      // time out. Surface a diagnostic instead of failing silently.
+      console.error(
+        '[JAW keys] Could not resolve the embedder origin (no ancestorOrigins and no referrer). ' +
+          'The iframe transport cannot establish a session; the host should allow a referrer or use the popup transport.'
+      );
+    }
+
     // Notify the SDK when this window goes away. `beforeunload` does not
     // fire reliably inside iframes — embedded mode uses `pagehide`.
     const unloadEvent = this.context === 'embedded' ? 'pagehide' : 'beforeunload';

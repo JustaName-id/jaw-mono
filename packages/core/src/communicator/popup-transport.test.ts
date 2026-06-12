@@ -148,6 +148,33 @@ describe('PopupTransport', () => {
 
             expect(message).toEqual({ requestId: 'legit' });
         });
+
+        it('should ignore messages whose source is not the popup window', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            const received = transport.onMessage(() => true);
+
+            // Right origin, wrong source (a different window) -> ignored
+            window.dispatchEvent(
+                new MessageEvent('message', {
+                    data: { requestId: 'spoofed-source' },
+                    origin: urlOrigin,
+                    source: { other: true } as unknown as Window,
+                })
+            );
+            // Right origin, source matching the popup -> accepted
+            window.dispatchEvent(
+                new MessageEvent('message', {
+                    data: { requestId: 'from-popup' },
+                    origin: urlOrigin,
+                    source: mockPopup as unknown as Window,
+                })
+            );
+
+            expect(await received).toEqual({ requestId: 'from-popup' });
+        });
     });
 
     describe('postRequestAndWaitForResponse', () => {

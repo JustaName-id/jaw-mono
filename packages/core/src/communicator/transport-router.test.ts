@@ -19,6 +19,7 @@ type MockTransportBase = {
     ensureReady: ReturnType<typeof vi.fn>;
     postMessage: ReturnType<typeof vi.fn>;
     isAlive: ReturnType<typeof vi.fn>;
+    matchesSource: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
 };
 
@@ -40,6 +41,7 @@ function createMockPopup(): MockPopup {
         ensureReady: vi.fn(async () => ({}) as Window),
         postMessage: vi.fn(async () => undefined),
         isAlive: vi.fn(() => true),
+        matchesSource: vi.fn(() => true),
         destroy: vi.fn(),
     };
 }
@@ -50,6 +52,7 @@ function createMockIframe(): MockIframe {
         ensureReady: vi.fn(async () => ({}) as Window),
         postMessage: vi.fn(async () => undefined),
         isAlive: vi.fn(() => true),
+        matchesSource: vi.fn(() => true),
         destroy: vi.fn(),
         prewarm: vi.fn(async () => undefined),
         show: vi.fn(),
@@ -384,5 +387,43 @@ describe('TransportRouter.destroyAll', () => {
     it('is safe to call before any acquire', () => {
         const { router } = createRouter({ mode: 'iframe' });
         expect(() => router.destroyAll()).not.toThrow();
+    });
+
+    it('clears a pending forced-popup so it does not leak past teardown (H2)', async () => {
+        const { router, iframeMock } = createRouter({ mode: 'iframe' });
+
+        await router.acquire({}); // iframe established
+        router.forcePopupOnce(); // arm forced popup
+        router.destroyAll(); // teardown must clear it
+
+        // Next acquire routes normally (iframe), not the stale forced popup
+        const transport = await router.acquire({});
+        expect(transport.kind).toBe('iframe');
+        expect(iframeMock.reload).not.toHaveBeenCalled();
+    });
+});
+
+describe('TransportRouter.ownsSource', () => {
+    it('is tolerant of a null source', () => {
+        const { router } = createRouter({ mode: 'iframe' });
+        expect(router.ownsSource(null)).toBe(true);
+    });
+
+    it('delegates to the owned transports matchesSource', async () => {
+        const { router, iframeMock } = createRouter({ mode: 'iframe' });
+        await router.acquire({});
+
+        const src = { tag: 'src' } as unknown as MessageEventSource;
+        iframeMock.matchesSource.mockReturnValue(false);
+        expect(router.ownsSource(src)).toBe(false);
+
+        iframeMock.matchesSource.mockReturnValue(true);
+        expect(router.ownsSource(src)).toBe(true);
+    });
+
+    it('returns false for a source when no transport is owned', () => {
+        const { router } = createRouter({ mode: 'iframe' });
+        const src = { tag: 'src' } as unknown as MessageEventSource;
+        expect(router.ownsSource(src)).toBe(false);
     });
 });

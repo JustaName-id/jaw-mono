@@ -87,8 +87,9 @@ export class PopupTransport implements Transport {
     async onMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): Promise<M> {
         return new Promise((resolve, reject) => {
             const listener = (event: MessageEvent) => {
-                // Validate origin
+                // Validate origin and source (the popup we opened)
                 if (event.origin !== this.url.origin) return;
+                if (!this.matchesSource(event.source)) return;
 
                 const message = event.data;
                 if (predicate(message)) {
@@ -101,6 +102,11 @@ export class PopupTransport implements Transport {
             window.addEventListener('message', listener);
             this.listeners.set(listener, { reject });
         });
+    }
+
+    matchesSource(source: MessageEventSource | null): boolean {
+        // Tolerant of a null source (synthetic events): enforce only when present.
+        return !source || source === this.popup;
     }
 
     /**

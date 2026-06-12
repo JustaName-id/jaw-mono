@@ -101,12 +101,19 @@ export class TransportRouter implements TransportRouterContract {
         return result;
     }
 
+    /** Whether a message's source belongs to any currently-owned transport window. */
+    ownsSource(source: MessageEventSource | null): boolean {
+        if (!source) return true; // tolerant of synthetic events without a source
+        return (this.popup?.matchesSource(source) ?? false) || (this.iframe?.matchesSource(source) ?? false);
+    }
+
     destroyAll(): void {
         this.popup?.destroy();
         this.popup = null;
         this.iframe?.destroy();
         this.iframe = null;
         this.pendingIframeReload = false;
+        this.popupForced = false;
     }
 
     /**

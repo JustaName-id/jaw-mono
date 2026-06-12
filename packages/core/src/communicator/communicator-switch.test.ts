@@ -176,6 +176,20 @@ describe('Communicator SwitchTransport handling (AC-11)', () => {
         removeSpy.mockRestore();
     });
 
+    it('cleans up the response listener when postMessage fails (H1 leak)', async () => {
+        // window.open returns null -> popup blocked -> ensureReady rejects ->
+        // postMessage rejects inside postRequestAndWaitForResponse.
+        window.open = vi.fn(() => null);
+        const removeSpy = vi.spyOn(window, 'removeEventListener');
+
+        const request: Message & { id: MessageID } = { id: 'req-eee-5-5-5', data: {} };
+        await expect(communicator.postRequestAndWaitForResponse(request)).rejects.toThrow(/allow popups/i);
+
+        // The orphaned response listener was removed, not leaked
+        expect(removeSpy.mock.calls.some(([type]) => type === 'message')).toBe(true);
+        removeSpy.mockRestore();
+    });
+
     it('settled requests are not replayed', async () => {
         const request: Message & { id: MessageID } = { id: 'req-id-3-3-3', data: {} };
 

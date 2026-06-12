@@ -94,8 +94,9 @@ export class IframeTransport implements IframeTransportContract {
     async onMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): Promise<M> {
         return new Promise((resolve, reject) => {
             const listener = (event: MessageEvent) => {
-                // Validate origin
+                // Validate origin and source (our iframe's contentWindow)
                 if (event.origin !== this.url.origin) return;
+                if (!this.matchesSource(event.source)) return;
 
                 const message = event.data;
                 if (predicate(message)) {
@@ -108,6 +109,11 @@ export class IframeTransport implements IframeTransportContract {
             window.addEventListener('message', listener);
             this.listeners.set(listener, { reject });
         });
+    }
+
+    matchesSource(source: MessageEventSource | null): boolean {
+        // Tolerant of a null source (synthetic events): enforce only when present.
+        return !source || source === (this.iframe?.contentWindow ?? null);
     }
 
     /**
@@ -178,6 +184,12 @@ export class IframeTransport implements IframeTransportContract {
         if (!this.iframe) {
             await this.ensureReady();
             return;
+        }
+
+        // Don't stomp an in-flight handshake (ensureReady/prewarm): let it
+        // settle first so its listeners aren't orphaned by a second one.
+        if (this.readyPromise) {
+            await this.readyPromise.catch(() => undefined);
         }
 
         this.ready = false;
@@ -283,6 +295,7 @@ export class IframeTransport implements IframeTransportContract {
         // Persistent config-event listener (DialogClose / PopupUnload)
         this.configListener = (event: MessageEvent) => {
             if (event.origin !== this.url.origin) return;
+            if (!this.matchesSource(event.source)) return;
             const message = event.data as ConfigMessage | undefined;
 
             if (message?.event === 'DialogClose') {

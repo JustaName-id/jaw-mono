@@ -82,6 +82,7 @@ export class Communicator {
     /** Routes SwitchTransport requests from the keys dialog. */
     private handleSwitchTransport = (event: MessageEvent): void => {
         if (event.origin !== this.url.origin) return;
+        if (!this.router.ownsSource(event.source)) return;
         const message = event.data as { event?: string } | undefined;
         if (message?.event !== 'SwitchTransport') return;
 
@@ -137,11 +138,17 @@ export class Communicator {
      * @returns Promise resolving to the response message
      */
     async postRequestAndWaitForResponse<M extends Message>(request: Message & { id: MessageID }): Promise<M> {
-        const responsePromise = this.onMessage<M>(({ requestId }) => requestId === request.id);
+        const { promise, cancel } = this.listenForMessage<M>(({ requestId }) => requestId === request.id);
         this.inflight.set(request.id, request);
         try {
             await this.postMessage(request);
-            return await responsePromise;
+            return await promise;
+        } catch (error) {
+            // postMessage failed (popup blocked, handshake timeout, acquire
+            // error): tear down the orphaned response listener so it doesn't
+            // leak until disconnect().
+            cancel();
+            throw error;
         } finally {
             this.inflight.delete(request.id);
         }
@@ -153,10 +160,24 @@ export class Communicator {
      * @returns Promise resolving to the matching message
      */
     async onMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): Promise<M> {
-        return new Promise((resolve, reject) => {
-            const listener = (event: MessageEvent) => {
-                // Validate origin
+        return this.listenForMessage<M>(predicate).promise;
+    }
+
+    /**
+     * Register an origin/source-validated message listener, returning the
+     * matching promise plus a cancel handle that removes the listener without
+     * resolving (used to clean up when the request never gets sent).
+     */
+    private listenForMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): {
+        promise: Promise<M>;
+        cancel: () => void;
+    } {
+        let listener!: (event: MessageEvent) => void;
+        const promise = new Promise<M>((resolve, reject) => {
+            listener = (event: MessageEvent) => {
+                // Validate origin and source (an owned transport window)
                 if (event.origin !== this.url.origin) return;
+                if (!this.router.ownsSource(event.source)) return;
 
                 const message = event.data;
                 if (predicate(message)) {
@@ -165,10 +186,16 @@ export class Communicator {
                     this.listeners.delete(listener);
                 }
             };
-
             window.addEventListener('message', listener);
             this.listeners.set(listener, { reject });
         });
+
+        const cancel = () => {
+            window.removeEventListener('message', listener);
+            this.listeners.delete(listener);
+        };
+
+        return { promise, cancel };
     }
 
     /**

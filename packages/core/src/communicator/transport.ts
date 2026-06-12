@@ -43,6 +43,13 @@ export interface Transport {
     isAlive(): boolean;
 
     /**
+     * Whether a received message's `event.source` belongs to this transport's
+     * target window. Tolerant of a null source (synthetic events) so the check
+     * enforces in real browsers without breaking on engines/tests that omit it.
+     */
+    matchesSource(source: MessageEventSource | null): boolean;
+
+    /**
      * Hide/close UI, reject all pending listeners with
      * UserRejectedRequest (4001), release resources.
      */
@@ -82,6 +89,9 @@ export interface TransportRouter {
 
     /** Acquire the routed, ready transport. Serializes cross-transport concurrency. */
     acquire(ctx: RouteContext): Promise<Transport>;
+
+    /** Whether a message's source belongs to any currently-owned transport window. */
+    ownsSource(source: MessageEventSource | null): boolean;
 
     destroyAll(): void;
 }
