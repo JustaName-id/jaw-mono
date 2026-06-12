@@ -1,3 +1,13 @@
+## 0.4.8 (2026-06-12)
+
+### 🩹 Fixes
+
+- **ui:** safely load ens profiles avatars ([#192](https://github.com/JustaName-id/jaw-mono/pull/192))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.4.7 (2026-06-12)
 
 ### 🩹 Fixes
