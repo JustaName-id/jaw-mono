@@ -1,3 +1,13 @@
+## 0.4.7 (2026-06-12)
+
+### 🩹 Fixes
+
+- **ui:** improve gas fee display and fallback logic ([#191](https://github.com/JustaName-id/jaw-mono/pull/191))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.6 (2026-06-11)
 
 ### 🩹 Fixes
