@@ -1,13 +1,26 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { KeyManager } from './keyManager.js';
-import { createMemoryStorage, type SyncStorage } from '../storage-manager/index.js';
+import { type AsyncStorage } from '../storage-manager/index.js';
+
+function createAsyncMemoryStorage(): AsyncStorage {
+    const store = new Map<string, unknown>();
+    return {
+        getItem: async <T>(key: string): Promise<T | null> => (store.has(key) ? (store.get(key) as T) : null),
+        setItem: async (key: string, value: unknown): Promise<void> => {
+            store.set(key, value);
+        },
+        removeItem: async (key: string): Promise<void> => {
+            store.delete(key);
+        },
+    };
+}
 
 describe('KeyManager', () => {
-    let storage: SyncStorage;
+    let storage: AsyncStorage;
     let keyManager: KeyManager;
 
     beforeEach(() => {
-        storage = createMemoryStorage();
+        storage = createAsyncMemoryStorage();
         keyManager = new KeyManager(storage);
     });
 
@@ -32,7 +45,7 @@ describe('KeyManager', () => {
 
     it('should derive shared secret after setting peer public key', async () => {
         // Create a second key manager to act as peer
-        const peerKeyManager = new KeyManager(createMemoryStorage());
+        const peerKeyManager = new KeyManager(createAsyncMemoryStorage());
         const peerPublicKey = await peerKeyManager.getOwnPublicKey();
 
         // Set peer's public key
@@ -45,8 +58,8 @@ describe('KeyManager', () => {
     });
 
     it('should derive same shared secret on both sides', async () => {
-        const storage1 = createMemoryStorage();
-        const storage2 = createMemoryStorage();
+        const storage1 = createAsyncMemoryStorage();
+        const storage2 = createAsyncMemoryStorage();
 
         const manager1 = new KeyManager(storage1);
         const manager2 = new KeyManager(storage2);
@@ -71,17 +84,20 @@ describe('KeyManager', () => {
         expect(secret2?.algorithm.name).toBe('AES-GCM');
     });
 
-    it('should persist keys to storage', async () => {
+    it('should persist keys as non-extractable CryptoKeys in storage', async () => {
         await keyManager.getOwnPublicKey();
 
-        // Verify keys were stored
-        const ownPrivateKey = storage.getItem('ownPrivateKey');
-        const ownPublicKey = storage.getItem('ownPublicKey');
+        // Verify keys were stored as CryptoKey objects (not extractable hex)
+        const ownPrivateKey = await storage.getItem<CryptoKey>('ownPrivateKey');
+        const ownPublicKey = await storage.getItem<CryptoKey>('ownPublicKey');
 
-        expect(ownPrivateKey).toBeDefined();
         expect(ownPrivateKey).not.toBeNull();
-        expect(ownPublicKey).toBeDefined();
         expect(ownPublicKey).not.toBeNull();
+
+        // The private key must be non-extractable so its bytes can't be exported
+        // (e.g. by XSS reading it back out of storage); the public key is not secret.
+        expect(ownPrivateKey?.extractable).toBe(false);
+        expect(ownPublicKey?.extractable).toBe(true);
     });
 
     it('should load keys from storage', async () => {
@@ -100,7 +116,7 @@ describe('KeyManager', () => {
     it('should clear all keys', async () => {
         // Generate keys and set peer
         await keyManager.getOwnPublicKey();
-        const peerManager = new KeyManager(createMemoryStorage());
+        const peerManager = new KeyManager(createAsyncMemoryStorage());
         const peerKey = await peerManager.getOwnPublicKey();
         await keyManager.setPeerPublicKey(peerKey);
 
@@ -112,9 +128,9 @@ describe('KeyManager', () => {
         await keyManager.clear();
 
         // Verify storage is cleared
-        expect(storage.getItem('ownPrivateKey')).toBeNull();
-        expect(storage.getItem('ownPublicKey')).toBeNull();
-        expect(storage.getItem('peerPublicKey')).toBeNull();
+        expect(await storage.getItem('ownPrivateKey')).toBeNull();
+        expect(await storage.getItem('ownPublicKey')).toBeNull();
+        expect(await storage.getItem('peerPublicKey')).toBeNull();
 
         // Shared secret should be null
         const secretAfter = await keyManager.getSharedSecret();
@@ -131,7 +147,7 @@ describe('KeyManager', () => {
     });
 
     it('should handle concurrent key loading without race conditions', async () => {
-        const testStorage = createMemoryStorage();
+        const testStorage = createAsyncMemoryStorage();
         const testKeyManager = new KeyManager(testStorage);
 
         // Call getOwnPublicKey multiple times concurrently
@@ -146,9 +162,9 @@ describe('KeyManager', () => {
         expect(key2).toBe(key3);
 
         // Verify only one key pair was stored
-        const storedPrivateKey = testStorage.getItem('ownPrivateKey');
-        const storedPublicKey = testStorage.getItem('ownPublicKey');
-        expect(storedPrivateKey).toBeDefined();
-        expect(storedPublicKey).toBeDefined();
+        const storedPrivateKey = await testStorage.getItem('ownPrivateKey');
+        const storedPublicKey = await testStorage.getItem('ownPublicKey');
+        expect(storedPrivateKey).not.toBeNull();
+        expect(storedPublicKey).not.toBeNull();
     });
 });

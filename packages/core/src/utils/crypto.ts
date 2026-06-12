@@ -15,6 +15,16 @@ export async function generateKeyPair(): Promise<CryptoKeyPair> {
 }
 
 /**
+ * Re-imports an ECDH private key as non-extractable, so it can be persisted and
+ * used for key derivation without its raw bytes ever being exportable again
+ * (e.g. by an XSS reading it back out of storage).
+ */
+export async function toNonExtractablePrivateKey(privateKey: CryptoKey): Promise<CryptoKey> {
+    const pkcs8 = await crypto.subtle.exportKey('pkcs8', privateKey);
+    return crypto.subtle.importKey('pkcs8', pkcs8, { name: 'ECDH', namedCurve: 'P-256' }, false, ['deriveKey']);
+}
+
+/**
  * Derive shared secret from own private key and peer's public key
  */
 export async function deriveSharedSecret(ownPrivateKey: CryptoKey, peerPublicKey: CryptoKey): Promise<CryptoKey> {

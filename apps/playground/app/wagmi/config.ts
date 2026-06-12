@@ -41,10 +41,6 @@ export function createWagmiConfig(
     transports,
   });
 }
-
-// Default config for type declarations
-export const config = createWagmiConfig(Mode.AppSpecific);
-
 declare module 'wagmi' {
   interface Register {
     config: ReturnType<typeof createWagmiConfig>;

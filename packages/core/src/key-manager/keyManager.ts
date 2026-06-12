@@ -1,45 +1,40 @@
-import { deriveSharedSecret, exportKeyToHexString, generateKeyPair, importKeyFromHexString } from '../utils/crypto.js';
-import { createLocalStorage, type SyncStorage } from '../storage-manager/index.js';
+import { deriveSharedSecret, generateKeyPair, toNonExtractablePrivateKey } from '../utils/crypto.js';
+import { createIndexedDBStorage, createLocalStorage, type AsyncStorage } from '../storage-manager/index.js';
 
-interface StorageItem {
-    storageKey: string;
-    keyType: 'public' | 'private';
-}
-
-const OWN_PRIVATE_KEY: StorageItem = {
-    storageKey: 'ownPrivateKey',
-    keyType: 'private',
-} as const;
-
-const OWN_PUBLIC_KEY: StorageItem = {
-    storageKey: 'ownPublicKey',
-    keyType: 'public',
-} as const;
-
-const PEER_PUBLIC_KEY: StorageItem = {
-    storageKey: 'peerPublicKey',
-    keyType: 'public',
-} as const;
+const OWN_PRIVATE_KEY = 'ownPrivateKey';
+const OWN_PUBLIC_KEY = 'ownPublicKey';
+const PEER_PUBLIC_KEY = 'peerPublicKey';
 
 /**
- * KeyManager handles cryptographic key management for secure communication
+ * KeyManager handles cryptographic key management for secure communication.
  *
  * Features:
- * - Generates and stores ECDH P-256 key pairs
- * - Derives shared secrets for encrypted communication
- * - Persists keys using configurable storage
+ * - Generates ECDH P-256 key pairs and derives shared secrets
+ * - Persists keys as CryptoKey objects in IndexedDB. The own private key is
+ *   stored non-extractable, so it can be used for derivation but its raw bytes
+ *   can never be exported again (e.g. by XSS). Public keys are not secret.
  * - Manages peer public keys
  */
 export class KeyManager {
-    private storage: SyncStorage;
+    private storage: AsyncStorage;
     private ownPrivateKey: CryptoKey | null = null;
     private ownPublicKey: CryptoKey | null = null;
     private peerPublicKey: CryptoKey | null = null;
     private sharedSecret: CryptoKey | null = null;
     private loadingPromise: Promise<void> | null = null;
 
-    constructor(storage?: SyncStorage) {
-        this.storage = storage ?? createLocalStorage('jaw', 'keys');
+    constructor(storage?: AsyncStorage) {
+        this.storage = storage ?? createIndexedDBStorage('jaw', 'keys');
+        // Migration: older versions persisted the private key as extractable hex in
+        // localStorage. Remove any such leftovers so the raw key no longer lingers there.
+        try {
+            const legacy = createLocalStorage('jaw', 'keys');
+            legacy.removeItem(OWN_PRIVATE_KEY);
+            legacy.removeItem(OWN_PUBLIC_KEY);
+            legacy.removeItem(PEER_PUBLIC_KEY);
+        } catch {
+            /* ignore */
+        }
     }
 
     /**
@@ -80,21 +75,20 @@ export class KeyManager {
         this.peerPublicKey = null;
         this.sharedSecret = null;
         this.loadingPromise = null;
-        // Clear all key storage items
-        this.storage.removeItem(OWN_PRIVATE_KEY.storageKey);
-        this.storage.removeItem(OWN_PUBLIC_KEY.storageKey);
-        this.storage.removeItem(PEER_PUBLIC_KEY.storageKey);
+        await this.storage.removeItem(OWN_PRIVATE_KEY);
+        await this.storage.removeItem(OWN_PUBLIC_KEY);
+        await this.storage.removeItem(PEER_PUBLIC_KEY);
     }
 
     /**
-     * Generate new key pair
+     * Generate new key pair. The private key is stored non-extractable.
      */
     private async generateKeyPair(): Promise<void> {
         const newKeyPair = await generateKeyPair();
-        this.ownPrivateKey = newKeyPair.privateKey;
         this.ownPublicKey = newKeyPair.publicKey;
-        await this.storeKey(OWN_PRIVATE_KEY, newKeyPair.privateKey);
-        await this.storeKey(OWN_PUBLIC_KEY, newKeyPair.publicKey);
+        this.ownPrivateKey = await toNonExtractablePrivateKey(newKeyPair.privateKey);
+        await this.storeKey(OWN_PRIVATE_KEY, this.ownPrivateKey);
+        await this.storeKey(OWN_PUBLIC_KEY, this.ownPublicKey);
     }
 
     /**
@@ -102,12 +96,10 @@ export class KeyManager {
      * Protected against concurrent calls to prevent race conditions
      */
     private async loadKeysIfNeeded(): Promise<void> {
-        // If already loading, wait for that operation to complete
         if (this.loadingPromise) {
             return this.loadingPromise;
         }
 
-        // Start loading operation
         this.loadingPromise = this._loadKeysIfNeeded();
 
         try {
@@ -148,25 +140,16 @@ export class KeyManager {
     }
 
     /**
-     * Load key from storage
+     * Load a CryptoKey from storage
      */
-    private async loadKey(item: StorageItem): Promise<CryptoKey | null> {
-        const key = this.storage.getItem<string>(item.storageKey);
-        if (!key) return null;
-
-        try {
-            return await importKeyFromHexString(item.keyType, key);
-        } catch (error) {
-            const message = error instanceof Error ? error.message : String(error);
-            throw new Error(`Failed to load ${item.keyType} key '${item.storageKey}' from storage: ${message}`);
-        }
+    private async loadKey(storageKey: string): Promise<CryptoKey | null> {
+        return (await this.storage.getItem<CryptoKey>(storageKey)) ?? null;
     }
 
     /**
-     * Store key to storage
+     * Store a CryptoKey to storage
      */
-    private async storeKey(item: StorageItem, key: CryptoKey): Promise<void> {
-        const hexString = await exportKeyToHexString(item.keyType, key);
-        this.storage.setItem(item.storageKey, hexString);
+    private async storeKey(storageKey: string, key: CryptoKey): Promise<void> {
+        await this.storage.setItem(storageKey, key);
     }
 }
