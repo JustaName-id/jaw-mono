@@ -79,25 +79,30 @@ export class Communicator {
         window.addEventListener('message', this.handleSwitchTransport);
     }
 
-    /** Visible for tests. Routes SwitchTransport requests from the keys dialog. */
-    handleSwitchTransport = (event: MessageEvent): void => {
+    /** Routes SwitchTransport requests from the keys dialog. */
+    private handleSwitchTransport = (event: MessageEvent): void => {
         if (event.origin !== this.url.origin) return;
         const message = event.data as { event?: string } | undefined;
         if (message?.event !== 'SwitchTransport') return;
 
         this.router.forcePopupOnce();
 
-        // Replay in-flight requests on the popup; their response listeners
-        // are transport-agnostic (matched by requestId), so they stay armed.
+        // Replay ALL in-flight requests on the popup. We acquire the popup
+        // once (the first acquire consumes the forced-popup flag) and reuse
+        // it for every request, so requests after the first don't route back
+        // to the now-hidden iframe. Response listeners are transport-agnostic
+        // (matched by requestId), so they stay armed.
         void (async () => {
-            for (const request of this.inflight.values()) {
-                try {
-                    const transport = await this.router.acquire(getRouteContext(request));
+            const requests = [...this.inflight.values()];
+            if (requests.length === 0) return;
+            try {
+                const transport = await this.router.acquire(getRouteContext(requests[0]));
+                for (const request of requests) {
                     await transport.postMessage(request);
-                } catch {
-                    // Popup blocked or failed — the original listener will
-                    // surface the rejection through the normal error path.
                 }
+            } catch {
+                // Popup blocked or failed — the original listeners surface the
+                // rejection through the normal error path.
             }
         })();
     };
@@ -172,6 +177,11 @@ export class Communicator {
     disconnect(): void {
         this.router.destroyAll();
         this.inflight.clear();
+
+        if (this.switchListenerArmed) {
+            window.removeEventListener('message', this.handleSwitchTransport);
+            this.switchListenerArmed = false;
+        }
 
         // Clean up all listeners and their timeouts
         this.listeners.forEach(({ reject }, listener) => {

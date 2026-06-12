@@ -208,6 +208,7 @@ export class IframeTransport implements IframeTransportContract {
         this.inertObserver = null;
 
         this.dialog?.remove();
+        document.getElementById(BACKDROP_STYLE_ID)?.remove();
         this.dialog = null;
         this.iframe = null;
         this.ready = false;
@@ -331,13 +332,24 @@ export class IframeTransport implements IframeTransportContract {
                 return this.getTargetWindow();
             });
 
+        // If the timeout wins the race, the handshake chain stays pending on its
+        // onMessage(PopupReady) listener. rejectPending() (below) rejects it so
+        // the listener is cleaned up — swallow that late rejection here so it
+        // doesn't surface as an unhandled rejection.
+        handshake.catch(() => undefined);
+
         const timeout = new Promise<never>((_, reject) => {
             timer = setTimeout(() => {
                 reject(standardErrors.rpc.internal('Iframe transport handshake timed out'));
             }, this.handshakeTimeoutMs);
         });
 
-        return Promise.race([handshake, timeout]).finally(() => clearTimeout(timer));
+        return Promise.race([handshake, timeout]).finally(() => {
+            clearTimeout(timer);
+            // On timeout (handshake didn't complete), reject the orphaned
+            // PopupLoaded/PopupReady listeners so they don't leak.
+            if (!this.ready) this.rejectPending();
+        });
     }
 
     /** Reject pending requests and hide the dialog; the iframe stays mounted. */

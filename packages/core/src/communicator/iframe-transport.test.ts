@@ -209,6 +209,29 @@ describe('IframeTransport', () => {
             expect(transport.isAlive()).toBe(false);
         });
 
+        it('cleans up orphaned handshake listeners on timeout (E4 leak)', async () => {
+            const removeSpy = vi.spyOn(window, 'removeEventListener');
+            transport = createTransport(120);
+            const promise = transport.ensureReady();
+            mockContentWindow();
+
+            // Complete only the first handshake step (dispatched synchronously,
+            // well before the 120ms timeout), then stall — this leaves the
+            // PopupReady listener pending until the timeout fires.
+            dispatchMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' }, origin: urlOrigin });
+
+            await expect(promise).rejects.toThrow(/timed out/i);
+
+            // Both handshake listeners were torn down (PopupLoaded removed itself
+            // on resolve; PopupReady removed by rejectPending on timeout).
+            expect(removeSpy.mock.calls.filter(([type]) => type === 'message').length).toBeGreaterThanOrEqual(2);
+
+            // A late PopupReady must not flip the transport to alive
+            dispatchMessageEvent({ data: { event: 'PopupReady' }, origin: urlOrigin });
+            expect(transport.isAlive()).toBe(false);
+            removeSpy.mockRestore();
+        });
+
         it('ignores handshake messages from other origins', async () => {
             transport = createTransport(400);
             const promise = transport.ensureReady();
