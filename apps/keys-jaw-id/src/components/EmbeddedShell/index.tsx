@@ -31,6 +31,15 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   const embedded = communicator.getContext() === 'embedded';
   const [presentation, setPresentation] = useState<EmbeddedPresentation>('floating');
   const [entered, setEntered] = useState(false);
+  // Context detection needs `window` (opener/parent), so the server always
+  // renders the plain children. Gate the shell to post-mount so the first
+  // client render matches the SSR output (avoids a hydration mismatch);
+  // the shell appears in the effect pass that follows.
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!embedded) return;
@@ -59,7 +68,7 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     return () => window.removeEventListener(WEBAUTHN_IFRAME_UNSUPPORTED_EVENT, onUnsupported);
   }, [embedded, communicator]);
 
-  if (!embedded) {
+  if (!embedded || !mounted) {
     return <>{children}</>;
   }
 
