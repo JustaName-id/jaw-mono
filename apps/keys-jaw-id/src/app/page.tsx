@@ -106,7 +106,10 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     // Listen for messages
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cleanup = communicator.onMessage<PopupConfig>((message: any) => {
-      console.log('📥 Received message:', message);
+      // Log only the message shape, never the full payload — it includes the
+      // embedder URL, metadata and the encrypted envelope (visible to any
+      // extension with console access).
+      console.log('📥 Received message:', message?.event ?? (message?.requestId ? 'response' : 'request'));
 
       // Handle config message
       if (message.data?.version) {

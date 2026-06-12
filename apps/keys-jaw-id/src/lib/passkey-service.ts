@@ -145,7 +145,9 @@ export class PasskeyService {
         throw new Error(`Passkey with ID ${credentialId} not found`);
       }
 
-      console.log('✅ Using account:', passkeyData.username, credentialId);
+      // Do not log credentialId — credential identifiers are sensitive
+      // (constitution §Security: Secrets/PII).
+      console.log('✅ Using account:', passkeyData.username);
 
       // Use Account.get which handles WebAuthn authentication
       const account = await Account.get(
