@@ -17,6 +17,20 @@ global.MessageEvent = dom.window.MessageEvent;
 global.MutationObserver = dom.window.MutationObserver;
 global.HTMLElement = dom.window.HTMLElement;
 
+// jsdom (all versions) recognizes <dialog> but does not implement
+// showModal()/close(). Production calls the real methods (available in every
+// browser that reaches the iframe transport); provide minimal versions here.
+const dialogProto = dom.window.HTMLDialogElement.prototype as HTMLDialogElement & {
+    showModal: () => void;
+    close: () => void;
+};
+dialogProto.showModal = function (this: HTMLDialogElement) {
+    this.setAttribute('open', '');
+};
+dialogProto.close = function (this: HTMLDialogElement) {
+    this.removeAttribute('open');
+};
+
 function dispatchMessageEvent({ data, origin }: { data: unknown; origin: string }) {
     const messageEvent = new MessageEvent('message', {
         data,

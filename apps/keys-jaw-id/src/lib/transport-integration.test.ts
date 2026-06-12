@@ -29,6 +29,19 @@ global.MessageEvent = dom.window.MessageEvent;
 global.MutationObserver = dom.window.MutationObserver;
 global.HTMLElement = dom.window.HTMLElement;
 
+// jsdom lacks dialog showModal()/close() — provide minimal versions so the
+// modal under test toggles its `open` attribute as a real browser would.
+const dialogProto = dom.window.HTMLDialogElement.prototype as HTMLDialogElement & {
+  showModal: () => void;
+  close: () => void;
+};
+dialogProto.showModal = function (this: HTMLDialogElement) {
+  this.setAttribute('open', '');
+};
+dialogProto.close = function (this: HTMLDialogElement) {
+  this.removeAttribute('open');
+};
+
 // The router gates the iframe on a secure context and IOv2 (clickjacking
 // guard) — emulate a Chromium HTTPS-like environment.
 Object.defineProperty(dom.window, 'isSecureContext', { value: true, configurable: true });

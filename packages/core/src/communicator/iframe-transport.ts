@@ -136,16 +136,10 @@ export class IframeTransport implements IframeTransportContract {
         this.previousBodyOverflow = document.body.style.overflow;
         document.body.style.overflow = 'hidden';
 
-        // jsdom (tests) and very old engines do not implement showModal()
-        if (typeof this.dialog.showModal === 'function') {
-            try {
-                this.dialog.showModal();
-            } catch {
-                this.dialog.setAttribute('open', '');
-            }
-        } else {
-            this.dialog.setAttribute('open', '');
-        }
+        // showModal() puts the dialog in the top layer with a backdrop — the
+        // only way to render a real modal. Supported by every browser that
+        // reaches the iframe transport (Safari 15.4+, Chrome 37+, Firefox 98+).
+        this.dialog.showModal();
 
         this.visible = true;
         this.applyRevealGating();
@@ -159,15 +153,7 @@ export class IframeTransport implements IframeTransportContract {
     hide(): void {
         if (!this.dialog || !this.visible) return;
 
-        if (typeof this.dialog.close === 'function') {
-            try {
-                this.dialog.close();
-            } catch {
-                this.dialog.removeAttribute('open');
-            }
-        } else {
-            this.dialog.removeAttribute('open');
-        }
+        this.dialog.close();
 
         document.body.style.overflow = this.previousBodyOverflow;
         if (this.previouslyFocused instanceof HTMLElement) {
