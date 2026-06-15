@@ -1,3 +1,13 @@
+## 0.4.13 (2026-06-15)
+
+### 🩹 Fixes
+
+- **ui:** add sanitizeDisplayName utility for safe app name display ([#196](https://github.com/JustaName-id/jaw-mono/pull/196))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.12 (2026-06-15)
 
 ### 🩹 Fixes
