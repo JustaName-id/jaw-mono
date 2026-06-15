@@ -1,3 +1,13 @@
+## 0.4.10 (2026-06-15)
+
+### 🩹 Fixes
+
+- **ui:** add native decimals support to clear signing hooks and utils ([#195](https://github.com/JustaName-id/jaw-mono/pull/195))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.9 (2026-06-15)
 
 ### 🩹 Fixes
