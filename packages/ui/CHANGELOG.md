@@ -1,3 +1,13 @@
+## 0.4.9 (2026-06-15)
+
+### 🩹 Fixes
+
+- **ui:** switch token price api ([#193](https://github.com/JustaName-id/jaw-mono/pull/193))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.4.8 (2026-06-12)
 
 ### 🩹 Fixes
