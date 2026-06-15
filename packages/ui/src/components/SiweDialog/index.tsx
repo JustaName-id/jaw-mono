@@ -3,7 +3,7 @@
 import { useEffect, useId, useState } from 'react';
 import { useIsMobile } from '../../hooks';
 import { CopyIcon } from '../../icons';
-import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
+import { reverseResolveAddresses, getDisplayAddress, getChainLabel, isSafeImageUrl } from '../../utils';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -115,7 +115,7 @@ export const SiweDialog = ({
     >
       <div className="flex h-full min-h-0 flex-col gap-3 max-md:pb-2">
         <div className="flex flex-1 flex-col items-center justify-center p-3.5">
-          {appLogoUrl && (
+          {isSafeImageUrl(appLogoUrl) && (
             <img src={appLogoUrl} alt={`${appName} logo`} className="mb-3 h-[72px] w-[72px] rounded-full" />
           )}
           <div className="text-foreground flex flex-col items-center gap-1">
