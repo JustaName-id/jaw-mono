@@ -621,6 +621,7 @@ export interface FormatterContext extends PathContext {
   chainId: number;
   resolveToken?: (address: string) => Promise<TokenInfo | null> | TokenInfo | null;
   nativeSymbol?: string;
+  nativeDecimals?: number;
 }
 
 const NATIVE_SENTINELS = new Set([
@@ -757,7 +758,7 @@ async function formatField(
       }
 
       if (isNativeSentinel(tokenAddr) || (!tokenAddr && field.params?.nativeCurrencyAddress)) {
-        const formatted = amount !== null ? formatUnits(amount, 18) : asString(value);
+        const formatted = amount !== null ? formatUnits(amount, ctx.nativeDecimals ?? 18) : asString(value);
         return {
           label,
           value: formatted,
@@ -801,7 +802,7 @@ async function formatField(
 
     case 'amount': {
       const amount = toBigInt(value);
-      const formatted = amount !== null ? formatUnits(amount, 18) : asString(value);
+      const formatted = amount !== null ? formatUnits(amount, ctx.nativeDecimals ?? 18) : asString(value);
       return {
         label,
         value: formatted,
@@ -980,4 +981,9 @@ export function createTokenResolver(chainId: number, apiKey?: string) {
 /** Native-coin symbol for a chain, sourced from viem's chain config via `SUPPORTED_CHAINS`. */
 export function getNativeSymbol(chainId: number): string {
   return SUPPORTED_CHAINS.find((c) => c.id === chainId)?.nativeCurrency?.symbol ?? 'ETH';
+}
+
+/** Native-coin decimals for a chain, sourced from viem's chain config via `SUPPORTED_CHAINS`. */
+export function getNativeDecimals(chainId: number): number {
+  return SUPPORTED_CHAINS.find((c) => c.id === chainId)?.nativeCurrency?.decimals ?? 18;
 }

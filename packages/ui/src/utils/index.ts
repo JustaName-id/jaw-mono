@@ -7,3 +7,4 @@ export * from './resolveChainLabel';
 export * from './clearSigning';
 export * from './siwe';
 export * from './sanitize';
+export * from './safeUrl';

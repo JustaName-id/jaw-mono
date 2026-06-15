@@ -1,3 +1,13 @@
+## 0.4.4 (2026-06-15)
+
+### 🩹 Fixes
+
+- polygon support ([#197](https://github.com/JustaName-id/jaw-mono/pull/197))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.4.3 (2026-06-11)
 
 ### 🩹 Fixes

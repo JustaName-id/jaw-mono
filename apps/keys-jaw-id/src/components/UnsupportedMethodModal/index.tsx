@@ -2,7 +2,7 @@
 
 import { useState } from 'react';
 import { standardErrorCodes } from '@jaw.id/core';
-import { sanitizeDisplayName } from '@jaw.id/ui';
+import { sanitizeDisplayName, isSafeImageUrl } from '@jaw.id/ui';
 
 export interface UnsupportedMethodModalProps {
   origin: string;
@@ -38,7 +38,7 @@ export const UnsupportedMethodModal = ({
         {/* App Info */}
         {(appLogoUrl || appName) && (
           <div className="border-border mb-6 flex items-center gap-3 border-b pb-6">
-            {appLogoUrl && (
+            {isSafeImageUrl(appLogoUrl) && (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={appLogoUrl} alt={safeAppName} className="h-12 w-12 rounded-lg object-cover" />
             )}

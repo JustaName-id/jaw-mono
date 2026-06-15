@@ -9,6 +9,7 @@ import { ConnectDialogProps } from './types';
 import { reverseResolveAddresses } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
 import { sanitizeDisplayName } from '../../utils/sanitize';
+import { isSafeImageUrl } from '../../utils/safeUrl';
 
 export const ConnectDialog = ({
   open,
@@ -151,7 +152,7 @@ export const ConnectDialog = ({
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
         {/* App Logo and Title */}
         <div className="flex flex-1 flex-col items-center justify-center p-3.5">
-          {appLogoUrl && (
+          {isSafeImageUrl(appLogoUrl) && (
             <img src={appLogoUrl} alt={`${safeAppName} logo`} className="mb-3 h-[72px] w-[72px] rounded-full" />
           )}
           <div className="text-foreground flex flex-col items-center gap-1">
