@@ -7,6 +7,7 @@ import {
   createTokenResolver,
   decodeCalldataWithSignature,
   getDefaultDescriptorSource,
+  getNativeDecimals,
   getNativeSymbol,
   resolveCalldataDescriptor,
   type ClearSigningDisplay,
@@ -115,6 +116,7 @@ async function clearSignedDecode(
     tx: { to: to.toLowerCase(), chainId },
     chainId,
     nativeSymbol: getNativeSymbol(chainId),
+    nativeDecimals: getNativeDecimals(chainId),
     resolveToken: createTokenResolver(chainId, apiKey),
   });
 }
