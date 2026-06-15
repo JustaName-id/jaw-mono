@@ -1,5 +1,6 @@
 import { Message } from '../messages/message.js';
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
+import type { JawTheme } from '../ui/theme.js';
 
 export type TransportKind = 'popup' | 'iframe';
 
@@ -16,6 +17,8 @@ export type TransportOptions = {
     url: URL;
     metadata: AppMetadata;
     preference: JawProviderPreference;
+    /** dApp theme tokens, forwarded to the keys app so the dialog matches its look & feel. */
+    theme?: JawTheme;
 };
 
 /**

@@ -3,12 +3,15 @@ import { Message, MessageID } from '../messages/message.js';
 import { standardErrors } from '../errors/errors.js';
 
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
+import type { JawTheme } from '../ui/theme.js';
 import { RouteContext, TransportMode } from './transport.js';
 import { TransportRouter } from './transport-router.js';
 
 export type CommunicatorOptions = {
     metadata: AppMetadata;
     preference: JawProviderPreference;
+    /** dApp theme tokens, forwarded to the keys app to match its look & feel. */
+    theme?: JawTheme;
 };
 
 const VALID_TRANSPORT_MODES: readonly TransportMode[] = ['popup', 'iframe', 'auto'];
@@ -60,12 +63,13 @@ export class Communicator {
 
     private switchListenerArmed = false;
 
-    constructor({ metadata, preference }: CommunicatorOptions) {
+    constructor({ metadata, preference, theme }: CommunicatorOptions) {
         this.url = new URL(preference.keysUrl ?? JAW_KEYS_URL);
         this.router = new TransportRouter({
             url: this.url,
             metadata,
             preference,
+            theme,
             mode: normalizeTransportMode(preference.transportMode),
         });
     }

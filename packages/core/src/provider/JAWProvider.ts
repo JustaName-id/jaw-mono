@@ -51,6 +51,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         this.communicator = new Communicator({
             metadata,
             preference,
+            theme,
         });
 
         // Determine the expected signer type from current preference

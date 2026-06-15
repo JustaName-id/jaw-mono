@@ -8,6 +8,7 @@ import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { ThemePicker } from '../../components/theme-picker';
 import { ThemeToggle } from '../../components/theme-toggle';
+import { derivePlaygroundTheme } from '../../lib/derive-playground-theme';
 import { parseEther, formatUnits, type Address } from 'viem';
 import {
   useAccount,
@@ -446,7 +447,8 @@ function WagmiPageContent({
           </Card>
         )}
 
-        {/* Theme Picker (only for AppSpecific mode which uses ReactUIHandler) */}
+        {/* AppSpecific: manual picker (applied via ReactUIHandler). CrossPlatform
+            auto-derives the theme from the playground's own tokens (see effect). */}
         {mode === Mode.AppSpecific && <ThemePicker theme={theme} onThemeChange={onThemeChange} />}
 
         {/* Connection Status */}
@@ -637,7 +639,29 @@ function WagmiPageInner() {
 
   const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
-  const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
+  // null until resolved on the client. We gate the connector mount on this so
+  // the JAW provider is constructed (and prewarms the keys iframe with the
+  // theme) only once we know the real theme — otherwise the prewarm sends a
+  // stale `{mode:'auto'}` that the later update never re-delivers.
+  const [theme, setTheme] = useState<JawTheme | null>(null);
+
+  // CrossPlatform: derive the JAW theme from the playground's OWN design
+  // tokens so the embedded keys dialog matches the app automatically (theme
+  // sync). AppSpecific keeps the manual ThemePicker. We read the mode from the
+  // DOM (the `dark` class on <html>) and re-derive whenever it changes, so the
+  // dialog always tracks how the playground actually renders.
+  useEffect(() => {
+    if (mode !== Mode.CrossPlatform) {
+      // AppSpecific: initialise once, then let the ThemePicker drive it.
+      setTheme((current) => current ?? { mode: 'auto' });
+      return;
+    }
+    const update = () => setTheme(derivePlaygroundTheme());
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, [mode]);
 
   const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
     if (config) {
@@ -655,6 +679,15 @@ function WagmiPageInner() {
       setPmConfig(undefined);
     }
   };
+
+  // Don't build the connector until the theme is resolved (see note above).
+  if (!theme) {
+    return (
+      <div className="bg-background flex min-h-screen items-center justify-center">
+        <div className="border-primary h-10 w-10 animate-spin rounded-full border-b-2" />
+      </div>
+    );
+  }
 
   return (
     <WagmiProviders mode={mode} paymasters={paymasters} theme={theme} transportMode={transportMode}>

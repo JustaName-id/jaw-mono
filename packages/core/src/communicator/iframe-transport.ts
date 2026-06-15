@@ -323,6 +323,7 @@ export class IframeTransport implements IframeTransportContract {
                             version: SDK_VERSION,
                             metadata: this.options.metadata,
                             preference: this.options.preference,
+                            theme: this.options.theme,
                             location: window.location.toString(),
                         },
                     },

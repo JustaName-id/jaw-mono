@@ -21,6 +21,7 @@ import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
 import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from '@jaw.id/ui';
+import { applyDappTheme } from '../lib/apply-dapp-theme';
 import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
 import type { PopupConfig, PendingRequest } from '../utils/types';
@@ -119,6 +120,14 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         setEnsConfig(message.data.preference?.ens);
         setChainId(message.data.metadata?.defaultChainId as ChainId);
         setApiKey(message.data.apiKey);
+
+        // Apply the dApp's theme tokens so the embedded dialog matches its
+        // look & feel (accent color, border radius, light/dark), translated
+        // into keys' own shadcn-HSL token system. Falls back to the OS theme
+        // (SystemThemeListener) when no theme is sent.
+        if (message.data.theme) {
+          applyDappTheme(message.data.theme);
+        }
 
         // Always show account selection UI - never auto-authenticate
         checkForPasskeys();

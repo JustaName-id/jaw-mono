@@ -70,7 +70,12 @@ export class TransportRouter implements TransportRouterContract {
     private queue: Promise<unknown> = Promise.resolve();
 
     constructor(config: TransportRouterConfig) {
-        this.options = { url: config.url, metadata: config.metadata, preference: config.preference };
+        this.options = {
+            url: config.url,
+            metadata: config.metadata,
+            preference: config.preference,
+            theme: config.theme,
+        };
         this.mode = config.mode ?? 'popup';
         this.createPopup = config.createPopupTransport ?? ((options) => new PopupTransport(options));
         this.createIframe = config.createIframeTransport ?? ((options) => new IframeTransport(options));
