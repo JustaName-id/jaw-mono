@@ -6,3 +6,4 @@ export * from './tokenBalance';
 export * from './resolveChainLabel';
 export * from './clearSigning';
 export * from './siwe';
+export * from './sanitize';
