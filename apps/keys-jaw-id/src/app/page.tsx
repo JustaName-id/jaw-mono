@@ -39,26 +39,6 @@ type PopupState =
   | 'success'
   | 'error';
 
-/**
- * The account/`from` address a request asks to act as, or undefined when the
- * method carries none. Each method puts the address at a different param index.
- */
-function getRequestedAddress(method: string, params: unknown[]): string | undefined {
-  switch (method) {
-    case 'personal_sign':
-      return typeof params[1] === 'string' ? params[1] : undefined;
-    case 'eth_signTypedData_v4':
-      return typeof params[0] === 'string' ? params[0] : undefined;
-    case 'wallet_sign':
-      return (params[0] as { address?: string } | undefined)?.address;
-    case 'wallet_sendCalls':
-    case 'eth_sendTransaction':
-      return (params[0] as { from?: string } | undefined)?.from;
-    default:
-      return undefined;
-  }
-}
-
 export default function KeysJawIdApp() {
   // Current origin for session-based auth
   const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
@@ -84,29 +64,6 @@ export default function KeysJawIdApp() {
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
-
-  // Audit #6: a dApp must not sign or transact as an account other than the
-  // authenticated session one — otherwise it can spoof the address shown in the
-  // modal or frame a confused-deputy signature. Mismatches are rejected below.
-  const requestedAddress = pendingRequest
-    ? getRequestedAddress(pendingRequest.method, pendingRequest.params)
-    : undefined;
-  const addressMismatch = !!(
-    requestedAddress &&
-    authQuery.walletAddress &&
-    requestedAddress.toLowerCase() !== authQuery.walletAddress.toLowerCase()
-  );
-
-  useEffect(() => {
-    if (!addressMismatch || !pendingRequest) return;
-    if (state === 'success' || state === 'error') return; // already settled
-    setError('Requested account does not match the authenticated account');
-    setState('error');
-    pendingRequest.onReject(
-      'Requested account does not match the authenticated account',
-      standardErrorCodes.provider.unauthorized
-    );
-  }, [addressMismatch, pendingRequest, state]);
 
   // Single useEffect for all message handling
   useEffect(() => {
@@ -470,11 +427,6 @@ export default function KeysJawIdApp() {
   // SDK MODE
   // ==========================================
   if (isSDKMode) {
-    // Don't mount a modal for a mismatch; the effect above sends the rejection.
-    if (addressMismatch && state !== 'error') {
-      return null;
-    }
-
     // Check if we have a pending transaction request and either user is authenticated OR we're in processing state
     // Don't show modal if state is 'success' or 'error' (request has been completed)
     if (
@@ -553,16 +505,24 @@ export default function KeysJawIdApp() {
       state !== 'error' &&
       (authQuery.isAuthenticated || state === 'processing')
     ) {
-      // The requested address is derived above; here we only need the message.
+      // Extract message and address based on method type
       let messageToSign: string;
+      let address: string | undefined;
+
       if (pendingRequest.method === 'wallet_sign') {
-        // ERC-7871: for type 0x45, params[0].request.data is { message }
+        // wallet_sign: params[0] is SignParams object
+        // ERC-7871: For type 0x45, data is { message: string }
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const signParams = pendingRequest.params[0] as {
           request: { type: string; data: { message: string } };
+          address?: string;
         };
         messageToSign = signParams?.request?.data?.message || '';
+        address = signParams?.address;
       } else {
+        // personal_sign: params[0] is message, params[1] is address
         messageToSign = pendingRequest.params[0] as string;
+        address = pendingRequest.params[1] as string;
       }
 
       // Check if this is a SIWE (Sign-In with Ethereum) message
@@ -579,7 +539,7 @@ export default function KeysJawIdApp() {
           <SiweModal
             origin={pendingRequest.origin}
             message={messageToSign}
-            address={requestedAddress}
+            address={address}
             chain={pendingRequest.chain as chain}
             apiKey={apiKey}
             appName={pendingRequest.metadata?.appName || 'dApp'}
@@ -621,7 +581,7 @@ export default function KeysJawIdApp() {
           // open={true}
           // onOpenChange={() => { }}
           message={messageToSign}
-          address={requestedAddress}
+          address={address}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
           onSuccess={async (signature, message) => {
@@ -662,24 +622,37 @@ export default function KeysJawIdApp() {
       state !== 'error' &&
       (authQuery.isAuthenticated || state === 'processing')
     ) {
-      // The requested address is derived above; here we only need the typed data.
+      // Extract typed data JSON and address based on method type
+      let address: string | undefined;
       let typedDataJson: string;
+
       if (pendingRequest.method === 'wallet_sign') {
-        // ERC-7871: for type 0x01, params[0].request.data is the TypedData object
+        // ERC-7871: For type 0x01, data is the TypedData object directly
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const signParams = pendingRequest.params[0] as {
           request: { type: string; data: Record<string, unknown> };
+          address?: string;
         };
+
         const data = signParams?.request?.data;
         typedDataJson = typeof data === 'string' ? data : JSON.stringify(data);
+
+        address = signParams?.address;
+
+        console.log('🔍 wallet_sign EIP-712 Request:', { type: signParams?.request?.type, address, typedDataJson });
       } else {
+        // eth_signTypedData_v4: params[0] is address, params[1] is typed data JSON string
+        address = pendingRequest.params[0] as string;
         typedDataJson = pendingRequest.params[1] as string;
+
+        console.log('🔍 eth_signTypedData_v4 Request:', { address, typedDataJson });
       }
 
       return (
         <Eip712Modal
           origin={pendingRequest.origin}
           typedDataJson={typedDataJson}
-          address={requestedAddress}
+          address={address}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
           onSuccess={async (signature) => {
