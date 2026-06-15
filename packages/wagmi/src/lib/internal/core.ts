@@ -71,12 +71,51 @@ export async function connect<config extends Config>(
 ): Promise<connect.ReturnType> {
   const { connector, chainId, capabilities } = parameters;
 
-  const result = await connector.connect({ chainId, capabilities } as never);
+  // This action reimplements @wagmi/core's connect to forward JAW's
+  // `capabilities` to the connector, but previously skipped the part that
+  // records the connection in wagmi's store — so useAccount()/isConnected
+  // stayed false even though the provider had connected. The block below
+  // mirrors @wagmi/core's connect: flip to 'connecting', wire the change/
+  // disconnect emitter listeners, persist the recent connector, then register
+  // the connection (connections + current + status 'connected') via setState.
+  try {
+    config.setState((x) => ({ ...x, status: 'connecting' }));
+    connector.emitter.emit('message', { type: 'connecting' });
 
-  return {
-    accounts: result.accounts as connect.ReturnType['accounts'],
-    chainId: result.chainId,
-  };
+    const result = await connector.connect({ chainId, capabilities } as never);
+
+    connector.emitter.off('connect', config._internal.events.connect);
+    connector.emitter.on('change', config._internal.events.change);
+    connector.emitter.on('disconnect', config._internal.events.disconnect);
+    await config.storage?.setItem('recentConnectorId', connector.id);
+
+    const accounts = (result.accounts as ReadonlyArray<Address | AccountWithCapabilities>).map((account) =>
+      typeof account === 'string' ? account : account.address
+    ) as unknown as readonly [Address, ...Address[]];
+
+    config.setState((x) => ({
+      ...x,
+      connections: new Map(x.connections).set(connector.uid, {
+        accounts,
+        chainId: result.chainId,
+        connector,
+      }),
+      current: connector.uid,
+      status: 'connected',
+    }));
+
+    return {
+      accounts: result.accounts as connect.ReturnType['accounts'],
+      chainId: result.chainId,
+    };
+  } catch (error) {
+    config.setState((x) => ({
+      ...x,
+      // Keep an existing connection intact if this one failed.
+      status: x.current ? 'connected' : 'disconnected',
+    }));
+    throw error;
+  }
 }
 
 // ============================================================================
