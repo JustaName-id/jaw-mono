@@ -1,3 +1,13 @@
+## 0.4.12 (2026-06-15)
+
+### 🩹 Fixes
+
+- added safe url check and address check ([#194](https://github.com/JustaName-id/jaw-mono/pull/194))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.11 (2026-06-15)
 
 ### 🧱 Updated Dependencies
