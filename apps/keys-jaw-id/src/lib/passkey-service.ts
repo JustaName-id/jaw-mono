@@ -1,4 +1,5 @@
 import { type PasskeyAccount, Account, type Chain } from '@jaw.id/core';
+import { debugLog } from './debug-log';
 import type { Address } from 'viem';
 
 export interface PasskeyCreationResult {
@@ -103,7 +104,7 @@ export class PasskeyService {
         throw new Error('Failed to retrieve created passkey account');
       }
 
-      console.log('🔍 Smart account address:', account.address);
+      debugLog('🔍 Smart account address:', account.address);
 
       return {
         credentialId: passkeyAccount.credentialId,
@@ -136,8 +137,8 @@ export class PasskeyService {
         throw new Error('No passkeys found. Please create a passkey first.');
       }
 
-      console.log('🔍 Found accounts:', existingAccounts.length);
-      console.log('🌐 Using rpId:', this.rpId);
+      debugLog('🔍 Found accounts:', existingAccounts.length);
+      debugLog('🌐 Using rpId:', this.rpId);
 
       // Find the passkey data
       const passkeyData = existingAccounts.find((acc) => acc.credentialId === credentialId);
@@ -147,7 +148,7 @@ export class PasskeyService {
 
       // Do not log credentialId — credential identifiers are sensitive
       // (constitution §Security: Secrets/PII).
-      console.log('✅ Using account:', passkeyData.username);
+      debugLog('✅ Using account:', passkeyData.username);
 
       // Use Account.get which handles WebAuthn authentication
       const account = await Account.get(

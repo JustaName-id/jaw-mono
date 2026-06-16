@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { debugLog } from '../lib/debug-log';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
 import { type PasskeyAccount } from '@jaw.id/core';
@@ -82,19 +83,19 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   useEffect(() => {
     // Check if running in popup mode
     if (!communicator.hasOpener()) {
-      console.log('📱 Running in normal mode (no opener)');
+      debugLog('📱 Running in normal mode (no opener)');
       setIsSDKMode(false);
       return;
     }
 
-    console.log('🚀 Running in SDK popup mode');
+    debugLog('🚀 Running in SDK popup mode');
     setIsSDKMode(true);
 
     // Initialize crypto handler
     cryptoHandler
       .initialize()
       .then(() => {
-        console.log('✅ CryptoHandler initialized');
+        debugLog('✅ CryptoHandler initialized');
         // Send PopupLoaded event
         communicator.sendPopupLoaded();
       })
@@ -110,7 +111,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       // Log only the message shape, never the full payload — it includes the
       // embedder URL, metadata and the encrypted envelope (visible to any
       // extension with console access).
-      console.log('📥 Received message:', message?.event ?? (message?.requestId ? 'response' : 'request'));
+      debugLog('📥 Received message:', message?.event ?? (message?.requestId ? 'response' : 'request'));
 
       // Handle config message
       if (message.data?.version) {
@@ -239,11 +240,11 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       const params = request.content.handshake.params;
       const chain = request.content.chain;
 
-      console.log('🔍 =========================');
-      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
-      console.log('🔍 Origin:', origin);
-      console.log('🔍 Method:', method);
-      console.log('🔍 =========================');
+      debugLog('🔍 =========================');
+      debugLog('🔍 HANDSHAKE REQUEST RECEIVED:');
+      debugLog('🔍 Origin:', origin);
+      debugLog('🔍 Method:', method);
+      debugLog('🔍 =========================');
 
       const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
       if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
@@ -258,7 +259,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       if (method === 'handshake') {
         if (!existingSession) {
           // No session yet - nothing to respond to, wait for wallet_connect
-          console.log('🔑 Handshake without session, waiting for wallet_connect');
+          debugLog('🔑 Handshake without session, waiting for wallet_connect');
           return;
         }
         if (existingSession.peerPublicKey !== peerPublicKey) {
@@ -276,12 +277,12 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
         // Always create a fresh session with new keys for each connection request
         if (existingSession) {
-          console.log('🗑️ Deleting old session for:', origin);
+          debugLog('🗑️ Deleting old session for:', origin);
           await cryptoHandler.getSessionManager().deleteSession(origin);
         }
 
         // Create new session with fresh keys (account will be set when user approves)
-        console.log('🔐 Creating fresh session for:', origin);
+        debugLog('🔐 Creating fresh session for:', origin);
         await cryptoHandler.getSessionManager().createSession({
           origin,
           peerPublicKey,
@@ -494,7 +495,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 response = (result.hash || `0x${'0'.repeat(64)}`) as EthSendTransactionReturn;
               }
 
-              console.log('✅ Transaction response:', response);
+              debugLog('✅ Transaction response:', response);
               await pendingRequest.onApprove(response);
               setState('success');
               setTimeout(() => communicator.requestClose(), 1500);
@@ -573,7 +574,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               setState('processing');
               try {
                 await pendingRequest.onApprove(signature);
-                console.log('✅ SIWE signature sent successfully');
+                debugLog('✅ SIWE signature sent successfully');
                 setState('success');
                 setTimeout(() => communicator.requestClose(), 1500);
               } catch (err) {
@@ -612,7 +613,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             setState('processing');
             try {
               await pendingRequest.onApprove(signature);
-              console.log('✅ Signature sent successfully');
+              debugLog('✅ Signature sent successfully');
               setState('success');
               setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
@@ -663,13 +664,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
         address = signParams?.address;
 
-        console.log('🔍 wallet_sign EIP-712 Request:', { type: signParams?.request?.type, address, typedDataJson });
+        debugLog('🔍 wallet_sign EIP-712 Request:', { type: signParams?.request?.type, address, typedDataJson });
       } else {
         // eth_signTypedData_v4: params[0] is address, params[1] is typed data JSON string
         address = pendingRequest.params[0] as string;
         typedDataJson = pendingRequest.params[1] as string;
 
-        console.log('🔍 eth_signTypedData_v4 Request:', { address, typedDataJson });
+        debugLog('🔍 eth_signTypedData_v4 Request:', { address, typedDataJson });
       }
 
       return (
@@ -683,7 +684,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             setState('processing');
             try {
               await pendingRequest.onApprove(signature);
-              console.log('✅ Typed data signature sent successfully');
+              debugLog('✅ Typed data signature sent successfully');
               setState('success');
               setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
@@ -731,7 +732,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             setState('processing');
             try {
               await pendingRequest.onApprove(result);
-              console.log('✅ Permission granted successfully');
+              debugLog('✅ Permission granted successfully');
               setState('success');
               setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
@@ -779,7 +780,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             setState('processing');
             try {
               await pendingRequest.onApprove(result);
-              console.log('✅ Permission revoked successfully');
+              debugLog('✅ Permission revoked successfully');
               setState('success');
               setTimeout(() => communicator.requestClose(), 1500);
             } catch (err) {
@@ -954,7 +955,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                       publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
-                    console.log('✅ Session auth state updated for origin:', currentOrigin);
+                    debugLog('✅ Session auth state updated for origin:', currentOrigin);
                   }
 
                   await authQuery.refetch();
@@ -1022,7 +1023,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                     };
                     await cryptoHandler.updateAuthState(authState);
                     // Do not log credentialId (constitution §Security: Secrets/PII)
-                    console.log('✅ Session auth state updated for origin:', currentOrigin);
+                    debugLog('✅ Session auth state updated for origin:', currentOrigin);
                   }
 
                   await authQuery.refetch();
@@ -1133,7 +1134,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             onSuccess={async (signature: string, message: string) => {
               setState('processing');
               try {
-                console.log('✅ User signed SIWE message');
+                debugLog('✅ User signed SIWE message');
 
                 // Build response per ERC-7846 format with SIWE capability
                 const response = {
@@ -1150,7 +1151,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                   ],
                 };
 
-                console.log('✅ SIWE response:', response);
+                debugLog('✅ SIWE response:', response);
                 await pendingRequest.onApprove(response);
                 setState('success');
                 setTimeout(() => communicator.requestClose(), 1500);
@@ -1189,7 +1190,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           onSuccess={async () => {
             setState('processing');
             try {
-              console.log('✅ User approved connection');
+              debugLog('✅ User approved connection');
 
               // Build response per ERC-7846 format (no capabilities)
               const response = {

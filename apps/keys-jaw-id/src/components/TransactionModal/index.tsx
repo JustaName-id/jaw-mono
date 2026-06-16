@@ -9,6 +9,7 @@ import {
   useFeeTokenPrice,
   useGasEstimation,
 } from '@jaw.id/ui';
+import { debugLog } from '../../lib/debug-log';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Address, Hash, Hex, formatUnits } from 'viem';
 import { getChainNameFromId } from '../../lib/chain-handlers';
@@ -448,7 +449,7 @@ export const TransactionModal = ({
 
   const handleCancel = useCallback(() => {
     if (!isProcessing) {
-      console.log('❌ User cancelled transaction request');
+      debugLog('❌ User cancelled transaction request');
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
       setTransactionStatus('');
@@ -469,7 +470,7 @@ export const TransactionModal = ({
       // onOpenChange={handleCancel}
       open={true}
       onOpenChange={() => {
-        console.log('onOpenChange');
+        debugLog('onOpenChange');
       }}
       transactions={normalizedTransactions}
       walletAddress={transactionRequest?.from ?? walletAddress ?? ''}
