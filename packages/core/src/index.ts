@@ -151,3 +151,6 @@ export { UIError, UIErrorCode } from './ui/interface.js';
 
 /** Theme types **/
 export type { JawTheme, JawThemeMode, JawBorderRadius, JawFontStack } from './ui/theme.js';
+
+/** Method policy (silent vs interactive RPC classification) **/
+export { SILENT_METHODS, INTERACTIVE_METHODS, isSilentMethod, requiresInteraction } from './method-policy.js';

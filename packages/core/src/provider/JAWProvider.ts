@@ -30,6 +30,7 @@ import { Signer } from '../signer/index.js';
 
 import { createSigner, loadSignerType, storeSignerType, clearSignerType } from '../signer/index.js';
 import { PasskeyManager } from '../passkey-manager/index.js';
+import { isSilentMethod } from '../method-policy.js';
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
     private readonly metadata: AppMetadata;
@@ -212,6 +213,14 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
 
                         return result as T;
                     }
+                    case 'eth_accounts': {
+                        // No signer restored → no live session. eth_accounts is a
+                        // silent method (per method-policy): per EIP-1193 it
+                        // reports an empty list when not connected rather than
+                        // throwing, so a wallet library's mount-time reconnect
+                        // probe resolves cleanly to "not connected".
+                        return [] as T;
+                    }
                     case 'net_version': {
                         const result = (this.metadata.defaultChainId ?? 1) as T;
                         return result;
@@ -221,6 +230,17 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         return result;
                     }
                     default: {
+                        // Reaching here means no live session. Silent methods are
+                        // all handled above, so a silent method falling through is
+                        // an internal gap (a new read method added without a case)
+                        // — surface that distinctly from the expected case: an
+                        // interactive method that legitimately needs the user to
+                        // connect first.
+                        if (isSilentMethod(args.method)) {
+                            throw standardErrors.rpc.methodNotSupported(
+                                `Silent method ${args.method} is not handled without a session`
+                            );
+                        }
                         throw standardErrors.provider.unauthorized(
                             "Must call 'eth_requestAccounts' before other methods"
                         );

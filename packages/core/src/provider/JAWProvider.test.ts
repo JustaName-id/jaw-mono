@@ -846,16 +846,15 @@ describe('JAWProvider', () => {
             provider = new JAWProvider(mockConstructorOptions);
         });
 
-        it('should throw unauthorized error for eth_accounts', async () => {
-            // Arrange
+        it('returns an empty list for eth_accounts when there is no session (EIP-1193, silent)', async () => {
+            // eth_accounts is a silent method: with no restored signer it reports
+            // "not connected" ([]) rather than throwing, so a wallet library's
+            // mount-time reconnect probe resolves cleanly.
             const request: RequestArguments = {
                 method: 'eth_accounts',
             };
 
-            // Act & Assert
-            await expect(provider.request(request)).rejects.toMatchObject({
-                message: "Must call 'eth_requestAccounts' before other methods",
-            });
+            await expect(provider.request(request)).resolves.toEqual([]);
         });
 
         it('should throw unauthorized error for personal_sign', async () => {
