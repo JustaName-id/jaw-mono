@@ -43,6 +43,7 @@ async function inspectKeysFrame(page) {
           htmlClass: document.documentElement.className,
           hasDark: !!document.querySelector('.dark'),
           bodyBg: getComputedStyle(document.body).backgroundColor,
+          embedded: document.documentElement.classList.contains('jaw-embedded'),
         }))
         .catch((e) => ({ err: e.message }));
     }
@@ -110,7 +111,10 @@ async function run() {
     check('keys iframe present', !!keys && !keys.err, keys?.err ?? '');
     if (keys && !keys.err) {
       check('iframe follows the dApp light mode (no .dark)', keys.hasDark === false, `htmlClass="${keys.htmlClass}"`);
-      check('iframe dialog has a solid light background', keys.bodyBg === 'rgb(255, 255, 255)', `bodyBg=${keys.bodyBg}`);
+      check('iframe flags embedded mode (jaw-embedded)', keys.embedded === true, `htmlClass="${keys.htmlClass}"`);
+      // In embedded mode keys paints no chrome of its own, so the host dApp
+      // shows through (dimmed by the embedded shell), like Porto.
+      check('iframe body is transparent in embedded mode', keys.bodyBg === 'rgba(0, 0, 0, 0)', `bodyBg=${keys.bodyBg}`);
     }
   } finally {
     await browser.close();
