@@ -61,7 +61,10 @@
 
 html {
   -webkit-text-size-adjust: 100%;
-  font-family:
+  /* --app-font-family is set by applyDappTheme when the dApp picks a fontStack;
+     falls back to keys' default system stack otherwise. */
+  font-family: var(
+    --app-font-family,
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -75,7 +78,8 @@ html {
     Apple Color Emoji,
     Segoe UI Emoji,
     Segoe UI Symbol,
-    Noto Color Emoji;
+    Noto Color Emoji
+  );
   line-height: 1.5;
   tab-size: 4;
   scroll-behavior: smooth;

@@ -1,6 +1,19 @@
 import { describe, it, expect, vi } from 'vitest';
 
-import { hexToHslTriplet, luminance, applyDappTheme } from './apply-dapp-theme';
+import { hexToHslTriplet, luminance, applyDappTheme, THEME_MODE_ATTR, isModePinned } from './apply-dapp-theme';
+
+describe('isModePinned', () => {
+  it('treats explicit light/dark as pinned (OS listener yields)', () => {
+    expect(isModePinned('light')).toBe(true);
+    expect(isModePinned('dark')).toBe(true);
+  });
+
+  it('treats auto / null / unknown as not pinned (OS stays in charge)', () => {
+    expect(isModePinned('auto')).toBe(false);
+    expect(isModePinned(null)).toBe(false);
+    expect(isModePinned('whatever')).toBe(false);
+  });
+});
 
 describe('hexToHslTriplet', () => {
   it('converts white and black', () => {
@@ -48,6 +61,7 @@ describe('applyDappTheme', () => {
   function fakeWindow(prefersDark = false) {
     const style: Record<string, string> = {};
     const classes = new Set<string>();
+    const attrs: Record<string, string> = {};
     const root = {
       style: {
         colorScheme: '',
@@ -59,6 +73,8 @@ describe('applyDappTheme', () => {
         toggle: (c: string, on: boolean) => (on ? classes.add(c) : classes.delete(c)),
         contains: (c: string) => classes.has(c),
       },
+      setAttribute: (k: string, v: string) => (attrs[k] = v),
+      getAttribute: (k: string) => attrs[k] ?? null,
     };
     return {
       win: {
@@ -67,6 +83,7 @@ describe('applyDappTheme', () => {
       } as unknown as Window,
       style,
       classes,
+      attrs,
     };
   }
 
@@ -113,6 +130,42 @@ describe('applyDappTheme', () => {
     applyDappTheme({ mode: 'auto' }, light.win);
     expect(light.classes.has('light')).toBe(true);
     expect(light.classes.has('dark')).toBe(false);
+  });
+
+  it('maps the font stack preset to --app-font-family', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ fontStack: 'mono' }, win);
+    expect(style['--app-font-family']).toContain('monospace');
+
+    const rounded = fakeWindow();
+    applyDappTheme({ fontStack: 'rounded' }, rounded.win);
+    expect(rounded.style['--app-font-family']).toContain('Nunito');
+  });
+
+  it('leaves --app-font-family unset when no fontStack is given', () => {
+    const { win, style } = fakeWindow();
+    applyDappTheme({ accentColor: '#6366f1' }, win);
+    expect(style['--app-font-family']).toBeUndefined();
+  });
+
+  it('pins an explicit mode on the html attribute so the OS listener yields', () => {
+    const light = fakeWindow(true /* OS dark, dApp says light */);
+    applyDappTheme({ mode: 'light' }, light.win);
+    expect(light.attrs[THEME_MODE_ATTR]).toBe('light');
+
+    const dark = fakeWindow();
+    applyDappTheme({ mode: 'dark' }, dark.win);
+    expect(dark.attrs[THEME_MODE_ATTR]).toBe('dark');
+  });
+
+  it("records 'auto' (not a pin) for auto/unset mode so the OS listener stays in charge", () => {
+    const auto = fakeWindow();
+    applyDappTheme({ mode: 'auto' }, auto.win);
+    expect(auto.attrs[THEME_MODE_ATTR]).toBe('auto');
+
+    const unset = fakeWindow();
+    applyDappTheme({ accentColor: '#6366f1' }, unset.win);
+    expect(unset.attrs[THEME_MODE_ATTR]).toBe('auto');
   });
 
   it('never writes oklch into keys HSL tokens (regression: transparency bug)', () => {
