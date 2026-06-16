@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, type ReactNode } from 'react';
+import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 
 import type { PopupCommunicator } from '../../lib/popup-communicator';
 import {
@@ -18,8 +18,12 @@ export interface EmbeddedShellProps {
 /**
  * Presentation shell for embedded (iframe) mode — AC-10.
  *
- * The host SDK keeps the dialog backdrop transparent; this shell draws the
- * visual overlay and lays the app out as a bottom drawer (≤460px) or a
+ * The host SDK keeps the dialog backdrop transparent and the embedded chrome
+ * is see-through too: this shell draws NO dimming scrim, so the host dApp
+ * shows through around the card. The full-viewport iframe still captures
+ * pointer events, so a click on the empty area (outside the card) dismisses
+ * the flow via DialogClose — the host hides the dialog and the dApp is
+ * interactive again. The app lays out as a bottom drawer (≤460px) or a
  * centered floating dialog, with its own enter animation so the host never
  * shows an unstyled frame. It also owns the iframe escape hatches:
  * EnsureVisibility (clickjacking guard) and the WebAuthn-unsupported event
@@ -84,13 +88,22 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
           entered ? '-translate-y-1/2 scale-100 opacity-100' : '-translate-y-1/2 scale-95 opacity-0'
         } rounded-2xl`;
 
+  // Click on the empty area (the overlay itself, not the card) dismisses the
+  // flow. requestClose('cancelled') makes the SDK reject the pending request
+  // and hide the dialog, handing control back to the dApp underneath.
+  const onOverlayClick = active
+    ? (event: MouseEvent) => {
+        if (event.target === event.currentTarget) communicator.requestClose('cancelled');
+      }
+    : undefined;
+
   return (
     <div
       className={
-        active
-          ? `fixed inset-0 z-50 bg-black/40 transition-opacity duration-200 ${entered ? 'opacity-100' : 'opacity-0'}`
-          : 'contents'
+        // Transparent (no scrim): the dApp shows through around the card.
+        active ? 'fixed inset-0 z-50' : 'contents'
       }
+      onClick={onOverlayClick}
     >
       {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
           which must not stretch the card to the full viewport */}
