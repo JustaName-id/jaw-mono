@@ -262,7 +262,13 @@ export class IframeTransport implements IframeTransportContract {
             width: '100%',
             height: '100%',
             border: 'none',
-            colorScheme: 'light dark',
+            // A recognized `color-scheme` (light/dark) makes the browser paint an
+            // OPAQUE canvas behind the iframe document (white in light), hiding
+            // the host dApp even when the embedded html/body are transparent.
+            // `normal` keeps the iframe genuinely see-through; the keys app still
+            // gets its dark visuals from the `.dark` token class, not from
+            // color-scheme. Mirrors the `html.jaw-embedded` rule on the keys side.
+            colorScheme: 'normal',
             visibility: 'hidden',
         });
 

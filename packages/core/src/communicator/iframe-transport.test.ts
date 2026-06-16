@@ -148,6 +148,10 @@ describe('IframeTransport', () => {
             expect(iframe?.getAttribute('title')).toBe('JAW');
             expect(iframe?.getAttribute('tabindex')).toBe('0');
             expect(iframe?.style.visibility).toBe('hidden');
+            // Regression: a recognized color-scheme paints an opaque iframe
+            // canvas (white), hiding the host dApp. Must stay `normal` so the
+            // embedded chrome is genuinely see-through.
+            expect(iframe?.style.colorScheme).toBe('normal');
             expect(iframe?.src).toMatch(/^https:\/\/keys\.jaw\.id\/?$/);
 
             transport.destroy();
@@ -338,9 +342,11 @@ describe('IframeTransport', () => {
             await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
 
             let rejected = false;
-            transport.onMessage(() => false).catch(() => {
-                rejected = true;
-            });
+            transport
+                .onMessage(() => false)
+                .catch(() => {
+                    rejected = true;
+                });
 
             dispatchMessageEvent({
                 data: { event: 'DialogClose', data: { reason: 'completed' } },
