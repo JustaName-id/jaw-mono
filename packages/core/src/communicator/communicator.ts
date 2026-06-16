@@ -4,6 +4,7 @@ import { standardErrors } from '../errors/errors.js';
 
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
 import type { JawTheme } from '../ui/theme.js';
+import { TrustedHostsRegistry } from '../trusted-hosts.js';
 import { RouteContext, TransportMode } from './transport.js';
 import { TransportRouter } from './transport-router.js';
 
@@ -63,6 +64,15 @@ export class Communicator {
 
     private switchListenerArmed = false;
 
+    /**
+     * Trusted embedders, queried synchronously on every routing decision and
+     * refreshed once (out of band) from the keys app. Fail-closed: the refresh
+     * can only ever *add* operator-vetted hosts; a missing/broken endpoint
+     * leaves the compiled-in baseline, so the router keeps routing untrusted
+     * embedders to the popup.
+     */
+    private readonly trustedHosts = new TrustedHostsRegistry();
+
     constructor({ metadata, preference, theme }: CommunicatorOptions) {
         this.url = new URL(preference.keysUrl ?? JAW_KEYS_URL);
         this.router = new TransportRouter({
@@ -71,6 +81,13 @@ export class Communicator {
             preference,
             theme,
             mode: normalizeTransportMode(preference.transportMode),
+            isTrustedHostFn: (hostname) => this.trustedHosts.has(hostname),
+        });
+
+        // Best-effort, non-blocking: routing works off the baseline until (and
+        // if) this resolves. Swallow failures — refreshFrom is already fail-soft.
+        void this.trustedHosts.refreshFrom(this.url).catch(() => {
+            /* fail-soft: keep the baseline */
         });
     }
 
@@ -174,7 +191,9 @@ export class Communicator {
      * matching promise plus a cancel handle that removes the listener without
      * resolving (used to clean up when the request never gets sent).
      */
-    private listenForMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): {
+    private listenForMessage<M extends Message>(
+        predicate: (msg: Partial<M>) => boolean
+    ): {
         promise: Promise<M>;
         cancel: () => void;
     } {
