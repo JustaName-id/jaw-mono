@@ -28,8 +28,10 @@ const popupLoadedMessage = {
     data: { event: 'PopupLoaded', id: 'popup-loaded-id' },
 };
 
+// The popup echoes the PopupLoaded id back as requestId on PopupReady so the
+// SDK can bind the handshake. popupLoadedMessage uses id 'popup-loaded-id'.
 const popupReadyMessage = {
-    data: { event: 'PopupReady' },
+    data: { event: 'PopupReady', requestId: 'popup-loaded-id' },
 };
 
 /**
@@ -328,6 +330,29 @@ describe('Communicator', () => {
             await communicator.waitForPopupLoaded();
 
             expect(callCount).toBe(2);
+        });
+
+        it('should complete the handshake when PopupReady requestId matches the PopupLoaded id', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
+
+            const popup = await communicator.waitForPopupLoaded();
+
+            expect(popup).toBeTruthy();
+        });
+
+        it('should not complete the handshake when PopupReady has a mismatched requestId', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent({ data: { event: 'PopupReady', requestId: 'mismatched-id-a-b' } });
+
+            const settled = vi.fn();
+            communicator.waitForPopupLoaded().then(settled, settled);
+
+            // Allow the queued events (dispatched at ~200ms) to be processed
+            await new Promise((resolve) => setTimeout(resolve, 400));
+
+            expect(settled).not.toHaveBeenCalled();
+            communicator.disconnect();
         });
     });
 
