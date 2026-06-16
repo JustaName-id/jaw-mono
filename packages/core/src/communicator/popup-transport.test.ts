@@ -266,6 +266,36 @@ describe('PopupTransport', () => {
             expect(popup).toBeTruthy();
         });
 
+        it('opens with centered window features on desktop', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            const openCall = (window.open as ReturnType<typeof vi.fn>).mock.calls[0];
+            expect(openCall[2]).toMatch(/width=\d+,height=\d+/);
+        });
+
+        it('opens as a full tab (no window features) on mobile', async () => {
+            const originalUA = navigator.userAgent;
+            Object.defineProperty(navigator, 'userAgent', {
+                value: 'Mozilla/5.0 (iPhone; CPU iPhone OS 17_4 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148 Safari/604.1',
+                configurable: true,
+            });
+            try {
+                transport = createTransport();
+                queueMessageEvent(popupLoadedMessage);
+                queueMessageEvent(popupReadyMessage);
+                await transport.ensureReady();
+
+                const openCall = (window.open as ReturnType<typeof vi.fn>).mock.calls[0];
+                // URL + name only, no feature string → full tab
+                expect(openCall.length).toBe(2);
+                expect(openCall[2]).toBeUndefined();
+            } finally {
+                Object.defineProperty(navigator, 'userAgent', { value: originalUA, configurable: true });
+            }
+        });
+
         it('should re-focus and return the existing popup window if one is already open', async () => {
             let callCount = 0;
             window.open = vi.fn(() => {

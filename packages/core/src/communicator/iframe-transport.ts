@@ -278,12 +278,21 @@ export class IframeTransport implements IframeTransportContract {
             if (event.target === dialog) this.dismiss();
         });
 
-        // Some extensions (1Password) set `inert` on top-layer dialogs,
-        // breaking interactivity — revert it.
+        // Our dialog is the active top-layer modal (showModal). Strip
+        // attributes that external focus managers wrongly put on it:
+        // - `inert` (e.g. the 1Password extension), which breaks interactivity;
+        // - `aria-hidden` (e.g. a sibling Radix/focus-trap modal in the host),
+        //   which both hides our dialog from assistive tech and triggers
+        //   Chrome's "aria-hidden on a focused ancestor" warning because the
+        //   iframe inside holds focus.
         this.inertObserver = new MutationObserver(() => {
             if (dialog.hasAttribute('inert')) dialog.removeAttribute('inert');
+            if (dialog.hasAttribute('aria-hidden')) dialog.removeAttribute('aria-hidden');
         });
-        this.inertObserver.observe(dialog, { attributes: true, attributeFilter: ['inert'] });
+        this.inertObserver.observe(dialog, {
+            attributes: true,
+            attributeFilter: ['inert', 'aria-hidden'],
+        });
 
         // Persistent config-event listener (DialogClose / PopupUnload)
         this.configListener = (event: MessageEvent) => {

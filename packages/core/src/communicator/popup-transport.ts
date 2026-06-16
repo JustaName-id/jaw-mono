@@ -2,6 +2,7 @@ import { SDK_VERSION } from '../sdk-info.js';
 import { Message, MessageID } from '../messages/message.js';
 import { ConfigMessage } from '../messages/configMessage.js';
 import { standardErrors } from '../errors/errors.js';
+import { isMobile } from '../utils/user-agent.js';
 import { Transport, TransportOptions } from './transport.js';
 
 const POPUP_WIDTH = 420;
@@ -144,16 +145,23 @@ export class PopupTransport implements Transport {
     }
 
     private openPopup(): Window {
-        const left = Math.max(0, (window.screen.width - POPUP_WIDTH) / 2);
-        const top = Math.max(0, (window.screen.height - POPUP_HEIGHT) / 2);
-
         const popupId = `jaw_${crypto.randomUUID()}`;
 
-        const popup = window.open(
-            this.url.toString(),
-            popupId,
-            `width=${POPUP_WIDTH},height=${POPUP_HEIGHT},left=${left},top=${top}`
-        );
+        // On mobile, a sized popup window is hostile (tiny, often blocked or
+        // backgrounded) — open as a full tab instead by omitting the window
+        // features. Desktop keeps the centered popup.
+        let popup: Window | null;
+        if (isMobile()) {
+            popup = window.open(this.url.toString(), popupId);
+        } else {
+            const left = Math.max(0, (window.screen.width - POPUP_WIDTH) / 2);
+            const top = Math.max(0, (window.screen.height - POPUP_HEIGHT) / 2);
+            popup = window.open(
+                this.url.toString(),
+                popupId,
+                `width=${POPUP_WIDTH},height=${POPUP_HEIGHT},left=${left},top=${top}`
+            );
+        }
 
         if (!popup) {
             throw standardErrors.provider.userRejectedRequest(

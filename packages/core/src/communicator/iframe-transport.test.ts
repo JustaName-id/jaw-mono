@@ -181,6 +181,21 @@ describe('IframeTransport', () => {
             transport.destroy();
             await pending;
         });
+
+        it('strips `aria-hidden` put on the dialog by a host focus manager', async () => {
+            const pending = transport.ensureReady().catch(() => {
+                /* noop */
+            });
+
+            const dialog = getDialog();
+            dialog?.setAttribute('aria-hidden', 'true');
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            expect(dialog?.hasAttribute('aria-hidden')).toBe(false);
+
+            transport.destroy();
+            await pending;
+        });
     });
 
     describe('ensureReady', () => {
