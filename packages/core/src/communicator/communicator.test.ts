@@ -28,8 +28,10 @@ const popupLoadedMessage = {
     data: { event: 'PopupLoaded', id: 'popup-loaded-id' },
 };
 
+// The popup echoes the PopupLoaded id back as requestId on PopupReady so the
+// SDK can bind the handshake. popupLoadedMessage uses id 'popup-loaded-id'.
 const popupReadyMessage = {
-    data: { event: 'PopupReady' },
+    data: { event: 'PopupReady', requestId: 'popup-loaded-id' },
 };
 
 /**
@@ -133,6 +135,37 @@ describe('Communicator', () => {
             expect(addEventListenerCallCount).toBe(1);
             expect(await promise).toEqual(mockRequest);
             expect(removeEventListenerCallCount).toBe(1);
+        });
+    });
+
+    describe('onMessage timeout', () => {
+        it('should reject after the configured timeout when no matching message arrives', async () => {
+            await expect(communicator.onMessage(() => false, { timeout: 50 })).rejects.toThrow(/Timed out/);
+        }, 1000);
+
+        it('should remove its message listener when the timeout elapses', async () => {
+            const before = removeEventListenerCallCount;
+            await communicator.onMessage(() => false, { timeout: 50 }).catch(() => undefined);
+            expect(removeEventListenerCallCount).toBe(before + 1);
+        }, 1000);
+
+        it('should resolve with the matching message when one arrives before the timeout', async () => {
+            const mockRequest: Message = { requestId: 'mock-request-id-timeout-1', data: 'test' };
+            queueMessageEvent({ data: mockRequest as unknown as Record<string, unknown> });
+
+            const message = await communicator.onMessage(() => true, { timeout: 5000 });
+
+            expect(message).toEqual(mockRequest);
+        });
+
+        it('should stay pending when no timeout is configured and nothing matches', async () => {
+            const settled = vi.fn();
+            communicator.onMessage(() => false).then(settled, settled);
+
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            expect(settled).not.toHaveBeenCalled();
+            communicator.disconnect();
         });
     });
 
@@ -297,6 +330,29 @@ describe('Communicator', () => {
             await communicator.waitForPopupLoaded();
 
             expect(callCount).toBe(2);
+        });
+
+        it('should complete the handshake when PopupReady requestId matches the PopupLoaded id', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
+
+            const popup = await communicator.waitForPopupLoaded();
+
+            expect(popup).toBeTruthy();
+        });
+
+        it('should not complete the handshake when PopupReady has a mismatched requestId', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent({ data: { event: 'PopupReady', requestId: 'mismatched-id-a-b' } });
+
+            const settled = vi.fn();
+            communicator.waitForPopupLoaded().then(settled, settled);
+
+            // Allow the queued events (dispatched at ~200ms) to be processed
+            await new Promise((resolve) => setTimeout(resolve, 400));
+
+            expect(settled).not.toHaveBeenCalled();
+            communicator.disconnect();
         });
     });
 

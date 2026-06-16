@@ -56,12 +56,13 @@ export class PopupCommunicator {
   }
 
   /**
-   * Send PopupReady event to opener
-   * Signals that popup is fully initialized and ready to receive business messages
+   * Send PopupReady event to opener.
+   * Echoes the config message's requestId so the opener can bind it to the handshake.
    */
-  sendPopupReady(): void {
+  sendPopupReady(requestId?: MessageID): void {
     const message: Message = {
       id: crypto.randomUUID(),
+      requestId,
       event: 'PopupReady',
     };
     this.postMessage(message);

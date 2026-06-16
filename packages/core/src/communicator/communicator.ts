@@ -14,6 +14,7 @@ export type CommunicatorOptions = {
 // Constants
 const POPUP_WIDTH = 420;
 const POPUP_HEIGHT = 730;
+const HANDSHAKE_TIMEOUT = 60_000;
 
 /**
  * Communicates with a popup window for JAW keys.jaw.id (or another url)
@@ -57,7 +58,7 @@ export class Communicator {
                 /* empty */
             });
 
-        return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded')
+        return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded', { timeout: HANDSHAKE_TIMEOUT })
             .then((message) => {
                 this.postMessage({
                     requestId: message.id,
@@ -68,10 +69,14 @@ export class Communicator {
                         location: window.location.toString(),
                     },
                 });
+                return message.id;
             })
-            .then(() => {
-                // Wait for popup to signal it's ready
-                return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupReady');
+            .then((handshakeId) => {
+                // Bind PopupReady to this handshake's id so a stale one can't resolve it.
+                return this.onMessage<ConfigMessage>(
+                    ({ event, requestId }) => event === 'PopupReady' && requestId === handshakeId,
+                    { timeout: HANDSHAKE_TIMEOUT }
+                );
             })
             .then(() => {
                 if (!this.popup) throw standardErrors.rpc.internal();
@@ -127,25 +132,48 @@ export class Communicator {
     /**
      * Listen for messages matching predicate
      * @param predicate - Function to test if a message matches
-     * @param timeout - Timeout in milliseconds (default: defaultTimeout)
-     * @returns Promise resolving to the matching message
+     * @param options.timeout - Optional ms timeout; rejects and cleans up on expiry. Omit to wait indefinitely.
      */
-    async onMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): Promise<M> {
-        return new Promise((resolve, reject) => {
+    async onMessage<M extends Message>(
+        predicate: (msg: Partial<M>) => boolean,
+        { timeout }: { timeout?: number } = {}
+    ): Promise<M> {
+        return new Promise<M>((resolve, reject) => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+
+            // Remove the listener and clear the timeout on any settle path.
+            const cleanup = () => {
+                window.removeEventListener('message', listener);
+                this.listeners.delete(listener);
+                if (timer !== undefined) clearTimeout(timer);
+            };
+
             const listener = (event: MessageEvent) => {
                 // Validate origin
                 if (event.origin !== this.url.origin) return;
 
                 const message = event.data;
                 if (predicate(message)) {
+                    cleanup();
                     resolve(message);
-                    window.removeEventListener('message', listener);
-                    this.listeners.delete(listener);
                 }
             };
 
             window.addEventListener('message', listener);
-            this.listeners.set(listener, { reject });
+            this.listeners.set(listener, {
+                reject: (error: Error) => {
+                    cleanup();
+                    reject(error);
+                },
+            });
+
+            if (timeout !== undefined && timeout !== Infinity) {
+                timer = setTimeout(() => {
+                    this.listeners
+                        .get(listener)
+                        ?.reject(standardErrors.rpc.internal('Timed out waiting for popup message'));
+                }, timeout);
+            }
         });
     }
 
@@ -158,10 +186,9 @@ export class Communicator {
         }
         this.popup = null;
 
-        // Clean up all listeners and their timeouts
-        this.listeners.forEach(({ reject }, listener) => {
+        // Reject all pending listeners; each reject() cleans up via cleanup().
+        this.listeners.forEach(({ reject }) => {
             reject(standardErrors.provider.userRejectedRequest('Request rejected'));
-            window.removeEventListener('message', listener);
         });
         this.listeners.clear();
     }
