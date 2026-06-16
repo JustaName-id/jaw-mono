@@ -1,3 +1,13 @@
+## 0.4.5 (2026-06-16)
+
+### 🩹 Fixes
+
+- listener accumulation no timeout config ([#199](https://github.com/JustaName-id/jaw-mono/pull/199))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.4 (2026-06-15)
 
 ### 🩹 Fixes
