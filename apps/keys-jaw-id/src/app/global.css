@@ -100,6 +100,15 @@ html.jaw-embedded body {
   background: transparent !important;
 }
 
+/* A `color-scheme` of light/dark makes the browser paint an OPAQUE canvas for
+   the iframe (white in light), hiding the host page even with a transparent
+   body. Force `normal` so the iframe is truly see-through; dark visuals still
+   come from the `.dark` token class, not color-scheme. `!important` beats the
+   inline `style.colorScheme` set by the pre-paint theme script and listeners. */
+html.jaw-embedded {
+  color-scheme: normal !important;
+}
+
 html.jaw-embedded [data-jaw-watermark] {
   display: none !important;
 }
