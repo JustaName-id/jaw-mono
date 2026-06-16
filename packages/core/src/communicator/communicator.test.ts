@@ -136,6 +136,37 @@ describe('Communicator', () => {
         });
     });
 
+    describe('onMessage timeout', () => {
+        it('should reject after the configured timeout when no matching message arrives', async () => {
+            await expect(communicator.onMessage(() => false, { timeout: 50 })).rejects.toThrow(/Timed out/);
+        }, 1000);
+
+        it('should remove its message listener when the timeout elapses', async () => {
+            const before = removeEventListenerCallCount;
+            await communicator.onMessage(() => false, { timeout: 50 }).catch(() => undefined);
+            expect(removeEventListenerCallCount).toBe(before + 1);
+        }, 1000);
+
+        it('should resolve with the matching message when one arrives before the timeout', async () => {
+            const mockRequest: Message = { requestId: 'mock-request-id-timeout-1', data: 'test' };
+            queueMessageEvent({ data: mockRequest as unknown as Record<string, unknown> });
+
+            const message = await communicator.onMessage(() => true, { timeout: 5000 });
+
+            expect(message).toEqual(mockRequest);
+        });
+
+        it('should stay pending when no timeout is configured and nothing matches', async () => {
+            const settled = vi.fn();
+            communicator.onMessage(() => false).then(settled, settled);
+
+            await new Promise((resolve) => setTimeout(resolve, 100));
+
+            expect(settled).not.toHaveBeenCalled();
+            communicator.disconnect();
+        });
+    });
+
     describe('postRequestAndWaitForResponse', () => {
         it('should post a message to the popup window and wait for response', async () => {
             const mockRequest: Message & { id: MessageID } = { id: 'mock-request-id-1-2', data: {} };
