@@ -1,3 +1,13 @@
+## 0.4.15 (2026-06-17)
+
+### 🩹 Fixes
+
+- **ui:** adjust Eip712Dialog layout for overflow handling ([#200](https://github.com/JustaName-id/jaw-mono/pull/200))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.14 (2026-06-16)
 
 ### 🧱 Updated Dependencies
