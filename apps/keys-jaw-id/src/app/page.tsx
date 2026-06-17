@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
 import { debugLog } from '../lib/debug-log';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
@@ -78,6 +78,29 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
+  // Mirrors `state` so the (once-registered) message listener can read the
+  // CURRENT state without a stale closure. Updated on every render.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // Holds the pending success→close timer so a new flow can cancel a previous
+  // flow's auto-close (the embedded iframe stays mounted across flows).
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * Schedule the dialog close after a flow completes. Cancelable: starting a new
+   * flow clears any pending close so a prior flow's timer can't hide the dialog
+   * mid-request (which, with no business-request timeout, would hang the dApp).
+   */
+  const scheduleClose = useCallback(
+    (ms: number) => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = setTimeout(() => {
+        closeTimerRef.current = null;
+        communicator.requestClose();
+      }, ms);
+    },
+    [communicator]
+  );
 
   // Single useEffect for all message handling
   useEffect(() => {
@@ -144,6 +167,22 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
       // Handle RPC requests
       if (message.id && message.sender && message.content) {
+        // The embedded iframe stays mounted across flows, so a previous flow may
+        // have left a terminal state ('success'/'error'), a stale pendingRequest,
+        // and a scheduled auto-close — none of which the popup ever hit (fresh
+        // page per flow). Reset before handling the new request so it renders its
+        // own UI and is not closed by the previous flow's timer. Read the live
+        // state via a ref (the listener is registered once → stale closure).
+        if (closeTimerRef.current) {
+          clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = null;
+        }
+        if (stateRef.current === 'success' || stateRef.current === 'error') {
+          setError(null);
+          setPendingRequest(null);
+          setState('processing');
+        }
+
         const rpcMessage = message as RPCRequestMessage;
 
         // Handle handshake (unencrypted initial request)
@@ -184,19 +223,19 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           const chainId = pendingRequest.chain?.id ?? 1;
           const chainIdHex = `0x${chainId.toString(16)}`;
           await pendingRequest.onApprove(chainIdHex);
-          setTimeout(() => communicator.requestClose(), 100);
+          scheduleClose(100);
         } catch (error) {
           console.error('❌ Failed to handle eth_chainId:', error);
           await pendingRequest.onReject(
             error instanceof Error ? error.message : 'Failed to get chain ID',
             standardErrorCodes.rpc.internal
           );
-          setTimeout(() => communicator.requestClose(), 100);
+          scheduleClose(100);
         }
       };
       handleChainId();
     }
-  }, [pendingRequest, isSDKMode]);
+  }, [pendingRequest, isSDKMode, scheduleClose]);
 
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
@@ -420,7 +459,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(errorResponse as any);
             // Close window after sending error
-            setTimeout(() => communicator.requestClose(), 100);
+            scheduleClose(100);
           } catch (err) {
             console.error('❌ Failed to send rejection response:', err);
             communicator.requestClose();
@@ -498,7 +537,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               debugLog('✅ Transaction response:', response);
               await pendingRequest.onApprove(response);
               setState('success');
-              setTimeout(() => communicator.requestClose(), 1500);
+              scheduleClose(1500);
             } catch (err) {
               console.error('❌ Failed to send transaction:', err);
               setError(err instanceof Error ? err.message : 'Failed to send transaction');
@@ -576,7 +615,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 await pendingRequest.onApprove(signature);
                 debugLog('✅ SIWE signature sent successfully');
                 setState('success');
-                setTimeout(() => communicator.requestClose(), 1500);
+                scheduleClose(1500);
               } catch (err) {
                 console.error('❌ Failed to send SIWE signature:', err);
                 setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -615,7 +654,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               await pendingRequest.onApprove(signature);
               debugLog('✅ Signature sent successfully');
               setState('success');
-              setTimeout(() => communicator.requestClose(), 1500);
+              scheduleClose(1500);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -686,7 +725,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               await pendingRequest.onApprove(signature);
               debugLog('✅ Typed data signature sent successfully');
               setState('success');
-              setTimeout(() => communicator.requestClose(), 1500);
+              scheduleClose(1500);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -734,7 +773,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               await pendingRequest.onApprove(result);
               debugLog('✅ Permission granted successfully');
               setState('success');
-              setTimeout(() => communicator.requestClose(), 1500);
+              scheduleClose(1500);
             } catch (err) {
               console.error('❌ Failed to grant permission:', err);
               setError(err instanceof Error ? err.message : 'Failed to grant permission');
@@ -782,7 +821,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               await pendingRequest.onApprove(result);
               debugLog('✅ Permission revoked successfully');
               setState('success');
-              setTimeout(() => communicator.requestClose(), 1500);
+              scheduleClose(1500);
             } catch (err) {
               console.error('❌ Failed to revoke permission:', err);
               setError(err instanceof Error ? err.message : 'Failed to revoke permission');
@@ -1154,7 +1193,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 debugLog('✅ SIWE response:', response);
                 await pendingRequest.onApprove(response);
                 setState('success');
-                setTimeout(() => communicator.requestClose(), 1500);
+                scheduleClose(1500);
               } catch (err) {
                 console.error('❌ Failed to approve connection with SIWE:', err);
                 setError(err instanceof Error ? err.message : 'Failed to approve connection');
@@ -1203,7 +1242,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
               await pendingRequest.onApprove(response);
               setState('success');
-              setTimeout(() => communicator.requestClose(), 1500);
+              scheduleClose(1500);
             } catch (err) {
               console.error('❌ Failed to approve connection:', err);
               setError(err instanceof Error ? err.message : 'Failed to approve connection');
