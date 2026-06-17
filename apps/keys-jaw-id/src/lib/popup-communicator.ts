@@ -6,7 +6,7 @@
  * - 'embedded': loaded inside an iframe — counterpart is window.parent
  * - 'standalone': direct navigation — communicator is inert
  *
- * Security rules (normative — see dev-specs keys-iframe-transport/contracts/wire-messages.md):
+ * Security rules (normative):
  * - Every inbound message must come from the counterpart window (event.source check).
  * - The counterpart origin is locked from the frame ancestry / referrer at
  *   startup — never from an inbound message in embedded mode (lock poisoning).

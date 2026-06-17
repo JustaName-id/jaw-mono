@@ -10,7 +10,7 @@
  *                            (color-scheme:normal, embedded, theme sync,
  *                            transparent, reveal-gating). Firefox/WebKit (no
  *                            IntersectionObserver v2): assert the clickjacking
- *                            guard does NOT embed an untrusted host (AC-4).
+ *                            guard does NOT embed an untrusted host.
  *
  *   JAW_E2E_KEYS_DOWN=1      ERROR: block the keys origin; assert the transport
  *                            degrades gracefully — no broken frame is ever shown
@@ -159,7 +159,7 @@ async function run() {
     }
   });
 
-  // The clickjacking guard (AC-4) only lets an UNTRUSTED host embed the iframe
+  // The clickjacking guard only lets an UNTRUSTED host embed the iframe
   // when the browser can verify visibility via IntersectionObserver v2 — which
   // is Chromium-only. On Firefox/WebKit an untrusted host falls back to the
   // popup and does NOT prewarm-mount the iframe.
@@ -191,7 +191,7 @@ async function run() {
         .$eval('dialog[data-jaw] iframe', (el) => getComputedStyle(el).visibility)
         .catch(() => null); // null = no iframe mounted at all
       check(
-        'keys unreachable: no broken embedded frame is ever shown (reveal gating, AC-10)',
+        'keys unreachable: no broken embedded frame is ever shown (reveal gating)',
         visibility === null || visibility === 'hidden',
         `iframe visibility=${visibility}`
       );
@@ -225,14 +225,14 @@ async function run() {
       const visibility = await page
         .$eval('dialog[data-jaw] iframe', (el) => getComputedStyle(el).visibility)
         .catch(() => '(unreadable)');
-      check('prewarmed iframe stays hidden until a request (reveal gating, AC-10)', visibility === 'hidden', `visibility=${visibility}`);
+      check('prewarmed iframe stays hidden until a request (reveal gating)', visibility === 'hidden', `visibility=${visibility}`);
     } else {
       // ─── GUARD PATH: untrusted host on a non-IOv2 engine ────────────────
       await page.goto(`${PLAYGROUND_URL}/wagmi`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(5000); // give prewarm a chance to (not) mount
       const iframeMounted = (await page.$('dialog[data-jaw] iframe')) !== null;
       check(
-        'untrusted host on a non-IOv2 engine does NOT embed (popup fallback, AC-4)',
+        'untrusted host on a non-IOv2 engine does NOT embed (popup fallback)',
         iframeMounted === false,
         iframeMounted ? 'iframe was embedded without a visibility guarantee' : ''
       );

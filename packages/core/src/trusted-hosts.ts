@@ -3,7 +3,7 @@
  * IntersectionObserver v2 (where occlusion cannot be verified).
  *
  * Empty at launch — hosts are added as partners are vetted. Adding an entry
- * requires security review (see specs constitution §Security).
+ * requires security review.
  *
  * Two layers:
  *  1. {@link TRUSTED_HOSTS} — the compiled-in baseline (this list). Always

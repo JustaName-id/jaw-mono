@@ -15,11 +15,11 @@ import { isTrustedHost } from '../trusted-hosts.js';
 export const CREDENTIAL_CREATING_METHODS: readonly string[] = ['eth_requestAccounts', 'wallet_connect'];
 
 type RouteReason =
-    | 'mode-popup' // transportMode unset or 'popup' (AC-7)
-    | 'insecure-protocol' // host page is not HTTPS (AC-3)
-    | 'safari-credential-method' // Safari cannot create passkeys in iframes (AC-2)
-    | 'clickjacking-guard' // visibility not verifiable and host not trusted (AC-4)
-    | 'iframe'; // default: embedded dialog (AC-1)
+    | 'mode-popup' // transportMode unset or 'popup'
+    | 'insecure-protocol' // host page is not HTTPS
+    | 'safari-credential-method' // Safari cannot create passkeys in iframes
+    | 'clickjacking-guard' // visibility not verifiable and host not trusted
+    | 'iframe'; // default: embedded dialog
 
 export type TransportRouterConfig = TransportOptions & {
     /** Transport preference (default: 'popup'). 'auto' is an alias of 'iframe' in v1. */
@@ -38,7 +38,7 @@ export type TransportRouterConfig = TransportOptions & {
 
 /**
  * Picks the transport per request. Routing rules, evaluated in order
- * (first match wins — see contracts/transport-interface.md):
+ * (first match wins):
  *
  *  1. mode unset or 'popup'                          -> popup
  *  2. host page not HTTPS                            -> popup (+ one warning)
@@ -60,13 +60,13 @@ export class TransportRouter implements TransportRouterContract {
     private popup: PopupTransport | null = null;
     private iframe: IframeTransport | null = null;
 
-    /** Iframe must resync (reload) before its next use after a popup-fallback flow (AC-2). */
+    /** Iframe must resync (reload) before its next use after a popup-fallback flow. */
     private pendingIframeReload = false;
-    /** Next acquire is forced to popup (user/dialog requested a transport switch, AC-11). */
+    /** Next acquire is forced to popup (user/dialog requested a transport switch). */
     private popupForced = false;
     private warnedInsecure = false;
 
-    /** Serializes acquires: no parallel popup + iframe setup races (AC-E4). */
+    /** Serializes acquires: no parallel popup + iframe setup races. */
     private queue: Promise<unknown> = Promise.resolve();
 
     constructor(config: TransportRouterConfig) {
@@ -95,7 +95,7 @@ export class TransportRouter implements TransportRouterContract {
 
     /**
      * Acquire the routed, ready transport. Calls are serialized; an iframe
-     * setup failure falls back to popup once before propagating (AC-E2).
+     * setup failure falls back to popup once before propagating.
      */
     async acquire(ctx: RouteContext): Promise<Transport> {
         const run = () => this.doAcquire(ctx);
@@ -130,7 +130,7 @@ export class TransportRouter implements TransportRouterContract {
     }
 
     /**
-     * Mount and handshake the iframe in the background (AC-9). No-op when
+     * Mount and handshake the iframe in the background. No-op when
      * routing would not pick the iframe.
      */
     async prewarm(): Promise<void> {
@@ -139,7 +139,7 @@ export class TransportRouter implements TransportRouterContract {
     }
 
     /**
-     * Force the next acquire onto the popup transport (AC-11 — the dialog
+     * Force the next acquire onto the popup transport (the dialog
      * or the user asked to continue in a new window). The iframe hides and
      * resyncs before its next use.
      */
@@ -182,9 +182,7 @@ export class TransportRouter implements TransportRouterContract {
         if (kind === 'popup') {
             if (reason === 'insecure-protocol' && !this.warnedInsecure) {
                 this.warnedInsecure = true;
-                console.warn(
-                    '[JAW] The iframe transport requires an HTTPS origin (WebAuthn). Falling back to popup.'
-                );
+                console.warn('[JAW] The iframe transport requires an HTTPS origin (WebAuthn). Falling back to popup.');
             }
             if (reason === 'safari-credential-method' && this.iframe) {
                 // The popup flow will mutate keys-side state the (storage-
@@ -206,7 +204,7 @@ export class TransportRouter implements TransportRouterContract {
             }
             return iframe;
         } catch {
-            // AC-E2: iframe setup failed (handshake timeout, CSP, extension
+            // Fallback: iframe setup failed (handshake timeout, CSP, extension
             // interference) — fall back to popup once, then propagate.
             iframe.destroy();
             this.iframe = null;

@@ -5,7 +5,6 @@ import type { NextRequest } from 'next/server';
 // Everything NOT in this list keeps frame-ancestors 'none' + X-Frame-Options
 // DENY — embeddability is opt-in per route, never inherited. Adding a route
 // here requires security review.
-// See dev-specs keys-iframe-transport/contracts/keys-headers.md.
 const EMBEDDABLE_ROUTES: readonly string[] = ['/'];
 
 export function middleware(request: NextRequest) {

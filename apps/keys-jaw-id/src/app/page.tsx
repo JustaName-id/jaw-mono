@@ -1072,7 +1072,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                       publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
-                    // Do not log credentialId (constitution §Security: Secrets/PII)
+                    // Do not log credentialId — it is sensitive (PII)
                     debugLog('✅ Session auth state updated for origin:', currentOrigin);
                   }
 

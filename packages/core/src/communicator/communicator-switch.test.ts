@@ -20,13 +20,7 @@ function dispatchMessageEvent({ data, origin }: { data: unknown; origin: string 
     window.dispatchEvent(new MessageEvent('message', { data, origin }));
 }
 
-function queueMessageEvent({
-    data,
-    origin = urlOrigin,
-}: {
-    data: Record<string, unknown>;
-    origin?: string;
-}) {
+function queueMessageEvent({ data, origin = urlOrigin }: { data: Record<string, unknown>; origin?: string }) {
     setTimeout(() => dispatchMessageEvent({ data, origin }), 200);
 }
 
@@ -38,7 +32,7 @@ const appMetadata: AppMetadata = {
 
 const preference: JawProviderPreference = { keysUrl: JAW_KEYS_URL };
 
-describe('Communicator SwitchTransport handling (AC-11)', () => {
+describe('Communicator SwitchTransport handling', () => {
     let communicator: Communicator;
     let mockPopup: Pick<Window, 'postMessage' | 'close' | 'closed' | 'focus'>;
     let originalWindowOpen: typeof window.open;
@@ -93,7 +87,7 @@ describe('Communicator SwitchTransport handling (AC-11)', () => {
         await expect(responsePromise).resolves.toEqual({ requestId: request.id });
     });
 
-    it('ignores SwitchTransport messages from other origins (AC-E3)', async () => {
+    it('ignores SwitchTransport messages from other origins', async () => {
         const request: Message & { id: MessageID } = { id: 'req-id-2-2-2', data: {} };
 
         queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
@@ -117,7 +111,7 @@ describe('Communicator SwitchTransport handling (AC-11)', () => {
         await responsePromise;
     });
 
-    it('replays ALL in-flight requests on the popup, not just the first (AC-E4)', async () => {
+    it('replays ALL in-flight requests on the popup, not just the first', async () => {
         const reqA: Message & { id: MessageID } = { id: 'req-aaa-1-1-1', data: { n: 1 } };
         const reqB: Message & { id: MessageID } = { id: 'req-bbb-2-2-2', data: { n: 2 } };
 

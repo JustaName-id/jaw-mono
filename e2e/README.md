@@ -49,14 +49,14 @@ touching the transport, the keys app, the playground, or `e2e/`, and via manual
 ## What it asserts
 
 Scenario: **OS in dark mode, playground forced to light.** Assertions are
-**engine-aware** — the clickjacking guard (AC-4) only lets an _untrusted_ host
+**engine-aware** — the clickjacking guard only lets an _untrusted_ host
 embed the iframe on browsers that can verify visibility via **IntersectionObserver
 v2, which is Chromium-only**.
 
 ### Errors / guards (the priority — these catch the dangerous regressions)
 
-- **Firefox / WebKit, untrusted host** → the SDK must **not** embed; it falls back to the popup (security gate, AC-4).
-- **Keys unreachable** (`JAW_E2E_KEYS_DOWN=1`, blocks the keys origin) → **no broken embedded frame is ever shown** (reveal gating, AC-10) and **the dApp does not hang**.
+- **Firefox / WebKit, untrusted host** → the SDK must **not** embed; it falls back to the popup (security gate).
+- **Keys unreachable** (`JAW_E2E_KEYS_DOWN=1`, blocks the keys origin) → **no broken embedded frame is ever shown** (reveal gating) and **the dApp does not hang**.
 - **Reveal gating** (Chromium) → even after the handshake, the prewarmed iframe stays **hidden** until an actual request — the user never sees it unprompted.
 
 ### Success path (Chromium, prewarmed iframe)

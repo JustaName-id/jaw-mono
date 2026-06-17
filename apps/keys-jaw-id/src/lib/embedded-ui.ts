@@ -1,28 +1,24 @@
 /**
  * Pure helpers for the embedded (iframe) presentation layer.
  * Kept logic-only so they can be unit-tested without a DOM.
- * See dev-specs keys-iframe-transport: AC-4, AC-10, AC-11, TASK-017.
  */
 
 export const EMBEDDED_BREAKPOINT_PX = 460;
 
 export type EmbeddedPresentation = 'drawer' | 'floating';
 
-/** Bottom drawer on narrow viewports, centered floating dialog otherwise (AC-10). */
+/** Bottom drawer on narrow viewports, centered floating dialog otherwise. */
 export function pickPresentation(viewportWidth: number): EmbeddedPresentation {
   return viewportWidth <= EMBEDDED_BREAKPOINT_PX ? 'drawer' : 'floating';
 }
 
 /**
  * IntersectionObserver v2 support (`isVisible` on entries) — the only API
- * that detects occlusion (clickjacking guard, AC-4). Chromium-only; on other
+ * that detects occlusion (clickjacking guard). Chromium-only; on other
  * engines the SDK routes untrusted hosts to a popup instead.
  */
 export function supportsIOv2(): boolean {
-  return (
-    typeof IntersectionObserverEntry !== 'undefined' &&
-    'isVisible' in IntersectionObserverEntry.prototype
-  );
+  return typeof IntersectionObserverEntry !== 'undefined' && 'isVisible' in IntersectionObserverEntry.prototype;
 }
 
 export type VisibilityEntry = {
@@ -51,8 +47,7 @@ export const WEBAUTHN_IFRAME_UNSUPPORTED_EVENT = 'jaw:webauthn-iframe-unsupporte
  *   (WebKit standards-positions #304 — create() unsupported in iframes)
  */
 export function isWebAuthnIframeUnsupportedError(error: unknown): boolean {
-  const message =
-    error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
   return (
     message.includes('sameOriginWithAncestors') ||
     message.includes('origin of the document is not the same as its ancestors')

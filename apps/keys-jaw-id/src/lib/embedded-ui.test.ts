@@ -8,7 +8,7 @@ import {
   EMBEDDED_BREAKPOINT_PX,
 } from './embedded-ui';
 
-describe('pickPresentation (AC-10)', () => {
+describe('pickPresentation', () => {
   it('uses a drawer at or below the breakpoint', () => {
     expect(pickPresentation(320)).toBe('drawer');
     expect(pickPresentation(EMBEDDED_BREAKPOINT_PX)).toBe('drawer');
@@ -20,7 +20,7 @@ describe('pickPresentation (AC-10)', () => {
   });
 });
 
-describe('isOccluded (AC-4, fail closed)', () => {
+describe('isOccluded (fail closed)', () => {
   it('is not occluded only when intersecting AND IOv2 reports visible', () => {
     expect(isOccluded({ isIntersecting: true, isVisible: true })).toBe(false);
   });
@@ -66,18 +66,14 @@ describe('supportsIOv2', () => {
   });
 });
 
-describe('isWebAuthnIframeUnsupportedError (TASK-017)', () => {
+describe('isWebAuthnIframeUnsupportedError', () => {
   it('matches the Firefox + Bitwarden error', () => {
-    expect(
-      isWebAuthnIframeUnsupportedError(new Error("Invalid 'sameOriginWithAncestors' value"))
-    ).toBe(true);
+    expect(isWebAuthnIframeUnsupportedError(new Error("Invalid 'sameOriginWithAncestors' value"))).toBe(true);
   });
 
   it('matches the Safari cross-origin iframe error', () => {
     expect(
-      isWebAuthnIframeUnsupportedError(
-        new Error('The origin of the document is not the same as its ancestors.')
-      )
+      isWebAuthnIframeUnsupportedError(new Error('The origin of the document is not the same as its ancestors.'))
     ).toBe(true);
   });
 

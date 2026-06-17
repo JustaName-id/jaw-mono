@@ -83,8 +83,7 @@ export type RouteContext = {
 
 /**
  * Picks the transport per request based on preference, browser capability
- * and security checks. See contracts/transport-interface.md for the
- * normative routing table.
+ * and security checks.
  */
 export interface TransportRouter {
     /** Resolve which transport handles this request. Pure decision, no side effects. */

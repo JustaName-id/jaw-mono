@@ -13,7 +13,7 @@ export interface EnsureVisibilityProps {
 }
 
 /**
- * Clickjacking guard for the embedded dialog (AC-4, AC-11).
+ * Clickjacking guard for the embedded dialog.
  *
  * Runs IntersectionObserver v2 *inside* the iframe: when the dialog is
  * occluded, transformed or faded by the embedding page, interactions are

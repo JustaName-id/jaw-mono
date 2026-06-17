@@ -31,7 +31,7 @@ describe('normalizeTransportMode', () => {
 });
 
 describe('getRouteContext', () => {
-    it('extracts the method from unencrypted handshake messages (AC-2 routing input)', () => {
+    it('extracts the method from unencrypted handshake messages (routing input)', () => {
         const message = {
             id: 'a-b-c-d-e',
             content: {

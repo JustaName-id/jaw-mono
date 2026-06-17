@@ -146,8 +146,7 @@ export class PasskeyService {
         throw new Error(`Passkey with ID ${credentialId} not found`);
       }
 
-      // Do not log credentialId — credential identifiers are sensitive
-      // (constitution §Security: Secrets/PII).
+      // Do not log credentialId — credential identifiers are sensitive (PII).
       debugLog('✅ Using account:', passkeyData.username);
 
       // Use Account.get which handles WebAuthn authentication

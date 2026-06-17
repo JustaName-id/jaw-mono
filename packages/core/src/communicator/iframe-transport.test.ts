@@ -234,7 +234,7 @@ describe('IframeTransport', () => {
             expect(getIframe()?.style.visibility).toBe('hidden');
         });
 
-        it('rejects when the handshake times out (AC-E2)', async () => {
+        it('rejects when the handshake times out', async () => {
             transport = createTransport(50);
             const promise = transport.ensureReady();
             mockContentWindow();
@@ -279,7 +279,7 @@ describe('IframeTransport', () => {
         });
     });
 
-    describe('prewarm (AC-9)', () => {
+    describe('prewarm', () => {
         it('completes the handshake without showing UI and is idempotent', async () => {
             const prewarmPromise = transport.prewarm();
             mockContentWindow();
@@ -322,7 +322,7 @@ describe('IframeTransport', () => {
     });
 
     describe('postMessage', () => {
-        it('shows the dialog, reveals the iframe and posts to the keys origin (AC-1, AC-10)', async () => {
+        it('shows the dialog, reveals the iframe and posts to the keys origin', async () => {
             const { target } = startHandshake(transport);
             const message: Message = { requestId: 'req-id-1-1-1', data: {} };
 
@@ -335,7 +335,7 @@ describe('IframeTransport', () => {
         });
     });
 
-    describe('dismissal (AC-8)', () => {
+    describe('dismissal', () => {
         it('Escape rejects pending requests with 4001 and hides, keeping the iframe alive', async () => {
             startHandshake(transport);
             await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
@@ -364,7 +364,7 @@ describe('IframeTransport', () => {
         });
     });
 
-    describe('DialogClose (AC-5b)', () => {
+    describe('DialogClose', () => {
         it('hides on reason "completed" without rejecting pending listeners', async () => {
             startHandshake(transport);
             await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
@@ -402,7 +402,7 @@ describe('IframeTransport', () => {
             expect(getDialog()?.hasAttribute('open')).toBe(false);
         });
 
-        it('ignores DialogClose from other origins (AC-E3)', async () => {
+        it('ignores DialogClose from other origins', async () => {
             startHandshake(transport);
             await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
 
@@ -432,7 +432,7 @@ describe('IframeTransport', () => {
         });
     });
 
-    describe('reload (AC-2)', () => {
+    describe('reload', () => {
         it('re-runs the handshake and becomes alive again', async () => {
             const { readyPromise } = startHandshake(transport);
             await readyPromise;

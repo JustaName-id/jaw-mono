@@ -1,5 +1,5 @@
 /**
- * Cross-package integration test (TASK-020): the REAL SDK Communicator
+ * Cross-package integration test: the REAL SDK Communicator
  * (TransportRouter + IframeTransport, iframe mode) talking to the REAL
  * keys-side PopupCommunicator over the actual wire protocol — the full
  * handshake and request/response cycle that unit tests cover only in halves.
@@ -7,7 +7,7 @@
  * jsdom cannot load a remote iframe, so the test bridges the two sides
  * manually: SDK -> keys via the iframe contentWindow, keys -> SDK via a fake
  * parent that dispatches MessageEvents on the page window. Real-browser
- * behavior (WebAuthn, IOv2, Safari) is covered by validation.md (TASK-021).
+ * behavior (WebAuthn, IOv2, Safari) is covered by separate validation.
  */
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { JSDOM } from 'jsdom';
@@ -159,7 +159,7 @@ describe('SDK <-> keys integration over the iframe transport', () => {
     document.head.innerHTML = '';
   });
 
-  it('completes the full handshake and request/response cycle (AC-1)', async () => {
+  it('completes the full handshake and request/response cycle', async () => {
     const { keysWin, deliver } = createKeysWindow();
     const keysApp = new PopupCommunicator(keysWin);
 
@@ -183,20 +183,16 @@ describe('SDK <-> keys integration over the iframe transport', () => {
     });
 
     // The keys side received the SDK config (handshake) and the request
-    const config = received.find(
-      (m) => m.data && typeof m.data === 'object' && 'metadata' in (m.data as object)
-    );
+    const config = received.find((m) => m.data && typeof m.data === 'object' && 'metadata' in (m.data as object));
     expect(config).toBeTruthy();
-    expect((config?.data as { metadata: { appName: string } }).metadata.appName).toBe(
-      'Integration Test dApp'
-    );
+    expect((config?.data as { metadata: { appName: string } }).metadata.appName).toBe('Integration Test dApp');
     expect(received.some((m) => m.id === 'req-1-1-1-1')).toBe(true);
 
-    // Dialog became visible for the business request (AC-10 reveal path)
+    // Dialog became visible for the business request (reveal path)
     expect(document.querySelector('dialog[data-jaw]')?.hasAttribute('open')).toBe(true);
   });
 
-  it('hides the dialog when keys requests a transport-aware close (AC-5b)', async () => {
+  it('hides the dialog when keys requests a transport-aware close', async () => {
     const { keysWin, deliver } = createKeysWindow();
     const keysApp = new PopupCommunicator(keysWin);
 
@@ -220,7 +216,7 @@ describe('SDK <-> keys integration over the iframe transport', () => {
     expect((keysWin as unknown as { close: ReturnType<typeof vi.fn> }).close).not.toHaveBeenCalled();
   });
 
-  it('switches to popup and replays the in-flight request when keys asks (AC-11)', async () => {
+  it('switches to popup and replays the in-flight request when keys asks', async () => {
     const { keysWin, deliver } = createKeysWindow();
     const keysApp = new PopupCommunicator(keysWin);
 
@@ -256,9 +252,7 @@ describe('SDK <-> keys integration over the iframe transport', () => {
           })
         );
         setTimeout(() => {
-          window.dispatchEvent(
-            new MessageEvent('message', { data: { event: 'PopupReady' }, origin: KEYS_ORIGIN })
-          );
+          window.dispatchEvent(new MessageEvent('message', { data: { event: 'PopupReady' }, origin: KEYS_ORIGIN }));
         }, 0);
       }, 0);
       return popupWindow as unknown as Window;

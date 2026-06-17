@@ -12,7 +12,7 @@ function cspFor(path: string): string {
   return headersFor(path).get('Content-Security-Policy') ?? '';
 }
 
-describe('framing policy is route-scoped (AC-6, contracts/keys-headers.md)', () => {
+describe('framing policy is route-scoped', () => {
   describe('dialog route "/" — embeddable', () => {
     it('omits frame-ancestors from the CSP', () => {
       expect(cspFor('/')).not.toContain('frame-ancestors');
@@ -67,7 +67,11 @@ describe('all other headers stay identical across routes (regression bar)', () =
   });
 
   it('keeps every other CSP directive identical on the embeddable route', () => {
-    const dialogDirectives = new Set(cspFor('/').split(';').map((d) => d.trim()));
+    const dialogDirectives = new Set(
+      cspFor('/')
+        .split(';')
+        .map((d) => d.trim())
+    );
     const otherDirectives = cspFor('/cli-bridge')
       .split(';')
       .map((d) => d.trim())

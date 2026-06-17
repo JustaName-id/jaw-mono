@@ -105,7 +105,7 @@ describe('context detection', () => {
   });
 });
 
-describe('origin locking (AC-5)', () => {
+describe('origin locking', () => {
   it('embedded: locks from location.ancestorOrigins, not from messages', () => {
     const win = createFakeWindow({ embedded: true, ancestorOrigins: [SDK_ORIGIN] });
     expect(new PopupCommunicator(win).getOrigin()).toBe(SDK_ORIGIN);
@@ -153,10 +153,7 @@ describe('outbound messages (no wildcard targets)', () => {
 
     communicator.sendPopupReady();
 
-    expect(win.counterpartPost).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'PopupReady' }),
-      SDK_ORIGIN
-    );
+    expect(win.counterpartPost).toHaveBeenCalledWith(expect.objectContaining({ event: 'PopupReady' }), SDK_ORIGIN);
   });
 
   it('popup without referrer: queues outbound until the first source-validated message locks the origin', () => {
@@ -174,7 +171,7 @@ describe('outbound messages (no wildcard targets)', () => {
   });
 });
 
-describe('inbound validation (AC-E3, AC-E5)', () => {
+describe('inbound validation', () => {
   it('ignores messages whose source is not the counterpart — popup context', () => {
     const { win } = createPopupWindow();
     const communicator = new PopupCommunicator(win);
@@ -210,7 +207,7 @@ describe('inbound validation (AC-E3, AC-E5)', () => {
     warn.mockRestore();
   });
 
-  it('AC-E5: a hostile first message cannot poison the embedded origin lock', () => {
+  it('a hostile first message cannot poison the embedded origin lock', () => {
     const win = createFakeWindow({ embedded: true, ancestorOrigins: [SDK_ORIGIN] });
     const communicator = new PopupCommunicator(win);
     const received = vi.fn();
@@ -245,7 +242,7 @@ describe('inbound validation (AC-E3, AC-E5)', () => {
   });
 });
 
-describe('requestClose (AC-5b)', () => {
+describe('requestClose', () => {
   it('popup context: closes the window', () => {
     const { win } = createPopupWindow();
     new PopupCommunicator(win).requestClose();
@@ -276,7 +273,7 @@ describe('requestClose (AC-5b)', () => {
   });
 });
 
-describe('requestSwitchToPopup (AC-11)', () => {
+describe('requestSwitchToPopup', () => {
   it('embedded context: posts SwitchTransport with the reason', () => {
     const win = createFakeWindow({ embedded: true, ancestorOrigins: [SDK_ORIGIN] });
     new PopupCommunicator(win).requestSwitchToPopup('visibility');
@@ -304,10 +301,7 @@ describe('lifecycle', () => {
 
     win.emit('beforeunload');
 
-    expect(opener.postMessage).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'PopupUnload' }),
-      SDK_ORIGIN
-    );
+    expect(opener.postMessage).toHaveBeenCalledWith(expect.objectContaining({ event: 'PopupUnload' }), SDK_ORIGIN);
   });
 
   it('embedded context: sends PopupUnload on pagehide (beforeunload unreliable in iframes)', () => {
@@ -316,10 +310,7 @@ describe('lifecycle', () => {
 
     win.emit('pagehide');
 
-    expect(win.counterpartPost).toHaveBeenCalledWith(
-      expect.objectContaining({ event: 'PopupUnload' }),
-      SDK_ORIGIN
-    );
+    expect(win.counterpartPost).toHaveBeenCalledWith(expect.objectContaining({ event: 'PopupUnload' }), SDK_ORIGIN);
 
     win.counterpartPost.mockClear();
     win.emit('beforeunload');
@@ -362,9 +353,6 @@ describe('back-compat surface', () => {
     const { win, opener } = createPopupWindow();
     new PopupCommunicator(win).sendResponse('r-1-1-1-1', { ok: true });
 
-    expect(opener.postMessage).toHaveBeenCalledWith(
-      { requestId: 'r-1-1-1-1', data: { ok: true } },
-      SDK_ORIGIN
-    );
+    expect(opener.postMessage).toHaveBeenCalledWith({ requestId: 'r-1-1-1-1', data: { ok: true } }, SDK_ORIGIN);
   });
 });

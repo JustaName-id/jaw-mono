@@ -319,7 +319,7 @@ export class IframeTransport implements IframeTransportContract {
 
         dialog.appendChild(iframe);
 
-        // Escape key: reject pending requests, keep the iframe mounted (AC-8)
+        // Escape key: reject pending requests, keep the iframe mounted
         dialog.addEventListener('cancel', (event) => {
             event.preventDefault();
             this.dismiss();
@@ -436,7 +436,7 @@ export class IframeTransport implements IframeTransportContract {
         this.listeners.clear();
     }
 
-    /** Reveal the iframe only when both visible and handshaken (AC-10). */
+    /** Reveal the iframe only when both visible and handshaken. */
     private applyRevealGating(): void {
         if (!this.iframe) return;
         this.iframe.style.visibility = this.ready && this.visible ? 'visible' : 'hidden';

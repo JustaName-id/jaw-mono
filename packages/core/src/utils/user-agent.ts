@@ -1,7 +1,7 @@
 /**
  * Browser detection utilities for transport routing.
  *
- * UA sniffing is confined to this module (see specs constitution). Safari is
+ * UA sniffing is confined to this module. Safari is
  * UA-detected because no feature detection exists for WebAuthn-in-iframe
  * support (credential creation in cross-origin iframes is unsupported in
  * Safari — https://github.com/WebKit/standards-positions/issues/304).
@@ -32,8 +32,5 @@ export function isMobile(userAgent: string = getUserAgent()): boolean {
  * verify the iframe is not occluded (clickjacking guard). Chromium-only.
  */
 export function supportsIOv2(): boolean {
-    return (
-        typeof IntersectionObserverEntry !== 'undefined' &&
-        'isVisible' in IntersectionObserverEntry.prototype
-    );
+    return typeof IntersectionObserverEntry !== 'undefined' && 'isVisible' in IntersectionObserverEntry.prototype;
 }

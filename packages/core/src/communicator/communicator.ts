@@ -59,7 +59,7 @@ export class Communicator {
     private readonly url: URL;
     private readonly router: TransportRouter;
     private listeners = new Map<(_: MessageEvent) => void, { reject: (_: Error) => void }>();
-    /** Requests awaiting a response, replayed if the dialog switches transports (AC-11). */
+    /** Requests awaiting a response, replayed if the dialog switches transports. */
     private inflight = new Map<MessageID, Message & { id: MessageID }>();
 
     private switchListenerArmed = false;

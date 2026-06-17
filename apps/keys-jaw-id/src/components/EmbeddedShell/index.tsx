@@ -16,7 +16,7 @@ export interface EmbeddedShellProps {
 }
 
 /**
- * Presentation shell for embedded (iframe) mode — AC-10.
+ * Presentation shell for embedded (iframe) mode.
  *
  * The host SDK keeps the dialog backdrop transparent and the embedded chrome
  * is see-through too: this shell draws NO dimming scrim, so the host dApp
@@ -63,7 +63,7 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     return () => cancelAnimationFrame(frame);
   }, [embedded]);
 
-  // TASK-017: passkey creation failed because this browser/extension cannot
+  // Passkey creation failed because this browser/extension cannot
   // create credentials inside a cross-origin iframe — continue in a popup.
   useEffect(() => {
     if (!embedded) return;

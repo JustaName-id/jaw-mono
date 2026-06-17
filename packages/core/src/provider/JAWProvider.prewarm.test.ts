@@ -28,14 +28,12 @@ function createOptions(preference: ConstructorOptions['preference']): Constructo
     };
 }
 
-describe('JAWProvider transportMode prewarm wiring (AC-9)', () => {
+describe('JAWProvider transportMode prewarm wiring', () => {
     let prewarm: ReturnType<typeof vi.fn>;
 
     beforeEach(() => {
         prewarm = vi.fn(() => Promise.resolve());
-        vi.mocked(Communicator).mockImplementation(
-            () => ({ prewarm }) as unknown as Communicator
-        );
+        vi.mocked(Communicator).mockImplementation(() => ({ prewarm }) as unknown as Communicator);
     });
 
     it('prewarms at construction when transportMode is "iframe"', () => {

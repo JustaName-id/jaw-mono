@@ -73,12 +73,8 @@ type RouterEnv = {
 function createRouter(env: RouterEnv = {}) {
     const popupMock = createMockPopup();
     const iframeMock = createMockIframe();
-    const popupFactory = vi.fn(
-        (_options: TransportOptions) => popupMock as unknown as PopupTransport
-    );
-    const iframeFactory = vi.fn(
-        (_options: TransportOptions) => iframeMock as unknown as IframeTransport
-    );
+    const popupFactory = vi.fn((_options: TransportOptions) => popupMock as unknown as PopupTransport);
+    const iframeFactory = vi.fn((_options: TransportOptions) => iframeMock as unknown as IframeTransport);
 
     const config: TransportRouterConfig = {
         url: new URL(JAW_KEYS_URL),
@@ -106,18 +102,18 @@ describe('CREDENTIAL_CREATING_METHODS', () => {
 });
 
 describe('TransportRouter.route', () => {
-    it('routes to popup when mode is unset (AC-7)', () => {
+    it('routes to popup when mode is unset', () => {
         const { router } = createRouter({});
         expect(router.route({})).toBe('popup');
         expect(router.route({ method: 'wallet_sendCalls' })).toBe('popup');
     });
 
-    it('routes to popup when mode is "popup" (AC-7)', () => {
+    it('routes to popup when mode is "popup"', () => {
         const { router } = createRouter({ mode: 'popup' });
         expect(router.route({})).toBe('popup');
     });
 
-    it('routes to iframe for mode "iframe" on a secure Chromium host (AC-1)', () => {
+    it('routes to iframe for mode "iframe" on a secure Chromium host', () => {
         const { router } = createRouter({ mode: 'iframe' });
         expect(router.route({ method: 'wallet_sendCalls' })).toBe('iframe');
     });
@@ -127,18 +123,18 @@ describe('TransportRouter.route', () => {
         expect(router.route({})).toBe('iframe');
     });
 
-    it('routes to popup on insecure contexts regardless of other conditions (AC-3)', () => {
+    it('routes to popup on insecure contexts regardless of other conditions', () => {
         const { router } = createRouter({ mode: 'iframe', secureContext: false });
         expect(router.route({})).toBe('popup');
     });
 
-    it('routes credential-creating methods to popup on Safari (AC-2)', () => {
+    it('routes credential-creating methods to popup on Safari', () => {
         const { router } = createRouter({ mode: 'iframe', safari: true });
         expect(router.route({ method: 'eth_requestAccounts' })).toBe('popup');
         expect(router.route({ method: 'wallet_connect' })).toBe('popup');
     });
 
-    it('keeps non-credential methods on iframe on Safari (AC-2)', () => {
+    it('keeps non-credential methods on iframe on Safari', () => {
         const { router } = createRouter({ mode: 'iframe', safari: true });
         expect(router.route({ method: 'personal_sign' })).toBe('iframe');
         expect(router.route({})).toBe('iframe');
@@ -149,12 +145,12 @@ describe('TransportRouter.route', () => {
         expect(router.route({ method: 'eth_requestAccounts' })).toBe('iframe');
     });
 
-    it('routes to popup without IOv2 when the host is untrusted (AC-4)', () => {
+    it('routes to popup without IOv2 when the host is untrusted', () => {
         const { router } = createRouter({ mode: 'iframe', iov2: false, trusted: false });
         expect(router.route({})).toBe('popup');
     });
 
-    it('allows iframe without IOv2 when the host is trusted (AC-4)', () => {
+    it('allows iframe without IOv2 when the host is trusted', () => {
         const { router } = createRouter({ mode: 'iframe', iov2: false, trusted: true });
         expect(router.route({})).toBe('iframe');
     });
@@ -192,7 +188,7 @@ describe('TransportRouter.acquire', () => {
         expect(iframeFactory).toHaveBeenCalledTimes(1);
     });
 
-    it('warns exactly once on insecure-protocol fallback (AC-3)', async () => {
+    it('warns exactly once on insecure-protocol fallback', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         const { router } = createRouter({ mode: 'iframe', secureContext: false });
 
@@ -203,7 +199,7 @@ describe('TransportRouter.acquire', () => {
         expect(warn.mock.calls[0][0]).toMatch(/HTTPS/);
     });
 
-    it('reloads the iframe on its next use after a Safari popup-fallback flow (AC-2)', async () => {
+    it('reloads the iframe on its next use after a Safari popup-fallback flow', async () => {
         const { router, iframeMock } = createRouter({ mode: 'iframe', safari: true });
 
         // Establish the iframe first (non-credential request)
@@ -235,7 +231,7 @@ describe('TransportRouter.acquire', () => {
         expect(iframeMock.ensureReady).toHaveBeenCalledTimes(1);
     });
 
-    it('falls back to popup once when the iframe setup fails (AC-E2)', async () => {
+    it('falls back to popup once when the iframe setup fails', async () => {
         const { router, popupMock, iframeMock } = createRouter({ mode: 'iframe' });
         iframeMock.ensureReady.mockRejectedValueOnce(new Error('handshake timed out'));
 
@@ -246,7 +242,7 @@ describe('TransportRouter.acquire', () => {
         expect(popupMock.ensureReady).toHaveBeenCalledTimes(1);
     });
 
-    it('propagates the popup error when the fallback also fails (AC-E2)', async () => {
+    it('propagates the popup error when the fallback also fails', async () => {
         const { router, popupMock, iframeMock } = createRouter({ mode: 'iframe' });
         iframeMock.ensureReady.mockRejectedValueOnce(new Error('handshake timed out'));
         popupMock.ensureReady.mockRejectedValueOnce(new Error('Failed to open popup'));
@@ -264,7 +260,7 @@ describe('TransportRouter.acquire', () => {
         expect(iframeFactory).toHaveBeenCalledTimes(2);
     });
 
-    it('serializes concurrent acquires (AC-E4)', async () => {
+    it('serializes concurrent acquires', async () => {
         const order: string[] = [];
         const { router, iframeMock } = createRouter({ mode: 'iframe' });
 
@@ -308,7 +304,7 @@ describe('TransportRouter.acquire', () => {
     });
 });
 
-describe('TransportRouter.forcePopupOnce (AC-11)', () => {
+describe('TransportRouter.forcePopupOnce', () => {
     it('forces the next acquire onto popup even when routing picks iframe', async () => {
         const { router, popupMock, iframeMock } = createRouter({ mode: 'iframe' });
 
@@ -335,7 +331,7 @@ describe('TransportRouter.forcePopupOnce (AC-11)', () => {
 });
 
 describe('TransportRouter.prewarm', () => {
-    it('prewarms the iframe when routing would pick it (AC-9)', async () => {
+    it('prewarms the iframe when routing would pick it', async () => {
         const { router, iframeMock } = createRouter({ mode: 'iframe' });
 
         await router.prewarm();
