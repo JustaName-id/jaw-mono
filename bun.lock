@@ -127,6 +127,66 @@
         "vite": "^8.0.0",
       },
     },
+    "examples/wagmi-ens-identity": {
+      "name": "@jaw-mono/example-wagmi-ens-identity",
+      "version": "0.0.0",
+      "dependencies": {
+        "@jaw.id/core": "workspace:*",
+        "@jaw.id/wagmi": "workspace:*",
+        "@tanstack/react-query": "^5.62.0",
+        "react": "19.2.6",
+        "react-dom": "19.2.6",
+        "viem": "^2.38.2",
+        "wagmi": "3.0.2",
+      },
+      "devDependencies": {
+        "@types/react": "^19.2.0",
+        "@types/react-dom": "^19.2.0",
+        "@vitejs/plugin-react": "^6.0.0",
+        "typescript": "~5.9.2",
+        "vite": "^8.0.0",
+      },
+    },
+    "examples/wagmi-gasless-sendcalls": {
+      "name": "@jaw-mono/example-wagmi-gasless-sendcalls",
+      "version": "0.0.0",
+      "dependencies": {
+        "@jaw.id/core": "workspace:*",
+        "@jaw.id/wagmi": "workspace:*",
+        "@tanstack/react-query": "^5.62.0",
+        "react": "19.2.6",
+        "react-dom": "19.2.6",
+        "viem": "^2.38.2",
+        "wagmi": "3.0.2",
+      },
+      "devDependencies": {
+        "@types/react": "^19.2.0",
+        "@types/react-dom": "^19.2.0",
+        "@vitejs/plugin-react": "^6.0.0",
+        "typescript": "~5.9.2",
+        "vite": "^8.0.0",
+      },
+    },
+    "examples/wagmi-grant-permissions-popup": {
+      "name": "@jaw-mono/example-wagmi-grant-permissions-popup",
+      "version": "0.0.0",
+      "dependencies": {
+        "@jaw.id/core": "workspace:*",
+        "@jaw.id/wagmi": "workspace:*",
+        "@tanstack/react-query": "^5.62.0",
+        "react": "19.2.6",
+        "react-dom": "19.2.6",
+        "viem": "^2.38.2",
+        "wagmi": "3.0.2",
+      },
+      "devDependencies": {
+        "@types/react": "^19.2.0",
+        "@types/react-dom": "^19.2.0",
+        "@vitejs/plugin-react": "^6.0.0",
+        "typescript": "~5.9.2",
+        "vite": "^8.0.0",
+      },
+    },
     "examples/wagmi-sign-message": {
       "name": "@jaw-mono/example-wagmi-sign-message",
       "version": "0.0.0",
@@ -852,6 +912,12 @@
     "@jaw-mono/docs": ["@jaw-mono/docs@workspace:apps/docs"],
 
     "@jaw-mono/example-core-popup-capabilities": ["@jaw-mono/example-core-popup-capabilities@workspace:examples/core-popup-capabilities"],
+
+    "@jaw-mono/example-wagmi-ens-identity": ["@jaw-mono/example-wagmi-ens-identity@workspace:examples/wagmi-ens-identity"],
+
+    "@jaw-mono/example-wagmi-gasless-sendcalls": ["@jaw-mono/example-wagmi-gasless-sendcalls@workspace:examples/wagmi-gasless-sendcalls"],
+
+    "@jaw-mono/example-wagmi-grant-permissions-popup": ["@jaw-mono/example-wagmi-grant-permissions-popup@workspace:examples/wagmi-grant-permissions-popup"],
 
     "@jaw-mono/example-wagmi-sign-message": ["@jaw-mono/example-wagmi-sign-message@workspace:examples/wagmi-sign-message"],
 
@@ -4670,6 +4736,18 @@
     "@jaw-mono/example-core-popup-capabilities/@types/react": ["@types/react@19.2.17", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw=="],
 
     "@jaw-mono/example-core-popup-capabilities/@types/react-dom": ["@types/react-dom@19.2.3", "", { "peerDependencies": { "@types/react": "^19.2.0" } }, "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ=="],
+
+    "@jaw-mono/example-wagmi-ens-identity/@types/react": ["@types/react@19.2.17", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw=="],
+
+    "@jaw-mono/example-wagmi-ens-identity/@types/react-dom": ["@types/react-dom@19.2.3", "", { "peerDependencies": { "@types/react": "^19.2.0" } }, "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ=="],
+
+    "@jaw-mono/example-wagmi-gasless-sendcalls/@types/react": ["@types/react@19.2.17", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw=="],
+
+    "@jaw-mono/example-wagmi-gasless-sendcalls/@types/react-dom": ["@types/react-dom@19.2.3", "", { "peerDependencies": { "@types/react": "^19.2.0" } }, "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ=="],
+
+    "@jaw-mono/example-wagmi-grant-permissions-popup/@types/react": ["@types/react@19.2.17", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw=="],
+
+    "@jaw-mono/example-wagmi-grant-permissions-popup/@types/react-dom": ["@types/react-dom@19.2.3", "", { "peerDependencies": { "@types/react": "^19.2.0" } }, "sha512-jp2L/eY6fn+KgVVQAOqYItbF0VY/YApe5Mz2F0aykSO8gx31bYCZyvSeYxCHKvzHG5eZjc+zyaS5BrBWya2+kQ=="],
 
     "@jaw-mono/example-wagmi-sign-message/@types/react": ["@types/react@19.2.17", "", { "dependencies": { "csstype": "^3.2.2" } }, "sha512-MXfmqaVPEVgkBT/aY0aGCkRWWtByiYQXo3xdQ8r5RzuFrPiRn8Gar2tQdXSUQ2GKV3bkXckek89V8wQBY2Q/Aw=="],
 
