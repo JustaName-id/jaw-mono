@@ -51,11 +51,13 @@ const popupReadyMessage = {
 function queueMessageEvent({
     data,
     origin = new URL(JAW_KEYS_URL).origin,
+    delayMs = 200,
 }: {
     data: Record<string, unknown>;
     origin?: string;
+    delayMs?: number;
 }) {
-    setTimeout(() => dispatchMessageEvent({ data, origin }), 200);
+    setTimeout(() => dispatchMessageEvent({ data, origin }), delayMs);
 }
 
 const appMetadata: AppMetadata = {
@@ -293,22 +295,22 @@ describe('IframeTransport', () => {
         });
 
         it('retries with backoff after a failed handshake, reloading the iframe', async () => {
-            // Timing: the first attempt times out at 120ms (before the messages
-            // arrive at ~200ms), so it fails; the retry reloads at ~140ms and its
-            // handshake (timeout 240ms) picks up the 200ms messages. ~60ms margin
-            // on the tightest step (reload listener attached before the messages).
+            // Timing (wide margins, ~180-220ms each, to stay robust on slow CI):
+            // first attempt times out at 400ms; the messages arrive at 600ms, so the
+            // first attempt fails. The retry reloads at ~420ms and its handshake
+            // (timeout 820ms) picks up the 600ms messages.
             const retrying = new IframeTransport({
                 url: new URL(JAW_KEYS_URL),
                 metadata: appMetadata,
                 preference,
-                handshakeTimeoutMs: 120,
+                handshakeTimeoutMs: 400,
                 prewarmBackoffMs: [20],
             });
             try {
                 const prewarmPromise = retrying.prewarm();
                 mockContentWindow(); // iframe is mounted synchronously by prewarm
-                queueMessageEvent(popupLoadedMessage);
-                queueMessageEvent(popupReadyMessage);
+                queueMessageEvent({ ...popupLoadedMessage, delayMs: 600 });
+                queueMessageEvent({ ...popupReadyMessage, delayMs: 600 });
 
                 await prewarmPromise;
 

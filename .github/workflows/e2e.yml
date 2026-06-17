@@ -52,6 +52,10 @@ jobs:
 
       - name: Start servers and run e2e (chromium, firefox, webkit)
         run: |
+          # Kill the backgrounded dev servers on exit (belt-and-suspenders; the
+          # runner also reaps the process tree at job end).
+          trap 'kill $(jobs -p) 2>/dev/null' EXIT
+
           bunx nx dev @jaw-mono/keys-jaw-id --port=3001 > /tmp/keys.log 2>&1 &
           NEXT_PUBLIC_KEYS_URL=http://localhost:3001 \
             bunx nx dev @jaw-mono/playground --port=3002 > /tmp/playground.log 2>&1 &
@@ -77,6 +81,8 @@ jobs:
             echo "::endgroup::"
           done
           # Error path: keys unreachable ⇒ graceful degradation (no broken frame, no hang).
+          # webkit skipped: without a trusted host it never embeds the iframe, so
+          # keys-down is a no-op there (covered by the default-mode guard above).
           for engine in chromium firefox; do
             echo "::group::e2e $engine (keys-down)"
             JAW_E2E_BROWSER=$engine JAW_E2E_KEYS_DOWN=1 node e2e/iframe-transport.e2e.mjs || fail=1

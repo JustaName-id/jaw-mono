@@ -177,6 +177,12 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           clearTimeout(closeTimerRef.current);
           closeTimerRef.current = null;
         }
+        // Terminal-only reset is sufficient: the SDK serializes requests (it
+        // awaits each response), and keys sets the terminal state synchronously
+        // right after sending the response — before the SDK can round-trip and
+        // dispatch the next request. So by the time a new request arrives, the
+        // prior flow is always already terminal. (A non-terminal in-progress
+        // flow, e.g. a cold connect's passkey screen, must NOT be reset.)
         if (stateRef.current === 'success' || stateRef.current === 'error') {
           setError(null);
           setPendingRequest(null);
@@ -200,6 +206,11 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     // Cleanup message listener on unmount (PopupUnload is handled by communicator's beforeunload)
     return () => {
       cleanup();
+      // Don't let a scheduled close fire after unmount (dev hot-reload / nav).
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

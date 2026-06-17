@@ -52,6 +52,20 @@ import {
 } from '../../lib/wagmi-methods';
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
 
+// Methods that open the embedded JAW dialog and require the user to sign/approve
+// with their passkey. Surfacing this in the activity log keeps the sign step from
+// feeling hidden by the see-through embedded UI (builder visibility).
+const NEEDS_PASSKEY_APPROVAL: ReadonlySet<WagmiMethod['hookType']> = new Set([
+  'jawConnect',
+  'useSendTransaction',
+  'useSignMessage',
+  'useSignTypedData',
+  'useSign',
+  'useSendCalls',
+  'useGrantPermissions',
+  'useRevokePermissions',
+]);
+
 interface WagmiPageContentProps {
   mode: ModeType;
   transportMode: TransportModeType;
@@ -144,20 +158,6 @@ function WagmiPageContent({
     async (method: WagmiMethod, params: Record<string, unknown>): Promise<unknown> => {
       addLog('request', method.name, params);
 
-      // Make the passkey step explicit for builders: these methods open the
-      // embedded JAW dialog and require the user to sign/approve with their
-      // passkey. Surfacing it in the log keeps the sign step from feeling hidden
-      // by the see-through embedded UI.
-      const NEEDS_PASSKEY_APPROVAL: ReadonlySet<WagmiMethod['hookType']> = new Set([
-        'jawConnect',
-        'useSendTransaction',
-        'useSignMessage',
-        'useSignTypedData',
-        'useSign',
-        'useSendCalls',
-        'useGrantPermissions',
-        'useRevokePermissions',
-      ]);
       if (NEEDS_PASSKEY_APPROVAL.has(method.hookType)) {
         addLog('approval', method.name, 'Awaiting approval in the JAW dialog — the user signs with their passkey.');
       }

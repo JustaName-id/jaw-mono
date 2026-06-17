@@ -53,6 +53,11 @@ const TRUSTED = process.env.JAW_E2E_TRUSTED === '1';
 // the dApp does not hang.
 const KEYS_DOWN = process.env.JAW_E2E_KEYS_DOWN === '1';
 
+if (KEYS_DOWN && TRUSTED) {
+  console.error('JAW_E2E_KEYS_DOWN and JAW_E2E_TRUSTED are mutually exclusive — set only one.');
+  process.exit(1);
+}
+
 const results = [];
 const check = (name, ok, detail = '') => {
   results.push({ name, ok, detail });

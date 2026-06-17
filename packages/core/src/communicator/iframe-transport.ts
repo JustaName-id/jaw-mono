@@ -69,10 +69,20 @@ export class IframeTransport implements IframeTransportContract {
         } catch {
             /* fall through to bounded retries */
         }
+        // Resolve to true only once the transport is actually ready. If a real
+        // request is mid-handshake, defer to it (await its outcome) rather than
+        // bailing — so a concurrent handshake that *fails* doesn't silently
+        // consume a retry. Leaves no `readyPromise` in flight on return false,
+        // so the reload below never stomps a live acquire.
+        const settledReady = async (): Promise<boolean> => {
+            if (this.ready) return true;
+            if (this.readyPromise) await this.readyPromise.catch(() => undefined);
+            return this.ready;
+        };
         for (const delay of this.prewarmBackoffMs) {
-            if (this.ready || this.readyPromise) return;
+            if (await settledReady()) return;
             await new Promise((resolve) => setTimeout(resolve, delay));
-            if (this.ready || this.readyPromise) return;
+            if (await settledReady()) return;
             try {
                 await this.reload();
                 return;
