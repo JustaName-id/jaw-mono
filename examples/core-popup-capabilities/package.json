@@ -1,0 +1,23 @@
+{
+  "name": "@jaw-mono/example-core-popup-capabilities",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "vite --port 5182",
+    "build": "vite build",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jaw.id/core": "workspace:*",
+    "react": "19.2.6",
+    "react-dom": "19.2.6"
+  },
+  "devDependencies": {
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "@vitejs/plugin-react": "^6.0.0",
+    "typescript": "~5.9.2",
+    "vite": "^8.0.0"
+  }
+}
