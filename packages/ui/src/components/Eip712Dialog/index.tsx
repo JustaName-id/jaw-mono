@@ -104,7 +104,7 @@ const NestedDataView = ({
 
     return (
       <div className="w-full font-mono text-sm">
-        <Accordion type="multiple" className="w-full" defaultValue={[]}>
+        <Accordion type="multiple" className="w-full" defaultValue={[accordionId]}>
           <AccordionItem value={accordionId} className="border-none">
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
               <AccordionTrigger className="group cursor-pointer py-0.5 transition-opacity hover:no-underline hover:opacity-70 [&>svg]:hidden">
@@ -188,7 +188,7 @@ const NestedDataView = ({
 
     return (
       <div className="w-full font-mono text-sm">
-        <Accordion type="multiple" className="w-full" defaultValue={[]}>
+        <Accordion type="multiple" className="w-full" defaultValue={[accordionId]}>
           <AccordionItem value={accordionId} className="border-none">
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
               <AccordionTrigger className="group cursor-pointer py-0.5 transition-opacity hover:no-underline hover:opacity-70 [&>svg]:hidden">
