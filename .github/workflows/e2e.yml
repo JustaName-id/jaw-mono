@@ -70,9 +70,16 @@ jobs:
           fi
 
           fail=0
+          # Default: see-through on Chromium; clickjacking-guard fallback on FF/WebKit.
           for engine in chromium firefox webkit; do
-            echo "::group::e2e $engine"
+            echo "::group::e2e $engine (default)"
             JAW_E2E_BROWSER=$engine node e2e/iframe-transport.e2e.mjs || fail=1
+            echo "::endgroup::"
+          done
+          # Error path: keys unreachable ⇒ graceful degradation (no broken frame, no hang).
+          for engine in chromium firefox; do
+            echo "::group::e2e $engine (keys-down)"
+            JAW_E2E_BROWSER=$engine JAW_E2E_KEYS_DOWN=1 node e2e/iframe-transport.e2e.mjs || fail=1
             echo "::endgroup::"
           done
           exit $fail

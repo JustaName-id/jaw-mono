@@ -41,19 +41,25 @@ Exits `0` on pass, `1` on failure or unmet prerequisites.
 ## CI
 
 `.github/workflows/e2e.yml` builds the SDK packages (the playground consumes the
-built dist, not source), starts both dev servers, and runs this check across
-chromium/firefox/webkit. Triggers on PRs touching the transport, the keys app,
-the playground, or `e2e/`, and via manual `workflow_dispatch`.
+built dist, not source), starts both dev servers, and runs the **default** and
+**keys-down (error)** modes across chromium/firefox/webkit. Triggers on PRs
+touching the transport, the keys app, the playground, or `e2e/`, and via manual
+`workflow_dispatch`.
 
 ## What it asserts
 
-Scenario: **OS in dark mode, playground forced to light.**
+Scenario: **OS in dark mode, playground forced to light.** Assertions are
+**engine-aware** — the clickjacking guard (AC-4) only lets an _untrusted_ host
+embed the iframe on browsers that can verify visibility via **IntersectionObserver
+v2, which is Chromium-only**.
 
-The assertions are **engine-aware**, because the clickjacking guard (AC-4) only
-lets an _untrusted_ host embed the iframe on browsers that can verify visibility
-via **IntersectionObserver v2 — which is Chromium-only**:
+### Errors / guards (the priority — these catch the dangerous regressions)
 
-**On Chromium** (IOv2 available → untrusted hosts may embed):
+- **Firefox / WebKit, untrusted host** → the SDK must **not** embed; it falls back to the popup (security gate, AC-4).
+- **Keys unreachable** (`JAW_E2E_KEYS_DOWN=1`, blocks the keys origin) → **no broken embedded frame is ever shown** (reveal gating, AC-10) and **the dApp does not hang**.
+- **Reveal gating** (Chromium) → even after the handshake, the prewarmed iframe stays **hidden** until an actual request — the user never sees it unprompted.
+
+### Success path (Chromium, prewarmed iframe)
 
 1. The embedded iframe is the **default** transport (mounted on load, pointed at the keys app).
 2. The iframe element keeps **`color-scheme: normal`** so the browser does not paint an opaque canvas — the host dApp stays visible (see-through regression guard).
@@ -61,13 +67,29 @@ via **IntersectionObserver v2 — which is Chromium-only**:
 4. **Theme sync**: the embedded dialog follows the dApp's light mode (no `.dark`), not the OS.
 5. The embedded document body is **transparent**.
 
-**On Firefox / WebKit** (no IOv2 → untrusted hosts must NOT embed):
-
-1. The SDK does **not** prewarm-mount the iframe for an untrusted host — it falls back to the popup (security gate, AC-4).
-
 > **Implication:** the see-through embedded iframe is available to every host on
 > Chromium, but only to **trusted (allow-listed) partners** on Firefox/Safari;
 > everyone else gets the popup. See `packages/core/src/trusted-hosts.ts`.
+
+## Trusted-host fixture (see-through on every engine)
+
+To validate that the see-through iframe renders on Firefox/WebKit too, start the
+keys app with the host allow-listed and run in trusted mode (drives a connect to
+mount the iframe — stops before the passkey ceremony, so no API key/authenticator
+is needed):
+
+```bash
+JAW_TRUSTED_HOSTS=localhost bunx nx dev @jaw-mono/keys-jaw-id --port=3001
+# then, against the running playground:
+JAW_E2E_BROWSER=webkit  JAW_E2E_TRUSTED=1 node e2e/iframe-transport.e2e.mjs
+JAW_E2E_BROWSER=firefox JAW_E2E_TRUSTED=1 node e2e/iframe-transport.e2e.mjs
+```
+
+It asserts the transport-level see-through core (iframe mounted, `color-scheme:
+normal`, embedded mode). Theme/transparency details are asserted only in the
+stable prewarm path — in the connect-driven path the dApp's per-engine theme
+resolution and frame-render timing make them flaky, not the transport. Kept out
+of CI (the connect drive is less stable than the load-time checks).
 
 ## Manual QA (real Safari — not coverable headlessly)
 
