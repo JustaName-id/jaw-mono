@@ -361,8 +361,9 @@ export class IframeTransport implements IframeTransportContract {
         this.iframe = iframe;
     }
 
-    private runHandshake(): Promise<Window> {
-        let timer: ReturnType<typeof setTimeout>;
+    private async runHandshake(): Promise<Window> {
+        // Definitely assigned synchronously by the timeout Promise executor below.
+        let timer!: ReturnType<typeof setTimeout>;
 
         const handshake = this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded')
             .then((message) => {
@@ -401,12 +402,14 @@ export class IframeTransport implements IframeTransportContract {
             }, this.handshakeTimeoutMs);
         });
 
-        return Promise.race([handshake, timeout]).finally(() => {
+        try {
+            return await Promise.race([handshake, timeout]);
+        } finally {
             clearTimeout(timer);
             // On timeout (handshake didn't complete), reject the orphaned
             // PopupLoaded/PopupReady listeners so they don't leak.
             if (!this.ready) this.rejectPending();
-        });
+        }
     }
 
     /** Reject pending requests and hide the dialog; the iframe stays mounted. */
