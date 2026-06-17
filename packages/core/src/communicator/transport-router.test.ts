@@ -188,6 +188,30 @@ describe('TransportRouter.acquire', () => {
         expect(iframeFactory).toHaveBeenCalledTimes(1);
     });
 
+    it('completes a connect via popup on the clickjacking-guard path (no IOv2, untrusted host)', async () => {
+        // Firefox/Safari (no IntersectionObserver v2) on a host that is not on
+        // the trusted allow-list: the connect must still complete — through the
+        // popup, with no error and without ever constructing the iframe.
+        const { router, popupMock, iframeMock, iframeFactory } = createRouter({
+            mode: 'auto',
+            iov2: false,
+            trusted: false,
+        });
+
+        const connect = await router.acquire({ method: 'eth_requestAccounts' });
+
+        expect(connect.kind).toBe('popup');
+        expect(popupMock.ensureReady).toHaveBeenCalledTimes(1);
+        // The iframe is never even created on this path (no clickjacking surface).
+        expect(iframeFactory).not.toHaveBeenCalled();
+        expect(iframeMock.ensureReady).not.toHaveBeenCalled();
+
+        // A follow-up signing request stays on the popup too (still no IOv2).
+        const sign = await router.acquire({ method: 'personal_sign' });
+        expect(sign.kind).toBe('popup');
+        expect(popupMock.ensureReady).toHaveBeenCalledTimes(2);
+    });
+
     it('warns exactly once on insecure-protocol fallback', async () => {
         const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
         const { router } = createRouter({ mode: 'iframe', secureContext: false });
