@@ -1,0 +1,78 @@
+name: E2E (iframe transport)
+
+# Real-browser smoke test for the embedded iframe transport across all three
+# engines (chromium, firefox, webkit≈Safari). It does NOT drive the passkey
+# flow (Chromium-only virtual authenticator), so it needs no API key — only the
+# two dev servers and the prewarmed, load-time iframe state.
+
+on:
+  pull_request:
+    paths:
+      - 'packages/core/src/communicator/**'
+      - 'apps/keys-jaw-id/**'
+      - 'apps/playground/**'
+      - 'e2e/**'
+      - '.github/workflows/e2e.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Cache bun dependencies
+        uses: actions/cache@v4
+        with:
+          path: ~/.bun/install/cache
+          key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+          restore-keys: bun-${{ runner.os }}-
+
+      - run: bun install --frozen-lockfile
+
+      # The playground consumes the BUILT dist of the SDK packages, not source —
+      # build them first so it serves the current transport code.
+      - name: Build SDK packages
+        run: bunx nx run-many -t build -p @jaw.id/core @jaw.id/wagmi @jaw.id/ui
+
+      - name: Install Playwright browsers
+        run: bunx playwright install --with-deps chromium firefox webkit
+
+      - name: Start servers and run e2e (chromium, firefox, webkit)
+        run: |
+          bunx nx dev @jaw-mono/keys-jaw-id --port=3001 > /tmp/keys.log 2>&1 &
+          NEXT_PUBLIC_KEYS_URL=http://localhost:3001 \
+            bunx nx dev @jaw-mono/playground --port=3002 > /tmp/playground.log 2>&1 &
+
+          # Wait until both respond (dev compiles on first hit).
+          up=0
+          for i in $(seq 1 90); do
+            if curl -sf -o /dev/null http://localhost:3001/ \
+               && curl -sf -o /dev/null http://localhost:3002/wagmi; then up=1; break; fi
+            sleep 2
+          done
+          if [ "$up" != "1" ]; then
+            echo "::error::dev servers did not start in time"
+            tail -n 60 /tmp/keys.log /tmp/playground.log
+            exit 1
+          fi
+
+          fail=0
+          for engine in chromium firefox webkit; do
+            echo "::group::e2e $engine"
+            JAW_E2E_BROWSER=$engine node e2e/iframe-transport.e2e.mjs || fail=1
+            echo "::endgroup::"
+          done
+          exit $fail
