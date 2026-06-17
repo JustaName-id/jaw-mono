@@ -6,7 +6,9 @@ import { ScrollArea } from './ui/scroll-area';
 
 export type LogEntry = {
   timestamp: Date;
-  type: 'request' | 'response' | 'error';
+  // 'approval' marks the step where the embedded JAW dialog asks the user to
+  // sign/approve with their passkey — surfaced explicitly so builders see it.
+  type: 'request' | 'response' | 'error' | 'approval';
   method: string;
   data: unknown;
 };
@@ -56,13 +58,21 @@ export function ExecutionLog({ logs, onClear }: ExecutionLogProps) {
                     ? 'bg-destructive/10 text-destructive'
                     : log.type === 'request'
                       ? 'bg-blue-50 text-blue-800 dark:bg-blue-950 dark:text-blue-200'
-                      : 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
+                      : log.type === 'approval'
+                        ? 'bg-amber-50 text-amber-800 dark:bg-amber-950 dark:text-amber-200'
+                        : 'bg-green-50 text-green-800 dark:bg-green-950 dark:text-green-200'
                 }`}
               >
                 <div className="flex items-start gap-2">
                   <span className="text-muted-foreground whitespace-nowrap">[{formatTime(log.timestamp)}]</span>
                   <span className="whitespace-nowrap font-semibold">
-                    {log.type === 'request' ? 'REQ' : log.type === 'response' ? 'RES' : 'ERR'}
+                    {log.type === 'request'
+                      ? 'REQ'
+                      : log.type === 'response'
+                        ? 'RES'
+                        : log.type === 'approval'
+                          ? '🔑 SIGN'
+                          : 'ERR'}
                   </span>
                   <span className="whitespace-nowrap">{log.method}</span>
                 </div>
