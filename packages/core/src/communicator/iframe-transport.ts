@@ -12,6 +12,8 @@ const BACKDROP_STYLE_ID = 'jaw-dialog-backdrop-style';
 export type IframeTransportConfig = TransportOptions & {
     /** Handshake timeout override (tests). Defaults to 10s. */
     handshakeTimeoutMs?: number;
+    /** Prewarm retry backoff in ms between attempts. Defaults to [1000, 3000]. */
+    prewarmBackoffMs?: number[];
 };
 
 /**
@@ -28,6 +30,7 @@ export class IframeTransport implements IframeTransportContract {
     private readonly url: URL;
     private readonly options: TransportOptions;
     private readonly handshakeTimeoutMs: number;
+    private readonly prewarmBackoffMs: number[];
 
     private dialog: HTMLDialogElement | null = null;
     private iframe: HTMLIFrameElement | null = null;
@@ -46,13 +49,45 @@ export class IframeTransport implements IframeTransportContract {
         this.url = config.url;
         this.options = config;
         this.handshakeTimeoutMs = config.handshakeTimeoutMs ?? HANDSHAKE_TIMEOUT_MS;
+        this.prewarmBackoffMs = config.prewarmBackoffMs ?? [1000, 3000];
     }
 
     /**
      * Mount hidden and complete the handshake without showing UI.
+     *
+     * Best-effort: a failed handshake (slow keys app / transient network) is
+     * retried with bounded backoff, reloading the iframe so the keys app
+     * re-emits its load event. It bails the moment a real request has warmed
+     * the transport (`ready`/`readyPromise` set), so it never fights an
+     * in-flight acquire, and it never throws — the first real use still routes
+     * (or falls back) on its own.
      */
     async prewarm(): Promise<void> {
-        await this.ensureReady();
+        try {
+            await this.ensureReady();
+            return;
+        } catch {
+            /* fall through to bounded retries */
+        }
+        for (const delay of this.prewarmBackoffMs) {
+            if (this.ready || this.readyPromise) return;
+            await new Promise((resolve) => setTimeout(resolve, delay));
+            if (this.ready || this.readyPromise) return;
+            try {
+                await this.reload();
+                return;
+            } catch {
+                /* try the next backoff step */
+            }
+        }
+        // All attempts exhausted. Harmless on its own (the first real request
+        // routes/falls back), but a persistent prewarm failure usually means a
+        // misconfigured or unreachable keys origin — surface a one-time hint.
+        // Fires at most once: prewarm runs a single time, at construction.
+        console.warn(
+            `[JAW] Iframe transport could not prewarm after ${this.prewarmBackoffMs.length + 1} attempts; ` +
+                'the dialog will retry (or fall back to a popup) on first use.'
+        );
     }
 
     /**

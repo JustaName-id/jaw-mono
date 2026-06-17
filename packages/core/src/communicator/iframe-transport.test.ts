@@ -291,6 +291,32 @@ describe('IframeTransport', () => {
             await transport.prewarm();
             expect(document.querySelectorAll('dialog[data-jaw]').length).toBe(1);
         });
+
+        it('retries with backoff after a failed handshake, reloading the iframe', async () => {
+            // Timing: the first attempt times out at 120ms (before the messages
+            // arrive at ~200ms), so it fails; the retry reloads at ~140ms and its
+            // handshake (timeout 240ms) picks up the 200ms messages. ~60ms margin
+            // on the tightest step (reload listener attached before the messages).
+            const retrying = new IframeTransport({
+                url: new URL(JAW_KEYS_URL),
+                metadata: appMetadata,
+                preference,
+                handshakeTimeoutMs: 120,
+                prewarmBackoffMs: [20],
+            });
+            try {
+                const prewarmPromise = retrying.prewarm();
+                mockContentWindow(); // iframe is mounted synchronously by prewarm
+                queueMessageEvent(popupLoadedMessage);
+                queueMessageEvent(popupReadyMessage);
+
+                await prewarmPromise;
+
+                expect(retrying.isAlive()).toBe(true);
+            } finally {
+                retrying.destroy();
+            }
+        });
     });
 
     describe('postMessage', () => {
