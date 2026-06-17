@@ -29,7 +29,8 @@ const popupLoadedMessage = {
 };
 
 const popupReadyMessage = {
-    data: { event: 'PopupReady' },
+    // requestId echoes the PopupLoaded id — the SDK binds PopupReady to the handshake.
+    data: { event: 'PopupReady', requestId: 'popup-loaded-id' },
 };
 
 /**

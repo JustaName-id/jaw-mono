@@ -59,7 +59,7 @@ describe('Communicator SwitchTransport handling', () => {
         const request: Message & { id: MessageID } = { id: 'req-id-1-1-1', data: {} };
 
         queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
-        queueMessageEvent({ data: { event: 'PopupReady' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
 
         const responsePromise = communicator.postRequestAndWaitForResponse(request);
 
@@ -91,7 +91,7 @@ describe('Communicator SwitchTransport handling', () => {
         const request: Message & { id: MessageID } = { id: 'req-id-2-2-2', data: {} };
 
         queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
-        queueMessageEvent({ data: { event: 'PopupReady' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
 
         const responsePromise = communicator.postRequestAndWaitForResponse(request);
 
@@ -116,7 +116,7 @@ describe('Communicator SwitchTransport handling', () => {
         const reqB: Message & { id: MessageID } = { id: 'req-bbb-2-2-2', data: { n: 2 } };
 
         queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
-        queueMessageEvent({ data: { event: 'PopupReady' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
 
         const promiseA = communicator.postRequestAndWaitForResponse(reqA);
         const promiseB = communicator.postRequestAndWaitForResponse(reqB);
@@ -147,7 +147,7 @@ describe('Communicator SwitchTransport handling', () => {
         const request: Message & { id: MessageID } = { id: 'req-ddd-4-4-4', data: {} };
 
         queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
-        queueMessageEvent({ data: { event: 'PopupReady' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
         queueMessageEvent({ data: { requestId: request.id } });
         await communicator.postRequestAndWaitForResponse(request);
 
@@ -188,7 +188,7 @@ describe('Communicator SwitchTransport handling', () => {
         const request: Message & { id: MessageID } = { id: 'req-id-3-3-3', data: {} };
 
         queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
-        queueMessageEvent({ data: { event: 'PopupReady' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
         queueMessageEvent({ data: { requestId: request.id } });
 
         await communicator.postRequestAndWaitForResponse(request);

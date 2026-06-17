@@ -1,3 +1,85 @@
+## 0.4.15 (2026-06-17)
+
+### 🩹 Fixes
+
+- **ui:** adjust Eip712Dialog layout for overflow handling ([#200](https://github.com/JustaName-id/jaw-mono/pull/200))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 0.4.14 (2026-06-16)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.4.5
+
+## 0.4.13 (2026-06-15)
+
+### 🩹 Fixes
+
+- **ui:** add sanitizeDisplayName utility for safe app name display ([#196](https://github.com/JustaName-id/jaw-mono/pull/196))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 0.4.12 (2026-06-15)
+
+### 🩹 Fixes
+
+- added safe url check and address check ([#194](https://github.com/JustaName-id/jaw-mono/pull/194))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 0.4.11 (2026-06-15)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 0.4.4
+
+## 0.4.10 (2026-06-15)
+
+### 🩹 Fixes
+
+- **ui:** add native decimals support to clear signing hooks and utils ([#195](https://github.com/JustaName-id/jaw-mono/pull/195))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 0.4.9 (2026-06-15)
+
+### 🩹 Fixes
+
+- **ui:** switch token price api ([#193](https://github.com/JustaName-id/jaw-mono/pull/193))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 0.4.8 (2026-06-12)
+
+### 🩹 Fixes
+
+- **ui:** safely load ens profiles avatars ([#192](https://github.com/JustaName-id/jaw-mono/pull/192))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 0.4.7 (2026-06-12)
+
+### 🩹 Fixes
+
+- **ui:** improve gas fee display and fallback logic ([#191](https://github.com/JustaName-id/jaw-mono/pull/191))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 0.4.6 (2026-06-11)
 
 ### 🩹 Fixes

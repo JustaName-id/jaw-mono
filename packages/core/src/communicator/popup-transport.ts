@@ -7,6 +7,7 @@ import { Transport, TransportOptions } from './transport.js';
 
 const POPUP_WIDTH = 420;
 const POPUP_HEIGHT = 730;
+const HANDSHAKE_TIMEOUT = 60_000;
 
 /**
  * Popup transport: window.open to the keys URL.
@@ -48,7 +49,7 @@ export class PopupTransport implements Transport {
                 /* empty */
             });
 
-        return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded')
+        return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded', { timeout: HANDSHAKE_TIMEOUT })
             .then((message) => {
                 this.postToTarget({
                     requestId: message.id,
@@ -60,10 +61,14 @@ export class PopupTransport implements Transport {
                         location: window.location.toString(),
                     },
                 });
+                return message.id;
             })
-            .then(() => {
-                // Wait for popup to signal it's ready
-                return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupReady');
+            .then((handshakeId) => {
+                // Bind PopupReady to this handshake's id so a stale one can't resolve it.
+                return this.onMessage<ConfigMessage>(
+                    ({ event, requestId }) => event === 'PopupReady' && requestId === handshakeId,
+                    { timeout: HANDSHAKE_TIMEOUT }
+                );
             })
             .then(() => {
                 if (!this.popup) throw standardErrors.rpc.internal();
@@ -86,8 +91,20 @@ export class PopupTransport implements Transport {
     /**
      * Listen for messages from the keys origin matching a predicate.
      */
-    async onMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): Promise<M> {
-        return new Promise((resolve, reject) => {
+    async onMessage<M extends Message>(
+        predicate: (msg: Partial<M>) => boolean,
+        { timeout }: { timeout?: number } = {}
+    ): Promise<M> {
+        return new Promise<M>((resolve, reject) => {
+            let timer: ReturnType<typeof setTimeout> | undefined;
+
+            // Remove the listener and clear the timeout on any settle path.
+            const cleanup = () => {
+                window.removeEventListener('message', listener);
+                this.listeners.delete(listener);
+                if (timer !== undefined) clearTimeout(timer);
+            };
+
             const listener = (event: MessageEvent) => {
                 // Validate origin and source (the popup we opened)
                 if (event.origin !== this.url.origin) return;
@@ -95,14 +112,26 @@ export class PopupTransport implements Transport {
 
                 const message = event.data;
                 if (predicate(message)) {
+                    cleanup();
                     resolve(message);
-                    window.removeEventListener('message', listener);
-                    this.listeners.delete(listener);
                 }
             };
 
             window.addEventListener('message', listener);
-            this.listeners.set(listener, { reject });
+            this.listeners.set(listener, {
+                reject: (error: Error) => {
+                    cleanup();
+                    reject(error);
+                },
+            });
+
+            if (timeout !== undefined && timeout !== Infinity) {
+                timer = setTimeout(() => {
+                    this.listeners
+                        .get(listener)
+                        ?.reject(standardErrors.rpc.internal('Timed out waiting for popup message'));
+                }, timeout);
+            }
         });
     }
 
@@ -129,9 +158,9 @@ export class PopupTransport implements Transport {
         }
         this.popup = null;
 
-        this.listeners.forEach(({ reject }, listener) => {
+        // Reject all pending listeners; each reject() cleans up via cleanup().
+        this.listeners.forEach(({ reject }) => {
             reject(standardErrors.provider.userRejectedRequest('Request rejected'));
-            window.removeEventListener('message', listener);
         });
         this.listeners.clear();
     }

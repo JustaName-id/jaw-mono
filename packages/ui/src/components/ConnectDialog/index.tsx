@@ -8,6 +8,8 @@ import { Button } from '../ui/button';
 import { ConnectDialogProps } from './types';
 import { reverseResolveAddresses } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
+import { sanitizeDisplayName } from '../../utils/sanitize';
+import { isSafeImageUrl } from '../../utils/safeUrl';
 
 export const ConnectDialog = ({
   open,
@@ -50,6 +52,9 @@ export const ConnectDialog = ({
 
   // Use resolved address, then accountName prop, then truncated address.
   const displayName = resolvedAddress || accountName;
+
+  // appName is externally-controlled (dApp metadata); sanitize before display.
+  const safeAppName = sanitizeDisplayName(appName) || 'dApp';
 
   // Format origin to display only domain (remove protocol)
   const formatOrigin = (url: string) => {
@@ -147,11 +152,11 @@ export const ConnectDialog = ({
       <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
         {/* App Logo and Title */}
         <div className="flex flex-1 flex-col items-center justify-center p-3.5">
-          {appLogoUrl && (
-            <img src={appLogoUrl} alt={`${appName} logo`} className="mb-3 h-[72px] w-[72px] rounded-full" />
+          {isSafeImageUrl(appLogoUrl) && (
+            <img src={appLogoUrl} alt={`${safeAppName} logo`} className="mb-3 h-[72px] w-[72px] rounded-full" />
           )}
           <div className="text-foreground flex flex-col items-center gap-1">
-            <p className="text-2xl font-normal leading-[133%]">Connect to {appName}</p>
+            <p className="text-2xl font-normal leading-[133%]">Connect to {safeAppName}</p>
             <p className="text-muted-foreground text-base leading-[150%]">This app wants to connect to your wallet</p>
           </div>
         </div>

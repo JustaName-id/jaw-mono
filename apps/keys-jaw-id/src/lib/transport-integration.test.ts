@@ -110,7 +110,7 @@ function bootKeysApp(
     const isConfig =
       message.requestId && message.data && typeof message.data === 'object' && 'version' in (message.data as object);
     if (isConfig) {
-      keys.sendPopupReady();
+      keys.sendPopupReady(message.requestId);
       return;
     }
     if (message.id) {
@@ -252,7 +252,12 @@ describe('SDK <-> keys integration over the iframe transport', () => {
           })
         );
         setTimeout(() => {
-          window.dispatchEvent(new MessageEvent('message', { data: { event: 'PopupReady' }, origin: KEYS_ORIGIN }));
+          window.dispatchEvent(
+            new MessageEvent('message', {
+              data: { event: 'PopupReady', requestId: 'popup-loaded-1' },
+              origin: KEYS_ORIGIN,
+            })
+          );
         }, 0);
       }, 0);
       return popupWindow as unknown as Window;

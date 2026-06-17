@@ -44,7 +44,8 @@ const popupLoadedMessage = {
 };
 
 const popupReadyMessage = {
-    data: { event: 'PopupReady' },
+    // requestId echoes the PopupLoaded id — the SDK binds PopupReady to the handshake.
+    data: { event: 'PopupReady', requestId: 'popup-loaded-id' },
 };
 
 /** Queues a message event simulating the keys app (see communicator.test.ts). */

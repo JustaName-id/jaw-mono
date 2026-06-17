@@ -171,8 +171,8 @@ export const FeeTokenSelector = ({
       };
     }
 
-    // Fallback: calculate from ETH gas estimate
-    if (!estimatedGasEth || !nativeTokenPrice) {
+    // Fallback: derive from the native ETH gas estimate
+    if (!estimatedGasEth) {
       return null;
     }
 
@@ -181,16 +181,21 @@ export const FeeTokenSelector = ({
       return null;
     }
 
-    const gasUsd = gasEth * nativeTokenPrice;
-
+    // Native token: show the ETH amount directly. The USD value is only added
+    // when a price conversion is available; if it failed, we still show the
+    // native estimate instead of blanking out.
     if (token.isNative) {
       return {
         formatted: `${formatBalance(estimatedGasEth, token.symbol)} ${token.symbol}`,
-        usd: formatUsd(gasUsd),
+        usd: nativeTokenPrice ? formatUsd(gasEth * nativeTokenPrice) : '',
       };
     }
 
-    // For non-native ERC-20 tokens, gas cost in token
+    // For non-native ERC-20 tokens, converting the ETH estimate needs a price
+    if (!nativeTokenPrice) {
+      return null;
+    }
+    const gasUsd = gasEth * nativeTokenPrice;
     // Show appropriate decimal places based on token decimals
     const displayDecimals = token.decimals >= 6 ? 3 : token.decimals;
     return {
@@ -232,11 +237,15 @@ export const FeeTokenSelector = ({
 
         {/* Gas Cost / Status */}
         <div className="shrink-0 text-right">
-          {gasCost?.usd ? (
-            <>
-              <div className="text-xs font-semibold">{gasCost.usd}</div>
-              <div className="text-muted-foreground text-[10px]">Up to {gasCost.formatted}</div>
-            </>
+          {gasCost ? (
+            gasCost.usd ? (
+              <>
+                <div className="text-xs font-semibold">{gasCost.usd}</div>
+                <div className="text-muted-foreground text-[10px]">Up to {gasCost.formatted}</div>
+              </>
+            ) : (
+              <div className="text-xs font-semibold">{gasCost.formatted}</div>
+            )
           ) : !token.isSelectable ? (
             <span className="text-destructive text-[10px]">{token.balance === 0n ? '0' : 'Insufficient'}</span>
           ) : null}

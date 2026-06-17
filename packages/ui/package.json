@@ -1,7 +1,7 @@
 {
   "name": "@jaw.id/ui",
   "description": "Pre-built React dialogs for JAW.id",
-  "version": "0.4.6",
+  "version": "0.4.15",
   "license": "MIT",
   "type": "module",
   "sideEffects": [
@@ -35,12 +35,29 @@
       "default": "./dist/index.js"
     }
   },
+  "nx": {
+    "targets": {
+      "test": {
+        "cache": true,
+        "inputs": [
+          "default",
+          "^production",
+          "{projectRoot}/vitest.config.ts"
+        ],
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "bunx vitest run"
+        }
+      }
+    }
+  },
   "peerDependencies": {
     "react": ">=18.0.0",
     "react-dom": ">=18.0.0"
   },
   "dependencies": {
-    "@jaw.id/core": "0.4.3",
+    "@jaw.id/core": "0.4.5",
     "@hookform/resolvers": "^5.2.2",
     "@justaname.id/sdk": "^0.2.204",
     "@radix-ui/react-accordion": "^1.2.12",

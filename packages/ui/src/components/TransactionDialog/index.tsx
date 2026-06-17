@@ -429,8 +429,18 @@ export const TransactionDialog = ({
                     ) : gasFee && gasFee !== 'sponsored' ? (
                       <div className="flex w-full flex-col gap-0.5">
                         <div className="flex w-full items-center justify-between">
-                          <p className="text-foreground text-base font-normal">
-                            {nativeTokenPrice > 0 ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}` : ''}
+                          <p
+                            className={`text-foreground text-base ${nativeTokenPrice > 0 ? 'font-normal' : 'font-bold'}`}
+                          >
+                            {nativeTokenPrice > 0
+                              ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}`
+                              : (() => {
+                                  const gasValue = Number(gasFee);
+                                  if (gasValue > 0 && gasValue < 0.0001) {
+                                    return `< 0.0001 ${nativeSymbol}`;
+                                  }
+                                  return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                                })()}
                           </p>
                           {/* Inline Fee Token Selector */}
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
@@ -445,15 +455,17 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
-                        <p className="text-muted-foreground text-xs font-normal">
-                          {(() => {
-                            const gasValue = Number(gasFee);
-                            if (gasValue > 0 && gasValue < 0.0001) {
-                              return `< 0.0001 ${nativeSymbol}`;
-                            }
-                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                          })()}
-                        </p>
+                        {nativeTokenPrice > 0 && (
+                          <p className="text-muted-foreground text-xs font-normal">
+                            {(() => {
+                              const gasValue = Number(gasFee);
+                              if (gasValue > 0 && gasValue < 0.0001) {
+                                return `< 0.0001 ${nativeSymbol}`;
+                              }
+                              return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                            })()}
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <p className="text-muted-foreground text-base font-normal">Unable to estimate</p>
@@ -789,8 +801,18 @@ export const TransactionDialog = ({
                     ) : gasFee && gasFee !== 'sponsored' ? (
                       <div className="flex w-full flex-col gap-0.5">
                         <div className="flex w-full items-center justify-between">
-                          <p className="text-foreground text-base font-normal">
-                            {nativeTokenPrice > 0 ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}` : ''}
+                          <p
+                            className={`text-foreground text-base ${nativeTokenPrice > 0 ? 'font-normal' : 'font-bold'}`}
+                          >
+                            {nativeTokenPrice > 0
+                              ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}`
+                              : (() => {
+                                  const gasValue = Number(gasFee);
+                                  if (gasValue > 0 && gasValue < 0.0001) {
+                                    return `< 0.0001 ${nativeSymbol}`;
+                                  }
+                                  return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                                })()}
                           </p>
                           {/* Inline Fee Token Selector */}
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
@@ -805,15 +827,17 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
-                        <p className="text-muted-foreground text-xs font-normal">
-                          {(() => {
-                            const gasValue = Number(gasFee);
-                            if (gasValue > 0 && gasValue < 0.0001) {
-                              return `< 0.0001 ${nativeSymbol}`;
-                            }
-                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                          })()}
-                        </p>
+                        {nativeTokenPrice > 0 && (
+                          <p className="text-muted-foreground text-xs font-normal">
+                            {(() => {
+                              const gasValue = Number(gasFee);
+                              if (gasValue > 0 && gasValue < 0.0001) {
+                                return `< 0.0001 ${nativeSymbol}`;
+                              }
+                              return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                            })()}
+                          </p>
+                        )}
                       </div>
                     ) : (
                       <p className="text-muted-foreground text-base font-normal">Unable to estimate</p>

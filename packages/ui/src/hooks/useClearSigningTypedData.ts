@@ -3,6 +3,7 @@ import {
   applyFormat,
   createTokenResolver,
   getDefaultDescriptorSource,
+  getNativeDecimals,
   getNativeSymbol,
   resolveEip712Descriptor,
   type ClearSigningDisplay,
@@ -86,6 +87,7 @@ export function useClearSigningTypedData(
           tx: { ...parsed.domain, chainId, verifyingContract: verifyingContract.toLowerCase() },
           chainId,
           nativeSymbol: getNativeSymbol(chainId),
+          nativeDecimals: getNativeDecimals(chainId),
           resolveToken: createTokenResolver(chainId, apiKey),
         });
 

@@ -180,10 +180,14 @@ export class Communicator {
     /**
      * Listen for messages matching predicate
      * @param predicate - Function to test if a message matches
+     * @param options.timeout - Optional ms timeout; rejects and cleans up on expiry. Omit to wait indefinitely.
      * @returns Promise resolving to the matching message
      */
-    async onMessage<M extends Message>(predicate: (msg: Partial<M>) => boolean): Promise<M> {
-        return this.listenForMessage<M>(predicate).promise;
+    async onMessage<M extends Message>(
+        predicate: (msg: Partial<M>) => boolean,
+        { timeout }: { timeout?: number } = {}
+    ): Promise<M> {
+        return this.listenForMessage<M>(predicate, { timeout }).promise;
     }
 
     /**
@@ -192,12 +196,22 @@ export class Communicator {
      * resolving (used to clean up when the request never gets sent).
      */
     private listenForMessage<M extends Message>(
-        predicate: (msg: Partial<M>) => boolean
+        predicate: (msg: Partial<M>) => boolean,
+        { timeout }: { timeout?: number } = {}
     ): {
         promise: Promise<M>;
         cancel: () => void;
     } {
         let listener!: (event: MessageEvent) => void;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+
+        // Remove the listener and clear the timeout on any settle path.
+        const cleanup = () => {
+            window.removeEventListener('message', listener);
+            this.listeners.delete(listener);
+            if (timer !== undefined) clearTimeout(timer);
+        };
+
         const promise = new Promise<M>((resolve, reject) => {
             listener = (event: MessageEvent) => {
                 // Validate origin and source (an owned transport window)
@@ -206,19 +220,28 @@ export class Communicator {
 
                 const message = event.data;
                 if (predicate(message)) {
+                    cleanup();
                     resolve(message);
-                    window.removeEventListener('message', listener);
-                    this.listeners.delete(listener);
                 }
             };
             window.addEventListener('message', listener);
-            this.listeners.set(listener, { reject });
+            this.listeners.set(listener, {
+                reject: (error: Error) => {
+                    cleanup();
+                    reject(error);
+                },
+            });
+
+            if (timeout !== undefined && timeout !== Infinity) {
+                timer = setTimeout(() => {
+                    this.listeners
+                        .get(listener)
+                        ?.reject(standardErrors.rpc.internal('Timed out waiting for popup message'));
+                }, timeout);
+            }
         });
 
-        const cancel = () => {
-            window.removeEventListener('message', listener);
-            this.listeners.delete(listener);
-        };
+        const cancel = () => cleanup();
 
         return { promise, cancel };
     }
@@ -235,10 +258,9 @@ export class Communicator {
             this.switchListenerArmed = false;
         }
 
-        // Clean up all listeners and their timeouts
-        this.listeners.forEach(({ reject }, listener) => {
+        // Reject all pending listeners; each reject() cleans up via cleanup().
+        this.listeners.forEach(({ reject }) => {
             reject(standardErrors.provider.userRejectedRequest('Request rejected'));
-            window.removeEventListener('message', listener);
         });
         this.listeners.clear();
     }
