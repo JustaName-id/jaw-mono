@@ -2,6 +2,15 @@
   "name": "@jaw-mono/keys-jaw-id",
   "version": "0.0.1",
   "private": true,
+  "nx": {
+    "targets": {
+      "typecheck": {
+        "dependsOn": [
+          "^build"
+        ]
+      }
+    }
+  },
   "dependencies": {
     "@jaw.id/core": "workspace:*",
     "@jaw.id/ui": "workspace:*",
