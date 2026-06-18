@@ -1,5 +1,2 @@
 # Ignore Foundry git submodule dependencies
 contracts/**/lib/**
-
-# Standalone runnable examples — not part of the Nx build graph
-examples

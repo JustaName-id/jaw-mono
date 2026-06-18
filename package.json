@@ -71,8 +71,7 @@
   },
   "workspaces": [
     "packages/*",
-    "apps/*",
-    "examples/*"
+    "apps/*"
   ],
   "overrides": {
     "@tanstack/react-query": "5.90.21",
