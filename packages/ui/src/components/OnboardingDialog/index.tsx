@@ -255,6 +255,15 @@ export function OnboardingDialog({
               value={username}
               onChange={(e) => setUsername(e.target.value)}
               className="flex-1"
+              // Prevent password-manager extensions (1Password, LastPass, Dashlane,
+              // Bitwarden) from attaching their inline overlay to this field. Their
+              // overlay covers the embedded iframe, which the clickjacking guard
+              // (EnsureVisibility) then reads as occlusion and disables interaction.
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
+              data-form-type="other"
+              data-bwignore
               right={
                 ensDomain ? <span className="text-foreground text-sm font-bold">{`.${ensDomain}`}</span> : undefined
               }

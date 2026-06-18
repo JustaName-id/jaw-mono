@@ -84,7 +84,7 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   const card =
     presentation === 'drawer'
       ? `fixed inset-x-0 bottom-0 max-h-[85vh] rounded-t-2xl ${entered ? 'translate-y-0' : 'translate-y-full'}`
-      : `fixed left-1/2 top-1/2 w-[400px] max-w-[calc(100vw-2rem)] max-h-[85vh] -translate-x-1/2 ${
+      : `fixed left-1/2 top-1/2 w-[450px] max-w-[calc(100vw-2rem)] max-h-[85vh] -translate-x-1/2 ${
           entered ? '-translate-y-1/2 scale-100 opacity-100' : '-translate-y-1/2 scale-95 opacity-0'
         } rounded-2xl`;
 
