@@ -206,6 +206,14 @@ async function run() {
       // Needs the keys app started with JAW_TRUSTED_HOSTS=localhost. On non-IOv2
       // engines prewarm races ahead of the trusted-hosts refresh, so a connect
       // mounts the iframe (the refresh has populated the registry by then).
+      //
+      // This path deliberately DRIVES A CONNECT to mount the iframe (the only way
+      // it appears on non-IOv2 engines), so the dialog is SHOWN by design — the
+      // reveal-gating assertion (iframe hidden until a request) does NOT apply
+      // here and is intentionally omitted. Reveal gating is covered by the
+      // untrusted Chromium prewarm run below (the `expectsIframe` branch), which
+      // loads the page WITHOUT a connect and asserts the prewarmed iframe stays
+      // hidden. The goal here is only cross-engine see-through after a connect.
       await page.goto(`${PLAYGROUND_URL}/wagmi`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(4000); // let /api/trusted-hosts refresh populate
       await driveConnect(page);
