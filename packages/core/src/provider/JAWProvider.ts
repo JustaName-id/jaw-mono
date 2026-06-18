@@ -38,7 +38,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     private readonly communicator: Communicator;
     private readonly apiKey: string;
     private readonly paymasters?: Record<number, PaymasterConfig>;
-    private readonly theme?: JawTheme;
+    private theme?: JawTheme;
 
     private signer: Signer | null = null;
 
@@ -84,6 +84,17 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                 clearSignerType();
             }
         }
+    }
+
+    /**
+     * Update the dApp theme after construction. Pushes it to the live keys
+     * dialog (cross-platform) so it re-themes in place without rebuilding the
+     * provider, and stores it for AppSpecific's next request. This is what lets
+     * a host app keep one connector and just sync the theme on light/dark flips.
+     */
+    public setTheme(theme: JawTheme | undefined): void {
+        this.theme = theme;
+        this.communicator.updateTheme(theme);
     }
 
     public async request<T>(args: RequestArguments): Promise<T> {

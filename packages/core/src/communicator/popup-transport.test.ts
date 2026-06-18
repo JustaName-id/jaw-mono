@@ -240,6 +240,26 @@ describe('PopupTransport', () => {
         });
     });
 
+    describe('setTheme', () => {
+        it('posts a SetTheme message to a live popup', async () => {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+            const before = (mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls.length;
+
+            transport.setTheme({ mode: 'dark' });
+
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[before]).toEqual([
+                { event: 'SetTheme', data: { theme: { mode: 'dark' } } },
+                urlOrigin,
+            ]);
+        });
+
+        it('does not throw when no popup is open', () => {
+            expect(() => transport.setTheme({ mode: 'light' })).not.toThrow();
+        });
+    });
+
     describe('ensureReady', () => {
         it('should open a popup window and finish handshake', async () => {
             queueMessageEvent(popupLoadedMessage);

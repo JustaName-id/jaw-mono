@@ -140,6 +140,14 @@ export class Communicator {
     }
 
     /**
+     * Push a new dApp theme to the live keys dialog (and onto future
+     * handshakes), so theme changes apply without rebuilding the connector.
+     */
+    updateTheme(theme: JawTheme | undefined): void {
+        this.router.updateTheme(theme);
+    }
+
+    /**
      * Mount and handshake the iframe in the background (no-op in popup mode).
      */
     async prewarm(): Promise<void> {

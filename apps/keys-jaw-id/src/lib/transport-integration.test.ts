@@ -192,6 +192,32 @@ describe('SDK <-> keys integration over the iframe transport', () => {
     expect(document.querySelector('dialog[data-jaw]')?.hasAttribute('open')).toBe(true);
   });
 
+  it('pushes a live theme update to the keys app as a SetTheme message', async () => {
+    const { keysWin, deliver } = createKeysWindow();
+    const keysApp = new PopupCommunicator(keysWin);
+
+    const responsePromise = sdk.postRequestAndWaitForResponse({
+      id: 'req-theme-1-1-1',
+      data: { method: 'wallet_getCapabilities' },
+    });
+
+    await bridgeIframe(deliver);
+    const received = bootKeysApp(keysApp, (message, app) => {
+      app.sendResponse(message.id as string, { ok: true });
+    });
+    await responsePromise;
+
+    // A live theme update (e.g. an OS light/dark flip on the dApp) must reach
+    // the keys side as a SetTheme message — without a reconnect or reload.
+    sdk.updateTheme({ mode: 'dark', accentColor: '#6366f1' });
+
+    await vi.waitFor(() => {
+      expect(received.some((m) => m.event === 'SetTheme')).toBe(true);
+    });
+    const setTheme = received.find((m) => m.event === 'SetTheme');
+    expect(setTheme?.data).toEqual({ theme: { mode: 'dark', accentColor: '#6366f1' } });
+  });
+
   it('hides the dialog when keys requests a transport-aware close', async () => {
     const { keysWin, deliver } = createKeysWindow();
     const keysApp = new PopupCommunicator(keysWin);

@@ -10,6 +10,7 @@ import { PopupTransport } from './popup-transport.js';
 import { IframeTransport } from './iframe-transport.js';
 import { isSafari, supportsIOv2 } from '../utils/user-agent.js';
 import { isTrustedHost } from '../trusted-hosts.js';
+import type { JawTheme } from '../ui/theme.js';
 
 /** Methods that may create a passkey — unsupported in Safari cross-origin iframes. */
 export const CREDENTIAL_CREATING_METHODS: readonly string[] = ['eth_requestAccounts', 'wallet_connect'];
@@ -118,6 +119,16 @@ export class TransportRouter implements TransportRouterContract {
     ownsSource(source: MessageEventSource | null): boolean {
         if (!source) return true;
         return (this.popup?.matchesSource(source) ?? false) || (this.iframe?.matchesSource(source) ?? false);
+    }
+
+    /**
+     * Update the dApp theme: store it for transports created later, and push it
+     * to any live transport so the keys dialog re-themes without a rebuild.
+     */
+    updateTheme(theme: JawTheme | undefined): void {
+        this.options.theme = theme;
+        this.iframe?.setTheme(theme);
+        this.popup?.setTheme(theme);
     }
 
     destroyAll(): void {

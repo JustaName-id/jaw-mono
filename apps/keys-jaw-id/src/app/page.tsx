@@ -168,6 +168,16 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         communicator.sendPopupReady(message.requestId);
       }
 
+      // Live theme update: the dApp pushed a new theme (e.g. an OS light/dark
+      // flip) without reconnecting. Re-apply it so the embedded dialog tracks
+      // the host — this is what makes theme sync robust against the prewarm
+      // one-shot. Same mapping as the config branch.
+      if (message.event === 'SetTheme') {
+        if (message.data?.theme) {
+          applyDappTheme(message.data.theme);
+        }
+      }
+
       // Handle selectSignerType event
       if (message.event === 'selectSignerType') {
         communicator.sendResponse(message.id, 'scw');

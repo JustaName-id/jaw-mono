@@ -4,6 +4,7 @@ import { ConfigMessage } from '../messages/configMessage.js';
 import { standardErrors } from '../errors/errors.js';
 import { isMobile } from '../utils/user-agent.js';
 import { Transport, TransportOptions } from './transport.js';
+import type { JawTheme } from '../ui/theme.js';
 
 const POPUP_WIDTH = 420;
 const POPUP_HEIGHT = 730;
@@ -147,6 +148,21 @@ export class PopupTransport implements Transport {
         const responsePromise = this.onMessage<M>(({ requestId }) => requestId === request.id);
         await this.postMessage(request);
         return await responsePromise;
+    }
+
+    /**
+     * Push a new dApp theme to the live popup and onto future handshakes. The
+     * popup is transient (re-handshaken per flow), so this mainly keeps a long-
+     * lived popup in sync; the updated theme also rides the next handshake.
+     */
+    setTheme(theme: JawTheme | undefined): void {
+        this.options.theme = theme;
+        if (!this.popup || this.popup.closed) return;
+        try {
+            this.popup.postMessage({ event: 'SetTheme', data: { theme } }, this.url.origin);
+        } catch {
+            /* window gone; the updated theme rides the next handshake */
+        }
     }
 
     /**

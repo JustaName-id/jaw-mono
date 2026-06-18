@@ -28,6 +28,8 @@ type ProviderEventMap = {
 export interface ProviderInterface extends EventEmitter<keyof ProviderEventMap> {
     request(args: RequestArguments): Promise<unknown>;
     disconnect(): Promise<void>;
+    /** Update the dApp theme after construction; re-themes the live keys dialog in place. */
+    setTheme(theme: JawTheme | undefined): void;
     emit<K extends keyof ProviderEventMap>(event: K, ...args: [ProviderEventMap[K]]): boolean;
     on<K extends keyof ProviderEventMap>(event: K, listener: (_: ProviderEventMap[K]) => void): this;
 }

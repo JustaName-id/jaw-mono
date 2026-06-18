@@ -336,6 +336,35 @@ describe('IframeTransport', () => {
         });
     });
 
+    describe('setTheme', () => {
+        it('posts a SetTheme message to the keys app after the handshake', async () => {
+            const { readyPromise, target } = startHandshake(transport);
+            await readyPromise;
+            const before = target.postMessage.mock.calls.length; // handshake config already sent
+
+            transport.setTheme({ mode: 'dark', accentColor: '#6366f1' });
+
+            expect(target.postMessage).toHaveBeenCalledTimes(before + 1);
+            expect(target.postMessage.mock.calls[before]).toEqual([
+                { event: 'SetTheme', data: { theme: { mode: 'dark', accentColor: '#6366f1' } } },
+                urlOrigin,
+            ]);
+        });
+
+        it('does not post before the handshake but carries the theme on the next one', async () => {
+            transport.setTheme({ mode: 'dark', borderRadius: 'lg' });
+
+            const { readyPromise, target } = startHandshake(transport);
+            await readyPromise;
+
+            // No standalone SetTheme — the updated theme rides the handshake config.
+            expect(target.postMessage.mock.calls[0][0].data.theme).toEqual({ mode: 'dark', borderRadius: 'lg' });
+            expect(
+                target.postMessage.mock.calls.some(([msg]) => (msg as { event?: string }).event === 'SetTheme')
+            ).toBe(false);
+        });
+    });
+
     describe('dismissal', () => {
         it('Escape rejects pending requests with 4001 and hides, keeping the iframe alive', async () => {
             startHandshake(transport);

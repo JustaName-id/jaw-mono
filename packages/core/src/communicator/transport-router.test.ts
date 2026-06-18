@@ -20,6 +20,7 @@ type MockTransportBase = {
     postMessage: ReturnType<typeof vi.fn>;
     isAlive: ReturnType<typeof vi.fn>;
     matchesSource: ReturnType<typeof vi.fn>;
+    setTheme: ReturnType<typeof vi.fn>;
     destroy: ReturnType<typeof vi.fn>;
 };
 
@@ -42,6 +43,7 @@ function createMockPopup(): MockPopup {
         postMessage: vi.fn(async () => undefined),
         isAlive: vi.fn(() => true),
         matchesSource: vi.fn(() => true),
+        setTheme: vi.fn(),
         destroy: vi.fn(),
     };
 }
@@ -53,6 +55,7 @@ function createMockIframe(): MockIframe {
         postMessage: vi.fn(async () => undefined),
         isAlive: vi.fn(() => true),
         matchesSource: vi.fn(() => true),
+        setTheme: vi.fn(),
         destroy: vi.fn(),
         prewarm: vi.fn(async () => undefined),
         show: vi.fn(),
@@ -370,6 +373,41 @@ describe('TransportRouter.prewarm', () => {
 
         expect(iframeFactory).not.toHaveBeenCalled();
         expect(iframeMock.prewarm).not.toHaveBeenCalled();
+    });
+});
+
+describe('TransportRouter.updateTheme', () => {
+    it('pushes the theme to a live iframe', async () => {
+        const { router, iframeMock } = createRouter({ mode: 'iframe' });
+        await router.acquire({}); // iframe established
+
+        router.updateTheme({ mode: 'dark' });
+
+        expect(iframeMock.setTheme).toHaveBeenCalledWith({ mode: 'dark' });
+    });
+
+    it('pushes the theme to a live popup', async () => {
+        const { router, popupMock } = createRouter({ mode: 'popup' });
+        await router.acquire({}); // popup established
+
+        router.updateTheme({ mode: 'light' });
+
+        expect(popupMock.setTheme).toHaveBeenCalledWith({ mode: 'light' });
+    });
+
+    it('carries the updated theme to transports created after the update', async () => {
+        const { router, iframeFactory } = createRouter({ mode: 'iframe' });
+
+        router.updateTheme({ mode: 'dark' }); // before any transport exists
+        await router.acquire({}); // iframe created now
+
+        expect(iframeFactory).toHaveBeenCalledTimes(1);
+        expect(iframeFactory.mock.calls[0][0].theme).toEqual({ mode: 'dark' });
+    });
+
+    it('does nothing harmful when no transport is live', () => {
+        const { router } = createRouter({ mode: 'iframe' });
+        expect(() => router.updateTheme({ mode: 'dark' })).not.toThrow();
     });
 });
 

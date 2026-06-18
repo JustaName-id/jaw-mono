@@ -53,6 +53,13 @@ export interface Transport {
     matchesSource(source: MessageEventSource | null): boolean;
 
     /**
+     * Push a new dApp theme to the live target window and carry it on the next
+     * handshake/reload. Best-effort: if the keys app is not ready yet, the
+     * updated theme rides the handshake config instead of a live message.
+     */
+    setTheme(theme: JawTheme | undefined): void;
+
+    /**
      * Hide/close UI, reject all pending listeners with
      * UserRejectedRequest (4001), release resources.
      */
@@ -94,6 +101,9 @@ export interface TransportRouter {
 
     /** Whether a message's source belongs to any currently-owned transport window. */
     ownsSource(source: MessageEventSource | null): boolean;
+
+    /** Push a new dApp theme to the live transport(s) and onto future handshakes. */
+    updateTheme(theme: JawTheme | undefined): void;
 
     destroyAll(): void;
 }

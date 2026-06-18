@@ -359,6 +359,26 @@ describe('JAWProvider', () => {
         });
     });
 
+    describe('setTheme', () => {
+        it('stores the theme and pushes it to the communicator', () => {
+            provider = new JAWProvider(mockConstructorOptions);
+            const theme = { mode: 'dark', accentColor: '#6366f1' } as const;
+
+            provider.setTheme(theme);
+
+            expect((provider as any).theme).toEqual(theme);
+            expect((provider as any).communicator.updateTheme).toHaveBeenCalledWith(theme);
+        });
+
+        it('forwards undefined to clear the theme', () => {
+            provider = new JAWProvider(mockConstructorOptions);
+
+            provider.setTheme(undefined);
+
+            expect((provider as any).communicator.updateTheme).toHaveBeenCalledWith(undefined);
+        });
+    });
+
     describe('_request - wallet_disconnect', () => {
         it('should disconnect when no signer exists', async () => {
             // Arrange

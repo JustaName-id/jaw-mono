@@ -3,6 +3,7 @@ import { Message, MessageID } from '../messages/message.js';
 import { ConfigMessage, DialogCloseData } from '../messages/configMessage.js';
 import { standardErrors } from '../errors/errors.js';
 import { IframeTransport as IframeTransportContract, TransportOptions } from './transport.js';
+import type { JawTheme } from '../ui/theme.js';
 
 const HANDSHAKE_TIMEOUT_MS = 10_000;
 
@@ -206,6 +207,22 @@ export class IframeTransport implements IframeTransportContract {
         }
         this.previouslyFocused = null;
         this.visible = false;
+    }
+
+    /**
+     * Push a new dApp theme to the live keys app. Updates the stored theme so a
+     * later handshake/reload carries it, and — when the handshake is already
+     * done — posts a SetTheme message so the embedded dialog re-themes in place
+     * (no reload, no stale one-shot from prewarm).
+     */
+    setTheme(theme: JawTheme | undefined): void {
+        this.options.theme = theme;
+        if (!this.ready || !this.isAlive()) return;
+        try {
+            this.getTargetWindow().postMessage({ event: 'SetTheme', data: { theme } }, this.url.origin);
+        } catch {
+            /* window gone; the updated theme rides the next handshake/reload */
+        }
     }
 
     /**
