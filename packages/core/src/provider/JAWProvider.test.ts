@@ -1196,6 +1196,19 @@ describe('JAWProvider', () => {
             expect((provider as any).signer).toBeNull();
         });
 
+        it('should tear down the communicator transport', async () => {
+            // Arrange — in iframe mode the transport is persistent, so disconnect
+            // must destroy it (popup was transient and needed no teardown).
+            (mockSigner.cleanup as Mock).mockResolvedValue(undefined);
+            const communicator = (provider as any).communicator;
+
+            // Act
+            await provider.disconnect();
+
+            // Assert
+            expect(communicator.disconnect).toHaveBeenCalled();
+        });
+
         it('should clear correlationIds', async () => {
             // Arrange
             (mockSigner.cleanup as Mock).mockResolvedValue(undefined);

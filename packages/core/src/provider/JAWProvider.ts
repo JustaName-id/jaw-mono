@@ -111,6 +111,13 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         const passkeyManager = new PasskeyManager(undefined, undefined, this.apiKey);
         passkeyManager.logout();
 
+        // Tear down the cross-platform transport. The iframe carrier is
+        // persistent (mounted once, reused across requests), so without this it
+        // would survive a disconnect and keep the keys-app session warm until a
+        // full page reload — the user would appear "still signed in". The popup
+        // transport was transient per-request, so this was a no-op there.
+        this.communicator.disconnect();
+
         this.signer = null;
         correlationIds.clear();
         this.emit('accountsChanged', []);

@@ -144,8 +144,8 @@ export const ConnectDialog = ({
               maxHeight: 'none',
             }
           : {
-              width: 'fit-content',
-              maxWidth: '500px',
+              width: '450px',
+              minWidth: '450px',
             }
       }
     >

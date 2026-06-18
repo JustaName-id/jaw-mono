@@ -17,8 +17,9 @@ export interface EnsureVisibilityProps {
  *
  * Runs IntersectionObserver v2 *inside* the iframe: when the dialog is
  * occluded, transformed or faded by the embedding page, interactions are
- * disabled and the user is offered an escape to a popup. The escape hatch
- * ("Continue in new window") is always available, occluded or not.
+ * disabled (pointer-events removed, content faded and aria-hidden). There is
+ * no persistent escape-hatch footer — the guard purely neutralizes the
+ * occluded dialog rather than offering a manual switch to a popup.
  *
  * The wrapper structure is constant: when inactive the containers use
  * `display: contents` (no visual/layout effect) and the footer is absent, so
@@ -60,22 +61,11 @@ export function EnsureVisibility({ communicator, active, children }: EnsureVisib
       >
         {children}
       </div>
-      {guardActive && (
-        <div className="border-border flex items-center justify-between gap-3 border-t px-4 py-2">
-          {occluded ? (
-            <p className="text-destructive text-xs">
-              This window appears to be covered. Interactions are disabled for your safety.
-            </p>
-          ) : (
-            <span aria-hidden="true" />
-          )}
-          <button
-            type="button"
-            className="text-muted-foreground hover:text-foreground shrink-0 text-xs underline underline-offset-2"
-            onClick={() => communicator.requestSwitchToPopup(occluded ? 'visibility' : 'user')}
-          >
-            Continue in new window
-          </button>
+      {guardActive && occluded && (
+        <div className="border-border border-t px-4 py-2">
+          <p className="text-destructive text-xs">
+            This window appears to be covered. Interactions are disabled for your safety.
+          </p>
         </div>
       )}
     </div>

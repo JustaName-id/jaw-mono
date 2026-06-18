@@ -34,15 +34,17 @@ describe('EnsureVisibility', () => {
     expect(html).not.toContain('Continue in new window');
   });
 
-  it('renders the clickjacking-guard footer + escape hatch when embedded and active', () => {
+  it('renders no escape hatch and enabled interactions when embedded, active and not occluded', () => {
     const html = renderToStaticMarkup(
       <EnsureVisibility communicator={mockCommunicator('embedded')} active={true}>
         {child}
       </EnsureVisibility>
     );
     expect(html).toContain('app content');
-    expect(html).toContain('Continue in new window');
-    // Not occluded on first render → interactions enabled (no pointer-events-none)
+    // No persistent escape-hatch footer/button — it was removed.
+    expect(html).not.toContain('Continue in new window');
+    // Not occluded on first render → no warning, interactions enabled.
+    expect(html).not.toContain('appears to be covered');
     expect(html).not.toContain('pointer-events-none');
   });
 });
