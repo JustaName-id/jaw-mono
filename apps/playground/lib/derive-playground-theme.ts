@@ -22,7 +22,10 @@ function colorToHex(raw: string): string | undefined {
   if (normalized.startsWith('#')) return normalized;
   const m = normalized.match(/\d+(\.\d+)?/g);
   if (!m || m.length < 3) return undefined;
-  const toHex = (n: number) => Math.max(0, Math.min(255, Math.round(n))).toString(16).padStart(2, '0');
+  const toHex = (n: number) =>
+    Math.max(0, Math.min(255, Math.round(n)))
+      .toString(16)
+      .padStart(2, '0');
   return `#${toHex(Number(m[0]))}${toHex(Number(m[1]))}${toHex(Number(m[2]))}`;
 }
 
