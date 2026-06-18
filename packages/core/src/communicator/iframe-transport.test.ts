@@ -205,6 +205,37 @@ describe('IframeTransport', () => {
         });
     });
 
+    describe('single-instance cleanup', () => {
+        it('keeps only one keys dialog when a second transport mounts', () => {
+            // First transport mounts (ensureReady mounts synchronously).
+            const first = createTransport();
+            first.ensureReady().catch(() => undefined);
+            expect(document.querySelectorAll('dialog[data-jaw]').length).toBe(1);
+            expect(first.isAlive()).toBe(false); // mounted, handshake not done yet
+
+            // A second transport mounts → the first is torn down, not leaked.
+            const second = createTransport();
+            second.ensureReady().catch(() => undefined);
+
+            expect(document.querySelectorAll('dialog[data-jaw]').length).toBe(1);
+
+            first.destroy();
+            second.destroy();
+        });
+
+        it('a new mount tears down the previous instance (destroy is called)', () => {
+            const first = createTransport();
+            first.ensureReady().catch(() => undefined);
+            const destroySpy = vi.spyOn(first, 'destroy');
+
+            const second = createTransport();
+            second.ensureReady().catch(() => undefined);
+
+            expect(destroySpy).toHaveBeenCalledTimes(1);
+            second.destroy();
+        });
+    });
+
     describe('ensureReady', () => {
         it('completes the handshake over the iframe contentWindow', async () => {
             const { readyPromise, target } = startHandshake(transport);

@@ -28,6 +28,15 @@ export type IframeTransportConfig = TransportOptions & {
 export class IframeTransport implements IframeTransportContract {
     readonly kind = 'iframe' as const;
 
+    /**
+     * The single iframe transport currently mounted in the document. The
+     * embedded keys dialog is a global, top-layer modal — there is only ever one.
+     * When a new instance mounts (a connector rebuilt on a config change, or a
+     * React StrictMode / Fast Refresh double-mount in dev), it tears down the
+     * previous one so stale prewarmed dialogs don't accumulate in the DOM.
+     */
+    private static mounted: IframeTransport | null = null;
+
     private readonly url: URL;
     private readonly options: TransportOptions;
     private readonly handshakeTimeoutMs: number;
@@ -267,6 +276,10 @@ export class IframeTransport implements IframeTransportContract {
         this.rejectPending();
         this.hide();
 
+        if (IframeTransport.mounted === this) {
+            IframeTransport.mounted = null;
+        }
+
         if (this.configListener) {
             window.removeEventListener('message', this.configListener);
             this.configListener = null;
@@ -286,6 +299,15 @@ export class IframeTransport implements IframeTransportContract {
 
     private mount(): void {
         if (this.dialog) return;
+
+        // Only one keys dialog may be live at a time. Tear down a previously
+        // mounted instance (defunct provider from a connector rebuild, or a dev
+        // StrictMode / Fast Refresh double-mount) so its dialog, listeners and
+        // observer are removed instead of leaking into the DOM.
+        if (IframeTransport.mounted && IframeTransport.mounted !== this) {
+            IframeTransport.mounted.destroy();
+        }
+        IframeTransport.mounted = this;
 
         this.injectBackdropStyle();
 
