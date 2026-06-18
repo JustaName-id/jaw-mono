@@ -9,11 +9,11 @@ How the SDK reaches `keys.jaw.id` in **CrossPlatform** mode: an embedded iframe 
 
 ## Values
 
-| Value | Behavior |
-| --- | --- |
-| `'auto'` | **Default.** Embeds `keys.jaw.id` as an in-page dialog, with automatic popup fallback where iframes can't work (see below). |
-| `'iframe'` | Same as `'auto'` in this release. |
-| `'popup'` | Legacy behavior: always opens `keys.jaw.id` in a popup window. Set this explicitly to opt out of the embedded dialog. |
+| Value      | Behavior                                                                                                                    |
+| ---------- | --------------------------------------------------------------------------------------------------------------------------- |
+| `'auto'`   | **Default.** Embeds `keys.jaw.id` as an in-page dialog, with automatic popup fallback where iframes can't work (see below). |
+| `'iframe'` | Same as `'auto'` in this release.                                                                                           |
+| `'popup'`  | Legacy behavior: always opens `keys.jaw.id` in a popup window. Set this explicitly to opt out of the embedded dialog.       |
 
 The fallback matrix below means `'auto'` never does worse than the popup: on browsers or pages where the iframe can't work, the SDK opens a popup exactly as before. If you need the popup unconditionally, set `transportMode: 'popup'`.
 
@@ -59,11 +59,11 @@ The wallet, passkeys, and message protocol are identical across both transports;
 
 Even with `transportMode: 'iframe'`, the SDK falls back to a popup **per request** when an iframe cannot do the job:
 
-| Condition | Why |
-| --- | --- |
-| **Safari + passkey creation** (`eth_requestAccounts`, `wallet_connect`) | Safari does not support creating passkeys inside cross-origin iframes. Sign-in still happens in the iframe; only first-time credential creation uses a popup. |
-| **Insecure context** | WebAuthn requires a secure context (HTTPS or `localhost`). On insecure origins the SDK uses a popup. |
-| **Occluded / untrusted embedding** | If the dialog's visibility can't be verified (no IntersectionObserver v2) and the embedder isn't a trusted host, the SDK uses a popup to prevent clickjacking. The user can also choose "Continue in new window" at any time. |
+| Condition                                                               | Why                                                                                                                                                                                                                           |
+| ----------------------------------------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Safari + passkey creation** (`eth_requestAccounts`, `wallet_connect`) | Safari does not support creating passkeys inside cross-origin iframes. Sign-in still happens in the iframe; only first-time credential creation uses a popup.                                                                 |
+| **Insecure context**                                                    | WebAuthn requires a secure context (HTTPS or `localhost`). On insecure origins the SDK uses a popup.                                                                                                                          |
+| **Occluded / untrusted embedding**                                      | If the dialog's visibility can't be verified (no IntersectionObserver v2) and the embedder isn't a trusted host, the SDK uses a popup to prevent clickjacking. The user can also choose "Continue in new window" at any time. |
 
 In the worst case, `'iframe'` degrades to exactly the popup behavior — it never does worse than today.
 
@@ -78,10 +78,10 @@ Requirements that must already hold:
 
 ## Browser support
 
-| Capability | Chrome / Edge | Firefox | Safari |
-| --- | --- | --- | --- |
-| Passkey sign-in in iframe (`get`) | 84+ | 118+ | 15.5+ |
-| Passkey creation in iframe (`create`) | 123+ | 123+ | Not supported → popup fallback |
+| Capability                            | Chrome / Edge | Firefox | Safari                         |
+| ------------------------------------- | ------------- | ------- | ------------------------------ |
+| Passkey sign-in in iframe (`get`)     | 84+           | 118+    | 15.5+                          |
+| Passkey creation in iframe (`create`) | 123+          | 123+    | Not supported → popup fallback |
 
 Anything older falls back to the popup transport automatically.
 

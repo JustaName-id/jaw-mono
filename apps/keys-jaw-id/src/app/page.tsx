@@ -165,8 +165,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         // Always show account selection UI - never auto-authenticate
         checkForPasskeys();
 
-        // Send PopupReady to signal we're ready for business messages
-        communicator.sendPopupReady();
+        communicator.sendPopupReady(message.requestId);
       }
 
       // Handle selectSignerType event

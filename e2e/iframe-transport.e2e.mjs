@@ -216,7 +216,11 @@ async function run() {
       const keys = await assertSeeThroughCore(page);
       // Stable prewarm path: also assert theme sync + document transparency.
       if (keys && !keys.err) {
-        check('theme sync follows the dApp light mode (no .dark)', keys.hasDark === false, `htmlClass="${keys.htmlClass}"`);
+        check(
+          'theme sync follows the dApp light mode (no .dark)',
+          keys.hasDark === false,
+          `htmlClass="${keys.htmlClass}"`
+        );
         check('embedded document body is transparent', keys.bodyBg === 'rgba(0, 0, 0, 0)', `bodyBg=${keys.bodyBg}`);
       }
 
@@ -225,7 +229,11 @@ async function run() {
       const visibility = await page
         .$eval('dialog[data-jaw] iframe', (el) => getComputedStyle(el).visibility)
         .catch(() => '(unreadable)');
-      check('prewarmed iframe stays hidden until a request (reveal gating)', visibility === 'hidden', `visibility=${visibility}`);
+      check(
+        'prewarmed iframe stays hidden until a request (reveal gating)',
+        visibility === 'hidden',
+        `visibility=${visibility}`
+      );
     } else {
       // ─── GUARD PATH: untrusted host on a non-IOv2 engine ────────────────
       await page.goto(`${PLAYGROUND_URL}/wagmi`, { waitUntil: 'networkidle' });

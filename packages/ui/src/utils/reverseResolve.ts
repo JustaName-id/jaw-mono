@@ -1,6 +1,15 @@
 const REVERSE_ENDPOINT = 'https://api.justaname.id/ens/v2/reverse';
 const MAX_BATCH = 50;
-const IPFS_GATEWAY = 'https://ipfs.io/ipfs/';
+// ENS metadata service: a valid-cert proxy that resolves a name's avatar record server-side and
+// streams the bytes. We render this instead of the raw avatar URL so the signing/permission page
+// never connects directly to an attacker-controlled host — a host with a TLS cert error there
+// taints the page and blocks the WebAuthn (passkey) ceremony in strict browsers (e.g. Brave).
+const ENS_METADATA_AVATAR_BASE = 'https://metadata.ens.domains/mainnet/avatar/';
+
+/** The ENS metadata proxy URL for a name's avatar. */
+function ensMetadataAvatarUrl(name: string): string {
+  return ENS_METADATA_AVATAR_BASE + encodeURIComponent(name);
+}
 
 export interface ReverseInput {
   address: string;
@@ -28,17 +37,6 @@ interface ReverseResponse {
   result?: { data?: ReverseSlot | ReverseSlot[] | null };
 }
 
-/** Normalize a raw ENS `avatar` record to a renderable image URL, or null for schemes we can't put in an <img> (e.g. `eip155:` NFT refs). */
-function normalizeAvatarUrl(value: string | undefined): string | null {
-  if (!value) return null;
-  if (value.startsWith('https://') || value.startsWith('http://')) return value;
-  if (value.startsWith('data:image/')) return value;
-  if (value.startsWith('ipfs://')) {
-    return IPFS_GATEWAY + value.slice('ipfs://'.length).replace(/^ipfs\//, '');
-  }
-  return null;
-}
-
 async function fetchReverseBatch(
   batch: ReverseInput[],
   rpcUrl: string,
@@ -64,8 +62,10 @@ async function fetchReverseBatch(
     if (!slot?.name) continue;
     const identity: ResolvedIdentity = { name: slot.name };
     if (withRecords) {
-      const avatar = normalizeAvatarUrl(slot.records?.records?.texts?.find((t) => t.key === 'avatar')?.value);
-      if (avatar) identity.avatar = avatar;
+      // Gate on record presence only; the ENS metadata proxy resolves the record's value
+      // (https/ipfs/data/eip155 NFT) itself, so we don't parse it here.
+      const hasAvatar = !!slot.records?.records?.texts?.find((t) => t.key === 'avatar')?.value;
+      if (hasAvatar) identity.avatar = ensMetadataAvatarUrl(slot.name);
     }
     resolved[slot.address.toLowerCase()] = identity;
   }

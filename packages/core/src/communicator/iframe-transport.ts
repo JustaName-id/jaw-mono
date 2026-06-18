@@ -390,9 +390,13 @@ export class IframeTransport implements IframeTransportContract {
                     },
                     this.url.origin
                 );
+                return message.id;
             })
-            .then(() => {
-                return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupReady');
+            .then((handshakeId) => {
+                // Bind PopupReady to this handshake's id so a stale one can't resolve it.
+                return this.onMessage<ConfigMessage>(
+                    ({ event, requestId }) => event === 'PopupReady' && requestId === handshakeId
+                );
             })
             .then(() => {
                 this.ready = true;

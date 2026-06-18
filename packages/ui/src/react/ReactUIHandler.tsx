@@ -2471,7 +2471,7 @@ function SiweDialogWrapper({
     return msg;
   }, [request.data.message]);
 
-  // Extract app name from SIWE message
+  // Extract app name from SIWE message (sanitized for display by SiweDialog).
   const appName = useMemo(() => {
     const match = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/);
     return match ? match[1] : 'dApp';

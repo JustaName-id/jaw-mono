@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { standardErrorCodes } from '@jaw.id/core';
+import { sanitizeDisplayName, isSafeImageUrl } from '@jaw.id/ui';
 
 export interface UnsupportedMethodModalProps {
   origin: string;
@@ -20,6 +21,9 @@ export const UnsupportedMethodModal = ({
 }: UnsupportedMethodModalProps) => {
   const [isClosing, setIsClosing] = useState<boolean>(false);
 
+  // appName is externally-controlled (dApp metadata); sanitize before display.
+  const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
+
   const handleClose = () => {
     if (!isClosing) {
       setIsClosing(true);
@@ -34,12 +38,12 @@ export const UnsupportedMethodModal = ({
         {/* App Info */}
         {(appLogoUrl || appName) && (
           <div className="border-border mb-6 flex items-center gap-3 border-b pb-6">
-            {appLogoUrl && (
+            {isSafeImageUrl(appLogoUrl) && (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={appLogoUrl} alt={appName || 'App'} className="h-12 w-12 rounded-lg object-cover" />
+              <img src={appLogoUrl} alt={safeAppName} className="h-12 w-12 rounded-lg object-cover" />
             )}
             <div className="flex-1">
-              <p className="text-foreground text-sm font-medium">{appName || 'dApp'}</p>
+              <p className="text-foreground text-sm font-medium">{safeAppName}</p>
               <p className="text-muted-foreground text-xs">{origin}</p>
             </div>
           </div>

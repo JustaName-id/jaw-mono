@@ -104,7 +104,7 @@ const NestedDataView = ({
 
     return (
       <div className="w-full font-mono text-sm">
-        <Accordion type="multiple" className="w-full" defaultValue={[]}>
+        <Accordion type="multiple" className="w-full" defaultValue={[accordionId]}>
           <AccordionItem value={accordionId} className="border-none">
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
               <AccordionTrigger className="group cursor-pointer py-0.5 transition-opacity hover:no-underline hover:opacity-70 [&>svg]:hidden">
@@ -188,7 +188,7 @@ const NestedDataView = ({
 
     return (
       <div className="w-full font-mono text-sm">
-        <Accordion type="multiple" className="w-full" defaultValue={[]}>
+        <Accordion type="multiple" className="w-full" defaultValue={[accordionId]}>
           <AccordionItem value={accordionId} className="border-none">
             <div style={{ paddingLeft: `${paddingLeft}px` }}>
               <AccordionTrigger className="group cursor-pointer py-0.5 transition-opacity hover:no-underline hover:opacity-70 [&>svg]:hidden">
@@ -402,7 +402,7 @@ export const Eip712Dialog = ({
     >
       <div className="flex flex-col justify-between gap-6 max-md:h-full">
         {/* Main Content - Typed Data Tree View */}
-        <div className="flex max-h-[60vh] min-h-0 flex-col gap-3 overflow-y-auto max-md:flex-1">
+        <div className="flex min-h-0 flex-col gap-3 max-md:flex-1">
           {(() => {
             if (!typedData) {
               return (
@@ -414,13 +414,13 @@ export const Eip712Dialog = ({
             const rawTree = (
               <div
                 ref={scrollableRef}
-                className="bg-muted/30 dark:bg-muted/10 border-border flex overflow-y-auto rounded-[6px] border p-3"
+                className="bg-muted/30 dark:bg-muted/10 border-border max-h-[50vh] overflow-y-auto rounded-[6px] border p-3"
               >
                 <NestedDataView data={typedData} depth={0} />
               </div>
             );
             if (!clearSigned || clearSigned.rows.length === 0) {
-              return <div className="max-h-[50vh] flex-1">{rawTree}</div>;
+              return rawTree;
             }
             return (
               <div className="flex flex-col gap-2">
@@ -431,7 +431,7 @@ export const Eip712Dialog = ({
                   <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
                     Show raw details
                   </summary>
-                  <div className="mt-1 max-h-[40vh]">{rawTree}</div>
+                  <div className="mt-1">{rawTree}</div>
                 </details>
               </div>
             );

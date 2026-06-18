@@ -3,7 +3,13 @@
 import { useEffect, useId, useState } from 'react';
 import { useIsMobile } from '../../hooks';
 import { CopyIcon } from '../../icons';
-import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
+import {
+  reverseResolveAddresses,
+  getDisplayAddress,
+  getChainLabel,
+  sanitizeDisplayName,
+  isSafeImageUrl,
+} from '../../utils';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
@@ -31,6 +37,9 @@ export const SiweDialog = ({
 }: SiweDialogProps) => {
   const isMobile = useIsMobile();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+
+  // appName is externally-controlled (dApp metadata or SIWE message body); sanitize before display.
+  const displayName = sanitizeDisplayName(appName) || 'dApp';
 
   // Require fresh acknowledgement of the phishing warning for each request
   const ackId = useId();
@@ -115,12 +124,12 @@ export const SiweDialog = ({
     >
       <div className="flex h-full min-h-0 flex-col gap-3 max-md:pb-2">
         <div className="flex flex-1 flex-col items-center justify-center p-3.5">
-          {appLogoUrl && (
-            <img src={appLogoUrl} alt={`${appName} logo`} className="mb-3 h-[72px] w-[72px] rounded-full" />
+          {isSafeImageUrl(appLogoUrl) && (
+            <img src={appLogoUrl} alt={`${displayName} logo`} className="mb-3 h-[72px] w-[72px] rounded-full" />
           )}
           <div className="text-foreground flex flex-col items-center gap-1">
             <p className="text-2xl font-normal leading-[133%]">Sign in Request</p>
-            <p className="text-base font-bold leading-[150%]">{appName}</p>
+            <p className="text-base font-bold leading-[150%]">{displayName}</p>
           </div>
         </div>
         {/* Main Content Area - Large scrollable message box */}
