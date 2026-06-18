@@ -1,5 +1,9 @@
 # transportMode
 
+:::warning
+**Want the embedded dialog on Safari & Firefox?** These browsers can't verify the iframe's visibility (no IntersectionObserver v2), so by default JAW falls back to a popup there to prevent clickjacking. To enable the embedded dialog for your site on those browsers, message us on [Telegram](https://t.me/+RsFLPfky7-YxZjVk) and we'll add your domain to our trusted allow-list. Chromium-based browsers (Chrome, Edge, Brave) get the embedded dialog with no setup.
+:::
+
 How the SDK reaches `keys.jaw.id` in **CrossPlatform** mode: an embedded iframe dialog with automatic popup fallback (default), or a popup window.
 
 **Type:** `'popup' | 'iframe' | 'auto'`
