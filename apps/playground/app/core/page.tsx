@@ -19,6 +19,7 @@ import { RPC_METHODS, CATEGORIES, CATEGORY_LABELS, type RpcMethod, type MethodCa
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
 
 type ModeType = (typeof Mode)[keyof typeof Mode];
+type TransportModeType = 'popup' | 'iframe' | 'auto';
 
 const DEFAULT_CHAIN_ID_NUM = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
   ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
@@ -28,7 +29,8 @@ function buildSdk(
   mode: ModeType,
   uiHandler?: ReactUIHandler,
   paymasters?: Record<number, { url: string; context?: Record<string, unknown> }>,
-  theme?: JawTheme
+  theme?: JawTheme,
+  transportMode?: TransportModeType
 ) {
   return JAW.create({
     appName: 'JAW Playground',
@@ -40,6 +42,7 @@ function buildSdk(
       }),
       showTestnets: true,
       mode,
+      ...(transportMode && { transportMode }),
       uiHandler: mode === Mode.AppSpecific ? uiHandler : undefined,
     },
     apiKey: process.env.NEXT_PUBLIC_API_KEY || '',
@@ -49,7 +52,7 @@ function buildSdk(
   });
 }
 
-function CorePageContent({ mode }: { mode: ModeType }) {
+function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMode: TransportModeType }) {
   const [isConnected, setIsConnected] = useState(false);
   const [accounts, setAccounts] = useState<string[]>([]);
   const defaultChainId = String(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID || 84532);
@@ -63,7 +66,7 @@ function CorePageContent({ mode }: { mode: ModeType }) {
 
   const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
   const uiHandlerRef = useRef<ReactUIHandler>(new ReactUIHandler({ theme }));
-  const [sdk, setSdk] = useState(() => buildSdk(mode, uiHandlerRef.current, undefined, theme));
+  const [sdk, setSdk] = useState(() => buildSdk(mode, uiHandlerRef.current, undefined, theme, transportMode));
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
 
   // Theme changes update the handler in-place — no SDK recreation, no disconnect
@@ -82,14 +85,14 @@ function CorePageContent({ mode }: { mode: ModeType }) {
             ...(chain.context && { context: chain.context }),
           };
         }
-        setSdk(buildSdk(mode, uiHandlerRef.current, paymasters, theme));
+        setSdk(buildSdk(mode, uiHandlerRef.current, paymasters, theme, transportMode));
         setPmConfig(config);
       } else {
-        setSdk(buildSdk(mode, uiHandlerRef.current, undefined, theme));
+        setSdk(buildSdk(mode, uiHandlerRef.current, undefined, theme, transportMode));
         setPmConfig(undefined);
       }
     },
-    [theme, mode]
+    [theme, mode, transportMode]
   );
 
   useEffect(() => {
@@ -243,6 +246,53 @@ function CorePageContent({ mode }: { mode: ModeType }) {
               : 'Passkey operations handled via keys.jaw.id'}
           </p>
         </Card>
+
+        {/* Transport Toggle (CrossPlatform only — how keys.jaw.id is reached) */}
+        {mode === Mode.CrossPlatform && (
+          <Card className="p-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground text-sm font-medium">Transport:</span>
+                <span
+                  className={`rounded-full px-3 py-1 text-sm font-medium ${
+                    transportMode === 'popup'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                  }`}
+                >
+                  {transportMode === 'popup' ? 'Popup' : `Iframe (${transportMode})`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href="/core"
+                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    transportMode !== 'popup'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Iframe (default)
+                </a>
+                <a
+                  href="/core?transport=popup"
+                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    transportMode === 'popup'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Popup
+                </a>
+              </div>
+            </div>
+            <p className="text-muted-foreground mt-2 text-xs">
+              {transportMode === 'popup'
+                ? 'Legacy opt-out: keys.jaw.id opens in a popup window'
+                : 'Default: embedded dialog with automatic popup fallback (Safari passkey creation, insecure contexts, occluded UI)'}
+            </p>
+          </Card>
+        )}
 
         {/* Theme Picker (only for AppSpecific mode which uses ReactUIHandler) */}
         {mode === Mode.AppSpecific && <ThemePicker theme={theme} onThemeChange={handleThemeChange} />}
@@ -405,10 +455,14 @@ function CorePageContent({ mode }: { mode: ModeType }) {
 function CorePageInner() {
   const searchParams = useSearchParams();
   const modeParam = searchParams.get('mode');
+  const transportParam = searchParams.get('transport');
 
   const mode: ModeType = modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
+  // SDK default is 'auto' (iframe primary); ?transport=popup is the opt-out.
+  const transportMode: TransportModeType =
+    transportParam === 'popup' ? 'popup' : transportParam === 'iframe' ? 'iframe' : 'auto';
 
-  return <CorePageContent key={mode} mode={mode} />;
+  return <CorePageContent key={`${mode}-${transportMode}`} mode={mode} transportMode={transportMode} />;
 }
 
 export default function CorePage() {
