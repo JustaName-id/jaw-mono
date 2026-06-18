@@ -548,7 +548,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               debugLog('✅ Transaction response:', response);
               await pendingRequest.onApprove(response);
               setState('success');
-              scheduleClose(1500);
+              scheduleClose(100);
             } catch (err) {
               console.error('❌ Failed to send transaction:', err);
               setError(err instanceof Error ? err.message : 'Failed to send transaction');
@@ -626,7 +626,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 await pendingRequest.onApprove(signature);
                 debugLog('✅ SIWE signature sent successfully');
                 setState('success');
-                scheduleClose(1500);
+                scheduleClose(100);
               } catch (err) {
                 console.error('❌ Failed to send SIWE signature:', err);
                 setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -665,7 +665,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               await pendingRequest.onApprove(signature);
               debugLog('✅ Signature sent successfully');
               setState('success');
-              scheduleClose(1500);
+              scheduleClose(100);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -736,7 +736,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               await pendingRequest.onApprove(signature);
               debugLog('✅ Typed data signature sent successfully');
               setState('success');
-              scheduleClose(1500);
+              scheduleClose(100);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -784,7 +784,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               await pendingRequest.onApprove(result);
               debugLog('✅ Permission granted successfully');
               setState('success');
-              scheduleClose(1500);
+              scheduleClose(100);
             } catch (err) {
               console.error('❌ Failed to grant permission:', err);
               setError(err instanceof Error ? err.message : 'Failed to grant permission');
@@ -832,7 +832,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               await pendingRequest.onApprove(result);
               debugLog('✅ Permission revoked successfully');
               setState('success');
-              scheduleClose(1500);
+              scheduleClose(100);
             } catch (err) {
               console.error('❌ Failed to revoke permission:', err);
               setError(err instanceof Error ? err.message : 'Failed to revoke permission');
@@ -914,37 +914,14 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       );
     }
 
-    // Show success state. In the embedded iframe the dialog is a small card, so
-    // render a compact version (no full-screen centering, smaller check) that
-    // fits the drawer/floating card instead of a large centered block.
+    // 'success' is a terminal marker only — it renders no UI. Each completed flow
+    // closes the dialog immediately (see scheduleClose on every onSuccess),
+    // matching the connect flow; the dApp surfaces its own confirmation. Keeping
+    // the state (rather than dropping it) preserves the cross-flow reset sentinel
+    // and the `state !== 'success'` modal-hide guards; returning null avoids a
+    // success interstitial flashing during the brief close window.
     if (state === 'success') {
-      const embedded = communicator.getContext() === 'embedded';
-      return (
-        <div
-          className={
-            embedded ? 'flex items-center justify-center p-6' : 'flex min-h-screen items-center justify-center'
-          }
-        >
-          <div className="text-center">
-            <div
-              className={`mx-auto flex items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30 ${
-                embedded ? 'mb-3 h-12 w-12' : 'mb-4 h-16 w-16'
-              }`}
-            >
-              <svg
-                className={`text-emerald-600 dark:text-emerald-400 ${embedded ? 'h-6 w-6' : 'h-8 w-8'}`}
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h3 className={`text-foreground font-bold ${embedded ? 'mb-1 text-base' : 'mb-2 text-xl'}`}>Success!</h3>
-            <p className="text-muted-foreground text-sm">Operation completed successfully</p>
-          </div>
-        </div>
-      );
+      return null;
     }
 
     // Show error state
@@ -1215,7 +1192,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 debugLog('✅ SIWE response:', response);
                 await pendingRequest.onApprove(response);
                 setState('success');
-                scheduleClose(1500);
+                scheduleClose(100);
               } catch (err) {
                 console.error('❌ Failed to approve connection with SIWE:', err);
                 setError(err instanceof Error ? err.message : 'Failed to approve connection');
@@ -1264,7 +1241,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
               await pendingRequest.onApprove(response);
               setState('success');
-              scheduleClose(1500);
+              scheduleClose(100);
             } catch (err) {
               console.error('❌ Failed to approve connection:', err);
               setError(err instanceof Error ? err.message : 'Failed to approve connection');
