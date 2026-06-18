@@ -81,11 +81,17 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   // session/crypto state, which a remount would reset and break the connect).
   const active = embedded && mounted;
 
+  // Anchored to the TOP of the viewport (like Porto's dialog) rather than
+  // centered/bottom, so it appears near where the user's attention is and drops
+  // in from the top edge instead of rising from the bottom.
   const card =
     presentation === 'drawer'
-      ? `fixed inset-x-0 bottom-0 max-h-[85vh] rounded-t-2xl ${entered ? 'translate-y-0' : 'translate-y-full'}`
-      : `fixed left-1/2 top-1/2 w-[450px] max-w-[calc(100vw-2rem)] max-h-[85vh] -translate-x-1/2 ${
-          entered ? '-translate-y-1/2 scale-100 opacity-100' : '-translate-y-1/2 scale-95 opacity-0'
+      ? // Mobile: full-width sheet at the top, sliding down into view.
+        `fixed inset-x-0 top-0 max-h-[85vh] rounded-b-2xl ${entered ? 'translate-y-0' : '-translate-y-full'}`
+      : // Desktop: floating card near the top, centered horizontally, dropping in
+        // a touch from above with a fade.
+        `fixed left-1/2 top-6 w-[450px] max-w-[calc(100vw-2rem)] max-h-[85vh] -translate-x-1/2 ${
+          entered ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
         } rounded-2xl`;
 
   // Click on the empty area (the overlay itself, not the card) dismisses the
