@@ -208,16 +208,32 @@ async function run() {
       // mounts the iframe (the refresh has populated the registry by then).
       //
       // This path deliberately DRIVES A CONNECT to mount the iframe (the only way
-      // it appears on non-IOv2 engines), so the dialog is SHOWN by design — the
-      // reveal-gating assertion (iframe hidden until a request) does NOT apply
-      // here and is intentionally omitted. Reveal gating is covered by the
+      // it appears on non-IOv2 engines), so the dialog is SHOWN by design. On
+      // Chromium we assert the COMPLEMENT of reveal-gating: after a request, the
+      // iframe is actually revealed (visible). The hidden state is covered by the
       // untrusted Chromium prewarm run below (the `expectsIframe` branch), which
-      // loads the page WITHOUT a connect and asserts the prewarmed iframe stays
-      // hidden. The goal here is only cross-engine see-through after a connect.
+      // loads the page WITHOUT a connect.
       await page.goto(`${PLAYGROUND_URL}/wagmi`, { waitUntil: 'networkidle' });
       await page.waitForTimeout(4000); // let /api/trusted-hosts refresh populate
       await driveConnect(page);
       await assertSeeThroughCore(page);
+
+      // Reveal-shown check only on Chromium: there the iframe prewarms on load
+      // and the connect simply reveals it, deterministically. On Firefox/WebKit
+      // the trusted iframe mounts late (after the /api/trusted-hosts refresh) and
+      // its reveal timing relative to the driven connect is engine-dependent, so
+      // a visible/hidden assertion would be flaky — the cross-engine guarantee
+      // asserted here is the see-through core (mounted, embedded, color-scheme).
+      if (expectsIframe) {
+        const shownVisibility = await page
+          .$eval('dialog[data-jaw] iframe', (el) => getComputedStyle(el).visibility)
+          .catch(() => '(unreadable)');
+        check(
+          'iframe is revealed after a connect (reveal gating, shown path)',
+          shownVisibility === 'visible',
+          `visibility=${shownVisibility}`
+        );
+      }
     } else if (expectsIframe) {
       // ─── SUCCESS PATH: Chromium, iframe prewarms on load ────────────────
       await page.goto(`${PLAYGROUND_URL}/wagmi`, { waitUntil: 'networkidle' });
