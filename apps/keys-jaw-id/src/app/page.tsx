@@ -914,14 +914,25 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       );
     }
 
-    // Show success state
+    // Show success state. In the embedded iframe the dialog is a small card, so
+    // render a compact version (no full-screen centering, smaller check) that
+    // fits the drawer/floating card instead of a large centered block.
     if (state === 'success') {
+      const embedded = communicator.getContext() === 'embedded';
       return (
-        <div className="flex min-h-screen items-center justify-center">
+        <div
+          className={
+            embedded ? 'flex items-center justify-center p-6' : 'flex min-h-screen items-center justify-center'
+          }
+        >
           <div className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
+            <div
+              className={`mx-auto flex items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30 ${
+                embedded ? 'mb-3 h-12 w-12' : 'mb-4 h-16 w-16'
+              }`}
+            >
               <svg
-                className="h-8 w-8 text-emerald-600 dark:text-emerald-400"
+                className={`text-emerald-600 dark:text-emerald-400 ${embedded ? 'h-6 w-6' : 'h-8 w-8'}`}
                 fill="none"
                 stroke="currentColor"
                 viewBox="0 0 24 24"
@@ -929,8 +940,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
               </svg>
             </div>
-            <h3 className="text-foreground mb-2 text-xl font-bold">Success!</h3>
-            <p className="text-muted-foreground">Operation completed successfully</p>
+            <h3 className={`text-foreground font-bold ${embedded ? 'mb-1 text-base' : 'mb-2 text-xl'}`}>Success!</h3>
+            <p className="text-muted-foreground text-sm">Operation completed successfully</p>
           </div>
         </div>
       );

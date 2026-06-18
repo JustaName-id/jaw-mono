@@ -267,7 +267,7 @@ describe('SDK <-> keys integration over the iframe transport', () => {
       await bridgeIframe(deliver);
       bootKeysApp(keysApp, (_message, app) => {
         // Instead of answering, the embedded dialog escapes to a popup
-        // (user clicked "Continue in new window")
+        // (e.g. a programmatic switch to the popup transport)
         app.requestSwitchToPopup('user');
       });
 
