@@ -135,6 +135,17 @@ function WagmiPageContent({
   const [isExecuting, setIsExecuting] = useState(false);
   const [ensName, setEnsName] = useState<string | null>(null);
 
+  // Theme sync: push theme changes to the live keys dialog via the connector's
+  // setTheme (re-themes in place) instead of rebuilding the connector. Calling
+  // connector.setTheme never force-creates a provider, so it's safe to run on
+  // every theme change — no duplicate prewarmed iframes (incl. under StrictMode).
+  useEffect(() => {
+    const jaw = connectors.find((c) => c.id === 'jaw') as
+      | { setTheme?: (theme: JawTheme | undefined) => void }
+      | undefined;
+    jaw?.setTheme?.(theme);
+  }, [theme, connectors]);
+
   useEffect(() => {
     if (!address || !chainId) {
       setEnsName(null);
@@ -711,7 +722,7 @@ function WagmiPageInner() {
   return (
     <WagmiProviders mode={mode} paymasters={paymasters} theme={theme} transportMode={transportMode}>
       <WagmiPageContent
-        key={`${mode}-${transportMode}-${JSON.stringify(theme)}`}
+        key={`${mode}-${transportMode}`}
         mode={mode}
         transportMode={transportMode}
         pmConfig={pmConfig}
