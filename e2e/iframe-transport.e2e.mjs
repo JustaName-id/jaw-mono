@@ -67,7 +67,11 @@ const check = (name, ok, detail = '') => {
 async function reachable(url) {
   try {
     const r = await fetch(url, { signal: AbortSignal.timeout(4000) });
-    return r.ok || r.status === 404; // server is up
+    // Up = the server responded with anything that isn't a server error. fetch
+    // follows 3xx by default (so a Next trailing-slash redirect resolves to its
+    // 200), and a 4xx on the probed path (404/401/…) still means it's reachable —
+    // only a 5xx or a thrown network error counts as down.
+    return r.status < 500;
   } catch {
     return false;
   }
