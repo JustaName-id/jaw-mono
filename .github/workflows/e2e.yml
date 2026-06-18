@@ -4,15 +4,14 @@ name: E2E (iframe transport)
 # engines (chromium, firefox, webkit≈Safari). It does NOT drive the passkey
 # flow (Chromium-only virtual authenticator), so it needs no API key — only the
 # two dev servers and the prewarmed, load-time iframe state.
+#
+# MANUAL-ONLY (not part of CI): this is slow and flaky on hosted runners — the
+# `playwright install --with-deps` step downloads 3 browsers + apt system deps
+# and can exceed the job timeout. Gating every PR on it isn't worth it. Run it
+# locally (see e2e/README.md) or on demand via the Actions "Run workflow" button.
+# The transport/theme guarantees are covered by the unit + integration suites.
 
 on:
-  pull_request:
-    paths:
-      - 'packages/core/src/communicator/**'
-      - 'apps/keys-jaw-id/**'
-      - 'apps/playground/**'
-      - 'e2e/**'
-      - '.github/workflows/e2e.yml'
   workflow_dispatch:
 
 permissions:
