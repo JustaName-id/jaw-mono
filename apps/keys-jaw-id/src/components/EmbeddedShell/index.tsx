@@ -24,8 +24,9 @@ export interface EmbeddedShellProps {
  * pointer events, so a click on the empty area (outside the card) dismisses
  * the flow via DialogClose — the host hides the dialog and the dApp is
  * interactive again. The app lays out as a bottom drawer (≤460px) or a
- * centered floating dialog, with its own enter animation so the host never
- * shows an unstyled frame. It also owns the iframe escape hatches:
+ * centered floating dialog. The host never shows an unstyled frame because the
+ * SDK keeps the iframe hidden until reveal gating fires (ready && visible). It
+ * also owns the iframe escape hatches:
  * EnsureVisibility (clickjacking guard) and the WebAuthn-unsupported event
  * (Bitwarden/Firefox, Safari create()) — both switch the flow to a popup.
  *
@@ -34,7 +35,6 @@ export interface EmbeddedShellProps {
 export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   const embedded = communicator.getContext() === 'embedded';
   const [presentation, setPresentation] = useState<EmbeddedPresentation>('floating');
-  const [entered, setEntered] = useState(false);
   // Context detection needs `window` (opener/parent), so the server always
   // renders the plain children. Gate the shell to post-mount so the first
   // client render matches the SSR output (avoids a hydration mismatch);
@@ -57,12 +57,6 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     return () => query.removeEventListener('change', onChange);
   }, [embedded]);
 
-  useEffect(() => {
-    if (!embedded) return;
-    const frame = requestAnimationFrame(() => setEntered(true));
-    return () => cancelAnimationFrame(frame);
-  }, [embedded]);
-
   // Passkey creation failed because this browser/extension cannot
   // create credentials inside a cross-origin iframe — continue in a popup.
   useEffect(() => {
@@ -82,17 +76,13 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   const active = embedded && mounted;
 
   // Anchored to the TOP of the viewport (like Porto's dialog) rather than
-  // centered/bottom, so it appears near where the user's attention is and drops
-  // in from the top edge instead of rising from the bottom.
+  // centered/bottom, so it appears near where the user's attention is.
   const card =
     presentation === 'drawer'
-      ? // Mobile: full-width sheet at the top, sliding down into view.
-        `fixed inset-x-0 top-0 max-h-[85vh] rounded-b-2xl ${entered ? 'translate-y-0' : '-translate-y-full'}`
-      : // Desktop: floating card near the top, centered horizontally, dropping in
-        // a touch from above with a fade.
-        `fixed left-1/2 top-6 w-[450px] max-w-[calc(100vw-2rem)] max-h-[85vh] -translate-x-1/2 ${
-          entered ? 'translate-y-0 opacity-100' : '-translate-y-2 opacity-0'
-        } rounded-2xl`;
+      ? // Mobile: full-width sheet at the top.
+        `fixed inset-x-0 top-0 max-h-[85vh] rounded-b-2xl`
+      : // Desktop: floating card near the top, centered horizontally.
+        `fixed left-1/2 top-6 w-[450px] max-w-[calc(100vw-2rem)] max-h-[85vh] -translate-x-1/2 rounded-2xl`;
 
   // Click on the empty area (the overlay itself, not the card) dismisses the
   // flow. requestClose('cancelled') makes the SDK reject the pending request
@@ -115,11 +105,7 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
           which must not stretch the card to the full viewport */}
       <div
         role={active ? 'document' : undefined}
-        className={
-          active
-            ? `bg-background overflow-y-auto shadow-xl transition-all duration-200 [&_.min-h-screen]:min-h-0 ${card}`
-            : 'contents'
-        }
+        className={active ? `bg-background overflow-y-auto shadow-xl [&_.min-h-screen]:min-h-0 ${card}` : 'contents'}
       >
         <EnsureVisibility communicator={communicator} active={active}>
           {children}
