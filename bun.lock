@@ -67,7 +67,7 @@
         "@jaw.id/core": "workspace:*",
         "react": "19.2.6",
         "react-dom": "19.2.6",
-        "vocs": "^2.0.10",
+        "vocs": "^2.0.15",
         "waku": "^1.0.0-beta.0",
       },
       "devDependencies": {
@@ -112,7 +112,7 @@
     },
     "packages/cli": {
       "name": "@jaw.id/cli",
-      "version": "0.1.1",
+      "version": "0.1.6",
       "bin": {
         "jaw": "./bin/run.js",
       },
@@ -135,7 +135,7 @@
     },
     "packages/core": {
       "name": "@jaw.id/core",
-      "version": "0.4.0",
+      "version": "0.4.5",
       "dependencies": {
         "axios": "1.13.5",
         "eventemitter3": "5.0.1",
@@ -153,7 +153,7 @@
     },
     "packages/ui": {
       "name": "@jaw.id/ui",
-      "version": "0.4.2",
+      "version": "0.4.15",
       "dependencies": {
         "@hookform/resolvers": "^5.2.2",
         "@jaw.id/core": "0.4.0",
@@ -194,7 +194,7 @@
     },
     "packages/wagmi": {
       "name": "@jaw.id/wagmi",
-      "version": "0.1.17",
+      "version": "0.1.22",
       "dependencies": {
         "@jaw.id/core": "0.4.0",
         "@wagmi/core": "^3.0.0",
@@ -4420,7 +4420,7 @@
 
     "vitest": ["vitest@3.2.4", "", { "dependencies": { "@types/chai": "^5.2.2", "@vitest/expect": "3.2.4", "@vitest/mocker": "3.2.4", "@vitest/pretty-format": "^3.2.4", "@vitest/runner": "3.2.4", "@vitest/snapshot": "3.2.4", "@vitest/spy": "3.2.4", "@vitest/utils": "3.2.4", "chai": "^5.2.0", "debug": "^4.4.1", "expect-type": "^1.2.1", "magic-string": "^0.30.17", "pathe": "^2.0.3", "picomatch": "^4.0.2", "std-env": "^3.9.0", "tinybench": "^2.9.0", "tinyexec": "^0.3.2", "tinyglobby": "^0.2.14", "tinypool": "^1.1.1", "tinyrainbow": "^2.0.0", "vite": "^5.0.0 || ^6.0.0 || ^7.0.0-0", "vite-node": "3.2.4", "why-is-node-running": "^2.3.0" }, "peerDependencies": { "@edge-runtime/vm": "*", "@types/debug": "^4.1.12", "@types/node": "^18.0.0 || ^20.0.0 || >=22.0.0", "@vitest/browser": "3.2.4", "@vitest/ui": "3.2.4", "happy-dom": "*", "jsdom": "*" }, "optionalPeers": ["@edge-runtime/vm", "@types/debug", "@types/node", "@vitest/browser", "@vitest/ui", "happy-dom", "jsdom"], "bin": { "vitest": "vitest.mjs" } }, "sha512-LUCP5ev3GURDysTWiP47wRRUpLKMOfPh+yKTx3kVIEiu5KOMeqzpnYNsKyOoVrULivR8tLcks4+lga33Whn90A=="],
 
-    "vocs": ["vocs@2.0.10", "", { "dependencies": { "@base-ui/react": "^1.0.0", "@codesandbox/sandpack-react": "^2.20.0", "@hono/node-server": "^2.0.2", "@iconify-json/lucide": "^1.2.82", "@iconify-json/simple-icons": "^1.2.65", "@iconify-json/vscode-icons": "^1.2.39", "@iconify/types": "^2.0.0", "@iconify/utils": "^3.1.0", "@mdx-js/mdx": "^3.1.1", "@mdx-js/react": "^3.1.1", "@mdx-js/rollup": "^3.1.1", "@modelcontextprotocol/sdk": "^1.25.2", "@remix-run/node-fetch-server": "^0.13.0", "@shikijs/rehype": "^3.20.0", "@shikijs/transformers": "^3.20.0", "@shikijs/twoslash": "^3.20.0", "@shikijs/types": "^3.20.0", "@svgr/core": "^8.1.0", "@svgr/plugin-jsx": "^8.1.0", "@tailwindcss/vite": "^4.3.0", "@takumi-rs/image-response": "^0.62.7", "@takumi-rs/wasm": "^0.62.7", "@vitejs/plugin-react": "^6.0.2", "@vitejs/plugin-rsc": "^0.5.26", "cac": "^6.7.14", "cva": "npm:class-variance-authority@^0.7.1", "debug": "^4.4.0", "esast-util-from-js": "^2.0.1", "estree-util-value-to-estree": "^3.5.0", "estree-util-visit": "^2.0.0", "extend": "^3.0.2", "github-slugger": "^2.0.0", "hono": "^4.12.14", "image-size": "^2.0.2", "lz-string": "^1.5.0", "magic-string": "^0.30.21", "mdast-util-from-markdown": "^2.0.2", "mdast-util-gfm": "^3.1.0", "mdast-util-mdx": "^3.0.0", "mdast-util-to-hast": "^13.2.1", "mdast-util-to-markdown": "^2.1.2", "mdast-util-to-string": "^4.0.0", "micromark-extension-gfm": "^3.0.0", "minisearch": "^7.2.0", "nuqs": "^2.4.3", "react-error-boundary": "^6.0.2", "rehype-autolink-headings": "^7.1.0", "rehype-slug": "^6.0.0", "rehype-stringify": "^10.0.1", "remark-directive": "^4.0.0", "remark-frontmatter": "^5.0.0", "remark-gfm": "^4.0.1", "remark-mdx": "^3.1.1", "remark-mdx-frontmatter": "^5.2.0", "remark-parse": "^11.0.0", "remark-rehype": "^11.1.2", "remark-stringify": "^11.0.0", "shiki": "^3.20.0", "sucrase": "^3.35.1", "tailwindcss": "^4.3.0", "tailwindcss-logical": "^4.1.0", "tsx": "^4.21.0", "twoslash": "^0.3.6", "unified": "^11.0.5", "unist-util-visit": "^5.0.0", "unplugin-icons": "^22.5.0", "urlpattern-polyfill": "^10.1.0", "vfile": "^6.0.3", "vite-plugin-arraybuffer": "^0.1.1", "vite-plugin-wasm": "^3.6.0", "yaml": "^2.8.2", "zod": "^4.3.5" }, "peerDependencies": { "@vocs/twoslash-rust": "^0.1.0", "mermaid": "^11", "react": "^19", "react-dom": "^19", "vite": "^8", "waku": "^1.0.0-beta.0" }, "optionalPeers": ["@vocs/twoslash-rust", "mermaid", "vite", "waku"], "bin": { "vocs": "dist/cli.js" } }, "sha512-EVJRXLBxV0/AODmRLZF+be6VTquUX5JeJXYWayer/6yS6UCrRsQSEurhRmSYMjlQhA/VyLVWdtegsZtJhimbAg=="],
+    "vocs": ["vocs@2.0.15", "", { "dependencies": { "@base-ui/react": "^1.0.0", "@codesandbox/sandpack-react": "^2.20.0", "@hono/node-server": "^2.0.2", "@iconify-json/lucide": "^1.2.82", "@iconify-json/simple-icons": "^1.2.65", "@iconify-json/vscode-icons": "^1.2.39", "@iconify/types": "^2.0.0", "@iconify/utils": "^3.1.0", "@mdx-js/mdx": "^3.1.1", "@mdx-js/react": "^3.1.1", "@mdx-js/rollup": "^3.1.1", "@modelcontextprotocol/sdk": "^1.25.2", "@remix-run/node-fetch-server": "^0.13.0", "@shikijs/rehype": "^3.20.0", "@shikijs/transformers": "^3.20.0", "@shikijs/twoslash": "^3.20.0", "@shikijs/types": "^3.20.0", "@svgr/core": "^8.1.0", "@svgr/plugin-jsx": "^8.1.0", "@tailwindcss/vite": "^4.3.0", "@takumi-rs/image-response": "^0.62.7", "@takumi-rs/wasm": "^0.62.7", "@vitejs/plugin-react": "^6.0.2", "@vitejs/plugin-rsc": "^0.5.26", "cac": "^6.7.14", "cva": "npm:class-variance-authority@^0.7.1", "debug": "^4.4.0", "esast-util-from-js": "^2.0.1", "estree-util-value-to-estree": "^3.5.0", "estree-util-visit": "^2.0.0", "extend": "^3.0.2", "github-slugger": "^2.0.0", "hono": "^4.12.14", "image-size": "^2.0.2", "lz-string": "^1.5.0", "magic-string": "^0.30.21", "mdast-util-from-markdown": "^2.0.2", "mdast-util-gfm": "^3.1.0", "mdast-util-mdx": "^3.0.0", "mdast-util-to-hast": "^13.2.1", "mdast-util-to-markdown": "^2.1.2", "mdast-util-to-string": "^4.0.0", "micromark-extension-gfm": "^3.0.0", "minisearch": "^7.2.0", "nuqs": "^2.4.3", "react-error-boundary": "^6.0.2", "rehype-autolink-headings": "^7.1.0", "rehype-slug": "^6.0.0", "rehype-stringify": "^10.0.1", "remark-directive": "^4.0.0", "remark-frontmatter": "^5.0.0", "remark-gfm": "^4.0.1", "remark-mdx": "^3.1.1", "remark-mdx-frontmatter": "^5.2.0", "remark-parse": "^11.0.0", "remark-rehype": "^11.1.2", "remark-stringify": "^11.0.0", "shiki": "^3.20.0", "sucrase": "^3.35.1", "tailwindcss": "^4.3.0", "tailwindcss-logical": "^4.1.0", "tsx": "^4.21.0", "twoslash": "^0.3.6", "unified": "^11.0.5", "unist-util-visit": "^5.0.0", "unplugin-icons": "^22.5.0", "urlpattern-polyfill": "^10.1.0", "vfile": "^6.0.3", "vite-plugin-arraybuffer": "^0.1.1", "vite-plugin-wasm": "^3.6.0", "yaml": "^2.8.2", "zod": "^4.3.5" }, "peerDependencies": { "@vocs/twoslash-rust": "^0.1.0", "mermaid": "^11", "react": "^19", "react-dom": "^19", "vite": "^8", "waku": "^1.0.0-beta.3" }, "optionalPeers": ["@vocs/twoslash-rust", "mermaid", "vite", "waku"], "bin": { "vocs": "dist/cli.js" } }, "sha512-Q7PrHD2z22qc3g2Ly6D/wZfp7oxnzMINE9a4O0aXjoYCHih0pfKGuHwzM7mRDSr/kCe1k3bXxUfZMaW6aoDYxQ=="],
 
     "vscode-uri": ["vscode-uri@3.1.0", "", {}, "sha512-/BpdSx+yCQGnCvecbyXdxHDkuk55/G3xwnC0GqY4gmQ3j+A+g8kzzgB4Nk/SINjqn6+waqw3EgbVF2QKExkRxQ=="],
 
