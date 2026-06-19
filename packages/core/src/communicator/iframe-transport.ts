@@ -398,7 +398,16 @@ export class IframeTransport implements IframeTransportContract {
                 this.hide();
             }
 
-            if (message?.event === 'PopupUnload' && !this.reloading) {
+            // Only an established, current session may be torn down by a
+            // PopupUnload. The keys app fires `pagehide` (→ PopupUnload) for any
+            // transient document teardown, including the initial cold-start load
+            // and the document the SDK itself navigates away from during a prewarm
+            // reload. Honouring those would dismiss a dialog that is still
+            // handshaking (`!ready`) or being reloaded (`reloading`) — rejecting
+            // the in-flight handshake and closing the dialog before the user can
+            // act. Gate on a live, non-reloading session so only a genuine unload
+            // of the current keys document resets the transport.
+            if (message?.event === 'PopupUnload' && this.ready && !this.reloading) {
                 this.ready = false;
                 this.dismiss();
             }

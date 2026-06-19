@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 
 import type { PopupCommunicator } from '../../lib/popup-communicator';
 import { isOccluded, supportsIOv2, type VisibilityEntry } from '../../lib/embedded-ui';
@@ -27,13 +27,21 @@ export interface EnsureVisibilityProps {
  * them (the children hold the keys session/crypto state).
  */
 export function EnsureVisibility({ communicator, active, children }: EnsureVisibilityProps) {
-  const containerRef = useRef<HTMLDivElement | null>(null);
   const [occluded, setOccluded] = useState(false);
   const guardActive = active && communicator.getContext() === 'embedded';
 
   useEffect(() => {
-    const container = containerRef.current;
-    if (!guardActive || !supportsIOv2() || !container) return;
+    if (!guardActive || !supportsIOv2()) return;
+    // Observe the iframe ROOT, not an inner wrapper. Dialog screens (Connect,
+    // Signature, Permission, …) render through a Radix Portal to document.body
+    // with position:fixed, so any inner wrapper around `children` collapses to
+    // zero height and IOv2 reports a zero-area element as isVisible:false (a
+    // permanent false "covered" warning). The root always contains the visible
+    // UI as descendants — and descendants never self-occlude in IOv2 — so this
+    // reflects only HOST occlusion, which is exactly what the guard detects.
+    // global.css gives html.jaw-embedded min-height:100vh so the root is never
+    // zero-area on a screen whose content is entirely fixed/portaled.
+    const container = document.documentElement;
 
     const observer = new IntersectionObserver(
       (entries) => {
@@ -48,7 +56,7 @@ export function EnsureVisibility({ communicator, active, children }: EnsureVisib
   }, [guardActive]);
 
   return (
-    <div ref={containerRef} className={guardActive ? undefined : 'contents'}>
+    <div className={guardActive ? undefined : 'contents'}>
       <div
         className={
           !guardActive

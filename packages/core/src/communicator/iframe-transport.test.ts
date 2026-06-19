@@ -491,6 +491,28 @@ describe('IframeTransport', () => {
             expect(transport.isAlive()).toBe(false);
             expect(getDialog()?.hasAttribute('open')).toBe(false);
         });
+
+        it('ignores a PopupUnload received during the handshake (before ready)', async () => {
+            // Cold-start race: the keys app fires `pagehide` (→ PopupUnload) for a
+            // transient load — or for a document the SDK itself navigates away from
+            // during a prewarm reload — while the handshake is still in flight. That
+            // must NOT abort the handshake: there is no established session to tear
+            // down, and dismissing here rejects the in-flight handshake listener,
+            // closing the dialog before the user can act.
+            const readyPromise = transport.ensureReady();
+            mockContentWindow();
+
+            dispatchMessageEvent({
+                data: { event: 'PopupUnload', id: 'unload-id' },
+                origin: urlOrigin,
+            });
+
+            // The handshake still completes and the transport becomes alive.
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await expect(readyPromise).resolves.toBeDefined();
+            expect(transport.isAlive()).toBe(true);
+        });
     });
 
     describe('reload', () => {
