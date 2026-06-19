@@ -331,7 +331,13 @@ export class IframeTransport implements IframeTransportContract {
         iframe.src = this.url.toString();
         iframe.setAttribute(
             'allow',
-            `publickey-credentials-get ${this.url.origin}; publickey-credentials-create ${this.url.origin}`
+            // WebAuthn delegation (passkeys) + clipboard-write so the embedded
+            // keys dialog's "copy" actions (address, tx data, SIWE message) work:
+            // a cross-origin iframe is denied clipboard-write by default unless
+            // the embedder delegates it here.
+            `publickey-credentials-get ${this.url.origin}; ` +
+                `publickey-credentials-create ${this.url.origin}; ` +
+                `clipboard-write ${this.url.origin}`
         );
         iframe.setAttribute(
             'sandbox',

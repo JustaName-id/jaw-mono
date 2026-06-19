@@ -301,7 +301,7 @@ export const TransactionDialog = ({
                           height={14}
                           onClick={() => {
                             if (typeof window !== 'undefined' && navigator?.clipboard) {
-                              navigator.clipboard.writeText(currentTransaction.to);
+                              navigator.clipboard.writeText(currentTransaction.to).catch(() => undefined);
                               setIsAddressCopied((prev) => ({
                                 ...prev,
                                 'single-to': true,
@@ -487,7 +487,7 @@ export const TransactionDialog = ({
                         height={16}
                         onClick={() => {
                           if (typeof window !== 'undefined' && navigator?.clipboard) {
-                            navigator.clipboard.writeText(currentTransaction?.data ?? '');
+                            navigator.clipboard.writeText(currentTransaction?.data ?? '').catch(() => undefined);
                             setIsDataCopied({ ...isDataCopied, 0: true });
                             setTimeout(
                               () =>
@@ -584,7 +584,7 @@ export const TransactionDialog = ({
                                   height={14}
                                   onClick={() => {
                                     if (typeof window !== 'undefined' && navigator?.clipboard) {
-                                      navigator.clipboard.writeText(transaction.to);
+                                      navigator.clipboard.writeText(transaction.to).catch(() => undefined);
                                       setIsAddressCopied((prev) => ({
                                         ...prev,
                                         [`to-${index}`]: true,
@@ -652,7 +652,7 @@ export const TransactionDialog = ({
                                     onClick={(e) => {
                                       e.stopPropagation();
                                       if (typeof window !== 'undefined' && navigator?.clipboard) {
-                                        navigator.clipboard.writeText(transaction.data ?? '');
+                                        navigator.clipboard.writeText(transaction.data ?? '').catch(() => undefined);
                                         setIsDataCopied({
                                           ...isDataCopied,
                                           [index]: true,

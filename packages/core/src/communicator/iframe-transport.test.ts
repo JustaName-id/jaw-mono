@@ -143,7 +143,7 @@ describe('IframeTransport', () => {
 
             expect(iframe).toBeTruthy();
             expect(iframe?.getAttribute('allow')).toBe(
-                `publickey-credentials-get ${urlOrigin}; publickey-credentials-create ${urlOrigin}`
+                `publickey-credentials-get ${urlOrigin}; publickey-credentials-create ${urlOrigin}; clipboard-write ${urlOrigin}`
             );
             expect(iframe?.getAttribute('sandbox')).toBe(
                 'allow-forms allow-scripts allow-same-origin allow-popups allow-popups-to-escape-sandbox'
