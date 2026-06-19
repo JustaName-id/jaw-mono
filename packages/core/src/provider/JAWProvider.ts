@@ -239,6 +239,12 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         // probe resolves cleanly to "not connected".
                         return [] as T;
                     }
+                    case 'eth_coinbase': {
+                        // Silent method (per method-policy). With no live session
+                        // there is no coinbase address — report null rather than
+                        // throwing so a mount-time probe resolves cleanly.
+                        return null as T;
+                    }
                     case 'net_version': {
                         const result = (this.metadata.defaultChainId ?? 1) as T;
                         return result;

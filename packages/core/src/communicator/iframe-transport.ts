@@ -399,9 +399,14 @@ export class IframeTransport implements IframeTransportContract {
             if (message?.event === 'DialogClose') {
                 const data = message.data as DialogCloseData | undefined;
                 if (data?.reason === 'cancelled') {
-                    this.rejectPending();
+                    // User cancelled from inside the keys app — reject the
+                    // in-flight dApp request (via dismiss → onDismiss), don't
+                    // just hide. 'completed' carries a real response already, so
+                    // it only hides.
+                    this.dismiss();
+                } else {
+                    this.hide();
                 }
-                this.hide();
             }
 
             // Only an established, current session may be torn down by a
@@ -483,6 +488,10 @@ export class IframeTransport implements IframeTransportContract {
     /** Reject pending requests and hide the dialog; the iframe stays mounted. */
     private dismiss(): void {
         this.rejectPending();
+        // Bridge to the facade: the dApp's response promise lives on the
+        // Communicator's listener map, not this transport's, so rejectPending()
+        // alone never settles it. onDismiss rejects it with 4001.
+        this.options.onDismiss?.();
         this.hide();
     }
 

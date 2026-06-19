@@ -451,6 +451,43 @@ describe('Communicator', () => {
             expect((mockPopup.close as ReturnType<typeof vi.fn>).mock.calls.length).toBeGreaterThanOrEqual(1);
         });
 
+        it('rejects an in-flight request when the user closes the popup (regression)', async () => {
+            // The dApp's response promise lives on the Communicator's listener
+            // map, not the transport's. A dismissal (here: closing the popup ->
+            // PopupUnload) must bridge to the facade and reject it with 4001 —
+            // before the fix the transport rejected only its own listeners and
+            // this promise hung forever.
+            const request: Message & { id: MessageID } = { id: 'pending-dismiss-req-id-1', data: {} };
+
+            // Handshake completes (so the request is actually posted), but no
+            // requestId-matched response ever arrives — the user closes the
+            // popup instead.
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            setTimeout(
+                () => dispatchMessageEvent({ data: { event: 'PopupUnload', id: 'unload-id' }, origin: urlOrigin }),
+                350
+            );
+
+            await expect(communicator.postRequestAndWaitForResponse(request)).rejects.toThrow(/Request rejected/);
+        }, 2000);
+
+        it('rejects an in-flight request when the popup is closed abruptly without PopupUnload (follow-up)', async () => {
+            // beforeunload → PopupUnload is best-effort: a popup killed before it
+            // can post the message leaves the SDK with no signal. The liveness
+            // poll must catch popup.closed flipping and reject the request.
+            const request: Message & { id: MessageID } = { id: 'abrupt-close-req-id-1', data: {} };
+
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            // The window vanishes (closed flips) but NO PopupUnload is dispatched.
+            setTimeout(() => {
+                (mockPopup as { closed: boolean }).closed = true;
+            }, 300);
+
+            await expect(communicator.postRequestAndWaitForResponse(request)).rejects.toThrow(/Request rejected/);
+        }, 3000);
+
         it('should clean up listeners when PopupUnload is received', async () => {
             const initialRemoveCount = removeEventListenerCallCount;
 

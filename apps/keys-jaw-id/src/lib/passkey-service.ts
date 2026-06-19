@@ -143,7 +143,9 @@ export class PasskeyService {
       // Find the passkey data
       const passkeyData = existingAccounts.find((acc) => acc.credentialId === credentialId);
       if (!passkeyData) {
-        throw new Error(`Passkey with ID ${credentialId} not found`);
+        // Do not embed the credentialId in the message — credential
+        // identifiers are sensitive (PII) and this surfaces to the UI.
+        throw new Error('The requested passkey was not found.');
       }
 
       // Do not log credentialId — credential identifiers are sensitive (PII).

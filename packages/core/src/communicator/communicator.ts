@@ -5,8 +5,16 @@ import { standardErrors } from '../errors/errors.js';
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
 import type { JawTheme } from '../ui/theme.js';
 import { TrustedHostsRegistry } from '../trusted-hosts.js';
-import { RouteContext, TransportMode } from './transport.js';
+import { RouteContext, Transport, TransportMode } from './transport.js';
 import { TransportRouter } from './transport-router.js';
+
+/**
+ * How often (ms) to poll the live transport's window while awaiting a response.
+ * The graceful close signal (beforeunload → PopupUnload) is best-effort: a popup
+ * killed abruptly never posts it, so we poll `isAlive()` as a backstop and reject
+ * the pending request rather than hang. Only runs while a request is in flight.
+ */
+const TRANSPORT_LIVENESS_POLL_MS = 500;
 
 export type CommunicatorOptions = {
     metadata: AppMetadata;
@@ -59,8 +67,13 @@ export class Communicator {
     private readonly url: URL;
     private readonly router: TransportRouter;
     private listeners = new Map<(_: MessageEvent) => void, { reject: (_: Error) => void }>();
-    /** Requests awaiting a response, replayed if the dialog switches transports. */
-    private inflight = new Map<MessageID, Message & { id: MessageID }>();
+    /**
+     * Requests awaiting a response, replayed if the dialog switches transports.
+     * Each entry carries the request (to re-post) and a reject handle (to fail
+     * the caller if the replay transport can't be acquired — otherwise the
+     * response listener, which has no timeout, would hang forever).
+     */
+    private inflight = new Map<MessageID, { request: Message & { id: MessageID }; reject: (error: Error) => void }>();
 
     private switchListenerArmed = false;
 
@@ -82,6 +95,11 @@ export class Communicator {
             theme,
             mode: normalizeTransportMode(preference.transportMode),
             isTrustedHostFn: (hostname) => this.trustedHosts.has(hostname),
+            // Bridge transport-level dismissal (Escape, click-outside, window
+            // close, keys-side cancel) to the facade: the dApp's in-flight
+            // response promise lives here on `listeners`, not on the transport,
+            // so a dismissal must reject it from here or it hangs forever.
+            onDismiss: () => this.rejectPendingRequests(),
         });
 
         // Best-effort, non-blocking: routing works off the baseline until (and
@@ -117,16 +135,20 @@ export class Communicator {
         // to the now-hidden iframe. Response listeners are transport-agnostic
         // (matched by requestId), so they stay armed.
         void (async () => {
-            const requests = [...this.inflight.values()];
-            if (requests.length === 0) return;
+            const entries = [...this.inflight.values()];
+            if (entries.length === 0) return;
             try {
-                const transport = await this.router.acquire(getRouteContext(requests[0]));
-                for (const request of requests) {
+                const transport = await this.router.acquire(getRouteContext(entries[0].request));
+                for (const { request } of entries) {
                     await transport.postMessage(request);
                 }
-            } catch {
-                // Popup blocked or failed — the original listeners surface the
-                // rejection through the normal error path.
+            } catch (error) {
+                // Popup blocked or acquire failed — nothing will deliver a
+                // response on the new transport, and the response listeners have
+                // no timeout, so reject the in-flight requests instead of
+                // leaving the callers to hang forever.
+                const reason = error instanceof Error ? error : standardErrors.rpc.internal('Transport switch failed');
+                for (const { reject } of entries) reject(reason);
             }
         })();
     };
@@ -169,11 +191,16 @@ export class Communicator {
      * @returns Promise resolving to the response message
      */
     async postRequestAndWaitForResponse<M extends Message>(request: Message & { id: MessageID }): Promise<M> {
-        const { promise, cancel } = this.listenForMessage<M>(({ requestId }) => requestId === request.id);
-        this.inflight.set(request.id, request);
+        const { promise, cancel, reject } = this.listenForMessage<M>(({ requestId }) => requestId === request.id);
+        this.inflight.set(request.id, { request, reject });
         try {
-            await this.postMessage(request);
-            return await promise;
+            // Inline postMessage to keep the acquired transport handle: we poll
+            // its window for an abrupt close (popup killed before it can post
+            // PopupUnload) so the request rejects instead of hanging.
+            this.ensureSwitchListener();
+            const transport = await this.router.acquire(getRouteContext(request));
+            await transport.postMessage(request);
+            return await this.awaitResponseOrClosed(transport, promise);
         } catch (error) {
             // postMessage failed (popup blocked, handshake timeout, acquire
             // error): tear down the orphaned response listener so it doesn't
@@ -183,6 +210,33 @@ export class Communicator {
         } finally {
             this.inflight.delete(request.id);
         }
+    }
+
+    /**
+     * Resolve with the response, or reject with UserRejectedRequest (4001) if
+     * the transport's window dies before it arrives. Backstops the best-effort
+     * PopupUnload signal (a popup closed abruptly never posts it). The interval
+     * is always cleared on settle, so nothing leaks past the request.
+     */
+    private awaitResponseOrClosed<M extends Message>(transport: Transport, response: Promise<M>): Promise<M> {
+        return new Promise<M>((resolve, reject) => {
+            let settled = false;
+            const finish = (run: () => void): void => {
+                if (settled) return;
+                settled = true;
+                clearInterval(poller);
+                run();
+            };
+            const poller = setInterval(() => {
+                if (!transport.isAlive()) {
+                    finish(() => reject(standardErrors.provider.userRejectedRequest('Request rejected')));
+                }
+            }, TRANSPORT_LIVENESS_POLL_MS);
+            response.then(
+                (value) => finish(() => resolve(value)),
+                (error) => finish(() => reject(error))
+            );
+        });
     }
 
     /**
@@ -209,9 +263,11 @@ export class Communicator {
     ): {
         promise: Promise<M>;
         cancel: () => void;
+        reject: (error: Error) => void;
     } {
         let listener!: (event: MessageEvent) => void;
         let timer: ReturnType<typeof setTimeout> | undefined;
+        let rejectFn!: (error: Error) => void;
 
         // Remove the listener and clear the timeout on any settle path.
         const cleanup = () => {
@@ -233,12 +289,11 @@ export class Communicator {
                 }
             };
             window.addEventListener('message', listener);
-            this.listeners.set(listener, {
-                reject: (error: Error) => {
-                    cleanup();
-                    reject(error);
-                },
-            });
+            rejectFn = (error: Error) => {
+                cleanup();
+                reject(error);
+            };
+            this.listeners.set(listener, { reject: rejectFn });
 
             if (timeout !== undefined && timeout !== Infinity) {
                 timer = setTimeout(() => {
@@ -251,7 +306,21 @@ export class Communicator {
 
         const cancel = () => cleanup();
 
-        return { promise, cancel };
+        return { promise, cancel, reject: rejectFn };
+    }
+
+    /**
+     * Reject every in-flight dApp request with UserRejectedRequest (4001) and
+     * clear the pending state. Used both when the user dismisses the dialog
+     * (via the transport `onDismiss` bridge) and on full {@link disconnect}.
+     * Each reject() cleans up its own listener via cleanup().
+     */
+    private rejectPendingRequests(): void {
+        this.inflight.clear();
+        this.listeners.forEach(({ reject }) => {
+            reject(standardErrors.provider.userRejectedRequest('Request rejected'));
+        });
+        this.listeners.clear();
     }
 
     /**
@@ -259,17 +328,12 @@ export class Communicator {
      */
     disconnect(): void {
         this.router.destroyAll();
-        this.inflight.clear();
 
         if (this.switchListenerArmed) {
             window.removeEventListener('message', this.handleSwitchTransport);
             this.switchListenerArmed = false;
         }
 
-        // Reject all pending listeners; each reject() cleans up via cleanup().
-        this.listeners.forEach(({ reject }) => {
-            reject(standardErrors.provider.userRejectedRequest('Request rejected'));
-        });
-        this.listeners.clear();
+        this.rejectPendingRequests();
     }
 }

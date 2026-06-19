@@ -44,6 +44,11 @@ export class PopupTransport implements Transport {
 
         this.onMessage<ConfigMessage>(({ event }) => event === 'PopupUnload')
             .then(() => {
+                // The user closed the popup window — reject the in-flight dApp
+                // request (which waits on the facade, not this transport) before
+                // tearing the popup down. destroy() stays pure teardown so the
+                // normal disconnect() path doesn't double-fire onDismiss.
+                this.options.onDismiss?.();
                 this.destroy();
             })
             .catch(() => {

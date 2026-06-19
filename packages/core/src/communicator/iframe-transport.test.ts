@@ -128,6 +128,35 @@ describe('IframeTransport', () => {
         });
     });
 
+    describe('user dismissal bridges to onDismiss', () => {
+        it('invokes onDismiss on DialogClose{cancelled} but not on {completed} (regression)', async () => {
+            const onDismiss = vi.fn();
+            transport.destroy(); // replace the no-onDismiss instance from beforeEach
+            transport = new IframeTransport({
+                url: new URL(JAW_KEYS_URL),
+                metadata: appMetadata,
+                preference,
+                handshakeTimeoutMs: 2000,
+                onDismiss,
+            });
+
+            const ready = transport.ensureReady();
+            mockContentWindow();
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await ready;
+
+            // 'completed' carries a real response already → must NOT dismiss.
+            dispatchMessageEvent({ data: { event: 'DialogClose', data: { reason: 'completed' } }, origin: urlOrigin });
+            expect(onDismiss).not.toHaveBeenCalled();
+
+            // 'cancelled' (Escape/click-outside surfaced by keys) → bridge to the
+            // facade so the in-flight dApp request is rejected, not left hanging.
+            dispatchMessageEvent({ data: { event: 'DialogClose', data: { reason: 'cancelled' } }, origin: urlOrigin });
+            expect(onDismiss).toHaveBeenCalledTimes(1);
+        });
+    });
+
     describe('mount', () => {
         it('creates a hidden dialog/iframe with the exact security attributes', async () => {
             const pending = transport.ensureReady().catch(() => {

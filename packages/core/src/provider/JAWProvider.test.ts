@@ -866,6 +866,30 @@ describe('JAWProvider', () => {
             provider = new JAWProvider(mockConstructorOptions);
         });
 
+        it('handles every SILENT_METHOD without a session (no policy/handler gap)', async () => {
+            // Guards against the eth_coinbase-style regression: a method listed in
+            // SILENT_METHODS but missing a no-session case falls through to the
+            // default branch and throws the internal "is not handled without a
+            // session" error. Read-only handlers that hit the network are mocked
+            // to resolve; we only assert no method trips the internal-gap error.
+            (buildHandleJawRpcUrl as Mock).mockReturnValue('https://rpc.test.com');
+            (fetchRPCRequest as Mock).mockResolvedValue(null);
+            (handleGetCallsStatusRequest as Mock).mockResolvedValue(null);
+            const { handleGetPermissionsRequest } = await import('../rpc/index.js');
+            (handleGetPermissionsRequest as Mock).mockResolvedValue(null);
+
+            const { SILENT_METHODS } = await import('../method-policy.js');
+
+            for (const method of SILENT_METHODS) {
+                const result = await provider
+                    .request({ method, params: ['0x'] } as RequestArguments)
+                    .catch((error: Error) => error);
+                if (result instanceof Error) {
+                    expect(result.message).not.toMatch(/is not handled without a session/);
+                }
+            }
+        });
+
         it('returns an empty list for eth_accounts when there is no session (EIP-1193, silent)', async () => {
             // eth_accounts is a silent method: with no restored signer it reports
             // "not connected" ([]) rather than throwing, so a wallet library's

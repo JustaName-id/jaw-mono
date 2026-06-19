@@ -19,6 +19,15 @@ export type TransportOptions = {
     preference: JawProviderPreference;
     /** dApp theme tokens, forwarded to the keys app so the dialog matches its look & feel. */
     theme?: JawTheme;
+    /**
+     * Invoked when the user dismisses the dialog/popup (Escape, click-outside,
+     * window close, or a keys-side cancel) — i.e. any close that is NOT a
+     * requestId-matched response. The facade (Communicator) wires this to reject
+     * its own pending requests with UserRejectedRequest (4001), because the
+     * dApp's in-flight promise lives on the facade, not on the transport's
+     * listener map. Without it, a dismissal leaves the request hanging forever.
+     */
+    onDismiss?: () => void;
 };
 
 /**

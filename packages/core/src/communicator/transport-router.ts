@@ -76,6 +76,7 @@ export class TransportRouter implements TransportRouterContract {
             metadata: config.metadata,
             preference: config.preference,
             theme: config.theme,
+            onDismiss: config.onDismiss,
         };
         this.mode = config.mode ?? 'popup';
         this.createPopup = config.createPopupTransport ?? ((options) => new PopupTransport(options));
