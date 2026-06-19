@@ -175,7 +175,7 @@ export const PermissionDialog = ({
   // Copy to clipboard helper
   const copyToClipboard = (text: string, setCopied: (value: boolean) => void) => {
     if (typeof window !== 'undefined' && navigator?.clipboard) {
-      navigator.clipboard.writeText(text);
+      navigator.clipboard.writeText(text).catch(() => undefined);
       setCopied(true);
       setTimeout(() => setCopied(false), 3000);
     }

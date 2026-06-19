@@ -80,7 +80,7 @@ export const SiweDialog = ({
 
   const onCopyMessageHandler = () => {
     if (typeof window !== 'undefined' && navigator?.clipboard) {
-      navigator.clipboard.writeText(message);
+      navigator.clipboard.writeText(message).catch(() => undefined);
     }
   };
 

@@ -68,7 +68,7 @@ export const ConnectDialog = ({
 
   const copyToClipboard = (text: string) => {
     if (typeof window !== 'undefined' && navigator?.clipboard) {
-      navigator.clipboard.writeText(text);
+      navigator.clipboard.writeText(text).catch(() => undefined);
       setIsAddressCopied(true);
       setTimeout(() => setIsAddressCopied(false), 3000);
     }
