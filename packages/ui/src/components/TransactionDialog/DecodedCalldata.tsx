@@ -11,8 +11,9 @@ import { ClearSignedView } from './ClearSignedView';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 /**
- * ERC-8213 Calldata Digest row. Shown only for non-empty calldata; the spec
- * omits the digest when calldata is empty (`0x`/undefined).
+ * ERC-8213 Calldata Digest, collapsed behind a disclosure like the raw calldata
+ * view. Shown only for non-empty calldata; the spec omits the digest when
+ * calldata is empty (`0x`/undefined).
  */
 const CalldataDigest = ({ data }: { data: string }) => {
   const digest = useMemo(() => {
@@ -25,7 +26,14 @@ const CalldataDigest = ({ data }: { data: string }) => {
   }, [data]);
 
   if (!digest) return null;
-  return <DigestRow label="Calldata Digest" value={digest} />;
+  return (
+    <details className="text-xs">
+      <summary className="text-muted-foreground hover:text-foreground cursor-pointer">Show calldata digest</summary>
+      <div className="mt-2">
+        <DigestRow label="Calldata Digest" value={digest} />
+      </div>
+    </details>
+  );
 };
 
 /** Merge parent-resolved and locally-resolved maps, normalizing all keys to lowercase. */

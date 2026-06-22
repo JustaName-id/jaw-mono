@@ -56,9 +56,9 @@ export const DigestRow = ({
 };
 
 /**
- * ERC-8213 verification digests for an EIP-712 signature. The spec RECOMMENDS
- * showing the EIP-712 Digest alone (the signer verifies one hash); the Domain
- * Hash and Message Hash are surfaced as secondary, expandable detail.
+ * ERC-8213 verification digests for an EIP-712 signature, collapsed behind a
+ * disclosure. Expanded, the EIP-712 Digest is shown prominently (the one hash
+ * the signer verifies) above the secondary Domain and Message hashes.
  *
  * Renders nothing if the typed data can't be parsed — the dialog already shows
  * its own "Failed to parse typed data" message in that case.
@@ -72,18 +72,15 @@ export const Eip712VerificationDigests = ({ typedDataJson }: { typedDataJson: st
   }
 
   return (
-    <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
-      <p className="text-muted-foreground text-xs font-bold leading-[133%]">Verification digests</p>
-      <DigestRow label="EIP-712 Digest" value={digests.eip712Digest} prominent />
-      <details className="text-xs">
-        <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
-          Show domain & message hashes
-        </summary>
-        <div className="mt-2 flex flex-col gap-2">
-          <DigestRow label="Domain Hash" value={digests.domainHash} />
-          <DigestRow label="Message Hash" value={digests.messageHash} />
-        </div>
-      </details>
-    </div>
+    <details className="text-xs">
+      <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
+        Show verification digests
+      </summary>
+      <div className="border-border mt-2 flex flex-col gap-2.5 rounded-[6px] border p-3.5">
+        <DigestRow label="EIP-712 Digest" value={digests.eip712Digest} prominent />
+        <DigestRow label="Domain Hash" value={digests.domainHash} />
+        <DigestRow label="Message Hash" value={digests.messageHash} />
+      </div>
+    </details>
   );
 };
