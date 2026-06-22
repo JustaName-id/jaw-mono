@@ -2,7 +2,6 @@ export {
     type ConfigMessage,
     type ConfigEvent,
     type SignerType,
-    type ReconnectRequiredData,
     RECONNECT_REQUIRED,
     isReconnectRequiredFailure,
 } from './configMessage.js';

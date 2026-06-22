@@ -188,22 +188,6 @@ export class PopupCommunicator {
   }
 
   /**
-   * Ask the SDK to re-establish a session against this iframe and replay the
-   * pending request. Emitted when the iframe has no usable session — e.g. on
-   * Safari, where storage partitioning isolates the iframe from the session a
-   * popup created during connect. Carries no secret. Embedded (iframe) context
-   * only; in a popup the session is first-party and present.
-   */
-  requestReconnect(): void {
-    if (this.context !== 'embedded') return;
-    this.postMessage({
-      id: crypto.randomUUID(),
-      event: 'ReconnectRequired',
-      data: { reason: 'no-session' },
-    });
-  }
-
-  /**
    * Listen for messages from the counterpart
    * Returns cleanup function
    */
