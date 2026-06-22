@@ -1,3 +1,13 @@
+## 1.0.1 (2026-06-22)
+
+### 🩹 Fixes
+
+- **core:** fallback to popup for non-secure http environments ([#208](https://github.com/JustaName-id/jaw-mono/pull/208))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 # 1.0.0 (2026-06-22)
 
 ### 🚀 Features
