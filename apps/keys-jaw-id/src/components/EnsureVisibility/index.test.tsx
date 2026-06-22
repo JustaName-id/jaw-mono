@@ -88,9 +88,15 @@ describe('EnsureVisibility — IOv2 debounce', () => {
       constructor(cb: IntersectionObserverCallback) {
         ioCallback = cb;
       }
-      observe() {}
-      unobserve() {}
-      disconnect() {}
+      observe() {
+        return undefined;
+      }
+      unobserve() {
+        return undefined;
+      }
+      disconnect() {
+        return undefined;
+      }
       takeRecords(): IntersectionObserverEntry[] {
         return [];
       }
