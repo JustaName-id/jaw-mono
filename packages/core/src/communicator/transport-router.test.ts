@@ -400,6 +400,17 @@ describe('TransportRouter.forceIframeReconnectOnce', () => {
         expect(router.route({ method: 'wallet_sendCalls' })).toBe('iframe');
         expect(router.route({ method: 'wallet_connect' })).toBe('popup');
     });
+
+    it('destroyAll() clears a pending reconnect override (no stale credential bypass)', async () => {
+        const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+
+        router.forceIframeReconnectOnce();
+        router.destroyAll();
+
+        // Flag cleared on destroy: a credential method reverts to the popup rule.
+        const transport = await router.acquire({ method: 'wallet_connect' });
+        expect(transport.kind).toBe('popup');
+    });
 });
 
 describe('TransportRouter.prewarm', () => {

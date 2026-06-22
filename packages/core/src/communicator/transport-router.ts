@@ -141,6 +141,9 @@ export class TransportRouter implements TransportRouterContract {
         this.iframe = null;
         this.pendingIframeReload = false;
         this.popupForced = false;
+        // Clear the reconnect override too: a stale flag could otherwise route a
+        // later credential-*create* onto the iframe, bypassing the Safari rule.
+        this.iframeReconnectForced = false;
     }
 
     /**

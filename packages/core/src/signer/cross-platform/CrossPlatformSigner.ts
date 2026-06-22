@@ -194,11 +194,31 @@ export class CrossPlatformSigner extends JAWSigner {
             // exactly once. Only the keys iframe emits this sentinel, only when it
             // has no session — so existing/popup flows never enter this branch.
             if (!isReconnectRetry && isReconnectRequiredFailure(error)) {
-                await this.reconnectInIframe();
+                // Deduplicate: concurrent in-flight requests can all get the
+                // sentinel at once. Share a single reconnect handshake so the
+                // second caller doesn't fire its own (its forced-iframe flag
+                // would already be consumed and route the handshake to a popup).
+                await this.ensureReconnected();
                 return this.sendRequestToPopup(request, overrideChain, true);
             }
             throw error;
         }
+    }
+
+    /** In-flight reconnect, shared by concurrent callers (see ensureReconnected). */
+    private reconnectInFlight: Promise<void> | null = null;
+
+    /**
+     * Run the iframe reconnect at most once for a burst of concurrent requests.
+     * Subsequent callers await the same handshake instead of starting their own.
+     */
+    private ensureReconnected(): Promise<void> {
+        if (!this.reconnectInFlight) {
+            this.reconnectInFlight = this.reconnectInIframe().finally(() => {
+                this.reconnectInFlight = null;
+            });
+        }
+        return this.reconnectInFlight;
     }
 
     /**
@@ -218,6 +238,9 @@ export class CrossPlatformSigner extends JAWSigner {
         const chains = store.getState().chains;
         const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
 
+        // eth_requestAccounts (not wallet_connect): both are credential methods
+        // handled identically by the keys handshake, but eth_requestAccounts needs
+        // no capability params to faithfully re-auth the existing account.
         const reconnectArgs: RequestArguments = { method: 'eth_requestAccounts', params: [] };
         const handshakeMessage = await this.createRequestMessage(
             {
