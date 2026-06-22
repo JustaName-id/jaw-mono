@@ -12,7 +12,14 @@ export type ConfigEvent =
     /** keys -> SDK: embedded flow completed/cancelled; replaces window.close() (no-op in iframes) */
     | 'DialogClose'
     /** keys -> SDK: user or visibility guard requests escaping the iframe to a popup */
-    | 'SwitchTransport';
+    | 'SwitchTransport'
+    /**
+     * keys -> SDK: the iframe has no usable session (e.g. Safari storage
+     * partitioning isolated it from a popup-created session) and cannot decrypt
+     * the request. Asks the SDK to re-establish a session against the iframe and
+     * replay the request. Carries no secret.
+     */
+    | 'ReconnectRequired';
 
 /** Payload of a DialogClose config message. */
 export type DialogCloseData = {
@@ -23,6 +30,11 @@ export type DialogCloseData = {
 export type SwitchTransportData = {
     to: 'popup';
     reason: 'user' | 'visibility' | 'webauthn-unsupported';
+};
+
+/** Payload of a ReconnectRequired config message. Carries no secret. */
+export type ReconnectRequiredData = {
+    reason: 'no-session';
 };
 
 export type SignerType = 'crossPlatform' | 'appSpecific';

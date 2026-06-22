@@ -357,6 +357,51 @@ describe('TransportRouter.forcePopupOnce', () => {
     });
 });
 
+describe('TransportRouter.forceIframeReconnectOnce', () => {
+    it('forces the next acquire onto iframe even when routing would pick popup', async () => {
+        // Safari + trusted host: a credential method (wallet_connect) normally
+        // routes to popup. The reconnect override sends it to the iframe instead
+        // (it is a credential *get*, allowed in Safari iframes).
+        const { router, iframeMock } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+        expect(router.route({ method: 'wallet_connect' })).toBe('popup');
+
+        router.forceIframeReconnectOnce();
+        const transport = await router.acquire({ method: 'wallet_connect' });
+
+        expect(transport.kind).toBe('iframe');
+        expect(iframeMock.ensureReady).toHaveBeenCalled();
+    });
+
+    it('is consumed once — the next acquire reverts to normal routing', async () => {
+        const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+
+        router.forceIframeReconnectOnce();
+        const first = await router.acquire({ method: 'wallet_connect' });
+        expect(first.kind).toBe('iframe');
+
+        const second = await router.acquire({ method: 'wallet_connect' });
+        expect(second.kind).toBe('popup'); // back to the Safari-credential rule
+    });
+
+    it('reuses the live iframe without reloading it', async () => {
+        const { router, iframeMock } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+
+        await router.acquire({ method: 'wallet_sendCalls' }); // iframe established + ready
+        router.forceIframeReconnectOnce();
+        await router.acquire({ method: 'wallet_connect' });
+
+        expect(iframeMock.reload).not.toHaveBeenCalled();
+    });
+
+    it('does not affect non-reconnect routing decisions', async () => {
+        const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+        // Without the override, a signing method on a trusted Safari host still
+        // routes to the iframe; a credential method still routes to popup.
+        expect(router.route({ method: 'wallet_sendCalls' })).toBe('iframe');
+        expect(router.route({ method: 'wallet_connect' })).toBe('popup');
+    });
+});
+
 describe('TransportRouter.prewarm', () => {
     it('prewarms the iframe when routing would pick it', async () => {
         const { router, iframeMock } = createRouter({ mode: 'iframe' });
