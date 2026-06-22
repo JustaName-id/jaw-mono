@@ -30,6 +30,7 @@ import { Signer } from '../signer/index.js';
 
 import { createSigner, loadSignerType, storeSignerType, clearSignerType } from '../signer/index.js';
 import { PasskeyManager } from '../passkey-manager/index.js';
+import { isSilentMethod } from '../method-policy.js';
 
 export class JAWProvider extends ProviderEventEmitter implements ProviderInterface {
     private readonly metadata: AppMetadata;
@@ -37,7 +38,7 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
     private readonly communicator: Communicator;
     private readonly apiKey: string;
     private readonly paymasters?: Record<number, PaymasterConfig>;
-    private readonly theme?: JawTheme;
+    private theme?: JawTheme;
 
     private signer: Signer | null = null;
 
@@ -51,10 +52,25 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         this.communicator = new Communicator({
             metadata,
             preference,
+            theme,
         });
 
         // Determine the expected signer type from current preference
         const expectedSignerType: SignerType = preference.mode === Mode.AppSpecific ? 'appSpecific' : 'crossPlatform';
+
+        // Iframe transport (the default): mount and handshake in the
+        // background so the dialog opens instantly on the first request.
+        // Failures are not fatal — the transport retries (or falls back) on
+        // first use. Skipped only on the explicit 'popup' opt-out.
+        if (
+            expectedSignerType === 'crossPlatform' &&
+            preference.transportMode !== 'popup' &&
+            typeof window !== 'undefined'
+        ) {
+            void this.communicator.prewarm().catch(() => {
+                /* handled on first acquire */
+            });
+        }
 
         const storedSignerType = loadSignerType();
 
@@ -68,6 +84,17 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                 clearSignerType();
             }
         }
+    }
+
+    /**
+     * Update the dApp theme after construction. Pushes it to the live keys
+     * dialog (cross-platform) so it re-themes in place without rebuilding the
+     * provider, and stores it for AppSpecific's next request. This is what lets
+     * a host app keep one connector and just sync the theme on light/dark flips.
+     */
+    public setTheme(theme: JawTheme | undefined): void {
+        this.theme = theme;
+        this.communicator.updateTheme(theme);
     }
 
     public async request<T>(args: RequestArguments): Promise<T> {
@@ -94,6 +121,13 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
         // Clear PasskeyManager auth state (explicit logout)
         const passkeyManager = new PasskeyManager(undefined, undefined, this.apiKey);
         passkeyManager.logout();
+
+        // Tear down the cross-platform transport. The iframe carrier is
+        // persistent (mounted once, reused across requests), so without this it
+        // would survive a disconnect and keep the keys-app session warm until a
+        // full page reload — the user would appear "still signed in". The popup
+        // transport was transient per-request, so this was a no-op there.
+        this.communicator.disconnect();
 
         this.signer = null;
         correlationIds.clear();
@@ -197,6 +231,20 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
 
                         return result as T;
                     }
+                    case 'eth_accounts': {
+                        // No signer restored → no live session. eth_accounts is a
+                        // silent method (per method-policy): per EIP-1193 it
+                        // reports an empty list when not connected rather than
+                        // throwing, so a wallet library's mount-time reconnect
+                        // probe resolves cleanly to "not connected".
+                        return [] as T;
+                    }
+                    case 'eth_coinbase': {
+                        // Silent method (per method-policy). With no live session
+                        // there is no coinbase address — report null rather than
+                        // throwing so a mount-time probe resolves cleanly.
+                        return null as T;
+                    }
                     case 'net_version': {
                         const result = (this.metadata.defaultChainId ?? 1) as T;
                         return result;
@@ -206,6 +254,17 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                         return result;
                     }
                     default: {
+                        // Reaching here means no live session. Silent methods are
+                        // all handled above, so a silent method falling through is
+                        // an internal gap (a new read method added without a case)
+                        // — surface that distinctly from the expected case: an
+                        // interactive method that legitimately needs the user to
+                        // connect first.
+                        if (isSilentMethod(args.method)) {
+                            throw standardErrors.rpc.methodNotSupported(
+                                `Silent method ${args.method} is not handled without a session`
+                            );
+                        }
                         throw standardErrors.provider.unauthorized(
                             "Must call 'eth_requestAccounts' before other methods"
                         );

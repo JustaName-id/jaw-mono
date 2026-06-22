@@ -14,6 +14,9 @@ export { SDK_VERSION, SDK_NAME } from './sdk-info.js';
 /** SDK exports **/
 export { create, JAW, type CreateJAWSDKOptions } from './sdk/index.js';
 
+/** Transport layer (keys communication) **/
+export { Communicator, type CommunicatorOptions } from './communicator/index.js';
+
 /**  RPC types and utilities **/
 export {
     // Capability types
@@ -148,3 +151,6 @@ export { UIError, UIErrorCode } from './ui/interface.js';
 
 /** Theme types **/
 export type { JawTheme, JawThemeMode, JawBorderRadius, JawFontStack } from './ui/theme.js';
+
+/** Method policy (silent vs interactive RPC classification) **/
+export { SILENT_METHODS, INTERACTIVE_METHODS, isSilentMethod, requiresInteraction } from './method-policy.js';

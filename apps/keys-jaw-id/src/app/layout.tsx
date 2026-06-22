@@ -10,14 +10,18 @@ export const metadata = {
 
 /**
  * Inline script that runs synchronously before any paint.
- * Reads `prefers-color-scheme` and sets `light`/`dark` class on <html>.
+ * Reads `prefers-color-scheme` and sets `light`/`dark` class on <html>, and
+ * flags `jaw-embedded` when running inside a cross-document frame (the SDK
+ * iframe) so the page can drop its own background/chrome and let the host
+ * dApp show through — see the `.jaw-embedded` rules in global.css.
  *
  * This is intentionally NOT next-themes — keys.jaw.id is a popup that only
  * follows the OS theme; there's no toggle, no persistence, no React state
- * to manage. A 200-byte inline script is the simplest, most reliable
- * solution and has zero hydration concerns.
+ * to manage. A small inline script is the simplest, most reliable solution
+ * and has zero hydration concerns. Doing the embed check here (before paint)
+ * avoids a flash of the opaque standalone background inside the iframe.
  */
-const SET_INITIAL_THEME = `(function(){try{var d=document.documentElement;var m=window.matchMedia('(prefers-color-scheme: dark)').matches;d.classList.remove('light','dark');d.classList.add(m?'dark':'light');d.style.colorScheme=m?'dark':'light';}catch(e){}})();`;
+const SET_INITIAL_THEME = `(function(){try{var d=document.documentElement;var m=window.matchMedia('(prefers-color-scheme: dark)').matches;d.classList.remove('light','dark');d.classList.add(m?'dark':'light');d.style.colorScheme=m?'dark':'light';if(window.top!==window.self)d.classList.add('jaw-embedded');}catch(e){}})();`;
 
 export default async function RootLayout({ children }: { children: React.ReactNode }) {
   // Reading headers() makes this layout dynamic (no static caching).
@@ -43,6 +47,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
         <ReactQueryProvider>
           <SystemThemeListener />
           <div
+            data-jaw-watermark
             aria-hidden="true"
             style={{
               position: 'fixed',

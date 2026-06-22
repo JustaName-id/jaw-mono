@@ -1,6 +1,7 @@
 'use client';
 
 import { Eip712Dialog, useChainIconURI } from '@jaw.id/ui';
+import { debugLog } from '../../lib/debug-log';
 import { useSessionAccount } from '../../hooks';
 import { useCallback, useMemo, useState } from 'react';
 import type { chain } from '../../lib/sdk-types';
@@ -133,7 +134,7 @@ export const Eip712Modal = ({
     <Eip712Dialog
       open={true}
       onOpenChange={() => {
-        console.log('onOpenChange');
+        debugLog('onOpenChange');
       }}
       typedDataJson={typedDataJson}
       origin={origin}

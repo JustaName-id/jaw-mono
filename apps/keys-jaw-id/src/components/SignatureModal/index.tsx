@@ -1,6 +1,7 @@
 'use client';
 
 import { SignatureDialog, useChainIconURI } from '@jaw.id/ui';
+import { debugLog } from '../../lib/debug-log';
 import { useSessionAccount } from '../../hooks';
 import { useCallback, useMemo, useState } from 'react';
 import type { chain } from '../../lib/sdk-types';
@@ -103,7 +104,7 @@ export const SignatureModal = ({
     <SignatureDialog
       open={true}
       onOpenChange={() => {
-        console.log('onOpenChange');
+        debugLog('onOpenChange');
       }}
       message={messageToSign}
       origin={origin}

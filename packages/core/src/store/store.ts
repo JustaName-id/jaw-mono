@@ -80,9 +80,22 @@ export const sdkstore = createStore(
         {
             name: 'jawsdk.store',
             storage: createJSONStorage(() => {
-                if (typeof localStorage !== 'undefined') return localStorage;
-                // No-op storage for non-browser environments (CLI, Node.js)
-                // eslint-disable-next-line @typescript-eslint/no-empty-function
+                // Use localStorage only when it's actually usable. A mere
+                // `typeof localStorage !== 'undefined'` check is not enough:
+                // Node 20+ exposes an experimental `localStorage` global whose
+                // methods throw / are missing without `--localstorage-file`,
+                // which broke persistence in tests and SSR prerender. Probe it.
+                try {
+                    if (typeof localStorage !== 'undefined' && typeof localStorage.setItem === 'function') {
+                        const probeKey = '__jawsdk_storage_probe__';
+                        localStorage.setItem(probeKey, '1');
+                        localStorage.removeItem(probeKey);
+                        return localStorage;
+                    }
+                } catch {
+                    /* unusable storage — fall through to the no-op below */
+                }
+                // No-op storage for non-browser / unusable environments.
                 return {
                     getItem: () => null,
                     setItem() {

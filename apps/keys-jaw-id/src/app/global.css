@@ -61,7 +61,10 @@
 
 html {
   -webkit-text-size-adjust: 100%;
-  font-family:
+  /* --app-font-family is set by applyDappTheme when the dApp picks a fontStack;
+     falls back to keys' default system stack otherwise. */
+  font-family: var(
+    --app-font-family,
     ui-sans-serif,
     system-ui,
     -apple-system,
@@ -75,7 +78,8 @@ html {
     Apple Color Emoji,
     Segoe UI Emoji,
     Segoe UI Symbol,
-    Noto Color Emoji;
+    Noto Color Emoji
+  );
   line-height: 1.5;
   tab-size: 4;
   scroll-behavior: smooth;
@@ -85,6 +89,39 @@ body {
   font-family: inherit;
   line-height: inherit;
   margin: 0;
+}
+
+/* Embedded (iframe) mode — flagged pre-paint by the inline script in layout.tsx.
+   keys paints no chrome of its own: html/body go transparent so the host dApp
+   shows through around the floating card — NO dimming scrim. The EmbeddedShell
+   overlay is see-through and a click on it dismisses the flow. The standalone
+   logo watermark is hidden; the modal card keeps its own bg-background. */
+html.jaw-embedded,
+html.jaw-embedded body {
+  background: transparent !important;
+}
+
+/* The clickjacking guard (EnsureVisibility) runs IntersectionObserver v2 on the
+   root element. On screens whose content is entirely fixed/portaled (the Radix
+   dialogs portal to body), the root would otherwise collapse to zero height and
+   IOv2 would report it as not-visible — a false "covered" warning. Pin the root
+   to the viewport so it always has real area to observe. Transparent, so no
+   visual effect. */
+html.jaw-embedded {
+  min-height: 100vh;
+}
+
+/* A `color-scheme` of light/dark makes the browser paint an OPAQUE canvas for
+   the iframe (white in light), hiding the host page even with a transparent
+   body. Force `normal` so the iframe is truly see-through; dark visuals still
+   come from the `.dark` token class, not color-scheme. `!important` beats the
+   inline `style.colorScheme` set by the pre-paint theme script and listeners. */
+html.jaw-embedded {
+  color-scheme: normal !important;
+}
+
+html.jaw-embedded [data-jaw-watermark] {
+  display: none !important;
 }
 
 h1,

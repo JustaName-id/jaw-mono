@@ -1,5 +1,5 @@
 import { AppMetadata, SDKRequestType } from '../../lib/sdk-types';
-import { ModeType } from '@jaw.id/core';
+import { ModeType, type JawTheme } from '@jaw.id/core';
 
 export type ChainId = 1 | 11155111;
 
@@ -14,6 +14,8 @@ export interface PopupConfig {
     serverUrl?: string;
     ens?: string;
   };
+  /** dApp theme tokens forwarded by the SDK so the embedded dialog matches its look & feel. */
+  theme?: JawTheme;
   location: string;
   apiKey: string;
 }

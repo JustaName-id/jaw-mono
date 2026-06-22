@@ -1,6 +1,7 @@
 'use client';
 
 import { LocalStorageAccount, OnboardingDialog, type CreatedAccountData } from '@jaw.id/ui';
+import { debugLog } from '../../lib/debug-log';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState, useMemo } from 'react';
 import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest, JAW_RPC_URL } from '@jaw.id/core';
@@ -44,10 +45,10 @@ export function SignInScreen({
     return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
   }, [apiKey]);
 
-  console.log('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED');
-  console.log('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED');
-  console.log('✅ OnboardingSection: ApiKey =', apiKey ? 'PROVIDED' : 'NOT PROVIDED');
-  console.log('✅ OnboardingSection: SubnameTextRecords =', subnameTextRecords);
+  debugLog('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED');
+  debugLog('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED');
+  debugLog('✅ OnboardingSection: ApiKey =', apiKey ? 'PROVIDED' : 'NOT PROVIDED');
+  debugLog('✅ OnboardingSection: SubnameTextRecords =', subnameTextRecords);
 
   const { mutateAsync: register, isPending: isCreatingPasskey } = useCreatePasskey();
 

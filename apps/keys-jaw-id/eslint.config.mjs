@@ -18,6 +18,31 @@ const config = [
   {
     ignores: ['.next/**/*', '**/out-tsc', 'next-env.d.ts'],
   },
+  {
+    // Transport-safety gates (dev-specs keys-iframe-transport/contracts/wire-messages.md):
+    // window.close() is a no-op inside the embedded iframe and wildcard
+    // postMessage targets break origin locking.
+    files: ['src/**/*.ts', 'src/**/*.tsx'],
+    ignores: ['src/lib/popup-communicator.ts'],
+    rules: {
+      'no-restricted-properties': [
+        'error',
+        {
+          object: 'window',
+          property: 'close',
+          message:
+            'Use communicator.requestClose() — window.close() is a no-op when keys runs inside the embedded iframe.',
+        },
+      ],
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name='postMessage'] Literal[value='*']",
+          message: "Never post with a '*' target origin — use the locked counterpart origin.",
+        },
+      ],
+    },
+  },
 ];
 
 export default config;

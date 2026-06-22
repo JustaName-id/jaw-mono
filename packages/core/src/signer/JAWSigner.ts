@@ -2,7 +2,12 @@ import { Address, numberToHex } from 'viem';
 
 import { Signer } from './interface.js';
 
-import { assertParamsChainId, getCachedWalletConnectResponse, injectRequestCapabilities } from './SignerUtils.js';
+import {
+    assertParamsChainId,
+    getCachedWalletConnectResponse,
+    injectRequestCapabilities,
+    isSessionExpired,
+} from './SignerUtils.js';
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
@@ -158,7 +163,20 @@ export abstract class JAWSigner implements Signer {
             }
 
             case 'eth_accounts': {
-                this.emitConnect();
+                // Silent reconnect path: wallet libraries call eth_accounts on
+                // mount to decide whether to reconnect. Unlike eth_requestAccounts
+                // it must NEVER open a dialog — so if the persisted session has
+                // provably expired, report "no accounts" and let the dApp prompt
+                // an explicit (interactive) reconnect, rather than silently
+                // re-attesting stale authorization.
+                if (this.accounts.length > 0 && isSessionExpired()) {
+                    this.accounts = [];
+                    store.account.clear();
+                    return this.accounts;
+                }
+                if (this.accounts.length > 0) {
+                    this.emitConnect();
+                }
                 return this.accounts;
             }
 

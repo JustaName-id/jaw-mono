@@ -6,10 +6,13 @@ import { ReactUIHandler } from '@jaw.id/ui';
 
 export type ModeType = (typeof Mode)[keyof typeof Mode];
 
+export type TransportModeType = 'popup' | 'iframe' | 'auto';
+
 export function createWagmiConfig(
   mode: ModeType,
   paymasters?: Record<number, PaymasterConfig>,
-  theme?: JawTheme
+  theme?: JawTheme,
+  transportMode?: TransportModeType
 ): Config {
   const defaultChainId = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
     ? Number(process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID)
@@ -31,6 +34,7 @@ export function createWagmiConfig(
           }),
           showTestnets: true,
           mode: mode,
+          ...(transportMode && { transportMode }),
           uiHandler: mode === Mode.AppSpecific ? new ReactUIHandler({ theme }) : undefined,
         },
         ens: process.env.NEXT_PUBLIC_ENS || 'justan.id',

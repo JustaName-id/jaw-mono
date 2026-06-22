@@ -1,6 +1,7 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useCallback, useEffect, useState, useRef } from 'react';
+import { debugLog } from '../lib/debug-log';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
 import { type PasskeyAccount } from '@jaw.id/core';
@@ -14,12 +15,14 @@ import { PermissionModal, type PermissionRequestData } from '../components/Permi
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
+import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
 import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
 import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from '@jaw.id/ui';
+import { applyDappTheme } from '../lib/apply-dapp-theme';
 import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
 import type { PopupConfig, PendingRequest } from '../utils/types';
@@ -39,7 +42,28 @@ type PopupState =
   | 'success'
   | 'error';
 
+// Delay before closing the dialog once a flow completes. The response is
+// already posted to the SDK *before* this timer starts (each flow does
+// `await onApprove(...)` then `scheduleClose(...)`), and a 'completed'
+// DialogClose never rejects a pending request — so this is purely event-loop
+// margin to let the SDK drain the result ahead of the close, not a round-trip
+// budget. 300ms stays effectively instant while giving a busy main thread
+// comfortable headroom.
+const CLOSE_DELAY_MS = 300;
+
 export default function KeysJawIdApp() {
+  // Single communicator instance, shared by the embedded shell (presentation
+  // + iframe escape hatches) and the app content (message flow).
+  const [communicator] = useState(() => new PopupCommunicator());
+
+  return (
+    <EmbeddedShell communicator={communicator}>
+      <KeysJawIdAppContent communicator={communicator} />
+    </EmbeddedShell>
+  );
+}
+
+function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator }) {
   // Current origin for session-based auth
   const [currentOrigin, setCurrentOrigin] = useState<string | null>(null);
 
@@ -48,7 +72,6 @@ export default function KeysJawIdApp() {
   const passkeyQuery = usePasskeys();
 
   // Service instances (created once)
-  const [communicator] = useState(() => new PopupCommunicator());
   const [cryptoHandler] = useState(() => new CryptoHandler());
 
   // Simple state
@@ -64,24 +87,47 @@ export default function KeysJawIdApp() {
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
+  // Mirrors `state` so the (once-registered) message listener can read the
+  // CURRENT state without a stale closure. Updated on every render.
+  const stateRef = useRef(state);
+  stateRef.current = state;
+  // Holds the pending success→close timer so a new flow can cancel a previous
+  // flow's auto-close (the embedded iframe stays mounted across flows).
+  const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  /**
+   * Schedule the dialog close after a flow completes. Cancelable: starting a new
+   * flow clears any pending close so a prior flow's timer can't hide the dialog
+   * mid-request (which, with no business-request timeout, would hang the dApp).
+   */
+  const scheduleClose = useCallback(
+    (ms: number) => {
+      if (closeTimerRef.current) clearTimeout(closeTimerRef.current);
+      closeTimerRef.current = setTimeout(() => {
+        closeTimerRef.current = null;
+        communicator.requestClose();
+      }, ms);
+    },
+    [communicator]
+  );
 
   // Single useEffect for all message handling
   useEffect(() => {
     // Check if running in popup mode
     if (!communicator.hasOpener()) {
-      console.log('📱 Running in normal mode (no opener)');
+      debugLog('📱 Running in normal mode (no opener)');
       setIsSDKMode(false);
       return;
     }
 
-    console.log('🚀 Running in SDK popup mode');
+    debugLog('🚀 Running in SDK popup mode');
     setIsSDKMode(true);
 
     // Initialize crypto handler
     cryptoHandler
       .initialize()
       .then(() => {
-        console.log('✅ CryptoHandler initialized');
+        debugLog('✅ CryptoHandler initialized');
         // Send PopupLoaded event
         communicator.sendPopupLoaded();
       })
@@ -94,7 +140,10 @@ export default function KeysJawIdApp() {
     // Listen for messages
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const cleanup = communicator.onMessage<PopupConfig>((message: any) => {
-      console.log('📥 Received message:', message);
+      // Log only the message shape, never the full payload — it includes the
+      // embedder URL, metadata and the encrypted envelope (visible to any
+      // extension with console access).
+      debugLog('📥 Received message:', message?.event ?? (message?.requestId ? 'response' : 'request'));
 
       // Handle config message
       if (message.data?.version) {
@@ -105,10 +154,28 @@ export default function KeysJawIdApp() {
         setChainId(message.data.metadata?.defaultChainId as ChainId);
         setApiKey(message.data.apiKey);
 
+        // Apply the dApp's theme tokens so the embedded dialog matches its
+        // look & feel (accent color, border radius, light/dark), translated
+        // into keys' own shadcn-HSL token system. Falls back to the OS theme
+        // (SystemThemeListener) when no theme is sent.
+        if (message.data.theme) {
+          applyDappTheme(message.data.theme);
+        }
+
         // Always show account selection UI - never auto-authenticate
         checkForPasskeys();
 
         communicator.sendPopupReady(message.requestId);
+      }
+
+      // Live theme update: the dApp pushed a new theme (e.g. an OS light/dark
+      // flip) without reconnecting. Re-apply it so the embedded dialog tracks
+      // the host — this is what makes theme sync robust against the prewarm
+      // one-shot. Same mapping as the config branch.
+      if (message.event === 'SetTheme') {
+        if (message.data?.theme) {
+          applyDappTheme(message.data.theme);
+        }
       }
 
       // Handle selectSignerType event
@@ -118,6 +185,28 @@ export default function KeysJawIdApp() {
 
       // Handle RPC requests
       if (message.id && message.sender && message.content) {
+        // The embedded iframe stays mounted across flows, so a previous flow may
+        // have left a terminal state ('success'/'error'), a stale pendingRequest,
+        // and a scheduled auto-close — none of which the popup ever hit (fresh
+        // page per flow). Reset before handling the new request so it renders its
+        // own UI and is not closed by the previous flow's timer. Read the live
+        // state via a ref (the listener is registered once → stale closure).
+        if (closeTimerRef.current) {
+          clearTimeout(closeTimerRef.current);
+          closeTimerRef.current = null;
+        }
+        // Terminal-only reset is sufficient: the SDK serializes requests (it
+        // awaits each response), and keys sets the terminal state synchronously
+        // right after sending the response — before the SDK can round-trip and
+        // dispatch the next request. So by the time a new request arrives, the
+        // prior flow is always already terminal. (A non-terminal in-progress
+        // flow, e.g. a cold connect's passkey screen, must NOT be reset.)
+        if (stateRef.current === 'success' || stateRef.current === 'error') {
+          setError(null);
+          setPendingRequest(null);
+          setState('processing');
+        }
+
         const rpcMessage = message as RPCRequestMessage;
 
         // Handle handshake (unencrypted initial request)
@@ -135,6 +224,11 @@ export default function KeysJawIdApp() {
     // Cleanup message listener on unmount (PopupUnload is handled by communicator's beforeunload)
     return () => {
       cleanup();
+      // Don't let a scheduled close fire after unmount (dev hot-reload / nav).
+      if (closeTimerRef.current) {
+        clearTimeout(closeTimerRef.current);
+        closeTimerRef.current = null;
+      }
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
@@ -158,19 +252,19 @@ export default function KeysJawIdApp() {
           const chainId = pendingRequest.chain?.id ?? 1;
           const chainIdHex = `0x${chainId.toString(16)}`;
           await pendingRequest.onApprove(chainIdHex);
-          setTimeout(() => window.close(), 100);
+          scheduleClose(CLOSE_DELAY_MS);
         } catch (error) {
           console.error('❌ Failed to handle eth_chainId:', error);
           await pendingRequest.onReject(
             error instanceof Error ? error.message : 'Failed to get chain ID',
             standardErrorCodes.rpc.internal
           );
-          setTimeout(() => window.close(), 100);
+          scheduleClose(CLOSE_DELAY_MS);
         }
       };
       handleChainId();
     }
-  }, [pendingRequest, isSDKMode]);
+  }, [pendingRequest, isSDKMode, scheduleClose]);
 
   // Check for existing passkeys using hooks
   const checkForPasskeys = async () => {
@@ -214,11 +308,11 @@ export default function KeysJawIdApp() {
       const params = request.content.handshake.params;
       const chain = request.content.chain;
 
-      console.log('🔍 =========================');
-      console.log('🔍 HANDSHAKE REQUEST RECEIVED:');
-      console.log('🔍 Origin:', origin);
-      console.log('🔍 Method:', method);
-      console.log('🔍 =========================');
+      debugLog('🔍 =========================');
+      debugLog('🔍 HANDSHAKE REQUEST RECEIVED:');
+      debugLog('🔍 Origin:', origin);
+      debugLog('🔍 Method:', method);
+      debugLog('🔍 =========================');
 
       const apiKeyFromProvider = request.content?.chain?.rpcUrl?.split('api-key=')[1];
       if (apiKeyFromProvider && apiKeyFromProvider !== apiKey) {
@@ -233,7 +327,7 @@ export default function KeysJawIdApp() {
       if (method === 'handshake') {
         if (!existingSession) {
           // No session yet - nothing to respond to, wait for wallet_connect
-          console.log('🔑 Handshake without session, waiting for wallet_connect');
+          debugLog('🔑 Handshake without session, waiting for wallet_connect');
           return;
         }
         if (existingSession.peerPublicKey !== peerPublicKey) {
@@ -251,12 +345,12 @@ export default function KeysJawIdApp() {
       if (method === 'eth_requestAccounts' || method === 'wallet_connect') {
         // Always create a fresh session with new keys for each connection request
         if (existingSession) {
-          console.log('🗑️ Deleting old session for:', origin);
+          debugLog('🗑️ Deleting old session for:', origin);
           await cryptoHandler.getSessionManager().deleteSession(origin);
         }
 
         // Create new session with fresh keys (account will be set when user approves)
-        console.log('🔐 Creating fresh session for:', origin);
+        debugLog('🔐 Creating fresh session for:', origin);
         await cryptoHandler.getSessionManager().createSession({
           origin,
           peerPublicKey,
@@ -286,7 +380,7 @@ export default function KeysJawIdApp() {
             communicator.sendMessage(response as any);
           },
           onReject: async () => {
-            window.close();
+            communicator.requestClose();
           },
         });
 
@@ -394,10 +488,10 @@ export default function KeysJawIdApp() {
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             communicator.sendMessage(errorResponse as any);
             // Close window after sending error
-            setTimeout(() => window.close(), 100);
+            scheduleClose(CLOSE_DELAY_MS);
           } catch (err) {
             console.error('❌ Failed to send rejection response:', err);
-            window.close();
+            communicator.requestClose();
           }
         },
       });
@@ -469,10 +563,10 @@ export default function KeysJawIdApp() {
                 response = (result.hash || `0x${'0'.repeat(64)}`) as EthSendTransactionReturn;
               }
 
-              console.log('✅ Transaction response:', response);
+              debugLog('✅ Transaction response:', response);
               await pendingRequest.onApprove(response);
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
               console.error('❌ Failed to send transaction:', err);
               setError(err instanceof Error ? err.message : 'Failed to send transaction');
@@ -486,10 +580,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -548,9 +642,9 @@ export default function KeysJawIdApp() {
               setState('processing');
               try {
                 await pendingRequest.onApprove(signature);
-                console.log('✅ SIWE signature sent successfully');
+                debugLog('✅ SIWE signature sent successfully');
                 setState('success');
-                setTimeout(() => window.close(), 1500);
+                scheduleClose(CLOSE_DELAY_MS);
               } catch (err) {
                 console.error('❌ Failed to send SIWE signature:', err);
                 setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -564,10 +658,10 @@ export default function KeysJawIdApp() {
                   error.message,
                   errorCode ?? standardErrorCodes.provider.userRejectedRequest
                 );
-                window.close();
+                communicator.requestClose();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
-                window.close();
+                communicator.requestClose();
               }
             }}
           />
@@ -587,9 +681,9 @@ export default function KeysJawIdApp() {
             setState('processing');
             try {
               await pendingRequest.onApprove(signature);
-              console.log('✅ Signature sent successfully');
+              debugLog('✅ Signature sent successfully');
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -603,10 +697,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -638,13 +732,13 @@ export default function KeysJawIdApp() {
 
         address = signParams?.address;
 
-        console.log('🔍 wallet_sign EIP-712 Request:', { type: signParams?.request?.type, address, typedDataJson });
+        debugLog('🔍 wallet_sign EIP-712 Request:', { type: signParams?.request?.type, address, typedDataJson });
       } else {
         // eth_signTypedData_v4: params[0] is address, params[1] is typed data JSON string
         address = pendingRequest.params[0] as string;
         typedDataJson = pendingRequest.params[1] as string;
 
-        console.log('🔍 eth_signTypedData_v4 Request:', { address, typedDataJson });
+        debugLog('🔍 eth_signTypedData_v4 Request:', { address, typedDataJson });
       }
 
       return (
@@ -658,9 +752,9 @@ export default function KeysJawIdApp() {
             setState('processing');
             try {
               await pendingRequest.onApprove(signature);
-              console.log('✅ Typed data signature sent successfully');
+              debugLog('✅ Typed data signature sent successfully');
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -674,10 +768,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -706,9 +800,9 @@ export default function KeysJawIdApp() {
             setState('processing');
             try {
               await pendingRequest.onApprove(result);
-              console.log('✅ Permission granted successfully');
+              debugLog('✅ Permission granted successfully');
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
               console.error('❌ Failed to grant permission:', err);
               setError(err instanceof Error ? err.message : 'Failed to grant permission');
@@ -722,10 +816,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -754,9 +848,9 @@ export default function KeysJawIdApp() {
             setState('processing');
             try {
               await pendingRequest.onApprove(result);
-              console.log('✅ Permission revoked successfully');
+              debugLog('✅ Permission revoked successfully');
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
               console.error('❌ Failed to revoke permission:', err);
               setError(err instanceof Error ? err.message : 'Failed to revoke permission');
@@ -770,10 +864,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -792,10 +886,10 @@ export default function KeysJawIdApp() {
             try {
               // Forward error and code directly from modal
               await pendingRequest.onReject(error.message, errorCode ?? standardErrorCodes.rpc.methodNotFound);
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject unsupported method:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />
@@ -838,26 +932,14 @@ export default function KeysJawIdApp() {
       );
     }
 
-    // Show success state
+    // 'success' is a terminal marker only — it renders no UI. Each completed flow
+    // closes the dialog immediately (see scheduleClose on every onSuccess),
+    // matching the connect flow; the dApp surfaces its own confirmation. Keeping
+    // the state (rather than dropping it) preserves the cross-flow reset sentinel
+    // and the `state !== 'success'` modal-hide guards; returning null avoids a
+    // success interstitial flashing during the brief close window.
     if (state === 'success') {
-      return (
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="text-center">
-            <div className="mx-auto mb-4 flex h-16 w-16 items-center justify-center rounded-full bg-emerald-100 dark:bg-emerald-900/30">
-              <svg
-                className="h-8 w-8 text-emerald-600 dark:text-emerald-400"
-                fill="none"
-                stroke="currentColor"
-                viewBox="0 0 24 24"
-              >
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M5 13l4 4L19 7" />
-              </svg>
-            </div>
-            <h3 className="text-foreground mb-2 text-xl font-bold">Success!</h3>
-            <p className="text-muted-foreground">Operation completed successfully</p>
-          </div>
-        </div>
-      );
+      return null;
     }
 
     // Show error state
@@ -886,7 +968,7 @@ export default function KeysJawIdApp() {
               <button
                 onClick={() => {
                   communicator.sendPopupUnload();
-                  window.close();
+                  communicator.requestClose();
                 }}
                 className="bg-secondary text-secondary-foreground hover:bg-secondary/80 w-full rounded-lg px-6 py-2 font-semibold transition-colors"
               >
@@ -929,7 +1011,7 @@ export default function KeysJawIdApp() {
                       publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
-                    console.log('✅ Session auth state updated for origin:', currentOrigin);
+                    debugLog('✅ Session auth state updated for origin:', currentOrigin);
                   }
 
                   await authQuery.refetch();
@@ -996,12 +1078,8 @@ export default function KeysJawIdApp() {
                       publicKey: authenticatedAccount.publicKey,
                     };
                     await cryptoHandler.updateAuthState(authState);
-                    console.log(
-                      '✅ Session auth state updated for origin:',
-                      currentOrigin,
-                      'with credentialId:',
-                      authenticatedAccount.credentialId
-                    );
+                    // Do not log credentialId — it is sensitive (PII)
+                    debugLog('✅ Session auth state updated for origin:', currentOrigin);
                   }
 
                   await authQuery.refetch();
@@ -1112,7 +1190,7 @@ export default function KeysJawIdApp() {
             onSuccess={async (signature: string, message: string) => {
               setState('processing');
               try {
-                console.log('✅ User signed SIWE message');
+                debugLog('✅ User signed SIWE message');
 
                 // Build response per ERC-7846 format with SIWE capability
                 const response = {
@@ -1129,10 +1207,10 @@ export default function KeysJawIdApp() {
                   ],
                 };
 
-                console.log('✅ SIWE response:', response);
+                debugLog('✅ SIWE response:', response);
                 await pendingRequest.onApprove(response);
                 setState('success');
-                setTimeout(() => window.close(), 1500);
+                scheduleClose(CLOSE_DELAY_MS);
               } catch (err) {
                 console.error('❌ Failed to approve connection with SIWE:', err);
                 setError(err instanceof Error ? err.message : 'Failed to approve connection');
@@ -1146,10 +1224,10 @@ export default function KeysJawIdApp() {
                   error.message,
                   errorCode ?? standardErrorCodes.provider.userRejectedRequest
                 );
-                window.close();
+                communicator.requestClose();
               } catch (err) {
                 console.error('❌ Failed to reject:', err);
-                window.close();
+                communicator.requestClose();
               }
             }}
           />
@@ -1168,7 +1246,7 @@ export default function KeysJawIdApp() {
           onSuccess={async () => {
             setState('processing');
             try {
-              console.log('✅ User approved connection');
+              debugLog('✅ User approved connection');
 
               // Build response per ERC-7846 format (no capabilities)
               const response = {
@@ -1181,7 +1259,7 @@ export default function KeysJawIdApp() {
 
               await pendingRequest.onApprove(response);
               setState('success');
-              setTimeout(() => window.close(), 1500);
+              scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
               console.error('❌ Failed to approve connection:', err);
               setError(err instanceof Error ? err.message : 'Failed to approve connection');
@@ -1195,10 +1273,10 @@ export default function KeysJawIdApp() {
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
               );
-              window.close();
+              communicator.requestClose();
             } catch (err) {
               console.error('❌ Failed to reject:', err);
-              window.close();
+              communicator.requestClose();
             }
           }}
         />

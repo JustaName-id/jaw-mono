@@ -108,6 +108,27 @@ export function normalizeAuthTTL(authTTL: number | undefined): number {
     return Math.max(0, authTTL);
 }
 
+/**
+ * Whether the persisted session is *provably* expired, based on its
+ * `connectedAt` stamp and the configured auth TTL. Used by the silent
+ * reconnect path (eth_accounts) to suppress stale authorization without
+ * opening a dialog.
+ *
+ * Conservative on purpose: returns false when there is no `connectedAt` to
+ * judge by (we cannot prove expiry, so we do not suppress) — this mirrors
+ * {@link getCachedWalletConnectResponse}, which returns the accounts when
+ * `connectedAt` is absent. Returns true when caching is disabled (TTL 0) and a
+ * session stamp exists.
+ */
+export function isSessionExpired(): boolean {
+    const { connectedAt } = store.account.get();
+    // No stamp → cannot prove expiry (e.g. legacy/in-memory-only session).
+    if (connectedAt === undefined) return false;
+    const authTTL = normalizeAuthTTL(store.config.get().preference?.authTTL);
+    if (authTTL === 0) return true;
+    return Date.now() > connectedAt + authTTL * 1000;
+}
+
 export async function getCachedWalletConnectResponse(): Promise<WalletConnectResponse | null> {
     const accountState = store.account.get();
     const accounts = accountState.accounts;

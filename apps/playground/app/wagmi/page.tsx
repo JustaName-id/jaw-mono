@@ -8,6 +8,7 @@ import { Card } from '../../components/ui/card';
 import { Button } from '../../components/ui/button';
 import { ThemePicker } from '../../components/theme-picker';
 import { ThemeToggle } from '../../components/theme-toggle';
+import { derivePlaygroundTheme } from '../../lib/derive-playground-theme';
 import { parseEther, formatUnits, type Address } from 'viem';
 import {
   useAccount,
@@ -36,7 +37,7 @@ import {
 } from '@jaw.id/wagmi';
 
 import { WagmiProviders } from './providers';
-import { type ModeType } from './config';
+import { type ModeType, type TransportModeType } from './config';
 import { MethodCard } from '../../components/method-card';
 import { WagmiMethodModal } from '../../components/wagmi-method-modal';
 import { EncodeDataModal } from '../../components/encode-data-modal';
@@ -51,15 +52,37 @@ import {
 } from '../../lib/wagmi-methods';
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
 
+// Methods that open the embedded JAW dialog and require the user to sign/approve
+// with their passkey. Surfacing this in the activity log keeps the sign step from
+// feeling hidden by the see-through embedded UI (builder visibility).
+const NEEDS_PASSKEY_APPROVAL: ReadonlySet<WagmiMethod['hookType']> = new Set([
+  'jawConnect',
+  'useSendTransaction',
+  'useSignMessage',
+  'useSignTypedData',
+  'useSign',
+  'useSendCalls',
+  'useGrantPermissions',
+  'useRevokePermissions',
+]);
+
 interface WagmiPageContentProps {
   mode: ModeType;
+  transportMode: TransportModeType;
   pmConfig: PaymasterApplyConfig | undefined;
   onPaymasterApply: (config: PaymasterApplyConfig | null) => void;
   theme: JawTheme;
   onThemeChange: (theme: JawTheme) => void;
 }
 
-function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChange }: WagmiPageContentProps) {
+function WagmiPageContent({
+  mode,
+  transportMode,
+  pmConfig,
+  onPaymasterApply,
+  theme,
+  onThemeChange,
+}: WagmiPageContentProps) {
   const { address, isConnected, connector } = useAccount();
   const chainId = useChainId();
   const { data: balance } = useBalance({ address });
@@ -112,6 +135,17 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
   const [isExecuting, setIsExecuting] = useState(false);
   const [ensName, setEnsName] = useState<string | null>(null);
 
+  // Theme sync: push theme changes to the live keys dialog via the connector's
+  // setTheme (re-themes in place) instead of rebuilding the connector. Calling
+  // connector.setTheme never force-creates a provider, so it's safe to run on
+  // every theme change — no duplicate prewarmed iframes (incl. under StrictMode).
+  useEffect(() => {
+    const jaw = connectors.find((c) => c.id === 'jaw') as
+      | { setTheme?: (theme: JawTheme | undefined) => void }
+      | undefined;
+    jaw?.setTheme?.(theme);
+  }, [theme, connectors]);
+
   useEffect(() => {
     if (!address || !chainId) {
       setEnsName(null);
@@ -134,6 +168,11 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
   const handleExecute = useCallback(
     async (method: WagmiMethod, params: Record<string, unknown>): Promise<unknown> => {
       addLog('request', method.name, params);
+
+      if (NEEDS_PASSKEY_APPROVAL.has(method.hookType)) {
+        addLog('approval', method.name, 'Awaiting approval in the JAW dialog — the user signs with their passkey.');
+      }
+
       setIsExecuting(true);
 
       try {
@@ -391,7 +430,55 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
           </p>
         </Card>
 
-        {/* Theme Picker (only for AppSpecific mode which uses ReactUIHandler) */}
+        {/* Transport Toggle (CrossPlatform only — how keys.jaw.id is reached) */}
+        {mode === Mode.CrossPlatform && (
+          <Card className="p-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex items-center gap-3">
+                <span className="text-muted-foreground text-sm font-medium">Transport:</span>
+                <span
+                  className={`rounded-full px-3 py-1 text-sm font-medium ${
+                    transportMode === 'popup'
+                      ? 'bg-amber-100 text-amber-800 dark:bg-amber-900 dark:text-amber-200'
+                      : 'bg-emerald-100 text-emerald-800 dark:bg-emerald-900 dark:text-emerald-200'
+                  }`}
+                >
+                  {transportMode === 'popup' ? 'Popup' : `Iframe (${transportMode})`}
+                </span>
+              </div>
+              <div className="flex items-center gap-2">
+                <a
+                  href="/wagmi"
+                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    transportMode !== 'popup'
+                      ? 'bg-emerald-600 text-white'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Iframe (default)
+                </a>
+                <a
+                  href="/wagmi?transport=popup"
+                  className={`rounded-md px-3 py-1.5 text-sm transition-colors ${
+                    transportMode === 'popup'
+                      ? 'bg-amber-600 text-white'
+                      : 'bg-muted text-muted-foreground hover:bg-muted/80'
+                  }`}
+                >
+                  Popup
+                </a>
+              </div>
+            </div>
+            <p className="text-muted-foreground mt-2 text-xs">
+              {transportMode === 'popup'
+                ? 'Legacy opt-out: keys.jaw.id opens in a popup window'
+                : 'Default: embedded dialog with automatic popup fallback (Safari passkey creation, insecure contexts, occluded UI)'}
+            </p>
+          </Card>
+        )}
+
+        {/* AppSpecific: manual picker (applied via ReactUIHandler). CrossPlatform
+            auto-derives the theme from the playground's own tokens (see effect). */}
         {mode === Mode.AppSpecific && <ThemePicker theme={theme} onThemeChange={onThemeChange} />}
 
         {/* Connection Status */}
@@ -573,12 +660,38 @@ function WagmiPageContent({ mode, pmConfig, onPaymasterApply, theme, onThemeChan
 function WagmiPageInner() {
   const searchParams = useSearchParams();
   const modeParam = searchParams.get('mode');
+  const transportParam = searchParams.get('transport');
 
   const mode: ModeType = modeParam === 'app-specific' ? Mode.AppSpecific : Mode.CrossPlatform;
+  // SDK default is 'auto' (iframe primary); ?transport=popup is the opt-out.
+  const transportMode: TransportModeType =
+    transportParam === 'popup' ? 'popup' : transportParam === 'iframe' ? 'iframe' : 'auto';
 
   const [paymasters, setPaymasters] = useState<Record<number, PaymasterConfig> | undefined>();
   const [pmConfig, setPmConfig] = useState<PaymasterApplyConfig | undefined>();
-  const [theme, setTheme] = useState<JawTheme>({ mode: 'auto' });
+  // null until resolved on the client. We gate the connector mount on this so
+  // the JAW provider is constructed (and prewarms the keys iframe with the
+  // theme) only once we know the real theme — otherwise the prewarm sends a
+  // stale `{mode:'auto'}` that the later update never re-delivers.
+  const [theme, setTheme] = useState<JawTheme | null>(null);
+
+  // CrossPlatform: derive the JAW theme from the playground's OWN design
+  // tokens so the embedded keys dialog matches the app automatically (theme
+  // sync). AppSpecific keeps the manual ThemePicker. We read the mode from the
+  // DOM (the `dark` class on <html>) and re-derive whenever it changes, so the
+  // dialog always tracks how the playground actually renders.
+  useEffect(() => {
+    if (mode !== Mode.CrossPlatform) {
+      // AppSpecific: initialise once, then let the ThemePicker drive it.
+      setTheme((current) => current ?? { mode: 'auto' });
+      return;
+    }
+    const update = () => setTheme(derivePlaygroundTheme());
+    update();
+    const observer = new MutationObserver(update);
+    observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
+    return () => observer.disconnect();
+  }, [mode]);
 
   const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
     if (config) {
@@ -597,11 +710,21 @@ function WagmiPageInner() {
     }
   };
 
+  // Don't build the connector until the theme is resolved (see note above).
+  if (!theme) {
+    return (
+      <div className="bg-background flex min-h-screen items-center justify-center">
+        <div className="border-primary h-10 w-10 animate-spin rounded-full border-b-2" />
+      </div>
+    );
+  }
+
   return (
-    <WagmiProviders mode={mode} paymasters={paymasters} theme={theme}>
+    <WagmiProviders mode={mode} paymasters={paymasters} theme={theme} transportMode={transportMode}>
       <WagmiPageContent
-        key={`${mode}-${JSON.stringify(theme)}`}
+        key={`${mode}-${transportMode}`}
         mode={mode}
+        transportMode={transportMode}
         pmConfig={pmConfig}
         onPaymasterApply={handlePaymasterApply}
         theme={theme}

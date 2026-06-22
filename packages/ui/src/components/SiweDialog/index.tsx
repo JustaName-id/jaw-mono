@@ -79,7 +79,9 @@ export const SiweDialog = ({
   };
 
   const onCopyMessageHandler = () => {
-    navigator.clipboard.writeText(message);
+    if (typeof window !== 'undefined' && navigator?.clipboard) {
+      navigator.clipboard.writeText(message).catch(() => undefined);
+    }
   };
 
   return (

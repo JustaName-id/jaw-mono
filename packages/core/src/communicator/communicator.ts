@@ -1,121 +1,188 @@
 import { JAW_KEYS_URL } from '../constants.js';
-import { SDK_VERSION } from '../sdk-info.js';
 import { Message, MessageID } from '../messages/message.js';
 import { standardErrors } from '../errors/errors.js';
 
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
-import { ConfigMessage } from '../messages/configMessage.js';
+import type { JawTheme } from '../ui/theme.js';
+import { TrustedHostsRegistry } from '../trusted-hosts.js';
+import { RouteContext, Transport, TransportMode } from './transport.js';
+import { TransportRouter } from './transport-router.js';
+
+/**
+ * How often (ms) to poll the live transport's window while awaiting a response.
+ * The graceful close signal (beforeunload → PopupUnload) is best-effort: a popup
+ * killed abruptly never posts it, so we poll `isAlive()` as a backstop and reject
+ * the pending request rather than hang. Only runs while a request is in flight.
+ */
+const TRANSPORT_LIVENESS_POLL_MS = 500;
 
 export type CommunicatorOptions = {
     metadata: AppMetadata;
     preference: JawProviderPreference;
+    /** dApp theme tokens, forwarded to the keys app to match its look & feel. */
+    theme?: JawTheme;
 };
 
-// Constants
-const POPUP_WIDTH = 420;
-const POPUP_HEIGHT = 730;
-const HANDSHAKE_TIMEOUT = 60_000;
+const VALID_TRANSPORT_MODES: readonly TransportMode[] = ['popup', 'iframe', 'auto'];
 
 /**
- * Communicates with a popup window for JAW keys.jaw.id (or another url)
- * to send and receive messages.
+ * Normalize the transport preference. Unset defaults to 'auto' (iframe
+ * primary with automatic popup fallback); set 'popup' explicitly to keep the
+ * legacy popup-only behavior. Invalid values fall back to 'popup' (the most
+ * conservative transport), warning once.
+ */
+export function normalizeTransportMode(mode: unknown, warn: (message: string) => void = console.warn): TransportMode {
+    if (mode === undefined) return 'auto';
+    if (VALID_TRANSPORT_MODES.includes(mode as TransportMode)) return mode as TransportMode;
+    warn(`[JAW] Invalid transportMode "${String(mode)}" — falling back to 'popup'.`);
+    return 'popup';
+}
+
+/**
+ * Extract the routing context from an outbound message. Only unencrypted
+ * handshake messages carry a visible method (eth_requestAccounts /
+ * wallet_connect — exactly the ones that may create a credential);
+ * encrypted business requests route with no method, which is correct.
+ */
+export function getRouteContext(message: Message): RouteContext {
+    const content = (message as { content?: unknown }).content;
+    if (content && typeof content === 'object' && 'handshake' in content) {
+        const handshake = (content as { handshake?: { method?: unknown } }).handshake;
+        if (typeof handshake?.method === 'string') {
+            return { method: handshake.method };
+        }
+    }
+    return {};
+}
+
+/**
+ * Communicates with the keys app (keys.jaw.id or another url) to send and
+ * receive messages.
  *
- * This class is responsible for opening a popup window, posting messages to it,
- * and listening for responses.
- *
- * It also handles cleanup of event listeners and the popup window itself when necessary.
+ * Facade over the transport layer: the TransportRouter decides per request
+ * whether the keys app is reached through a popup window or an embedded
+ * iframe dialog. The message protocol is identical on both carriers.
  */
 export class Communicator {
-    private readonly metadata: AppMetadata;
-    private readonly preference: JawProviderPreference;
     private readonly url: URL;
-    private popup: Window | null = null;
+    private readonly router: TransportRouter;
     private listeners = new Map<(_: MessageEvent) => void, { reject: (_: Error) => void }>();
+    /**
+     * Requests awaiting a response, replayed if the dialog switches transports.
+     * Each entry carries the request (to re-post) and a reject handle (to fail
+     * the caller if the replay transport can't be acquired — otherwise the
+     * response listener, which has no timeout, would hang forever).
+     */
+    private inflight = new Map<MessageID, { request: Message & { id: MessageID }; reject: (error: Error) => void }>();
 
-    constructor({ metadata, preference }: CommunicatorOptions) {
+    private switchListenerArmed = false;
+
+    /**
+     * Trusted embedders, queried synchronously on every routing decision and
+     * refreshed once (out of band) from the keys app. Fail-closed: the refresh
+     * can only ever *add* operator-vetted hosts; a missing/broken endpoint
+     * leaves the compiled-in baseline, so the router keeps routing untrusted
+     * embedders to the popup.
+     */
+    private readonly trustedHosts = new TrustedHostsRegistry();
+
+    constructor({ metadata, preference, theme }: CommunicatorOptions) {
         this.url = new URL(preference.keysUrl ?? JAW_KEYS_URL);
-        this.metadata = metadata;
-        this.preference = preference;
+        this.router = new TransportRouter({
+            url: this.url,
+            metadata,
+            preference,
+            theme,
+            mode: normalizeTransportMode(preference.transportMode),
+            isTrustedHostFn: (hostname) => this.trustedHosts.has(hostname),
+            // Bridge transport-level dismissal (Escape, click-outside, window
+            // close, keys-side cancel) to the facade: the dApp's in-flight
+            // response promise lives here on `listeners`, not on the transport,
+            // so a dismissal must reject it from here or it hangs forever.
+            onDismiss: () => this.rejectPendingRequests(),
+        });
+
+        // Best-effort, non-blocking: routing works off the baseline until (and
+        // if) this resolves. Swallow failures — refreshFrom is already fail-soft.
+        void this.trustedHosts.refreshFrom(this.url).catch(() => {
+            /* fail-soft: keep the baseline */
+        });
     }
 
     /**
-     * Wait for popup to load
+     * The keys dialog can ask to continue the flow in a popup (occluded UI,
+     * WebAuthn-in-iframe limitations, or the user's choice). Armed lazily on
+     * first business traffic.
+     */
+    private ensureSwitchListener(): void {
+        if (this.switchListenerArmed || typeof window === 'undefined') return;
+        this.switchListenerArmed = true;
+        window.addEventListener('message', this.handleSwitchTransport);
+    }
+
+    /** Routes SwitchTransport requests from the keys dialog. */
+    private handleSwitchTransport = (event: MessageEvent): void => {
+        if (event.origin !== this.url.origin) return;
+        if (!this.router.ownsSource(event.source)) return;
+        const message = event.data as { event?: string } | undefined;
+        if (message?.event !== 'SwitchTransport') return;
+
+        this.router.forcePopupOnce();
+
+        // Replay ALL in-flight requests on the popup. We acquire the popup
+        // once (the first acquire consumes the forced-popup flag) and reuse
+        // it for every request, so requests after the first don't route back
+        // to the now-hidden iframe. Response listeners are transport-agnostic
+        // (matched by requestId), so they stay armed.
+        void (async () => {
+            const entries = [...this.inflight.values()];
+            if (entries.length === 0) return;
+            try {
+                const transport = await this.router.acquire(getRouteContext(entries[0].request));
+                for (const { request } of entries) {
+                    await transport.postMessage(request);
+                }
+            } catch (error) {
+                // Popup blocked or acquire failed — nothing will deliver a
+                // response on the new transport, and the response listeners have
+                // no timeout, so reject the in-flight requests instead of
+                // leaving the callers to hang forever.
+                const reason = error instanceof Error ? error : standardErrors.rpc.internal('Transport switch failed');
+                for (const { reject } of entries) reject(reason);
+            }
+        })();
+    };
+
+    /**
+     * Wait for the keys app to load and complete the handshake.
      */
     async waitForPopupLoaded(): Promise<Window> {
-        // If popup exists and is not closed, return it
-        if (this.popup && !this.popup.closed) {
-            this.popup.focus();
-            return this.popup;
-        }
-
-        this.popup = await this.openPopup();
-
-        this.onMessage<ConfigMessage>(({ event }) => event === 'PopupUnload')
-            .then(() => {
-                this.disconnect();
-            })
-            .catch(() => {
-                /* empty */
-            });
-
-        return this.onMessage<ConfigMessage>(({ event }) => event === 'PopupLoaded', { timeout: HANDSHAKE_TIMEOUT })
-            .then((message) => {
-                this.postMessage({
-                    requestId: message.id,
-                    data: {
-                        version: SDK_VERSION,
-                        metadata: this.metadata,
-                        preference: this.preference,
-                        location: window.location.toString(),
-                    },
-                });
-                return message.id;
-            })
-            .then((handshakeId) => {
-                // Bind PopupReady to this handshake's id so a stale one can't resolve it.
-                return this.onMessage<ConfigMessage>(
-                    ({ event, requestId }) => event === 'PopupReady' && requestId === handshakeId,
-                    { timeout: HANDSHAKE_TIMEOUT }
-                );
-            })
-            .then(() => {
-                if (!this.popup) throw standardErrors.rpc.internal();
-                return this.popup;
-            });
+        const transport = await this.router.acquire({});
+        return transport.ensureReady();
     }
 
     /**
-     * Open popup window
+     * Push a new dApp theme to the live keys dialog (and onto future
+     * handshakes), so theme changes apply without rebuilding the connector.
      */
-    private async openPopup(): Promise<Window> {
-        const left = Math.max(0, (window.screen.width - POPUP_WIDTH) / 2);
-        const top = Math.max(0, (window.screen.height - POPUP_HEIGHT) / 2);
-
-        const popupId = `jaw_${crypto.randomUUID()}`;
-
-        const popup = window.open(
-            this.url.toString(),
-            popupId,
-            `width=${POPUP_WIDTH},height=${POPUP_HEIGHT},left=${left},top=${top}`
-        );
-
-        if (!popup) {
-            throw standardErrors.provider.userRejectedRequest(
-                'Failed to open popup. Please allow popups for this site.'
-            );
-        }
-
-        popup.focus();
-        return popup;
+    updateTheme(theme: JawTheme | undefined): void {
+        this.router.updateTheme(theme);
     }
 
     /**
-     * Posts a message to the popup window
+     * Mount and handshake the iframe in the background (no-op in popup mode).
+     */
+    async prewarm(): Promise<void> {
+        await this.router.prewarm();
+    }
+
+    /**
+     * Posts a message to the keys app.
      */
     postMessage = async (message: Message) => {
-        const popup = await this.waitForPopupLoaded();
-
-        popup.postMessage(message, this.url.origin);
+        this.ensureSwitchListener();
+        const transport = await this.router.acquire(getRouteContext(message));
+        await transport.postMessage(message);
     };
 
     /**
@@ -124,33 +191,96 @@ export class Communicator {
      * @returns Promise resolving to the response message
      */
     async postRequestAndWaitForResponse<M extends Message>(request: Message & { id: MessageID }): Promise<M> {
-        const responsePromise = this.onMessage<M>(({ requestId }) => requestId === request.id);
-        await this.postMessage(request);
-        return await responsePromise;
+        const { promise, cancel, reject } = this.listenForMessage<M>(({ requestId }) => requestId === request.id);
+        this.inflight.set(request.id, { request, reject });
+        try {
+            // Inline postMessage to keep the acquired transport handle: we poll
+            // its window for an abrupt close (popup killed before it can post
+            // PopupUnload) so the request rejects instead of hanging.
+            this.ensureSwitchListener();
+            const transport = await this.router.acquire(getRouteContext(request));
+            await transport.postMessage(request);
+            return await this.awaitResponseOrClosed(transport, promise);
+        } catch (error) {
+            // postMessage failed (popup blocked, handshake timeout, acquire
+            // error): tear down the orphaned response listener so it doesn't
+            // leak until disconnect().
+            cancel();
+            throw error;
+        } finally {
+            this.inflight.delete(request.id);
+        }
+    }
+
+    /**
+     * Resolve with the response, or reject with UserRejectedRequest (4001) if
+     * the transport's window dies before it arrives. Backstops the best-effort
+     * PopupUnload signal (a popup closed abruptly never posts it). The interval
+     * is always cleared on settle, so nothing leaks past the request.
+     */
+    private awaitResponseOrClosed<M extends Message>(transport: Transport, response: Promise<M>): Promise<M> {
+        return new Promise<M>((resolve, reject) => {
+            let settled = false;
+            const finish = (run: () => void): void => {
+                if (settled) return;
+                settled = true;
+                clearInterval(poller);
+                run();
+            };
+            const poller = setInterval(() => {
+                if (!transport.isAlive()) {
+                    finish(() => reject(standardErrors.provider.userRejectedRequest('Request rejected')));
+                }
+            }, TRANSPORT_LIVENESS_POLL_MS);
+            response.then(
+                (value) => finish(() => resolve(value)),
+                (error) => finish(() => reject(error))
+            );
+        });
     }
 
     /**
      * Listen for messages matching predicate
      * @param predicate - Function to test if a message matches
      * @param options.timeout - Optional ms timeout; rejects and cleans up on expiry. Omit to wait indefinitely.
+     * @returns Promise resolving to the matching message
      */
     async onMessage<M extends Message>(
         predicate: (msg: Partial<M>) => boolean,
         { timeout }: { timeout?: number } = {}
     ): Promise<M> {
-        return new Promise<M>((resolve, reject) => {
-            let timer: ReturnType<typeof setTimeout> | undefined;
+        return this.listenForMessage<M>(predicate, { timeout }).promise;
+    }
 
-            // Remove the listener and clear the timeout on any settle path.
-            const cleanup = () => {
-                window.removeEventListener('message', listener);
-                this.listeners.delete(listener);
-                if (timer !== undefined) clearTimeout(timer);
-            };
+    /**
+     * Register an origin/source-validated message listener, returning the
+     * matching promise plus a cancel handle that removes the listener without
+     * resolving (used to clean up when the request never gets sent).
+     */
+    private listenForMessage<M extends Message>(
+        predicate: (msg: Partial<M>) => boolean,
+        { timeout }: { timeout?: number } = {}
+    ): {
+        promise: Promise<M>;
+        cancel: () => void;
+        reject: (error: Error) => void;
+    } {
+        let listener!: (event: MessageEvent) => void;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let rejectFn!: (error: Error) => void;
 
-            const listener = (event: MessageEvent) => {
-                // Validate origin
+        // Remove the listener and clear the timeout on any settle path.
+        const cleanup = () => {
+            window.removeEventListener('message', listener);
+            this.listeners.delete(listener);
+            if (timer !== undefined) clearTimeout(timer);
+        };
+
+        const promise = new Promise<M>((resolve, reject) => {
+            listener = (event: MessageEvent) => {
+                // Validate origin and source (an owned transport window)
                 if (event.origin !== this.url.origin) return;
+                if (!this.router.ownsSource(event.source)) return;
 
                 const message = event.data;
                 if (predicate(message)) {
@@ -158,14 +288,12 @@ export class Communicator {
                     resolve(message);
                 }
             };
-
             window.addEventListener('message', listener);
-            this.listeners.set(listener, {
-                reject: (error: Error) => {
-                    cleanup();
-                    reject(error);
-                },
-            });
+            rejectFn = (error: Error) => {
+                cleanup();
+                reject(error);
+            };
+            this.listeners.set(listener, { reject: rejectFn });
 
             if (timeout !== undefined && timeout !== Infinity) {
                 timer = setTimeout(() => {
@@ -175,21 +303,37 @@ export class Communicator {
                 }, timeout);
             }
         });
+
+        const cancel = () => cleanup();
+
+        return { promise, cancel, reject: rejectFn };
+    }
+
+    /**
+     * Reject every in-flight dApp request with UserRejectedRequest (4001) and
+     * clear the pending state. Used both when the user dismisses the dialog
+     * (via the transport `onDismiss` bridge) and on full {@link disconnect}.
+     * Each reject() cleans up its own listener via cleanup().
+     */
+    private rejectPendingRequests(): void {
+        this.inflight.clear();
+        this.listeners.forEach(({ reject }) => {
+            reject(standardErrors.provider.userRejectedRequest('Request rejected'));
+        });
+        this.listeners.clear();
     }
 
     /**
      * Cleanup all resources
      */
     disconnect(): void {
-        if (this.popup && !this.popup.closed) {
-            this.popup.close();
-        }
-        this.popup = null;
+        this.router.destroyAll();
 
-        // Reject all pending listeners; each reject() cleans up via cleanup().
-        this.listeners.forEach(({ reject }) => {
-            reject(standardErrors.provider.userRejectedRequest('Request rejected'));
-        });
-        this.listeners.clear();
+        if (this.switchListenerArmed) {
+            window.removeEventListener('message', this.handleSwitchTransport);
+            this.switchListenerArmed = false;
+        }
+
+        this.rejectPendingRequests();
     }
 }

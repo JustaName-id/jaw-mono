@@ -242,6 +242,9 @@ function CLIBridgeContent() {
                   break;
 
                 case 'shutdown':
+                  // Direct close is intentional: /cli-bridge is never embedded
+                  // (its route keeps frame-ancestors 'none' / X-Frame-Options DENY).
+                  // eslint-disable-next-line no-restricted-properties
                   window.close();
                   break;
               }

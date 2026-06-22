@@ -3,6 +3,7 @@ import {
   type ProviderInterface,
   type WalletConnectCapabilities,
   type WalletConnectResponse,
+  type JawTheme,
   JAW,
   JAW_WALLET_ICON,
 } from '@jaw.id/core';
@@ -66,6 +67,13 @@ type ConnectorProperties = {
     chainId: number;
   }>;
   onConnect(connectInfo: ProviderConnectInfo): void;
+  /**
+   * Update the dApp theme. Re-themes the live embedded keys dialog in place
+   * (if the provider is already created) and updates the stored parameters so
+   * a provider created later picks it up. Never forces provider creation — safe
+   * to call on every theme change without spawning extra prewarmed iframes.
+   */
+  setTheme(theme: JawTheme | undefined): void;
 };
 
 export function jaw(parameters: JawParameters) {
@@ -235,6 +243,17 @@ export function jaw(parameters: JawParameters) {
         provider_ = sdk.provider;
       }
       return provider_;
+    },
+
+    setTheme(theme: JawTheme | undefined) {
+      // Keep the stored options in sync so a provider created later (or after a
+      // reconnect) starts with the right theme...
+      parameters = { ...parameters, theme };
+      // ...and push it to the live provider if one already exists. Crucially we
+      // do NOT call getProvider() here — that would force-create a provider (and
+      // prewarm an iframe), which under React StrictMode's double-mount spawns a
+      // duplicate. No-op until wagmi creates the provider through its lifecycle.
+      provider_?.setTheme(theme);
     },
 
     async isAuthorized() {
