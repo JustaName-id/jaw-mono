@@ -1,3 +1,17 @@
+# 1.0.0 (2026-06-22)
+
+### 🚀 Features
+
+- ⚠️  embedded iframe transport for keys ([#198](https://github.com/JustaName-id/jaw-mono/pull/198), [#1](https://github.com/JustaName-id/jaw-mono/issues/1), [#2](https://github.com/JustaName-id/jaw-mono/issues/2), [#7](https://github.com/JustaName-id/jaw-mono/issues/7), [#5](https://github.com/JustaName-id/jaw-mono/issues/5), [#6](https://github.com/JustaName-id/jaw-mono/issues/6))
+
+### ⚠️  Breaking Changes
+
+- integrators upgrading without setting transportMode
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
 ## 0.4.5 (2026-06-16)
 
 ### 🩹 Fixes
