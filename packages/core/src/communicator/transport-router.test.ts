@@ -70,6 +70,7 @@ type RouterEnv = {
     iov2?: boolean;
     trusted?: boolean;
     secureContext?: boolean;
+    https?: boolean;
     hostname?: string;
 };
 
@@ -90,6 +91,7 @@ function createRouter(env: RouterEnv = {}) {
         supportsIOv2Fn: () => env.iov2 ?? true,
         isTrustedHostFn: () => env.trusted ?? false,
         isSecureContextFn: () => env.secureContext ?? true,
+        isHttpsFn: () => env.https ?? true,
         getLocation: () => ({
             hostname: env.hostname ?? 'dapp.example.com',
         }),
@@ -129,6 +131,24 @@ describe('TransportRouter.route', () => {
     it('routes to popup on insecure contexts regardless of other conditions', () => {
         const { router } = createRouter({ mode: 'iframe', secureContext: false });
         expect(router.route({})).toBe('popup');
+    });
+
+    it('routes to popup on an http dev server (secure context but not HTTPS)', () => {
+        // http://localhost is a secure context (isSecureContext === true) yet not
+        // HTTPS — the iframe must not be used; the popup is the default there.
+        const { router } = createRouter({ mode: 'iframe', secureContext: true, https: false });
+        expect(router.route({})).toBe('popup');
+        expect(router.route({ method: 'wallet_sendCalls' })).toBe('popup');
+    });
+
+    it('forces popup on a non-HTTPS origin even for mode "auto"', () => {
+        const { router } = createRouter({ mode: 'auto', secureContext: true, https: false });
+        expect(router.route({})).toBe('popup');
+    });
+
+    it('keeps iframe on an HTTPS origin (secure context and HTTPS)', () => {
+        const { router } = createRouter({ mode: 'iframe', secureContext: true, https: true });
+        expect(router.route({})).toBe('iframe');
     });
 
     it('routes credential-creating methods to popup on Safari', () => {
@@ -222,6 +242,23 @@ describe('TransportRouter.acquire', () => {
         await router.acquire({});
         await router.acquire({});
 
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0][0]).toMatch(/HTTPS/);
+    });
+
+    it('acquires the popup (and warns) on an http dev server', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const { router, popupMock, iframeFactory } = createRouter({
+            mode: 'iframe',
+            secureContext: true,
+            https: false,
+        });
+
+        const transport = await router.acquire({ method: 'personal_sign' });
+
+        expect(transport.kind).toBe('popup');
+        expect(popupMock.ensureReady).toHaveBeenCalledTimes(1);
+        expect(iframeFactory).not.toHaveBeenCalled();
         expect(warn).toHaveBeenCalledTimes(1);
         expect(warn.mock.calls[0][0]).toMatch(/HTTPS/);
     });

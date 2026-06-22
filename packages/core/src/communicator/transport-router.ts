@@ -17,7 +17,7 @@ export const CREDENTIAL_CREATING_METHODS: readonly string[] = ['eth_requestAccou
 
 type RouteReason =
     | 'mode-popup' // transportMode unset or 'popup'
-    | 'insecure-protocol' // host page is not HTTPS
+    | 'insecure-protocol' // host page is not a secure HTTPS origin
     | 'safari-credential-method' // Safari cannot create passkeys in iframes
     | 'clickjacking-guard' // visibility not verifiable and host not trusted
     | 'iframe'; // default: embedded dialog
@@ -34,6 +34,12 @@ export type TransportRouterConfig = TransportOptions & {
     isTrustedHostFn?: (hostname: string) => boolean;
     /** Secure-context check (true on HTTPS and localhost — WebAuthn requirement). */
     isSecureContextFn?: () => boolean;
+    /**
+     * HTTPS-origin check. Distinct from the secure-context check: `http://localhost`
+     * is a secure context but not HTTPS, so the iframe requires both — a plain-http
+     * dev server falls back to popup.
+     */
+    isHttpsFn?: () => boolean;
     getLocation?: () => { hostname: string };
 };
 
@@ -42,7 +48,7 @@ export type TransportRouterConfig = TransportOptions & {
  * (first match wins):
  *
  *  1. mode unset or 'popup'                          -> popup
- *  2. host page not HTTPS                            -> popup (+ one warning)
+ *  2. host page not a secure HTTPS origin            -> popup (+ one warning)
  *  3. Safari and the method may create a credential  -> popup, iframe resyncs after
  *  4. no IOv2 and embedder not trusted               -> popup
  *  5. otherwise                                      -> iframe
@@ -56,6 +62,7 @@ export class TransportRouter implements TransportRouterContract {
     private readonly supportsIOv2Fn: () => boolean;
     private readonly isTrustedHostFn: (hostname: string) => boolean;
     private readonly isSecureContextFn: () => boolean;
+    private readonly isHttpsFn: () => boolean;
     private readonly getLocation: () => { hostname: string };
 
     private popup: PopupTransport | null = null;
@@ -87,6 +94,7 @@ export class TransportRouter implements TransportRouterContract {
         this.supportsIOv2Fn = config.supportsIOv2Fn ?? supportsIOv2;
         this.isTrustedHostFn = config.isTrustedHostFn ?? isTrustedHost;
         this.isSecureContextFn = config.isSecureContextFn ?? (() => window.isSecureContext);
+        this.isHttpsFn = config.isHttpsFn ?? (() => window.location.protocol === 'https:');
         this.getLocation = config.getLocation ?? (() => ({ hostname: window.location.hostname }));
     }
 
@@ -191,7 +199,10 @@ export class TransportRouter implements TransportRouterContract {
         if (this.mode !== 'iframe' && this.mode !== 'auto') {
             return { kind: 'popup', reason: 'mode-popup' };
         }
-        if (!this.isSecureContextFn()) {
+        // Iframe needs a secure context (WebAuthn) AND a real HTTPS origin. The
+        // latter excludes http://localhost dev servers — secure contexts that are
+        // not HTTPS — which must use the popup.
+        if (!this.isSecureContextFn() || !this.isHttpsFn()) {
             return { kind: 'popup', reason: 'insecure-protocol' };
         }
         if (this.isSafariFn() && ctx.method !== undefined && CREDENTIAL_CREATING_METHODS.includes(ctx.method)) {
@@ -225,7 +236,11 @@ export class TransportRouter implements TransportRouterContract {
         if (kind === 'popup') {
             if (reason === 'insecure-protocol' && !this.warnedInsecure) {
                 this.warnedInsecure = true;
-                console.warn('[JAW] The iframe transport requires an HTTPS origin (WebAuthn). Falling back to popup.');
+                console.warn(
+                    '[JAW] The iframe transport requires a secure HTTPS origin. ' +
+                        'On a non-HTTPS origin (e.g. an http:// dev server, including http://localhost), ' +
+                        'JAW falls back to the popup transport.'
+                );
             }
             if (reason === 'safari-credential-method' && this.iframe) {
                 // The popup flow will mutate keys-side state the (storage-

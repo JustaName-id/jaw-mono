@@ -50,7 +50,16 @@ describe('fetchTrustedHosts', () => {
     });
 
     it('returns empty when no fetch implementation is available', async () => {
-        expect(await fetchTrustedHosts(KEYS_URL, undefined as unknown as typeof fetch)).toEqual([]);
+        // Passing `undefined` would trigger the `= globalThis.fetch` default param and make a
+        // real network call. Simulate the actual "no fetch" runtime by removing the global.
+        const original = globalThis.fetch;
+        // @ts-expect-error — simulate a runtime without a global fetch
+        globalThis.fetch = undefined;
+        try {
+            expect(await fetchTrustedHosts(KEYS_URL)).toEqual([]);
+        } finally {
+            globalThis.fetch = original;
+        }
     });
 });
 
