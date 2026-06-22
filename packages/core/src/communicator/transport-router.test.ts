@@ -402,6 +402,7 @@ describe('TransportRouter.forceIframeReconnectOnce', () => {
         const { router, iframeMock } = createRouter({ mode: 'iframe', safari: true, trusted: true });
         expect(router.route({ method: 'wallet_connect' })).toBe('popup');
 
+        await router.acquire({ method: 'wallet_sendCalls' }); // live iframe established (precondition)
         router.forceIframeReconnectOnce();
         const transport = await router.acquire({ method: 'wallet_connect' });
 
@@ -412,12 +413,24 @@ describe('TransportRouter.forceIframeReconnectOnce', () => {
     it('is consumed once — the next acquire reverts to normal routing', async () => {
         const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
 
+        await router.acquire({ method: 'wallet_sendCalls' }); // live iframe established
         router.forceIframeReconnectOnce();
         const first = await router.acquire({ method: 'wallet_connect' });
         expect(first.kind).toBe('iframe');
 
         const second = await router.acquire({ method: 'wallet_connect' });
         expect(second.kind).toBe('popup'); // back to the Safari-credential rule
+    });
+
+    it('falls through to normal routing when forced without a live iframe', async () => {
+        // Defensive: the override only applies to a live iframe (the one that
+        // requested the reconnect). With no iframe, decide() still governs — so
+        // the secure-context/credential rules are never silently bypassed.
+        const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+
+        router.forceIframeReconnectOnce();
+        const transport = await router.acquire({ method: 'wallet_connect' });
+        expect(transport.kind).toBe('popup'); // Safari-credential rule, not bypassed
     });
 
     it('reuses the live iframe without reloading it', async () => {
@@ -441,6 +454,7 @@ describe('TransportRouter.forceIframeReconnectOnce', () => {
     it('destroyAll() clears a pending reconnect override (no stale credential bypass)', async () => {
         const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
 
+        await router.acquire({ method: 'wallet_sendCalls' }); // live iframe established
         router.forceIframeReconnectOnce();
         router.destroyAll();
 

@@ -215,6 +215,9 @@ export class TransportRouter implements TransportRouterContract {
     }
 
     private async doAcquire(ctx: RouteContext): Promise<Transport> {
+        // Priority: an explicit popup switch (user/dialog) always wins over an
+        // automatic reconnect, which in turn wins over normal routing. Both
+        // overrides are single-use (consumed here).
         if (this.popupForced) {
             this.popupForced = false;
             const popup = this.getOrCreatePopup();
@@ -222,13 +225,18 @@ export class TransportRouter implements TransportRouterContract {
             return popup;
         }
 
-        // Reconnect override: hand back the live iframe regardless of routing,
-        // so a session can be re-established inside it (Safari partition recovery).
+        // Reconnect override: hand back the LIVE iframe regardless of routing, so a
+        // session can be re-established inside it (Safari partition recovery). Only
+        // honored when an iframe actually exists — it is set in response to that
+        // very iframe emitting a reconnect request. If there is no live iframe we
+        // fall through to decide(), so the secure-context/HTTPS rules still apply
+        // (a future eager-iframe change can't silently bypass them).
         if (this.iframeReconnectForced) {
             this.iframeReconnectForced = false;
-            const iframe = this.getOrCreateIframe();
-            await iframe.ensureReady();
-            return iframe;
+            if (this.iframe) {
+                await this.iframe.ensureReady();
+                return this.iframe;
+            }
         }
 
         const { kind, reason } = this.decide(ctx);

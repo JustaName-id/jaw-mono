@@ -416,7 +416,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           const reconnectResponse: RPCResponseMessage = {
             requestId: request.id,
             id: crypto.randomUUID() as MessageID,
-            sender: '',
+            sender: '', // no session → no popup public key; this response carries no secret
             correlationId: request.correlationId,
             content: {
               failure: {
