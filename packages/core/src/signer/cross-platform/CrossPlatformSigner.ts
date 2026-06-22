@@ -6,7 +6,12 @@ import { decodePersonalSignRequest } from '../SignerUtils.js';
 import { Communicator } from '../../communicator/index.js';
 import { getPermissionFromRelay } from '../../rpc/index.js';
 import { standardErrors } from '../../errors/index.js';
-import { RPCRequestMessage, RPCResponseMessage, RPCResponse, isReconnectRequiredFailure } from '../../messages/index.js';
+import {
+    RPCRequestMessage,
+    RPCResponseMessage,
+    RPCResponse,
+    isReconnectRequiredFailure,
+} from '../../messages/index.js';
 import { KeyManager } from '../../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/index.js';
 import { store, SDKChain } from '../../store/index.js';
