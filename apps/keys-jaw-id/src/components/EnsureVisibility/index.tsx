@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 
 import type { PopupCommunicator } from '../../lib/popup-communicator';
 import { isOccluded, supportsIOv2, type VisibilityEntry } from '../../lib/embedded-ui';
@@ -119,6 +120,46 @@ export function EnsureVisibility({ communicator, active, children }: EnsureVisib
     };
   }, [guardActive]);
 
+  // The signing dialogs (SignatureDialog, TransactionDialog, …) render through
+  // a Radix Portal to document.body (position:fixed, z-[100]) — OUTSIDE this
+  // wrapper — so the wrapper's pointer-events-none cannot reach the live
+  // approve button. To actually neutralize that button while the iframe is
+  // occluded, portal a full-viewport blocking shield to document.body, stacked
+  // ABOVE the dialog. The shield is driven by the RAW `occluded` reading
+  // (immediate, fail-closed) so there is no interactive window; the cosmetic
+  // "covered" banner inside it stays gated on the debounced `covered` flag so
+  // the per-reveal transient doesn't flash it (see COVER_CONFIRM_MS).
+  //
+  // Pointer-based clickjacking is the threat this addresses. Keyboard
+  // activation of an already-focused control is not an overlay attack and is
+  // out of scope here.
+  const shield =
+    guardActive && occluded && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            data-testid="jaw-clickjacking-shield"
+            aria-hidden={covered ? undefined : true}
+            // z-[2147483647] keeps it above the dialog (z-[100]); pointer-events
+            // auto makes every click land here instead of the dialog beneath.
+            className="fixed inset-0 z-[2147483647] flex items-start justify-center"
+            style={{ pointerEvents: 'auto' }}
+            // Belt-and-suspenders: swallow the gesture at the capture phase even
+            // if a descendant re-enables pointer-events.
+            onPointerDownCapture={(event) => event.preventDefault()}
+            onClickCapture={(event) => event.preventDefault()}
+          >
+            {covered && (
+              <div role="alert" className="bg-background border-border mt-4 rounded-md border px-4 py-2 shadow-lg">
+                <p className="text-destructive text-xs">
+                  This window appears to be covered. Interactions are disabled for your safety.
+                </p>
+              </div>
+            )}
+          </div>,
+          document.body
+        )
+      : null;
+
   return (
     <div className={guardActive ? undefined : 'contents'}>
       <div
@@ -127,7 +168,9 @@ export function EnsureVisibility({ communicator, active, children }: EnsureVisib
             ? 'contents'
             : occluded
               ? // Neutralize interactions immediately on the raw reading
-                // (fail-closed); only fade once the cover is confirmed.
+                // (fail-closed); only fade once the cover is confirmed. This
+                // covers any content rendered inline (non-portaled); the
+                // body-level shield below covers the portaled dialog.
                 `pointer-events-none transition-opacity ${covered ? 'opacity-40' : ''}`
               : 'transition-opacity'
         }
@@ -135,13 +178,7 @@ export function EnsureVisibility({ communicator, active, children }: EnsureVisib
       >
         {children}
       </div>
-      {guardActive && covered && (
-        <div className="border-border border-t px-4 py-2">
-          <p className="text-destructive text-xs">
-            This window appears to be covered. Interactions are disabled for your safety.
-          </p>
-        </div>
-      )}
+      {shield}
     </div>
   );
 }
