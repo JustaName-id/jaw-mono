@@ -7,6 +7,7 @@ import { Eip712DialogProps } from './types';
 import { useIsMobile, useClearSigningTypedData } from '../../hooks';
 import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
 import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
+import { Eip712VerificationDigests } from '../VerificationDigest';
 import { useState, useEffect, useMemo, useRef } from 'react';
 
 // EIP-712 TypedData structure
@@ -436,6 +437,9 @@ export const Eip712Dialog = ({
               </div>
             );
           })()}
+
+          {/* ERC-8213 verification digests — only when typed data parsed. */}
+          {typedData && <Eip712VerificationDigests typedDataJson={typedDataJson} />}
 
           {/* URL and Domain Information */}
           <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5 max-md:mt-auto">

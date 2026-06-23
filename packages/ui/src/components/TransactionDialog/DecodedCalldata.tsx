@@ -1,11 +1,40 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
+import type { Hex } from 'viem';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
+import { computeCalldataDigest } from '../../utils/erc8213';
 import { IdentityAvatar } from '../IdentityAvatar';
+import { DigestRow } from '../VerificationDigest';
 import { ClearSignedView } from './ClearSignedView';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+/**
+ * ERC-8213 Calldata Digest, collapsed behind a disclosure like the raw calldata
+ * view. Shown only for non-empty calldata; the spec omits the digest when
+ * calldata is empty (`0x`/undefined).
+ */
+const CalldataDigest = ({ data }: { data: string }) => {
+  const digest = useMemo(() => {
+    if (!data || data === '0x') return null;
+    try {
+      return computeCalldataDigest(data as Hex);
+    } catch {
+      return null;
+    }
+  }, [data]);
+
+  if (!digest) return null;
+  return (
+    <details className="text-xs">
+      <summary className="text-muted-foreground hover:text-foreground cursor-pointer">Show calldata digest</summary>
+      <div className="mt-2">
+        <DigestRow label="Calldata Digest" value={digest} />
+      </div>
+    </details>
+  );
+};
 
 /** Merge parent-resolved and locally-resolved maps, normalizing all keys to lowercase. */
 function mergeLowercased(
@@ -151,6 +180,7 @@ export const DecodedCalldata = ({
             </div>
           </div>
         </details>
+        <CalldataDigest data={data} />
       </div>
     );
   }
@@ -171,8 +201,11 @@ export const DecodedCalldata = ({
 
   if (!decoded) {
     return (
-      <div className="bg-secondary max-h-[40vh] overflow-y-auto rounded-[6px] p-2.5">
-        <p className="text-foreground break-all font-mono text-xs font-semibold leading-[150%]">{data}</p>
+      <div className="flex flex-col gap-2">
+        <div className="bg-secondary max-h-[40vh] overflow-y-auto rounded-[6px] p-2.5">
+          <p className="text-foreground break-all font-mono text-xs font-semibold leading-[150%]">{data}</p>
+        </div>
+        <CalldataDigest data={data} />
       </div>
     );
   }
@@ -215,6 +248,8 @@ export const DecodedCalldata = ({
           <p className="text-foreground break-all font-mono text-xs leading-[150%]">{data}</p>
         </div>
       </details>
+
+      <CalldataDigest data={data} />
     </div>
   );
 };

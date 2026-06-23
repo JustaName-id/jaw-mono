@@ -59,7 +59,7 @@ bunx nx release
 
 ### Applications (`apps/`)
 
-- **playground** - Next.js demo app using @jaw.id/wagmi with Privy authentication
+- **playground** - Next.js demo app exercising the SDK via @jaw.id/wagmi (the `jaw()` connector wired through wagmi)
 - **keys-jaw-id** - Next.js keys management application (keys.jaw.id)
 - **docs** - Documentation site built with Vocs
 
