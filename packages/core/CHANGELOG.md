@@ -1,3 +1,13 @@
+## 1.0.2 (2026-06-23)
+
+### 🩹 Fixes
+
+- **core,keys:** re-establish iframe session on Safari instead of "No session found" ([#209](https://github.com/JustaName-id/jaw-mono/pull/209))
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
 ## 1.0.1 (2026-06-22)
 
 ### 🩹 Fixes
