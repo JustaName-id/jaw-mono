@@ -190,6 +190,22 @@ describe('IframeTransport', () => {
             await pending;
         });
 
+        it('forces pointer-events:auto so a host modal cannot block the iframe (regression)', async () => {
+            // A host app that opens the SDK from inside its own modal (e.g. Radix
+            // Dialog) sets `body { pointer-events: none }`. Our top-layer dialog is
+            // a DOM child of body and would inherit `none`, making the iframe
+            // unclickable. Owning `pointer-events: auto` keeps the keys UI usable
+            // regardless of any ancestor's pointer-events.
+            const pending = transport.ensureReady().catch(() => {
+                /* noop */
+            });
+
+            expect(getDialog()?.style.pointerEvents).toBe('auto');
+
+            transport.destroy();
+            await pending;
+        });
+
         it('injects the transparent-backdrop style once', async () => {
             const pending = transport.ensureReady().catch(() => {
                 /* noop */
