@@ -1,3 +1,17 @@
+## 1.1.1 (2026-06-23)
+
+### 🩹 Fixes
+
+- **ui:** generate declarations via tsc to fix project-reference typecheck ([#215](https://github.com/JustaName-id/jaw-mono/pull/215))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.3
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.1.0 (2026-06-23)
 
 ### 🚀 Features
