@@ -6,7 +6,12 @@ import { decodePersonalSignRequest } from '../SignerUtils.js';
 import { Communicator } from '../../communicator/index.js';
 import { getPermissionFromRelay } from '../../rpc/index.js';
 import { standardErrors } from '../../errors/index.js';
-import { RPCRequestMessage, RPCResponseMessage, RPCResponse } from '../../messages/index.js';
+import {
+    RPCRequestMessage,
+    RPCResponseMessage,
+    RPCResponse,
+    isReconnectRequiredFailure,
+} from '../../messages/index.js';
 import { KeyManager } from '../../key-manager/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/index.js';
 import { store, SDKChain } from '../../store/index.js';
@@ -173,15 +178,92 @@ export class CrossPlatformSigner extends JAWSigner {
         await super.cleanup();
     }
 
-    private async sendRequestToPopup(request: RequestArguments, overrideChain?: SDKChain): Promise<unknown> {
+    private async sendRequestToPopup(
+        request: RequestArguments,
+        overrideChain?: SDKChain,
+        isReconnectRetry = false
+    ): Promise<unknown> {
         // Open the popup before constructing the request message.
         // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
         await this.communicator.waitForPopupLoaded?.();
 
-        const response = await this.sendEncryptedRequest(request, overrideChain);
-        const decrypted = await this.decryptResponseMessage(response);
+        try {
+            const response = await this.sendEncryptedRequest(request, overrideChain);
+            const decrypted = await this.decryptResponseMessage(response);
 
-        return this.handleResponse(request, decrypted);
+            return this.handleResponse(request, decrypted);
+        } catch (error) {
+            // Safari iframe storage partitioning: the iframe has no session (the
+            // one created in the popup at connect is in a different partition) and
+            // asked us to re-establish one. Reconnect against the iframe and retry
+            // exactly once. Only the keys iframe emits this sentinel, only when it
+            // has no session — so existing/popup flows never enter this branch.
+            if (!isReconnectRetry && isReconnectRequiredFailure(error)) {
+                // Deduplicate: concurrent in-flight requests can all get the
+                // sentinel at once. Share a single reconnect handshake so the
+                // second caller doesn't fire its own (its forced-iframe flag
+                // would already be consumed and route the handshake to a popup).
+                await this.ensureReconnected();
+                return this.sendRequestToPopup(request, overrideChain, true);
+            }
+            throw error;
+        }
+    }
+
+    /** In-flight reconnect, shared by concurrent callers (see ensureReconnected). */
+    private reconnectInFlight: Promise<void> | null = null;
+
+    /**
+     * Run the iframe reconnect at most once for a burst of concurrent requests.
+     * Subsequent callers await the same handshake instead of starting their own.
+     */
+    private ensureReconnected(): Promise<void> {
+        if (!this.reconnectInFlight) {
+            this.reconnectInFlight = this.reconnectInIframe().finally(() => {
+                this.reconnectInFlight = null;
+            });
+        }
+        return this.reconnectInFlight;
+    }
+
+    /**
+     * Re-establish a session inside the live iframe (Safari partition recovery).
+     *
+     * Re-runs the connect handshake forced at the iframe — a credential *get*
+     * (the passkey already exists), which Safari permits in cross-origin iframes,
+     * unlike the *create* at first connect. This rebuilds the session and re-keys
+     * the shared secret in the iframe's own storage; the caller then retries the
+     * original request, which re-encrypts with the new secret.
+     */
+    private async reconnectInIframe(): Promise<void> {
+        // Direct this one handshake at the live iframe, bypassing the Safari
+        // credential->popup rule (safe: it is a get(), not a create()).
+        this.communicator.forceIframeReconnect();
+
+        const chains = store.getState().chains;
+        const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
+
+        // eth_requestAccounts (not wallet_connect): both are credential methods
+        // handled identically by the keys handshake, but eth_requestAccounts needs
+        // no capability params to faithfully re-auth the existing account.
+        const reconnectArgs: RequestArguments = { method: 'eth_requestAccounts', params: [] };
+        const handshakeMessage = await this.createRequestMessage(
+            {
+                handshake: { method: reconnectArgs.method, params: reconnectArgs.params ?? [] },
+                chain,
+            },
+            this.getCorrelationId(reconnectArgs)
+        );
+
+        const response: RPCResponseMessage = await this.communicator.postRequestAndWaitForResponse(handshakeMessage);
+
+        if ('failure' in response.content) {
+            throw response.content.failure;
+        }
+
+        // Re-key: derive the new shared secret from the iframe session's public key.
+        const peerPublicKey = await importKeyFromHexString('public', response.sender);
+        await this.keyManager.setPeerPublicKey(peerPublicKey);
     }
 
     private async sendEncryptedRequest(
