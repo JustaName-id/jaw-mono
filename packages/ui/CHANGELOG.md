@@ -1,3 +1,13 @@
+## 1.1.0 (2026-06-23)
+
+### 🚀 Features
+
+- **ui:** add support for erc-8213 ([#212](https://github.com/JustaName-id/jaw-mono/pull/212))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.0.2 (2026-06-23)
 
 ### 🧱 Updated Dependencies
