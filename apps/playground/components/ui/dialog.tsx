@@ -5,6 +5,7 @@ import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { XIcon } from 'lucide-react';
 
 import { cn } from '../../lib/utils';
+import { isSdkDialogOpen } from '../../lib/dialog-close-guard';
 
 function Dialog({ open, onOpenChange, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   const prevOpenRef = React.useRef(open);
@@ -34,21 +35,13 @@ function Dialog({ open, onOpenChange, ...props }: React.ComponentProps<typeof Di
     };
   }, [open]);
 
-  // Wrap onOpenChange to prevent closing when higher z-index dialogs are open
+  // Wrap onOpenChange to prevent closing while an SDK dialog is shown on top —
+  // covers both the AppSpecific Radix overlay and the iframe transport's native
+  // <dialog data-jaw> (see isSdkDialogOpen for the why).
   const handleOpenChange = React.useCallback(
     (newOpen: boolean) => {
-      if (!newOpen) {
-        // Check if there's a higher z-index dialog (SDK dialog with z-100) open
-        const overlays = document.querySelectorAll('[data-slot="dialog-overlay"]');
-        const hasHigherZIndexDialog = Array.from(overlays).some((overlay) => {
-          const zIndex = window.getComputedStyle(overlay).zIndex;
-          return zIndex && parseInt(zIndex) > 50;
-        });
-
-        // Don't close playground dialog if SDK dialog (z-100) is open
-        if (hasHigherZIndexDialog) {
-          return;
-        }
+      if (!newOpen && isSdkDialogOpen()) {
+        return;
       }
 
       onOpenChange?.(newOpen);
