@@ -72,6 +72,8 @@ export class TransportRouter implements TransportRouterContract {
     private pendingIframeReload = false;
     /** Next acquire is forced to popup (user/dialog requested a transport switch). */
     private popupForced = false;
+    /** Next acquire is forced to the (live) iframe for a session reconnect. */
+    private iframeReconnectForced = false;
     private warnedInsecure = false;
 
     /** Serializes acquires: no parallel popup + iframe setup races. */
@@ -147,6 +149,9 @@ export class TransportRouter implements TransportRouterContract {
         this.iframe = null;
         this.pendingIframeReload = false;
         this.popupForced = false;
+        // Clear the reconnect override too: a stale flag could otherwise route a
+        // later credential-*create* onto the iframe, bypassing the Safari rule.
+        this.iframeReconnectForced = false;
     }
 
     /**
@@ -171,6 +176,23 @@ export class TransportRouter implements TransportRouterContract {
         }
     }
 
+    /**
+     * Force the next acquire onto the (live) iframe, bypassing the normal
+     * routing decision for one call. Used to re-establish a session inside the
+     * iframe on Safari, where the routing rule would otherwise send the
+     * credential method (wallet_connect) to the popup. This is safe only for a
+     * credential *get* (a reconnect where the passkey already exists) — the
+     * caller is responsible for that gating; the router just honors the override.
+     *
+     * The existing iframe is reused as-is (no reload): it is the live frame that
+     * requested the reconnect, so its app state must be preserved.
+     */
+    forceIframeReconnectOnce(): void {
+        this.iframeReconnectForced = true;
+        // A reconnect supersedes a pending reload — we want the live frame, intact.
+        this.pendingIframeReload = false;
+    }
+
     // ------------------------------------------------------------------ //
 
     private decide(ctx: RouteContext): { kind: TransportKind; reason: RouteReason } {
@@ -193,11 +215,28 @@ export class TransportRouter implements TransportRouterContract {
     }
 
     private async doAcquire(ctx: RouteContext): Promise<Transport> {
+        // Priority: an explicit popup switch (user/dialog) always wins over an
+        // automatic reconnect, which in turn wins over normal routing. Both
+        // overrides are single-use (consumed here).
         if (this.popupForced) {
             this.popupForced = false;
             const popup = this.getOrCreatePopup();
             await popup.ensureReady();
             return popup;
+        }
+
+        // Reconnect override: hand back the LIVE iframe regardless of routing, so a
+        // session can be re-established inside it (Safari partition recovery). Only
+        // honored when an iframe actually exists — it is set in response to that
+        // very iframe emitting a reconnect request. If there is no live iframe we
+        // fall through to decide(), so the secure-context/HTTPS rules still apply
+        // (a future eager-iframe change can't silently bypass them).
+        if (this.iframeReconnectForced) {
+            this.iframeReconnectForced = false;
+            if (this.iframe) {
+                await this.iframe.ensureReady();
+                return this.iframe;
+            }
         }
 
         const { kind, reason } = this.decide(ctx);
