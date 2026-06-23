@@ -37,6 +37,34 @@
   },
   "nx": {
     "targets": {
+      "build": {
+        "executor": "nx:run-commands",
+        "dependsOn": [
+          "^build"
+        ],
+        "cache": true,
+        "inputs": [
+          "production",
+          "^production",
+          {
+            "externalDependencies": [
+              "vite",
+              "typescript"
+            ]
+          }
+        ],
+        "outputs": [
+          "{projectRoot}/dist"
+        ],
+        "options": {
+          "cwd": "{projectRoot}",
+          "commands": [
+            "vite build",
+            "tsc --build tsconfig.lib.json"
+          ],
+          "parallel": false
+        }
+      },
       "test": {
         "cache": true,
         "inputs": [
