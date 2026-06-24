@@ -1,3 +1,13 @@
+## 1.1.2 (2026-06-24)
+
+### 🩹 Fixes
+
+- **ui:** add max-height and overflow-y to dialog content for better responsiveness ([#216](https://github.com/JustaName-id/jaw-mono/pull/216))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.1.1 (2026-06-23)
 
 ### 🩹 Fixes
