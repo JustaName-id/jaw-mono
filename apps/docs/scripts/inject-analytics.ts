@@ -6,7 +6,6 @@
  * after `vocs build`. Gated on env so local/CI builds emit nothing unless the
  * deploy environment opts in.
  *
- *
  * Env (read from process.env; on Vercel these are build-time env vars):
  *   VITE_ANALYTICS_ENABLED  "true" to inject (anything else = no-op)
  *   VITE_POSTHOG_KEY        PostHog project API key (required when enabled)
