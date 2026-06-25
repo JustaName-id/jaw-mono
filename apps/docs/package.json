@@ -15,7 +15,7 @@
   },
   "scripts": {
     "dev": "vocs dev",
-    "build": "vocs build && tsx scripts/generate-llms.ts",
+    "build": "vocs build && tsx scripts/generate-llms.ts && tsx scripts/inject-analytics.ts",
     "preview": "vocs preview"
   },
   "dependencies": {
