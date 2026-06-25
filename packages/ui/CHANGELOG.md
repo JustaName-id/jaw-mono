@@ -1,3 +1,49 @@
+## 1.1.2 (2026-06-24)
+
+### 🩹 Fixes
+
+- **ui:** add max-height and overflow-y to dialog content for better responsiveness ([#216](https://github.com/JustaName-id/jaw-mono/pull/216))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 1.1.1 (2026-06-23)
+
+### 🩹 Fixes
+
+- **ui:** generate declarations via tsc to fix project-reference typecheck ([#215](https://github.com/JustaName-id/jaw-mono/pull/215))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.3
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 1.1.0 (2026-06-23)
+
+### 🚀 Features
+
+- **ui:** add support for erc-8213 ([#212](https://github.com/JustaName-id/jaw-mono/pull/212))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 1.0.2 (2026-06-23)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.2
+
+## 1.0.1 (2026-06-22)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.1
+
 # 1.0.0 (2026-06-22)
 
 ### 🚀 Features

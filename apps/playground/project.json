@@ -3,5 +3,16 @@
   "$schema": "../../node_modules/nx/schemas/project-schema.json",
   "sourceRoot": "apps/playground/app",
   "projectType": "application",
-  "tags": ["npm:private"]
+  "tags": ["npm:private"],
+  "targets": {
+    "test": {
+      "cache": true,
+      "inputs": ["default", "^production", "{projectRoot}/vitest.config.mts"],
+      "executor": "nx:run-commands",
+      "options": {
+        "cwd": "{projectRoot}",
+        "command": "bunx vitest run"
+      }
+    }
+  }
 }

@@ -70,6 +70,7 @@ type RouterEnv = {
     iov2?: boolean;
     trusted?: boolean;
     secureContext?: boolean;
+    https?: boolean;
     hostname?: string;
 };
 
@@ -90,6 +91,7 @@ function createRouter(env: RouterEnv = {}) {
         supportsIOv2Fn: () => env.iov2 ?? true,
         isTrustedHostFn: () => env.trusted ?? false,
         isSecureContextFn: () => env.secureContext ?? true,
+        isHttpsFn: () => env.https ?? true,
         getLocation: () => ({
             hostname: env.hostname ?? 'dapp.example.com',
         }),
@@ -129,6 +131,24 @@ describe('TransportRouter.route', () => {
     it('routes to popup on insecure contexts regardless of other conditions', () => {
         const { router } = createRouter({ mode: 'iframe', secureContext: false });
         expect(router.route({})).toBe('popup');
+    });
+
+    it('routes to popup on an http dev server (secure context but not HTTPS)', () => {
+        // http://localhost is a secure context (isSecureContext === true) yet not
+        // HTTPS — the iframe must not be used; the popup is the default there.
+        const { router } = createRouter({ mode: 'iframe', secureContext: true, https: false });
+        expect(router.route({})).toBe('popup');
+        expect(router.route({ method: 'wallet_sendCalls' })).toBe('popup');
+    });
+
+    it('forces popup on a non-HTTPS origin even for mode "auto"', () => {
+        const { router } = createRouter({ mode: 'auto', secureContext: true, https: false });
+        expect(router.route({})).toBe('popup');
+    });
+
+    it('keeps iframe on an HTTPS origin (secure context and HTTPS)', () => {
+        const { router } = createRouter({ mode: 'iframe', secureContext: true, https: true });
+        expect(router.route({})).toBe('iframe');
     });
 
     it('routes credential-creating methods to popup on Safari', () => {
@@ -222,6 +242,23 @@ describe('TransportRouter.acquire', () => {
         await router.acquire({});
         await router.acquire({});
 
+        expect(warn).toHaveBeenCalledTimes(1);
+        expect(warn.mock.calls[0][0]).toMatch(/HTTPS/);
+    });
+
+    it('acquires the popup (and warns) on an http dev server', async () => {
+        const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+        const { router, popupMock, iframeFactory } = createRouter({
+            mode: 'iframe',
+            secureContext: true,
+            https: false,
+        });
+
+        const transport = await router.acquire({ method: 'personal_sign' });
+
+        expect(transport.kind).toBe('popup');
+        expect(popupMock.ensureReady).toHaveBeenCalledTimes(1);
+        expect(iframeFactory).not.toHaveBeenCalled();
         expect(warn).toHaveBeenCalledTimes(1);
         expect(warn.mock.calls[0][0]).toMatch(/HTTPS/);
     });
@@ -354,6 +391,76 @@ describe('TransportRouter.forcePopupOnce', () => {
         const next = await router.acquire({});
         expect(next.kind).toBe('iframe');
         expect(iframeMock.reload).toHaveBeenCalledTimes(1);
+    });
+});
+
+describe('TransportRouter.forceIframeReconnectOnce', () => {
+    it('forces the next acquire onto iframe even when routing would pick popup', async () => {
+        // Safari + trusted host: a credential method (wallet_connect) normally
+        // routes to popup. The reconnect override sends it to the iframe instead
+        // (it is a credential *get*, allowed in Safari iframes).
+        const { router, iframeMock } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+        expect(router.route({ method: 'wallet_connect' })).toBe('popup');
+
+        await router.acquire({ method: 'wallet_sendCalls' }); // live iframe established (precondition)
+        router.forceIframeReconnectOnce();
+        const transport = await router.acquire({ method: 'wallet_connect' });
+
+        expect(transport.kind).toBe('iframe');
+        expect(iframeMock.ensureReady).toHaveBeenCalled();
+    });
+
+    it('is consumed once — the next acquire reverts to normal routing', async () => {
+        const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+
+        await router.acquire({ method: 'wallet_sendCalls' }); // live iframe established
+        router.forceIframeReconnectOnce();
+        const first = await router.acquire({ method: 'wallet_connect' });
+        expect(first.kind).toBe('iframe');
+
+        const second = await router.acquire({ method: 'wallet_connect' });
+        expect(second.kind).toBe('popup'); // back to the Safari-credential rule
+    });
+
+    it('falls through to normal routing when forced without a live iframe', async () => {
+        // Defensive: the override only applies to a live iframe (the one that
+        // requested the reconnect). With no iframe, decide() still governs — so
+        // the secure-context/credential rules are never silently bypassed.
+        const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+
+        router.forceIframeReconnectOnce();
+        const transport = await router.acquire({ method: 'wallet_connect' });
+        expect(transport.kind).toBe('popup'); // Safari-credential rule, not bypassed
+    });
+
+    it('reuses the live iframe without reloading it', async () => {
+        const { router, iframeMock } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+
+        await router.acquire({ method: 'wallet_sendCalls' }); // iframe established + ready
+        router.forceIframeReconnectOnce();
+        await router.acquire({ method: 'wallet_connect' });
+
+        expect(iframeMock.reload).not.toHaveBeenCalled();
+    });
+
+    it('does not affect non-reconnect routing decisions', async () => {
+        const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+        // Without the override, a signing method on a trusted Safari host still
+        // routes to the iframe; a credential method still routes to popup.
+        expect(router.route({ method: 'wallet_sendCalls' })).toBe('iframe');
+        expect(router.route({ method: 'wallet_connect' })).toBe('popup');
+    });
+
+    it('destroyAll() clears a pending reconnect override (no stale credential bypass)', async () => {
+        const { router } = createRouter({ mode: 'iframe', safari: true, trusted: true });
+
+        await router.acquire({ method: 'wallet_sendCalls' }); // live iframe established
+        router.forceIframeReconnectOnce();
+        router.destroyAll();
+
+        // Flag cleared on destroy: a credential method reverts to the popup rule.
+        const transport = await router.acquire({ method: 'wallet_connect' });
+        expect(transport.kind).toBe('popup');
     });
 });
 

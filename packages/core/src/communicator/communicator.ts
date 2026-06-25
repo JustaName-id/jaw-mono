@@ -177,6 +177,15 @@ export class Communicator {
     }
 
     /**
+     * Force the next acquire onto the live iframe (Safari session reconnect).
+     * Used by the signer to direct a credential-*get* reconnect handshake at the
+     * iframe instead of the popup. See TransportRouter.forceIframeReconnectOnce.
+     */
+    forceIframeReconnect(): void {
+        this.router.forceIframeReconnectOnce();
+    }
+
+    /**
      * Posts a message to the keys app.
      */
     postMessage = async (message: Message) => {

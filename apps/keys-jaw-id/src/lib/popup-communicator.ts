@@ -182,6 +182,11 @@ export class PopupCommunicator {
     });
   }
 
+  /** True when running inside the embedded (iframe) transport. */
+  isEmbedded(): boolean {
+    return this.context === 'embedded';
+  }
+
   /**
    * Listen for messages from the counterpart
    * Returns cleanup function
