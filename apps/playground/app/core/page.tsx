@@ -17,6 +17,11 @@ import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import { RPC_METHODS, CATEGORIES, CATEGORY_LABELS, type RpcMethod, type MethodCategory } from '../../lib/rpc-methods';
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
+import { getAnalyticsClient } from '../../analytics';
+import type { ModeName } from '../../analytics/events/types';
+
+// Chain IDs arrive as hex (`0x...`) or decimal strings depending on the RPC.
+const parseChainId = (c: string): number => (c.startsWith('0x') ? parseInt(c, 16) : parseInt(c, 10));
 
 type ModeType = (typeof Mode)[keyof typeof Mode];
 type TransportModeType = 'popup' | 'iframe' | 'auto';
@@ -124,6 +129,9 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
     async (method: string, params: unknown[]): Promise<unknown> => {
       addLog('request', method, params);
 
+      const modeName: ModeName = mode === Mode.AppSpecific ? 'app-specific' : 'cross-platform';
+      const analytics = getAnalyticsClient();
+
       try {
         const result = await sdk.provider.request({ method, params });
 
@@ -147,18 +155,59 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
               params: [],
             });
             setChainId(chainIdResult as string);
+            if (connectedAccounts[0]) analytics.identify(connectedAccounts[0]);
+            analytics.track('WALLET_CONNECTED', {
+              sdk: 'core',
+              mode: modeName,
+              transportMode,
+              chainId: parseChainId(chainIdResult as string),
+            });
           }
         } else if (method === 'wallet_disconnect') {
           setIsConnected(false);
           setAccounts([]);
           setChainId(defaultChainId);
+          analytics.track('WALLET_DISCONNECTED', { sdk: 'core' });
+          analytics.reset();
         } else if (method === 'wallet_switchEthereumChain') {
           const chainIdResult = await sdk.provider.request({
             method: 'eth_chainId',
             params: [],
           });
+          const previousChainId = chainId;
           setChainId(chainIdResult as string);
+          analytics.track('CHAIN_SWITCHED', {
+            sdk: 'core',
+            from: parseChainId(previousChainId),
+            to: parseChainId(chainIdResult as string),
+          });
+        } else if (method === 'personal_sign') {
+          analytics.track('MESSAGE_SIGNED', { sdk: 'core', mode: modeName });
+        } else if (method === 'eth_signTypedData_v4') {
+          analytics.track('TYPED_DATA_SIGNED', { sdk: 'core', mode: modeName });
+        } else if (method === 'wallet_sign') {
+          // wallet_sign is unified: type 0x01 is typed data, otherwise personal.
+          const req = (params[0] as { type?: string }) ?? undefined;
+          analytics.track(req?.type === '0x01' ? 'TYPED_DATA_SIGNED' : 'MESSAGE_SIGNED', {
+            sdk: 'core',
+            mode: modeName,
+          });
+        } else if (method === 'eth_sendTransaction') {
+          analytics.track('TRANSACTION_SENT', { sdk: 'core', mode: modeName, chainId: parseChainId(chainId) });
+        } else if (method === 'wallet_sendCalls') {
+          const calls = (params[0] as { calls?: unknown[] })?.calls;
+          analytics.track('CALLS_SENT', {
+            sdk: 'core',
+            mode: modeName,
+            count: Array.isArray(calls) ? calls.length : 0,
+          });
+        } else if (method === 'wallet_grantPermissions') {
+          analytics.track('PERMISSIONS_GRANTED', { sdk: 'core' });
+        } else if (method === 'wallet_revokePermissions') {
+          analytics.track('PERMISSIONS_REVOKED', { sdk: 'core' });
         }
+
+        analytics.track('METHOD_EXECUTED', { sdk: 'core', method, mode: modeName, status: 'success' });
 
         return result;
       } catch (error) {
@@ -169,10 +218,11 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
               ? (error as { message: string }).message
               : JSON.stringify(error);
         addLog('error', method, errorMessage);
+        analytics.track('METHOD_EXECUTED', { sdk: 'core', method, mode: modeName, status: 'error' });
         throw error;
       }
     },
-    [sdk, addLog, defaultChainId]
+    [sdk, addLog, defaultChainId, mode, transportMode, chainId]
   );
 
   const handleMethodClick = (method: RpcMethod) => {

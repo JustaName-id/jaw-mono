@@ -51,6 +51,8 @@ import {
   type MethodCategory,
 } from '../../lib/wagmi-methods';
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
+import { getAnalyticsClient } from '../../analytics';
+import type { ModeName } from '../../analytics/events/types';
 
 // Methods that open the embedded JAW dialog and require the user to sign/approve
 // with their passkey. Surfacing this in the activity log keeps the sign step from
@@ -160,6 +162,17 @@ function WagmiPageContent({
       cancelled = true;
     };
   }, [address, chainId]);
+
+  // Link analytics to the connected wallet. wagmi resolves `address`
+  // asynchronously after connect, so identify here rather than in the connect
+  // handler.
+  useEffect(() => {
+    if (isConnected && address) {
+      getAnalyticsClient().identify(address);
+    }
+  }, [isConnected, address]);
+
+  const modeName: ModeName = mode === Mode.AppSpecific ? 'app-specific' : 'cross-platform';
 
   const addLog = useCallback((type: LogEntry['type'], method: string, data: unknown) => {
     setLogs((prev) => [...prev, { timestamp: new Date(), type, method, data }]);
@@ -311,6 +324,60 @@ function WagmiPageContent({
         }
 
         addLog('response', method.name, result);
+
+        const analytics = getAnalyticsClient();
+        analytics.track('METHOD_EXECUTED', {
+          sdk: 'wagmi',
+          method: method.method,
+          hookType: method.hookType,
+          category: method.category,
+          mode: modeName,
+          status: 'success',
+        });
+        switch (method.hookType) {
+          case 'jawConnect':
+            analytics.track('WALLET_CONNECTED', { sdk: 'wagmi', mode: modeName, transportMode, chainId });
+            break;
+          case 'jawDisconnect':
+            analytics.track('WALLET_DISCONNECTED', { sdk: 'wagmi' });
+            analytics.reset();
+            break;
+          case 'useSwitchChain':
+            analytics.track('CHAIN_SWITCHED', { sdk: 'wagmi', from: chainId, to: params.chainId as number });
+            break;
+          case 'useSendTransaction':
+            analytics.track('TRANSACTION_SENT', { sdk: 'wagmi', mode: modeName, chainId });
+            break;
+          case 'useSendCalls':
+            analytics.track('CALLS_SENT', {
+              sdk: 'wagmi',
+              mode: modeName,
+              count: Array.isArray(params.calls) ? params.calls.length : 0,
+            });
+            break;
+          case 'useSignMessage':
+            analytics.track('MESSAGE_SIGNED', { sdk: 'wagmi', mode: modeName });
+            break;
+          case 'useSignTypedData':
+            analytics.track('TYPED_DATA_SIGNED', { sdk: 'wagmi', mode: modeName });
+            break;
+          case 'useSign': {
+            // wallet_sign is unified: type 0x01 is typed data, otherwise personal.
+            const req = params.request as { type?: string } | undefined;
+            analytics.track(req?.type === '0x01' ? 'TYPED_DATA_SIGNED' : 'MESSAGE_SIGNED', {
+              sdk: 'wagmi',
+              mode: modeName,
+            });
+            break;
+          }
+          case 'useGrantPermissions':
+            analytics.track('PERMISSIONS_GRANTED', { sdk: 'wagmi' });
+            break;
+          case 'useRevokePermissions':
+            analytics.track('PERMISSIONS_REVOKED', { sdk: 'wagmi' });
+            break;
+        }
+
         return result;
       } catch (error) {
         const errorMessage =
@@ -320,6 +387,14 @@ function WagmiPageContent({
               ? (error as { message: string }).message
               : JSON.stringify(error);
         addLog('error', method.name, errorMessage);
+        getAnalyticsClient().track('METHOD_EXECUTED', {
+          sdk: 'wagmi',
+          method: method.method,
+          hookType: method.hookType,
+          category: method.category,
+          mode: modeName,
+          status: 'error',
+        });
         throw error;
       } finally {
         setIsExecuting(false);
@@ -353,6 +428,9 @@ function WagmiPageContent({
       refetchCallsHistory,
       callsHistory,
       addLog,
+      modeName,
+      transportMode,
+      chainId,
     ]
   );
 

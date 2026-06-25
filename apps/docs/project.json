@@ -9,7 +9,7 @@
       "executor": "nx:run-commands",
       "outputs": ["{projectRoot}/dist"],
       "options": {
-        "commands": ["vocs build", "tsx scripts/generate-llms.ts"],
+        "commands": ["vocs build", "tsx scripts/generate-llms.ts", "tsx scripts/inject-analytics.ts"],
         "cwd": "apps/docs",
         "parallel": false
       }
