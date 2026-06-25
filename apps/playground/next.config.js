@@ -12,6 +12,7 @@ const nextConfig = {
   experimental: {
     optimizePackageImports: ['lucide-react'],
   },
+
   // PostHog reverse proxy: makes analytics first-party (ad-blocker resistant).
   // Ingestion lives on eu.i.posthog.com; the old eu.posthog.com host no longer
   // ingests /capture events. Static assets live on eu-assets.i.posthog.com.
