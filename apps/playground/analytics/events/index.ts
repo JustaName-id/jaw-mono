@@ -9,9 +9,9 @@ import { TRANSACTION_EVENTS, TransactionEventPayload } from './transaction';
 export const EVENTS = {
   ...CHAIN_EVENTS,
   ...CONNECTION_EVENTS,
+  ...PERMISSIONS_EVENTS,
   ...METHOD_EVENTS,
   ...NAVIGATION_EVENTS,
-  ...PERMISSIONS_EVENTS,
   ...SIGNING_EVENTS,
   ...TRANSACTION_EVENTS,
 } as const;

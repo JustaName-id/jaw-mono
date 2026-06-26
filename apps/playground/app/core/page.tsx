@@ -187,6 +187,7 @@ function CorePageContent({ mode, transportMode }: { mode: ModeType; transportMod
           analytics.track('TYPED_DATA_SIGNED', { sdk: 'core', mode: modeName });
         } else if (method === 'wallet_sign') {
           // wallet_sign is unified: type 0x01 is typed data, otherwise personal.
+
           const req = (params[0] as { type?: string }) ?? undefined;
           analytics.track(req?.type === '0x01' ? 'TYPED_DATA_SIGNED' : 'MESSAGE_SIGNED', {
             sdk: 'core',
