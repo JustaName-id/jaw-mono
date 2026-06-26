@@ -1,4 +1,5 @@
 import { FeeTokenOption } from '../FeeTokenSelector';
+import { AssetDelta } from '../../utils/assetPreview';
 
 export interface TransactionData {
   to: string;
@@ -26,6 +27,12 @@ export interface TransactionDialogProps {
   gasFeeLoading: boolean;
   gasEstimationError: string;
   sponsored: boolean;
+
+  // Asset preview (simulated balance changes)
+  assetsOut?: AssetDelta[];
+  assetsIn?: AssetDelta[];
+  assetPreviewLoading?: boolean;
+  assetPreviewError?: boolean;
 
   // Actions
   onConfirm: () => Promise<void>;

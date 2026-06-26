@@ -15,6 +15,7 @@ import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { DecodedCalldata } from './DecodedCalldata';
+import { AssetPreview } from './AssetPreview';
 
 export const TransactionDialog = ({
   // open,
@@ -25,6 +26,10 @@ export const TransactionDialog = ({
   gasFeeLoading,
   gasEstimationError,
   sponsored,
+  assetsOut,
+  assetsIn,
+  assetPreviewLoading,
+  assetPreviewError,
   onConfirm,
   onCancel,
   isProcessing,
@@ -277,6 +282,13 @@ export const TransactionDialog = ({
           // Single Transaction Layout
           <>
             <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+              <AssetPreview
+                assetsOut={assetsOut ?? []}
+                assetsIn={assetsIn ?? []}
+                loading={assetPreviewLoading ?? false}
+                error={assetPreviewError ?? false}
+                nativeSymbol={nativeSymbol}
+              />
               {/* From - To */}
               <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
                 <div className="text-foreground flex min-w-0 flex-col gap-0.5">
@@ -545,6 +557,13 @@ export const TransactionDialog = ({
           // Multiple Transactions Layout with Accordion
           <>
             <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
+              <AssetPreview
+                assetsOut={assetsOut ?? []}
+                assetsIn={assetsIn ?? []}
+                loading={assetPreviewLoading ?? false}
+                error={assetPreviewError ?? false}
+                nativeSymbol={nativeSymbol}
+              />
               {/* From Address */}
               <div className="border-border flex-shrink-0 rounded-[6px] border p-3.5">
                 <p className="text-foreground mb-1 text-xs font-bold leading-[133%]">From</p>
