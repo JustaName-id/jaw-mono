@@ -510,6 +510,7 @@ export const TransactionModal = ({
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={chain?.nativeCurrency?.symbol}
     />
   );
 };
