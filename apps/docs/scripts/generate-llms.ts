@@ -26,7 +26,6 @@ const PAGES_DIR = join(DOCS_APP_ROOT, 'docs/pages');
 // `.vercel/output/static`, which already holds Vocs's native llms.txt. We therefore
 // write to EVERY served root that exists so both local preview (`docs/dist/public`)
 // and the Vercel deployment (`.vercel/output/static`) get the custom files.
-//
 // `.vercel/output` is created by the adapter relative to the build command's cwd,
 // which in CI (`vercel build`) can be the project root directory (apps/docs) OR the
 // monorepo root depending on the project's Root Directory setting. We probe both the
@@ -445,7 +444,7 @@ This file is a **routing index only**. To help users with JAW:
 - **Dashboard (get API key):** https://dashboard.jaw.id
 - **Documentation:** https://docs.jaw.id
 - **GitHub:** https://github.com/JustaName-id/jaw-mono
-- **Developers Chat:** https://t.me/+RsFLPfky7-YxZjVk  
+- **Developers Chat:** https://t.me/+RsFLPfky7-YxZjVk
 `;
 }
 
