@@ -28,7 +28,6 @@ export const TransactionDialog = ({
   sponsored,
   assetsOut,
   assetsIn,
-  assetPreviewLoading,
   assetPreviewError,
   onConfirm,
   onCancel,
@@ -282,13 +281,6 @@ export const TransactionDialog = ({
           // Single Transaction Layout
           <>
             <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-              <AssetPreview
-                assetsOut={assetsOut ?? []}
-                assetsIn={assetsIn ?? []}
-                loading={assetPreviewLoading ?? false}
-                error={assetPreviewError ?? false}
-                nativeSymbol={nativeSymbol}
-              />
               {/* From - To */}
               <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
                 <div className="text-foreground flex min-w-0 flex-col gap-0.5">
@@ -334,6 +326,13 @@ export const TransactionDialog = ({
                   </div>
                 </div>
               </div>
+
+              <AssetPreview
+                assetsOut={assetsOut ?? []}
+                assetsIn={assetsIn ?? []}
+                error={assetPreviewError ?? false}
+                nativeSymbol={nativeSymbol}
+              />
 
               {/* Value */}
               {formatTransactionValue(currentTransaction?.value) && (
@@ -557,13 +556,6 @@ export const TransactionDialog = ({
           // Multiple Transactions Layout with Accordion
           <>
             <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-              <AssetPreview
-                assetsOut={assetsOut ?? []}
-                assetsIn={assetsIn ?? []}
-                loading={assetPreviewLoading ?? false}
-                error={assetPreviewError ?? false}
-                nativeSymbol={nativeSymbol}
-              />
               {/* From Address */}
               <div className="border-border flex-shrink-0 rounded-[6px] border p-3.5">
                 <p className="text-foreground mb-1 text-xs font-bold leading-[133%]">From</p>
@@ -572,6 +564,13 @@ export const TransactionDialog = ({
                   <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                 </div>
               </div>
+
+              <AssetPreview
+                assetsOut={assetsOut ?? []}
+                assetsIn={assetsIn ?? []}
+                error={assetPreviewError ?? false}
+                nativeSymbol={nativeSymbol}
+              />
 
               {/* Accordion for Transactions */}
               <div className="min-h-0 flex-1 overflow-y-auto">
