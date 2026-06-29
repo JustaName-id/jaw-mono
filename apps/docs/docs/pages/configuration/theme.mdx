@@ -7,14 +7,38 @@ Customize the appearance of SDK UI dialogs (onboarding, signing, transactions, p
 **Default:** `{ mode: 'auto', borderRadius: 'md', fontStack: 'system' }`
 
 :::info
-Theming only applies to **AppSpecific** mode, where dialogs are rendered by `ReactUIHandler` inside your app. In **CrossPlatform** mode, the popup at keys.jaw.id manages its own styling.
+Theming applies to **both** authentication modes. Pass `theme` in the constructor (the `jaw()` connector or `JAW.create()`) and it travels to the wallet dialog automatically:
+
+- **AppSpecific** — dialogs are rendered by `ReactUIHandler` inside your app and themed directly in the host DOM.
+- **CrossPlatform** — the theme rides the connection handshake to the keys.jaw.id dialog (embedded iframe or popup), so it re-themes to match your app instead of using its own default styling.
+
+The simple props and `cssVariables` overrides below work in both modes. The Layer 3 raw-CSS escape hatch only reaches **AppSpecific** dialogs, since the cross-platform dialog runs in a separate origin.
 :::
 
 ## Quick Start
 
+Pass `theme` in the constructor. It works the same way in both authentication modes.
+
+### With Wagmi (Recommended)
+
 ```typescript
-import { JAW, Mode } from '@jaw.id/core';
-import { ReactUIHandler } from '@jaw.id/ui';
+import { jaw } from '@jaw.id/wagmi';
+
+const connector = jaw({
+  apiKey: 'your-api-key',
+  appName: 'My App',
+  theme: {
+    mode: 'dark',
+    accentColor: '#6366f1',
+    borderRadius: 'lg',
+  },
+});
+```
+
+### With Provider Directly
+
+```typescript
+import { JAW } from '@jaw.id/core';
 
 const jaw = JAW.create({
   apiKey: 'your-api-key',
@@ -22,10 +46,6 @@ const jaw = JAW.create({
     mode: 'dark',
     accentColor: '#6366f1',
     borderRadius: 'lg',
-  },
-  preference: {
-    mode: Mode.AppSpecific,
-    uiHandler: new ReactUIHandler(),
   },
 });
 ```
@@ -55,10 +75,6 @@ const jaw = JAW.create({
     accentColor: '#e11d48', // Rose
     borderRadius: 'lg',
   },
-  preference: {
-    mode: Mode.AppSpecific,
-    uiHandler: new ReactUIHandler(),
-  },
 });
 ```
 
@@ -78,16 +94,12 @@ const jaw = JAW.create({
       '--jaw-font-family': '"Berkeley Mono", monospace',
     },
   },
-  preference: {
-    mode: Mode.AppSpecific,
-    uiHandler: new ReactUIHandler(),
-  },
 });
 ```
 
 ### Layer 3: Raw CSS (escape hatch)
 
-Target `[data-jaw-modal-container]` in your own CSS. No SDK changes needed.
+Target `[data-jaw-modal-container]` in your own CSS. No SDK changes needed. This only applies to **AppSpecific** mode — the cross-platform dialog is served from keys.jaw.id in a separate origin, so use simple props or `cssVariables` to theme it.
 
 ```css
 [data-jaw-modal-container] {
@@ -139,6 +151,29 @@ theme: {
   mode: 'auto';
 } // follows system preference
 ```
+
+## Updating the Theme at Runtime
+
+If your app toggles light/dark after the provider is created, call `setTheme()` to push the new theme to the live dialog without rebuilding the provider or reconnecting. In CrossPlatform mode this re-themes the embedded keys.jaw.id dialog in place.
+
+:::code-group
+
+```typescript [Core SDK]
+// jaw is the object returned by JAW.create()
+jaw.provider.setTheme({ mode: 'dark', accentColor: '#6366f1' });
+```
+
+```tsx [Wagmi]
+import { useConnect } from 'wagmi';
+import type { JawTheme } from '@jaw.id/core';
+
+const { connectors } = useConnect();
+const jaw = connectors.find((c) => c.id === 'jaw') as { setTheme?: (theme: JawTheme | undefined) => void } | undefined;
+
+jaw?.setTheme?.({ mode: 'dark', accentColor: '#6366f1' });
+```
+
+:::
 
 ## Available CSS Variables
 
@@ -202,7 +237,7 @@ theme: {
 
 ## Related Configuration
 
-- [mode](/configuration/mode) - Authentication mode (AppSpecific required for theming)
+- [mode](/configuration/mode) - Authentication mode (theming works in both AppSpecific and CrossPlatform)
 - [AppSpecific](/configuration/mode/app-specific) - AppSpecific mode setup
 - [appName](/configuration/appName) - App name shown in dialogs
 - [appLogoUrl](/configuration/appLogoUrl) - App logo shown in dialogs
