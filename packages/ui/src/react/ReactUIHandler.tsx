@@ -1620,6 +1620,17 @@ function SendTransactionDialogWrapper({
     [request.data]
   );
 
+  const {
+    assetsOut,
+    assetsIn,
+    error: assetPreviewError,
+  } = useAssetPreview({
+    account: request.data.from as Address | undefined,
+    calls: transactionCalls,
+    chainId,
+    apiKey,
+  });
+
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
     gasFee,
@@ -1860,6 +1871,9 @@ function SendTransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      assetsOut={assetsOut}
+      assetsIn={assetsIn}
+      assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
