@@ -1262,11 +1262,9 @@ function TransactionDialogWrapper({
   // Permission ID for permission-based execution
   const permissionId = request.data.capabilities?.permissions?.id as Hex | undefined;
 
-  // Simulated asset changes for the confirm screen (never blocks signing)
   const {
     assetsOut,
     assetsIn,
-    loading: assetPreviewLoading,
     error: assetPreviewError,
   } = useAssetPreview({
     account: request.data.from,
@@ -1524,7 +1522,6 @@ function TransactionDialogWrapper({
       sponsored={isSponsored}
       assetsOut={assetsOut}
       assetsIn={assetsIn}
-      assetPreviewLoading={assetPreviewLoading}
       assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}

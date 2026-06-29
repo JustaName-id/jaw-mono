@@ -31,7 +31,6 @@ export interface TransactionDialogProps {
   // Asset preview (simulated balance changes)
   assetsOut?: AssetDelta[];
   assetsIn?: AssetDelta[];
-  assetPreviewLoading?: boolean;
   assetPreviewError?: boolean;
 
   // Actions

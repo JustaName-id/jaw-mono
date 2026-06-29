@@ -1,4 +1,4 @@
-import { AssetDelta } from '../../utils/assetPreview';
+import { AssetDelta, formatAssetAmount } from '../../utils/assetPreview';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
 interface AssetPreviewProps {
@@ -10,13 +10,6 @@ interface AssetPreviewProps {
 
 function symbolFor(delta: AssetDelta, nativeSymbol: string): string {
   return delta.isNative ? nativeSymbol : (delta.symbol ?? '');
-}
-
-// Display rounding: at most 4 decimals (drops trailing zeros). Full value shown on hover.
-function displayAmount(amountFormatted: string): string {
-  const n = Number(amountFormatted);
-  if (n > 0 && n < 0.0001) return '<0.0001';
-  return String(Number(n.toFixed(4)));
 }
 
 function AmountRow({
@@ -32,8 +25,7 @@ function AmountRow({
 }) {
   const sign = delta.direction === 'out' ? '-' : '+';
   const symbol = symbolFor(delta, nativeSymbol);
-  const rounded = displayAmount(delta.amountFormatted);
-  // Only show a hover tooltip when rounding actually hid precision.
+  const rounded = formatAssetAmount(delta.amountFormatted);
   const hasMore = rounded !== delta.amountFormatted;
 
   const amount = (
@@ -64,7 +56,6 @@ function AmountRow({
 }
 
 export const AssetPreview = ({ assetsOut, assetsIn, error, nativeSymbol }: AssetPreviewProps) => {
-  // Render nothing while simulating or on error — the section appears only once there are changes.
   if (error || (assetsOut.length === 0 && assetsIn.length === 0)) return null;
 
   return (

@@ -49,6 +49,16 @@ export function mapAssetChanges(changes: readonly RawAssetChange[]): AssetDelta[
   return out;
 }
 
+// Intl avoids scientific notation for large magnitudes and caps display at 4 decimals.
+const amountFormatter = new Intl.NumberFormat('en-US', { useGrouping: false, maximumFractionDigits: 4 });
+
+/** Format a formatUnits string for display: at most 4 decimals, sub-0.0001 dust floored to "<0.0001". */
+export function formatAssetAmount(amountFormatted: string): string {
+  const n = Number(amountFormatted);
+  if (n > 0 && n < 0.0001) return '<0.0001';
+  return amountFormatter.format(n);
+}
+
 function jawRpcUrl(chainId: number, apiKey?: string): string {
   return apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`;
 }

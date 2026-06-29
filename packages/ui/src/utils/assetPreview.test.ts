@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapAssetChanges, type RawAssetChange } from './assetPreview';
+import { formatAssetAmount, mapAssetChanges, type RawAssetChange } from './assetPreview';
 
 const ETH = '0xeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeeee';
 const USDC = '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48';
@@ -48,5 +48,24 @@ describe('mapAssetChanges', () => {
       change(USDC, 3_000_000n, 6, 'USDC'),
     ]);
     expect(out.map((d) => d.direction)).toEqual(['out', 'in']);
+  });
+});
+
+describe('formatAssetAmount', () => {
+  it('caps at 4 decimals', () => {
+    expect(formatAssetAmount('0.06423881663022805')).toBe('0.0642');
+  });
+
+  it('drops trailing zeros / whole numbers', () => {
+    expect(formatAssetAmount('10')).toBe('10');
+    expect(formatAssetAmount('1.5')).toBe('1.5');
+  });
+
+  it('floors sub-0.0001 dust', () => {
+    expect(formatAssetAmount('0.00001')).toBe('<0.0001');
+  });
+
+  it('never uses scientific notation for large amounts', () => {
+    expect(formatAssetAmount('1000000000000000000000')).not.toMatch(/e/i);
   });
 });

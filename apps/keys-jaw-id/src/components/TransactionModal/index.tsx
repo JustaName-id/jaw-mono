@@ -216,17 +216,16 @@ export const TransactionModal = ({
     onFeeTokensUpdate: setFeeTokens,
   });
 
-  // Simulated asset changes for the confirm screen (never blocks signing)
   const {
     assetsOut,
     assetsIn,
-    loading: assetPreviewLoading,
     error: assetPreviewError,
   } = useAssetPreview({
     account: (transactionRequest?.from ?? walletAddress) as Address | undefined,
     calls: transactionCalls,
     chainId: chain?.id ?? 1,
     apiKey: effectiveApiKey,
+    enabled: chain?.id !== undefined,
   });
 
   // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
@@ -494,7 +493,6 @@ export const TransactionModal = ({
       sponsored={isSponsored}
       assetsOut={assetsOut}
       assetsIn={assetsIn}
-      assetPreviewLoading={assetPreviewLoading}
       assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
