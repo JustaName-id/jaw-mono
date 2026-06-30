@@ -8,6 +8,7 @@ import {
   isNativeToken,
   useFeeTokenPrice,
   useGasEstimation,
+  useAssetPreview,
 } from '@jaw.id/ui';
 import { debugLog } from '../../lib/debug-log';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -213,6 +214,18 @@ export const TransactionModal = ({
     permissionId,
     address: transactionRequest?.from,
     onFeeTokensUpdate: setFeeTokens,
+  });
+
+  const {
+    assetsOut,
+    assetsIn,
+    error: assetPreviewError,
+  } = useAssetPreview({
+    account: (transactionRequest?.from ?? walletAddress) as Address | undefined,
+    calls: transactionCalls,
+    chainId: chain?.id ?? 1,
+    apiKey: effectiveApiKey,
+    enabled: chain?.id !== undefined,
   });
 
   // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
@@ -478,6 +491,9 @@ export const TransactionModal = ({
       gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      assetsOut={assetsOut}
+      assetsIn={assetsIn}
+      assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -492,6 +508,7 @@ export const TransactionModal = ({
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={chain?.nativeCurrency?.symbol}
     />
   );
 };

@@ -15,6 +15,7 @@ import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { DecodedCalldata } from './DecodedCalldata';
+import { AssetPreview } from './AssetPreview';
 
 export const TransactionDialog = ({
   // open,
@@ -25,6 +26,9 @@ export const TransactionDialog = ({
   gasFeeLoading,
   gasEstimationError,
   sponsored,
+  assetsOut,
+  assetsIn,
+  assetPreviewError,
   onConfirm,
   onCancel,
   isProcessing,
@@ -323,6 +327,13 @@ export const TransactionDialog = ({
                 </div>
               </div>
 
+              <AssetPreview
+                assetsOut={assetsOut ?? []}
+                assetsIn={assetsIn ?? []}
+                error={assetPreviewError ?? false}
+                nativeSymbol={nativeSymbol}
+              />
+
               {/* Value */}
               {formatTransactionValue(currentTransaction?.value) && (
                 <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
@@ -553,6 +564,13 @@ export const TransactionDialog = ({
                   <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                 </div>
               </div>
+
+              <AssetPreview
+                assetsOut={assetsOut ?? []}
+                assetsIn={assetsIn ?? []}
+                error={assetPreviewError ?? false}
+                nativeSymbol={nativeSymbol}
+              />
 
               {/* Accordion for Transactions */}
               <div className="min-h-0 flex-1 overflow-y-auto">

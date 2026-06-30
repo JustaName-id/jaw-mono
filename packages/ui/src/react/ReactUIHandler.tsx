@@ -51,6 +51,7 @@ import { type LocalStorageAccount, type CreatedAccountData } from '../components
 import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
+import { useAssetPreview } from '../hooks/useAssetPreview';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getSiweOriginWarning, isSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
@@ -1261,6 +1262,17 @@ function TransactionDialogWrapper({
   // Permission ID for permission-based execution
   const permissionId = request.data.capabilities?.permissions?.id as Hex | undefined;
 
+  const {
+    assetsOut,
+    assetsIn,
+    error: assetPreviewError,
+  } = useAssetPreview({
+    account: request.data.from,
+    calls: transactionCalls,
+    chainId,
+    apiKey,
+  });
+
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
     gasFee,
@@ -1508,6 +1520,9 @@ function TransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      assetsOut={assetsOut}
+      assetsIn={assetsIn}
+      assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1604,6 +1619,17 @@ function SendTransactionDialogWrapper({
     ],
     [request.data]
   );
+
+  const {
+    assetsOut,
+    assetsIn,
+    error: assetPreviewError,
+  } = useAssetPreview({
+    account: request.data.from as Address | undefined,
+    calls: transactionCalls,
+    chainId,
+    apiKey,
+  });
 
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
@@ -1845,6 +1871,9 @@ function SendTransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      assetsOut={assetsOut}
+      assetsIn={assetsIn}
+      assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
