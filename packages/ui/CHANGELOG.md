@@ -1,3 +1,13 @@
+## 1.2.0 (2026-06-30)
+
+### 🚀 Features
+
+- **ui, keys:** asset preview ([#222](https://github.com/JustaName-id/jaw-mono/pull/222))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.1.2 (2026-06-24)
 
 ### 🩹 Fixes
