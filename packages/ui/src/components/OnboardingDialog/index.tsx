@@ -296,8 +296,8 @@ export function OnboardingDialog({
             </Button>
             <Button
               onClick={onImportAccount}
-              variant="ghost"
-              className="text-muted-foreground hover:text-foreground mx-auto h-auto p-1 text-xs font-medium"
+              variant="link"
+              className="mx-auto h-auto p-1 text-xs font-medium"
               disabled={isImporting || isBusy}
             >
               {isImporting ? 'Opening Passkey...' : 'Switch account'}
