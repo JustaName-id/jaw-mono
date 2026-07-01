@@ -5,19 +5,33 @@ import { Input } from '../ui/input';
 import { Spinner } from '../ui/spinner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { WalletIcon } from '../../icons';
-import { ChevronRight } from 'lucide-react';
 import { OrSeparator } from '../OrSeparator';
 import { OnboardingDialogProps } from './types';
-import { useState, useEffect, useRef } from 'react';
+import { selectDefaultAccount } from './selectDefaultAccount';
+import { useState, useEffect, useMemo } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
 import { toCoinType } from 'viem';
 
-export function OnboardingDialog({
-  accounts,
-  onAccountSelect,
-  loggingInAccount,
-  onImportAccount,
-  isImporting,
+// Props needed by the create form — the create-related subset of OnboardingDialogProps.
+type CreateAccountFormProps = Pick<
+  OnboardingDialogProps,
+  | 'onCreateAccount'
+  | 'onAccountCreationComplete'
+  | 'isCreating'
+  | 'ensDomain'
+  | 'chainId'
+  | 'mainnetRpcUrl'
+  | 'apiKey'
+  | 'supportedChains'
+  | 'subnameTextRecords'
+>;
+
+/**
+ * Username input + availability check + Create button + error display.
+ * Shared between Layout B (inline) and the Layout A "Create Account" sub-view.
+ * Logic is unchanged from the previous OnboardingDialog create section.
+ */
+function CreateAccountForm({
   onCreateAccount,
   onAccountCreationComplete,
   isCreating,
@@ -27,18 +41,12 @@ export function OnboardingDialog({
   apiKey,
   supportedChains,
   subnameTextRecords,
-}: OnboardingDialogProps) {
-  // Ref for scrollable container
-  const scrollableRef = useRef<HTMLDivElement>(null);
-
-  // Validation state
+}: CreateAccountFormProps) {
   const [isValid, setIsValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [message, setMessage] = useState('');
   const [username, setUsername] = useState('');
-  const [debouncedUsername, setDebouncedUsername] = useState(username);
-
-  // Error state
+  const [debouncedUsername, setDebouncedUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
 
   // Debounce username input
@@ -46,47 +54,38 @@ export function OnboardingDialog({
     const handler = setTimeout(() => {
       setDebouncedUsername(username);
     }, 500);
-
-    return () => {
-      clearTimeout(handler);
-    };
+    return () => clearTimeout(handler);
   }, [username]);
 
   // Validate username and check availability
   useEffect(() => {
     const validateUsername = async () => {
-      // Reset state
       setIsLoading(false);
       setIsValid(false);
       setMessage('');
 
-      // Check if username includes dots
       if (username.includes('.')) {
         setMessage('Invalid format');
         setIsValid(false);
         return;
       }
 
-      // Check minimum length
       if (username.length > 0 && username.length <= 2) {
         setMessage('Minimum 3 characters');
         setIsValid(false);
         return;
       }
 
-      // If username is empty, don't show anything
       if (username.length === 0) {
         return;
       }
 
-      // If no ensDomain, just validate format and length
       if (!ensDomain) {
         setMessage('Available');
         setIsValid(true);
         return;
       }
 
-      // Check availability with SDK
       if (debouncedUsername.length > 2 && chainId) {
         setIsLoading(true);
         setMessage('Checking availability...');
@@ -116,34 +115,12 @@ export function OnboardingDialog({
     };
 
     validateUsername();
-  }, [debouncedUsername, username, ensDomain, chainId]);
-
-  // Handle wheel events for smooth scrolling over buttons
-  useEffect(() => {
-    const scrollable = scrollableRef.current;
-    if (!scrollable) return;
-
-    const handleWheel = (e: WheelEvent) => {
-      // Prevent default to handle scroll manually
-      e.preventDefault();
-      // Smooth scroll
-      scrollable.scrollTop += e.deltaY;
-    };
-
-    // Add event listener with passive: false to allow preventDefault
-    scrollable.addEventListener('wheel', handleWheel, { passive: false });
-
-    return () => {
-      scrollable.removeEventListener('wheel', handleWheel);
-    };
-  }, []);
+  }, [debouncedUsername, username, ensDomain, chainId, mainnetRpcUrl]);
 
   const handleCreateAccountClick = async () => {
-    // Clear any previous errors
     setError(null);
 
     try {
-      // onCreateAccount now returns full account data (not just address)
       const accountData = await onCreateAccount(username);
 
       if (ensDomain && chainId && apiKey && supportedChains && accountData.address) {
@@ -190,51 +167,165 @@ export function OnboardingDialog({
   };
 
   return (
+    <div className="flex flex-col gap-2">
+      <div className="flex flex-row items-center gap-2">
+        <Input
+          placeholder="Username"
+          value={username}
+          onChange={(e) => setUsername(e.target.value)}
+          className="flex-1"
+          // Prevent password-manager extensions (1Password, LastPass, Dashlane,
+          // Bitwarden) from attaching their inline overlay to this field. Their
+          // overlay covers the embedded iframe, which the clickjacking guard
+          // (EnsureVisibility) then reads as occlusion and disables interaction.
+          autoComplete="off"
+          data-1p-ignore
+          data-lpignore="true"
+          data-form-type="other"
+          data-bwignore
+          right={ensDomain ? <span className="text-foreground text-sm font-bold">{`.${ensDomain}`}</span> : undefined}
+        />
+        {isCreating ? (
+          <Spinner className="h-10 w-10" />
+        ) : (
+          <Button
+            onClick={async () => {
+              try {
+                await handleCreateAccountClick();
+              } catch (err) {
+                console.error('❌ Button onClick caught error:', err);
+              }
+            }}
+            disabled={!isValid || isLoading}
+          >
+            Create Account
+          </Button>
+        )}
+      </div>
+      {username.length > 0 && message && !error && (
+        <div className="flex items-center justify-between px-1">
+          <span
+            className={`text-xs font-medium ${
+              isLoading ? 'text-muted-foreground' : isValid ? 'text-success' : 'text-destructive'
+            }`}
+          >
+            {message}
+          </span>
+        </div>
+      )}
+      {error && (
+        <div className="bg-destructive/10 border-destructive/20 flex flex-col gap-2 overflow-hidden rounded-md border px-1 py-2">
+          <span className="text-destructive break-all text-xs font-medium">{error}</span>
+          <Button
+            onClick={() => setError(null)}
+            variant="ghost"
+            className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-6 text-xs"
+          >
+            Dismiss
+          </Button>
+        </div>
+      )}
+    </div>
+  );
+}
+
+export function OnboardingDialog({
+  accounts,
+  onAccountSelect,
+  loggingInAccount,
+  onImportAccount,
+  isImporting,
+  onCreateAccount,
+  onAccountCreationComplete,
+  isCreating,
+  ensDomain,
+  chainId,
+  mainnetRpcUrl,
+  apiKey,
+  supportedChains,
+  subnameTextRecords,
+  lastAuthenticatedCredentialId,
+}: OnboardingDialogProps) {
+  const defaultAccount = useMemo(
+    () => selectDefaultAccount(accounts, lastAuthenticatedCredentialId),
+    [accounts, lastAuthenticatedCredentialId]
+  );
+
+  const createForm = (
+    <CreateAccountForm
+      onCreateAccount={onCreateAccount}
+      onAccountCreationComplete={onAccountCreationComplete}
+      isCreating={isCreating}
+      ensDomain={ensDomain}
+      chainId={chainId}
+      mainnetRpcUrl={mainnetRpcUrl}
+      apiKey={apiKey}
+      supportedChains={supportedChains}
+      subnameTextRecords={subnameTextRecords}
+    />
+  );
+
+  // Layout A — a last account exists: one-tap Continue + Switch Account, with the
+  // create form inline below so a returning user can still spin up a new account.
+  if (defaultAccount) {
+    const isBusy = loggingInAccount !== null;
+    return (
+      <Card className="w-full max-w-md shadow-xl">
+        <CardHeader className="flex flex-col gap-1">
+          <CardTitle className="text-xl font-normal">Welcome back</CardTitle>
+          <CardDescription className="text-xs font-medium">
+            Continue with your last used account, switch to another, or create a new one.
+          </CardDescription>
+        </CardHeader>
+
+        <CardContent className="flex flex-col gap-5">
+          <div className="flex flex-col gap-1">
+            <Button
+              onClick={() => onAccountSelect(defaultAccount)}
+              disabled={isBusy}
+              className="flex h-12 w-full flex-row items-center justify-center gap-2"
+            >
+              {loggingInAccount === defaultAccount.username ? (
+                <Spinner className="!h-5 !w-5" />
+              ) : (
+                <>
+                  <WalletIcon className="!h-6 !w-6" stroke="currentColor" />
+                  <span>{`Continue as ${defaultAccount.username || 'your account'}`}</span>
+                </>
+              )}
+            </Button>
+            <Button
+              onClick={onImportAccount}
+              variant="ghost"
+              className="text-muted-foreground hover:text-foreground mx-auto h-auto p-1 text-xs font-medium"
+              disabled={isImporting || isBusy}
+            >
+              {isImporting ? 'Opening Passkey...' : 'Switch account'}
+            </Button>
+          </div>
+
+          <OrSeparator />
+
+          <div className="flex flex-col gap-2">
+            <span className="text-muted-foreground text-xs font-medium">Create a new account</span>
+            {createForm}
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
+
+  // Layout B — no stored account: Sign In (OS passkey picker) + inline create
+  return (
     <Card className="w-full max-w-md shadow-xl">
       <CardHeader className="flex flex-col gap-1">
         <CardTitle className="text-xl font-normal">Sign In</CardTitle>
-
         <CardDescription className="text-xs font-medium">
-          {`Choose one of your existing accounts below to sign in instantly.
-          If you're on a new device or don't see your account listed, you can
-          import it from your cloud backup.`}
+          Sign in with an existing account, or create a new one.
         </CardDescription>
       </CardHeader>
 
       <CardContent className="flex flex-col gap-5">
-        {/* Existing Accounts */}
-        <div ref={scrollableRef} className="flex max-h-[40vh] flex-col gap-1 overflow-y-auto overscroll-contain">
-          {accounts.map((account) => (
-            <Button
-              key={account.credentialId || account.username || Math.random().toString()}
-              onClick={() => onAccountSelect(account)}
-              variant="ghost"
-              className="hover:bg-muted/50 flex h-auto w-full items-center justify-between !px-3 !py-2"
-              disabled={loggingInAccount !== null}
-            >
-              <div className="flex flex-row items-center gap-2">
-                <WalletIcon className="!h-6 !w-6" />
-                <div className="text-left">
-                  <p className="text-foreground text-sm font-normal">{account.username || 'Unnamed Account'}</p>
-                  <p className="text-muted-foreground text-xs font-semibold">
-                    {new Date(account.creationDate).toLocaleDateString('en-US', {
-                      year: 'numeric',
-                      month: 'short',
-                      day: 'numeric',
-                    })}
-                  </p>
-                </div>
-              </div>
-              {loggingInAccount === account.username ? (
-                <Spinner className="!h-5 !w-5" />
-              ) : (
-                <ChevronRight className="text-foreground !h-5 !w-5" />
-              )}
-            </Button>
-          ))}
-        </div>
-
-        {/* Import Account Button */}
         <Button
           onClick={onImportAccount}
           variant="outline"
@@ -242,72 +333,14 @@ export function OnboardingDialog({
           disabled={isImporting}
         >
           <WalletIcon className="!h-6 !w-6" stroke="currentColor" />
-          <span>{isImporting ? 'Opening Passkey...' : 'Import an existing account'}</span>
+          <span>{isImporting ? 'Opening Passkey...' : 'Sign In'}</span>
         </Button>
 
         <OrSeparator />
 
-        {/* Create New Account */}
         <div className="flex flex-col gap-2">
-          <div className="flex flex-row items-center gap-2">
-            <Input
-              placeholder="Username"
-              value={username}
-              onChange={(e) => setUsername(e.target.value)}
-              className="flex-1"
-              // Prevent password-manager extensions (1Password, LastPass, Dashlane,
-              // Bitwarden) from attaching their inline overlay to this field. Their
-              // overlay covers the embedded iframe, which the clickjacking guard
-              // (EnsureVisibility) then reads as occlusion and disables interaction.
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
-              data-form-type="other"
-              data-bwignore
-              right={
-                ensDomain ? <span className="text-foreground text-sm font-bold">{`.${ensDomain}`}</span> : undefined
-              }
-            />
-            {isCreating ? (
-              <Spinner className="h-10 w-10" />
-            ) : (
-              <Button
-                onClick={async () => {
-                  try {
-                    await handleCreateAccountClick();
-                  } catch (err) {
-                    console.error('❌ Button onClick caught error:', err);
-                  }
-                }}
-                disabled={!isValid || isLoading}
-              >
-                Create Account
-              </Button>
-            )}
-          </div>
-          {username.length > 0 && message && !error && (
-            <div className="flex items-center justify-between px-1">
-              <span
-                className={`text-xs font-medium ${
-                  isLoading ? 'text-muted-foreground' : isValid ? 'text-success' : 'text-destructive'
-                }`}
-              >
-                {message}
-              </span>
-            </div>
-          )}
-          {error && (
-            <div className="bg-destructive/10 border-destructive/20 flex flex-col gap-2 overflow-hidden rounded-md border px-1 py-2">
-              <span className="text-destructive break-all text-xs font-medium">{error}</span>
-              <Button
-                onClick={() => setError(null)}
-                variant="ghost"
-                className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-6 text-xs"
-              >
-                Dismiss
-              </Button>
-            </div>
-          )}
+          <span className="text-muted-foreground text-xs font-medium">Create a new account</span>
+          {createForm}
         </div>
       </CardContent>
     </Card>

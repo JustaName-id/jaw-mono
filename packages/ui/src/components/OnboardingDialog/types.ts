@@ -38,6 +38,12 @@ export interface OnboardingDialogProps {
   chainId?: number;
   mainnetRpcUrl: string;
   apiKey?: string; // API key for JustaName API authentication (xApiKey header)
+  /**
+   * credentialId of the currently-authenticated account (from jaw:passkey:authState).
+   * Used to pick the "Continue with X" default. When it does not match any stored
+   * account, the most recently created account is used instead.
+   */
+  lastAuthenticatedCredentialId?: string | null;
   supportedChains?: Array<{ id: number }>;
   subnameTextRecords?: SubnameTextRecordCapabilityRequest;
 }

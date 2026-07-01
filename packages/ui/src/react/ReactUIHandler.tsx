@@ -547,7 +547,18 @@ function OnboardingDialogWrapper({
   ens?: string;
 }) {
   const [open, setOpen] = useState(true);
-  const [accounts, setAccounts] = useState<LocalStorageAccount[]>([]);
+  const mapStoredAccounts = (): LocalStorageAccount[] =>
+    Account.getStoredAccounts(apiKey).map((acc) => ({
+      username: acc.username,
+      creationDate: new Date(acc.creationDate),
+      credentialId: acc.credentialId,
+      isImported: acc.isImported,
+    }));
+  const [accounts, setAccounts] = useState<LocalStorageAccount[]>(mapStoredAccounts);
+  const lastAuthenticatedCredentialId = useMemo(
+    () => Account.getCurrentAccount(apiKey)?.credentialId ?? null,
+    [apiKey]
+  );
   const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -572,20 +583,9 @@ function OnboardingDialogWrapper({
   const chainName = getChainNameFromId(targetChainId);
   const chainIcon = useChainIconURI(targetChainId, apiKey, 24);
 
-  // Load accounts on mount using Account class
+  // Reload accounts if apiKey changes (initial value is set lazily above)
   useEffect(() => {
-    const loadAccounts = () => {
-      const storedAccounts = Account.getStoredAccounts(apiKey);
-      setAccounts(
-        storedAccounts.map((acc) => ({
-          username: acc.username,
-          creationDate: new Date(acc.creationDate),
-          credentialId: acc.credentialId,
-          isImported: acc.isImported,
-        }))
-      );
-    };
-    loadAccounts();
+    setAccounts(mapStoredAccounts());
   }, [apiKey]);
 
   // Silent mode: check for existing auth state and use it directly
@@ -1010,6 +1010,7 @@ function OnboardingDialogWrapper({
         chainId={chainId}
         mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         apiKey={apiKey}
+        lastAuthenticatedCredentialId={lastAuthenticatedCredentialId}
         supportedChains={SUPPORTED_CHAINS.map((chain) => ({ id: chain.id }))}
         subnameTextRecords={subnameTextRecords}
       />

@@ -4,7 +4,7 @@ import { LocalStorageAccount, OnboardingDialog, type CreatedAccountData } from '
 import { debugLog } from '../../lib/debug-log';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState, useMemo } from 'react';
-import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest, JAW_RPC_URL } from '@jaw.id/core';
+import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest, JAW_RPC_URL, Account } from '@jaw.id/core';
 import { ChainId } from '../../utils/types';
 
 // Authenticated account data returned after successful login
@@ -44,6 +44,11 @@ export function SignInScreen({
   const mainnetRpcUrl = useMemo(() => {
     return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
   }, [apiKey]);
+
+  const lastAuthenticatedCredentialId = useMemo(
+    () => Account.getCurrentAccount(apiKey)?.credentialId ?? null,
+    [apiKey]
+  );
 
   debugLog('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED');
   debugLog('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED');
@@ -188,6 +193,7 @@ export function SignInScreen({
       chainId={chainId}
       mainnetRpcUrl={mainnetRpcUrl}
       apiKey={apiKey}
+      lastAuthenticatedCredentialId={lastAuthenticatedCredentialId}
       supportedChains={SUPPORTED_CHAINS.map((chain) => ({ id: chain.id }))}
       subnameTextRecords={subnameTextRecords}
     />
