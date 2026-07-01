@@ -5,6 +5,7 @@ import { Input } from '../ui/input';
 import { Spinner } from '../ui/spinner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
 import { WalletIcon } from '../../icons';
+import { ArrowRightLeft } from 'lucide-react';
 import { OrSeparator } from '../OrSeparator';
 import { OnboardingDialogProps } from './types';
 import { selectDefaultAccount } from './selectDefaultAccount';
@@ -279,7 +280,7 @@ export function OnboardingDialog({
         </CardHeader>
 
         <CardContent className="flex flex-col gap-5">
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <Button
               onClick={() => onAccountSelect(defaultAccount)}
               disabled={isBusy}
@@ -290,17 +291,21 @@ export function OnboardingDialog({
               ) : (
                 <>
                   <WalletIcon className="!h-6 !w-6" stroke="currentColor" />
-                  <span>{`Continue as ${defaultAccount.username || 'your account'}`}</span>
+                  <span className="flex min-w-0 flex-row items-center gap-1.5">
+                    <span className="opacity-70">Continue as</span>
+                    <span className="max-w-full truncate">{defaultAccount.username || 'your account'}</span>
+                  </span>
                 </>
               )}
             </Button>
             <Button
               onClick={onImportAccount}
-              variant="link"
-              className="mx-auto h-auto p-1 text-xs font-medium"
+              variant="outline"
+              className="mx-auto flex h-auto w-auto flex-row items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium"
               disabled={isImporting || isBusy}
             >
-              {isImporting ? 'Opening Passkey...' : 'Switch account'}
+              <ArrowRightLeft className="!h-3.5 !w-3.5" />
+              <span>{isImporting ? 'Opening Passkey...' : 'Switch account'}</span>
             </Button>
           </div>
 
