@@ -257,12 +257,14 @@ export function getRequiredPrefund(gas: UserOpGasFields): bigint {
  * @returns Token cost in the token's smallest unit
  */
 export function calculateTokenCostFromGas(gas: UserOpGasFields, quote: TokenQuote): bigint {
+    // NOTE: paymasterPostOpGasLimit is intentionally NOT included here. The paymaster postOp
+    // phase is accounted for once, via `quote.postOpGas` added below (Pimlico's formula).
+    // Including both double-counts the postOp gas.
     const totalGas =
         gas.preVerificationGas +
         gas.verificationGasLimit +
         gas.callGasLimit +
-        (gas.paymasterVerificationGasLimit || 0n) +
-        (gas.paymasterPostOpGasLimit || 0n);
+        (gas.paymasterVerificationGasLimit || 0n);
 
     // maxCostInWei = (totalGas + postOpGas) * maxFeePerGas
     const maxCostWei = (totalGas + quote.postOpGas) * gas.maxFeePerGas;
