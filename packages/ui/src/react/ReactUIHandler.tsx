@@ -48,6 +48,10 @@ import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
+import {
+  getStoredLocalAccounts,
+  getLastAuthenticatedCredentialId,
+} from '../components/OnboardingDialog/accountHelpers';
 import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
@@ -547,23 +551,16 @@ function OnboardingDialogWrapper({
   ens?: string;
 }) {
   const [open, setOpen] = useState(true);
-  const mapStoredAccounts = (): LocalStorageAccount[] =>
-    Account.getStoredAccounts(apiKey).map((acc) => ({
-      username: acc.username,
-      creationDate: new Date(acc.creationDate),
-      credentialId: acc.credentialId,
-      isImported: acc.isImported,
-    }));
-  const [accounts, setAccounts] = useState<LocalStorageAccount[]>(mapStoredAccounts);
-  const [lastAuthenticatedCredentialId, setLastAuthenticatedCredentialId] = useState<string | null>(
-    () => Account.getCurrentAccount(apiKey)?.credentialId ?? null
+  const [accounts, setAccounts] = useState<LocalStorageAccount[]>(() => getStoredLocalAccounts(apiKey));
+  const [lastAuthenticatedCredentialId, setLastAuthenticatedCredentialId] = useState<string | null>(() =>
+    getLastAuthenticatedCredentialId(apiKey)
   );
   // Re-read accounts and auth state from storage. Must run after flows that write them
   // (import, account creation), so cancelling a later dialog returns to a fresh default
   // instead of a stale "Continue as" account.
   const refreshAccounts = () => {
-    setAccounts(mapStoredAccounts());
-    setLastAuthenticatedCredentialId(Account.getCurrentAccount(apiKey)?.credentialId ?? null);
+    setAccounts(getStoredLocalAccounts(apiKey));
+    setLastAuthenticatedCredentialId(getLastAuthenticatedCredentialId(apiKey));
   };
   const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
@@ -588,11 +585,6 @@ function OnboardingDialogWrapper({
   const targetChainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(targetChainId);
   const chainIcon = useChainIconURI(targetChainId, apiKey, 24);
-
-  // Reload accounts if apiKey changes (initial value is set lazily above)
-  useEffect(() => {
-    refreshAccounts();
-  }, [apiKey]);
 
   // Silent mode: check for existing auth state and use it directly
   // This mirrors the cross-platform behavior where jaw:passkey:authState is checked

@@ -1,10 +1,16 @@
 'use client';
 
-import { LocalStorageAccount, OnboardingDialog, type CreatedAccountData } from '@jaw.id/ui';
+import {
+  LocalStorageAccount,
+  OnboardingDialog,
+  type CreatedAccountData,
+  toLocalStorageAccount,
+  getLastAuthenticatedCredentialId,
+} from '@jaw.id/ui';
 import { debugLog } from '../../lib/debug-log';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState, useMemo } from 'react';
-import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest, JAW_RPC_URL, Account } from '@jaw.id/core';
+import { SUPPORTED_CHAINS, Chain, SubnameTextRecordCapabilityRequest, JAW_RPC_URL } from '@jaw.id/core';
 import { ChainId } from '../../utils/types';
 
 // Authenticated account data returned after successful login
@@ -45,10 +51,7 @@ export function SignInScreen({
     return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
   }, [apiKey]);
 
-  const lastAuthenticatedCredentialId = useMemo(
-    () => Account.getCurrentAccount(apiKey)?.credentialId ?? null,
-    [apiKey]
-  );
+  const lastAuthenticatedCredentialId = useMemo(() => getLastAuthenticatedCredentialId(apiKey), [apiKey]);
 
   debugLog('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED');
   debugLog('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED');
@@ -180,12 +183,7 @@ export function SignInScreen({
 
   return (
     <OnboardingDialog
-      accounts={accounts.map((account) => ({
-        username: account.username,
-        creationDate: new Date(account.creationDate),
-        credentialId: account.credentialId,
-        isImported: account.isImported,
-      }))}
+      accounts={accounts.map(toLocalStorageAccount)}
       onAccountSelect={handleAccountSelect}
       loggingInAccount={loggingInAccount}
       onImportAccount={handleImportAccount}
