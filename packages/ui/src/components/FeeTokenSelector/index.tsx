@@ -20,7 +20,10 @@ export interface FeeTokenOption {
   // Optional: USD values for display
   balanceUsd?: string;
   gasCostUsd?: string;
+  /** Realistic expected fee (what the user will likely pay). */
   gasCostFormatted?: string;
+  /** Worst-case fee ceiling (the "up to" amount reserved/approved). */
+  gasCostMaxFormatted?: string;
   // Optional: Token logo URI from API
   logoURI?: string;
 }
@@ -147,7 +150,7 @@ export const FeeTokenSelector = ({
 
   // Get gas cost for a token
   // For ERC-20 tokens, use pre-computed gasCostFormatted if available (from paymaster quote)
-  const getGasCost = (token: FeeTokenOption): { formatted: string; usd: string } | null => {
+  const getGasCost = (token: FeeTokenOption): { formatted: string; maxFormatted?: string; usd: string } | null => {
     // Tokens with 0 balance - no gas cost to show
     if (token.balance === 0n) {
       return null;
@@ -166,6 +169,7 @@ export const FeeTokenSelector = ({
 
       return {
         formatted: token.gasCostFormatted,
+        maxFormatted: token.gasCostMaxFormatted,
         usd:
           ['USDC', 'USDT', 'DAI'].includes(token.symbol.toUpperCase()) && !isNaN(tokenCost) ? formatUsd(tokenCost) : '',
       };
@@ -241,7 +245,9 @@ export const FeeTokenSelector = ({
             gasCost.usd ? (
               <>
                 <div className="text-xs font-semibold">{gasCost.usd}</div>
-                <div className="text-muted-foreground text-[10px]">Up to {gasCost.formatted}</div>
+                <div className="text-muted-foreground text-[10px]">
+                  Up to {gasCost.maxFormatted ?? gasCost.formatted}
+                </div>
               </>
             ) : (
               <div className="text-xs font-semibold">{gasCost.formatted}</div>

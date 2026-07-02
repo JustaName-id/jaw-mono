@@ -21,6 +21,7 @@ import {
   getPermissionFromRelay,
   buildGrantPermissionCall,
   buildRevokePermissionCall,
+  buildErc20PaymasterContext,
   standardErrorCodes,
   JAW_PAYMASTER_URL,
   JAW_RPC_URL,
@@ -329,11 +330,7 @@ export const PermissionModal = ({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
       // Fallback to client-side calculation if no estimate yet

@@ -26,6 +26,7 @@ import {
   handleGetCapabilitiesRequest,
   buildGrantPermissionCall,
   buildRevokePermissionCall,
+  buildErc20PaymasterContext,
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   type PaymasterConfig,
@@ -1306,11 +1307,7 @@ function TransactionDialogWrapper({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
       // Fallback to client-side calculation if no estimate yet
@@ -1649,11 +1646,7 @@ function SendTransactionDialogWrapper({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
       // Fallback to client-side calculation if no estimate yet
@@ -2005,11 +1998,7 @@ function PermissionDialogWrapper({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
       // Fallback to client-side calculation if no estimate yet
@@ -2656,11 +2645,7 @@ function RevokePermissionDialogWrapper({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
       // Fallback to client-side calculation if no estimate yet

@@ -288,6 +288,7 @@ export function useGasEstimation({
             return {
               ...token,
               gasCostFormatted: undefined, // No estimate available
+              gasCostMaxFormatted: undefined,
               isSelectable: false,
             };
           }
@@ -298,6 +299,7 @@ export function useGasEstimation({
             return {
               ...token,
               gasCostFormatted: estimate.tokenCostFormatted,
+              gasCostMaxFormatted: estimate.tokenCostMaxFormatted,
               isSelectable: estimate.hasSufficientBalance,
             };
           }
@@ -321,6 +323,7 @@ export function useGasEstimation({
               return {
                 ...token,
                 gasCostFormatted: undefined,
+                gasCostMaxFormatted: undefined,
                 isSelectable: false,
               };
             }
@@ -337,6 +340,7 @@ export function useGasEstimation({
             return {
               ...token,
               gasCostFormatted,
+              gasCostMaxFormatted: undefined,
               isSelectable: false,
             };
           });
@@ -351,6 +355,7 @@ export function useGasEstimation({
               return {
                 ...token,
                 gasCostFormatted: undefined,
+                gasCostMaxFormatted: undefined,
                 isSelectable: false,
               };
             }
@@ -358,6 +363,7 @@ export function useGasEstimation({
             return {
               ...token,
               gasCostFormatted: 'Estimation failed',
+              gasCostMaxFormatted: undefined,
               isSelectable: false,
             };
           });

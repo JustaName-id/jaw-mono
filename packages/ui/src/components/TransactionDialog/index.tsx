@@ -420,9 +420,10 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
-                        {selectedFeeToken.gasCostFormatted && (
+                        {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
                           <p className="text-muted-foreground text-xs font-normal">
-                            Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                            Up to {selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted}{' '}
+                            {selectedFeeToken.symbol}
                           </p>
                         )}
                       </div>
@@ -792,9 +793,10 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
-                        {selectedFeeToken.gasCostFormatted && (
+                        {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
                           <p className="text-muted-foreground text-xs font-normal">
-                            Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                            Up to {selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted}{' '}
+                            {selectedFeeToken.symbol}
                           </p>
                         )}
                       </div>

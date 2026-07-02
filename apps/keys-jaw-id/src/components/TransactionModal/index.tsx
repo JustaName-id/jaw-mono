@@ -19,6 +19,7 @@ import {
   type TransactionCall,
   standardErrorCodes,
   handleGetCapabilitiesRequest,
+  buildErc20PaymasterContext,
   JAW_PAYMASTER_URL,
   JAW_RPC_URL,
   type FeeTokenCapability,
@@ -239,11 +240,7 @@ export const TransactionModal = ({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
       // Fallback to client-side calculation if no estimate yet
