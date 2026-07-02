@@ -82,6 +82,15 @@ The `@jaw.id/core` package follows this structure:
 4. **RPC Handlers** (`src/rpc/`) - Individual handlers for wallet methods (wallet_sendCalls, wallet_grantPermissions, etc.)
 5. **State Management** (`src/store/`) - Zustand stores for config, chains, and client instances
 
+### ERC-20 Gas Fee Model
+
+`estimateErc20PaymasterCosts` (`packages/core/src/account/erc20Paymaster.ts`) returns two values per token:
+
+- `tokenCost` — realistic fee shown to the user: gas limits with the paymaster's real quoted postOp gas, priced at a buffered effective gas price (baseFee × 1.25 + priority, capped at maxFeePerGas), capped at the ceiling.
+- `tokenCostMax` — worst-case ceiling ("Up to"): all five gas limits plus the quoted postOp gas at maxFeePerGas. This is the amount the paymaster approval must cover and what `hasSufficientBalance` checks against.
+
+UIs must build the ERC-20 paymaster context via `buildErc20PaymasterContext(estimate)` so the approve-with-ceiling rule stays in one place.
+
 ### Authentication Modes
 
 - **CrossPlatform** (default) - Opens popup to keys.jaw.id for passkey authentication. Credentials portable across apps.
