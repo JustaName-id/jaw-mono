@@ -49,9 +49,14 @@ import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
+import {
+  getStoredLocalAccounts,
+  getLastAuthenticatedCredentialId,
+} from '../components/OnboardingDialog/accountHelpers';
 import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
+import { useAssetPreview } from '../hooks/useAssetPreview';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getSiweOriginWarning, isSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
@@ -547,7 +552,17 @@ function OnboardingDialogWrapper({
   ens?: string;
 }) {
   const [open, setOpen] = useState(true);
-  const [accounts, setAccounts] = useState<LocalStorageAccount[]>([]);
+  const [accounts, setAccounts] = useState<LocalStorageAccount[]>(() => getStoredLocalAccounts(apiKey));
+  const [lastAuthenticatedCredentialId, setLastAuthenticatedCredentialId] = useState<string | null>(() =>
+    getLastAuthenticatedCredentialId(apiKey)
+  );
+  // Re-read accounts and auth state from storage. Must run after flows that write them
+  // (import, account creation), so cancelling a later dialog returns to a fresh default
+  // instead of a stale "Continue as" account.
+  const refreshAccounts = () => {
+    setAccounts(getStoredLocalAccounts(apiKey));
+    setLastAuthenticatedCredentialId(getLastAuthenticatedCredentialId(apiKey));
+  };
   const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -571,22 +586,6 @@ function OnboardingDialogWrapper({
   const targetChainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(targetChainId);
   const chainIcon = useChainIconURI(targetChainId, apiKey, 24);
-
-  // Load accounts on mount using Account class
-  useEffect(() => {
-    const loadAccounts = () => {
-      const storedAccounts = Account.getStoredAccounts(apiKey);
-      setAccounts(
-        storedAccounts.map((acc) => ({
-          username: acc.username,
-          creationDate: new Date(acc.creationDate),
-          credentialId: acc.credentialId,
-          isImported: acc.isImported,
-        }))
-      );
-    };
-    loadAccounts();
-  }, [apiKey]);
 
   // Silent mode: check for existing auth state and use it directly
   // This mirrors the cross-platform behavior where jaw:passkey:authState is checked
@@ -700,6 +699,9 @@ function OnboardingDialogWrapper({
         paymasterUrl: paymasters?.[targetChainId]?.url,
       });
 
+      // Import wrote the account + auth state to storage
+      refreshAccounts();
+
       const metadata = accountInstance.getMetadata();
 
       // If silent mode, skip ConnectDialog and approve immediately
@@ -784,6 +786,8 @@ function OnboardingDialogWrapper({
   // Handle account creation completion (after subname registration if applicable)
   // Account data flows through from onCreateAccount - no intermediate state needed
   const handleAccountCreationComplete = async (accountData: CreatedAccountData) => {
+    // Creation wrote the account + auth state to storage
+    refreshAccounts();
     // If silent mode, skip ConnectDialog and approve immediately
     if (request.data.silent) {
       setIsCreating(false);
@@ -1005,11 +1009,13 @@ function OnboardingDialogWrapper({
         isImporting={isImporting}
         onCreateAccount={handleCreateAccount}
         onAccountCreationComplete={handleAccountCreationComplete}
+        onAccountCreationError={() => setIsCreating(false)}
         isCreating={isCreating}
         ensDomain={ensDomain}
         chainId={chainId}
         mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         apiKey={apiKey}
+        lastAuthenticatedCredentialId={lastAuthenticatedCredentialId}
         supportedChains={SUPPORTED_CHAINS.map((chain) => ({ id: chain.id }))}
         subnameTextRecords={subnameTextRecords}
       />
@@ -1262,6 +1268,17 @@ function TransactionDialogWrapper({
   // Permission ID for permission-based execution
   const permissionId = request.data.capabilities?.permissions?.id as Hex | undefined;
 
+  const {
+    assetsOut,
+    assetsIn,
+    error: assetPreviewError,
+  } = useAssetPreview({
+    account: request.data.from,
+    calls: transactionCalls,
+    chainId,
+    apiKey,
+  });
+
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
     gasFee,
@@ -1505,6 +1522,9 @@ function TransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      assetsOut={assetsOut}
+      assetsIn={assetsIn}
+      assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1601,6 +1621,17 @@ function SendTransactionDialogWrapper({
     ],
     [request.data]
   );
+
+  const {
+    assetsOut,
+    assetsIn,
+    error: assetPreviewError,
+  } = useAssetPreview({
+    account: request.data.from as Address | undefined,
+    calls: transactionCalls,
+    chainId,
+    apiKey,
+  });
 
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
@@ -1838,6 +1869,9 @@ function SendTransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      assetsOut={assetsOut}
+      assetsIn={assetsIn}
+      assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}

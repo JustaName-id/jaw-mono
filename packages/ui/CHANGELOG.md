@@ -1,3 +1,23 @@
+## 1.2.1 (2026-07-02)
+
+### 🩹 Fixes
+
+- **ui:** improve account selection ux ([#224](https://github.com/JustaName-id/jaw-mono/pull/224))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 1.2.0 (2026-06-30)
+
+### 🚀 Features
+
+- **ui, keys:** asset preview ([#222](https://github.com/JustaName-id/jaw-mono/pull/222))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.1.2 (2026-06-24)
 
 ### 🩹 Fixes
