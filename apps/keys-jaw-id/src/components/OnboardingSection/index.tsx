@@ -34,7 +34,7 @@ export function SignInScreen({
   subnameTextRecords,
   origin,
 }: SignInScreenProps) {
-  const { accounts, refetchAccounts } = usePasskeys({ apiKey });
+  const { accounts, accountsLoading, refetchAccounts } = usePasskeys({ apiKey });
   const { mutateAsync: login } = useLogin();
   const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
   const { refetch: refetchAuth } = useAuth({ origin });
@@ -173,6 +173,10 @@ export function SignInScreen({
       console.error('❌ Import failed:', error);
     }
   };
+
+  if (accountsLoading) {
+    return null;
+  }
 
   return (
     <OnboardingDialog
