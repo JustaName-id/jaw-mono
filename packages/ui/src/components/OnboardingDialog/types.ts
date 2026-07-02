@@ -31,6 +31,11 @@ export interface OnboardingDialogProps {
   // Create new account section
   onCreateAccount: (username: string) => Promise<CreatedAccountData>;
   onAccountCreationComplete: (account: CreatedAccountData) => Promise<void>;
+  /**
+   * Called when the create flow fails after onCreateAccount resolved (e.g. subname
+   * registration), so hosts managing isCreating themselves can reset it.
+   */
+  onAccountCreationError?: (error: unknown) => void;
   isCreating: boolean;
 
   // Configuration
@@ -38,6 +43,12 @@ export interface OnboardingDialogProps {
   chainId?: number;
   mainnetRpcUrl: string;
   apiKey?: string; // API key for JustaName API authentication (xApiKey header)
+  /**
+   * credentialId of the currently-authenticated account (from jaw:passkey:authState).
+   * Used to pick the "Continue with X" default. When it does not match any stored
+   * account, the most recently created account is used instead.
+   */
+  lastAuthenticatedCredentialId?: string | null;
   supportedChains?: Array<{ id: number }>;
   subnameTextRecords?: SubnameTextRecordCapabilityRequest;
 }
