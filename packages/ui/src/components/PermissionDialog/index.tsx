@@ -182,8 +182,16 @@ export const PermissionDialog = ({
   };
 
   const hasGasPaymentOption = !gasEstimationError || sponsored;
+  // Paying with ERC-20 requires a settled estimate for the selected token — the
+  // approval amount comes from it; without one the transaction must not start.
+  const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
   const canConfirm =
-    !isProcessing && !isLoadingTokenInfo && !isResolvingAddresses && !gasFeeLoading && hasGasPaymentOption;
+    !isProcessing &&
+    !isLoadingTokenInfo &&
+    !isResolvingAddresses &&
+    !gasFeeLoading &&
+    hasGasPaymentOption &&
+    !erc20EstimateMissing;
 
   // Count total permissions
   const totalSpends = spends.length;

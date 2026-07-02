@@ -220,7 +220,10 @@ export const TransactionDialog = ({
   // - No gas estimation error (unless sponsored)
   // - Must have at least one selectable payment option
   const hasInsufficientFunds = !hasSelectablePaymentOption || (gasEstimationError && !sponsored && !isPayingWithErc20);
-  const canConfirm = !isProcessing && !gasFeeLoading && !hasInsufficientFunds;
+  // Paying with ERC-20 requires a settled estimate for the selected token — the
+  // approval amount comes from it; without one the transaction must not start.
+  const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
+  const canConfirm = !isProcessing && !gasFeeLoading && !hasInsufficientFunds && !erc20EstimateMissing;
 
   return (
     <DefaultDialog

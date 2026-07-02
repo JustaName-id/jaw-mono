@@ -1,13 +1,6 @@
 'use client';
 
-import {
-  PermissionDialog,
-  useGasEstimation,
-  useFeeTokenPrice,
-  type FeeTokenOption,
-  fetchTokenBalance,
-  isNativeToken,
-} from '@jaw.id/ui';
+import { PermissionDialog, useGasEstimation, type FeeTokenOption, fetchTokenBalance, isNativeToken } from '@jaw.id/ui';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from 'viem';
 import { getChainNameFromId } from '../../lib/chain-handlers';
@@ -155,13 +148,6 @@ export const PermissionModal = ({
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState<boolean>(true);
-
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find((t) => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
-
-  // Fetch native token price dynamically based on the chain's native token symbol
-  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract API key from rpcUrl if not provided as prop
   const extractedApiKey = useMemo(() => {
@@ -333,16 +319,13 @@ export const PermissionModal = ({
         return buildErc20PaymasterContext(estimate);
       }
 
-      // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
-      return {
-        token: selectedFeeToken.address,
-        gas: gasInTokenUnits.toString(),
-      };
+      // No estimate yet: omit `gas` so Account.createErc20ApprovalCall estimates
+      // the worst-case ceiling itself, instead of a client-side USD guess that
+      // ignores the exchange rate and can under-approve.
+      return { token: selectedFeeToken.address };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates]);
 
   // Network name and icon
   const networkName = useMemo(() => {
