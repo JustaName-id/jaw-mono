@@ -4,8 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Spinner } from '../ui/spinner';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { WalletIcon } from '../../icons';
-import { ArrowRightLeft } from 'lucide-react';
+import { ArrowRightLeft, Fingerprint } from 'lucide-react';
 import { OrSeparator } from '../OrSeparator';
 import { OnboardingDialogProps } from './types';
 import { selectDefaultAccount } from './selectDefaultAccount';
@@ -295,7 +294,7 @@ export function OnboardingDialog({
                 <Spinner className="!h-5 !w-5" />
               ) : (
                 <>
-                  <WalletIcon className="!h-6 !w-6" stroke="currentColor" />
+                  <Fingerprint className="!h-6 !w-6" />
                   <span className="flex min-w-0 flex-row items-center gap-1.5">
                     <span className="opacity-70">Continue as</span>
                     <span className="max-w-full truncate">{defaultAccount.username || 'your account'}</span>
@@ -342,7 +341,7 @@ export function OnboardingDialog({
           className="flex h-10 w-full flex-row items-center gap-2"
           disabled={isImporting}
         >
-          <WalletIcon className="!h-6 !w-6" stroke="currentColor" />
+          <Fingerprint className="!h-6 !w-6" />
           <span>{isImporting ? 'Opening Passkey...' : 'Sign In'}</span>
         </Button>
 
