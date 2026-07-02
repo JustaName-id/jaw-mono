@@ -288,7 +288,7 @@ export function OnboardingDialog({
           <div className="flex flex-col gap-2">
             <Button
               onClick={() => onAccountSelect(defaultAccount)}
-              disabled={isBusy}
+              disabled={isBusy || isImporting}
               className="flex h-12 w-full flex-row items-center justify-center gap-2"
             >
               {loggingInAccount === defaultAccount.username ? (

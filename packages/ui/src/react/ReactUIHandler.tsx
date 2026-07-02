@@ -555,10 +555,16 @@ function OnboardingDialogWrapper({
       isImported: acc.isImported,
     }));
   const [accounts, setAccounts] = useState<LocalStorageAccount[]>(mapStoredAccounts);
-  const lastAuthenticatedCredentialId = useMemo(
-    () => Account.getCurrentAccount(apiKey)?.credentialId ?? null,
-    [apiKey]
+  const [lastAuthenticatedCredentialId, setLastAuthenticatedCredentialId] = useState<string | null>(
+    () => Account.getCurrentAccount(apiKey)?.credentialId ?? null
   );
+  // Re-read accounts and auth state from storage. Must run after flows that write them
+  // (import, account creation), so cancelling a later dialog returns to a fresh default
+  // instead of a stale "Continue as" account.
+  const refreshAccounts = () => {
+    setAccounts(mapStoredAccounts());
+    setLastAuthenticatedCredentialId(Account.getCurrentAccount(apiKey)?.credentialId ?? null);
+  };
   const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -585,7 +591,7 @@ function OnboardingDialogWrapper({
 
   // Reload accounts if apiKey changes (initial value is set lazily above)
   useEffect(() => {
-    setAccounts(mapStoredAccounts());
+    refreshAccounts();
   }, [apiKey]);
 
   // Silent mode: check for existing auth state and use it directly
@@ -700,6 +706,9 @@ function OnboardingDialogWrapper({
         paymasterUrl: paymasters?.[targetChainId]?.url,
       });
 
+      // Import wrote the account + auth state to storage
+      refreshAccounts();
+
       const metadata = accountInstance.getMetadata();
 
       // If silent mode, skip ConnectDialog and approve immediately
@@ -784,6 +793,8 @@ function OnboardingDialogWrapper({
   // Handle account creation completion (after subname registration if applicable)
   // Account data flows through from onCreateAccount - no intermediate state needed
   const handleAccountCreationComplete = async (accountData: CreatedAccountData) => {
+    // Creation wrote the account + auth state to storage
+    refreshAccounts();
     // If silent mode, skip ConnectDialog and approve immediately
     if (request.data.silent) {
       setIsCreating(false);
