@@ -185,8 +185,13 @@ export function useGasEstimation({
 
     const updatedToken = feeTokens.find((t) => t.address.toLowerCase() === selectedFeeToken.address.toLowerCase());
 
-    // Update if gasCostFormatted changed (new estimate came in)
-    if (updatedToken && updatedToken.gasCostFormatted !== selectedFeeToken.gasCostFormatted) {
+    // Update if either fee value changed (new estimate came in) — the ceiling can
+    // move even when the realistic display rounds to the same string.
+    if (
+      updatedToken &&
+      (updatedToken.gasCostFormatted !== selectedFeeToken.gasCostFormatted ||
+        updatedToken.gasCostMaxFormatted !== selectedFeeToken.gasCostMaxFormatted)
+    ) {
       setSelectedFeeToken(updatedToken);
     }
   }, [feeTokens, selectedFeeToken]);
