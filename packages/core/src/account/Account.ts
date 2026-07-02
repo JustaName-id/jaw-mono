@@ -1378,6 +1378,7 @@ export class Account {
                                 ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit
                                 : undefined,
                         maxFeePerGas: userOp.maxFeePerGas,
+                        maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
                     };
 
                     // Calculate token cost
