@@ -1,7 +1,7 @@
-import { Address, Hex, encodeFunctionData, erc20Abi, formatUnits, getAddress } from 'viem';
+import { Address, Hex, createPublicClient, encodeFunctionData, erc20Abi, formatUnits, getAddress, http } from 'viem';
 import { SmartAccount, entryPoint08Address } from 'viem/account-abstraction';
 import { getBundlerClient } from './smartAccount.js';
-import { Chain } from '../store/index.js';
+import { Chain, getClient } from '../store/index.js';
 import { ERC20_PAYMASTER_ADDRESS, PERMISSIONS_MANAGER_ADDRESS } from '../constants.js';
 import {
     getPermissionFromRelay,
@@ -26,11 +26,27 @@ export interface TokenEstimate {
     tokenAddress: Address;
     symbol: string;
     decimals: number;
+    /**
+     * Realistic expected cost, for display. Uses the paymaster's own quoted postOp
+     * gas (not the padded stub limit) priced at the effective gas price when
+     * available. Always <= tokenCostMax.
+     */
     tokenCost: bigint;
     tokenCostFormatted: string;
+    /**
+     * Worst-case ceiling: the maximum the paymaster can charge for this userOp
+     * (full gas limits at maxFeePerGas). This is the amount to approve and the
+     * amount the balance must cover.
+     */
+    tokenCostMax: bigint;
+    tokenCostMaxFormatted: string;
     paymasterAddress: Address;
     exchangeRate: bigint;
-    /** Whether the user has sufficient balance to pay with this token */
+    /**
+     * Whether the user has sufficient balance to pay with this token.
+     * Checked against tokenCostMax so a transaction is never started that could
+     * fail at the paymaster's postOp transfer in the worst case.
+     */
     hasSufficientBalance: boolean;
 }
 
@@ -55,6 +71,36 @@ export interface UserOpGasFields {
     paymasterVerificationGasLimit?: bigint;
     paymasterPostOpGasLimit?: bigint;
     maxFeePerGas: bigint;
+    maxPriorityFeePerGas?: bigint;
+}
+
+/**
+ * Buffer applied to the current base fee when pricing the displayed estimate.
+ * EIP-1559 lets the base fee rise up to 12.5% per block, so 1.25x absorbs a
+ * couple of rising blocks between estimation and inclusion — the shown fee lands
+ * at or slightly above the real charge, never below, while staying far under the
+ * ~2x ceiling that maxFeePerGas carries.
+ */
+const DISPLAY_BASE_FEE_BUFFER_BPS = 12500n;
+const BPS_DENOMINATOR = 10000n;
+
+/**
+ * Effective gas price for the displayed estimate.
+ *
+ * The paymaster charges in postOp at the price the EntryPoint settles at —
+ * `min(maxFeePerGas, baseFee + maxPriorityFeePerGas)` — NOT the maxFeePerGas
+ * ceiling. Pricing the display at a buffered base fee + priority tracks the real
+ * charge closely; the result is capped at maxFeePerGas since the settle price
+ * can never exceed the userOp's own ceiling.
+ */
+export function computeEffectiveGasPrice(
+    gas: Pick<UserOpGasFields, 'maxFeePerGas' | 'maxPriorityFeePerGas'>,
+    baseFeePerGas: bigint,
+    bufferBps: bigint = DISPLAY_BASE_FEE_BUFFER_BPS
+): bigint {
+    const priority = gas.maxPriorityFeePerGas ?? 0n;
+    const buffered = (baseFeePerGas * bufferBps) / BPS_DENOMINATOR + priority;
+    return buffered < gas.maxFeePerGas ? buffered : gas.maxFeePerGas;
 }
 
 /**
@@ -204,6 +250,13 @@ export async function estimateErc20PaymasterCosts(
     // This is key - the paymaster being included means estimation won't fail with AA21
     const bundlerClient = getBundlerClient(chain, paymasterUrl, { token: tokens[0].address });
 
+    // Fire the base-fee fetch in parallel with the userOp preparation — the two are
+    // independent and the block is only consumed after the userOp resolves. Reuse the
+    // cached per-chain client when the chain is registered in the store. Best-effort:
+    // without a base fee the display falls back to the ceiling price.
+    const publicClient = getClient(chain.id) ?? createPublicClient({ transport: http(chain.rpcUrl) });
+    const blockPromise = publicClient.getBlock({ blockTag: 'latest' }).catch(() => null);
+
     const userOp = await bundlerClient.prepareUserOperation({
         account: smartAccount,
         calls: preparedCalls,
@@ -223,10 +276,26 @@ export async function estimateErc20PaymasterCosts(
                 ? (userOp as { paymasterPostOpGasLimit?: bigint }).paymasterPostOpGasLimit
                 : undefined,
         maxFeePerGas: userOp.maxFeePerGas,
+        maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
     };
 
-    // 5. Calculate cost for each token using the utility function
-    return calculateTokenEstimatesFromGas(gas, quotes, tokens);
+    // 5. Price the displayed estimate at the effective gas price instead of the
+    // maxFeePerGas ceiling, using the base fee fetched above.
+    let displayGasPrice: bigint | undefined;
+    const block = await blockPromise;
+    if (block?.baseFeePerGas != null && block.baseFeePerGas > 0n) {
+        displayGasPrice = computeEffectiveGasPrice(gas, block.baseFeePerGas);
+    }
+
+    // 6. Calculate cost for each token using the utility function
+    return calculateTokenEstimatesFromGas(gas, quotes, tokens, { displayGasPrice });
+}
+
+/** Sum of the userOp gas limits shared by every cost formula (all phases except postOp). */
+function sumGasLimitsExceptPostOp(gas: UserOpGasFields): bigint {
+    return (
+        gas.preVerificationGas + gas.verificationGasLimit + gas.callGasLimit + (gas.paymasterVerificationGasLimit || 0n)
+    );
 }
 
 /**
@@ -234,41 +303,66 @@ export async function estimateErc20PaymasterCosts(
  * This follows Pimlico's getRequiredPrefund formula for EntryPoint v0.7/0.8.
  */
 export function getRequiredPrefund(gas: UserOpGasFields): bigint {
-    const totalGas =
-        gas.preVerificationGas +
-        gas.verificationGasLimit +
-        gas.callGasLimit +
-        (gas.paymasterVerificationGasLimit || 0n) +
-        (gas.paymasterPostOpGasLimit || 0n);
+    const totalGas = sumGasLimitsExceptPostOp(gas) + (gas.paymasterPostOpGasLimit || 0n);
 
     return totalGas * gas.maxFeePerGas;
 }
 
 /**
- * Calculates the token cost for a userOp using existing gas data and quote.
- * Use this when you already have the userOp prepared and want to avoid redundant API calls.
+ * Calculates the worst-case token cost (ceiling) for a userOp.
  *
- * Formula (Pimlico's):
- * maxCostInWei = (totalGas + postOpGas) * maxFeePerGas
- * costInToken = (maxCostInWei * exchangeRate) / 1e18
+ * This mirrors the maximum the singleton paymaster can charge in postOp:
+ * `costInToken = (actualGasCost + postOpGas * actualFee) * exchangeRate / 1e18`,
+ * where actualGasCost is bounded by the full prefund (ALL five gas limits,
+ * including paymasterPostOpGasLimit) and actualFee by maxFeePerGas. postOpGas is
+ * added ON TOP by the contract (it can't measure its own token transfer), so it
+ * appears here in addition to the postOp limit — that is not a double count for
+ * the ceiling, it's the contract's exact worst case.
+ *
+ * Use this for the approval amount and the balance check. For the fee shown to
+ * the user, use calculateDisplayTokenCost.
  *
  * @param gas - Gas fields from a prepared userOp
  * @param quote - Token quote from fetchTokenQuotes
- * @returns Token cost in the token's smallest unit
+ * @returns Worst-case token cost in the token's smallest unit
  */
 export function calculateTokenCostFromGas(gas: UserOpGasFields, quote: TokenQuote): bigint {
-    const totalGas =
-        gas.preVerificationGas +
-        gas.verificationGasLimit +
-        gas.callGasLimit +
-        (gas.paymasterVerificationGasLimit || 0n) +
-        (gas.paymasterPostOpGasLimit || 0n);
+    const totalGas = sumGasLimitsExceptPostOp(gas) + (gas.paymasterPostOpGasLimit || 0n) + quote.postOpGas;
 
-    // maxCostInWei = (totalGas + postOpGas) * maxFeePerGas
-    const maxCostWei = (totalGas + quote.postOpGas) * gas.maxFeePerGas;
+    const maxCostWei = totalGas * gas.maxFeePerGas;
 
-    // Convert to token using exchange rate
     return (maxCostWei * quote.exchangeRate) / BigInt(1e18);
+}
+
+/**
+ * Calculates the realistic token cost for display.
+ *
+ * Differs from the ceiling in two ways:
+ * - counts the postOp phase once, via the paymaster's own quoted real postOp gas
+ *   (`quote.postOpGas`), instead of also including the padded
+ *   `paymasterPostOpGasLimit` stub — the real postOp can't exceed what the
+ *   paymaster itself quotes;
+ * - prices at `gasPrice` (the effective price when available) instead of the
+ *   maxFeePerGas ceiling.
+ *
+ * @param gas - Gas fields from a prepared userOp
+ * @param quote - Token quote from fetchTokenQuotes
+ * @param gasPrice - Price per gas for the estimate (defaults to maxFeePerGas)
+ * @returns Expected token cost in the token's smallest unit
+ */
+export function calculateDisplayTokenCost(gas: UserOpGasFields, quote: TokenQuote, gasPrice?: bigint): bigint {
+    // Structurally bounded: should a quote ever exceed the userOp's own postOp
+    // limit, the limit wins — the display can never leapfrog the ceiling.
+    const postOpGas =
+        gas.paymasterPostOpGasLimit != null && gas.paymasterPostOpGasLimit < quote.postOpGas
+            ? gas.paymasterPostOpGasLimit
+            : quote.postOpGas;
+
+    const totalGas = sumGasLimitsExceptPostOp(gas) + postOpGas;
+
+    const costWei = totalGas * (gasPrice ?? gas.maxFeePerGas);
+
+    return (costWei * quote.exchangeRate) / BigInt(1e18);
 }
 
 /**
@@ -283,17 +377,23 @@ export function calculateTokenCostFromGas(gas: UserOpGasFields, quote: TokenQuot
 export function calculateTokenEstimatesFromGas(
     gas: UserOpGasFields,
     quotes: TokenQuote[],
-    tokens: TokenInfo[]
+    tokens: TokenInfo[],
+    opts?: { displayGasPrice?: bigint }
 ): TokenEstimate[] {
     return quotes.map((quote) => {
         const token = tokens.find((t) => t.address.toLowerCase() === quote.tokenAddress.toLowerCase());
-        const decimals = token?.decimals || 18;
+        const decimals = token?.decimals ?? 18;
         const symbol = token?.symbol || 'UNKNOWN';
         const balance = token?.balance || 0n;
 
-        const tokenCost = calculateTokenCostFromGas(gas, quote);
-        const hasSufficientBalance = balance >= tokenCost;
+        const tokenCostMax = calculateTokenCostFromGas(gas, quote);
+        let tokenCost = calculateDisplayTokenCost(gas, quote, opts?.displayGasPrice);
+        // The shown estimate can never exceed the ceiling being reserved.
+        if (tokenCost > tokenCostMax) tokenCost = tokenCostMax;
+
+        const hasSufficientBalance = balance >= tokenCostMax;
         const tokenCostFormatted = formatTokenAmount(tokenCost, decimals);
+        const tokenCostMaxFormatted = formatTokenAmount(tokenCostMax, decimals);
 
         return {
             tokenAddress: quote.tokenAddress,
@@ -301,11 +401,29 @@ export function calculateTokenEstimatesFromGas(
             decimals,
             tokenCost,
             tokenCostFormatted,
+            tokenCostMax,
+            tokenCostMaxFormatted,
             paymasterAddress: quote.paymasterAddress,
             exchangeRate: quote.exchangeRate,
             hasSufficientBalance,
         };
     });
+}
+
+/**
+ * Builds the paymaster context for paying gas with an estimated ERC-20 token.
+ *
+ * `gas` is the amount the bundled approval must cover: the worst-case ceiling
+ * (`tokenCostMax`), NOT the displayed estimate — the paymaster's postOp can
+ * charge up to the ceiling, and an insufficient allowance reverts the whole
+ * operation. Every UI that lets a user pay in ERC-20 should build its
+ * paymaster context through this helper so the rule lives in one place.
+ */
+export function buildErc20PaymasterContext(estimate: TokenEstimate): { token: Address; gas: string } {
+    return {
+        token: estimate.tokenAddress,
+        gas: estimate.tokenCostMax.toString(),
+    };
 }
 
 /**
