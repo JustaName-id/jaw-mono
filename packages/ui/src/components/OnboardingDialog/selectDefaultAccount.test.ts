@@ -34,4 +34,15 @@ describe('selectDefaultAccount', () => {
     const accounts = [acc('alice', 'cred-1', '2024-01-01')];
     expect(selectDefaultAccount(accounts, undefined)?.username).toBe('alice');
   });
+
+  it('skips accounts without a credentialId even when they are the newest', () => {
+    const ghost: LocalStorageAccount = { username: 'ghost', creationDate: new Date('2024-06-01'), isImported: false };
+    const accounts = [acc('alice', 'cred-1', '2024-01-01'), ghost];
+    expect(selectDefaultAccount(accounts, undefined)?.username).toBe('alice');
+  });
+
+  it('returns null when no account has a credentialId', () => {
+    const ghost: LocalStorageAccount = { username: 'ghost', creationDate: new Date('2024-06-01'), isImported: false };
+    expect(selectDefaultAccount([ghost], undefined)).toBeNull();
+  });
 });

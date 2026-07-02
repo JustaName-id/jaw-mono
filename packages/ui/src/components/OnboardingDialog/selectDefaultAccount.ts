@@ -13,12 +13,13 @@ export function selectDefaultAccount(
   accounts: LocalStorageAccount[],
   lastAuthenticatedCredentialId?: string | null
 ): LocalStorageAccount | null {
-  if (accounts.length === 0) return null;
+  const selectable = accounts.filter((a) => a.credentialId);
+  if (selectable.length === 0) return null;
 
   if (lastAuthenticatedCredentialId) {
-    const match = accounts.find((a) => a.credentialId === lastAuthenticatedCredentialId);
+    const match = selectable.find((a) => a.credentialId === lastAuthenticatedCredentialId);
     if (match) return match;
   }
 
-  return accounts.reduce((latest, a) => (a.creationDate.getTime() > latest.creationDate.getTime() ? a : latest));
+  return selectable.reduce((latest, a) => (a.creationDate.getTime() > latest.creationDate.getTime() ? a : latest));
 }
