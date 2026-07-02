@@ -5,6 +5,7 @@ import {
     calculateTokenCostFromGas,
     calculateTokenEstimatesFromGas,
     computeEffectiveGasPrice,
+    computeMeasuredDisplayGas,
     type TokenInfo,
     type TokenQuote,
     type UserOpGasFields,
@@ -75,6 +76,27 @@ describe('calculateDisplayTokenCost (realistic estimate)', () => {
         // (50k + 60k + 70k + 40k + 69k) * 100 — the limit wins over the quote
         expect(calculateDisplayTokenCost(gas, oversizedQuote)).toBe(28_900_000n);
     });
+
+    it('uses measured gas instead of the summed limits when provided', () => {
+        // (100k measured + 19k postOp) * 100 = 11_900_000 — limits ignored
+        expect(calculateDisplayTokenCost(gas, quote, undefined, 100_000n)).toBe(11_900_000n);
+    });
+});
+
+describe('computeMeasuredDisplayGas', () => {
+    it('combines preVerificationGas, the paymaster verification limit, and buffered measured phases', () => {
+        // 50k pVG + 40k pmVerGL + (30k + 50k) * 1.05 = 174_000
+        const measured = { verificationGasUsed: 30_000n, executionGasUsed: 50_000n };
+        expect(computeMeasuredDisplayGas(gas, measured)).toBe(174_000n);
+    });
+
+    it('treats a missing paymaster verification limit as zero', () => {
+        const noPmGas = { ...gas, paymasterVerificationGasLimit: undefined };
+        // 50k + 0 + 84k
+        expect(computeMeasuredDisplayGas(noPmGas, { verificationGasUsed: 30_000n, executionGasUsed: 50_000n })).toBe(
+            134_000n
+        );
+    });
 });
 
 describe('buildErc20PaymasterContext', () => {
@@ -128,6 +150,21 @@ describe('calculateTokenEstimatesFromGas', () => {
 
     it('never displays more than the ceiling', () => {
         const [est] = calculateTokenEstimatesFromGas(gas, [quote], tokens, { displayGasPrice: 1_000n });
+        expect(est.tokenCost).toBe(est.tokenCostMax);
+    });
+
+    it('prices the display from measured gas when provided', () => {
+        const [est] = calculateTokenEstimatesFromGas(gas, [quote], tokens, {
+            displayGasPrice: 52n,
+            measuredGas: 174_000n,
+        });
+        // (174k + 19k) * 52 = 10_036_000; ceiling untouched
+        expect(est.tokenCost).toBe(10_036_000n);
+        expect(est.tokenCostMax).toBe(30_800_000n);
+    });
+
+    it('caps a measured display at the ceiling', () => {
+        const [est] = calculateTokenEstimatesFromGas(gas, [quote], tokens, { measuredGas: 10_000_000n });
         expect(est.tokenCost).toBe(est.tokenCostMax);
     });
 
