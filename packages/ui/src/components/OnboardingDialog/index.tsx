@@ -18,6 +18,7 @@ type CreateAccountFormProps = Pick<
   OnboardingDialogProps,
   | 'onCreateAccount'
   | 'onAccountCreationComplete'
+  | 'onAccountCreationError'
   | 'isCreating'
   | 'ensDomain'
   | 'chainId'
@@ -30,11 +31,11 @@ type CreateAccountFormProps = Pick<
 /**
  * Username input + availability check + Create button + error display.
  * Shared between Layout B (inline) and the Layout A "Create Account" sub-view.
- * Logic is unchanged from the previous OnboardingDialog create section.
  */
 function CreateAccountForm({
   onCreateAccount,
   onAccountCreationComplete,
+  onAccountCreationError,
   isCreating,
   ensDomain,
   chainId,
@@ -154,6 +155,7 @@ function CreateAccountForm({
           const errorMessage = `Failed to register subname: ${subnameError instanceof Error ? subnameError.message : 'Unknown error'}`;
           console.error('❌ SUBNAME ERROR:', errorMessage, subnameError);
           setError(errorMessage);
+          onAccountCreationError?.(subnameError);
           return; // Don't complete if subname registration fails
         }
       }
@@ -164,6 +166,7 @@ function CreateAccountForm({
       const errorMessage = `Account creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`;
       console.error('❌ ACCOUNT CREATION ERROR:', errorMessage, error);
       setError(errorMessage);
+      onAccountCreationError?.(error);
     }
   };
 
@@ -238,6 +241,7 @@ export function OnboardingDialog({
   isImporting,
   onCreateAccount,
   onAccountCreationComplete,
+  onAccountCreationError,
   isCreating,
   ensDomain,
   chainId,
@@ -256,6 +260,7 @@ export function OnboardingDialog({
     <CreateAccountForm
       onCreateAccount={onCreateAccount}
       onAccountCreationComplete={onAccountCreationComplete}
+      onAccountCreationError={onAccountCreationError}
       isCreating={isCreating}
       ensDomain={ensDomain}
       chainId={chainId}

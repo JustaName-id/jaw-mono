@@ -1005,6 +1005,7 @@ function OnboardingDialogWrapper({
         isImporting={isImporting}
         onCreateAccount={handleCreateAccount}
         onAccountCreationComplete={handleAccountCreationComplete}
+        onAccountCreationError={() => setIsCreating(false)}
         isCreating={isCreating}
         ensDomain={ensDomain}
         chainId={chainId}
