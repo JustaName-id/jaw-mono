@@ -11,6 +11,8 @@ export const JAW_PROXY_URL = `${JAW_BASE_URL}/proxy/v1`;
 export const JAW_RPC_URL = `${JAW_PROXY_URL}/rpc`;
 export const JAW_PAYMASTER_URL = `${JAW_RPC_URL}/erc20-paymaster`;
 export const JAW_PASSKEYS_URL = `${JAW_BASE_URL}/wallet/v2/passkeys`;
+// Onramp endpoints live on staging until the backend is promoted to production.
+export const JAW_ONRAMP_URL = 'https://api-staging.justaname.id/proxy/v2/onramp';
 
 export const FACTORY_ADDRESS = '0x5803c076563C85799989d42Fc00292A8aE52fa9E';
 export const CONTRACT_NAME = 'JustanAccount';

@@ -12,6 +12,8 @@ import {
   type PersonalSignRequestData,
   type TypedDataRequestData,
   type WalletGetCallsHistoryResponse,
+  type OnrampParams,
+  type OnrampOrder,
 } from '@jaw.id/core';
 import type { AccountWithCapabilities } from '../Connector.js';
 
@@ -542,4 +544,45 @@ export async function getCallsHistory<config extends Config>(
   });
 
   return result as getCallsHistory.ReturnType;
+}
+
+// ============================================================================
+// onramp
+// ============================================================================
+
+export namespace onramp {
+  export type Parameters<config extends Config = Config> = {
+    address?: Address;
+    chainId?: number;
+    connector?: Connector;
+    /** Optional presets; user edits amount + fills contact in the wallet modal. */
+    params?: OnrampParams;
+  };
+
+  export type ReturnType = OnrampOrder;
+  export type ErrorType = Error;
+}
+
+/**
+ * Opens the wallet's fiat→crypto onramp modal (Apple/Google Pay) for the
+ * connected account. Calls wallet_onramp and resolves with the resulting order.
+ */
+export async function onramp<config extends Config>(
+  config: config,
+  parameters: onramp.Parameters<config> = {}
+): Promise<onramp.ReturnType> {
+  const { address, chainId, connector, params } = parameters;
+
+  const client = await getConnectorClient(config, {
+    account: address,
+    chainId,
+    connector,
+  });
+
+  const result = await client.request({
+    method: 'wallet_onramp' as never,
+    params: [params ?? {}] as never,
+  });
+
+  return result as onramp.ReturnType;
 }

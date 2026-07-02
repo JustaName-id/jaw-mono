@@ -15,6 +15,7 @@ import {
   getCapabilities,
   sign,
   getCallsHistory,
+  onramp,
 } from './core.js';
 import {
   getPermissionsQueryKey,
@@ -832,4 +833,49 @@ export function useGetCallsHistory<
     queryKey,
     staleTime: 30_000, // Cache for 30 seconds
   }) as useGetCallsHistory.ReturnType<selectData>;
+}
+
+// ============================================================================
+// useOnramp
+// ============================================================================
+
+export namespace useOnramp {
+  export type Parameters<config extends Config = Config, context = unknown> = {
+    config?: config;
+    mutation?:
+      | UseMutationParameters<onramp.ReturnType, onramp.ErrorType, onramp.Parameters<config>, context>
+      | undefined;
+  };
+
+  export type ReturnType<config extends Config = Config, context = unknown> = UseMutationResult<
+    onramp.ReturnType,
+    onramp.ErrorType,
+    onramp.Parameters<config>,
+    context
+  >;
+}
+
+/**
+ * Hook to open the fiat→crypto onramp modal (Apple/Google Pay) for the
+ * connected account. Resolves with the resulting order.
+ *
+ * @example
+ * ```tsx
+ * const { mutate, data, isPending } = useOnramp();
+ * mutate({ params: { fiatAmount: '50' } });
+ * ```
+ */
+export function useOnramp<config extends Config = ResolvedRegister['config'], context = unknown>(
+  parameters: useOnramp.Parameters<config, context> = {}
+): useOnramp.ReturnType<config, context> {
+  const { mutation } = parameters;
+  const config = useConfig(parameters as { config?: Config });
+
+  return useMutation({
+    ...mutation,
+    mutationFn: async (variables) => {
+      return onramp(config, variables);
+    },
+    mutationKey: ['onramp'],
+  }) as useOnramp.ReturnType<config, context>;
 }

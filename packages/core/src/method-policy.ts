@@ -55,6 +55,7 @@ export const INTERACTIVE_METHODS: readonly string[] = [
     'eth_sendTransaction',
     'wallet_grantPermissions',
     'wallet_revokePermissions',
+    'wallet_onramp',
 ];
 
 /** Whether a method may be resolved silently (no user gesture, no UI). */

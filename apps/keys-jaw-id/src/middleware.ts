@@ -58,6 +58,12 @@ export function middleware(request: NextRequest) {
     `img-src ${imgSrc}`,
     "font-src 'self' data:",
     `connect-src ${connectSrc}`,
+    // frame-src: the Coinbase headless-onramp pay widget (Apple/Google Pay) is
+    // embedded in an iframe during wallet_onramp. Without this, framing falls
+    // back to default-src 'self' and the pay sheet is blocked. child-src covers
+    // older engines. Both are unrelated to frame-ancestors (who may embed US).
+    "frame-src 'self' https://pay.coinbase.com",
+    "child-src 'self' https://pay.coinbase.com",
     // Clickjacking protection for the embeddable dialog route is handled by
     // the in-dialog visibility guard (IntersectionObserver v2) + popup
     // routing, not by framing headers.
@@ -95,7 +101,12 @@ export function middleware(request: NextRequest) {
     response.headers.set('X-Frame-Options', 'DENY');
   }
   response.headers.set('Referrer-Policy', 'strict-origin-when-cross-origin');
-  response.headers.set('Permissions-Policy', 'camera=(), microphone=(), geolocation=()');
+  // payment delegated to self + the Coinbase pay origin so the embedded onramp
+  // iframe (allow="payment") can open the Apple/Google Pay sheet.
+  response.headers.set(
+    'Permissions-Policy',
+    'camera=(), microphone=(), geolocation=(), payment=(self "https://pay.coinbase.com")'
+  );
   response.headers.set('X-DNS-Prefetch-Control', 'off');
 
   return response;
