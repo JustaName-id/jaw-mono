@@ -60,62 +60,72 @@ function CreateAccountForm({
 
   // Validate username and check availability
   useEffect(() => {
-    const validateUsername = async () => {
-      setIsLoading(false);
-      setIsValid(false);
-      setMessage('');
+    setIsLoading(false);
+    setIsValid(false);
+    setMessage('');
 
-      if (username.includes('.')) {
-        setMessage('Invalid format');
-        setIsValid(false);
-        return;
-      }
+    if (username.includes('.')) {
+      setMessage('Invalid format');
+      return;
+    }
 
-      if (username.length > 0 && username.length <= 2) {
-        setMessage('Minimum 3 characters');
-        setIsValid(false);
-        return;
-      }
+    if (username.length > 0 && username.length <= 2) {
+      setMessage('Minimum 3 characters');
+      return;
+    }
 
-      if (username.length === 0) {
-        return;
-      }
+    if (username.length === 0) {
+      return;
+    }
 
-      if (!ensDomain) {
-        setMessage('Available');
-        setIsValid(true);
-        return;
-      }
+    if (!ensDomain) {
+      setMessage('Available');
+      setIsValid(true);
+      return;
+    }
 
-      if (debouncedUsername.length > 2 && chainId) {
-        setIsLoading(true);
-        setMessage('Checking availability...');
+    // Only query once the debounce has settled on the current input — while it is
+    // pending, debouncedUsername is stale and would fire un-debounced requests for
+    // the previous value.
+    if (debouncedUsername !== username || !chainId) {
+      return;
+    }
 
-        try {
-          const justaName = getJustaNameInstance(mainnetRpcUrl);
-          const result = await justaName.subnames.isSubnameAvailable({
-            subname: debouncedUsername + '.' + ensDomain,
-            chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
-          });
+    let cancelled = false;
+    setIsLoading(true);
+    setMessage('Checking availability...');
 
-          if (result?.isAvailable) {
-            setMessage('Available');
-            setIsValid(true);
-          } else {
-            setMessage('Unavailable');
-            setIsValid(false);
-          }
-        } catch (error) {
-          console.error('Error checking subname availability:', error);
-          setMessage('Error checking availability');
-          setIsValid(false);
-        } finally {
+    (async () => {
+      try {
+        const justaName = getJustaNameInstance(mainnetRpcUrl);
+        const result = await justaName.subnames.isSubnameAvailable({
+          subname: debouncedUsername + '.' + ensDomain,
+          chainId: 1, // ENS offchain subnames must always be issued on Ethereum mainnet (chainId 1)
+        });
+
+        if (cancelled) return;
+        if (result?.isAvailable) {
+          setMessage('Available');
+          setIsValid(true);
+        } else {
+          setMessage('Unavailable');
+        }
+      } catch (error) {
+        if (cancelled) return;
+        console.error('Error checking subname availability:', error);
+        setMessage('Error checking availability');
+      } finally {
+        if (!cancelled) {
           setIsLoading(false);
         }
       }
-    };
+    })();
 
-    validateUsername();
+    // Superseded checks must not write state: without this, the last response to
+    // resolve wins, even when it answers for an older username.
+    return () => {
+      cancelled = true;
+    };
   }, [debouncedUsername, username, ensDomain, chainId, mainnetRpcUrl]);
 
   const handleCreateAccountClick = async () => {
