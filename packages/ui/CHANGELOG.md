@@ -1,3 +1,17 @@
+## 1.2.2 (2026-07-02)
+
+### 🩹 Fixes
+
+- **core,ui:** show the realistic ERC-20 gas fee and approve the worst-case ceiling ([#225](https://github.com/JustaName-id/jaw-mono/pull/225))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.4
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
 ## 1.2.1 (2026-07-02)
 
 ### 🩹 Fixes
