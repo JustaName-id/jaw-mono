@@ -64,7 +64,7 @@ describe('calculateDisplayTokenCost (realistic estimate)', () => {
 
     it('prices at the provided gas price instead of maxFeePerGas', () => {
         // 239_000 gas * 40 = 9_560_000
-        expect(calculateDisplayTokenCost(gas, quote, 40n)).toBe(9_560_000n);
+        expect(calculateDisplayTokenCost(gas, quote, { gasPrice: 40n })).toBe(9_560_000n);
     });
 
     it('is always below the ceiling for the same gas price', () => {
@@ -79,7 +79,7 @@ describe('calculateDisplayTokenCost (realistic estimate)', () => {
 
     it('uses measured gas instead of the summed limits when provided', () => {
         // (100k measured + 19k postOp) * 100 = 11_900_000 — limits ignored
-        expect(calculateDisplayTokenCost(gas, quote, undefined, 100_000n)).toBe(11_900_000n);
+        expect(calculateDisplayTokenCost(gas, quote, { measuredGas: 100_000n })).toBe(11_900_000n);
     });
 });
 

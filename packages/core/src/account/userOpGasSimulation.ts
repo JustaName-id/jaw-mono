@@ -1,43 +1,13 @@
-import { Client, Hex, encodeFunctionData } from 'viem';
+import { Address, Client, Hex, encodeFunctionData } from 'viem';
 import { readContract, simulateBlocks } from 'viem/actions';
-import {
-    entryPoint08Abi,
-    entryPoint08Address,
-    toPackedUserOperation,
-    type UserOperation,
-} from 'viem/account-abstraction';
+import { entryPoint08Abi, toPackedUserOperation, type UserOperation } from 'viem/account-abstraction';
+import { abi as accountAbi } from './toJustanAccount.js';
 
 /** Gas actually consumed by the userOp phases, measured via eth_simulateV1. */
 export interface MeasuredUserOpGas {
     verificationGasUsed: bigint;
     executionGasUsed: bigint;
 }
-
-const packedUserOpComponents = [
-    { name: 'sender', type: 'address' },
-    { name: 'nonce', type: 'uint256' },
-    { name: 'initCode', type: 'bytes' },
-    { name: 'callData', type: 'bytes' },
-    { name: 'accountGasLimits', type: 'bytes32' },
-    { name: 'preVerificationGas', type: 'uint256' },
-    { name: 'gasFees', type: 'bytes32' },
-    { name: 'paymasterAndData', type: 'bytes' },
-    { name: 'signature', type: 'bytes' },
-] as const;
-
-const accountAbi = [
-    {
-        type: 'function',
-        name: 'validateUserOp',
-        stateMutability: 'nonpayable',
-        inputs: [
-            { name: 'userOp', type: 'tuple', components: packedUserOpComponents },
-            { name: 'userOpHash', type: 'bytes32' },
-            { name: 'missingAccountFunds', type: 'uint256' },
-        ],
-        outputs: [{ name: 'validationData', type: 'uint256' }],
-    },
-] as const;
 
 const senderCreatorAbi = [
     {
@@ -81,7 +51,8 @@ const MIN_PHASE_GAS = 1_000n;
  */
 export async function simulateUserOpGasUsage(
     client: Client,
-    userOp: UserOperation<'0.8'>
+    userOp: UserOperation<'0.8'>,
+    entryPointAddress: Address
 ): Promise<MeasuredUserOpGas | null> {
     try {
         const packed = toPackedUserOperation(userOp);
@@ -91,15 +62,15 @@ export async function simulateUserOpGasUsage(
             args: [packed, DUMMY_USER_OP_HASH, 0n],
         });
 
-        let deployCall: { account: typeof entryPoint08Address; to: Hex; data: Hex } | undefined;
+        let deployCall: { account: Address; to: Address; data: Hex } | undefined;
         if (userOp.factory) {
             const senderCreator = await readContract(client, {
-                address: entryPoint08Address,
+                address: entryPointAddress,
                 abi: entryPoint08Abi,
                 functionName: 'senderCreator',
             });
             deployCall = {
-                account: entryPoint08Address,
+                account: entryPointAddress,
                 to: senderCreator,
                 data: encodeFunctionData({
                     abi: senderCreatorAbi,
@@ -114,8 +85,8 @@ export async function simulateUserOpGasUsage(
                 {
                     calls: [
                         ...(deployCall ? [deployCall] : []),
-                        { account: entryPoint08Address, to: userOp.sender, data: validateData },
-                        { account: entryPoint08Address, to: userOp.sender, data: userOp.callData },
+                        { account: entryPointAddress, to: userOp.sender, data: validateData },
+                        { account: entryPointAddress, to: userOp.sender, data: userOp.callData },
                     ],
                 },
             ],

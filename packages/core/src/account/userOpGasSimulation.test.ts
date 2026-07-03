@@ -65,7 +65,7 @@ describe('intrinsicGas', () => {
 describe('simulateUserOpGasUsage', () => {
     it('measures each phase and subtracts the per-call transaction intrinsic', async () => {
         const { client, captured } = fakeClient(okCalls);
-        const measured = await simulateUserOpGasUsage(client, userOp);
+        const measured = await simulateUserOpGasUsage(client, userOp, entryPoint08Address);
 
         expect(captured.method).toBe('eth_simulateV1');
         const [{ blockStateCalls }] = captured.params as [
@@ -93,7 +93,7 @@ describe('simulateUserOpGasUsage', () => {
         const { client, captured } = fakeClient([deployResult, ...okCalls]);
         const withFactory = { ...userOp, factory: PAYMASTER, factoryData: '0xabcd' as Hex };
 
-        const measured = await simulateUserOpGasUsage(client, withFactory);
+        const measured = await simulateUserOpGasUsage(client, withFactory, entryPoint08Address);
 
         const [{ blockStateCalls }] = captured.params as [
             { blockStateCalls: { calls: { from: string; to: string; data: Hex }[] }[] },
@@ -115,28 +115,28 @@ describe('simulateUserOpGasUsage', () => {
     it('returns null when the deploy call reverts', async () => {
         const { client } = fakeClient([{ status: '0x0', gasUsed: '0x186a0', returnData: '0x' }, ...okCalls]);
         const withFactory = { ...userOp, factory: PAYMASTER, factoryData: '0xabcd' as Hex };
-        expect(await simulateUserOpGasUsage(client, withFactory)).toBeNull();
+        expect(await simulateUserOpGasUsage(client, withFactory, entryPoint08Address)).toBeNull();
     });
 
     it('returns null when the execution call reverts', async () => {
         const { client } = fakeClient([okCalls[0], { status: '0x0', gasUsed: '0xea60', returnData: '0x' }]);
-        expect(await simulateUserOpGasUsage(client, userOp)).toBeNull();
+        expect(await simulateUserOpGasUsage(client, userOp, entryPoint08Address)).toBeNull();
     });
 
     it('returns null when validation reverts (a genuine revert, not the stub)', async () => {
         const { client } = fakeClient([{ status: '0x0', gasUsed: '0xea60', returnData: '0x' }, okCalls[1]]);
-        expect(await simulateUserOpGasUsage(client, userOp)).toBeNull();
+        expect(await simulateUserOpGasUsage(client, userOp, entryPoint08Address)).toBeNull();
     });
 
     it('returns null when a phase runs below the sanity floor (sender looked codeless)', async () => {
         // Execution gasUsed == its intrinsic -> 0 real gas after subtraction -> below floor.
         const codeless = [okCalls[0], { status: '0x1', gasUsed: '0x52e0', returnData: '0x' }]; // 0x52e0 = 21_216
         const { client } = fakeClient(codeless);
-        expect(await simulateUserOpGasUsage(client, userOp)).toBeNull();
+        expect(await simulateUserOpGasUsage(client, userOp, entryPoint08Address)).toBeNull();
     });
 
     it('returns null when the RPC call fails', async () => {
         const { client } = fakeClient(new Error('eth_simulateV1 not supported'));
-        expect(await simulateUserOpGasUsage(client, userOp)).toBeNull();
+        expect(await simulateUserOpGasUsage(client, userOp, entryPoint08Address)).toBeNull();
     });
 });

@@ -86,7 +86,7 @@ The `@jaw.id/core` package follows this structure:
 
 `estimateErc20PaymasterCosts` (`packages/core/src/account/erc20Paymaster.ts`) returns two values per token:
 
-- `tokenCost` — realistic fee shown to the user: gas limits with the paymaster's real quoted postOp gas, priced at a buffered effective gas price (baseFee × 1.25 + priority, capped at maxFeePerGas), capped at the ceiling.
+- `tokenCost` — realistic fee shown to the user: the userOp's phases are replayed via `eth_simulateV1` (deploying undeployed accounts inside the simulation), combined with the EntryPoint's overhead and unused-gas penalty, priced at a buffered effective gas price (baseFee × 1.25 + priority, capped at maxFeePerGas), capped at the ceiling. Falls back to summed gas limits when simulation is unavailable.
 - `tokenCostMax` — worst-case ceiling ("Up to"): all five gas limits plus the quoted postOp gas at maxFeePerGas. This is the amount the paymaster approval must cover and what `hasSufficientBalance` checks against.
 
 UIs must build the ERC-20 paymaster context via `buildErc20PaymasterContext(estimate)` so the approve-with-ceiling rule stays in one place.

@@ -321,7 +321,7 @@ export async function estimateErc20PaymasterCosts(
     // No retries + short timeout so a node without eth_simulateV1 can't stall the
     // fee estimate (viem would otherwise retry up to ~40s on every refetch).
     const simClient = createPublicClient({ transport: http(chain.rpcUrl, { retryCount: 0, timeout: 2_500 }) });
-    const measuredPromise = simulateUserOpGasUsage(simClient, userOp);
+    const measuredPromise = simulateUserOpGasUsage(simClient, userOp, smartAccount.entryPoint.address);
 
     // 6. Price the displayed estimate at the effective gas price instead of the
     // maxFeePerGas ceiling, using the base fee fetched above.
@@ -392,15 +392,14 @@ export function calculateTokenCostFromGas(gas: UserOpGasFields, quote: TokenQuot
  *
  * @param gas - Gas fields from a prepared userOp
  * @param quote - Token quote from fetchTokenQuotes
- * @param gasPrice - Price per gas for the estimate (defaults to maxFeePerGas)
- * @param measuredGas - Simulated real gas usage (except postOp); replaces the summed limits
+ * @param opts.gasPrice - Price per gas for the estimate (defaults to maxFeePerGas)
+ * @param opts.measuredGas - Simulated real gas usage (except postOp); replaces the summed limits
  * @returns Expected token cost in the token's smallest unit
  */
 export function calculateDisplayTokenCost(
     gas: UserOpGasFields,
     quote: TokenQuote,
-    gasPrice?: bigint,
-    measuredGas?: bigint
+    opts?: { gasPrice?: bigint; measuredGas?: bigint }
 ): bigint {
     // Structurally bounded: should a quote ever exceed the userOp's own postOp
     // limit, the limit wins — the display can never leapfrog the ceiling.
@@ -409,9 +408,9 @@ export function calculateDisplayTokenCost(
             ? gas.paymasterPostOpGasLimit
             : quote.postOpGas;
 
-    const totalGas = (measuredGas ?? sumGasLimitsExceptPostOp(gas)) + postOpGas;
+    const totalGas = (opts?.measuredGas ?? sumGasLimitsExceptPostOp(gas)) + postOpGas;
 
-    const costWei = totalGas * (gasPrice ?? gas.maxFeePerGas);
+    const costWei = totalGas * (opts?.gasPrice ?? gas.maxFeePerGas);
 
     return (costWei * quote.exchangeRate) / BigInt(1e18);
 }
@@ -438,7 +437,10 @@ export function calculateTokenEstimatesFromGas(
         const balance = token?.balance || 0n;
 
         const tokenCostMax = calculateTokenCostFromGas(gas, quote);
-        let tokenCost = calculateDisplayTokenCost(gas, quote, opts?.displayGasPrice, opts?.measuredGas);
+        let tokenCost = calculateDisplayTokenCost(gas, quote, {
+            gasPrice: opts?.displayGasPrice,
+            measuredGas: opts?.measuredGas,
+        });
         // The shown estimate can never exceed the ceiling being reserved.
         if (tokenCost > tokenCostMax) tokenCost = tokenCostMax;
 
