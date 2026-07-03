@@ -84,17 +84,26 @@ describe('calculateDisplayTokenCost (realistic estimate)', () => {
 });
 
 describe('computeMeasuredDisplayGas', () => {
-    it('combines preVerificationGas, the paymaster verification limit, and buffered measured phases', () => {
-        // 50k pVG + 40k pmVerGL + (30k + 50k) * 1.05 = 174_000
+    it('combines pVG, the pm verification limit, split-buffered phases, and EP overhead', () => {
+        // 50k pVG + 40k pmVerGL + 30k*1.05 + 50k*1.10 + 25k EP (unused callGas 20k < 40k -> no penalty)
         const measured = { verificationGasUsed: 30_000n, executionGasUsed: 50_000n };
-        expect(computeMeasuredDisplayGas(gas, measured)).toBe(174_000n);
+        expect(computeMeasuredDisplayGas(gas, measured)).toBe(201_500n);
     });
 
     it('treats a missing paymaster verification limit as zero', () => {
         const noPmGas = { ...gas, paymasterVerificationGasLimit: undefined };
-        // 50k + 0 + 84k
+        // 50k + 0 + 31_500 + 55_000 + 25k
         expect(computeMeasuredDisplayGas(noPmGas, { verificationGasUsed: 30_000n, executionGasUsed: 50_000n })).toBe(
-            134_000n
+            161_500n
+        );
+    });
+
+    it('adds the EntryPoint unused-callGas penalty when the gap exceeds 40k', () => {
+        // callGasLimit 200k - 50k measured = 150k unused > 40k -> +15k penalty
+        const paddedGas = { ...gas, callGasLimit: 200_000n };
+        // 50k + 40k + 31_500 + 55_000 + 25k + 15_000
+        expect(computeMeasuredDisplayGas(paddedGas, { verificationGasUsed: 30_000n, executionGasUsed: 50_000n })).toBe(
+            216_500n
         );
     });
 });

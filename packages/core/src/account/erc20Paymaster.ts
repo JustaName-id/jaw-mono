@@ -8,7 +8,7 @@ import {
     relayPermissionToPermission,
     encodeExecuteBatchWithPermission,
 } from '../rpc/permissions.js';
-import { simulateUserOpGasUsage, type MeasuredUserOpGas, type SimulatableUserOp } from './userOpGasSimulation.js';
+import { simulateUserOpGasUsage, type MeasuredUserOpGas } from './userOpGasSimulation.js';
 
 /**
  * Token quote from Pimlico's ERC-20 paymaster
@@ -85,22 +85,40 @@ export interface UserOpGasFields {
 const DISPLAY_BASE_FEE_BUFFER_BPS = 12500n;
 const BPS_DENOMINATOR = 10000n;
 
-/**
- * Buffer applied to simulated per-phase gas: covers the EntryPoint's own
- * bookkeeping (not visible when replaying the phases individually) and state
- * drift between simulation and inclusion.
- */
-const SIMULATED_GAS_BUFFER_BPS = 10500n;
+/** Buffer on simulated verification gas: state drift between simulation and inclusion. */
+const VERIFICATION_GAS_BUFFER_BPS = 10500n;
+
+/** Larger execution buffer: also covers EIP-3529 refunds the simulation nets out but the EntryPoint bills. */
+const EXECUTION_GAS_BUFFER_BPS = 11000n;
+
+/** EntryPoint v0.8 charges 10% of unused callGasLimit once the gap exceeds this. */
+const UNUSED_GAS_PENALTY_THRESHOLD = 40000n;
+
+/** EntryPoint bookkeeping invisible to per-phase replay (innerHandleOp, hashing, event, fee collection). Calibrated against real Base Sepolia ops. */
+const ENTRYPOINT_OVERHEAD_GAS = 25000n;
 
 /**
- * Token-independent display gas from a real simulation of the userOp phases:
- * the deterministic preVerificationGas, the paymaster verification limit (its
- * actual usage isn't simulated), and the buffered measured phases.
+ * Display gas from the simulated phases: preVerificationGas, the paymaster
+ * verification limit (not simulated), buffered measured phases, EntryPoint
+ * overhead, and the unused-callGas penalty (grows with bundler padding, so no
+ * proportional buffer can absorb it).
  */
 export function computeMeasuredDisplayGas(gas: UserOpGasFields, measured: MeasuredUserOpGas): bigint {
-    const buffered =
-        ((measured.verificationGasUsed + measured.executionGasUsed) * SIMULATED_GAS_BUFFER_BPS) / BPS_DENOMINATOR;
-    return gas.preVerificationGas + (gas.paymasterVerificationGasLimit || 0n) + buffered;
+    const bufferedVerification = (measured.verificationGasUsed * VERIFICATION_GAS_BUFFER_BPS) / BPS_DENOMINATOR;
+    const bufferedExecution = (measured.executionGasUsed * EXECUTION_GAS_BUFFER_BPS) / BPS_DENOMINATOR;
+
+    const unusedCallGas =
+        gas.callGasLimit > measured.executionGasUsed ? gas.callGasLimit - measured.executionGasUsed : 0n;
+    const penalty = unusedCallGas > UNUSED_GAS_PENALTY_THRESHOLD ? unusedCallGas / 10n : 0n;
+
+    return (
+        gas.preVerificationGas +
+        (gas.paymasterVerificationGasLimit || 0n) +
+        bufferedVerification +
+        bufferedExecution +
+        ENTRYPOINT_OVERHEAD_GAS +
+        penalty
+    );
 }
 
 /**
@@ -300,11 +318,10 @@ export async function estimateErc20PaymasterCosts(
 
     // 5. Replay the userOp phases against current state to measure the gas they
     // really consume — the padded limits stay as the fallback (and the ceiling).
-    const preparedOp = userOp as unknown as SimulatableUserOp;
-    const measuredPromise = (async () => {
-        const signature = preparedOp.signature ?? (await smartAccount.getStubSignature());
-        return simulateUserOpGasUsage(publicClient, { ...preparedOp, signature });
-    })().catch(() => null);
+    // No retries + short timeout so a node without eth_simulateV1 can't stall the
+    // fee estimate (viem would otherwise retry up to ~40s on every refetch).
+    const simClient = createPublicClient({ transport: http(chain.rpcUrl, { retryCount: 0, timeout: 2_500 }) });
+    const measuredPromise = simulateUserOpGasUsage(simClient, userOp);
 
     // 6. Price the displayed estimate at the effective gas price instead of the
     // maxFeePerGas ceiling, using the base fee fetched above.
