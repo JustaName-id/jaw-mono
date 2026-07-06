@@ -32,6 +32,12 @@ class Analytics {
         // URL, so toolbar / session-replay / "view in PostHog" links break
         // without this.
         ui_host: 'https://eu.posthog.com',
+        // All JAW sites are subdomains of jaw.id. Storing the distinct_id in a
+        // cookie scoped to the registrable domain (.jaw.id) lets ONE anonymous
+        // identity follow a user across landing/docs/playground/dashboard, which
+        // is what makes cross-app funnels work once they share a project key.
+        persistence: 'localStorage+cookie',
+        cross_subdomain_cookie: true,
         // Pageviews are tracked manually by AnalyticsProvider on every
         // App-Router navigation (the default only fires on hard loads).
         capture_pageview: false,
@@ -56,8 +62,14 @@ class Analytics {
 
   identify(id: string) {
     if (!analyticsEnabled) return;
-    posthog.identify(id);
-    this.register({ id });
+    // Canonical cross-app id = the lowercased smart-account address. Every JAW
+    // app must identify() the same human with the SAME string, and PostHog
+    // distinct_ids are case-sensitive — wagmi's useAccount() returns a
+    // checksummed (mixed-case) address, so normalize here to guarantee the
+    // dashboard/playground/etc. don't fork one user into two person profiles.
+    const canonicalId = id.toLowerCase();
+    posthog.identify(canonicalId);
+    this.register({ id: canonicalId });
   }
 
   register(props: Record<string, string>) {

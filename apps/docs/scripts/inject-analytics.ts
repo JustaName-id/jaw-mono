@@ -61,12 +61,24 @@ function findHtmlFiles(dir: string): string[] {
 // `capture_pageview: 'history_change'` tracks SPA route changes in the static site.
 function buildSnippet(): string {
   const loader = `!function(t,e){var o,n,p,r;e.__SV||(window.posthog=e,e._i=[],e.init=function(i,s,a){function g(t,e){var o=e.split(".");2==o.length&&(t=t[o[0]],e=o[1]),t[e]=function(){t.push([e].concat(Array.prototype.slice.call(arguments,0)))}}(p=t.createElement("script")).type="text/javascript",p.crossOrigin="anonymous",p.async=!0,p.src=s.api_host.replace(".i.posthog.com","-assets.i.posthog.com")+"/static/array.js",(r=t.getElementsByTagName("script")[0]).parentNode.insertBefore(p,r);var u=e;for(void 0!==a?u=e[a]=[]:a="posthog",u.people=u.people||[],u.toString=function(t){var e="posthog";return"posthog"!==a&&(e+="."+a),t||(e+=" (stub)"),e},u.people.toString=function(){return u.toString(1)+".people (stub)"},o="init capture register register_once register_for_session unregister unregister_for_session getFeatureFlag getFeatureFlagPayload isFeatureEnabled reloadFeatureFlags updateEarlyAccessFeatureEnrollment getEarlyAccessFeatures on onFeatureFlags onSessionId getSurveys getActiveMatchingSurveys renderSurvey canRenderSurvey identify setPersonProperties group resetGroups setPersonPropertiesForFlags resetPersonPropertiesForFlags setGroupPropertiesForFlags resetGroupPropertiesForFlags reset get_distinct_id getGroups get_session_id get_session_replay_url alias set_config startSessionRecording stopSessionRecording sessionRecordingStarted captureException loadToolbar get_property getSessionProperty createPersonProfile opt_in_capturing opt_out_capturing has_opted_in_capturing has_opted_out_capturing clear_opt_in_out_capturing debug getPageViewId captureTraceFeedback captureTraceMetric".split(" "),n=0;n<o.length;n++)g(u,o[n]);e._i.push([i,s,a])},e.__SV=1)}(document,window.posthog||[]);`;
+  // `cross_subdomain_cookie:true` scopes the distinct_id cookie to `.jaw.id` so
+  // one anonymous identity follows a user across all JAW subdomains (landing,
+  // docs, playground, dashboard) — the basis for cross-app funnels once every
+  // site shares the same project key.
   const init = `posthog.init(${JSON.stringify(posthogKey)}, {api_host:${JSON.stringify(
     posthogHost
-  )},ui_host:'https://eu.posthog.com',capture_pageview:'history_change',capture_pageleave:true,person_profiles:'identified_only',loaded:function(p){p.register({app:'docs',environment:${JSON.stringify(
+  )},ui_host:'https://eu.posthog.com',capture_pageview:'history_change',capture_pageleave:true,person_profiles:'identified_only',persistence:'localStorage+cookie',cross_subdomain_cookie:true,loaded:function(p){p.register({app:'docs',environment:${JSON.stringify(
     environment
   )}});}});`;
-  return `${MARKER}<script>${loader}${init}</script>`;
+  // Delegated click listener: fire a destination-named CTA event for any
+  // outbound link to another JAW property, using the SAME event names as landing
+  // and playground (dashboard -> GET_STARTED_CLICKED, playground ->
+  // PLAYGROUND_CLICKED). The `app='docs'` super-property identifies the source.
+  // Delegation means we don't touch every MDX file, and links added later are
+  // covered automatically. `location` = the doc page that drove the click, so
+  // funnels can attribute which page converts. Capture phase (before navigation).
+  const ctaListener = `document.addEventListener('click',function(e){var a=e.target&&e.target.closest&&e.target.closest('a[href]');if(!a)return;var h;try{h=new URL(a.href,window.location.href).host}catch(_){return}var n=h==='dashboard.jaw.id'?'GET_STARTED_CLICKED':(h==='playground.jaw.id'?'PLAYGROUND_CLICKED':null);if(!n)return;if(window.posthog)window.posthog.capture(n,{location:window.location.pathname})},true);`;
+  return `${MARKER}<script>${loader}${init}${ctaListener}</script>`;
 }
 
 function main() {

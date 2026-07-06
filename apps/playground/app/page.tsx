@@ -4,6 +4,14 @@ import Link from 'next/link';
 import Image from 'next/image';
 import { Card } from '../components/ui/card';
 import { ThemeToggle } from '../components/theme-toggle';
+import { getAnalyticsClient } from '../analytics';
+
+// Destination-named CTA events, matching the landing site's convention so a
+// click toward a given property has one event name across every JAW app.
+const OUTBOUND_LINKS: { href: string; label: string; event: 'DOCS_CLICKED' | 'GET_STARTED_CLICKED' }[] = [
+  { href: 'https://docs.jaw.id', label: 'Documentation', event: 'DOCS_CLICKED' },
+  { href: 'https://dashboard.jaw.id', label: 'Get an API key', event: 'GET_STARTED_CLICKED' },
+];
 
 const routes = [
   {
@@ -125,6 +133,24 @@ export default function Home() {
               </span>
             </li>
           </ul>
+        </div>
+
+        {/* Outbound links to the other JAW properties. Instrumented so the
+            landing → playground → docs/dashboard journey is visible in the
+            combined PostHog project. */}
+        <div className="mt-10 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 md:mt-14">
+          {OUTBOUND_LINKS.map((link) => (
+            <a
+              key={link.event}
+              href={link.href}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={() => getAnalyticsClient().track(link.event, { location: 'home-footer' })}
+              className="text-muted-foreground hover:text-primary text-sm font-medium transition-colors"
+            >
+              {link.label}
+            </a>
+          ))}
         </div>
       </div>
     </div>
