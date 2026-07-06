@@ -1,3 +1,13 @@
+## 1.2.3 (2026-07-06)
+
+### 🩹 Fixes
+
+- bump justaname/sdk to v0.3.0 ([#227](https://github.com/JustaName-id/jaw-mono/pull/227))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.2.2 (2026-07-02)
 
 ### 🩹 Fixes
