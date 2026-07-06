@@ -1,3 +1,13 @@
+## 1.0.5 (2026-07-06)
+
+### 🩹 Fixes
+
+- gas estimation using eth_simulateV1 ([#226](https://github.com/JustaName-id/jaw-mono/pull/226))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.0.4 (2026-07-02)
 
 ### 🩹 Fixes
