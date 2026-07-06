@@ -1,3 +1,13 @@
+## 1.2.4 (2026-07-06)
+
+### 🩹 Fixes
+
+- **ui,keys,docs:** match embedded action modals to the account-selec… ([#228](https://github.com/JustaName-id/jaw-mono/pull/228))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.2.3 (2026-07-06)
 
 ### 🩹 Fixes
