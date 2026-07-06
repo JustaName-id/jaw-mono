@@ -2,6 +2,8 @@
 
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 
+import { DialogAnchorContext } from '@jaw.id/ui';
+
 import type { PopupCommunicator } from '../../lib/popup-communicator';
 import {
   EMBEDDED_BREAKPOINT_PX,
@@ -94,23 +96,32 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     : undefined;
 
   return (
-    <div
-      className={
-        // Transparent (no scrim): the dApp shows through around the card.
-        active ? 'fixed inset-0 z-50' : 'contents'
-      }
-      onClick={onOverlayClick}
-    >
-      {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
-          which must not stretch the card to the full viewport */}
+    // The Radix-based modals (Connect, Transaction, …) portal to document.body,
+    // escaping this card and Radix-centering at 50% by default. Anchor them to
+    // the top via context so they line up with the card's inline screens; the
+    // same context makes their overlay transparent, matching this shell's
+    // scrim-free backdrop. Drawer presentation keeps 'center': the dialogs
+    // style themselves full-size on small viewports, where a top offset would
+    // misplace them (and their scrim is hidden behind them anyway).
+    <DialogAnchorContext.Provider value={active && presentation === 'floating' ? 'top' : 'center'}>
       <div
-        role={active ? 'document' : undefined}
-        className={active ? `bg-background overflow-y-auto shadow-xl [&_.min-h-screen]:min-h-0 ${card}` : 'contents'}
+        className={
+          // Transparent (no scrim): the dApp shows through around the card.
+          active ? 'fixed inset-0 z-50' : 'contents'
+        }
+        onClick={onOverlayClick}
       >
-        <EnsureVisibility communicator={communicator} active={active}>
-          {children}
-        </EnsureVisibility>
+        {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
+            which must not stretch the card to the full viewport */}
+        <div
+          role={active ? 'document' : undefined}
+          className={active ? `bg-background overflow-y-auto shadow-xl [&_.min-h-screen]:min-h-0 ${card}` : 'contents'}
+        >
+          <EnsureVisibility communicator={communicator} active={active}>
+            {children}
+          </EnsureVisibility>
+        </div>
       </div>
-    </div>
+    </DialogAnchorContext.Provider>
   );
 }

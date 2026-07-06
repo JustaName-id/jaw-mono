@@ -122,7 +122,7 @@ export default defineConfig({
           { text: 'Connector', link: '/wagmi/jaw' },
           {
             text: 'Hooks',
-            collapsed: true,
+            collapsed: false,
             items: [
               {
                 text: 'useGetCallsHistory()',
@@ -148,7 +148,7 @@ export default defineConfig({
       },
       {
         text: 'Provider - RPC Reference',
-        collapsed: true,
+        collapsed: false,
         items: [
           { text: 'Overview', link: '/api-reference' },
           {
