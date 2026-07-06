@@ -8,6 +8,7 @@ import {
     relayPermissionToPermission,
     encodeExecuteBatchWithPermission,
 } from '../rpc/permissions.js';
+import { simulateUserOpGasUsage, type MeasuredUserOpGas } from './userOpGasSimulation.js';
 
 /**
  * Token quote from Pimlico's ERC-20 paymaster
@@ -83,6 +84,42 @@ export interface UserOpGasFields {
  */
 const DISPLAY_BASE_FEE_BUFFER_BPS = 12500n;
 const BPS_DENOMINATOR = 10000n;
+
+/** Buffer on simulated verification gas: state drift between simulation and inclusion. */
+const VERIFICATION_GAS_BUFFER_BPS = 10500n;
+
+/** Larger execution buffer: also covers EIP-3529 refunds the simulation nets out but the EntryPoint bills. */
+const EXECUTION_GAS_BUFFER_BPS = 11000n;
+
+/** EntryPoint v0.8 charges 10% of unused callGasLimit once the gap exceeds this. */
+const UNUSED_GAS_PENALTY_THRESHOLD = 40000n;
+
+/** EntryPoint bookkeeping invisible to per-phase replay (innerHandleOp, hashing, event, fee collection). Calibrated against real Base Sepolia ops. */
+const ENTRYPOINT_OVERHEAD_GAS = 25000n;
+
+/**
+ * Display gas from the simulated phases: preVerificationGas, the paymaster
+ * verification limit (not simulated), buffered measured phases, EntryPoint
+ * overhead, and the unused-callGas penalty (grows with bundler padding, so no
+ * proportional buffer can absorb it).
+ */
+export function computeMeasuredDisplayGas(gas: UserOpGasFields, measured: MeasuredUserOpGas): bigint {
+    const bufferedVerification = (measured.verificationGasUsed * VERIFICATION_GAS_BUFFER_BPS) / BPS_DENOMINATOR;
+    const bufferedExecution = (measured.executionGasUsed * EXECUTION_GAS_BUFFER_BPS) / BPS_DENOMINATOR;
+
+    const unusedCallGas =
+        gas.callGasLimit > measured.executionGasUsed ? gas.callGasLimit - measured.executionGasUsed : 0n;
+    const penalty = unusedCallGas > UNUSED_GAS_PENALTY_THRESHOLD ? unusedCallGas / 10n : 0n;
+
+    return (
+        gas.preVerificationGas +
+        (gas.paymasterVerificationGasLimit || 0n) +
+        bufferedVerification +
+        bufferedExecution +
+        ENTRYPOINT_OVERHEAD_GAS +
+        penalty
+    );
+}
 
 /**
  * Effective gas price for the displayed estimate.
@@ -279,16 +316,24 @@ export async function estimateErc20PaymasterCosts(
         maxPriorityFeePerGas: userOp.maxPriorityFeePerGas,
     };
 
-    // 5. Price the displayed estimate at the effective gas price instead of the
+    // 5. Replay the userOp phases against current state to measure the gas they
+    // really consume — the padded limits stay as the fallback (and the ceiling).
+    // No retries + short timeout so a node without eth_simulateV1 can't stall the
+    // fee estimate (viem would otherwise retry up to ~40s on every refetch).
+    const simClient = createPublicClient({ transport: http(chain.rpcUrl, { retryCount: 0, timeout: 2_500 }) });
+    const measuredPromise = simulateUserOpGasUsage(simClient, userOp, smartAccount.entryPoint.address);
+
+    // 6. Price the displayed estimate at the effective gas price instead of the
     // maxFeePerGas ceiling, using the base fee fetched above.
     let displayGasPrice: bigint | undefined;
-    const block = await blockPromise;
+    const [block, measured] = await Promise.all([blockPromise, measuredPromise]);
     if (block?.baseFeePerGas != null && block.baseFeePerGas > 0n) {
         displayGasPrice = computeEffectiveGasPrice(gas, block.baseFeePerGas);
     }
+    const measuredGas = measured ? computeMeasuredDisplayGas(gas, measured) : undefined;
 
-    // 6. Calculate cost for each token using the utility function
-    return calculateTokenEstimatesFromGas(gas, quotes, tokens, { displayGasPrice });
+    // 7. Calculate cost for each token using the utility function
+    return calculateTokenEstimatesFromGas(gas, quotes, tokens, { displayGasPrice, measuredGas });
 }
 
 /** Sum of the userOp gas limits shared by every cost formula (all phases except postOp). */
@@ -347,10 +392,15 @@ export function calculateTokenCostFromGas(gas: UserOpGasFields, quote: TokenQuot
  *
  * @param gas - Gas fields from a prepared userOp
  * @param quote - Token quote from fetchTokenQuotes
- * @param gasPrice - Price per gas for the estimate (defaults to maxFeePerGas)
+ * @param opts.gasPrice - Price per gas for the estimate (defaults to maxFeePerGas)
+ * @param opts.measuredGas - Simulated real gas usage (except postOp); replaces the summed limits
  * @returns Expected token cost in the token's smallest unit
  */
-export function calculateDisplayTokenCost(gas: UserOpGasFields, quote: TokenQuote, gasPrice?: bigint): bigint {
+export function calculateDisplayTokenCost(
+    gas: UserOpGasFields,
+    quote: TokenQuote,
+    opts?: { gasPrice?: bigint; measuredGas?: bigint }
+): bigint {
     // Structurally bounded: should a quote ever exceed the userOp's own postOp
     // limit, the limit wins — the display can never leapfrog the ceiling.
     const postOpGas =
@@ -358,9 +408,9 @@ export function calculateDisplayTokenCost(gas: UserOpGasFields, quote: TokenQuot
             ? gas.paymasterPostOpGasLimit
             : quote.postOpGas;
 
-    const totalGas = sumGasLimitsExceptPostOp(gas) + postOpGas;
+    const totalGas = (opts?.measuredGas ?? sumGasLimitsExceptPostOp(gas)) + postOpGas;
 
-    const costWei = totalGas * (gasPrice ?? gas.maxFeePerGas);
+    const costWei = totalGas * (opts?.gasPrice ?? gas.maxFeePerGas);
 
     return (costWei * quote.exchangeRate) / BigInt(1e18);
 }
@@ -378,7 +428,7 @@ export function calculateTokenEstimatesFromGas(
     gas: UserOpGasFields,
     quotes: TokenQuote[],
     tokens: TokenInfo[],
-    opts?: { displayGasPrice?: bigint }
+    opts?: { displayGasPrice?: bigint; measuredGas?: bigint }
 ): TokenEstimate[] {
     return quotes.map((quote) => {
         const token = tokens.find((t) => t.address.toLowerCase() === quote.tokenAddress.toLowerCase());
@@ -387,7 +437,10 @@ export function calculateTokenEstimatesFromGas(
         const balance = token?.balance || 0n;
 
         const tokenCostMax = calculateTokenCostFromGas(gas, quote);
-        let tokenCost = calculateDisplayTokenCost(gas, quote, opts?.displayGasPrice);
+        let tokenCost = calculateDisplayTokenCost(gas, quote, {
+            gasPrice: opts?.displayGasPrice,
+            measuredGas: opts?.measuredGas,
+        });
         // The shown estimate can never exceed the ceiling being reserved.
         if (tokenCost > tokenCostMax) tokenCost = tokenCostMax;
 

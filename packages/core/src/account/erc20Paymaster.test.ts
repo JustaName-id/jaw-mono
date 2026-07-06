@@ -5,6 +5,7 @@ import {
     calculateTokenCostFromGas,
     calculateTokenEstimatesFromGas,
     computeEffectiveGasPrice,
+    computeMeasuredDisplayGas,
     type TokenInfo,
     type TokenQuote,
     type UserOpGasFields,
@@ -63,7 +64,7 @@ describe('calculateDisplayTokenCost (realistic estimate)', () => {
 
     it('prices at the provided gas price instead of maxFeePerGas', () => {
         // 239_000 gas * 40 = 9_560_000
-        expect(calculateDisplayTokenCost(gas, quote, 40n)).toBe(9_560_000n);
+        expect(calculateDisplayTokenCost(gas, quote, { gasPrice: 40n })).toBe(9_560_000n);
     });
 
     it('is always below the ceiling for the same gas price', () => {
@@ -74,6 +75,36 @@ describe('calculateDisplayTokenCost (realistic estimate)', () => {
         const oversizedQuote = { ...quote, postOpGas: 100_000n }; // > pmPostOpGL (69k)
         // (50k + 60k + 70k + 40k + 69k) * 100 — the limit wins over the quote
         expect(calculateDisplayTokenCost(gas, oversizedQuote)).toBe(28_900_000n);
+    });
+
+    it('uses measured gas instead of the summed limits when provided', () => {
+        // (100k measured + 19k postOp) * 100 = 11_900_000 — limits ignored
+        expect(calculateDisplayTokenCost(gas, quote, { measuredGas: 100_000n })).toBe(11_900_000n);
+    });
+});
+
+describe('computeMeasuredDisplayGas', () => {
+    it('combines pVG, the pm verification limit, split-buffered phases, and EP overhead', () => {
+        // 50k pVG + 40k pmVerGL + 30k*1.05 + 50k*1.10 + 25k EP (unused callGas 20k < 40k -> no penalty)
+        const measured = { verificationGasUsed: 30_000n, executionGasUsed: 50_000n };
+        expect(computeMeasuredDisplayGas(gas, measured)).toBe(201_500n);
+    });
+
+    it('treats a missing paymaster verification limit as zero', () => {
+        const noPmGas = { ...gas, paymasterVerificationGasLimit: undefined };
+        // 50k + 0 + 31_500 + 55_000 + 25k
+        expect(computeMeasuredDisplayGas(noPmGas, { verificationGasUsed: 30_000n, executionGasUsed: 50_000n })).toBe(
+            161_500n
+        );
+    });
+
+    it('adds the EntryPoint unused-callGas penalty when the gap exceeds 40k', () => {
+        // callGasLimit 200k - 50k measured = 150k unused > 40k -> +15k penalty
+        const paddedGas = { ...gas, callGasLimit: 200_000n };
+        // 50k + 40k + 31_500 + 55_000 + 25k + 15_000
+        expect(computeMeasuredDisplayGas(paddedGas, { verificationGasUsed: 30_000n, executionGasUsed: 50_000n })).toBe(
+            216_500n
+        );
     });
 });
 
@@ -128,6 +159,21 @@ describe('calculateTokenEstimatesFromGas', () => {
 
     it('never displays more than the ceiling', () => {
         const [est] = calculateTokenEstimatesFromGas(gas, [quote], tokens, { displayGasPrice: 1_000n });
+        expect(est.tokenCost).toBe(est.tokenCostMax);
+    });
+
+    it('prices the display from measured gas when provided', () => {
+        const [est] = calculateTokenEstimatesFromGas(gas, [quote], tokens, {
+            displayGasPrice: 52n,
+            measuredGas: 174_000n,
+        });
+        // (174k + 19k) * 52 = 10_036_000; ceiling untouched
+        expect(est.tokenCost).toBe(10_036_000n);
+        expect(est.tokenCostMax).toBe(30_800_000n);
+    });
+
+    it('caps a measured display at the ceiling', () => {
+        const [est] = calculateTokenEstimatesFromGas(gas, [quote], tokens, { measuredGas: 10_000_000n });
         expect(est.tokenCost).toBe(est.tokenCostMax);
     });
 
