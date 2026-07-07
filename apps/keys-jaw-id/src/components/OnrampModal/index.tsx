@@ -2,7 +2,7 @@
 
 import { OnrampDialog } from '@jaw.id/ui';
 import { useMemo } from 'react';
-import { type Chain, type OnrampOrder, type OnrampParams, standardErrorCodes } from '@jaw.id/core';
+import { type Chain, type OnrampOrder, type OnrampParams, standardErrorCodes, JAW_RPC_URL } from '@jaw.id/core';
 import { useSessionAccount } from '../../hooks';
 
 export interface OnrampModalProps {
@@ -19,12 +19,8 @@ export const OnrampModal = ({ onrampRequest, chain, apiKey, origin, onSuccess, o
   // signature, so we only read walletAddress from the session.
   const { walletAddress } = useSessionAccount({ origin, chain, apiKey });
 
-  const effectiveApiKey = useMemo(() => {
-    // Onramp is staging-only for now (see JAW_ONRAMP_URL), which needs a staging
-    // api-key — distinct from the production key the rest of the app flows in.
-    // Prefer an explicit onramp key when set; fall back to the flowing key.
-    // Remove this override once onramp is promoted to production.
-    if (process.env.NEXT_PUBLIC_ONRAMP_API_KEY) return process.env.NEXT_PUBLIC_ONRAMP_API_KEY;
+  // The production api-key the rest of the app flows in (RPC/paymaster/ENS).
+  const prodApiKey = useMemo(() => {
     if (apiKey) return apiKey;
     if (chain?.rpcUrl) {
       try {
@@ -36,12 +32,21 @@ export const OnrampModal = ({ onrampRequest, chain, apiKey, origin, onSuccess, o
     return '';
   }, [apiKey, chain?.rpcUrl]);
 
+  // Onramp is staging-only for now (see JAW_ONRAMP_URL), which needs a staging
+  // api-key — distinct from the production key. Prefer the explicit onramp key.
+  // Remove this override once onramp is promoted to production.
+  const onrampApiKey = process.env.NEXT_PUBLIC_ONRAMP_API_KEY || prodApiKey;
+
+  // Mainnet RPC (production key) for reverse ENS resolution of the destination.
+  const mainnetRpcUrl = prodApiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${prodApiKey}` : `${JAW_RPC_URL}?chainId=1`;
+
   if (!walletAddress) return null;
 
   return (
     <OnrampDialog
-      apiKey={effectiveApiKey}
+      apiKey={onrampApiKey}
       destinationAddress={walletAddress}
+      mainnetRpcUrl={mainnetRpcUrl}
       presets={onrampRequest?.params}
       onComplete={(order) => onSuccess?.(order)}
       onCancel={() =>
