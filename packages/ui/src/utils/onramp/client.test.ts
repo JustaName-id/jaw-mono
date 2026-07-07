@@ -1,11 +1,11 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { startOnramp, validateOtp, getOnrampOrder } from './client';
+import { startOnramp, validateOtp, getOnrampOrder, OnrampApiError } from './client';
 
 const BASE = 'https://api.example.test/proxy/v2/onramp';
 const ok = (data: unknown) =>
   ({ ok: true, status: 200, json: async () => ({ statusCode: 200, result: { data, error: null } }) }) as Response;
-const bad = (error: string) =>
-  ({ ok: false, status: 400, json: async () => ({ result: { data: null, error } }) }) as unknown as Response;
+const bad = (error: string, status = 400) =>
+  ({ ok: false, status, json: async () => ({ result: { data: null, error } }) }) as unknown as Response;
 
 const mockFetch = () => fetch as unknown as ReturnType<typeof vi.fn>;
 
@@ -54,5 +54,17 @@ describe('onramp client', () => {
     await expect(
       startOnramp({ phoneNumber: 'x', email: 'a@b.co', fiatAmount: '1', destinationAddress: '0x' }, 'K', BASE)
     ).rejects.toThrow('phoneNumber invalid');
+  });
+
+  it('errors carry the HTTP status so callers can detect dead sessions (400/409)', async () => {
+    mockFetch().mockResolvedValue(bad('session already used', 409));
+    const err = await validateOtp({ sessionId: 's1', code: '000000' }, 'K', BASE).catch((e) => e);
+    expect(err).toBeInstanceOf(OnrampApiError);
+    expect(err.status).toBe(409);
+
+    mockFetch().mockResolvedValue(bad('invalid otp'));
+    const err400 = await validateOtp({ sessionId: 's1', code: '111111' }, 'K', BASE).catch((e) => e);
+    expect(err400).toBeInstanceOf(OnrampApiError);
+    expect(err400.status).toBe(400);
   });
 });

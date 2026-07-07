@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { JAW_ONRAMP_URL, type OnrampOrder, type OnrampParams } from '@jaw.id/core';
-import { startOnramp, validateOtp } from '../utils/onramp/client';
+import { startOnramp, validateOtp, OnrampApiError } from '../utils/onramp/client';
 import {
   parseOnrampEvent,
   isTerminalSuccess,
@@ -13,9 +13,17 @@ import {
 
 export type OnrampStep = 'form' | 'otp' | 'pay' | 'success' | 'error';
 
-/** Pay-step scenario, driven by the widget's load_* events: loading until the
- * pay button renders, 'qr' when the browser falls back to an Apple Pay QR code. */
-export type OnrampPayStatus = 'loading' | 'ready' | 'qr' | 'failed';
+// Native Apple Pay is Safari-only on the web (`window.ApplePaySession`). Where
+// it's absent (Chrome/Brave/Firefox), the widget's button opens an in-frame QR
+// instead of a native sheet, so that's the only case where we grow the frame.
+const hasNativeApplePay = (): boolean => typeof window !== 'undefined' && 'ApplePaySession' in window;
+
+/** Pay-step scenario:
+ *  - 'loading'/'ready': the compact "Buy with Apple/Google Pay" button.
+ *  - 'failed': a genuinely terminal load error (region/asset/expired link).
+ * The frame grows only when the user taps into the widget (see `expanded`), so
+ * the button stays compact until pressed. */
+export type OnrampPayStatus = 'loading' | 'ready' | 'failed';
 
 export interface OnrampFormState {
   fiatAmount: string;
@@ -40,6 +48,13 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
   const [payUrl, setPayUrl] = useState<string | null>(null);
   const [payStatus, setPayStatus] = useState<OnrampPayStatus>('loading');
   const [payError, setPayError] = useState<OnrampLoadError | null>(null);
+  // The frame is a compact button until the user taps into the widget. It grows
+  // ONLY when Apple Pay is unsupported (`needsQr`) — then the tap opens an
+  // in-frame QR that needs room. On Safari the tap opens the native sheet, so it
+  // stays a compact button. The iframe is cross-origin, so the tap is detected
+  // via focus moving into it (see effect).
+  const [expanded, setExpanded] = useState(false);
+  const [needsQr, setNeedsQr] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [form, setFormState] = useState<OnrampFormState>({
@@ -90,9 +105,23 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
         setPayUrl(res.embeddable.url);
         setPayStatus('loading');
         setPayError(null);
+        setExpanded(false);
+        setNeedsQr(!hasNativeApplePay());
         setStep('pay');
       } catch (e) {
-        setError(e instanceof Error ? e.message : 'Invalid code');
+        const message = e instanceof Error ? e.message : 'Invalid code';
+        // A 400/409 means the backend killed the session (wrong code, expired,
+        // or a concurrent flow on the same phone) — retrying validate-otp with
+        // the same sessionId always fails. Drop it and return to the form so
+        // the next Continue starts a fresh session. Not automatic: /start is
+        // rate-limited per phone.
+        if (e instanceof OnrampApiError && (e.status === 400 || e.status === 409)) {
+          setSessionId(null);
+          setStep('form');
+          setError(`${message} — press Continue to get a new code.`);
+        } else {
+          setError(message);
+        }
       } finally {
         setBusy(false);
       }
@@ -111,6 +140,8 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
     setPayUrl(null);
     setPayStatus('loading');
     setPayError(null);
+    setExpanded(false);
+    setNeedsQr(false);
     setSessionId(null);
   }, []);
 
@@ -118,6 +149,8 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
   const retryPay = useCallback(() => {
     setPayError(null);
     setPayStatus('loading');
+    setExpanded(false);
+    setNeedsQr(!hasNativeApplePay());
     setIframeKey((k) => k + 1);
   }, []);
 
@@ -131,15 +164,15 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
     function onMessage(e: MessageEvent) {
       const parsed = parseOnrampEvent(e.data);
       if (!parsed) return;
-      if (parsed.name === ONRAMP_EVENT.LOAD_PENDING) {
-        setPayStatus((s) => (s === 'qr' ? s : 'loading'));
-      } else if (parsed.name === ONRAMP_EVENT.LOAD_SUCCESS) {
-        setPayStatus((s) => (s === 'qr' ? s : 'ready'));
+      if (parsed.name === ONRAMP_EVENT.LOAD_SUCCESS) {
+        setPayStatus((s) => (s === 'failed' ? s : 'ready'));
       } else if (parsed.name === ONRAMP_EVENT.LOAD_ERROR) {
         if (parsed.errorCode === ONRAMP_ERROR_CODE.APPLE_PAY_NOT_SUPPORTED) {
-          // Not an error on web: the widget falls back to an Apple Pay QR code,
-          // so give the frame room to render it instead of failing.
-          setPayStatus('qr');
+          // NOT fatal on web: the widget renders a button that opens its QR
+          // overlay in-frame on tap. Stay compact but arm the grow-on-tap so the
+          // QR gets room (also covers browsers ApplePaySession detection missed).
+          setPayStatus((s) => (s === 'failed' ? s : 'ready'));
+          setNeedsQr(true);
         } else {
           setPayError(describeLoadError(parsed.errorCode, parsed.errorMessage));
           setPayStatus('failed');
@@ -172,6 +205,21 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
     return () => clearTimeout(timer);
   }, [step, payStatus, iframeKey]);
 
+  // When Apple Pay is unsupported, the widget's button opens an in-frame QR, so
+  // grow the frame the moment the user taps into it. Only armed for that case —
+  // on Safari the tap opens the native sheet and the button stays compact. The
+  // iframe is cross-origin, so we detect the tap via focus moving into it.
+  useEffect(() => {
+    if (step !== 'pay' || expanded || !needsQr) return;
+    function onBlur() {
+      setTimeout(() => {
+        if (document.activeElement === iframeRef.current) setExpanded(true);
+      }, 0);
+    }
+    window.addEventListener('blur', onBlur);
+    return () => window.removeEventListener('blur', onBlur);
+  }, [step, expanded, needsQr]);
+
   return {
     step,
     busy,
@@ -180,6 +228,7 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
     payUrl,
     payStatus,
     payError,
+    expanded,
     iframeKey,
     form,
     setForm,

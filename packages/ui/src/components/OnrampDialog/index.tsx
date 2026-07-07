@@ -16,9 +16,19 @@ const COINBASE_TERMS = 'https://www.coinbase.com/legal/guest-checkout/us';
 const COINBASE_USER_AGREEMENT = 'https://www.coinbase.com/legal/user_agreement';
 const COINBASE_PRIVACY = 'https://www.coinbase.com/legal/privacy';
 
-// The widget renders just a pay button when ready; when Apple Pay is
-// unavailable in the browser it falls back to a full QR experience instead.
-const PAY_FRAME_HEIGHT = { loading: 'h-0', ready: 'h-16', qr: 'h-[420px]', failed: 'h-0' } as const;
+// The pay frame is compact until the user taps into it — then it grows so
+// Coinbase's QR overlay (opened in-frame on non-Safari) has room. Safari taps
+// open the native OS sheet; the extra height is harmless there.
+//
+// The widget's pay button is a pill inset on the widget's own background, so a
+// rectangular crop always shows background at the corners. Instead the compact
+// crop IS the button: a pill slightly shorter than the widget's (~44px) button,
+// with the iframe over-scanned 32px per side so the widget's margins fall
+// outside the window — every visible pixel is button.
+const PAY_FRAME_COMPACT = 'h-10 rounded-full';
+const PAY_FRAME_EXPANDED = 'h-[440px] rounded-[6px]';
+const PAY_IFRAME_COMPACT = 'left-[-32px] w-[calc(100%+64px)]';
+const PAY_IFRAME_EXPANDED = 'left-0 w-full';
 
 export const OnrampDialog = ({
   open = true,
@@ -33,6 +43,19 @@ export const OnrampDialog = ({
   const isMobile = useIsMobile();
   const flow = useOnrampFlow({ apiKey, destinationAddress, presets, onComplete, onError });
   const [code, setCode] = useState('');
+
+  // Each OTP step belongs to a fresh session — never show a code typed for a
+  // previous one.
+  useEffect(() => {
+    if (flow.step === 'otp') setCode('');
+  }, [flow.step]);
+
+  // Sessions are single-flow on the backend: if a keep-mounted consumer closes
+  // and reopens the dialog, resuming the old sessionId would always 409.
+  const { reset } = flow;
+  useEffect(() => {
+    if (!open) reset();
+  }, [open, reset]);
 
   const asset = presets?.cryptoCurrency ?? 'USDC';
   const network = presets?.network ?? 'Base';
@@ -285,22 +308,26 @@ export const OnrampDialog = ({
               </div>
             ) : (
               <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
-                <p className="text-foreground text-xs font-bold leading-[133%]">
-                  {flow.payStatus === 'qr' ? 'Scan to pay' : 'Pay with Apple Pay or Google Pay'}
-                </p>
-                {flow.payStatus === 'loading' && (
-                  <div className="flex flex-row items-center gap-2">
-                    <Spinner />
-                    <p className="text-muted-foreground text-sm">Preparing secure payment…</p>
-                  </div>
-                )}
-                {flow.payStatus === 'qr' && (
-                  <p className="text-muted-foreground text-sm">
-                    Apple Pay isn&apos;t available in this browser. Scan the QR code with your phone to finish paying.
-                  </p>
-                )}
-                {/* Kept mounted while loading (h-0) so the widget can boot and emit load_* events. */}
-                <div className={`overflow-hidden rounded-[6px] bg-white ${PAY_FRAME_HEIGHT[flow.payStatus]}`}>
+                <div className="flex flex-row items-center justify-between gap-2">
+                  <p className="text-foreground text-xs font-bold leading-[133%]">Pay with Apple Pay or Google Pay</p>
+                  {flow.payStatus === 'loading' && (
+                    <div className="flex flex-row items-center gap-1.5">
+                      <Spinner />
+                      <p className="text-muted-foreground text-xs">Loading…</p>
+                    </div>
+                  )}
+                </div>
+                {/* The iframe is ALWAYS full height (never resized before the
+                    tap) and centered; we only grow the crop window on tap.
+                    Resizing the iframe before the click reflows the widget and
+                    eats it — cropping keeps it a single click. The width does
+                    change on expand, but by then the click already landed.
+                    Assumes the widget centers its button/QR (it does). */}
+                <div
+                  className={`relative w-full overflow-hidden transition-[height,border-radius] duration-300 ${
+                    flow.expanded ? PAY_FRAME_EXPANDED : PAY_FRAME_COMPACT
+                  }`}
+                >
                   <iframe
                     key={flow.iframeKey}
                     ref={flow.iframeRef}
@@ -309,7 +336,9 @@ export const OnrampDialog = ({
                     allow="payment"
                     sandbox="allow-scripts allow-same-origin allow-forms allow-popups"
                     referrerPolicy="no-referrer"
-                    className="h-full w-full"
+                    className={`absolute top-1/2 h-[440px] -translate-y-1/2 border-0 ${
+                      flow.expanded ? PAY_IFRAME_EXPANDED : PAY_IFRAME_COMPACT
+                    }`}
                   />
                 </div>
               </div>
@@ -334,14 +363,11 @@ export const OnrampDialog = ({
                 )}
               </>
             ) : (
-              <>
-                <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
-                  Cancel
-                </Button>
-                <Button type="button" className="flex-1" onClick={flow.finishWithCurrentStatus}>
-                  Done
-                </Button>
-              </>
+              // No "Done": the pay action is the Coinbase button in the frame;
+              // success auto-resolves via polling_success. Cancel is the only exit.
+              <Button type="button" variant="outline" className="w-full" onClick={onCancel}>
+                Cancel
+              </Button>
             )}
           </div>
         </div>

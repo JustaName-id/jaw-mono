@@ -8,6 +8,16 @@ interface Envelope<T> {
   result?: { data: T | null; error: string | null };
 }
 
+export class OnrampApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number
+  ) {
+    super(message);
+    this.name = 'OnrampApiError';
+  }
+}
+
 // `baseUrl` is required (callers pass JAW_ONRAMP_URL) so this module carries no
 // runtime import of @jaw.id/core — only type-only ones — keeping the test's
 // module graph free of cross-package runtime code.
@@ -39,7 +49,7 @@ async function call<T>(
   const error = parsed?.result?.error ?? null;
 
   if (!res.ok || data === null) {
-    throw new Error(error ?? `Onramp request failed (${res.status})`);
+    throw new OnrampApiError(error ?? `Onramp request failed (${res.status})`, res.status);
   }
   return data;
 }

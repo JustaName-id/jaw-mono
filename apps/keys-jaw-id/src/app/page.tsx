@@ -606,6 +606,10 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       const onrampParams = (pendingRequest.params?.[0] ?? {}) as OnrampParams;
       return (
         <OnrampModal
+          // The embedded iframe stays mounted across flows, so without a
+          // per-request key React reuses the instance and a cancelled flow's
+          // state (step, sessionId, payUrl) resurfaces on the next request.
+          key={pendingRequest.requestId}
           onrampRequest={{ params: onrampParams }}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
