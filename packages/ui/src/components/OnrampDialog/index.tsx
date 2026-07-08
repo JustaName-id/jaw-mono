@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -23,6 +23,67 @@ const PAY_FRAME_COMPACT = 'h-10 rounded-full';
 const PAY_FRAME_EXPANDED = 'h-[440px] rounded-[6px]';
 const PAY_IFRAME_COMPACT = 'left-[-32px] w-[calc(100%+64px)]';
 const PAY_IFRAME_EXPANDED = 'left-0 w-full';
+
+const OTP_LENGTH = 6;
+
+function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: string) => void; disabled?: boolean }) {
+  const refs = useRef<Array<HTMLInputElement | null>>([]);
+  const digits = Array.from({ length: OTP_LENGTH }, (_, i) => value[i] ?? '');
+  const focusBox = (i: number) => refs.current[Math.min(Math.max(i, 0), OTP_LENGTH - 1)]?.focus();
+  const setDigit = (i: number, d: string) => {
+    if (i < 0) return;
+    const next = digits.slice();
+    next[i] = d;
+    onChange(next.join('').slice(0, OTP_LENGTH));
+  };
+
+  return (
+    <div className="flex gap-2">
+      {digits.map((d, i) => (
+        <input
+          key={i}
+          ref={(el) => {
+            refs.current[i] = el;
+          }}
+          type="text"
+          inputMode="numeric"
+          autoComplete={i === 0 ? 'one-time-code' : 'off'}
+          maxLength={1}
+          disabled={disabled}
+          value={d}
+          onChange={(e) => {
+            const digit = e.target.value.replace(/\D/g, '').slice(-1);
+            if (!digit) return;
+            setDigit(i, digit);
+            focusBox(i + 1);
+          }}
+          onKeyDown={(e) => {
+            if (e.key === 'Backspace') {
+              e.preventDefault();
+              if (digits[i]) setDigit(i, '');
+              else {
+                setDigit(i - 1, '');
+                focusBox(i - 1);
+              }
+            } else if (e.key === 'ArrowLeft') {
+              focusBox(i - 1);
+            } else if (e.key === 'ArrowRight') {
+              focusBox(i + 1);
+            }
+          }}
+          onPaste={(e) => {
+            e.preventDefault();
+            const pasted = e.clipboardData.getData('text').replace(/\D/g, '').slice(0, OTP_LENGTH);
+            if (!pasted) return;
+            onChange(pasted);
+            focusBox(pasted.length);
+          }}
+          className="border-input focus-visible:border-ring focus-visible:ring-ring/50 dark:bg-input/30 text-foreground h-12 w-full min-w-0 rounded-md border bg-transparent text-center text-lg font-medium outline-none transition-[color,box-shadow] focus-visible:ring-[1px] disabled:cursor-not-allowed disabled:opacity-50"
+        />
+      ))}
+    </div>
+  );
+}
 
 export const OnrampDialog = ({
   open = true,
@@ -124,9 +185,6 @@ export const OnrampDialog = ({
             })}
           </p>
           <p className="text-foreground text-[30px] font-normal leading-[100%]">Buy Crypto</p>
-          <p className="text-muted-foreground text-sm">
-            {asset} on {networkDisplay} · Guest checkout by Coinbase
-          </p>
         </div>
       }
       contentStyle={
@@ -254,20 +312,15 @@ export const OnrampDialog = ({
               />
               <span className="text-foreground text-xs font-medium leading-[150%]">
                 I agree to Coinbase&apos;s{' '}
-                <a className="text-primary hover:underline" href={COINBASE_TERMS} target="_blank" rel="noreferrer">
+                <a className="text-primary underline" href={COINBASE_TERMS} target="_blank" rel="noreferrer">
                   Guest Checkout Terms
                 </a>
                 ,{' '}
-                <a
-                  className="text-primary hover:underline"
-                  href={COINBASE_USER_AGREEMENT}
-                  target="_blank"
-                  rel="noreferrer"
-                >
+                <a className="text-primary underline" href={COINBASE_USER_AGREEMENT} target="_blank" rel="noreferrer">
                   User Agreement
                 </a>{' '}
                 and{' '}
-                <a className="text-primary hover:underline" href={COINBASE_PRIVACY} target="_blank" rel="noreferrer">
+                <a className="text-primary underline" href={COINBASE_PRIVACY} target="_blank" rel="noreferrer">
                   Privacy Policy
                 </a>
                 .
@@ -296,20 +349,13 @@ export const OnrampDialog = ({
           className="flex flex-col justify-between gap-6 max-md:h-full"
           onSubmit={(e) => {
             e.preventDefault();
-            void flow.submitOtp(code);
+            if (code.length === OTP_LENGTH) void flow.submitOtp(code);
           }}
         >
           <div className="flex flex-col gap-3">
-            <div className="border-border flex flex-col gap-1.5 rounded-[6px] border p-3.5">
+            <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
               <Label className="text-foreground text-xs font-bold leading-[133%]">Verification code</Label>
-              <Input
-                type="text"
-                inputMode="numeric"
-                autoComplete="one-time-code"
-                placeholder="123456"
-                value={code}
-                onChange={(e) => setCode(e.target.value.replace(/\D/g, ''))}
-              />
+              <OtpInput value={code} onChange={setCode} disabled={flow.busy} />
               <p className="text-muted-foreground text-xs font-normal">
                 Enter the code sent to {flow.form.phoneNumber.trim()}.
               </p>
@@ -324,7 +370,7 @@ export const OnrampDialog = ({
             <Button type="button" variant="outline" className="flex-1" onClick={restart}>
               Back
             </Button>
-            <Button type="submit" className="flex-1" disabled={flow.busy || !/^\d{4,8}$/.test(code)}>
+            <Button type="submit" className="flex-1" disabled={flow.busy || code.length !== OTP_LENGTH}>
               {flow.busy ? <Spinner /> : 'Verify'}
             </Button>
           </div>
@@ -347,9 +393,9 @@ export const OnrampDialog = ({
                 <p className="text-xs font-bold leading-[133%]">Receiving</p>
                 <p className="text-base font-normal leading-[150%]">
                   {flow.order?.cryptoAmount ? `${flow.order.cryptoAmount} ` : ''}
-                  {flow.order?.cryptoCurrency ?? asset}
+                  {flow.order?.cryptoCurrency ?? asset}{' '}
+                  <span className="text-muted-foreground text-sm">on {networkDisplay}</span>
                 </p>
-                <p className="text-muted-foreground text-xs leading-[133%]">on {networkDisplay}</p>
               </div>
             </div>
 
