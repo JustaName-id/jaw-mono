@@ -378,6 +378,30 @@ describe('CrossPlatformSigner', () => {
             expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
         });
 
+        it('should route wallet_onramp to the popup', async () => {
+            // Onramp is claimed by CrossPlatformSigner (not the base signer), so it
+            // must still reach the popup here.
+            const request: RequestArguments = { method: 'wallet_onramp', params: [{}] };
+
+            mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue({
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: 'peer-public-key-hex',
+                content: { encrypted: mockEncryptedData },
+                timestamp: new Date(),
+            } as RPCResponseMessage);
+
+            (decryptContent as Mock).mockResolvedValue({
+                result: { value: { providerOrderId: 'o1', status: 'PENDING' } },
+            } as RPCResponse);
+
+            const result = await signer.request(request);
+
+            expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+            expect(result).toEqual({ providerOrderId: 'o1', status: 'PENDING' });
+        });
+
         it('should make eth_sendTransaction request to popup', async () => {
             // Arrange
             const txRequest: RequestArguments = {
