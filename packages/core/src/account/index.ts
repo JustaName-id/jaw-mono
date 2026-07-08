@@ -28,7 +28,12 @@ export {
     fetchTokenQuotes,
     estimateErc20PaymasterCosts,
     encodeApprovalCall,
+    buildErc20PaymasterContext,
+    calculateTokenCostFromGas,
+    calculateDisplayTokenCost,
+    computeEffectiveGasPrice,
     type TokenQuote,
     type TokenEstimate,
     type TokenInfo,
+    type UserOpGasFields,
 } from './erc20Paymaster.js';

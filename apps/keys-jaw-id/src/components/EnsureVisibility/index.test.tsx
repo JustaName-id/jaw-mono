@@ -142,7 +142,9 @@ describe('EnsureVisibility — IOv2 debounce', () => {
   it('shows the warning for a cover that persists past the confirm window', () => {
     emit(true, false);
     act(() => vi.advanceTimersByTime(300)); // sustained → confirmed
-    expect(container.innerHTML).toContain('appears to be covered');
+    // The banner lives in the body-level shield (above the portaled dialog),
+    // not in the wrapper subtree — so query the whole document.
+    expect(document.body.innerHTML).toContain('appears to be covered');
     expect(container.innerHTML).toContain('pointer-events-none');
   });
 
@@ -162,5 +164,116 @@ describe('EnsureVisibility — IOv2 debounce', () => {
     act(() => vi.advanceTimersByTime(300));
     expect(container.innerHTML).not.toContain('appears to be covered');
     expect(container.innerHTML).not.toContain('pointer-events-none');
+  });
+});
+
+// The signing dialogs (SignatureDialog, TransactionDialog, …) render through a
+// Radix Portal to document.body, OUTSIDE this component's wrapper — so the
+// wrapper's pointer-events-none never reaches the live approve button. The
+// guard must therefore neutralize interaction with a body-level shield that
+// sits above the portaled dialog. These tests pin that the shield exists at the
+// document.body level (not merely inside the wrapper) and tracks the raw,
+// immediate occlusion reading. (jsdom does not hit-test pointer-events/z-index,
+// so we assert the shield's presence/placement rather than simulate a covered
+// click landing on the dialog.)
+describe('EnsureVisibility — body-level interaction shield', () => {
+  let ioCallback: IntersectionObserverCallback | null;
+  let container: HTMLDivElement;
+  let root: Root;
+
+  const SHIELD = '[data-testid="jaw-clickjacking-shield"]';
+
+  const emit = (isIntersecting: boolean, isVisible: boolean) => {
+    act(() => {
+      ioCallback?.([{ isIntersecting, isVisible } as unknown as IntersectionObserverEntry], null as never);
+    });
+  };
+
+  beforeEach(() => {
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    vi.useFakeTimers();
+    ioCallback = null;
+
+    class MockIntersectionObserver {
+      constructor(cb: IntersectionObserverCallback) {
+        ioCallback = cb;
+      }
+      observe() {
+        return undefined;
+      }
+      unobserve() {
+        return undefined;
+      }
+      disconnect() {
+        return undefined;
+      }
+      takeRecords(): IntersectionObserverEntry[] {
+        return [];
+      }
+    }
+    vi.stubGlobal('IntersectionObserver', MockIntersectionObserver);
+
+    class MockIntersectionObserverEntry {}
+    Object.defineProperty(MockIntersectionObserverEntry.prototype, 'isVisible', { value: false });
+    vi.stubGlobal('IntersectionObserverEntry', MockIntersectionObserverEntry);
+
+    container = document.createElement('div');
+    document.body.appendChild(container);
+    act(() => {
+      root = createRoot(container);
+    });
+    act(() => {
+      root.render(
+        <EnsureVisibility communicator={mockCommunicator('embedded')} active={true}>
+          {child}
+        </EnsureVisibility>
+      );
+    });
+  });
+
+  afterEach(() => {
+    act(() => root.unmount());
+    container.remove();
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+  });
+
+  it('mounts a click-blocking shield at document.body level, not inside the wrapper', () => {
+    emit(true, false); // covered, immediate
+    const shield = document.body.querySelector(SHIELD);
+    expect(shield).not.toBeNull();
+    // Portaled to body, NOT a descendant of the guarded wrapper — this is the
+    // whole point: it can cover the dialog that also portals to body.
+    expect(container.querySelector(SHIELD)).toBeNull();
+    // Above the dialog (z-[100]) and capturing pointer events.
+    expect(shield?.className).toContain('z-[2147483647]');
+    expect((shield as HTMLElement).style.pointerEvents).toBe('auto');
+  });
+
+  it('mounts the shield immediately on the raw occluded reading (no debounce window)', () => {
+    emit(true, false);
+    // No timer advance — interaction blocking must be fail-closed at once.
+    expect(document.body.querySelector(SHIELD)).not.toBeNull();
+  });
+
+  it('removes the shield once the dialog is certified visible again', () => {
+    emit(true, false);
+    expect(document.body.querySelector(SHIELD)).not.toBeNull();
+    emit(true, true); // certified visible → not occluded
+    expect(document.body.querySelector(SHIELD)).toBeNull();
+  });
+
+  it('keeps the shield up but holds the banner until the cover is confirmed', () => {
+    emit(true, false);
+    // Blocker present immediately; banner text only after the confirm window.
+    expect(document.body.querySelector(SHIELD)).not.toBeNull();
+    expect(document.body.innerHTML).not.toContain('appears to be covered');
+    act(() => vi.advanceTimersByTime(300));
+    expect(document.body.innerHTML).toContain('appears to be covered');
+  });
+
+  it('does not mount the shield when not occluded', () => {
+    emit(true, true);
+    expect(document.body.querySelector(SHIELD)).toBeNull();
   });
 });

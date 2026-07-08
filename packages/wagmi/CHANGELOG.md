@@ -1,3 +1,51 @@
+## 1.0.5 (2026-07-06)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.5
+
+## 1.0.4 (2026-07-02)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.4
+
+## 1.0.3 (2026-06-23)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.3
+
+## 1.0.2 (2026-06-23)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.2
+
+## 1.0.1 (2026-06-22)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.1
+
+# 1.0.0 (2026-06-22)
+
+### 🚀 Features
+
+- ⚠️  embedded iframe transport for keys ([#198](https://github.com/JustaName-id/jaw-mono/pull/198), [#1](https://github.com/JustaName-id/jaw-mono/issues/1), [#2](https://github.com/JustaName-id/jaw-mono/issues/2), [#7](https://github.com/JustaName-id/jaw-mono/issues/7), [#5](https://github.com/JustaName-id/jaw-mono/issues/5), [#6](https://github.com/JustaName-id/jaw-mono/issues/6))
+
+### ⚠️  Breaking Changes
+
+- integrators upgrading without setting transportMode
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.0
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
 ## 0.1.22 (2026-06-16)
 
 ### 🧱 Updated Dependencies

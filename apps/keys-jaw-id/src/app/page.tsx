@@ -20,7 +20,8 @@ import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
 import type { SessionAuthState } from '../lib/session-manager';
-import type { RPCRequestMessage } from '@jaw.id/core';
+import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/core';
+import { RECONNECT_REQUIRED } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
 import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from '@jaw.id/ui';
@@ -407,6 +408,31 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       const session = await cryptoHandler.loadSession(origin);
 
       if (!session) {
+        // Embedded (iframe) on Safari: storage partitioning isolates this frame
+        // from the session a popup created during connect, so there is nothing to
+        // decrypt with. Instead of dead-ending with a local error dialog, reply to
+        // the SDK with a reconnect-required sentinel (tied to this request id, no
+        // secret) so it re-establishes a session against this iframe and retries.
+        if (communicator.isEmbedded()) {
+          console.warn('⚠️ No session in iframe partition — requesting reconnect for origin:', origin);
+          const reconnectResponse: RPCResponseMessage = {
+            requestId: request.id,
+            id: crypto.randomUUID() as MessageID,
+            sender: '', // no session → no popup public key; this response carries no secret
+            correlationId: request.correlationId,
+            content: {
+              failure: {
+                code: standardErrorCodes.provider.disconnected,
+                message: 'No session in this context; reconnect required',
+                data: { reason: RECONNECT_REQUIRED },
+              },
+            },
+            timestamp: new Date(),
+          };
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          communicator.sendMessage(reconnectResponse as any);
+          return;
+        }
         console.error('❌ No session found for origin:', origin);
         throw new Error('No session found. Please reconnect.');
       }

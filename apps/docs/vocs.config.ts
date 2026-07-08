@@ -1,5 +1,11 @@
 import { defineConfig } from 'vocs/config';
 
+// NOTE: Vocs 2.x has no `head`/script-injection config option, so PostHog is
+// injected into the built static HTML by a post-build step
+//
+// (scripts/inject-analytics.ts), per the official Vocs recommendation.
+// Analytics is gated on VITE_ANALYTICS_ENABLED (set in Vercel Production env).
+
 export default defineConfig({
   srcDir: 'docs',
   outDir: 'docs/dist',
@@ -116,7 +122,7 @@ export default defineConfig({
           { text: 'Connector', link: '/wagmi/jaw' },
           {
             text: 'Hooks',
-            collapsed: true,
+            collapsed: false,
             items: [
               {
                 text: 'useGetCallsHistory()',
@@ -142,7 +148,7 @@ export default defineConfig({
       },
       {
         text: 'Provider - RPC Reference',
-        collapsed: true,
+        collapsed: false,
         items: [
           { text: 'Overview', link: '/api-reference' },
           {

@@ -1,0 +1,17 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "rewrites": [
+    {
+      "source": "/analytics/static/:path*",
+      "destination": "https://eu-assets.i.posthog.com/static/:path*"
+    },
+    {
+      "source": "/analytics/:path*/",
+      "destination": "https://eu.i.posthog.com/:path*/"
+    },
+    {
+      "source": "/analytics/:path*",
+      "destination": "https://eu.i.posthog.com/:path*"
+    }
+  ]
+}

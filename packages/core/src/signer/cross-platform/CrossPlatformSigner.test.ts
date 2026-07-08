@@ -9,12 +9,14 @@ import { exportKeyToHexString, importKeyFromHexString, encryptContent, decryptCo
 import { fetchRPCRequest } from '../../utils/index.js';
 import { correlationIds } from '../../store/correlation-ids/store.js';
 import { getCallStatus, getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
+import { RECONNECT_REQUIRED } from '../../messages/index.js';
 
 // Mock dependencies
 vi.mock('../../communicator/index.js', () => ({
     Communicator: vi.fn(() => ({
         waitForPopupLoaded: vi.fn(),
         postRequestAndWaitForResponse: vi.fn(),
+        forceIframeReconnect: vi.fn(),
         disconnect: vi.fn(),
     })),
 }));
@@ -341,6 +343,111 @@ describe('CrossPlatformSigner', () => {
 
             // Assert
             expect(result).toBe('0x1');
+        });
+
+        it('reconnects in the iframe and retries once on a reconnect-required failure (Safari)', async () => {
+            const request: RequestArguments = {
+                method: 'personal_sign',
+                params: ['0x48656c6c6f', '0x1234567890123456789012345678901234567890'],
+            };
+
+            const reconnectFailureResponse: RPCResponseMessage = {
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: '',
+                content: {
+                    failure: {
+                        code: 4900,
+                        message: 'No session in this context; reconnect required',
+                        data: { reason: RECONNECT_REQUIRED },
+                    },
+                },
+                timestamp: new Date(),
+            };
+
+            const okResponse: RPCResponseMessage = {
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: 'peer-public-key-hex',
+                content: { encrypted: mockEncryptedData },
+                timestamp: new Date(),
+            };
+
+            // 1) original request -> reconnect-required, 2) reconnect handshake -> ok,
+            // 3) retried request -> ok
+            mockCommunicator.postRequestAndWaitForResponse
+                .mockResolvedValueOnce(reconnectFailureResponse)
+                .mockResolvedValueOnce(okResponse)
+                .mockResolvedValueOnce(okResponse);
+
+            (decryptContent as Mock).mockResolvedValue({ result: { value: '0xsignature...' } } as RPCResponse);
+
+            const result = await signer.request(request);
+
+            expect(result).toBe('0xsignature...');
+            // forced the reconnect at the iframe, exactly once
+            expect(mockCommunicator.forceIframeReconnect).toHaveBeenCalledTimes(1);
+            // re-keyed with the iframe session's public key
+            expect(mockKeyManager.setPeerPublicKey).toHaveBeenCalled();
+            // original + reconnect handshake + retry
+            expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalledTimes(3);
+        });
+
+        it('does not loop: a second reconnect-required after retry rejects', async () => {
+            const request: RequestArguments = {
+                method: 'personal_sign',
+                params: ['0x48656c6c6f', '0x1234567890123456789012345678901234567890'],
+            };
+
+            const reconnectFailureResponse: RPCResponseMessage = {
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: '',
+                content: {
+                    failure: { code: 4900, message: 'reconnect', data: { reason: RECONNECT_REQUIRED } },
+                },
+                timestamp: new Date(),
+            };
+            const okHandshake: RPCResponseMessage = {
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: 'peer-public-key-hex',
+                content: { encrypted: mockEncryptedData },
+                timestamp: new Date(),
+            };
+
+            // original -> reconnect, handshake -> ok, retry -> reconnect AGAIN
+            mockCommunicator.postRequestAndWaitForResponse
+                .mockResolvedValueOnce(reconnectFailureResponse)
+                .mockResolvedValueOnce(okHandshake)
+                .mockResolvedValueOnce(reconnectFailureResponse);
+
+            await expect(signer.request(request)).rejects.toMatchObject({ data: { reason: RECONNECT_REQUIRED } });
+            // reconnect attempted only once (no infinite loop)
+            expect(mockCommunicator.forceIframeReconnect).toHaveBeenCalledTimes(1);
+        });
+
+        it('does not reconnect on a normal (non-reconnect) failure', async () => {
+            const request: RequestArguments = {
+                method: 'personal_sign',
+                params: ['0x48656c6c6f', '0x1234567890123456789012345678901234567890'],
+            };
+            const normalFailure: RPCResponseMessage = {
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: '',
+                content: { failure: { code: 4001, message: 'User rejected' } },
+                timestamp: new Date(),
+            };
+            mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(normalFailure);
+
+            await expect(signer.request(request)).rejects.toMatchObject({ code: 4001 });
+            expect(mockCommunicator.forceIframeReconnect).not.toHaveBeenCalled();
         });
 
         it('should make personal_sign request to popup', async () => {

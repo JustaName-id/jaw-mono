@@ -64,6 +64,7 @@ export function middleware(request: NextRequest) {
     // older engines. Both are unrelated to frame-ancestors (who may embed US).
     "frame-src 'self' https://pay.coinbase.com",
     "child-src 'self' https://pay.coinbase.com",
+
     // Clickjacking protection for the embeddable dialog route is handled by
     // the in-dialog visibility guard (IntersectionObserver v2) + popup
     // routing, not by framing headers.

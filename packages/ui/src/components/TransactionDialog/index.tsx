@@ -15,6 +15,7 @@ import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { DecodedCalldata } from './DecodedCalldata';
+import { AssetPreview } from './AssetPreview';
 
 export const TransactionDialog = ({
   // open,
@@ -25,6 +26,9 @@ export const TransactionDialog = ({
   gasFeeLoading,
   gasEstimationError,
   sponsored,
+  assetsOut,
+  assetsIn,
+  assetPreviewError,
   onConfirm,
   onCancel,
   isProcessing,
@@ -216,7 +220,10 @@ export const TransactionDialog = ({
   // - No gas estimation error (unless sponsored)
   // - Must have at least one selectable payment option
   const hasInsufficientFunds = !hasSelectablePaymentOption || (gasEstimationError && !sponsored && !isPayingWithErc20);
-  const canConfirm = !isProcessing && !gasFeeLoading && !hasInsufficientFunds;
+  // Paying with ERC-20 requires a settled estimate for the selected token — the
+  // approval amount comes from it; without one the transaction must not start.
+  const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
+  const canConfirm = !isProcessing && !gasFeeLoading && !hasInsufficientFunds && !erc20EstimateMissing;
 
   return (
     <DefaultDialog
@@ -323,6 +330,13 @@ export const TransactionDialog = ({
                 </div>
               </div>
 
+              <AssetPreview
+                assetsOut={assetsOut ?? []}
+                assetsIn={assetsIn ?? []}
+                error={assetPreviewError ?? false}
+                nativeSymbol={nativeSymbol}
+              />
+
               {/* Value */}
               {formatTransactionValue(currentTransaction?.value) && (
                 <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
@@ -420,9 +434,10 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
-                        {selectedFeeToken.gasCostFormatted && (
+                        {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
                           <p className="text-muted-foreground text-xs font-normal">
-                            Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                            Up to {selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted}{' '}
+                            {selectedFeeToken.symbol}
                           </p>
                         )}
                       </div>
@@ -553,6 +568,13 @@ export const TransactionDialog = ({
                   <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
                 </div>
               </div>
+
+              <AssetPreview
+                assetsOut={assetsOut ?? []}
+                assetsIn={assetsIn ?? []}
+                error={assetPreviewError ?? false}
+                nativeSymbol={nativeSymbol}
+              />
 
               {/* Accordion for Transactions */}
               <div className="min-h-0 flex-1 overflow-y-auto">
@@ -792,9 +814,10 @@ export const TransactionDialog = ({
                             />
                           )}
                         </div>
-                        {selectedFeeToken.gasCostFormatted && (
+                        {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
                           <p className="text-muted-foreground text-xs font-normal">
-                            Up to {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                            Up to {selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted}{' '}
+                            {selectedFeeToken.symbol}
                           </p>
                         )}
                       </div>

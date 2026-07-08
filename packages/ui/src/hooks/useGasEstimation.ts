@@ -185,8 +185,13 @@ export function useGasEstimation({
 
     const updatedToken = feeTokens.find((t) => t.address.toLowerCase() === selectedFeeToken.address.toLowerCase());
 
-    // Update if gasCostFormatted changed (new estimate came in)
-    if (updatedToken && updatedToken.gasCostFormatted !== selectedFeeToken.gasCostFormatted) {
+    // Update if either fee value changed (new estimate came in) — the ceiling can
+    // move even when the realistic display rounds to the same string.
+    if (
+      updatedToken &&
+      (updatedToken.gasCostFormatted !== selectedFeeToken.gasCostFormatted ||
+        updatedToken.gasCostMaxFormatted !== selectedFeeToken.gasCostMaxFormatted)
+    ) {
       setSelectedFeeToken(updatedToken);
     }
   }, [feeTokens, selectedFeeToken]);
@@ -288,6 +293,7 @@ export function useGasEstimation({
             return {
               ...token,
               gasCostFormatted: undefined, // No estimate available
+              gasCostMaxFormatted: undefined,
               isSelectable: false,
             };
           }
@@ -298,6 +304,7 @@ export function useGasEstimation({
             return {
               ...token,
               gasCostFormatted: estimate.tokenCostFormatted,
+              gasCostMaxFormatted: estimate.tokenCostMaxFormatted,
               isSelectable: estimate.hasSufficientBalance,
             };
           }
@@ -321,6 +328,7 @@ export function useGasEstimation({
               return {
                 ...token,
                 gasCostFormatted: undefined,
+                gasCostMaxFormatted: undefined,
                 isSelectable: false,
               };
             }
@@ -337,6 +345,7 @@ export function useGasEstimation({
             return {
               ...token,
               gasCostFormatted,
+              gasCostMaxFormatted: undefined,
               isSelectable: false,
             };
           });
@@ -351,6 +360,7 @@ export function useGasEstimation({
               return {
                 ...token,
                 gasCostFormatted: undefined,
+                gasCostMaxFormatted: undefined,
                 isSelectable: false,
               };
             }
@@ -358,6 +368,7 @@ export function useGasEstimation({
             return {
               ...token,
               gasCostFormatted: 'Estimation failed',
+              gasCostMaxFormatted: undefined,
               isSelectable: false,
             };
           });

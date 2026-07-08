@@ -59,7 +59,7 @@ bunx nx release
 
 ### Applications (`apps/`)
 
-- **playground** - Next.js demo app using @jaw.id/wagmi with Privy authentication
+- **playground** - Next.js demo app exercising the SDK via @jaw.id/wagmi (the `jaw()` connector wired through wagmi)
 - **keys-jaw-id** - Next.js keys management application (keys.jaw.id)
 - **docs** - Documentation site built with Vocs
 
@@ -81,6 +81,15 @@ The `@jaw.id/core` package follows this structure:
    - `AppSpecificSigner` - Direct passkey signing within the app
 4. **RPC Handlers** (`src/rpc/`) - Individual handlers for wallet methods (wallet_sendCalls, wallet_grantPermissions, etc.)
 5. **State Management** (`src/store/`) - Zustand stores for config, chains, and client instances
+
+### ERC-20 Gas Fee Model
+
+`estimateErc20PaymasterCosts` (`packages/core/src/account/erc20Paymaster.ts`) returns two values per token:
+
+- `tokenCost` — realistic fee shown to the user: the userOp's phases are replayed via `eth_simulateV1` (deploying undeployed accounts inside the simulation), combined with the EntryPoint's overhead and unused-gas penalty, priced at a buffered effective gas price (baseFee × 1.25 + priority, capped at maxFeePerGas), capped at the ceiling. Falls back to summed gas limits when simulation is unavailable.
+- `tokenCostMax` — worst-case ceiling ("Up to"): all five gas limits plus the quoted postOp gas at maxFeePerGas. This is the amount the paymaster approval must cover and what `hasSufficientBalance` checks against.
+
+UIs must build the ERC-20 paymaster context via `buildErc20PaymasterContext(estimate)` so the approve-with-ceiling rule stays in one place.
 
 ### Authentication Modes
 

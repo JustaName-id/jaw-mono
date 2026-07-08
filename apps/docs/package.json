@@ -15,14 +15,14 @@
   },
   "scripts": {
     "dev": "vocs dev",
-    "build": "vocs build && tsx scripts/generate-llms.ts",
+    "build": "vocs build && tsx scripts/generate-llms.ts && tsx scripts/inject-analytics.ts",
     "preview": "vocs preview"
   },
   "dependencies": {
     "@jaw.id/core": "workspace:*",
     "react": "19.2.6",
     "react-dom": "19.2.6",
-    "vocs": "^2.0.10",
+    "vocs": "^2.0.15",
     "waku": "^1.0.0-beta.0"
   },
   "devDependencies": {

@@ -26,6 +26,7 @@ import {
   handleGetCapabilitiesRequest,
   buildGrantPermissionCall,
   buildRevokePermissionCall,
+  buildErc20PaymasterContext,
   type Chain,
   type SignInWithEthereumCapabilityRequest,
   type PaymasterConfig,
@@ -48,9 +49,13 @@ import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
+import {
+  getStoredLocalAccounts,
+  getLastAuthenticatedCredentialId,
+} from '../components/OnboardingDialog/accountHelpers';
 import { useChainIconURI } from '../hooks/useChainIconURI';
-import { useFeeTokenPrice } from '../hooks/useFeeTokenPrice';
 import { useGasEstimation } from '../hooks/useGasEstimation';
+import { useAssetPreview } from '../hooks/useAssetPreview';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getSiweOriginWarning, isSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
@@ -546,7 +551,17 @@ function OnboardingDialogWrapper({
   ens?: string;
 }) {
   const [open, setOpen] = useState(true);
-  const [accounts, setAccounts] = useState<LocalStorageAccount[]>([]);
+  const [accounts, setAccounts] = useState<LocalStorageAccount[]>(() => getStoredLocalAccounts(apiKey));
+  const [lastAuthenticatedCredentialId, setLastAuthenticatedCredentialId] = useState<string | null>(() =>
+    getLastAuthenticatedCredentialId(apiKey)
+  );
+  // Re-read accounts and auth state from storage. Must run after flows that write them
+  // (import, account creation), so cancelling a later dialog returns to a fresh default
+  // instead of a stale "Continue as" account.
+  const refreshAccounts = () => {
+    setAccounts(getStoredLocalAccounts(apiKey));
+    setLastAuthenticatedCredentialId(getLastAuthenticatedCredentialId(apiKey));
+  };
   const [loggingInAccount, setLoggingInAccount] = useState<string | null>(null);
   const [isImporting, setIsImporting] = useState(false);
   const [isCreating, setIsCreating] = useState(false);
@@ -570,22 +585,6 @@ function OnboardingDialogWrapper({
   const targetChainId = request.data.chainId || defaultChainId || 1;
   const chainName = getChainNameFromId(targetChainId);
   const chainIcon = useChainIconURI(targetChainId, apiKey, 24);
-
-  // Load accounts on mount using Account class
-  useEffect(() => {
-    const loadAccounts = () => {
-      const storedAccounts = Account.getStoredAccounts(apiKey);
-      setAccounts(
-        storedAccounts.map((acc) => ({
-          username: acc.username,
-          creationDate: new Date(acc.creationDate),
-          credentialId: acc.credentialId,
-          isImported: acc.isImported,
-        }))
-      );
-    };
-    loadAccounts();
-  }, [apiKey]);
 
   // Silent mode: check for existing auth state and use it directly
   // This mirrors the cross-platform behavior where jaw:passkey:authState is checked
@@ -699,6 +698,9 @@ function OnboardingDialogWrapper({
         paymasterUrl: paymasters?.[targetChainId]?.url,
       });
 
+      // Import wrote the account + auth state to storage
+      refreshAccounts();
+
       const metadata = accountInstance.getMetadata();
 
       // If silent mode, skip ConnectDialog and approve immediately
@@ -783,6 +785,8 @@ function OnboardingDialogWrapper({
   // Handle account creation completion (after subname registration if applicable)
   // Account data flows through from onCreateAccount - no intermediate state needed
   const handleAccountCreationComplete = async (accountData: CreatedAccountData) => {
+    // Creation wrote the account + auth state to storage
+    refreshAccounts();
     // If silent mode, skip ConnectDialog and approve immediately
     if (request.data.silent) {
       setIsCreating(false);
@@ -1004,11 +1008,13 @@ function OnboardingDialogWrapper({
         isImporting={isImporting}
         onCreateAccount={handleCreateAccount}
         onAccountCreationComplete={handleAccountCreationComplete}
+        onAccountCreationError={() => setIsCreating(false)}
         isCreating={isCreating}
         ensDomain={ensDomain}
         chainId={chainId}
         mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
         apiKey={apiKey}
+        lastAuthenticatedCredentialId={lastAuthenticatedCredentialId}
         supportedChains={SUPPORTED_CHAINS.map((chain) => ({ id: chain.id }))}
         subnameTextRecords={subnameTextRecords}
       />
@@ -1212,13 +1218,6 @@ function TransactionDialogWrapper({
   const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
 
-  // Get native token symbol from feeTokens, falling back to chain's native currency
-  const nativeToken = feeTokens?.find((t) => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
-
-  // Fetch native token price dynamically based on the chain's native token symbol
-  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
-
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
@@ -1260,6 +1259,17 @@ function TransactionDialogWrapper({
 
   // Permission ID for permission-based execution
   const permissionId = request.data.capabilities?.permissions?.id as Hex | undefined;
+
+  const {
+    assetsOut,
+    assetsIn,
+    error: assetPreviewError,
+  } = useAssetPreview({
+    account: request.data.from,
+    calls: transactionCalls,
+    chainId,
+    apiKey,
+  });
 
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
@@ -1306,23 +1316,16 @@ function TransactionDialogWrapper({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
-      // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
-      return {
-        token: selectedFeeToken.address,
-        gas: gasInTokenUnits.toString(),
-      };
+      // No estimate yet: omit `gas` so Account.createErc20ApprovalCall estimates
+      // the worst-case ceiling itself, instead of a client-side USD guess that
+      // ignores the exchange rate and can under-approve.
+      return { token: selectedFeeToken.address };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1508,6 +1511,9 @@ function TransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      assetsOut={assetsOut}
+      assetsIn={assetsIn}
+      assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1555,13 +1561,6 @@ function SendTransactionDialogWrapper({
   const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
 
-  // Get native token symbol from feeTokens, falling back to chain's native currency
-  const nativeToken = feeTokens?.find((t) => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
-
-  // Fetch native token price dynamically based on the chain's native token symbol
-  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
-
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
@@ -1604,6 +1603,17 @@ function SendTransactionDialogWrapper({
     ],
     [request.data]
   );
+
+  const {
+    assetsOut,
+    assetsIn,
+    error: assetPreviewError,
+  } = useAssetPreview({
+    account: request.data.from as Address | undefined,
+    calls: transactionCalls,
+    chainId,
+    apiKey,
+  });
 
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
@@ -1649,23 +1659,16 @@ function SendTransactionDialogWrapper({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
-      // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
-      return {
-        token: selectedFeeToken.address,
-        gas: gasInTokenUnits.toString(),
-      };
+      // No estimate yet: omit `gas` so Account.createErc20ApprovalCall estimates
+      // the worst-case ceiling itself, instead of a client-side USD guess that
+      // ignores the exchange rate and can under-approve.
+      return { token: selectedFeeToken.address };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates]);
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
@@ -1845,6 +1848,9 @@ function SendTransactionDialogWrapper({
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      assetsOut={assetsOut}
+      assetsIn={assetsIn}
+      assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1918,9 +1924,6 @@ function PermissionDialogWrapper({
   // Get native token symbol from feeTokens, falling back to chain's native currency
   const nativeToken = feeTokens?.find((t) => t.isNative);
   const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
-
-  // Fetch native token price dynamically based on the chain's native token symbol
-  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
@@ -2005,23 +2008,16 @@ function PermissionDialogWrapper({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
-      // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
-      return {
-        token: selectedFeeToken.address,
-        gas: gasInTokenUnits.toString(),
-      };
+      // No estimate yet: omit `gas` so Account.createErc20ApprovalCall estimates
+      // the worst-case ceiling itself, instead of a client-side USD guess that
+      // ignores the exchange rate and can under-approve.
+      return { token: selectedFeeToken.address };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates]);
 
   const chain = useMemo(
     () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),
@@ -2577,9 +2573,6 @@ function RevokePermissionDialogWrapper({
   const nativeToken = feeTokens?.find((t) => t.isNative);
   const nativeSymbol = nativeToken?.symbol || viemChain?.nativeCurrency?.symbol || 'ETH';
 
-  // Fetch native token price dynamically based on the chain's native token symbol
-  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
-
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > paymasters[chainId].url
   const effectivePaymasterUrl = useMemo(() => {
@@ -2656,23 +2649,16 @@ function RevokePermissionDialogWrapper({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
-      // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
-      return {
-        token: selectedFeeToken.address,
-        gas: gasInTokenUnits.toString(),
-      };
+      // No estimate yet: omit `gas` so Account.createErc20ApprovalCall estimates
+      // the worst-case ceiling itself, instead of a client-side USD guess that
+      // ignores the exchange rate and can under-approve.
+      return { token: selectedFeeToken.address };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates, gasFee, nativeTokenPrice]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates]);
 
   const chain = useMemo(
     () => buildChainConfigFromApiKey(chainId, apiKey, computedPaymasterUrl),

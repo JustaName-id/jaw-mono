@@ -2,17 +2,12 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
 import { libInjectCss } from 'vite-plugin-lib-inject-css';
-import dts from 'vite-plugin-dts';
 import * as path from 'path';
 
 export default defineConfig(() => ({
   root: __dirname,
   cacheDir: '../../node_modules/.vite/packages/ui',
-  plugins: [
-    react(),
-    libInjectCss(),
-    dts({ entryRoot: 'src', tsconfigPath: path.join(__dirname, 'tsconfig.lib.json') }),
-  ],
+  plugins: [react(), libInjectCss()],
   resolve: {
     alias: {
       '@': path.resolve(__dirname, './src'),

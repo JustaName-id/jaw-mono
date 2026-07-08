@@ -325,6 +325,11 @@ export class IframeTransport implements IframeTransportContract {
             padding: '0',
             border: 'none',
             background: 'transparent',
+            // Own our interactivity: a host that opens the SDK from inside its
+            // own modal (e.g. Radix Dialog) sets `body { pointer-events: none }`.
+            // We are a DOM child of body and would inherit `none`, making the
+            // iframe unclickable — `auto` keeps the keys UI usable regardless.
+            pointerEvents: 'auto',
         });
 
         const iframe = document.createElement('iframe');

@@ -1,3 +1,67 @@
+## 1.0.5 (2026-07-06)
+
+### 🩹 Fixes
+
+- gas estimation using eth_simulateV1 ([#226](https://github.com/JustaName-id/jaw-mono/pull/226))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 1.0.4 (2026-07-02)
+
+### 🩹 Fixes
+
+- **core,ui:** show the realistic ERC-20 gas fee and approve the worst-case ceiling ([#225](https://github.com/JustaName-id/jaw-mono/pull/225))
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
+## 1.0.3 (2026-06-23)
+
+### 🩹 Fixes
+
+- **core:** force pointer-events:auto on iframe transport dialog ([#214](https://github.com/JustaName-id/jaw-mono/pull/214))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 1.0.2 (2026-06-23)
+
+### 🩹 Fixes
+
+- **core,keys:** re-establish iframe session on Safari instead of "No session found" ([#209](https://github.com/JustaName-id/jaw-mono/pull/209))
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
+## 1.0.1 (2026-06-22)
+
+### 🩹 Fixes
+
+- **core:** fallback to popup for non-secure http environments ([#208](https://github.com/JustaName-id/jaw-mono/pull/208))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+# 1.0.0 (2026-06-22)
+
+### 🚀 Features
+
+- ⚠️  embedded iframe transport for keys ([#198](https://github.com/JustaName-id/jaw-mono/pull/198), [#1](https://github.com/JustaName-id/jaw-mono/issues/1), [#2](https://github.com/JustaName-id/jaw-mono/issues/2), [#7](https://github.com/JustaName-id/jaw-mono/issues/7), [#5](https://github.com/JustaName-id/jaw-mono/issues/5), [#6](https://github.com/JustaName-id/jaw-mono/issues/6))
+
+### ⚠️  Breaking Changes
+
+- integrators upgrading without setting transportMode
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
 ## 0.4.5 (2026-06-16)
 
 ### 🩹 Fixes

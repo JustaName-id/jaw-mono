@@ -11,3 +11,4 @@ export * from './safeUrl';
 export * from './onramp/client';
 export * from './onramp/types';
 export * from './onramp/events';
+export * from './assetPreview';

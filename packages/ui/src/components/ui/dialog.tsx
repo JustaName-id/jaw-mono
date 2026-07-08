@@ -4,7 +4,7 @@ import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { XIcon } from 'lucide-react';
 
-import { cn, PortalContainerContext } from '../../lib/utils';
+import { cn, DialogAnchorContext, PortalContainerContext } from '../../lib/utils';
 
 function Dialog({ open, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   const prevOpenRef = React.useRef(open);
@@ -86,13 +86,23 @@ function DialogContent({
   fullScreen = false,
   ...props
 }: DialogContentProps) {
+  const anchor = React.useContext(DialogAnchorContext);
   return (
     <DialogPortal data-slot="dialog-portal">
-      <DialogOverlay />
+      {/* 'top' = embedded card presentation: no scrim, matching the shell's
+          transparent backdrop. The overlay still captures outside clicks. */}
+      <DialogOverlay className={anchor === 'top' ? 'bg-transparent' : undefined} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
-          'bg-background data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 fixed left-[50%] top-[50%] z-[100] grid w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 rounded-lg border p-6 shadow-lg duration-200 sm:max-w-lg',
+          'bg-background fixed left-[50%] top-[50%] z-[100] grid max-h-[calc(100vh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border p-6 shadow-lg sm:max-w-lg',
+          // max-h also caps dialogs styled `height: 100%` (max-height beats
+          // height), so a top-anchored dialog can't run past the viewport.
+          // No enter/exit animation: the embedded card it aligns with appears
+          // via a plain visibility flip, so the dialog must snap in the same way.
+          anchor === 'top' && !fullScreen
+            ? 'top-6 max-h-[85vh] translate-y-0'
+            : 'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 duration-200',
           fullScreen ? 'h-[100vh] min-h-[100vh] w-[100vw] min-w-[100vw] translate-x-0 translate-y-0' : '',
           className
         )}

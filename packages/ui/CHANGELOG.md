@@ -1,3 +1,127 @@
+## 1.2.5 (2026-07-06)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.5
+
+## 1.2.4 (2026-07-06)
+
+### 🩹 Fixes
+
+- **ui,keys,docs:** match embedded action modals to the account-selec… ([#228](https://github.com/JustaName-id/jaw-mono/pull/228))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 1.2.3 (2026-07-06)
+
+### 🩹 Fixes
+
+- bump justaname/sdk to v0.3.0 ([#227](https://github.com/JustaName-id/jaw-mono/pull/227))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 1.2.2 (2026-07-02)
+
+### 🩹 Fixes
+
+- **core,ui:** show the realistic ERC-20 gas fee and approve the worst-case ceiling ([#225](https://github.com/JustaName-id/jaw-mono/pull/225))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.4
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
+## 1.2.1 (2026-07-02)
+
+### 🩹 Fixes
+
+- **ui:** improve account selection ux ([#224](https://github.com/JustaName-id/jaw-mono/pull/224))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 1.2.0 (2026-06-30)
+
+### 🚀 Features
+
+- **ui, keys:** asset preview ([#222](https://github.com/JustaName-id/jaw-mono/pull/222))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 1.1.2 (2026-06-24)
+
+### 🩹 Fixes
+
+- **ui:** add max-height and overflow-y to dialog content for better responsiveness ([#216](https://github.com/JustaName-id/jaw-mono/pull/216))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 1.1.1 (2026-06-23)
+
+### 🩹 Fixes
+
+- **ui:** generate declarations via tsc to fix project-reference typecheck ([#215](https://github.com/JustaName-id/jaw-mono/pull/215))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.3
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
+## 1.1.0 (2026-06-23)
+
+### 🚀 Features
+
+- **ui:** add support for erc-8213 ([#212](https://github.com/JustaName-id/jaw-mono/pull/212))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
+## 1.0.2 (2026-06-23)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.2
+
+## 1.0.1 (2026-06-22)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.1
+
+# 1.0.0 (2026-06-22)
+
+### 🚀 Features
+
+- ⚠️  embedded iframe transport for keys ([#198](https://github.com/JustaName-id/jaw-mono/pull/198), [#1](https://github.com/JustaName-id/jaw-mono/issues/1), [#2](https://github.com/JustaName-id/jaw-mono/issues/2), [#7](https://github.com/JustaName-id/jaw-mono/issues/7), [#5](https://github.com/JustaName-id/jaw-mono/issues/5), [#6](https://github.com/JustaName-id/jaw-mono/issues/6))
+
+### ⚠️  Breaking Changes
+
+- integrators upgrading without setting transportMode
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.0
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
 ## 0.4.15 (2026-06-17)
 
 ### 🩹 Fixes

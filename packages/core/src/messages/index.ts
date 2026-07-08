@@ -1,4 +1,10 @@
-export { type ConfigMessage, type ConfigEvent, type SignerType } from './configMessage.js';
+export {
+    type ConfigMessage,
+    type ConfigEvent,
+    type SignerType,
+    RECONNECT_REQUIRED,
+    isReconnectRequiredFailure,
+} from './configMessage.js';
 
 export { type MessageID, type Message } from './message.js';
 

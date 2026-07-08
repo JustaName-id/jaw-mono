@@ -15,7 +15,9 @@ import { JSDOM } from 'jsdom';
 import { Communicator } from '@jaw.id/core';
 import { PopupCommunicator, type Message } from './popup-communicator';
 
-const DAPP_ORIGIN = 'http://localhost:3000';
+// The iframe transport requires a real HTTPS origin (http://localhost falls
+// back to popup), so the dApp page must be served over HTTPS to exercise it.
+const DAPP_ORIGIN = 'https://localhost:3000';
 const KEYS_URL = 'https://keys.jaw.id';
 const KEYS_ORIGIN = new URL(KEYS_URL).origin;
 

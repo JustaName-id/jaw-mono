@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { Mode } from '@jaw.id/core';
 import { Button } from './ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from './ui/dialog';
+import { getAnalyticsClient } from '../analytics';
 
 export type PaymasterChainConfig = {
   chainId: number;
@@ -122,6 +123,7 @@ export function ConfigSnippet({ type, mode, paymasters, onPaymasterApply }: Conf
   const handleCopy = async () => {
     await navigator.clipboard.writeText(code);
     setCopied(true);
+    getAnalyticsClient().track('CODE_SNIPPET_COPIED', { snippet: 'config', location: type });
     setTimeout(() => setCopied(false), 2000);
   };
 

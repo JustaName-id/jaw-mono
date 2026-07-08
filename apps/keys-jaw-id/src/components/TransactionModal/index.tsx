@@ -6,8 +6,8 @@ import {
   FeeTokenOption,
   fetchTokenBalance,
   isNativeToken,
-  useFeeTokenPrice,
   useGasEstimation,
+  useAssetPreview,
 } from '@jaw.id/ui';
 import { debugLog } from '../../lib/debug-log';
 import { useCallback, useEffect, useMemo, useState } from 'react';
@@ -19,6 +19,7 @@ import {
   type TransactionCall,
   standardErrorCodes,
   handleGetCapabilitiesRequest,
+  buildErc20PaymasterContext,
   JAW_PAYMASTER_URL,
   JAW_RPC_URL,
   type FeeTokenCapability,
@@ -93,13 +94,6 @@ export const TransactionModal = ({
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
-
-  // Get native token symbol from feeTokens (defaults to ETH if not found)
-  const nativeToken = feeTokens?.find((t) => t.isNative);
-  const nativeSymbol = nativeToken?.symbol || 'ETH';
-
-  // Fetch native token price dynamically based on the chain's native token symbol
-  const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -215,6 +209,18 @@ export const TransactionModal = ({
     onFeeTokensUpdate: setFeeTokens,
   });
 
+  const {
+    assetsOut,
+    assetsIn,
+    error: assetPreviewError,
+  } = useAssetPreview({
+    account: (transactionRequest?.from ?? walletAddress) as Address | undefined,
+    calls: transactionCalls,
+    chainId: chain?.id ?? 1,
+    apiKey: effectiveApiKey,
+    enabled: chain?.id !== undefined,
+  });
+
   // Compute paymaster URL based on fee token selection (for ERC-20 paymaster)
   const computedPaymasterUrl = useMemo(() => {
     // If already sponsored via capabilities or config, use that
@@ -239,23 +245,16 @@ export const TransactionModal = ({
       );
 
       if (estimate) {
-        // Use the actual token cost from paymaster quote
-        return {
-          token: selectedFeeToken.address,
-          gas: estimate.tokenCost.toString(),
-        };
+        return buildErc20PaymasterContext(estimate);
       }
 
-      // Fallback to client-side calculation if no estimate yet
-      const gasUsd = gasFee && nativeTokenPrice ? nativeTokenPrice * Number(gasFee) : 0;
-      const gasInTokenUnits = Math.ceil(gasUsd * Math.pow(10, selectedFeeToken.decimals));
-      return {
-        token: selectedFeeToken.address,
-        gas: gasInTokenUnits.toString(),
-      };
+      // No estimate yet: omit `gas` so Account.createErc20ApprovalCall estimates
+      // the worst-case ceiling itself, instead of a client-side USD guess that
+      // ignores the exchange rate and can under-approve.
+      return { token: selectedFeeToken.address };
     }
     return effectivePaymasterContext;
-  }, [selectedFeeToken, effectivePaymasterContext, gasFee, nativeTokenPrice, tokenEstimates]);
+  }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates]);
 
   // Determine if fee token selector should be shown
   const showFeeTokenSelector = !isSponsored && feeTokens.some((t) => !t.isNative);
@@ -478,6 +477,9 @@ export const TransactionModal = ({
       gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}
       sponsored={isSponsored}
+      assetsOut={assetsOut}
+      assetsIn={assetsIn}
+      assetPreviewError={assetPreviewError}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -492,6 +494,7 @@ export const TransactionModal = ({
       onFeeTokenSelect={setSelectedFeeToken}
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
+      nativeCurrencySymbol={chain?.nativeCurrency?.symbol}
     />
   );
 };

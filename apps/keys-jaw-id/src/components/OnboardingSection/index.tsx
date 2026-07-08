@@ -1,6 +1,12 @@
 'use client';
 
-import { LocalStorageAccount, OnboardingDialog, type CreatedAccountData } from '@jaw.id/ui';
+import {
+  LocalStorageAccount,
+  OnboardingDialog,
+  type CreatedAccountData,
+  toLocalStorageAccount,
+  getLastAuthenticatedCredentialId,
+} from '@jaw.id/ui';
 import { debugLog } from '../../lib/debug-log';
 import { useLogin, usePasskeyLogin, usePasskeys, useCreatePasskey, useAuth } from '../../hooks';
 import { useState, useMemo } from 'react';
@@ -34,7 +40,7 @@ export function SignInScreen({
   subnameTextRecords,
   origin,
 }: SignInScreenProps) {
-  const { accounts, refetchAccounts } = usePasskeys({ apiKey });
+  const { accounts, accountsLoading, refetchAccounts } = usePasskeys({ apiKey });
   const { mutateAsync: login } = useLogin();
   const { mutateAsync: passkeyLogin, isPending: isImportingPasskey } = usePasskeyLogin();
   const { refetch: refetchAuth } = useAuth({ origin });
@@ -44,6 +50,8 @@ export function SignInScreen({
   const mainnetRpcUrl = useMemo(() => {
     return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
   }, [apiKey]);
+
+  const lastAuthenticatedCredentialId = useMemo(() => getLastAuthenticatedCredentialId(apiKey), [apiKey]);
 
   debugLog('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED');
   debugLog('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED');
@@ -169,14 +177,13 @@ export function SignInScreen({
     }
   };
 
+  if (accountsLoading) {
+    return null;
+  }
+
   return (
     <OnboardingDialog
-      accounts={accounts.map((account) => ({
-        username: account.username,
-        creationDate: new Date(account.creationDate),
-        credentialId: account.credentialId,
-        isImported: account.isImported,
-      }))}
+      accounts={accounts.map(toLocalStorageAccount)}
       onAccountSelect={handleAccountSelect}
       loggingInAccount={loggingInAccount}
       onImportAccount={handleImportAccount}
@@ -188,6 +195,7 @@ export function SignInScreen({
       chainId={chainId}
       mainnetRpcUrl={mainnetRpcUrl}
       apiKey={apiKey}
+      lastAuthenticatedCredentialId={lastAuthenticatedCredentialId}
       supportedChains={SUPPORTED_CHAINS.map((chain) => ({ id: chain.id }))}
       subnameTextRecords={subnameTextRecords}
     />
