@@ -7,6 +7,6 @@ export default class Mcp extends Command {
   static override examples = ['<%= config.bin %> mcp'];
 
   async run(): Promise<void> {
-    await startMcpServer();
+    await startMcpServer(this.config.version);
   }
 }

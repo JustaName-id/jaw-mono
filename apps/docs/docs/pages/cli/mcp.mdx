@@ -29,13 +29,14 @@ Environment variables in the MCP config follow the same resolution order as the 
 
 ## Available Tools
 
-| Tool              | Description                                              |
-| ----------------- | -------------------------------------------------------- |
-| `jaw_rpc`         | Execute any RPC method (`method`, `params?`, `chainId?`) |
-| `jaw_config_show` | Display current configuration                            |
-| `jaw_config_set`  | Update a configuration value (`key`, `value`)            |
-| `jaw_status`      | Check relay session and connection status                |
-| `jaw_disconnect`  | Close relay session and browser tab                      |
+| Tool                 | Description                                                          |
+| -------------------- | -------------------------------------------------------------------- |
+| `jaw_rpc`            | Execute any RPC method (`method`, `params?`, `chainId?`, `session?`) |
+| `jaw_config_show`    | Display current configuration (secrets redacted)                     |
+| `jaw_config_set`     | Update a configuration value (`key`, `value`)                        |
+| `jaw_status`         | Check relay session status and configuration in use                  |
+| `jaw_session_status` | Check local session-key (auto mode) status                           |
+| `jaw_disconnect`     | Close relay session and browser tab                                  |
 
 ### jaw_rpc
 
@@ -53,6 +54,24 @@ The primary tool. Executes any EIP-1193 RPC method through the browser bridge.
 
 Methods that require signing (e.g., `wallet_sendCalls`, `personal_sign`) will open the browser for passkey confirmation on first use. The session persists across multiple tool calls.
 
+The chain is resolved in this order: the `chainId` argument, the `JAW_CHAIN_ID` environment variable, the configured `defaultChain`, then Ethereum mainnet (`1`).
+
+#### Autonomous signing with session keys
+
+If a session key exists (created with [`jaw session setup`](/cli/auto-mode)), pass `session: true` to sign without opening the browser:
+
+```json
+{
+  "method": "wallet_sendCalls",
+  "params": {
+    "calls": [{ "to": "0x...", "value": "0x..." }]
+  },
+  "session": true
+}
+```
+
+Set `JAW_SESSION=true` in the MCP server's `env` block to make session mode the default (a per-call `session: false` still routes through the browser). Session mode supports `eth_requestAccounts`, `eth_accounts`, `wallet_sendCalls`, `wallet_getCallsStatus`, `personal_sign`, and `eth_signTypedData_v4`. Use `jaw_session_status` to check whether a session key exists and when it expires.
+
 ### jaw_config_set
 
 ```json
@@ -62,7 +81,7 @@ Methods that require signing (e.g., `wallet_sendCalls`, `personal_sign`) will op
 }
 ```
 
-Valid keys: `apiKey`, `defaultChain`, `keysUrl`, `paymasterUrl`, `ens`
+Valid keys: `apiKey`, `defaultChain`, `keysUrl`, `ens`, `relayUrl`, `sessionExpiry`
 
 ## Available Resources
 

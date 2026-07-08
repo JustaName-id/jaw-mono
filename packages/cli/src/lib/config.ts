@@ -41,10 +41,28 @@ export function saveConfig(config: JawConfig): void {
   });
 }
 
+/** Paymaster URLs embed provider API keys as query params (e.g. Pimlico's ?apikey=...). */
+function redactUrlSecrets(url: string): string {
+  try {
+    const parsed = new URL(url);
+    for (const key of [...parsed.searchParams.keys()]) {
+      parsed.searchParams.set(key, '***');
+    }
+    return parsed.toString();
+  } catch {
+    return '***';
+  }
+}
+
 export function redactConfig(config: JawConfig): Record<string, unknown> {
   return {
     ...config,
     apiKey: config.apiKey ? `${config.apiKey.slice(0, 8)}...` : undefined,
+    ...(config.paymasters && {
+      paymasters: Object.fromEntries(
+        Object.entries(config.paymasters).map(([chainId, pm]) => [chainId, { ...pm, url: redactUrlSecrets(pm.url) }])
+      ),
+    }),
   };
 }
 
