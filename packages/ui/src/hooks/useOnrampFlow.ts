@@ -13,16 +13,10 @@ import {
 
 export type OnrampStep = 'form' | 'otp' | 'pay' | 'success' | 'error';
 
-// Native Apple Pay is Safari-only on the web (`window.ApplePaySession`). Where
-// it's absent (Chrome/Brave/Firefox), the widget's button opens an in-frame QR
-// instead of a native sheet, so that's the only case where we grow the frame.
+// Native Apple Pay is Safari-only on web; elsewhere the widget's button opens
+// an in-frame QR, which is the only case where the frame grows.
 const hasNativeApplePay = (): boolean => typeof window !== 'undefined' && 'ApplePaySession' in window;
 
-/** Pay-step scenario:
- *  - 'loading'/'ready': the compact "Buy with Apple/Google Pay" button.
- *  - 'failed': a genuinely terminal load error (region/asset/expired link).
- * The frame grows only when the user taps into the widget (see `expanded`), so
- * the button stays compact until pressed. */
 export type OnrampPayStatus = 'loading' | 'ready' | 'failed';
 
 export interface OnrampFormState {
@@ -30,8 +24,7 @@ export interface OnrampFormState {
   email: string;
   phoneNumber: string;
   accepted: boolean;
-  /** Selected pair (catalogue ids). Seeded from presets, then defaulted to the
-   * catalogue's first allowlisted pair once options load; '' until then. */
+  /** Selected pair (catalogue ids); '' until presets or options seed it. */
   cryptoCurrency: string;
   network: string;
 }
@@ -52,19 +45,13 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
   const [payUrl, setPayUrl] = useState<string | null>(null);
   const [payStatus, setPayStatus] = useState<OnrampPayStatus>('loading');
   const [payError, setPayError] = useState<OnrampLoadError | null>(null);
-  // The frame is a compact button until the user taps into the widget. It grows
-  // ONLY when Apple Pay is unsupported (`needsQr`) — then the tap opens an
-  // in-frame QR that needs room. On Safari the tap opens the native sheet, so it
-  // stays a compact button. The iframe is cross-origin, so the tap is detected
-  // via focus moving into it (see effect).
+  // Frame grows only when Apple Pay is unsupported (`needsQr`): the tap opens an
+  // in-frame QR that needs room. Detected via focus moving into the iframe.
   const [expanded, setExpanded] = useState(false);
   const [needsQr, setNeedsQr] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
-  // Supported-options catalogue (allowlist ∩ provider catalogue). Advisory:
-  // drives the displayed asset/network and amount bounds; the dialog falls
-  // back to its static defaults while loading or when the fetch fails —
-  // /start re-validates everything server-side anyway.
+  // Advisory: drives displayed asset/network/bounds; /start re-validates.
   const [options, setOptions] = useState<OnrampOptions | null>(null);
   const [form, setFormState] = useState<OnrampFormState>({
     fiatAmount: presets?.fiatAmount ?? '25',
@@ -84,8 +71,7 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
       .then((o) => {
         if (cancelled) return;
         setOptions(o);
-        // Default an unset selection to the first allowlisted pair — never
-        // override a preset or a choice the user already made.
+        // Default an unset selection to the first pair; never override a choice.
         const first = o.tokens[0];
         if (first) {
           setFormState((f) => ({
@@ -114,8 +100,7 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
           fiatAmount: form.fiatAmount,
           destinationAddress,
           fiatCurrency: presets?.fiatCurrency,
-          // Selected pair (seeded from presets); omit when unset so the
-          // backend defaults from its allowlist.
+          // Omit when unset so the backend defaults from its allowlist.
           cryptoCurrency: form.cryptoCurrency || undefined,
           network: form.network || undefined,
           paymentMethodHint: presets?.paymentMethodHint,
@@ -148,11 +133,8 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
         setStep('pay');
       } catch (e) {
         const message = e instanceof Error ? e.message : 'Invalid code';
-        // A 400/409 means the backend killed the session (wrong code, expired,
-        // or a concurrent flow on the same phone) — retrying validate-otp with
-        // the same sessionId always fails. Drop it and return to the form so
-        // the next Continue starts a fresh session. Not automatic: /start is
-        // rate-limited per phone.
+        // 400/409 means the session is dead; retrying it always fails, so drop
+        // it and return to the form for a fresh /start.
         if (e instanceof OnrampApiError && (e.status === 400 || e.status === 409)) {
           setSessionId(null);
           setStep('form');
@@ -192,23 +174,28 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
     setIframeKey((k) => k + 1);
   }, []);
 
-  // Listen for the Coinbase pay widget's post-message events. We trust the
-  // `onramp_api.` name filter in parseOnrampEvent rather than checking
-  // e.source: the widget can post from a nested frame, so a strict
-  // `e.source === iframe.contentWindow` check silently drops load_success and
-  // leaves the button hidden behind the spinner forever.
+  // Gate widget events on origin: the `onramp_api.` prefix is forgeable, so
+  // without this any co-resident frame could post a fake polling_success and
+  // resolve wallet_onramp before payment. Origin (not e.source) because the
+  // widget posts from nested frames that share the payUrl origin.
   useEffect(() => {
-    if (step !== 'pay') return;
+    if (step !== 'pay' || !payUrl) return;
+    let payOrigin: string;
+    try {
+      payOrigin = new URL(payUrl).origin;
+    } catch {
+      return;
+    }
     function onMessage(e: MessageEvent) {
+      if (e.origin !== payOrigin) return;
       const parsed = parseOnrampEvent(e.data);
       if (!parsed) return;
       if (parsed.name === ONRAMP_EVENT.LOAD_SUCCESS) {
         setPayStatus((s) => (s === 'failed' ? s : 'ready'));
       } else if (parsed.name === ONRAMP_EVENT.LOAD_ERROR) {
         if (parsed.errorCode === ONRAMP_ERROR_CODE.APPLE_PAY_NOT_SUPPORTED) {
-          // NOT fatal on web: the widget renders a button that opens its QR
-          // overlay in-frame on tap. Stay compact but arm the grow-on-tap so the
-          // QR gets room (also covers browsers ApplePaySession detection missed).
+          // Not fatal on web: the button opens an in-frame QR on tap. Stay
+          // compact but arm the grow-on-tap so the QR gets room.
           setPayStatus((s) => (s === 'failed' ? s : 'ready'));
           setNeedsQr(true);
         } else {
@@ -232,21 +219,18 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
     }
     window.addEventListener('message', onMessage);
     return () => window.removeEventListener('message', onMessage);
-  }, [step, onComplete, onError]);
+  }, [step, payUrl, onComplete, onError]);
 
-  // Fallback: reveal the frame if the widget never emits load_success within a
-  // few seconds (missed/blocked message), so the pay button can't be trapped
-  // behind the "Preparing…" spinner. A later load_error still overrides this.
+  // Reveal the button if load_success never arrives, so it can't stay trapped
+  // behind the spinner. A later load_error still overrides this.
   useEffect(() => {
     if (step !== 'pay' || payStatus !== 'loading') return;
     const timer = setTimeout(() => setPayStatus((s) => (s === 'loading' ? 'ready' : s)), 6000);
     return () => clearTimeout(timer);
   }, [step, payStatus, iframeKey]);
 
-  // When Apple Pay is unsupported, the widget's button opens an in-frame QR, so
-  // grow the frame the moment the user taps into it. Only armed for that case —
-  // on Safari the tap opens the native sheet and the button stays compact. The
-  // iframe is cross-origin, so we detect the tap via focus moving into it.
+  // Grow the frame when the user taps into the QR button (focus moves into the
+  // cross-origin iframe). Only armed when Apple Pay is unsupported.
   useEffect(() => {
     if (step !== 'pay' || expanded || !needsQr) return;
     function onBlur() {

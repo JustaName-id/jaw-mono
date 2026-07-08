@@ -59,12 +59,7 @@ export interface OnrampFiatCurrency {
     limits: OnrampFiatLimit[];
 }
 
-/**
- * GET /options — what the onramp currently offers: the operator allowlist
- * intersected with the provider catalogue (tokens/networks), and fiat
- * currencies with per-payment-method limits already clamped into the bounds
- * the order path enforces.
- */
+/** GET /options — supported tokens/networks and fiat currencies with per-payment-method limits. */
 export interface OnrampOptions {
     tokens: OnrampToken[];
     fiatCurrencies: OnrampFiatCurrency[];

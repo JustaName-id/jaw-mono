@@ -17,15 +17,8 @@ const COINBASE_TERMS = 'https://www.coinbase.com/legal/guest-checkout/us';
 const COINBASE_USER_AGREEMENT = 'https://www.coinbase.com/legal/user_agreement';
 const COINBASE_PRIVACY = 'https://www.coinbase.com/legal/privacy';
 
-// The pay frame is compact until the user taps into it — then it grows so
-// Coinbase's QR overlay (opened in-frame on non-Safari) has room. Safari taps
-// open the native OS sheet; the extra height is harmless there.
-//
-// The widget's pay button is a pill inset on the widget's own background, so a
-// rectangular crop always shows background at the corners. Instead the compact
-// crop IS the button: a pill slightly shorter than the widget's (~44px) button,
-// with the iframe over-scanned 32px per side so the widget's margins fall
-// outside the window — every visible pixel is button.
+// Compact crop IS the button: the iframe is over-scanned 32px per side so the
+// widget's margins fall outside the pill window. It grows for the QR on tap.
 const PAY_FRAME_COMPACT = 'h-10 rounded-full';
 const PAY_FRAME_EXPANDED = 'h-[440px] rounded-[6px]';
 const PAY_IFRAME_COMPACT = 'left-[-32px] w-[calc(100%+64px)]';
@@ -45,23 +38,18 @@ export const OnrampDialog = ({
   const flow = useOnrampFlow({ apiKey, destinationAddress, presets, onComplete, onError });
   const [code, setCode] = useState('');
 
-  // Each OTP step belongs to a fresh session — never show a code typed for a
-  // previous one.
   useEffect(() => {
     if (flow.step === 'otp') setCode('');
   }, [flow.step]);
 
-  // Sessions are single-flow on the backend: if a keep-mounted consumer closes
-  // and reopens the dialog, resuming the old sessionId would always 409.
+  // Sessions are single-flow: a reopened dialog resuming the old sessionId 409s.
   const { reset } = flow;
   useEffect(() => {
     if (!open) reset();
   }, [open, reset]);
 
-  // The selected pair lives in form state (seeded from presets, defaulted to
-  // the catalogue's first pair once options load); the catalogue drives the
-  // Token/Network pickers and display names, with the launch defaults as
-  // fallbacks while it loads or when it fails.
+  // Catalogue drives the Token/Network pickers and display names, falling back
+  // to the launch defaults while it loads or when it fails.
   const tokens = flow.options?.tokens ?? [];
   const token = tokens.find((t) => t.symbol === flow.form.cryptoCurrency) ?? tokens[0];
   const asset = flow.form.cryptoCurrency || token?.symbol || 'USDC';
@@ -81,8 +69,7 @@ export const OnrampDialog = ({
       }
     : { min: 2, max: 500 };
 
-  // Reverse-resolve the destination to a name (name@chain) like the other
-  // dialogs; falls back to a truncated address when there's no name.
+  // Reverse-resolve the destination to name@chain, like the other dialogs.
   const [resolvedName, setResolvedName] = useState<string | null>(null);
   useEffect(() => {
     if (!destinationAddress || !mainnetRpcUrl) return;
@@ -389,12 +376,8 @@ export const OnrampDialog = ({
                     </div>
                   )}
                 </div>
-                {/* The iframe is ALWAYS full height (never resized before the
-                    tap) and centered; we only grow the crop window on tap.
-                    Resizing the iframe before the click reflows the widget and
-                    eats it — cropping keeps it a single click. The width does
-                    change on expand, but by then the click already landed.
-                    Assumes the widget centers its button/QR (it does). */}
+                {/* Iframe stays full height; only the crop window grows on tap.
+                    Resizing before the click would reflow the widget and eat it. */}
                 <div
                   className={`relative w-full overflow-hidden transition-[height,border-radius] duration-300 ${
                     flow.expanded ? PAY_FRAME_EXPANDED : PAY_FRAME_COMPACT
@@ -435,8 +418,7 @@ export const OnrampDialog = ({
                 )}
               </>
             ) : (
-              // No "Done": the pay action is the Coinbase button in the frame;
-              // success auto-resolves via polling_success. Cancel is the only exit.
+              // No "Done": success auto-resolves via polling_success.
               <Button type="button" variant="outline" className="w-full" onClick={onCancel}>
                 Cancel
               </Button>
