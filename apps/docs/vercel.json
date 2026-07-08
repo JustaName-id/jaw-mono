@@ -1,5 +1,8 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "cd ../../ && bun install --frozen-lockfile",
+  "buildCommand": "cd ../../ && bunx nx run-many -t build -p @jaw.id/core @jaw.id/wagmi @jaw.id/ui && bunx nx build docs",
+  "git": { "deploymentEnabled": { "main": false } },
   "rewrites": [
     {
       "source": "/analytics/static/:path*",
