@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { startOnramp, validateOtp, getOnrampOrder, OnrampApiError } from './client';
+import { startOnramp, validateOtp, getOnrampOrder, getOnrampOptions, OnrampApiError } from './client';
 
 const BASE = 'https://api.example.test/proxy/v2/onramp';
 const ok = (data: unknown) =>
@@ -45,6 +45,22 @@ describe('onramp client', () => {
     expect(res.status).toBe('COMPLETED');
     const [url, init] = mockFetch().mock.calls[0];
     expect(url).toBe(`${BASE}/orders/o1`);
+    expect(init.method).toBe('GET');
+    expect(init.headers['x-api-key']).toBe('KEY');
+  });
+
+  it('getOnrampOptions GETs /options and unwraps tokens + fiat limits', async () => {
+    mockFetch().mockResolvedValue(
+      ok({
+        tokens: [{ symbol: 'USDC', name: 'USDC', networks: [{ network: 'base', displayName: 'Base' }] }],
+        fiatCurrencies: [{ currency: 'USD', limits: [{ paymentMethod: 'APPLE_PAY', min: '2', max: '500' }] }],
+      })
+    );
+    const res = await getOnrampOptions('KEY', BASE);
+    expect(res.tokens[0].symbol).toBe('USDC');
+    expect(res.fiatCurrencies[0].limits[0].max).toBe('500');
+    const [url, init] = mockFetch().mock.calls[0];
+    expect(url).toBe(`${BASE}/options`);
     expect(init.method).toBe('GET');
     expect(init.headers['x-api-key']).toBe('KEY');
   });

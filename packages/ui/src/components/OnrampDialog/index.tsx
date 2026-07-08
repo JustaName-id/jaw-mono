@@ -6,6 +6,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Checkbox } from '../ui/checkbox';
 import { Label } from '../ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '../ui/select';
 import { Spinner } from '../ui/spinner';
 import { useIsMobile } from '../../hooks';
 import { useOnrampFlow } from '../../hooks/useOnrampFlow';
@@ -57,8 +58,28 @@ export const OnrampDialog = ({
     if (!open) reset();
   }, [open, reset]);
 
-  const asset = presets?.cryptoCurrency ?? 'USDC';
-  const network = presets?.network ?? 'Base';
+  // The selected pair lives in form state (seeded from presets, defaulted to
+  // the catalogue's first pair once options load); the catalogue drives the
+  // Token/Network pickers and display names, with the launch defaults as
+  // fallbacks while it loads or when it fails.
+  const tokens = flow.options?.tokens ?? [];
+  const token = tokens.find((t) => t.symbol === flow.form.cryptoCurrency) ?? tokens[0];
+  const asset = flow.form.cryptoCurrency || token?.symbol || 'USDC';
+  const networks = token?.networks ?? [];
+  const selectedNetwork = flow.form.network || networks[0]?.network || 'base';
+  const networkDisplay =
+    networks.find((n) => n.network === selectedNetwork)?.displayName ??
+    selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1);
+
+  const fiat = presets?.fiatCurrency?.toUpperCase() ?? 'USD';
+  // Envelope across payment methods: the widget picks the method at pay time.
+  const fiatLimits = flow.options?.fiatCurrencies.find((c) => c.currency === fiat)?.limits;
+  const bounds = fiatLimits?.length
+    ? {
+        min: Math.min(...fiatLimits.map((l) => Number(l.min))),
+        max: Math.max(...fiatLimits.map((l) => Number(l.max))),
+      }
+    : { min: 2, max: 500 };
 
   // Reverse-resolve the destination to a name (name@chain) like the other
   // dialogs; falls back to a truncated address when there's no name.
@@ -82,7 +103,10 @@ export const OnrampDialog = ({
   }, [destinationAddress, mainnetRpcUrl]);
   const accountDisplay = getDisplayAddress(resolvedName, destinationAddress);
 
-  const amountValid = /^(?:0|[1-9]\d{0,8})(\.\d{1,2})?$/.test(flow.form.fiatAmount) && Number(flow.form.fiatAmount) > 0;
+  const amountValid =
+    /^(?:0|[1-9]\d{0,8})(\.\d{1,2})?$/.test(flow.form.fiatAmount) &&
+    Number(flow.form.fiatAmount) >= bounds.min &&
+    Number(flow.form.fiatAmount) <= bounds.max;
   const phoneValid = /^\+1\d{10}$/.test(flow.form.phoneNumber.trim());
   const emailValid = /.+@.+\..+/.test(flow.form.email.trim());
   const canSubmit = !flow.busy && flow.form.accepted && amountValid && phoneValid && emailValid;
@@ -114,7 +138,7 @@ export const OnrampDialog = ({
           </p>
           <p className="text-foreground text-[30px] font-normal leading-[100%]">Buy Crypto</p>
           <p className="text-muted-foreground text-sm">
-            {asset} on {network} · Guest checkout by Coinbase
+            {asset} on {networkDisplay} · Guest checkout by Coinbase
           </p>
         </div>
       }
@@ -144,19 +168,67 @@ export const OnrampDialog = ({
         >
           <div className="flex flex-col gap-3">
             <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
+              <div className="flex flex-row gap-4">
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label className="text-foreground text-xs font-bold leading-[133%]">Token</Label>
+                  <Select
+                    value={asset}
+                    onValueChange={(v) => {
+                      const next = tokens.find((t) => t.symbol === v);
+                      flow.setForm({
+                        cryptoCurrency: v,
+                        network: next?.networks[0]?.network ?? flow.form.network,
+                      });
+                    }}
+                  >
+                    <SelectTrigger>
+                      <SelectValue placeholder="USDC" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(tokens.length ? tokens : [{ symbol: asset, name: asset }]).map((t) => (
+                        <SelectItem key={t.symbol} value={t.symbol}>
+                          {t.symbol}
+                          {t.name && t.name !== t.symbol ? ` — ${t.name}` : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+                <div className="bg-border min-h-[40px] w-[1px]" />
+                <div className="flex flex-1 flex-col gap-1.5">
+                  <Label className="text-foreground text-xs font-bold leading-[133%]">Network</Label>
+                  <Select value={selectedNetwork} onValueChange={(v) => flow.setForm({ network: v })}>
+                    <SelectTrigger>
+                      <SelectValue placeholder="Base" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {(networks.length ? networks : [{ network: selectedNetwork, displayName: networkDisplay }]).map(
+                        (n) => (
+                          <SelectItem key={n.network} value={n.network}>
+                            {n.displayName}
+                          </SelectItem>
+                        )
+                      )}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
               <div className="flex flex-col gap-1.5">
-                <Label className="text-foreground text-xs font-bold leading-[133%]">Amount (USD)</Label>
+                <Label className="text-foreground text-xs font-bold leading-[133%]">Amount ({fiat})</Label>
                 <Input
                   type="number"
                   inputMode="decimal"
-                  min="2"
-                  max="500"
+                  min={String(bounds.min)}
+                  max={String(bounds.max)}
                   step="0.01"
                   placeholder="25"
                   value={flow.form.fiatAmount}
                   onChange={(e) => flow.setForm({ fiatAmount: e.target.value })}
                 />
-                <p className="text-muted-foreground text-xs font-normal">Min $2 · Max $500</p>
+                <p className="text-muted-foreground text-xs font-normal">
+                  Min ${bounds.min} · Max ${bounds.max}
+                </p>
               </div>
               <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
               <div className="flex flex-col gap-1.5">
@@ -290,7 +362,7 @@ export const OnrampDialog = ({
                   {flow.order?.cryptoAmount ? `${flow.order.cryptoAmount} ` : ''}
                   {flow.order?.cryptoCurrency ?? asset}
                 </p>
-                <p className="text-muted-foreground text-xs leading-[133%]">on {flow.order?.network ?? network}</p>
+                <p className="text-muted-foreground text-xs leading-[133%]">on {networkDisplay}</p>
               </div>
             </div>
 

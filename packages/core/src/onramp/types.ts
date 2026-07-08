@@ -35,6 +35,41 @@ export interface OnrampEmbeddable {
     url: string;
 }
 
+export interface OnrampTokenNetwork {
+    network: string;
+    displayName: string;
+    chainId?: string;
+    contractAddress?: string;
+}
+
+export interface OnrampToken {
+    symbol: string;
+    name: string;
+    networks: OnrampTokenNetwork[];
+}
+
+export interface OnrampFiatLimit {
+    paymentMethod: OnrampPaymentMethod;
+    min: string;
+    max: string;
+}
+
+export interface OnrampFiatCurrency {
+    currency: string;
+    limits: OnrampFiatLimit[];
+}
+
+/**
+ * GET /options — what the onramp currently offers: the operator allowlist
+ * intersected with the provider catalogue (tokens/networks), and fiat
+ * currencies with per-payment-method limits already clamped into the bounds
+ * the order path enforces.
+ */
+export interface OnrampOptions {
+    tokens: OnrampToken[];
+    fiatCurrencies: OnrampFiatCurrency[];
+}
+
 /**
  * dApp-supplied params for wallet_onramp (all optional; the destination is the
  * connected account, injected by the wallet — never passed by the dApp).

@@ -1,4 +1,4 @@
-import type { OnrampOrder } from '@jaw.id/core';
+import type { OnrampOptions, OnrampOrder } from '@jaw.id/core';
 import type { StartOnrampRequest, StartOnrampResponse, ValidateOtpRequest, ValidateOtpResponse } from './types';
 
 // The proxy wraps every response as { statusCode, result: { data, error } }
@@ -64,4 +64,9 @@ export function validateOtp(body: ValidateOtpRequest, apiKey: string, baseUrl: s
 
 export function getOnrampOrder(orderId: string, apiKey: string, baseUrl: string): Promise<OnrampOrder> {
   return call<OnrampOrder>('GET', `/orders/${encodeURIComponent(orderId)}`, apiKey, baseUrl);
+}
+
+/** Supported tokens/networks and fiat limits (allowlist ∩ provider catalogue, cached server-side). */
+export function getOnrampOptions(apiKey: string, baseUrl: string): Promise<OnrampOptions> {
+  return call<OnrampOptions>('GET', '/options', apiKey, baseUrl);
 }

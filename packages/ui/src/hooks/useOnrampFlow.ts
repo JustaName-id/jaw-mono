@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { JAW_ONRAMP_URL, type OnrampOrder, type OnrampParams } from '@jaw.id/core';
-import { startOnramp, validateOtp, OnrampApiError } from '../utils/onramp/client';
+import { JAW_ONRAMP_URL, type OnrampOptions, type OnrampOrder, type OnrampParams } from '@jaw.id/core';
+import { startOnramp, validateOtp, getOnrampOptions, OnrampApiError } from '../utils/onramp/client';
 import {
   parseOnrampEvent,
   isTerminalSuccess,
@@ -30,6 +30,10 @@ export interface OnrampFormState {
   email: string;
   phoneNumber: string;
   accepted: boolean;
+  /** Selected pair (catalogue ids). Seeded from presets, then defaulted to the
+   * catalogue's first allowlisted pair once options load; '' until then. */
+  cryptoCurrency: string;
+  network: string;
 }
 
 export interface UseOnrampFlowArgs {
@@ -57,15 +61,47 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
   const [needsQr, setNeedsQr] = useState(false);
   const [iframeKey, setIframeKey] = useState(0);
   const [sessionId, setSessionId] = useState<string | null>(null);
+  // Supported-options catalogue (allowlist ∩ provider catalogue). Advisory:
+  // drives the displayed asset/network and amount bounds; the dialog falls
+  // back to its static defaults while loading or when the fetch fails —
+  // /start re-validates everything server-side anyway.
+  const [options, setOptions] = useState<OnrampOptions | null>(null);
   const [form, setFormState] = useState<OnrampFormState>({
     fiatAmount: presets?.fiatAmount ?? '25',
     email: '',
     phoneNumber: '+1',
     accepted: false,
+    cryptoCurrency: presets?.cryptoCurrency ?? '',
+    network: presets?.network?.toLowerCase() ?? '',
   });
   const iframeRef = useRef<HTMLIFrameElement | null>(null);
 
   const setForm = useCallback((patch: Partial<OnrampFormState>) => setFormState((f) => ({ ...f, ...patch })), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    getOnrampOptions(apiKey, JAW_ONRAMP_URL)
+      .then((o) => {
+        if (cancelled) return;
+        setOptions(o);
+        // Default an unset selection to the first allowlisted pair — never
+        // override a preset or a choice the user already made.
+        const first = o.tokens[0];
+        if (first) {
+          setFormState((f) => ({
+            ...f,
+            cryptoCurrency: f.cryptoCurrency || first.symbol,
+            network: f.network || (first.networks[0]?.network ?? ''),
+          }));
+        }
+      })
+      .catch(() => {
+        /* advisory only — keep the static defaults */
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [apiKey]);
 
   const submitForm = useCallback(async () => {
     setBusy(true);
@@ -78,8 +114,10 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
           fiatAmount: form.fiatAmount,
           destinationAddress,
           fiatCurrency: presets?.fiatCurrency,
-          cryptoCurrency: presets?.cryptoCurrency,
-          network: presets?.network,
+          // Selected pair (seeded from presets); omit when unset so the
+          // backend defaults from its allowlist.
+          cryptoCurrency: form.cryptoCurrency || undefined,
+          network: form.network || undefined,
           paymentMethodHint: presets?.paymentMethodHint,
         },
         apiKey,
@@ -230,6 +268,7 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
     payError,
     expanded,
     iframeKey,
+    options,
     form,
     setForm,
     submitForm,
