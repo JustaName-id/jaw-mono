@@ -64,6 +64,9 @@
           "cwd": "{projectRoot}",
           "command": "NODE_OPTIONS='--max-old-space-size=8192' tsc --noEmit -p tsconfig.lib.json"
         },
+        "dependsOn": [
+          "^build"
+        ],
         "cache": true,
         "inputs": [
           "default",
