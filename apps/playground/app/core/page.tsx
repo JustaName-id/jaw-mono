@@ -24,6 +24,7 @@ import type { ModeName } from '../../analytics/events/types';
 const parseChainId = (c: string): number => (c.startsWith('0x') ? parseInt(c, 16) : parseInt(c, 10));
 
 type ModeType = (typeof Mode)[keyof typeof Mode];
+
 type TransportModeType = 'popup' | 'iframe' | 'auto';
 
 const DEFAULT_CHAIN_ID_NUM = process.env.NEXT_PUBLIC_DEFAULT_CHAIN_ID
