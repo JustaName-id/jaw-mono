@@ -1022,7 +1022,7 @@ console.log('Assets:', assets);`;
     method: 'wallet_onramp',
     category: 'asset',
     description: 'Buy crypto with Apple/Google Pay (guest checkout) into the connected account',
-    requiresConnection: true,
+    requiresConnection: false,
     parameters: [
       {
         name: 'fiatAmount',
