@@ -17,6 +17,7 @@ import { ExecutionLog, type LogEntry } from '../../components/execution-log';
 import { ConfigSnippet, type PaymasterApplyConfig } from '../../components/config-snippet';
 import { RPC_METHODS, CATEGORIES, CATEGORY_LABELS, type RpcMethod, type MethodCategory } from '../../lib/rpc-methods';
 import { reverseResolveEnsName } from '../../lib/ens-resolver';
+import { resolveKeysUrl } from '../../lib/keys-url';
 import { getAnalyticsClient } from '../../analytics';
 import type { ModeName } from '../../analytics/events/types';
 
@@ -37,14 +38,14 @@ function buildSdk(
   theme?: JawTheme,
   transportMode?: TransportModeType
 ) {
+  const keysUrl = resolveKeysUrl();
+
   return JAW.create({
     appName: 'JAW Playground',
     appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
     defaultChainId: DEFAULT_CHAIN_ID_NUM,
     preference: {
-      ...(process.env.NEXT_PUBLIC_KEYS_URL && {
-        keysUrl: process.env.NEXT_PUBLIC_KEYS_URL,
-      }),
+      ...(keysUrl && { keysUrl }),
       showTestnets: true,
       mode,
       ...(transportMode && { transportMode }),
