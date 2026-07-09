@@ -11,6 +11,7 @@ export default defineConfig({
       // `dist` (the Nx-inferred `test` target has no `^build` dependency, so
       // core is unbuilt in CI). Mirrors packages/wagmi.
       '@jaw.id/core': resolve(__dirname, '../../packages/core/src/index.ts'),
+      '@jaw.id/ui': resolve(__dirname, '../../packages/ui/src/index.ts'),
     },
   },
   test: {
