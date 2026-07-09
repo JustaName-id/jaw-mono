@@ -170,7 +170,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     case 'wallet_sendCalls':
                     case 'wallet_sign':
                     case 'wallet_grantPermissions':
-                    case 'wallet_revokePermissions': {
+                    case 'wallet_revokePermissions':
+                    case 'wallet_onramp': {
+                        if (args.method === 'wallet_onramp' && signerType === 'appSpecific') {
+                            throw standardErrors.provider.unsupportedMethod();
+                        }
                         const ephemeralSigner = this.initSigner(signerType);
 
                         if (signerType === 'appSpecific') {

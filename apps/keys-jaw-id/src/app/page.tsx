@@ -1102,7 +1102,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                     pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
                     pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
                     pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
+                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS ||
+                    pendingRequest?.type === SDKRequestType.ONRAMP
                   ) {
                     // If there's a pending sign message, typed data, transaction, or permission request,
                     // the modal will be shown in the priority logic above since user is now authenticated
@@ -1170,7 +1171,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                     pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
                     pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
                     pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
+                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS ||
+                    pendingRequest?.type === SDKRequestType.ONRAMP
                   ) {
                     // If there's a pending sign message, typed data, transaction, or permission request,
                     // the modal will be shown in the priority logic above since user is now authenticated
