@@ -437,7 +437,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         throw new Error('No session found. Please reconnect.');
       }
 
-      // Verify and update peer key if changed.
+      // Verify and update peer key if changed
       await cryptoHandler.verifyAndUpdatePeerKey(request);
 
       // Decrypt the request

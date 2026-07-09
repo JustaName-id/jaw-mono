@@ -1,6 +1,6 @@
 /**
  * Wagmi Methods Registry
- * Maps RPC methods to their wagmi hook implementations.
+ * Maps RPC methods to their wagmi hook implementations
  */
 
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
