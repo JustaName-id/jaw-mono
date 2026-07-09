@@ -30,12 +30,12 @@ describe('resolveKeysUrl', () => {
 
   it("derives this PR's keys preview from the playground branch-alias host", () => {
     setHost('playground-git-feature-just-a-lab.vercel.app');
-    expect(resolveKeysUrl()).toBe('https://keys-jaw-git-feature-just-a-lab.vercel.app');
+    expect(resolveKeysUrl()).toBe('https://keys-jaw-id-git-feature-just-a-lab.vercel.app');
   });
 
   it('is case-insensitive on the host', () => {
     setHost('Playground-Git-Feature-Just-A-Lab.Vercel.App');
-    expect(resolveKeysUrl()).toBe('https://keys-jaw-git-feature-just-a-lab.vercel.app');
+    expect(resolveKeysUrl()).toBe('https://keys-jaw-id-git-feature-just-a-lab.vercel.app');
   });
 
   it('falls back to production keys when the derived host would be hashed (long branch)', () => {

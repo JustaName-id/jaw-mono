@@ -10,7 +10,7 @@
  *      share Vercel's stable branch-alias suffix and differ only by the project
  *      slug, e.g.
  *        playground-git-<branch>-<team>.vercel.app
- *        keys-jaw-git-<branch>-<team>.vercel.app
+ *        keys-jaw-id-git-<branch>-<team>.vercel.app
  *      so we swap the slug to reach THIS PR's own keys preview. Only the
  *      `-git-<branch>-` alias form is deterministic across projects (the
  *      per-deployment hash form is not shared), and we skip it when the derived
@@ -24,20 +24,21 @@
  * always resolve to the SDK default.
  */
 
-// Vercel *project slugs* (as they appear in the *.vercel.app hostname), NOT the
-// Nx project names. Verified against live deployment URLs: the playground
-// project is `playground` and the keys project is `keys-jaw` (its Nx name is
-// @jaw-mono/keys-jaw-id, but the Vercel slug is shorter). If either project is
-// renamed in Vercel, update these or per-PR derivation silently falls back to
-// production keys.
+// Vercel *project names* as they appear in the git BRANCH-ALIAS hostname
+// (`<project>-git-<branch>-<team>.vercel.app`) — which is what we derive against.
+// Verified live: playground → `playground`, keys → `keys-jaw-id`.
+// NOTE: the per-deployment *hash* URL truncates keys to `keys-jaw`
+// (`keys-jaw-<hash>-…`), but that form is NOT what we target — the branch alias
+// keeps the full project name. If either project is renamed in Vercel, update
+// these or per-PR derivation silently falls back to production keys.
 //
 // Coupling note: derivation assumes BOTH projects deploy a preview for every
 // branch. That holds today because neither vercel.json sets an affected/ignore
-// build step. If keys-jaw ever skips unaffected builds, a playground-only PR
-// would derive a keys URL that was never deployed — keep their build triggers
-// in lockstep, or this must fall back instead.
+// build step. If keys ever skips unaffected builds, a playground-only PR would
+// derive a keys URL that was never deployed — keep their build triggers in
+// lockstep, or this must fall back instead.
 const PLAYGROUND_PREFIX = 'playground';
-const KEYS_PREFIX = 'keys-jaw';
+const KEYS_PREFIX = 'keys-jaw-id';
 const VERCEL_PREVIEW_SUFFIX = '.vercel.app';
 const BRANCH_ALIAS_MARKER = `${PLAYGROUND_PREFIX}-git-`;
 // Max length of a single DNS label; past this Vercel hashes the branch alias,
