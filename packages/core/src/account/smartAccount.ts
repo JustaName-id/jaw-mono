@@ -55,6 +55,7 @@ import {
     dosChain,
     gnosis,
     arcTestnet,
+    robinhood,
 } from 'viem/chains';
 import { PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS } from '../constants.js';
 import { standardErrors } from '../errors/errors.js';
@@ -105,6 +106,7 @@ export const MAINNET_CHAINS = [
     ink,
     dosChain,
     gnosis,
+    robinhood,
 ];
 
 export const TESTNET_CHAINS = [
