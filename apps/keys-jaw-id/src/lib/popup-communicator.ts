@@ -182,6 +182,25 @@ export class PopupCommunicator {
     });
   }
 
+  /**
+   * Tell the SDK which account the user just connected with, so it can
+   * persist the hint in the dApp's first-party storage. Our own storage is
+   * partitioned when embedded (and wiped between visits in Brave/Safari);
+   * the hint rides back on the next handshake to seed the "Continue as"
+   * screen. Sent from the popup context too — a popup sign-in should still
+   * produce "Continue as" on a later embedded visit. Carries only data the
+   * dApp already learns at connect time; continuing always re-runs the
+   * passkey ceremony.
+   */
+  sendAccountHint(hint: { address: `0x${string}`; username: string; credentialId: string; publicKey: string }): void {
+    if (this.context === 'standalone') return;
+    this.postMessage({
+      id: crypto.randomUUID(),
+      event: 'AccountHint',
+      data: hint,
+    });
+  }
+
   /** True when running inside the embedded (iframe) transport. */
   isEmbedded(): boolean {
     return this.context === 'embedded';

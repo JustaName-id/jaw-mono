@@ -12,7 +12,9 @@ export type ConfigEvent =
     /** keys -> SDK: embedded flow completed/cancelled; replaces window.close() (no-op in iframes) */
     | 'DialogClose'
     /** keys -> SDK: user or visibility guard requests escaping the iframe to a popup */
-    | 'SwitchTransport';
+    | 'SwitchTransport'
+    /** keys -> SDK: connected account hint, persisted dApp-side to survive partitioned/ephemeral iframe storage */
+    | 'AccountHint';
 
 /** Payload of a DialogClose config message. */
 export type DialogCloseData = {
@@ -24,6 +26,50 @@ export type SwitchTransportData = {
     to: 'popup';
     reason: 'user' | 'visibility' | 'webauthn-unsupported';
 };
+
+/**
+ * Payload of an AccountHint config message (keys -> SDK), and the shape the
+ * SDK sends back on the handshake as `lastAccount`.
+ *
+ * Cross-site iframe storage is partitioned everywhere and *ephemeral* in
+ * Brave/Safari, so the embedded keys app forgets its accounts between visits.
+ * The dApp's own first-party storage is not — so after the user approves a
+ * connection, keys sends this hint, the SDK persists it, and the next
+ * embedded handshake carries it back so keys can seed its "Continue as"
+ * screen. It is a UI hint only: continuing still runs the full passkey
+ * ceremony, and it carries nothing the dApp does not already learn at
+ * connect time.
+ */
+export type AccountHintData = {
+    /** Wallet address (checksummed) */
+    address: `0x${string}`;
+    /** Display name (e.g., ENS name or username) */
+    username: string;
+    /** Passkey credential ID used for authentication */
+    credentialId: string;
+    /** Passkey public key (for WebAuthn operations) */
+    publicKey: `0x${string}`;
+};
+
+/**
+ * Validate an account hint from the wire. Both sides gate on this: the SDK
+ * before persisting into dApp-side storage, the keys app before seeding its
+ * account list from a handshake.
+ */
+export function isValidAccountHint(hint: unknown): hint is AccountHintData {
+    if (!hint || typeof hint !== 'object') return false;
+    const h = hint as Record<string, unknown>;
+    return (
+        typeof h.address === 'string' &&
+        /^0x[0-9a-fA-F]{40}$/.test(h.address) &&
+        typeof h.username === 'string' &&
+        h.username.length > 0 &&
+        typeof h.credentialId === 'string' &&
+        /^[A-Za-z0-9_-]+$/.test(h.credentialId) &&
+        typeof h.publicKey === 'string' &&
+        /^0x[0-9a-fA-F]+$/.test(h.publicKey)
+    );
+}
 
 /**
  * Sentinel set on a response `failure` (in `failure.data.reason`) when the keys

@@ -287,6 +287,29 @@ describe('PopupTransport', () => {
             expect(popup).toBeTruthy();
         });
 
+        it('carries the lastAccount hint on the handshake config when provided', async () => {
+            const lastAccount = {
+                address: '0x1234567890abcdef1234567890abcdef12345678' as const,
+                username: 'ghadi.jaw.id',
+                credentialId: 'A1b2-C3d4_E5f6',
+                publicKey: '0xdeadbeef' as const,
+            };
+            transport = new PopupTransport({
+                url: new URL(JAW_KEYS_URL),
+                metadata: appMetadata,
+                preference,
+                // Read at handshake time (not construction) so a hint stored
+                // during this session rides the next handshake.
+                getLastAccount: () => lastAccount,
+            });
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            const posted = (mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+            expect(posted.data.lastAccount).toEqual(lastAccount);
+        });
+
         it('opens with centered window features on desktop', async () => {
             queueMessageEvent(popupLoadedMessage);
             queueMessageEvent(popupReadyMessage);

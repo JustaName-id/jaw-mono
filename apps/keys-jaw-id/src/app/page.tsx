@@ -17,6 +17,7 @@ import { SDKRequestType } from '../lib/sdk-types';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
+import { seedAccountsFromHint } from '../lib/account-hint';
 import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/core';
 import { RECONNECT_REQUIRED } from '@jaw.id/core';
@@ -161,6 +162,16 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         // (SystemThemeListener) when no theme is sent.
         if (message.data.theme) {
           applyDappTheme(message.data.theme);
+        }
+
+        // Embedded only: our storage is partitioned (and wiped between visits
+        // in Brave/Safari). If it came up empty, restore the "Continue as"
+        // screen from the dApp-side hint — before checkForPasskeys reads the
+        // account list. Popup/standalone contexts have real first-party
+        // storage and must not be seeded (a stale hint could resurrect an
+        // account the user deliberately removed).
+        if (communicator.isEmbedded() && seedAccountsFromHint(message.data.lastAccount)) {
+          debugLog('🌱 Seeded account list from dApp-side lastAccount hint');
         }
 
         // Always show account selection UI - never auto-authenticate
@@ -1235,6 +1246,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
                 debugLog('✅ SIWE response:', response);
                 await pendingRequest.onApprove(response);
+                // Only after approval (never on mere authentication, which the
+                // user may still cancel): let the SDK persist the account hint
+                // dApp-side, so the next embedded visit can show "Continue as"
+                // even after Brave/Safari wipe our partitioned storage.
+                if (authQuery.authState) {
+                  communicator.sendAccountHint(authQuery.authState);
+                }
                 setState('success');
                 scheduleClose(CLOSE_DELAY_MS);
               } catch (err) {
@@ -1284,6 +1302,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               };
 
               await pendingRequest.onApprove(response);
+              // Only after approval (never on mere authentication, which the
+              // user may still cancel): let the SDK persist the account hint
+              // dApp-side, so the next embedded visit can show "Continue as"
+              // even after Brave/Safari wipe our partitioned storage.
+              if (authQuery.authState) {
+                communicator.sendAccountHint(authQuery.authState);
+              }
               setState('success');
               scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {

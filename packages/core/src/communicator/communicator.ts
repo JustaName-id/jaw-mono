@@ -1,6 +1,8 @@
 import { JAW_KEYS_URL } from '../constants.js';
 import { Message, MessageID } from '../messages/message.js';
+import { isValidAccountHint } from '../messages/configMessage.js';
 import { standardErrors } from '../errors/errors.js';
+import { account as accountStore } from '../store/store.js';
 
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
 import type { JawTheme } from '../ui/theme.js';
@@ -93,6 +95,10 @@ export class Communicator {
             metadata,
             preference,
             theme,
+            // Handshake-time read: the hint lands in the store mid-session
+            // (AccountHint after the first connect approval) and must ride
+            // the next handshake, not the state at construction.
+            getLastAccount: () => accountStore.get().lastAccount,
             mode: normalizeTransportMode(preference.transportMode),
             isTrustedHostFn: (hostname) => this.trustedHosts.has(hostname),
             // Bridge transport-level dismissal (Escape, click-outside, window
@@ -118,7 +124,25 @@ export class Communicator {
         if (this.switchListenerArmed || typeof window === 'undefined') return;
         this.switchListenerArmed = true;
         window.addEventListener('message', this.handleSwitchTransport);
+        window.addEventListener('message', this.handleAccountHint);
     }
+
+    /**
+     * Persists the keys app's AccountHint into the dApp-side store. The
+     * embedded keys iframe's storage is partitioned (and wiped between visits
+     * in Brave/Safari), so the dApp's first-party storage is the only place
+     * the "last account" can durably live; the next handshake carries it back
+     * as `lastAccount` so keys can seed its "Continue as" screen.
+     */
+    private handleAccountHint = (event: MessageEvent): void => {
+        if (event.origin !== this.url.origin) return;
+        if (!this.router.ownsSource(event.source)) return;
+        const message = event.data as { event?: string; data?: unknown } | undefined;
+        if (message?.event !== 'AccountHint') return;
+        if (!isValidAccountHint(message.data)) return;
+
+        accountStore.set({ lastAccount: message.data });
+    };
 
     /** Routes SwitchTransport requests from the keys dialog. */
     private handleSwitchTransport = (event: MessageEvent): void => {
@@ -340,6 +364,7 @@ export class Communicator {
 
         if (this.switchListenerArmed) {
             window.removeEventListener('message', this.handleSwitchTransport);
+            window.removeEventListener('message', this.handleAccountHint);
             this.switchListenerArmed = false;
         }
 

@@ -303,6 +303,29 @@ describe('IframeTransport', () => {
             expect(transport.isAlive()).toBe(true);
         });
 
+        it('carries the lastAccount hint on the handshake config when provided', async () => {
+            const lastAccount = {
+                address: '0x1234567890abcdef1234567890abcdef12345678' as const,
+                username: 'ghadi.jaw.id',
+                credentialId: 'A1b2-C3d4_E5f6',
+                publicKey: '0xdeadbeef' as const,
+            };
+            transport.destroy(); // replace the no-hint instance from beforeEach
+            transport = new IframeTransport({
+                url: new URL(JAW_KEYS_URL),
+                metadata: appMetadata,
+                preference,
+                handshakeTimeoutMs: 2000,
+                // Read at handshake time (not construction) so a hint stored
+                // during this session rides the next reload/handshake.
+                getLastAccount: () => lastAccount,
+            });
+            const { readyPromise, target } = startHandshake(transport);
+            await readyPromise;
+
+            expect(target.postMessage.mock.calls[0][0].data.lastAccount).toEqual(lastAccount);
+        });
+
         it('does not show the dialog during the handshake', async () => {
             const { readyPromise } = startHandshake(transport);
             await readyPromise;

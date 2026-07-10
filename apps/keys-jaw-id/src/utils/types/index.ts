@@ -1,5 +1,5 @@
 import { AppMetadata, SDKRequestType } from '../../lib/sdk-types';
-import { ModeType, type JawTheme } from '@jaw.id/core';
+import { ModeType, type AccountHintData, type JawTheme } from '@jaw.id/core';
 
 export type ChainId = 1 | 11155111;
 
@@ -18,6 +18,12 @@ export interface PopupConfig {
   theme?: JawTheme;
   location: string;
   apiKey: string;
+  /**
+   * Last account the user connected with, persisted dApp-side by the SDK.
+   * Seeds the "Continue as" screen when our own (partitioned, Brave/Safari-
+   * ephemeral) storage came up empty. Untrusted input — validated before use.
+   */
+  lastAccount?: AccountHintData;
 }
 
 export interface PendingRequest {
