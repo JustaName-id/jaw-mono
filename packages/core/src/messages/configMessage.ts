@@ -36,13 +36,13 @@ export type SwitchTransportData = {
  * The dApp's own first-party storage is not — so after the user approves a
  * connection, keys sends this hint, the SDK persists it, and the next
  * embedded handshake carries it back so keys can seed its "Continue as"
- * screen. It is a UI hint only: continuing still runs the full passkey
- * ceremony, and it carries nothing the dApp does not already learn at
- * connect time.
+ * screen. It is a UI hint only: it seeds the account *list*, never auth
+ * state, and continuing always runs the full passkey ceremony — which is
+ * what derives and stores the address, so no address travels here. Note it
+ * does place the passkey credentialId and public key in the dApp's storage:
+ * identifiers, not signing capability.
  */
 export type AccountHintData = {
-    /** Wallet address (checksummed) */
-    address: `0x${string}`;
     /** Display name (e.g., ENS name or username) */
     username: string;
     /** Passkey credential ID used for authentication */
@@ -60,8 +60,6 @@ export function isValidAccountHint(hint: unknown): hint is AccountHintData {
     if (!hint || typeof hint !== 'object') return false;
     const h = hint as Record<string, unknown>;
     return (
-        typeof h.address === 'string' &&
-        /^0x[0-9a-fA-F]{40}$/.test(h.address) &&
         typeof h.username === 'string' &&
         h.username.length > 0 &&
         typeof h.credentialId === 'string' &&

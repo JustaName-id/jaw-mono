@@ -188,16 +188,21 @@ export class PopupCommunicator {
    * partitioned when embedded (and wiped between visits in Brave/Safari);
    * the hint rides back on the next handshake to seed the "Continue as"
    * screen. Sent from the popup context too — a popup sign-in should still
-   * produce "Continue as" on a later embedded visit. Carries only data the
-   * dApp already learns at connect time; continuing always re-runs the
-   * passkey ceremony.
+   * produce "Continue as" on a later embedded visit. The hint seeds only the
+   * account list, never auth state; continuing always re-runs the passkey
+   * ceremony. Only the picked fields go on the wire — no address (the
+   * ceremony derives it) and nothing else the caller's object may carry.
    */
-  sendAccountHint(hint: { address: `0x${string}`; username: string; credentialId: string; publicKey: string }): void {
+  sendAccountHint(hint: { username: string; credentialId: string; publicKey: string }): void {
     if (this.context === 'standalone') return;
     this.postMessage({
       id: crypto.randomUUID(),
       event: 'AccountHint',
-      data: hint,
+      data: {
+        username: hint.username,
+        credentialId: hint.credentialId,
+        publicKey: hint.publicKey,
+      },
     });
   }
 

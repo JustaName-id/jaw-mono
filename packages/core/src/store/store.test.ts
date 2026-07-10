@@ -86,7 +86,6 @@ describe('store', () => {
             // moments after which the next connect should still show "Continue
             // as". The hint must outlive the connection state.
             const lastAccount = {
-                address: '0x1234567890abcdef1234567890abcdef12345678' as const,
                 username: 'ghadi.jaw.id',
                 credentialId: 'A1b2-C3d4_E5f6',
                 publicKey: '0xdeadbeef' as const,

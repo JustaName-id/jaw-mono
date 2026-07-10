@@ -49,7 +49,6 @@ describe('isReconnectRequiredFailure', () => {
  */
 describe('isValidAccountHint', () => {
     const valid = {
-        address: '0x1234567890abcdef1234567890abcdef12345678',
         username: 'ghadi.jaw.id',
         credentialId: 'A1b2-C3d4_E5f6',
         publicKey: '0xdeadbeef',
@@ -64,12 +63,6 @@ describe('isValidAccountHint', () => {
         expect(isValidAccountHint(undefined)).toBe(false);
         expect(isValidAccountHint('hint')).toBe(false);
         expect(isValidAccountHint(42)).toBe(false);
-    });
-
-    it('returns false when address is not a valid Ethereum address', () => {
-        expect(isValidAccountHint({ ...valid, address: '0x123' })).toBe(false);
-        expect(isValidAccountHint({ ...valid, address: 'not-an-address' })).toBe(false);
-        expect(isValidAccountHint({ ...valid, address: undefined })).toBe(false);
     });
 
     it('returns false when credentialId is empty or has invalid characters', () => {

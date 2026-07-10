@@ -296,15 +296,20 @@ describe('requestSwitchToPopup', () => {
 
 describe('sendAccountHint', () => {
   const hint = {
-    address: '0x1234567890abcdef1234567890abcdef12345678' as const,
     username: 'ghadi.jaw.id',
     credentialId: 'A1b2-C3d4_E5f6',
-    publicKey: '0xdeadbeef' as const,
+    publicKey: '0xdeadbeef',
+  };
+  // Callers pass session auth state, which carries more (address, …); only
+  // the hint fields may reach the wire.
+  const sessionAuthState = {
+    ...hint,
+    address: '0x1234567890abcdef1234567890abcdef12345678' as const,
   };
 
-  it('embedded context: posts AccountHint to the locked origin', () => {
+  it('embedded context: posts AccountHint to the locked origin, stripped to the hint fields', () => {
     const win = createFakeWindow({ embedded: true, ancestorOrigins: [SDK_ORIGIN] });
-    new PopupCommunicator(win).sendAccountHint(hint);
+    new PopupCommunicator(win).sendAccountHint(sessionAuthState);
 
     expect(win.counterpartPost).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'AccountHint', data: hint }),
@@ -314,7 +319,7 @@ describe('sendAccountHint', () => {
 
   it('popup context: also posts AccountHint (stores the hint for future embedded visits)', () => {
     const { win, opener } = createPopupWindow();
-    new PopupCommunicator(win).sendAccountHint(hint);
+    new PopupCommunicator(win).sendAccountHint(sessionAuthState);
 
     expect(opener.postMessage).toHaveBeenCalledWith(
       expect.objectContaining({ event: 'AccountHint', data: hint }),
@@ -324,7 +329,7 @@ describe('sendAccountHint', () => {
 
   it('standalone context: is a no-op', () => {
     const win = createFakeWindow();
-    expect(() => new PopupCommunicator(win).sendAccountHint(hint)).not.toThrow();
+    expect(() => new PopupCommunicator(win).sendAccountHint(sessionAuthState)).not.toThrow();
   });
 });
 

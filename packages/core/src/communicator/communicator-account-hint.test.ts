@@ -39,7 +39,6 @@ const appMetadata: AppMetadata = {
 const preference: JawProviderPreference = { keysUrl: JAW_KEYS_URL };
 
 const validHint = {
-    address: '0x1234567890abcdef1234567890abcdef12345678',
     username: 'ghadi.jaw.id',
     credentialId: 'A1b2-C3d4_E5f6',
     publicKey: '0xdeadbeef',
@@ -114,7 +113,7 @@ describe('Communicator AccountHint handling', () => {
         await completeFlow('req-hint-3-3-3');
 
         dispatchMessageEvent({
-            data: { event: 'AccountHint', data: { ...validHint, address: 'not-an-address' } },
+            data: { event: 'AccountHint', data: { ...validHint, credentialId: '<script>' } },
             origin: urlOrigin,
         });
         dispatchMessageEvent({
@@ -124,6 +123,19 @@ describe('Communicator AccountHint handling', () => {
 
         await new Promise((resolve) => setTimeout(resolve, 50));
         expect(store.account.get().lastAccount).toBeUndefined();
+    });
+
+    it('persists only the hint fields, stripping anything else on the payload', async () => {
+        await completeFlow('req-hint-6-6-6');
+
+        dispatchMessageEvent({
+            data: { event: 'AccountHint', data: { ...validHint, address: '0x1234', extra: 'x'.repeat(1000) } },
+            origin: urlOrigin,
+        });
+
+        await vi.waitFor(() => {
+            expect(store.account.get().lastAccount).toEqual(validHint);
+        });
     });
 
     it('overwrites a previously stored hint with the latest one', async () => {
