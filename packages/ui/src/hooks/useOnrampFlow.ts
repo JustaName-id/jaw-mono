@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { JAW_ONRAMP_URL, type OnrampOptions, type OnrampOrder, type OnrampParams } from '@jaw.id/core';
 import { startOnramp, validateOtp, getOnrampOptions, OnrampApiError } from '../utils/onramp/client';
 import {
@@ -33,11 +33,20 @@ export interface UseOnrampFlowArgs {
   apiKey: string;
   destinationAddress: string;
   presets?: OnrampParams;
+  /** Chain the UI currently targets; drives buyable tokens + form sync. */
+  selectedChainId: number;
   onComplete: (order: OnrampOrder) => void;
   onError: (error: Error) => void;
 }
 
-export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete, onError }: UseOnrampFlowArgs) {
+export function useOnrampFlow({
+  apiKey,
+  destinationAddress,
+  presets,
+  selectedChainId,
+  onComplete,
+  onError,
+}: UseOnrampFlowArgs) {
   const [step, setStep] = useState<OnrampStep>('form');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -88,6 +97,42 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
       cancelled = true;
     };
   }, [apiKey]);
+
+  // Onramp availability for the selected chain, matched on chainId (options
+  // networks carry chainId). Buyable tokens = tokens sold on this chain.
+  const buyableTokens = useMemo(
+    () => (options?.tokens ?? []).filter((t) => t.networks.some((n) => Number(n.chainId) === selectedChainId)),
+    [options, selectedChainId]
+  );
+  const onrampNetwork = useMemo(
+    () =>
+      (options?.tokens ?? []).flatMap((t) => t.networks).find((n) => Number(n.chainId) === selectedChainId)?.network,
+    [options, selectedChainId]
+  );
+  const hasOnramp = buyableTokens.length > 0 && !!onrampNetwork;
+  const buyableSig = buyableTokens.map((t) => t.symbol).join(',');
+
+  // Keep the form's network/token aligned with the selected chain.
+  useEffect(() => {
+    if (!onrampNetwork) return;
+    setFormState((f) => ({
+      ...f,
+      network: onrampNetwork,
+      cryptoCurrency: buyableTokens.some((t) => t.symbol === f.cryptoCurrency)
+        ? f.cryptoCurrency
+        : (buyableTokens[0]?.symbol ?? ''),
+    }));
+    // buyableSig stands in for the token set so we don't depend on `form`.
+  }, [selectedChainId, onrampNetwork, buyableSig]);
+
+  const asset = form.cryptoCurrency || buyableTokens[0]?.symbol || 'USDC';
+
+  const fiat = presets?.fiatCurrency?.toUpperCase() ?? 'USD';
+  // Envelope across payment methods: the widget picks the method at pay time.
+  const fiatLimits = options?.fiatCurrencies.find((c) => c.currency === fiat)?.limits;
+  const bounds = fiatLimits?.length
+    ? { min: Math.min(...fiatLimits.map((l) => Number(l.min))), max: Math.max(...fiatLimits.map((l) => Number(l.max))) }
+    : { min: 2, max: 500 };
 
   const submitForm = useCallback(async () => {
     setBusy(true);
@@ -253,6 +298,11 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
     expanded,
     iframeKey,
     options,
+    buyableTokens,
+    hasOnramp,
+    bounds,
+    asset,
+    fiat,
     form,
     setForm,
     submitForm,
@@ -263,3 +313,5 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
     iframeRef,
   };
 }
+
+export type OnrampFlow = ReturnType<typeof useOnrampFlow>;
