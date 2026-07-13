@@ -197,7 +197,12 @@ export class TransportRouter implements TransportRouterContract {
 
     // ------------------------------------------------------------------ //
 
-    private decide(ctx: RouteContext): { kind: TransportKind; reason: RouteReason } {
+    /**
+     * @internal Exposed for the Communicator (willRouteToIframe / the bounded
+     * trusted-hosts await in acquire). Pure and side-effect-free. Not part of the
+     * TransportRouter public contract — do not rely on it from outside core.
+     */
+    decide(ctx: RouteContext): { kind: TransportKind; reason: RouteReason } {
         if (this.mode !== 'iframe' && this.mode !== 'auto') {
             return { kind: 'popup', reason: 'mode-popup' };
         }
@@ -208,7 +213,20 @@ export class TransportRouter implements TransportRouterContract {
             return { kind: 'popup', reason: 'insecure-protocol' };
         }
         if (this.isSafariFn() && ctx.method !== undefined && CREDENTIAL_CREATING_METHODS.includes(ctx.method)) {
-            return { kind: 'popup', reason: 'safari-credential-method' };
+            // On Safari a credential method for a KNOWN account (the persisted
+            // `lastAccount` hint) is a WebAuthn get() — which Safari permits in
+            // cross-origin iframes — so it runs embedded (the clickjacking-guard
+            // and secure-context rules below still apply; untrusted embedders keep
+            // the popup). Without a known account the connect may need create(),
+            // which Safari blocks in iframes, so it keeps the popup, where
+            // creating/selecting an account already works in the original click's
+            // gesture. Keying off lastAccount (not the live account list) means
+            // this survives disconnect and the Brave/Safari storage wipe between
+            // visits.
+            const knownAccount = !!this.options.getLastAccount?.();
+            if (!knownAccount) {
+                return { kind: 'popup', reason: 'safari-credential-method' };
+            }
         }
         if (!this.supportsIOv2Fn() && !this.isTrustedHostFn(this.getLocation().hostname)) {
             return { kind: 'popup', reason: 'clickjacking-guard' };
