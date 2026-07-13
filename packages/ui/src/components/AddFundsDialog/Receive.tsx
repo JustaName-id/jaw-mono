@@ -32,6 +32,38 @@ function QrCode({ value }: { value: string }) {
   );
 }
 
+// Click-to-copy text with a trailing copy/copied icon. No border/background —
+// just an inline attribute that flips to a check for a beat after copying.
+function Copyable({ value, display, className }: { value: string; display: string; className?: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    if (typeof window === 'undefined' || !navigator?.clipboard) return;
+    navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => undefined);
+  };
+
+  return (
+    <button
+      type="button"
+      onClick={copy}
+      title={value}
+      className={`flex items-center gap-1.5 transition-opacity hover:opacity-70 ${className ?? ''}`}
+    >
+      <span className="break-all">{display}</span>
+      {copied ? (
+        <CopiedIcon width={13} height={13} className="shrink-0" />
+      ) : (
+        <CopyIcon width={13} height={13} className="shrink-0 opacity-60" />
+      )}
+    </button>
+  );
+}
+
 export interface ReceiveProps {
   address: string;
   /** Display name of the currently-selected network. */
@@ -41,44 +73,34 @@ export interface ReceiveProps {
 }
 
 /**
- * Receive section of the Add Funds screen: the account address as a QR plus a
- * copyable truncated address. Self-contained — no onramp/keys/proxy dependency,
- * so it renders identically in CrossPlatform (keys) and AppSpecific (host UI).
- * The address is the same on every EVM chain; the chain name is guidance.
+ * Receive section of the Add Funds screen: the account address as a QR plus its
+ * copyable ENS name (if any) and truncated address. Self-contained — no
+ * onramp/keys/proxy dependency, so it renders identically in CrossPlatform
+ * (keys) and AppSpecific (host UI). The address is the same on every EVM chain;
+ * the chain name is guidance.
  */
 export function Receive({ address, chainName, ensName }: ReceiveProps) {
-  const [copied, setCopied] = useState(false);
-
-  const copy = () => {
-    if (typeof window === 'undefined' || !navigator?.clipboard) return;
-    navigator.clipboard
-      .writeText(address)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 2000);
-      })
-      .catch(() => undefined);
-  };
-
   return (
-    <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
+    <div className="border-border flex flex-col gap-4 rounded-[6px] border p-3.5">
       <p className="text-foreground text-xs font-bold leading-[133%]">Receive on {chainName}</p>
       <div className="flex justify-center">
-        <div className="rounded-[6px] bg-white p-3">
+        <div className="rounded-[10px] bg-white p-3">
           <QrCode value={address} />
         </div>
       </div>
-      <div className="flex flex-col items-center gap-1">
-        {ensName && <p className="text-foreground text-sm font-medium leading-[150%]">{ensName}</p>}
-        <button
-          type="button"
-          onClick={copy}
-          className="text-foreground hover:text-muted-foreground flex items-center gap-1.5 font-mono text-xs transition-colors"
-          title={address}
-        >
-          <span className="break-all">{formatAddress(address)}</span>
-          {copied ? <CopiedIcon width={14} height={14} /> : <CopyIcon width={14} height={14} />}
-        </button>
+      <div className="flex flex-col items-center gap-1.5">
+        {ensName && (
+          <Copyable
+            value={ensName.split('@')[0]}
+            display={ensName}
+            className="text-foreground text-sm font-semibold leading-[150%]"
+          />
+        )}
+        <Copyable
+          value={address}
+          display={formatAddress(address)}
+          className="text-muted-foreground font-mono text-xs leading-[150%]"
+        />
       </div>
     </div>
   );
