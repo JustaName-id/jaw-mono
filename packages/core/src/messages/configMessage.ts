@@ -63,11 +63,12 @@ export type AccountHintData = {
 export function isValidAccountHint(hint: unknown): hint is AccountHintData {
     if (!hint || typeof hint !== 'object') return false;
     const h = hint as Record<string, unknown>;
-    // Length cap: real credential IDs run ~20-64 bytes (WebAuthn allows up to
-    // 1023); without it a broken or hostile keys origin could blow the
-    // localStorage quota on both sides of the wire.
+    // Length cap: WebAuthn allows credential IDs up to 1023 bytes, which is
+    // exactly 1364 base64url characters (real ones run ~20-64 bytes). Without
+    // a cap a broken or hostile keys origin could blow the localStorage quota
+    // on both sides of the wire.
     return (
-        typeof h.credentialId === 'string' && h.credentialId.length <= 1024 && /^[A-Za-z0-9_-]+$/.test(h.credentialId)
+        typeof h.credentialId === 'string' && h.credentialId.length <= 1364 && /^[A-Za-z0-9_-]+$/.test(h.credentialId)
     );
 }
 

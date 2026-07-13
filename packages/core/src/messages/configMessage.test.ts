@@ -77,8 +77,9 @@ describe('isValidAccountHint', () => {
 
     it('returns false when credentialId exceeds the length cap', () => {
         // The validator gates writes into localStorage on both sides of the
-        // wire — an unbounded string could blow the storage quota.
-        expect(isValidAccountHint({ credentialId: 'a'.repeat(1024) })).toBe(true);
-        expect(isValidAccountHint({ credentialId: 'a'.repeat(1025) })).toBe(false);
+        // wire — an unbounded string could blow the storage quota. The cap is
+        // 1364: the base64url length of a spec-maximum 1023-byte credential ID.
+        expect(isValidAccountHint({ credentialId: 'a'.repeat(1364) })).toBe(true);
+        expect(isValidAccountHint({ credentialId: 'a'.repeat(1365) })).toBe(false);
     });
 });
