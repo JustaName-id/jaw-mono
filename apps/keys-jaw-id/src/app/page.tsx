@@ -85,6 +85,11 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   const [error, setError] = useState<string | null>(null);
   const [ensConfig, setEnsConfig] = useState<string | undefined>(undefined);
   const [chainId, setChainId] = useState<ChainId | undefined>(undefined);
+  // The dApp's API key. It arrives in the transport config message (seeded from
+  // the SDK's store), is used to bootstrap the account screen, and is then
+  // overridden by the handshake's chain.rpcUrl — the authoritative source. Never
+  // fall back to the keys app's own key: that key identifies a different project
+  // for ENS subname issuance and billing, so using it would misattribute both.
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
@@ -154,7 +159,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
         setEnsConfig(message.data.preference?.ens);
         setChainId(message.data.metadata?.defaultChainId as ChainId);
-        setApiKey(message.data.apiKey);
+        // Bootstrap the API key from the transport config message so the account
+        // screen has the dApp's key before the handshake arrives. Guarded so a
+        // config message without one can't wipe a key already set; the handshake
+        // chain.rpcUrl remains the authoritative source and overrides it.
+        if (message.data.apiKey) {
+          setApiKey(message.data.apiKey);
+        }
 
         // Apply the dApp's theme tokens so the embedded dialog matches its
         // look & feel (accent color, border radius, light/dark), translated
@@ -414,32 +425,36 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       // Update React state with current origin (needed for useAuth hook)
       setCurrentOrigin(origin);
 
+      // Reply to the SDK with a reconnect-required sentinel (tied to this
+      // request id, carries no secret) so it re-establishes a session against
+      // this iframe and retries. Used both when there is NO session and when the
+      // session is stale (decrypt fails) — Safari storage partitioning can leave
+      // the iframe with a session whose keys no longer match the SDK's.
+      const emitReconnectRequired = (reason: string) => {
+        console.warn(`⚠️ ${reason} — requesting reconnect for origin:`, origin);
+        const reconnectResponse: RPCResponseMessage = {
+          requestId: request.id,
+          id: crypto.randomUUID() as MessageID,
+          sender: '',
+          correlationId: request.correlationId,
+          content: {
+            failure: {
+              code: standardErrorCodes.provider.disconnected,
+              message: 'No usable session in this context; reconnect required',
+              data: { reason: RECONNECT_REQUIRED },
+            },
+          },
+          timestamp: new Date(),
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        communicator.sendMessage(reconnectResponse as any);
+      };
+
       const session = await cryptoHandler.loadSession(origin);
 
       if (!session) {
-        // Embedded (iframe) on Safari: storage partitioning isolates this frame
-        // from the session a popup created during connect, so there is nothing to
-        // decrypt with. Instead of dead-ending with a local error dialog, reply to
-        // the SDK with a reconnect-required sentinel (tied to this request id, no
-        // secret) so it re-establishes a session against this iframe and retries.
         if (communicator.isEmbedded()) {
-          console.warn('⚠️ No session in iframe partition — requesting reconnect for origin:', origin);
-          const reconnectResponse: RPCResponseMessage = {
-            requestId: request.id,
-            id: crypto.randomUUID() as MessageID,
-            sender: '', // no session → no popup public key; this response carries no secret
-            correlationId: request.correlationId,
-            content: {
-              failure: {
-                code: standardErrorCodes.provider.disconnected,
-                message: 'No session in this context; reconnect required',
-                data: { reason: RECONNECT_REQUIRED },
-              },
-            },
-            timestamp: new Date(),
-          };
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          communicator.sendMessage(reconnectResponse as any);
+          emitReconnectRequired('No session in iframe partition');
           return;
         }
         console.error('❌ No session found for origin:', origin);
@@ -449,8 +464,25 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       // Verify and update peer key if changed
       await cryptoHandler.verifyAndUpdatePeerKey(request);
 
-      // Decrypt the request
-      const decrypted = await cryptoHandler.decryptRequest(request);
+      // Decrypt the request. A stale iframe session (keys no longer match the
+      // SDK's) fails here with an AES-GCM auth-tag mismatch — Web Crypto's
+      // OperationError. Treat ONLY that, and only when embedded, like a missing
+      // session: drop it and ask the SDK to reconnect + retry, instead of
+      // dead-ending on an undecryptable request. Any other error (malformed
+      // envelope, bug, corrupted ciphertext) must surface, not be masked behind a
+      // reconnect cycle that would fail identically on retry.
+      let decrypted: Awaited<ReturnType<typeof cryptoHandler.decryptRequest>>;
+      try {
+        decrypted = await cryptoHandler.decryptRequest(request);
+      } catch (decryptErr) {
+        const isStaleSession = decryptErr instanceof DOMException && decryptErr.name === 'OperationError';
+        if (communicator.isEmbedded() && isStaleSession) {
+          await cryptoHandler.getSessionManager().deleteSession(origin);
+          emitReconnectRequired('Stale iframe session (decrypt failed)');
+          return;
+        }
+        throw decryptErr;
+      }
 
       const method = decrypted.action.method;
       const params = decrypted.action.params;

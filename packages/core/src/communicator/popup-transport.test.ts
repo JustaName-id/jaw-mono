@@ -310,6 +310,23 @@ describe('PopupTransport', () => {
             expect(posted.data.lastAccount).toEqual(lastAccount);
         });
 
+        it('carries the dApp API key on the handshake config so keys can bootstrap the account screen', async () => {
+            transport = new PopupTransport({
+                url: new URL(JAW_KEYS_URL),
+                metadata: appMetadata,
+                preference,
+                // Read at handshake time from the SDK store — always the dApp's
+                // own key, never a keys-app fallback.
+                getApiKey: () => 'dapp-api-key-123',
+            });
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+            await transport.ensureReady();
+
+            const posted = (mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls[0][0];
+            expect(posted.data.apiKey).toBe('dapp-api-key-123');
+        });
+
         it('opens with centered window features on desktop', async () => {
             queueMessageEvent(popupLoadedMessage);
             queueMessageEvent(popupReadyMessage);

@@ -326,6 +326,23 @@ describe('IframeTransport', () => {
             expect(target.postMessage.mock.calls[0][0].data.lastAccount).toEqual(lastAccount);
         });
 
+        it('carries the dApp API key on the handshake config so keys can bootstrap the account screen', async () => {
+            transport.destroy(); // replace the no-key instance from beforeEach
+            transport = new IframeTransport({
+                url: new URL(JAW_KEYS_URL),
+                metadata: appMetadata,
+                preference,
+                handshakeTimeoutMs: 2000,
+                // Read at handshake time from the SDK store — always the dApp's
+                // own key, never a keys-app fallback.
+                getApiKey: () => 'dapp-api-key-123',
+            });
+            const { readyPromise, target } = startHandshake(transport);
+            await readyPromise;
+
+            expect(target.postMessage.mock.calls[0][0].data.apiKey).toBe('dapp-api-key-123');
+        });
+
         it('does not show the dialog during the handshake', async () => {
             const { readyPromise } = startHandshake(transport);
             await readyPromise;

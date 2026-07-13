@@ -451,6 +451,7 @@ export class IframeTransport implements IframeTransportContract {
                             theme: this.options.theme,
                             location: window.location.toString(),
                             lastAccount: this.options.getLastAccount?.(),
+                            apiKey: this.options.getApiKey?.(),
                         },
                     },
                     this.url.origin

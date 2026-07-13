@@ -39,9 +39,11 @@ export class CrossPlatformSigner extends JAWSigner {
     override async handshake(args: RequestArguments): Promise<void> {
         const correlationId = this.getCorrelationId(args);
 
-        // Open the popup before constructing the request message.
-        // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
-        await this.communicator.waitForPopupLoaded?.();
+        // Ready the transport this handshake routes to, before other async work.
+        // On the popup route this opens the window as the first thing after the
+        // click (so Safari's popup blocker allows it); on the iframe route
+        // (embedded Safari connect) it readies the live frame instead.
+        await this.communicator.waitForPopupLoaded?.(args.method);
 
         const chains = store.getState().chains;
         const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
@@ -79,8 +81,9 @@ export class CrossPlatformSigner extends JAWSigner {
             return cachedResponse;
         }
 
-        // Wait for the popup to be loaded before making async calls
-        await this.communicator.waitForPopupLoaded?.();
+        // Ready the routed transport before async calls (opens the popup inside
+        // the gesture when that's the route)
+        await this.communicator.waitForPopupLoaded?.(request.method);
 
         // Validate and inject capabilities using base class method
         const modifiedRequest = this.validateAndInjectCapabilities(request);
@@ -90,8 +93,9 @@ export class CrossPlatformSigner extends JAWSigner {
     }
 
     protected override async handleWalletConnectUnauthenticated(request: RequestArguments): Promise<unknown> {
-        // Wait for the popup to be loaded before making async calls
-        await this.communicator.waitForPopupLoaded?.();
+        // Ready the routed transport before async calls (opens the popup inside
+        // the gesture when that's the route)
+        await this.communicator.waitForPopupLoaded?.(request.method);
 
         // Validate and inject capabilities using base class method
         const modifiedRequest = this.validateAndInjectCapabilities(request);
@@ -183,9 +187,9 @@ export class CrossPlatformSigner extends JAWSigner {
         overrideChain?: SDKChain,
         isReconnectRetry = false
     ): Promise<unknown> {
-        // Open the popup before constructing the request message.
-        // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
-        await this.communicator.waitForPopupLoaded?.();
+        // Ready the routed transport first — when that's the popup it must open
+        // inside the user gesture or Safari's popup blocker stops it.
+        await this.communicator.waitForPopupLoaded?.(request.method);
 
         try {
             const response = await this.sendEncryptedRequest(request, overrideChain);
