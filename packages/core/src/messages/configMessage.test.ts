@@ -74,4 +74,11 @@ describe('isValidAccountHint', () => {
         expect(isValidAccountHint({ ...valid, credentialId: undefined })).toBe(false);
         expect(isValidAccountHint({ ...valid, credentialId: 7 })).toBe(false);
     });
+
+    it('returns false when credentialId exceeds the length cap', () => {
+        // The validator gates writes into localStorage on both sides of the
+        // wire — an unbounded string could blow the storage quota.
+        expect(isValidAccountHint({ credentialId: 'a'.repeat(1024) })).toBe(true);
+        expect(isValidAccountHint({ credentialId: 'a'.repeat(1025) })).toBe(false);
+    });
 });
