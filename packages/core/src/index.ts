@@ -100,6 +100,8 @@ export {
 /** Passkey exports (used with Account class) **/
 export {
     PasskeyManager,
+    lookupPasskeyFromBackend,
+    type PasskeyLookupResponse,
     type PasskeyAccount,
     type NativePasskeyGetFn,
     type NativePasskeyCreateFn,

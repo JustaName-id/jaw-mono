@@ -296,18 +296,19 @@ describe('requestSwitchToPopup', () => {
 
 describe('sendAccountHint', () => {
   const hint = {
-    username: 'ghadi.jaw.id',
     credentialId: 'A1b2-C3d4_E5f6',
-    publicKey: '0xdeadbeef',
   };
-  // Callers pass session auth state, which carries more (address, …); only
-  // the hint fields may reach the wire.
+  // Callers pass session auth state, which carries more (address, publicKey,
+  // username, …); only the credentialId may reach the wire — the seeding side
+  // resolves everything else from the backend registry.
   const sessionAuthState = {
     ...hint,
+    username: 'ghadi.jaw.id',
+    publicKey: '0xdeadbeef' as const,
     address: '0x1234567890abcdef1234567890abcdef12345678' as const,
   };
 
-  it('embedded context: posts AccountHint to the locked origin, stripped to the hint fields', () => {
+  it('embedded context: posts AccountHint to the locked origin, stripped to the credentialId', () => {
     const win = createFakeWindow({ embedded: true, ancestorOrigins: [SDK_ORIGIN] });
     new PopupCommunicator(win).sendAccountHint(sessionAuthState);
 

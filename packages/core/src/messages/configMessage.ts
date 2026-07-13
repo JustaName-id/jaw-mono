@@ -38,35 +38,32 @@ export type SwitchTransportData = {
  * embedded handshake carries it back so keys can seed its "Continue as"
  * screen. It is a UI hint only: it seeds the account *list*, never auth
  * state, and continuing always runs the full passkey ceremony — which is
- * what derives and stores the address, so no address travels here. Note it
- * does place the passkey credentialId and public key in the dApp's storage:
- * identifiers, not signing capability.
+ * what derives and stores the address, so no address travels here.
  */
 export type AccountHintData = {
-    /** Display name (e.g., ENS name or username) */
-    username: string;
-    /** Passkey credential ID used for authentication */
+    /**
+     * Passkey credential ID used for authentication — deliberately the ONLY
+     * field. The hint transits dApp-controlled storage, so nothing in it may
+     * influence what the keys UI shows or derives: the public key (which
+     * derives the smart account address in Account.get) and the display name
+     * are resolved from the backend passkey registry at seed time, the same
+     * source of truth the sign-in/import path uses. A tampered hint can
+     * therefore only point at a different credential — whose passkey
+     * ceremony the user cannot complete.
+     */
     credentialId: string;
-    /** Passkey public key (for WebAuthn operations) */
-    publicKey: `0x${string}`;
 };
 
 /**
  * Validate an account hint from the wire. Both sides gate on this: the SDK
- * before persisting into dApp-side storage, the keys app before seeding its
- * account list from a handshake.
+ * before persisting into dApp-side storage, the keys app before resolving it
+ * against the backend on a handshake. Extra fields are tolerated here but
+ * never propagated — both consumers pick `credentialId` only.
  */
 export function isValidAccountHint(hint: unknown): hint is AccountHintData {
     if (!hint || typeof hint !== 'object') return false;
     const h = hint as Record<string, unknown>;
-    return (
-        typeof h.username === 'string' &&
-        h.username.length > 0 &&
-        typeof h.credentialId === 'string' &&
-        /^[A-Za-z0-9_-]+$/.test(h.credentialId) &&
-        typeof h.publicKey === 'string' &&
-        /^0x[0-9a-fA-F]+$/.test(h.publicKey)
-    );
+    return typeof h.credentialId === 'string' && /^[A-Za-z0-9_-]+$/.test(h.credentialId);
 }
 
 /**

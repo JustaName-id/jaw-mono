@@ -166,16 +166,26 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
         // Embedded only: our storage is partitioned (and wiped between visits
         // in Brave/Safari). If it came up empty, restore the "Continue as"
-        // screen from the dApp-side hint — before checkForPasskeys reads the
-        // account list. Popup/standalone contexts have real first-party
-        // storage and must not be seeded (a stale hint could resurrect an
-        // account the user deliberately removed).
-        if (communicator.isEmbedded() && seedAccountsFromHint(message.data.lastAccount)) {
-          debugLog('🌱 Seeded account list from dApp-side lastAccount hint');
+        // screen before checkForPasskeys reads the account list. The dApp-side
+        // hint is only a credentialId pointer — the public key and display
+        // name are resolved from the backend registry, never trusted from the
+        // dApp. The seed is async (backend roundtrip, bounded by a timeout),
+        // so only checkForPasskeys waits on it; the handshake ack below must
+        // not. Popup/standalone contexts have real first-party storage and
+        // must not be seeded (a stale hint could resurrect an account the
+        // user deliberately removed).
+        if (communicator.isEmbedded()) {
+          void seedAccountsFromHint(message.data.lastAccount, { apiKey: message.data.apiKey }).then((seeded) => {
+            if (seeded) {
+              debugLog('🌱 Seeded account list from backend-resolved lastAccount hint');
+            }
+            // Always show account selection UI - never auto-authenticate
+            checkForPasskeys();
+          });
+        } else {
+          // Always show account selection UI - never auto-authenticate
+          checkForPasskeys();
         }
-
-        // Always show account selection UI - never auto-authenticate
-        checkForPasskeys();
 
         communicator.sendPopupReady(message.requestId);
       }

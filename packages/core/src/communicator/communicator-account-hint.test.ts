@@ -39,9 +39,7 @@ const appMetadata: AppMetadata = {
 const preference: JawProviderPreference = { keysUrl: JAW_KEYS_URL };
 
 const validHint = {
-    username: 'ghadi.jaw.id',
     credentialId: 'A1b2-C3d4_E5f6',
-    publicKey: '0xdeadbeef',
 };
 
 /**
@@ -125,11 +123,23 @@ describe('Communicator AccountHint handling', () => {
         expect(store.account.get().lastAccount).toBeUndefined();
     });
 
-    it('persists only the hint fields, stripping anything else on the payload', async () => {
+    it('persists only credentialId, stripping anything else on the payload', async () => {
+        // publicKey especially must never reach dApp-side storage: seeding
+        // resolves it from the backend, and a stored one would be a lever for
+        // whoever controls the storage to pick the derived account address.
         await completeFlow('req-hint-6-6-6');
 
         dispatchMessageEvent({
-            data: { event: 'AccountHint', data: { ...validHint, address: '0x1234', extra: 'x'.repeat(1000) } },
+            data: {
+                event: 'AccountHint',
+                data: {
+                    ...validHint,
+                    publicKey: '0xdeadbeef',
+                    username: 'ghadi.jaw.id',
+                    address: '0x1234',
+                    extra: 'x'.repeat(1000),
+                },
+            },
             origin: urlOrigin,
         });
 
@@ -145,7 +155,7 @@ describe('Communicator AccountHint handling', () => {
             data: { event: 'AccountHint', data: validHint },
             origin: urlOrigin,
         });
-        const newer = { ...validHint, username: 'newer.jaw.id' };
+        const newer = { credentialId: 'Newer_Cred-Id' };
         dispatchMessageEvent({
             data: { event: 'AccountHint', data: newer },
             origin: urlOrigin,

@@ -288,12 +288,7 @@ describe('PopupTransport', () => {
         });
 
         it('carries the lastAccount hint on the handshake config when provided', async () => {
-            const lastAccount = {
-                address: '0x1234567890abcdef1234567890abcdef12345678' as const,
-                username: 'ghadi.jaw.id',
-                credentialId: 'A1b2-C3d4_E5f6',
-                publicKey: '0xdeadbeef' as const,
-            };
+            const lastAccount = { credentialId: 'A1b2-C3d4_E5f6' };
             transport = new PopupTransport({
                 url: new URL(JAW_KEYS_URL),
                 metadata: appMetadata,

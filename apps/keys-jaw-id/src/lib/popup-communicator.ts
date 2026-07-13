@@ -190,18 +190,18 @@ export class PopupCommunicator {
    * screen. Sent from the popup context too — a popup sign-in should still
    * produce "Continue as" on a later embedded visit. The hint seeds only the
    * account list, never auth state; continuing always re-runs the passkey
-   * ceremony. Only the picked fields go on the wire — no address (the
-   * ceremony derives it) and nothing else the caller's object may carry.
+   * ceremony. Only the credentialId goes on the wire — no publicKey or
+   * display name (seeding resolves both from the backend registry, so
+   * dApp-side storage never holds data our UI would trust), no address (the
+   * ceremony derives it), and nothing else the caller's object may carry.
    */
-  sendAccountHint(hint: { username: string; credentialId: string; publicKey: string }): void {
+  sendAccountHint(hint: { credentialId: string }): void {
     if (this.context === 'standalone') return;
     this.postMessage({
       id: crypto.randomUUID(),
       event: 'AccountHint',
       data: {
-        username: hint.username,
         credentialId: hint.credentialId,
-        publicKey: hint.publicKey,
       },
     });
   }
