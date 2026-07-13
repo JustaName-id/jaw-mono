@@ -32,6 +32,7 @@ import {
   useCapabilities,
   useSign,
   useGetCallsHistory,
+  useAddFunds,
   type PersonalSignRequestData,
   type TypedDataRequestData,
 } from '@jaw.id/wagmi';
@@ -66,6 +67,7 @@ const NEEDS_PASSKEY_APPROVAL: ReadonlySet<WagmiMethod['hookType']> = new Set([
   'useSendCalls',
   'useGrantPermissions',
   'useRevokePermissions',
+  'useAddFunds',
 ]);
 
 interface WagmiPageContentProps {
@@ -101,6 +103,7 @@ function WagmiPageContent({
   const { mutateAsync: grantPermissions, isPending: isGrantingPermissions } = useGrantPermissions();
   const { mutateAsync: revokePermissions, isPending: isRevokingPermissions } = useRevokePermissions();
   const { mutateAsync: sign, isPending: isSigning } = useSign();
+  const { mutateAsync: addFunds, isPending: isAddingFunds } = useAddFunds();
 
   // State for query addresses (allows querying for arbitrary addresses)
   const [permissionsAddress, setPermissionsAddress] = useState<string | undefined>();
@@ -319,6 +322,12 @@ function WagmiPageContent({
             break;
           }
 
+          case 'useAddFunds':
+            result = await addFunds({
+              params: (params.params ?? {}) as import('@jaw.id/core').AddFundsParams,
+            });
+            break;
+
           default:
             throw new Error(`Unknown hook type: ${method.hookType}`);
         }
@@ -415,6 +424,7 @@ function WagmiPageContent({
       capabilities,
       grantPermissions,
       revokePermissions,
+      addFunds,
       setPermissionsAddress,
       refetchPermissions,
       permissions,
@@ -451,7 +461,7 @@ function WagmiPageContent({
   const filteredMethods =
     selectedCategory === 'all' ? WAGMI_METHODS : WAGMI_METHODS.filter((m) => m.category === selectedCategory);
 
-  const isPending = isGrantingPermissions || isRevokingPermissions || isSigning || isExecuting;
+  const isPending = isGrantingPermissions || isRevokingPermissions || isSigning || isAddingFunds || isExecuting;
 
   return (
     <div className="bg-background min-h-screen p-4 md:p-8">

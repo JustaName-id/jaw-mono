@@ -8,5 +8,5 @@ export {
   useCapabilities,
   useSign,
   useGetCallsHistory,
-  useOnramp,
+  useAddFunds,
 } from './internal/react.js';

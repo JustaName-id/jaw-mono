@@ -15,7 +15,7 @@ import {
   getCapabilities,
   sign,
   getCallsHistory,
-  onramp,
+  addFunds,
 } from './core.js';
 import {
   getPermissionsQueryKey,
@@ -836,46 +836,47 @@ export function useGetCallsHistory<
 }
 
 // ============================================================================
-// useOnramp
+// useAddFunds
 // ============================================================================
 
-export namespace useOnramp {
+export namespace useAddFunds {
   export type Parameters<config extends Config = Config, context = unknown> = {
     config?: config;
     mutation?:
-      | UseMutationParameters<onramp.ReturnType, onramp.ErrorType, onramp.Parameters<config>, context>
+      | UseMutationParameters<addFunds.ReturnType, addFunds.ErrorType, addFunds.Parameters<config>, context>
       | undefined;
   };
 
   export type ReturnType<config extends Config = Config, context = unknown> = UseMutationResult<
-    onramp.ReturnType,
-    onramp.ErrorType,
-    onramp.Parameters<config>,
+    addFunds.ReturnType,
+    addFunds.ErrorType,
+    addFunds.Parameters<config>,
     context
   >;
 }
 
 /**
- * Hook to open the fiat→crypto onramp modal (Apple/Google Pay) for the
- * connected account. Resolves with the resulting order.
+ * Hook to open the wallet's Add Funds screen (receive via QR + optional
+ * Apple/Google Pay buy) for the connected account. Resolves with the order if
+ * the user bought, or null if they only received/closed.
  *
  * @example
  * ```tsx
- * const { mutate, data, isPending } = useOnramp();
- * mutate({ params: { fiatAmount: '50' } });
+ * const { mutate, data, isPending } = useAddFunds();
+ * mutate({ params: { chains: [8453], fiatAmount: '50' } });
  * ```
  */
-export function useOnramp<config extends Config = ResolvedRegister['config'], context = unknown>(
-  parameters: useOnramp.Parameters<config, context> = {}
-): useOnramp.ReturnType<config, context> {
+export function useAddFunds<config extends Config = ResolvedRegister['config'], context = unknown>(
+  parameters: useAddFunds.Parameters<config, context> = {}
+): useAddFunds.ReturnType<config, context> {
   const { mutation } = parameters;
   const config = useConfig(parameters as { config?: Config });
 
   return useMutation({
     ...mutation,
     mutationFn: async (variables) => {
-      return onramp(config, variables);
+      return addFunds(config, variables);
     },
-    mutationKey: ['onramp'],
-  }) as useOnramp.ReturnType<config, context>;
+    mutationKey: ['addFunds'],
+  }) as useAddFunds.ReturnType<config, context>;
 }

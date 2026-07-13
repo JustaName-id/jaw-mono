@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
@@ -11,7 +11,9 @@ import { Spinner } from '../ui/spinner';
 import { useIsMobile } from '../../hooks';
 import { useOnrampFlow } from '../../hooks/useOnrampFlow';
 import { formatAddress, getDisplayAddress, getChainLabel, reverseResolveAddresses } from '../../utils';
-import type { OnrampDialogProps } from './types';
+import { Receive } from './Receive';
+import { PayButton } from './PayButton';
+import type { AddFundsDialogProps } from './types';
 
 const COINBASE_TERMS = 'https://www.coinbase.com/legal/guest-checkout/us';
 const COINBASE_USER_AGREEMENT = 'https://www.coinbase.com/legal/user_agreement';
@@ -85,40 +87,77 @@ function OtpInput({ value, onChange, disabled }: { value: string; onChange: (v: 
   );
 }
 
-export const OnrampDialog = ({
+export const AddFundsDialog = ({
   open = true,
   apiKey,
   destinationAddress,
   mainnetRpcUrl,
+  chains,
+  defaultChainId,
+  canBuy = false,
   presets,
   onComplete,
   onCancel,
   onError,
-}: OnrampDialogProps) => {
+}: AddFundsDialogProps) => {
   const isMobile = useIsMobile();
   const flow = useOnrampFlow({ apiKey, destinationAddress, presets, onComplete, onError });
   const [code, setCode] = useState('');
+  // The home view shows receive + a Buy CTA; tapping it opens the buy form.
+  const [showBuy, setShowBuy] = useState(false);
 
   useEffect(() => {
     if (flow.step === 'otp') setCode('');
   }, [flow.step]);
 
-  // Sessions are single-flow: a reopened dialog resuming the old sessionId 409s.
   const { reset } = flow;
   useEffect(() => {
-    if (!open) reset();
+    if (!open) {
+      reset();
+      setShowBuy(false);
+    }
   }, [open, reset]);
 
-  // Catalogue drives the Token/Network pickers and display names, falling back
-  // to the launch defaults while it loads or when it fails.
-  const tokens = flow.options?.tokens ?? [];
-  const token = tokens.find((t) => t.symbol === flow.form.cryptoCurrency) ?? tokens[0];
-  const asset = flow.form.cryptoCurrency || token?.symbol || 'USDC';
-  const networks = token?.networks ?? [];
-  const selectedNetwork = flow.form.network || networks[0]?.network || 'base';
-  const networkDisplay =
-    networks.find((n) => n.network === selectedNetwork)?.displayName ??
-    selectedNetwork.charAt(0).toUpperCase() + selectedNetwork.slice(1);
+  // Top network selector drives both sections. Default to the connected chain
+  // when it's allowed, else the first allowed chain.
+  const [selectedChainId, setSelectedChainId] = useState<number>(
+    () => (defaultChainId && chains.some((c) => c.id === defaultChainId) ? defaultChainId : chains[0]?.id) ?? 0
+  );
+  const selectedChain = chains.find((c) => c.id === selectedChainId) ?? chains[0];
+  const chainName = selectedChain?.name ?? 'this network';
+
+  // Onramp availability for the selected chain, matched on chainId (options
+  // networks carry chainId). Buyable tokens = tokens sold on this chain.
+  const buyableTokens = useMemo(
+    () => (flow.options?.tokens ?? []).filter((t) => t.networks.some((n) => Number(n.chainId) === selectedChainId)),
+    [flow.options, selectedChainId]
+  );
+  const onrampNetwork = useMemo(
+    () =>
+      (flow.options?.tokens ?? []).flatMap((t) => t.networks).find((n) => Number(n.chainId) === selectedChainId)
+        ?.network,
+    [flow.options, selectedChainId]
+  );
+  const canBuyOnChain = canBuy && buyableTokens.length > 0 && !!onrampNetwork;
+  const buyableSig = buyableTokens.map((t) => t.symbol).join(',');
+
+  // Keep the onramp flow's network/token in sync with the selected chain.
+  useEffect(() => {
+    if (!canBuyOnChain || !onrampNetwork) return;
+    flow.setForm({
+      network: onrampNetwork,
+      cryptoCurrency: buyableTokens.some((t) => t.symbol === flow.form.cryptoCurrency)
+        ? flow.form.cryptoCurrency
+        : (buyableTokens[0]?.symbol ?? ''),
+    });
+  }, [selectedChainId, canBuyOnChain, onrampNetwork, buyableSig]);
+
+  // Switching to a chain without an onramp drops us back to the receive view.
+  useEffect(() => {
+    if (!canBuyOnChain) setShowBuy(false);
+  }, [canBuyOnChain]);
+
+  const asset = flow.form.cryptoCurrency || buyableTokens[0]?.symbol || 'USDC';
 
   const fiat = presets?.fiatCurrency?.toUpperCase() ?? 'USD';
   // Envelope across payment methods: the widget picks the method at pay time.
@@ -157,7 +196,7 @@ export const OnrampDialog = ({
     Number(flow.form.fiatAmount) <= bounds.max;
   const phoneValid = /^\+1\d{10}$/.test(flow.form.phoneNumber.trim());
   const emailValid = /.+@.+\..+/.test(flow.form.email.trim());
-  const canSubmit = !flow.busy && flow.form.accepted && amountValid && phoneValid && emailValid;
+  const canSubmit = canBuyOnChain && !flow.busy && flow.form.accepted && amountValid && phoneValid && emailValid;
 
   const restart = () => {
     setCode('');
@@ -171,12 +210,7 @@ export const OnrampDialog = ({
       header={
         <div className="flex flex-col gap-2.5 p-3.5">
           <p className="text-muted-foreground text-xs font-bold leading-[100%]">
-            {new Date().toLocaleDateString('en-US', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-            })}{' '}
-            at{' '}
+            {new Date().toLocaleDateString('en-US', { weekday: 'long', day: 'numeric', month: 'long' })} at{' '}
             {new Date().toLocaleTimeString('en-US', {
               hour: '2-digit',
               minute: '2-digit',
@@ -184,53 +218,76 @@ export const OnrampDialog = ({
               timeZoneName: 'short',
             })}
           </p>
-          <p className="text-foreground text-[30px] font-normal leading-[100%]">Buy Crypto</p>
+          <p className="text-foreground text-[30px] font-normal leading-[100%]">Add Funds</p>
         </div>
       }
       contentStyle={
         isMobile
-          ? {
-              width: '100%',
-              height: '100%',
-              maxWidth: 'none',
-              maxHeight: 'none',
-              overflowY: 'auto',
-            }
-          : {
-              width: '500px',
-              minWidth: '500px',
-            }
+          ? { width: '100%', height: '100%', maxWidth: 'none', maxHeight: 'none', overflowY: 'auto' }
+          : { width: '500px', minWidth: '500px' }
       }
     >
-      {/* ---- FORM ---- */}
-      {flow.step === 'form' && (
+      {/* ---- HOME: network + buy CTA + receive ---- */}
+      {flow.step === 'form' && (!showBuy || !canBuyOnChain) && (
+        <div className="flex flex-col justify-between gap-6 max-md:h-full">
+          <div className="flex flex-col gap-3">
+            {/* Network selector (drives both sections) */}
+            <div className="border-border flex flex-col gap-1.5 rounded-[6px] border p-3.5">
+              <Label className="text-foreground text-xs font-bold leading-[133%]">Network</Label>
+              <Select value={String(selectedChainId)} onValueChange={(v) => setSelectedChainId(Number(v))}>
+                <SelectTrigger>
+                  <SelectValue placeholder={chainName} />
+                </SelectTrigger>
+                <SelectContent>
+                  {chains.map((c) => (
+                    <SelectItem key={c.id} value={String(c.id)}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <Receive address={destinationAddress} chainName={chainName} ensName={resolvedName} />
+
+            {/* Buy CTA below receive — only when the chain has an onramp-supported token */}
+            {canBuyOnChain && (
+              <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
+                <p className="text-foreground text-xs font-bold leading-[133%]">Or buy on {chainName}</p>
+                <PayButton onClick={() => setShowBuy(true)} />
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-shrink-0 gap-3 p-3.5 max-md:mt-auto">
+            <Button type="button" variant="outline" className="w-full" onClick={onCancel}>
+              Done
+            </Button>
+          </div>
+        </div>
+      )}
+
+      {/* ---- BUY FORM: token/amount/contact/terms → OTP → pay ---- */}
+      {flow.step === 'form' && showBuy && canBuyOnChain && (
         <form
           className="flex flex-col justify-between gap-6 max-md:h-full"
           onSubmit={(e) => {
             e.preventDefault();
-            void flow.submitForm();
+            if (canSubmit) void flow.submitForm();
           }}
         >
           <div className="flex flex-col gap-3">
             <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
+              <p className="text-foreground text-xs font-bold leading-[133%]">Buy on {chainName}</p>
               <div className="flex flex-row gap-4">
                 <div className="flex flex-1 flex-col gap-1.5">
                   <Label className="text-foreground text-xs font-bold leading-[133%]">Token</Label>
-                  <Select
-                    value={asset}
-                    onValueChange={(v) => {
-                      const next = tokens.find((t) => t.symbol === v);
-                      flow.setForm({
-                        cryptoCurrency: v,
-                        network: next?.networks[0]?.network ?? flow.form.network,
-                      });
-                    }}
-                  >
+                  <Select value={asset} onValueChange={(v) => flow.setForm({ cryptoCurrency: v })}>
                     <SelectTrigger>
-                      <SelectValue placeholder="USDC" />
+                      <SelectValue placeholder={asset} />
                     </SelectTrigger>
                     <SelectContent>
-                      {(tokens.length ? tokens : [{ symbol: asset, name: asset }]).map((t) => (
+                      {buyableTokens.map((t) => (
                         <SelectItem key={t.symbol} value={t.symbol}>
                           {t.symbol}
                           {t.name && t.name !== t.symbol ? ` — ${t.name}` : ''}
@@ -241,40 +298,22 @@ export const OnrampDialog = ({
                 </div>
                 <div className="bg-border min-h-[40px] w-[1px]" />
                 <div className="flex flex-1 flex-col gap-1.5">
-                  <Label className="text-foreground text-xs font-bold leading-[133%]">Network</Label>
-                  <Select value={selectedNetwork} onValueChange={(v) => flow.setForm({ network: v })}>
-                    <SelectTrigger>
-                      <SelectValue placeholder="Base" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {(networks.length ? networks : [{ network: selectedNetwork, displayName: networkDisplay }]).map(
-                        (n) => (
-                          <SelectItem key={n.network} value={n.network}>
-                            {n.displayName}
-                          </SelectItem>
-                        )
-                      )}
-                    </SelectContent>
-                  </Select>
+                  <Label className="text-foreground text-xs font-bold leading-[133%]">Amount ({fiat})</Label>
+                  <Input
+                    type="number"
+                    inputMode="decimal"
+                    min={String(bounds.min)}
+                    max={String(bounds.max)}
+                    step="0.01"
+                    placeholder="25"
+                    value={flow.form.fiatAmount}
+                    onChange={(e) => flow.setForm({ fiatAmount: e.target.value })}
+                  />
                 </div>
               </div>
-              <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
-              <div className="flex flex-col gap-1.5">
-                <Label className="text-foreground text-xs font-bold leading-[133%]">Amount ({fiat})</Label>
-                <Input
-                  type="number"
-                  inputMode="decimal"
-                  min={String(bounds.min)}
-                  max={String(bounds.max)}
-                  step="0.01"
-                  placeholder="25"
-                  value={flow.form.fiatAmount}
-                  onChange={(e) => flow.setForm({ fiatAmount: e.target.value })}
-                />
-                <p className="text-muted-foreground text-xs font-normal">
-                  Min ${bounds.min} · Max ${bounds.max}
-                </p>
-              </div>
+              <p className="text-muted-foreground text-xs font-normal">
+                Min ${bounds.min} · Max ${bounds.max}
+              </p>
               <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
               <div className="flex flex-col gap-1.5">
                 <Label className="text-foreground text-xs font-bold leading-[133%]">Email</Label>
@@ -285,7 +324,6 @@ export const OnrampDialog = ({
                   onChange={(e) => flow.setForm({ email: e.target.value })}
                 />
               </div>
-              <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
               <div className="flex flex-col gap-1.5">
                 <Label className="text-foreground text-xs font-bold leading-[133%]">Phone (US)</Label>
                 <Input
@@ -295,46 +333,37 @@ export const OnrampDialog = ({
                   onChange={(e) => flow.setForm({ phoneNumber: e.target.value })}
                 />
               </div>
+              <label className="flex cursor-pointer items-start gap-2">
+                <Checkbox
+                  checked={flow.form.accepted}
+                  onCheckedChange={(c) => flow.setForm({ accepted: c === true })}
+                  className="mt-0.5"
+                />
+                <span className="text-foreground text-xs font-medium leading-[150%]">
+                  I agree to Coinbase&apos;s{' '}
+                  <a className="text-primary underline" href={COINBASE_TERMS} target="_blank" rel="noreferrer">
+                    Guest Checkout Terms
+                  </a>
+                  ,{' '}
+                  <a className="text-primary underline" href={COINBASE_USER_AGREEMENT} target="_blank" rel="noreferrer">
+                    User Agreement
+                  </a>{' '}
+                  and{' '}
+                  <a className="text-primary underline" href={COINBASE_PRIVACY} target="_blank" rel="noreferrer">
+                    Privacy Policy
+                  </a>
+                  .
+                </span>
+              </label>
+              {flow.error && (
+                <div className="bg-destructive/10 text-destructive rounded-lg p-3 text-sm">{flow.error}</div>
+              )}
             </div>
-
-            <div className="border-border flex flex-col gap-0.5 rounded-[6px] border p-3.5">
-              <p className="text-foreground text-xs font-bold leading-[133%]">To your account</p>
-              <p className="text-foreground break-all text-base font-normal leading-[150%]" title={destinationAddress}>
-                {accountDisplay}
-              </p>
-            </div>
-
-            <label className="flex cursor-pointer items-start gap-2">
-              <Checkbox
-                checked={flow.form.accepted}
-                onCheckedChange={(c) => flow.setForm({ accepted: c === true })}
-                className="mt-0.5"
-              />
-              <span className="text-foreground text-xs font-medium leading-[150%]">
-                I agree to Coinbase&apos;s{' '}
-                <a className="text-primary underline" href={COINBASE_TERMS} target="_blank" rel="noreferrer">
-                  Guest Checkout Terms
-                </a>
-                ,{' '}
-                <a className="text-primary underline" href={COINBASE_USER_AGREEMENT} target="_blank" rel="noreferrer">
-                  User Agreement
-                </a>{' '}
-                and{' '}
-                <a className="text-primary underline" href={COINBASE_PRIVACY} target="_blank" rel="noreferrer">
-                  Privacy Policy
-                </a>
-                .
-              </span>
-            </label>
-
-            {flow.error && (
-              <div className="bg-destructive/10 text-destructive rounded-lg p-3 text-sm">{flow.error}</div>
-            )}
           </div>
 
           <div className="flex flex-shrink-0 gap-3 p-3.5 max-md:mt-auto">
-            <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
-              Cancel
+            <Button type="button" variant="outline" className="flex-1" onClick={() => setShowBuy(false)}>
+              Back
             </Button>
             <Button type="submit" className="flex-1" disabled={!canSubmit}>
               {flow.busy ? <Spinner /> : 'Continue'}
@@ -360,12 +389,10 @@ export const OnrampDialog = ({
                 Enter the code sent to {flow.form.phoneNumber.trim()}.
               </p>
             </div>
-
             {flow.error && (
               <div className="bg-destructive/10 text-destructive rounded-lg p-3 text-sm">{flow.error}</div>
             )}
           </div>
-
           <div className="flex flex-shrink-0 gap-3 p-3.5 max-md:mt-auto">
             <Button type="button" variant="outline" className="flex-1" onClick={restart}>
               Back
@@ -394,7 +421,7 @@ export const OnrampDialog = ({
                 <p className="text-base font-normal leading-[150%]">
                   {flow.order?.cryptoAmount ? `${flow.order.cryptoAmount} ` : ''}
                   {flow.order?.cryptoCurrency ?? asset}{' '}
-                  <span className="text-muted-foreground text-sm">on {networkDisplay}</span>
+                  <span className="text-muted-foreground text-sm">on {chainName}</span>
                 </p>
               </div>
             </div>
@@ -500,7 +527,6 @@ export const OnrampDialog = ({
               )}
             </div>
           </div>
-
           <div className="flex flex-shrink-0 gap-3 p-3.5 max-md:mt-auto">
             <Button type="button" className="flex-1" onClick={flow.finishWithCurrentStatus}>
               Close
@@ -515,7 +541,6 @@ export const OnrampDialog = ({
           <div className="bg-destructive/10 text-destructive rounded-lg p-3 text-sm">
             {flow.error ?? 'Payment failed.'}
           </div>
-
           <div className="flex flex-shrink-0 gap-3 p-3.5 max-md:mt-auto">
             <Button type="button" variant="outline" className="flex-1" onClick={onCancel}>
               Close
@@ -529,3 +554,5 @@ export const OnrampDialog = ({
     </DefaultDialog>
   );
 };
+
+export * from './types';

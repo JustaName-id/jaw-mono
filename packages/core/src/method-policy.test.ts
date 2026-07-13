@@ -26,10 +26,10 @@ describe('method-policy', () => {
         }
     });
 
-    it('treats wallet_onramp as interactive (never silent)', () => {
-        expect(isSilentMethod('wallet_onramp')).toBe(false);
-        expect(requiresInteraction('wallet_onramp')).toBe(true);
-        expect(INTERACTIVE_METHODS).toContain('wallet_onramp');
+    it('treats wallet_addFunds as interactive (never silent)', () => {
+        expect(isSilentMethod('wallet_addFunds')).toBe(false);
+        expect(requiresInteraction('wallet_addFunds')).toBe(true);
+        expect(INTERACTIVE_METHODS).toContain('wallet_addFunds');
     });
 
     it('fails safe: an unknown method is interactive, never silent', () => {

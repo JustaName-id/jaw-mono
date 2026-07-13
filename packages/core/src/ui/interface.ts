@@ -16,7 +16,8 @@ export type UIRequestType =
     | 'wallet_revokePermissions'
     | 'personal_sign'
     | 'eth_signTypedData_v4'
-    | 'wallet_sign';
+    | 'wallet_sign'
+    | 'wallet_addFunds';
 
 /**
  * Base structure for all UI requests
@@ -193,6 +194,21 @@ export interface WalletSignUIRequest extends BaseUIRequest {
 /**
  * Discriminated union of all UI request types
  */
+/**
+ * Add Funds request (wallet_addFunds). In AppSpecific mode this renders the
+ * receive-only screen (ENS + QR + address + network selector) — there is no Buy
+ * section without CrossPlatform. Resolves when the user closes.
+ */
+export interface AddFundsUIRequest extends BaseUIRequest {
+    type: 'wallet_addFunds';
+    data: {
+        address: Address;
+        chainId: number;
+        /** Allowed chain IDs (from the dApp params); undefined ⇒ all supported. */
+        chains?: number[];
+    };
+}
+
 export type UIRequest =
     | ConnectUIRequest
     | SignatureUIRequest
@@ -201,7 +217,8 @@ export type UIRequest =
     | SendTransactionUIRequest
     | PermissionUIRequest
     | RevokePermissionUIRequest
-    | WalletSignUIRequest;
+    | WalletSignUIRequest
+    | AddFundsUIRequest;
 
 /**
  * UI response structure

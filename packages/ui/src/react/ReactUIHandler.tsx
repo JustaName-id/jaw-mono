@@ -17,6 +17,7 @@ import {
   PermissionUIRequest,
   RevokePermissionUIRequest,
   WalletSignUIRequest,
+  AddFundsUIRequest,
   Account,
   SUPPORTED_CHAINS,
   JAW_RPC_URL,
@@ -47,6 +48,7 @@ import { Eip712Dialog } from '../components/Eip712Dialog';
 import { TransactionDialog } from '../components/TransactionDialog';
 import { PermissionDialog } from '../components/PermissionDialog';
 import { ConnectDialog } from '../components/ConnectDialog';
+import { AddFundsDialog } from '../components/AddFundsDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
 import {
@@ -294,6 +296,7 @@ export class ReactUIHandler implements UIHandler {
       'wallet_grantPermissions',
       'wallet_revokePermissions',
       'wallet_sign',
+      'wallet_addFunds',
     ].includes(request.type);
   }
 
@@ -493,6 +496,17 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+          />
+        );
+
+      case 'wallet_addFunds':
+        return (
+          <AddFundsDialogWrapper
+            request={request as AddFundsUIRequest}
+            onApprove={onApprove}
+            onReject={onReject}
+            apiKey={this.config.apiKey}
+            defaultChainId={this.config.defaultChainId}
           />
         );
 
@@ -2540,6 +2554,40 @@ function SiweDialogWrapper({
 }
 
 // RevokePermissionDialogWrapper - handles wallet_revokePermissions
+// AppSpecific Add Funds: receive-only (no CrossPlatform onramp). Renders the
+// AddFundsDialog with canBuy=false; closing the screen resolves null (deposits
+// are off-app, never a rejection).
+function AddFundsDialogWrapper({
+  request,
+  onApprove,
+  apiKey,
+  defaultChainId,
+}: {
+  request: AddFundsUIRequest;
+  onApprove: (data: unknown) => void;
+  onReject: (error?: Error) => void;
+  apiKey?: string;
+  defaultChainId?: number;
+}) {
+  const allowedIds = request.data.chains?.length ? request.data.chains : SUPPORTED_CHAINS.map((c) => c.id);
+  const chains = SUPPORTED_CHAINS.filter((c) => allowedIds.includes(c.id)).map((c) => ({ id: c.id, name: c.name }));
+  const mainnetRpcUrl = apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : undefined;
+  const close = () => onApprove(null);
+  return (
+    <AddFundsDialog
+      apiKey={apiKey ?? ''}
+      destinationAddress={request.data.address}
+      mainnetRpcUrl={mainnetRpcUrl}
+      chains={chains}
+      defaultChainId={request.data.chainId ?? defaultChainId}
+      canBuy={false}
+      onComplete={close}
+      onCancel={close}
+      onError={close}
+    />
+  );
+}
+
 function RevokePermissionDialogWrapper({
   request,
   onApprove,

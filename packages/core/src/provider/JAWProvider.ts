@@ -171,10 +171,9 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
                     case 'wallet_sign':
                     case 'wallet_grantPermissions':
                     case 'wallet_revokePermissions':
-                    case 'wallet_onramp': {
-                        if (args.method === 'wallet_onramp' && signerType === 'appSpecific') {
-                            throw standardErrors.provider.unsupportedMethod();
-                        }
+                    case 'wallet_addFunds': {
+                        // addFunds is valid in both modes: CrossPlatform shows the
+                        // full screen (receive + buy), AppSpecific shows receive-only.
                         const ephemeralSigner = this.initSigner(signerType);
 
                         if (signerType === 'appSpecific') {

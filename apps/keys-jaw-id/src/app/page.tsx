@@ -12,8 +12,8 @@ import { ensureIntNumber, type SignInWithEthereumCapabilityRequest } from '@jaw.
 import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
-import { OnrampModal } from '../components/OnrampModal';
-import type { OnrampOrder, OnrampParams } from '@jaw.id/core';
+import { AddFundsModal } from '../components/AddFundsModal';
+import type { OnrampOrder, AddFundsParams } from '@jaw.id/core';
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
@@ -477,8 +477,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         requestType = SDKRequestType.GRANT_PERMISSIONS;
       } else if (method === 'wallet_revokePermissions') {
         requestType = SDKRequestType.REVOKE_PERMISSIONS;
-      } else if (method === 'wallet_onramp') {
-        requestType = SDKRequestType.ONRAMP;
+      } else if (method === 'wallet_addFunds') {
+        requestType = SDKRequestType.ADD_FUNDS;
       } else if (method === 'wallet_connect') {
         requestType = SDKRequestType.CONNECT;
       } else {
@@ -533,7 +533,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           requestType === SDKRequestType.SEND_TRANSACTION ||
           requestType === SDKRequestType.GRANT_PERMISSIONS ||
           requestType === SDKRequestType.REVOKE_PERMISSIONS ||
-          requestType === SDKRequestType.ONRAMP) &&
+          requestType === SDKRequestType.ADD_FUNDS) &&
         authQuery.isAuthenticated &&
         currentAccount
       ) {
@@ -621,22 +621,23 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       );
     }
 
-    // Onramp: fiat→crypto guest-checkout modal. No signature — delivers to the
-    // connected account. Resolves with the normalized order.
+    // Add Funds: receive (QR) + optional fiat buy. No signature — delivers to /
+    // receives at the connected account. Resolves with the order on a buy, or
+    // null when the user only received / closed.
     if (
-      pendingRequest?.type === SDKRequestType.ONRAMP &&
+      pendingRequest?.type === SDKRequestType.ADD_FUNDS &&
       state !== 'success' &&
       state !== 'error' &&
       (authQuery.isAuthenticated || state === 'processing')
     ) {
-      const onrampParams = (pendingRequest.params?.[0] ?? {}) as OnrampParams;
+      const addFundsParams = (pendingRequest.params?.[0] ?? {}) as AddFundsParams;
       return (
-        <OnrampModal
+        <AddFundsModal
           // The embedded iframe stays mounted across flows, so without a
           // per-request key React reuses the instance and a cancelled flow's
           // state (step, sessionId, payUrl) resurfaces on the next request.
           key={pendingRequest.requestId}
-          onrampRequest={{ params: onrampParams }}
+          addFundsRequest={{ params: addFundsParams }}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
           origin={currentOrigin || undefined}
@@ -647,9 +648,22 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               setState('success');
               scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
-              console.error('❌ Failed to complete onramp:', err);
-              setError(err instanceof Error ? err.message : 'Failed to complete onramp');
+              console.error('❌ Failed to complete add funds:', err);
+              setError(err instanceof Error ? err.message : 'Failed to complete add funds');
               setState('error');
+            }
+          }}
+          onClose={async () => {
+            // Received via QR or dismissed without buying — resolve null, not a
+            // rejection, so the dApp gets a clean "no order" result.
+            setState('processing');
+            try {
+              await pendingRequest.onApprove(null);
+              setState('success');
+              scheduleClose(CLOSE_DELAY_MS);
+            } catch (err) {
+              console.error('❌ Failed to close add funds:', err);
+              communicator.requestClose();
             }
           }}
           onError={async (error, errorCode) => {
@@ -1103,7 +1117,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                     pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
                     pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
                     pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.ONRAMP
+                    pendingRequest?.type === SDKRequestType.ADD_FUNDS
                   ) {
                     // If there's a pending sign message, typed data, transaction, or permission request,
                     // the modal will be shown in the priority logic above since user is now authenticated
@@ -1172,7 +1186,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                     pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
                     pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
                     pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.ONRAMP
+                    pendingRequest?.type === SDKRequestType.ADD_FUNDS
                   ) {
                     // If there's a pending sign message, typed data, transaction, or permission request,
                     // the modal will be shown in the priority logic above since user is now authenticated

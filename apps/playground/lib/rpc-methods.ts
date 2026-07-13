@@ -1015,33 +1015,56 @@ console.log('Assets:', assets);`;
     },
   },
 
-  // ===== Onramp =====
+  // ===== Add Funds =====
   {
-    id: 'wallet_onramp',
-    name: 'wallet_onramp',
-    method: 'wallet_onramp',
+    id: 'wallet_addFunds',
+    name: 'wallet_addFunds',
+    method: 'wallet_addFunds',
     category: 'asset',
-    description: 'Buy crypto with Apple/Google Pay (guest checkout) into the connected account',
+    description: 'Open the Add Funds screen: receive via QR + (where supported) buy with Apple/Google Pay',
     requiresConnection: false,
     parameters: [
+      {
+        name: 'chains',
+        type: 'json',
+        label: 'Chains (optional)',
+        description: 'Array of chain IDs to offer (subset of supported). Blank ⇒ all supported.',
+        required: false,
+        defaultValue: '[8453]',
+      },
       {
         name: 'fiatAmount',
         type: 'number',
         label: 'Amount (USD)',
-        description: 'Fiat amount to spend (2–500). Optional — the user can edit it in the wallet.',
+        description: 'Buy-section preset (2–500). Optional — the user can edit it in the wallet.',
         required: false,
         defaultValue: '2',
       },
     ],
     getCodeSnippet: (params) => {
-      const presets = params.fiatAmount ? `{ fiatAmount: '${params.fiatAmount}' }` : '{}';
-      return `const order = await provider.request({
-  method: 'wallet_onramp',
+      const parts: string[] = [];
+      if (params.chains) parts.push(`chains: ${params.chains}`);
+      if (params.fiatAmount) parts.push(`fiatAmount: '${params.fiatAmount}'`);
+      const presets = parts.length ? `{ ${parts.join(', ')} }` : '{}';
+      return `const result = await provider.request({
+  method: 'wallet_addFunds',
   params: [${presets}],
 });
-console.log('Onramp order:', order);`;
+// result is the order if the user bought, or null if they only received
+console.log('Add funds result:', result);`;
     },
-    buildParams: (params) => [params.fiatAmount ? { fiatAmount: params.fiatAmount } : {}],
+    buildParams: (params) => {
+      const preset: Record<string, unknown> = {};
+      if (params.chains) {
+        try {
+          preset.chains = JSON.parse(params.chains);
+        } catch {
+          /* ignore malformed chains */
+        }
+      }
+      if (params.fiatAmount) preset.fiatAmount = params.fiatAmount;
+      return [preset];
+    },
   },
 
   // ===== Utility Tools =====

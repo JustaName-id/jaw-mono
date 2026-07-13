@@ -12,6 +12,7 @@ import {
     PermissionUIRequest,
     RevokePermissionUIRequest,
     WalletSignUIRequest,
+    AddFundsUIRequest,
     PersonalSignRequestData,
     TypedDataRequestData,
     PaymasterConfig,
@@ -424,6 +425,28 @@ export class AppSpecificSigner extends JAWSigner {
                 }
 
                 return response.data;
+            }
+
+            case 'wallet_addFunds': {
+                // AppSpecific has no CrossPlatform onramp, so this is receive-only:
+                // the UI shows ENS + QR + address + network selector. Closing the
+                // screen is a normal finish (deposits are off-app), so resolve null.
+                const addFundsParams = ((request.params as [{ chains?: number[] }] | undefined)?.[0] ?? {}) as {
+                    chains?: number[];
+                };
+                const uiRequest: AddFundsUIRequest = {
+                    id: crypto.randomUUID(),
+                    type: 'wallet_addFunds',
+                    timestamp: Date.now(),
+                    correlationId,
+                    data: {
+                        address: this.accounts[0],
+                        chainId: this.chain.id,
+                        chains: addFundsParams.chains,
+                    },
+                };
+                await this.uiHandler.request(uiRequest);
+                return null;
             }
 
             default:

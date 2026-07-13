@@ -12,7 +12,7 @@ import {
   type PersonalSignRequestData,
   type TypedDataRequestData,
   type WalletGetCallsHistoryResponse,
-  type OnrampParams,
+  type AddFundsParams,
   type OnrampOrder,
 } from '@jaw.id/core';
 import type { AccountWithCapabilities } from '../Connector.js';
@@ -547,30 +547,31 @@ export async function getCallsHistory<config extends Config>(
 }
 
 // ============================================================================
-// onramp
+// addFunds
 // ============================================================================
 
-export namespace onramp {
+export namespace addFunds {
   export type Parameters<config extends Config = Config> = {
     address?: Address;
     chainId?: number;
     connector?: Connector;
-    /** Optional presets; user edits amount + fills contact in the wallet modal. */
-    params?: OnrampParams;
+    /** Optional presets (chains allowlist + Buy-section presets). */
+    params?: AddFundsParams;
   };
 
-  export type ReturnType = OnrampOrder;
+  export type ReturnType = OnrampOrder | null;
   export type ErrorType = Error;
 }
 
 /**
- * Opens the wallet's fiat→crypto onramp modal (Apple/Google Pay) for the
- * connected account. Calls wallet_onramp and resolves with the resulting order.
+ * Opens the wallet's Add Funds screen (receive via QR + optional Apple/Google
+ * Pay buy) for the connected account. Calls wallet_addFunds and resolves with
+ * the resulting order if the user bought, or null if they only received/closed.
  */
-export async function onramp<config extends Config>(
+export async function addFunds<config extends Config>(
   config: config,
-  parameters: onramp.Parameters<config> = {}
-): Promise<onramp.ReturnType> {
+  parameters: addFunds.Parameters<config> = {}
+): Promise<addFunds.ReturnType> {
   const { address, chainId, connector, params } = parameters;
 
   const client = await getConnectorClient(config, {
@@ -580,9 +581,9 @@ export async function onramp<config extends Config>(
   });
 
   const result = await client.request({
-    method: 'wallet_onramp' as never,
+    method: 'wallet_addFunds' as never,
     params: [params ?? {}] as never,
   });
 
-  return result as onramp.ReturnType;
+  return result as addFunds.ReturnType;
 }

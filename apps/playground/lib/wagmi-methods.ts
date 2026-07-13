@@ -101,6 +101,7 @@ export type WagmiHookType =
   | 'useGetAssets'
   | 'useCapabilities'
   | 'useGetCallsHistory'
+  | 'useAddFunds'
   | 'utility';
 
 export type WagmiMethod = {
@@ -1027,6 +1028,52 @@ console.log('Assets:', assets);`;
         args.assetFilter = JSON.parse(params.assetFilter);
       }
       return args;
+    },
+  },
+
+  // ===== Add Funds =====
+  {
+    id: 'useAddFunds',
+    name: 'useAddFunds',
+    method: 'wallet_addFunds',
+    hookType: 'useAddFunds',
+    category: 'asset',
+    description: 'Open the Add Funds screen: receive via QR + (where supported) buy with Apple/Google Pay',
+    requiresConnection: false,
+    parameters: [
+      {
+        name: 'chains',
+        type: 'json',
+        label: 'Chains (optional)',
+        description: 'Array of chain IDs to offer (subset of supported). Blank ⇒ all supported.',
+        required: false,
+        defaultValue: '[8453]',
+      },
+      {
+        name: 'fiatAmount',
+        type: 'number',
+        label: 'Amount (USD)',
+        description: 'Buy-section preset. Optional — the user can edit it in the wallet.',
+        required: false,
+        defaultValue: '2',
+      },
+    ],
+    getCodeSnippet: () => `import { useAddFunds } from '@jaw.id/wagmi';
+
+const { mutateAsync: addFunds } = useAddFunds();
+// order if the user bought, or null if they only received
+const result = await addFunds({ params: { chains: [8453], fiatAmount: '2' } });`,
+    buildParams: (params) => {
+      const preset: Record<string, unknown> = {};
+      if (params.chains) {
+        try {
+          preset.chains = JSON.parse(params.chains);
+        } catch {
+          /* ignore malformed chains */
+        }
+      }
+      if (params.fiatAmount) preset.fiatAmount = params.fiatAmount;
+      return { params: preset };
     },
   },
 

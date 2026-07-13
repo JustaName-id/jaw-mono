@@ -66,8 +66,9 @@ export interface OnrampOptions {
 }
 
 /**
- * dApp-supplied params for wallet_onramp (all optional; the destination is the
- * connected account, injected by the wallet — never passed by the dApp).
+ * Buy-section (Coinbase onramp) presets for wallet_addFunds (all optional; the
+ * destination is the connected account, injected by the wallet — never passed
+ * by the dApp).
  */
 export interface OnrampParams {
     fiatAmount?: string;
@@ -75,4 +76,15 @@ export interface OnrampParams {
     cryptoCurrency?: string;
     network?: string;
     paymentMethodHint?: OnrampPaymentMethod;
+}
+
+/**
+ * dApp-supplied params for wallet_addFunds. Extends the onramp (Buy-section)
+ * presets with an optional chains allowlist. `chains` are chain IDs, a subset
+ * of SUPPORTED_CHAINS; omitted ⇒ all supported chains (incl testnets). The Buy
+ * section only appears (CrossPlatform) when a selected chain has an
+ * onramp-supported token; otherwise the screen is receive-only.
+ */
+export interface AddFundsParams extends OnrampParams {
+    chains?: number[];
 }

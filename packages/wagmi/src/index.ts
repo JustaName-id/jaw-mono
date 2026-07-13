@@ -35,7 +35,7 @@ export {
   useCapabilities,
   useSign,
   useGetCallsHistory,
-  useOnramp,
+  useAddFunds,
 } from './lib/Hooks.js';
 
 // Also export individual actions for convenience

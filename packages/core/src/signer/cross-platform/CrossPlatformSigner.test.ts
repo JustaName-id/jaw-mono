@@ -485,10 +485,9 @@ describe('CrossPlatformSigner', () => {
             expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
         });
 
-        it('should route wallet_onramp to the popup', async () => {
-            // Onramp is claimed by CrossPlatformSigner (not the base signer), so it
-            // must still reach the popup here.
-            const request: RequestArguments = { method: 'wallet_onramp', params: [{}] };
+        it('should route wallet_addFunds to the popup', async () => {
+            // addFunds is routed like the other signing methods and reaches the popup.
+            const request: RequestArguments = { method: 'wallet_addFunds', params: [{}] };
 
             mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue({
                 id: mockMessageId,

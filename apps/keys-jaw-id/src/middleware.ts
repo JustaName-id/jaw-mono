@@ -59,7 +59,7 @@ export function middleware(request: NextRequest) {
     "font-src 'self' data:",
     `connect-src ${connectSrc}`,
     // frame-src: the Coinbase headless-onramp pay widget (Apple/Google Pay) is
-    // embedded in an iframe during wallet_onramp. Without this, framing falls
+    // embedded in an iframe during the wallet_addFunds Buy flow. Without this, framing falls
     // back to default-src 'self' and the pay sheet is blocked. child-src covers
     // older engines. Both are unrelated to frame-ancestors (who may embed US).
     "frame-src 'self' https://pay.coinbase.com",

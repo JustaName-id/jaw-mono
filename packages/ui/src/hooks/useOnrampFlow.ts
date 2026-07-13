@@ -176,7 +176,7 @@ export function useOnrampFlow({ apiKey, destinationAddress, presets, onComplete,
 
   // Gate widget events on origin: the `onramp_api.` prefix is forgeable, so
   // without this any co-resident frame could post a fake polling_success and
-  // resolve wallet_onramp before payment. Origin (not e.source) because the
+  // resolve the buy before payment. Origin (not e.source) because the
   // widget posts from nested frames that share the payUrl origin.
   useEffect(() => {
     if (step !== 'pay' || !payUrl) return;

@@ -9,7 +9,7 @@ export * from './components/SiweDialog';
 export * from './components/ConnectDialog';
 export * from './components/Eip712Dialog';
 export * from './components/PermissionDialog';
-export * from './components/OnrampDialog';
+export * from './components/AddFundsDialog';
 export * from './components/FeeTokenSelector';
 export * from './lib/utils';
 export * from './icons';
