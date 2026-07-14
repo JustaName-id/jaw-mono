@@ -27,7 +27,26 @@ function envSessionEnabled(): boolean {
   return value === '1' || value === 'true';
 }
 
+// Autonomous (session) signing has no per-call human confirmation, so a
+// prompt-injected agent could burst signing calls and silently drain the
+// session key's on-chain allowance. A small client-side rate limit on signing
+// methods bounds that; the on-chain permission scope remains the hard cap.
+const SIGN_RATE_WINDOW_MS = 60_000;
+const MAX_SIGNS_PER_WINDOW = 5;
+const SESSION_SIGNING_METHODS = ['wallet_sendCalls', 'personal_sign', 'eth_signTypedData_v4'];
+
 export function registerRpcTool(server: McpServer): void {
+  // Per-server (per-process) sliding window over recent autonomous signs.
+  const recentSigns: number[] = [];
+  function assertUnderSignLimit(): void {
+    const now = Date.now();
+    while (recentSigns.length && now - recentSigns[0] > SIGN_RATE_WINDOW_MS) recentSigns.shift();
+    if (recentSigns.length >= MAX_SIGNS_PER_WINDOW) {
+      throw new Error('Autonomous signing rate limit reached, retry shortly or call again with session: false.');
+    }
+    recentSigns.push(now);
+  }
+
   server.registerTool(
     'jaw_rpc',
     {
@@ -57,6 +76,9 @@ export function registerRpcTool(server: McpServer): void {
               `Method ${params.method} is not supported in session mode. ` +
                 'Call again with session: false to route through the browser bridge.'
             );
+          }
+          if (SESSION_SIGNING_METHODS.includes(params.method)) {
+            assertUnderSignLimit();
           }
           bridge = new SessionBridge({ apiKey, chainId });
         } else {

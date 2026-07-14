@@ -60,7 +60,12 @@ export function redactConfig(config: JawConfig): Record<string, unknown> {
     apiKey: config.apiKey ? `${config.apiKey.slice(0, 8)}...` : undefined,
     ...(config.paymasters && {
       paymasters: Object.fromEntries(
-        Object.entries(config.paymasters).map(([chainId, pm]) => [chainId, { ...pm, url: redactUrlSecrets(pm.url) }])
+        Object.entries(config.paymasters).map(([chainId, pm]) => [
+          chainId,
+          // context is a free-form object (usually just a sponsorshipPolicyId) but a
+          // provider could stash a token there, so mask it rather than hand it to the agent.
+          { ...pm, url: redactUrlSecrets(pm.url), context: pm.context ? '***' : undefined },
+        ])
       ),
     }),
   };

@@ -165,6 +165,36 @@ describe('jaw_rpc session mode', () => {
     expect(getBridgeMock).toHaveBeenCalled();
     expect(sessionRequestMock).not.toHaveBeenCalled();
   });
+
+  it('rate-limits a burst of autonomous signing calls (bounds silent allowance drain)', async () => {
+    const client = await connectClient();
+    const sign = () =>
+      client.callTool({
+        name: 'jaw_rpc',
+        arguments: { method: 'wallet_sendCalls', params: { calls: [] }, session: true, chainId: 84532 },
+      });
+
+    // The window allows 5 signs; each fresh server starts with an empty window.
+    for (let i = 0; i < 5; i++) {
+      expect(toolText(await sign())).toContain('0xsession-result');
+    }
+
+    const sixth = await sign();
+    expect(sixth.isError).toBe(true);
+    expect(toolText(sixth)).toContain('rate limit');
+    // The rate-limited call never reaches the bridge.
+    expect(sessionRequestMock).toHaveBeenCalledTimes(5);
+  });
+
+  it('does not rate-limit reads or browser-bridge calls', async () => {
+    const client = await connectClient();
+    for (let i = 0; i < 8; i++) {
+      // wallet_getAssets is a read routed through the browser bridge, not a session sign.
+      expect(toolText(await client.callTool({ name: 'jaw_rpc', arguments: { method: 'wallet_getAssets' } }))).toContain(
+        '0xbridge-result'
+      );
+    }
+  });
 });
 
 describe('jaw_session_status', () => {

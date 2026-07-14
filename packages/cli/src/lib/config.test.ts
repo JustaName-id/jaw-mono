@@ -81,6 +81,21 @@ describe('redactConfig', () => {
     }) as { paymasters: Record<number, { url: string }> };
     expect(redacted.paymasters[1].url).toBe('https://paymaster.example.com/rpc');
   });
+
+  it('masks the free-form paymaster context (a provider could stash a token there)', () => {
+    const redacted = redactConfig({
+      paymasters: { 84532: { url: 'https://pm.example.com/rpc', context: { sponsorshipPolicyId: 'sp_secret' } } },
+    }) as { paymasters: Record<number, { url: string; context?: unknown }> };
+    expect(redacted.paymasters[84532].context).toBe('***');
+    expect(JSON.stringify(redacted)).not.toContain('sp_secret');
+  });
+
+  it('leaves the context undefined when there is none', () => {
+    const redacted = redactConfig({
+      paymasters: { 1: { url: 'https://pm.example.com/rpc' } },
+    }) as { paymasters: Record<number, { context?: unknown }> };
+    expect(redacted.paymasters[1].context).toBeUndefined();
+  });
 });
 
 describe('migrateConfig', () => {
