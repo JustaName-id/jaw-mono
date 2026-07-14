@@ -18,6 +18,14 @@ import { TransportRouter } from './transport-router.js';
  */
 const TRANSPORT_LIVENESS_POLL_MS = 500;
 
+/**
+ * Upper bound on how long the first transport acquire waits for the
+ * trusted-hosts refresh before proceeding on the baseline. Short enough to keep
+ * connect responsive on a slow/dead keys endpoint; long enough that a healthy
+ * localhost/prod fetch settles first.
+ */
+const TRUSTED_HOSTS_READY_TIMEOUT_MS = 1500;
+
 export type CommunicatorOptions = {
     metadata: AppMetadata;
     preference: JawProviderPreference;
@@ -112,11 +120,60 @@ export class Communicator {
             onDismiss: () => this.rejectPendingRequests(),
         });
 
-        // Best-effort, non-blocking: routing works off the baseline until (and
-        // if) this resolves. Swallow failures — refreshFrom is already fail-soft.
-        void this.trustedHosts.refreshFrom(this.url).catch(() => {
-            /* fail-soft: keep the baseline */
-        });
+        // Kick off the trusted-hosts refresh. Routing works off the baseline
+        // until this resolves; an acquire routed to popup ONLY by the
+        // clickjacking guard awaits it (bounded) so a Safari embedded connect —
+        // which needs the embedder trusted at connect time — doesn't lose a
+        // deterministic race against the fetch and fall back to the popup.
+        // Fail-soft: on error/timeout the baseline stands.
+        const refresh = this.trustedHosts
+            .refreshFrom(this.url)
+            .then(() => undefined)
+            .catch(() => undefined);
+        const timeout = new Promise<void>((resolve) => setTimeout(resolve, TRUSTED_HOSTS_READY_TIMEOUT_MS));
+        this.trustedHostsReady = Promise.race([refresh, timeout]);
+    }
+
+    /** Resolves once the trusted-hosts refresh has completed, failed, or timed out. */
+    private readonly trustedHostsReady: Promise<void>;
+
+    /**
+     * Acquire the routed transport. Waits for the trusted-hosts refresh ONLY
+     * when the pending list could change the decision — i.e. the route is popup
+     * purely because the embedder isn't (yet) trusted. Every other popup reason
+     * is trust-independent, and there the wait must be skipped: it would spend
+     * the click's transient activation, and Safari then blocks the popup's
+     * window.open.
+     */
+    private async acquire(ctx: RouteContext): Promise<Transport> {
+        if (this.router.decide(ctx).reason === 'clickjacking-guard') {
+            await this.trustedHostsReady;
+        }
+        return this.router.acquire(ctx);
+    }
+
+    /**
+     * Whether a request with this method would route to the embedded iframe
+     * (rather than the popup). Used by the connect flow to decide whether to
+     * establish the session in the iframe's own storage partition.
+     *
+     * Awaits the bounded trusted-hosts refresh when the ONLY thing keeping the
+     * route on the popup is an as-yet-unconfirmed embedder trust — mirroring
+     * `acquire` — so this answer matches the transport the request will actually
+     * get. Without the await a cold-start (trust list still loading) would read
+     * the pre-refresh state, report popup, skip the forced handshake, and then
+     * route the real request to the iframe with no session — costing the extra
+     * reconnect biometric this feature exists to avoid.
+     *
+     * Reflects the static routing decision only, not the single-use
+     * popup/iframe-reconnect overrides (those live in the transport's acquire).
+     */
+    async willRouteToIframe(method?: string): Promise<boolean> {
+        const ctx: RouteContext = method !== undefined ? { method } : {};
+        if (this.router.decide(ctx).reason === 'clickjacking-guard') {
+            await this.trustedHostsReady;
+        }
+        return this.router.decide(ctx).kind === 'iframe';
     }
 
     /**
@@ -171,7 +228,7 @@ export class Communicator {
             const entries = [...this.inflight.values()];
             if (entries.length === 0) return;
             try {
-                const transport = await this.router.acquire(getRouteContext(entries[0].request));
+                const transport = await this.acquire(getRouteContext(entries[0].request));
                 for (const { request } of entries) {
                     await transport.postMessage(request);
                 }
@@ -202,7 +259,7 @@ export class Communicator {
      * encrypted request goes to the iframe).
      */
     async waitForPopupLoaded(method?: string): Promise<Window> {
-        const transport = await this.router.acquire(method !== undefined ? { method } : {});
+        const transport = await this.acquire(method !== undefined ? { method } : {});
         return transport.ensureReady();
     }
 
@@ -235,7 +292,7 @@ export class Communicator {
      */
     postMessage = async (message: Message) => {
         this.ensureSwitchListener();
-        const transport = await this.router.acquire(getRouteContext(message));
+        const transport = await this.acquire(getRouteContext(message));
         await transport.postMessage(message);
     };
 
@@ -252,7 +309,7 @@ export class Communicator {
             // its window for an abrupt close (popup killed before it can post
             // PopupUnload) so the request rejects instead of hanging.
             this.ensureSwitchListener();
-            const transport = await this.router.acquire(getRouteContext(request));
+            const transport = await this.acquire(getRouteContext(request));
             await transport.postMessage(request);
             return await this.awaitResponseOrClosed(transport, promise);
         } catch (error) {

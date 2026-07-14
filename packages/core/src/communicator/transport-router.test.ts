@@ -74,6 +74,7 @@ type RouterEnv = {
     secureContext?: boolean;
     https?: boolean;
     hostname?: string;
+    hasAccount?: boolean;
 };
 
 function createRouter(env: RouterEnv = {}) {
@@ -97,6 +98,7 @@ function createRouter(env: RouterEnv = {}) {
         getLocation: () => ({
             hostname: env.hostname ?? 'dapp.example.com',
         }),
+        getLastAccount: () => (env.hasAccount ? { username: 'x', credentialId: 'abc', publicKey: '0x01' } : undefined),
     };
 
     return { router: new TransportRouter(config), popupMock, iframeMock, popupFactory, iframeFactory };
@@ -178,6 +180,71 @@ describe('TransportRouter.route', () => {
     it('allows iframe without IOv2 when the host is trusted', () => {
         const { router } = createRouter({ mode: 'iframe', iov2: false, trusted: true });
         expect(router.route({})).toBe('iframe');
+    });
+
+    describe('Safari embedded connect for known accounts', () => {
+        it('routes connect to the iframe on Safari when an account exists (trusted host)', () => {
+            const { router } = createRouter({
+                mode: 'iframe',
+                safari: true,
+                iov2: false,
+                trusted: true,
+                hasAccount: true,
+            });
+            expect(router.route({ method: 'eth_requestAccounts' })).toBe('iframe');
+            expect(router.route({ method: 'wallet_connect' })).toBe('iframe');
+        });
+
+        it('keeps the popup when NO account exists (create must run there, in the click gesture)', () => {
+            const { router } = createRouter({
+                mode: 'iframe',
+                safari: true,
+                iov2: false,
+                trusted: true,
+                hasAccount: false,
+            });
+            expect(router.route({ method: 'wallet_connect' })).toBe('popup');
+        });
+
+        it('still routes untrusted embedders to the popup (clickjacking guard wins)', () => {
+            const { router } = createRouter({
+                mode: 'iframe',
+                safari: true,
+                iov2: false,
+                trusted: false,
+                hasAccount: true,
+            });
+            expect(router.route({ method: 'wallet_connect' })).toBe('popup');
+        });
+
+        it('still routes insecure/non-HTTPS contexts to the popup', () => {
+            const { router } = createRouter({
+                mode: 'iframe',
+                safari: true,
+                trusted: true,
+                https: false,
+                hasAccount: true,
+            });
+            expect(router.route({ method: 'wallet_connect' })).toBe('popup');
+        });
+
+        it('does not change non-Safari routing (Chrome already uses the iframe)', () => {
+            const { router } = createRouter({
+                mode: 'iframe',
+                safari: false,
+                hasAccount: true,
+            });
+            expect(router.route({ method: 'wallet_connect' })).toBe('iframe');
+        });
+
+        it('does not change popup mode', () => {
+            const { router } = createRouter({
+                mode: 'popup',
+                safari: true,
+                hasAccount: true,
+            });
+            expect(router.route({ method: 'wallet_connect' })).toBe('popup');
+        });
     });
 });
 
