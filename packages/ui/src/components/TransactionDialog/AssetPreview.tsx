@@ -60,7 +60,7 @@ function AmountRow({
 export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSymbol }: AssetPreviewProps) => {
   if (willRevert) {
     return (
-      <div className="flex items-center gap-1">
+      <div className="flex items-center gap-1 px-3.5">
         <p className="text-xs leading-[133%] text-red-500">Transaction is likely to fail</p>
         <TooltipProvider delayDuration={0}>
           <Tooltip>
