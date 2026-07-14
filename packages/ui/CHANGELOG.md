@@ -1,3 +1,13 @@
+## 1.2.7 (2026-07-14)
+
+### 🩹 Fixes
+
+- asset changes ([#241](https://github.com/JustaName-id/jaw-mono/pull/241))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.2.6 (2026-07-10)
 
 ### 🧱 Updated Dependencies
