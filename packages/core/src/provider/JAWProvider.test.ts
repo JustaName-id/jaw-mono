@@ -379,6 +379,23 @@ describe('JAWProvider', () => {
             expect(mockSigner.handshake).not.toHaveBeenCalled();
             expect(mockSigner.request).toHaveBeenCalledWith({ method: 'eth_requestAccounts' });
         });
+
+        it('does NOT force the handshake in AppSpecific mode (it drives its own UIHandler, not the iframe/popup transport)', async () => {
+            const appSpecificProvider = new JAWProvider({
+                ...mockConstructorOptions,
+                preference: { ...mockConstructorOptions.preference, mode: 'AppSpecific' },
+            });
+            (appSpecificProvider as any).signer = mockSigner;
+            (isSafari as Mock).mockReturnValue(true);
+            (appSpecificProvider as any).communicator.willRouteToIframe = vi.fn().mockResolvedValue(true);
+
+            await appSpecificProvider.request({ method: 'eth_requestAccounts' });
+
+            // Mode gate short-circuits before the router is consulted.
+            expect((appSpecificProvider as any).communicator.willRouteToIframe).not.toHaveBeenCalled();
+            expect(mockSigner.handshake).not.toHaveBeenCalled();
+            expect(mockSigner.request).toHaveBeenCalledWith({ method: 'eth_requestAccounts' });
+        });
     });
 
     describe('_request - No Signer: wallet_connect', () => {
