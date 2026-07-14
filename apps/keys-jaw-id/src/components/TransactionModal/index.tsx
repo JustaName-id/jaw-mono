@@ -213,6 +213,7 @@ export const TransactionModal = ({
     assetsOut,
     assetsIn,
     error: assetPreviewError,
+    willRevert: assetPreviewWillRevert,
   } = useAssetPreview({
     account: (transactionRequest?.from ?? walletAddress) as Address | undefined,
     calls: transactionCalls,
@@ -480,6 +481,7 @@ export const TransactionModal = ({
       assetsOut={assetsOut}
       assetsIn={assetsIn}
       assetPreviewError={assetPreviewError}
+      assetPreviewWillRevert={assetPreviewWillRevert}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}

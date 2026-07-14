@@ -32,6 +32,7 @@ export interface TransactionDialogProps {
   assetsOut?: AssetDelta[];
   assetsIn?: AssetDelta[];
   assetPreviewError?: boolean;
+  assetPreviewWillRevert?: boolean;
 
   // Actions
   onConfirm: () => Promise<void>;

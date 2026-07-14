@@ -15,6 +15,8 @@ export interface UseAssetPreviewResult {
   assetsOut: AssetDelta[];
   assetsIn: AssetDelta[];
   error: boolean;
+  /** True when the simulation ran and a call in the batch reverted — the batch would fail on-chain. */
+  willRevert: boolean;
 }
 
 /**
@@ -31,6 +33,7 @@ export function useAssetPreview({
   const [assetsOut, setAssetsOut] = useState<AssetDelta[]>([]);
   const [assetsIn, setAssetsIn] = useState<AssetDelta[]>([]);
   const [error, setError] = useState<boolean>(false);
+  const [willRevert, setWillRevert] = useState<boolean>(false);
 
   // Collision-safe content key so the effect re-runs only when the batch actually changes.
   const callsKey = JSON.stringify(calls.map((c) => [c.to, c.value?.toString(), c.data]));
@@ -40,15 +43,18 @@ export function useAssetPreview({
       setAssetsOut([]);
       setAssetsIn([]);
       setError(false);
+      setWillRevert(false);
       return;
     }
 
     let cancelled = false;
     setError(false);
+    setWillRevert(false);
 
     simulateAssetChanges({ chainId, apiKey, account, calls })
-      .then((deltas) => {
+      .then(({ deltas, willRevert }) => {
         if (cancelled) return;
+        setWillRevert(willRevert);
         setAssetsOut(deltas.filter((d) => d.direction === 'out'));
         setAssetsIn(deltas.filter((d) => d.direction === 'in'));
       })
@@ -57,6 +63,7 @@ export function useAssetPreview({
         setError(true);
         setAssetsOut([]);
         setAssetsIn([]);
+        setWillRevert(false);
       });
 
     return () => {
@@ -64,5 +71,5 @@ export function useAssetPreview({
     };
   }, [enabled, account, chainId, apiKey, callsKey]);
 
-  return { assetsOut, assetsIn, error };
+  return { assetsOut, assetsIn, error, willRevert };
 }

@@ -5,6 +5,7 @@ interface AssetPreviewProps {
   assetsOut: AssetDelta[];
   assetsIn: AssetDelta[];
   error: boolean;
+  willRevert: boolean;
   nativeSymbol: string;
 }
 
@@ -55,7 +56,19 @@ function AmountRow({
   );
 }
 
-export const AssetPreview = ({ assetsOut, assetsIn, error, nativeSymbol }: AssetPreviewProps) => {
+export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSymbol }: AssetPreviewProps) => {
+  if (willRevert) {
+    return (
+      <div className="flex flex-col gap-1 rounded-[6px] border border-red-500/40 bg-red-500/5 p-3.5">
+        <p className="text-xs font-bold leading-[133%] text-red-500">This transaction is likely to fail</p>
+        <p className="text-muted-foreground text-xs leading-[150%]">
+          Simulation shows this transaction reverting on-chain. You can still submit it, but it will probably fail and
+          consume gas.
+        </p>
+      </div>
+    );
+  }
+
   if (error || (assetsOut.length === 0 && assetsIn.length === 0)) return null;
 
   return (
