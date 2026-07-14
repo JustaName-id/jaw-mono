@@ -17,7 +17,7 @@ import { SDKRequestType } from '../lib/sdk-types';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
-import { seedAccountsFromHint } from '../lib/account-hint';
+import { applyAccountHint } from '../lib/account-hint';
 import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/core';
 import { RECONNECT_REQUIRED } from '@jaw.id/core';
@@ -91,6 +91,12 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   // fall back to the keys app's own key: that key identifies a different project
   // for ENS subname issuance and billing, so using it would misattribute both.
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
+  // Embedded only: credentialId of the account the dApp is currently
+  // connected as (the handshake's lastAccount hint). Preferred as the
+  // "Continue as" default so this partition tracks a popup-side account
+  // switch it can otherwise never see. UI pointer only — auth state still
+  // comes exclusively from the passkey ceremony.
+  const [hintedCredentialId, setHintedCredentialId] = useState<string | null>(null);
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
@@ -175,14 +181,21 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           applyDappTheme(message.data.theme);
         }
 
-        // Embedded only: our storage is partitioned (and wiped between visits
-        // in Brave/Safari). If it came up empty, restore the "Continue as"
-        // screen from the dApp-side hint — before checkForPasskeys reads the
-        // account list. Popup/standalone contexts have real first-party
-        // storage and must not be seeded (a stale hint could resurrect an
-        // account the user deliberately removed).
-        if (communicator.isEmbedded() && seedAccountsFromHint(message.data.lastAccount)) {
-          debugLog('🌱 Seeded account list from dApp-side lastAccount hint');
+        // Embedded only: our storage is partitioned (wiped between visits in
+        // Brave/Safari) AND blind to flows that ran in the popup's first-party
+        // world — on Safari an account switch routes to the popup, so this
+        // partition would keep offering the OLD identity and sign with the
+        // wrong passkey. Apply the dApp-side hint (the account the dApp is
+        // actually connected as) before checkForPasskeys reads the list:
+        // append-only on the account list, and preferred as the "Continue as"
+        // default. Popup/standalone contexts have real first-party storage
+        // and take no hint.
+        if (communicator.isEmbedded()) {
+          const hinted = applyAccountHint(message.data.lastAccount);
+          if (hinted) {
+            setHintedCredentialId(hinted);
+            debugLog('🌱 Applied dApp-side lastAccount hint as the Continue-as default');
+          }
         }
 
         // Always show account selection UI - never auto-authenticate
@@ -1061,6 +1074,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
+              preferredCredentialId={hintedCredentialId ?? undefined}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data
@@ -1127,6 +1141,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
+              preferredCredentialId={hintedCredentialId ?? undefined}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data

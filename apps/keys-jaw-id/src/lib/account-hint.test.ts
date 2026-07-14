@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { PasskeyManager, createMemoryStorage, type SyncStorage } from '@jaw.id/core';
 
-import { seedAccountsFromHint } from './account-hint';
+import { applyAccountHint } from './account-hint';
 
 const validHint = {
   username: 'ghadi.jaw.id',
@@ -10,20 +10,23 @@ const validHint = {
 };
 
 /**
- * When embedded, our storage is partitioned per top-level site — and wiped
- * between visits in Brave/Safari. The SDK sends back the last connected
- * account on the handshake; seeding it restores the "Continue as" screen.
- * Seeding touches only the account list — auth state is written exclusively
- * by a real passkey ceremony — so a forged hint can never fake an
- * authentication; it can only offer a "Continue as" that fails.
+ * When embedded, our storage is partitioned per top-level site — wiped between
+ * visits in Brave/Safari, and never updated by flows that run in the POPUP's
+ * first-party world (e.g. a Safari account switch). The SDK sends the account
+ * the dApp is currently connected as on the handshake; applying it ensures the
+ * "Continue as" screen offers that identity — whether the partition came up
+ * empty or holds a stale one. The hint touches only the account list —
+ * auth state is written exclusively by a real passkey ceremony — so a forged
+ * hint can never fake an authentication; it can only offer a "Continue as"
+ * that fails.
  */
-describe('seedAccountsFromHint', () => {
+describe('applyAccountHint', () => {
   it('seeds the account list into empty storage without touching auth state', () => {
     const storage = createMemoryStorage();
 
-    const seeded = seedAccountsFromHint(validHint, storage);
+    const applied = applyAccountHint(validHint, storage);
 
-    expect(seeded).toBe(true);
+    expect(applied).toBe(validHint.credentialId);
     const manager = new PasskeyManager(storage);
     const accounts = manager.fetchAccounts();
     expect(accounts).toHaveLength(1);
@@ -34,13 +37,14 @@ describe('seedAccountsFromHint', () => {
       isImported: false,
     });
     // Auth state stays untouched: only the passkey ceremony may write it.
-    // The "Continue as" default still resolves — selectDefaultAccount falls
-    // back to the most recent account when no auth state exists.
     expect(manager.fetchActiveCredentialId()).toBeNull();
     expect(manager.checkAuth().isAuthenticated).toBe(false);
   });
 
-  it('does not touch storage that already has accounts', () => {
+  it('appends to a non-empty list without removing or replacing existing accounts', () => {
+    // Safari popup-switch desync: the partition holds the OLD identity while
+    // the dApp is connected as a NEW one. The hint must land in the list (so
+    // it can be the "Continue as" default) while local accounts stay intact.
     const storage = createMemoryStorage();
     const manager = new PasskeyManager(storage);
     manager.addAccountToList({
@@ -51,38 +55,38 @@ describe('seedAccountsFromHint', () => {
       isImported: false,
     });
 
-    const seeded = seedAccountsFromHint(validHint, storage);
+    const applied = applyAccountHint(validHint, storage);
 
-    expect(seeded).toBe(false);
+    expect(applied).toBe(validHint.credentialId);
     const accounts = manager.fetchAccounts();
-    expect(accounts).toHaveLength(1);
-    expect(accounts[0].credentialId).toBe('ExistingCred');
+    expect(accounts).toHaveLength(2);
+    expect(accounts.map((a) => a.credentialId)).toEqual(['ExistingCred', validHint.credentialId]);
   });
 
   it('rejects malformed hints without writing anything', () => {
     const storage = createMemoryStorage();
 
-    expect(seedAccountsFromHint(null, storage)).toBe(false);
-    expect(seedAccountsFromHint({ ...validHint, username: '' }, storage)).toBe(false);
-    expect(seedAccountsFromHint({ ...validHint, credentialId: '<script>' }, storage)).toBe(false);
-    expect(seedAccountsFromHint({ ...validHint, publicKey: 'deadbeef' }, storage)).toBe(false);
+    expect(applyAccountHint(null, storage)).toBeNull();
+    expect(applyAccountHint({ ...validHint, username: '' }, storage)).toBeNull();
+    expect(applyAccountHint({ ...validHint, credentialId: '<script>' }, storage)).toBeNull();
+    expect(applyAccountHint({ ...validHint, publicKey: 'deadbeef' }, storage)).toBeNull();
 
     expect(new PasskeyManager(storage).fetchAccounts()).toHaveLength(0);
   });
 
-  it('is idempotent for the same hint', () => {
+  it('is idempotent for the same hint (no duplicate list entries)', () => {
     const storage = createMemoryStorage();
 
-    expect(seedAccountsFromHint(validHint, storage)).toBe(true);
-    expect(seedAccountsFromHint(validHint, storage)).toBe(false);
+    expect(applyAccountHint(validHint, storage)).toBe(validHint.credentialId);
+    expect(applyAccountHint(validHint, storage)).toBe(validHint.credentialId);
 
     expect(new PasskeyManager(storage).fetchAccounts()).toHaveLength(1);
   });
 
-  it('returns false instead of throwing when storage writes fail', () => {
+  it('returns null instead of throwing when storage writes fail', () => {
     // Simulates Safari private browsing / an exhausted partition quota. The
-    // seed runs on the handshake path before sendPopupReady, so a throw here
-    // would block connect entirely.
+    // hint is applied on the handshake path before sendPopupReady, so a throw
+    // here would block connect entirely.
     const backing = createMemoryStorage();
     const failingStorage: SyncStorage = {
       getItem: <T>(key: string) => backing.getItem<T>(key),
@@ -92,7 +96,7 @@ describe('seedAccountsFromHint', () => {
       removeItem: (key: string) => backing.removeItem(key),
     };
 
-    expect(() => seedAccountsFromHint(validHint, failingStorage)).not.toThrow();
-    expect(seedAccountsFromHint(validHint, failingStorage)).toBe(false);
+    expect(() => applyAccountHint(validHint, failingStorage)).not.toThrow();
+    expect(applyAccountHint(validHint, failingStorage)).toBeNull();
   });
 });

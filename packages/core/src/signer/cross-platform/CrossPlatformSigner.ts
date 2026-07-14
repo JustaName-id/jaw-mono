@@ -81,9 +81,12 @@ export class CrossPlatformSigner extends JAWSigner {
             return cachedResponse;
         }
 
-        // Ready the routed transport before async calls (opens the popup inside
-        // the gesture when that's the route)
-        await this.communicator.waitForPopupLoaded?.(request.method);
+        // Ready the routed transport before async calls. No method here: the
+        // outgoing message is an encrypted envelope, which routes method-less
+        // (getRouteContext) — passing the plaintext method would ready a
+        // different transport than the send uses (on Safari, wallet_connect
+        // would open a popup the encrypted request never reaches).
+        await this.communicator.waitForPopupLoaded?.();
 
         // Validate and inject capabilities using base class method
         const modifiedRequest = this.validateAndInjectCapabilities(request);
@@ -93,9 +96,12 @@ export class CrossPlatformSigner extends JAWSigner {
     }
 
     protected override async handleWalletConnectUnauthenticated(request: RequestArguments): Promise<unknown> {
-        // Ready the routed transport before async calls (opens the popup inside
-        // the gesture when that's the route)
-        await this.communicator.waitForPopupLoaded?.(request.method);
+        // Ready the routed transport before async calls. No method here: the
+        // outgoing message is an encrypted envelope, which routes method-less
+        // (getRouteContext) — passing the plaintext method would ready a
+        // different transport than the send uses (on Safari, wallet_connect
+        // would open a popup the encrypted request never reaches).
+        await this.communicator.waitForPopupLoaded?.();
 
         // Validate and inject capabilities using base class method
         const modifiedRequest = this.validateAndInjectCapabilities(request);
@@ -187,9 +193,12 @@ export class CrossPlatformSigner extends JAWSigner {
         overrideChain?: SDKChain,
         isReconnectRetry = false
     ): Promise<unknown> {
-        // Ready the routed transport first — when that's the popup it must open
-        // inside the user gesture or Safari's popup blocker stops it.
-        await this.communicator.waitForPopupLoaded?.(request.method);
+        // Ready the routed transport first. Method-less on purpose: the message
+        // sent below is an encrypted envelope, which the router routes with no
+        // method (getRouteContext) — threading the plaintext method here would
+        // diverge from the send on Safari (credential methods route to popup,
+        // the encrypted envelope to the iframe).
+        await this.communicator.waitForPopupLoaded?.();
 
         try {
             const response = await this.sendEncryptedRequest(request, overrideChain);

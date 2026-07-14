@@ -187,11 +187,17 @@ export class Communicator {
     /**
      * Wait for the keys app to load and complete the handshake.
      *
-     * Pass the RPC method about to be sent so the transport readied here is the
-     * one that request will actually route to. This matters on Safari: a connect
-     * that routes to the popup must call window.open as the FIRST thing after the
-     * user's click — a method-less acquire would ready the iframe instead, and
-     * the popup opened afterwards (past the gesture) gets blocked.
+     * Pass the RPC method ONLY when the outgoing message is a handshake
+     * envelope — those carry the method on the wire, so the send-time acquire
+     * (getRouteContext) routes by it and the transport readied here matches.
+     * This matters on Safari: a connect that routes to the popup must call
+     * window.open as the FIRST thing after the user's click — a method-less
+     * acquire would ready the iframe instead, and the popup opened afterwards
+     * (past the gesture) gets blocked.
+     *
+     * Encrypted envelopes route method-less; their ready must be method-less
+     * too, or the two acquires diverge (Safari would open a popup while the
+     * encrypted request goes to the iframe).
      */
     async waitForPopupLoaded(method?: string): Promise<Window> {
         const transport = await this.router.acquire(method !== undefined ? { method } : {});

@@ -481,7 +481,8 @@ describe('CrossPlatformSigner', () => {
 
             // Assert
             expect(result).toBe('0xsignature...');
-            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith('personal_sign');
+            // Encrypted envelope → method-less ready, matching send-time routing.
+            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith();
             expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
         });
 
@@ -863,9 +864,10 @@ describe('CrossPlatformSigner', () => {
 
             // Assert
             expect(result).toEqual(['0x1234567890123456789012345678901234567890']);
-            // eth_requestAccounts is routed through the wallet_connect flow when
-            // unauthenticated, so that is the method threaded to the transport.
-            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith('wallet_connect');
+            // eth_requestAccounts routes through the wallet_connect flow when
+            // unauthenticated, but that request is sent as an encrypted envelope,
+            // which routes method-less — so the ready must be method-less too.
+            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith();
             expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
         });
 
@@ -1299,7 +1301,8 @@ describe('CrossPlatformSigner', () => {
 
             // Assert
             expect(result).toBe('0xbatchId');
-            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith('wallet_sendCalls');
+            // Encrypted envelope → method-less ready, matching send-time routing.
+            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith();
         });
 
         it('should allow wallet_sign when unauthenticated', async () => {
@@ -1340,7 +1343,8 @@ describe('CrossPlatformSigner', () => {
 
             // Assert
             expect(result).toBe('0xsignature');
-            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith('wallet_sign');
+            // Encrypted envelope → method-less ready, matching send-time routing.
+            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith();
         });
 
         it('should allow wallet_connect when unauthenticated', async () => {
@@ -1389,7 +1393,9 @@ describe('CrossPlatformSigner', () => {
             expect(result).toEqual({
                 accounts: [{ address: '0x1234567890123456789012345678901234567890' }],
             });
-            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith('wallet_connect');
+            // Unauthenticated wallet_connect is still sent as an encrypted
+            // envelope → method-less ready, matching send-time routing.
+            expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith();
         });
     });
 
