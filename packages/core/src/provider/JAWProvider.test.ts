@@ -2134,3 +2134,25 @@ describe('createJAWProvider', () => {
         expect((provider2 as any).metadata.appName).toBe('App 2');
     });
 });
+
+describe('wallet_onramp cold-path gating', () => {
+    beforeEach(() => {
+        (checkErrorForInvalidRequestArgs as Mock).mockImplementation(() => undefined);
+        (loadSignerType as Mock).mockReturnValue(null);
+    });
+
+    it('rejects wallet_onramp with unsupportedMethod in AppSpecific mode, before creating a signer', async () => {
+        (createSigner as Mock).mockClear();
+        const provider = new JAWProvider({
+            metadata: { appName: 'Test App', appLogoUrl: 'https://test.com/logo.png' },
+            preference: { keysUrl: 'https://keys.test.com', mode: 'AppSpecific' },
+            apiKey: 'test-api-key',
+        } as any);
+
+        await expect(provider.request({ method: 'wallet_onramp', params: [{}] })).rejects.toMatchObject({
+            code: standardErrorCodes.provider.unsupportedMethod,
+        });
+        // Guard fires before the ephemeral handshake — no signer/passkey.
+        expect(createSigner as Mock).not.toHaveBeenCalled();
+    });
+});

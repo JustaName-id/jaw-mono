@@ -12,6 +12,8 @@ import { ensureIntNumber, type SignInWithEthereumCapabilityRequest } from '@jaw.
 import { ConnectModal } from '../components/ConnectModal';
 import { TransactionModal, type TransactionResult, type TransactionRequestData } from '../components/TransactionModal';
 import { PermissionModal, type PermissionRequestData } from '../components/PermissionModal';
+import { OnrampModal } from '../components/OnrampModal';
+import type { OnrampOrder, OnrampParams } from '@jaw.id/core';
 import { UnsupportedMethodModal } from '../components/UnsupportedMethodModal';
 import { SDKRequestType } from '../lib/sdk-types';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
@@ -475,6 +477,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         requestType = SDKRequestType.GRANT_PERMISSIONS;
       } else if (method === 'wallet_revokePermissions') {
         requestType = SDKRequestType.REVOKE_PERMISSIONS;
+      } else if (method === 'wallet_onramp') {
+        requestType = SDKRequestType.ONRAMP;
       } else if (method === 'wallet_connect') {
         requestType = SDKRequestType.CONNECT;
       } else {
@@ -528,7 +532,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           requestType === SDKRequestType.SIGN_TYPED_DATA ||
           requestType === SDKRequestType.SEND_TRANSACTION ||
           requestType === SDKRequestType.GRANT_PERMISSIONS ||
-          requestType === SDKRequestType.REVOKE_PERMISSIONS) &&
+          requestType === SDKRequestType.REVOKE_PERMISSIONS ||
+          requestType === SDKRequestType.ONRAMP) &&
         authQuery.isAuthenticated &&
         currentAccount
       ) {
@@ -602,6 +607,53 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           onError={async (error, errorCode) => {
             try {
               // Forward error and code directly from modal
+              await pendingRequest.onReject(
+                error.message,
+                errorCode ?? standardErrorCodes.provider.userRejectedRequest
+              );
+              communicator.requestClose();
+            } catch (err) {
+              console.error('❌ Failed to reject:', err);
+              communicator.requestClose();
+            }
+          }}
+        />
+      );
+    }
+
+    // Onramp: fiat→crypto guest-checkout modal. No signature — delivers to the
+    // connected account. Resolves with the normalized order.
+    if (
+      pendingRequest?.type === SDKRequestType.ONRAMP &&
+      state !== 'success' &&
+      state !== 'error' &&
+      (authQuery.isAuthenticated || state === 'processing')
+    ) {
+      const onrampParams = (pendingRequest.params?.[0] ?? {}) as OnrampParams;
+      return (
+        <OnrampModal
+          // The embedded iframe stays mounted across flows, so without a
+          // per-request key React reuses the instance and a cancelled flow's
+          // state (step, sessionId, payUrl) resurfaces on the next request.
+          key={pendingRequest.requestId}
+          onrampRequest={{ params: onrampParams }}
+          chain={pendingRequest.chain as chain}
+          apiKey={apiKey}
+          origin={currentOrigin || undefined}
+          onSuccess={async (order: OnrampOrder) => {
+            setState('processing');
+            try {
+              await pendingRequest.onApprove(order);
+              setState('success');
+              scheduleClose(CLOSE_DELAY_MS);
+            } catch (err) {
+              console.error('❌ Failed to complete onramp:', err);
+              setError(err instanceof Error ? err.message : 'Failed to complete onramp');
+              setState('error');
+            }
+          }}
+          onError={async (error, errorCode) => {
+            try {
               await pendingRequest.onReject(
                 error.message,
                 errorCode ?? standardErrorCodes.provider.userRejectedRequest
@@ -1050,7 +1102,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                     pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
                     pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
                     pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
+                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS ||
+                    pendingRequest?.type === SDKRequestType.ONRAMP
                   ) {
                     // If there's a pending sign message, typed data, transaction, or permission request,
                     // the modal will be shown in the priority logic above since user is now authenticated
@@ -1118,7 +1171,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                     pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
                     pendingRequest?.type === SDKRequestType.SEND_TRANSACTION ||
                     pendingRequest?.type === SDKRequestType.GRANT_PERMISSIONS ||
-                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS
+                    pendingRequest?.type === SDKRequestType.REVOKE_PERMISSIONS ||
+                    pendingRequest?.type === SDKRequestType.ONRAMP
                   ) {
                     // If there's a pending sign message, typed data, transaction, or permission request,
                     // the modal will be shown in the priority logic above since user is now authenticated

@@ -98,6 +98,24 @@ export class CrossPlatformSigner extends JAWSigner {
         return this.sendRequestToPopup(modifiedRequest);
     }
 
+    // Onramp is a CrossPlatform-only capability (keys.jaw.id guest checkout).
+    // Claim it here so the base signer needn't route it for every mode — and so
+    // AppSpecific, which has no onramp flow, rejects it via the base default
+    // (unsupportedMethod) instead of recursing back into handleSigningRequest.
+    protected override async handleAuthenticatedRequest(request: RequestArguments): Promise<unknown> {
+        if (request.method === 'wallet_onramp') {
+            return this.handleSigningRequest(request);
+        }
+        return super.handleAuthenticatedRequest(request);
+    }
+
+    protected override async handleUnauthenticatedRequest(request: RequestArguments): Promise<unknown> {
+        if (request.method === 'wallet_onramp') {
+            return this.handleSigningRequest(request);
+        }
+        return super.handleUnauthenticatedRequest(request);
+    }
+
     protected override async handleSigningRequest(request: RequestArguments): Promise<unknown> {
         let resolvedChain: SDKChain | undefined;
 
