@@ -1264,6 +1264,7 @@ function TransactionDialogWrapper({
     assetsOut,
     assetsIn,
     error: assetPreviewError,
+    willRevert: assetPreviewWillRevert,
   } = useAssetPreview({
     account: request.data.from,
     calls: transactionCalls,
@@ -1514,6 +1515,7 @@ function TransactionDialogWrapper({
       assetsOut={assetsOut}
       assetsIn={assetsIn}
       assetPreviewError={assetPreviewError}
+      assetPreviewWillRevert={assetPreviewWillRevert}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -1608,6 +1610,7 @@ function SendTransactionDialogWrapper({
     assetsOut,
     assetsIn,
     error: assetPreviewError,
+    willRevert: assetPreviewWillRevert,
   } = useAssetPreview({
     account: request.data.from as Address | undefined,
     calls: transactionCalls,
@@ -1851,6 +1854,7 @@ function SendTransactionDialogWrapper({
       assetsOut={assetsOut}
       assetsIn={assetsIn}
       assetPreviewError={assetPreviewError}
+      assetPreviewWillRevert={assetPreviewWillRevert}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}

@@ -29,6 +29,7 @@ export const TransactionDialog = ({
   assetsOut,
   assetsIn,
   assetPreviewError,
+  assetPreviewWillRevert,
   onConfirm,
   onCancel,
   isProcessing,
@@ -334,6 +335,7 @@ export const TransactionDialog = ({
                 assetsOut={assetsOut ?? []}
                 assetsIn={assetsIn ?? []}
                 error={assetPreviewError ?? false}
+                willRevert={assetPreviewWillRevert ?? false}
                 nativeSymbol={nativeSymbol}
               />
 
@@ -573,6 +575,7 @@ export const TransactionDialog = ({
                 assetsOut={assetsOut ?? []}
                 assetsIn={assetsIn ?? []}
                 error={assetPreviewError ?? false}
+                willRevert={assetPreviewWillRevert ?? false}
                 nativeSymbol={nativeSymbol}
               />
 
