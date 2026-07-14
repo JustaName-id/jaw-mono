@@ -1,3 +1,4 @@
+import { Info } from 'lucide-react';
 import { AssetDelta, formatAssetAmount } from '../../utils/assetPreview';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
@@ -59,12 +60,21 @@ function AmountRow({
 export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSymbol }: AssetPreviewProps) => {
   if (willRevert) {
     return (
-      <div className="flex flex-col gap-1 rounded-[6px] border border-red-500/40 bg-red-500/5 p-3.5">
-        <p className="text-xs font-bold leading-[133%] text-red-500">This transaction is likely to fail</p>
-        <p className="text-muted-foreground text-xs leading-[150%]">
-          Simulation shows this transaction reverting on-chain. You can still submit it, but it will probably fail and
-          consume gas.
-        </p>
+      <div className="flex items-center gap-1">
+        <p className="text-xs leading-[133%] text-red-500">Transaction is likely to fail</p>
+        <TooltipProvider delayDuration={0}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="size-3 cursor-help text-red-500" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[240px] text-xs">
+              <p>
+                Simulation shows this transaction reverting on-chain. You can still submit it, but it will probably fail
+                and consume gas.
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
       </div>
     );
   }
