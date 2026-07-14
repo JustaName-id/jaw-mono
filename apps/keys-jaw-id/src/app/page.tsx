@@ -17,7 +17,7 @@ import { SDKRequestType } from '../lib/sdk-types';
 import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
-import { seedAccountsFromHint } from '../lib/account-hint';
+import { applyAccountHint } from '../lib/account-hint';
 import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/core';
 import { RECONNECT_REQUIRED } from '@jaw.id/core';
@@ -85,7 +85,18 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   const [error, setError] = useState<string | null>(null);
   const [ensConfig, setEnsConfig] = useState<string | undefined>(undefined);
   const [chainId, setChainId] = useState<ChainId | undefined>(undefined);
+  // The dApp's API key. It arrives in the transport config message (seeded from
+  // the SDK's store), is used to bootstrap the account screen, and is then
+  // overridden by the handshake's chain.rpcUrl — the authoritative source. Never
+  // fall back to the keys app's own key: that key identifies a different project
+  // for ENS subname issuance and billing, so using it would misattribute both.
   const [apiKey, setApiKey] = useState<string | undefined>(undefined);
+  // Embedded only: credentialId of the account the dApp is currently
+  // connected as (the handshake's lastAccount hint). Preferred as the
+  // "Continue as" default so this partition tracks a popup-side account
+  // switch it can otherwise never see. UI pointer only — auth state still
+  // comes exclusively from the passkey ceremony.
+  const [hintedCredentialId, setHintedCredentialId] = useState<string | null>(null);
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
@@ -154,7 +165,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
         setEnsConfig(message.data.preference?.ens);
         setChainId(message.data.metadata?.defaultChainId as ChainId);
-        setApiKey(message.data.apiKey);
+        // Bootstrap the API key from the transport config message so the account
+        // screen has the dApp's key before the handshake arrives. Guarded so a
+        // config message without one can't wipe a key already set; the handshake
+        // chain.rpcUrl remains the authoritative source and overrides it.
+        if (message.data.apiKey) {
+          setApiKey(message.data.apiKey);
+        }
 
         // Apply the dApp's theme tokens so the embedded dialog matches its
         // look & feel (accent color, border radius, light/dark), translated
@@ -164,20 +181,24 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           applyDappTheme(message.data.theme);
         }
 
-        // Embedded only: our storage is partitioned (and wiped between visits
-        // in Brave/Safari). If it came up empty, restore the "Continue as"
-        // screen before checkForPasskeys reads the account list. The dApp-side
-        // hint is only a credentialId pointer — the public key and display
-        // name are resolved from the backend registry, never trusted from the
-        // dApp. The seed is async (backend roundtrip, bounded by a timeout),
-        // so only checkForPasskeys waits on it; the handshake ack below must
-        // not. Popup/standalone contexts have real first-party storage and
-        // must not be seeded (a stale hint could resurrect an account the
-        // user deliberately removed).
+        // Embedded only: our storage is partitioned (wiped between visits in
+        // Brave/Safari) AND blind to flows that ran in the popup's first-party
+        // world — on Safari an account switch routes to the popup, so this
+        // partition would keep offering the OLD identity and sign with the
+        // wrong passkey. Apply the dApp-side hint (the account the dApp is
+        // actually connected as) before checkForPasskeys reads the list:
+        // append-only on the account list, and preferred as the "Continue as"
+        // default. The hint is only a credentialId pointer — the public key
+        // and display name are resolved from the backend registry, never
+        // trusted from the dApp. The apply is async (backend roundtrip,
+        // bounded by a timeout), so only checkForPasskeys waits on it; the
+        // handshake ack below must not. Popup/standalone contexts have real
+        // first-party storage and take no hint.
         if (communicator.isEmbedded()) {
-          void seedAccountsFromHint(message.data.lastAccount, { apiKey: message.data.apiKey }).then((seeded) => {
-            if (seeded) {
-              debugLog('🌱 Seeded account list from backend-resolved lastAccount hint');
+          void applyAccountHint(message.data.lastAccount, { apiKey: message.data.apiKey }).then((hinted) => {
+            if (hinted) {
+              setHintedCredentialId(hinted);
+              debugLog('🌱 Applied backend-resolved lastAccount hint as the Continue-as default');
             }
             // Always show account selection UI - never auto-authenticate
             checkForPasskeys();
@@ -424,32 +445,36 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       // Update React state with current origin (needed for useAuth hook)
       setCurrentOrigin(origin);
 
+      // Reply to the SDK with a reconnect-required sentinel (tied to this
+      // request id, carries no secret) so it re-establishes a session against
+      // this iframe and retries. Used both when there is NO session and when the
+      // session is stale (decrypt fails) — Safari storage partitioning can leave
+      // the iframe with a session whose keys no longer match the SDK's.
+      const emitReconnectRequired = (reason: string) => {
+        console.warn(`⚠️ ${reason} — requesting reconnect for origin:`, origin);
+        const reconnectResponse: RPCResponseMessage = {
+          requestId: request.id,
+          id: crypto.randomUUID() as MessageID,
+          sender: '',
+          correlationId: request.correlationId,
+          content: {
+            failure: {
+              code: standardErrorCodes.provider.disconnected,
+              message: 'No usable session in this context; reconnect required',
+              data: { reason: RECONNECT_REQUIRED },
+            },
+          },
+          timestamp: new Date(),
+        };
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        communicator.sendMessage(reconnectResponse as any);
+      };
+
       const session = await cryptoHandler.loadSession(origin);
 
       if (!session) {
-        // Embedded (iframe) on Safari: storage partitioning isolates this frame
-        // from the session a popup created during connect, so there is nothing to
-        // decrypt with. Instead of dead-ending with a local error dialog, reply to
-        // the SDK with a reconnect-required sentinel (tied to this request id, no
-        // secret) so it re-establishes a session against this iframe and retries.
         if (communicator.isEmbedded()) {
-          console.warn('⚠️ No session in iframe partition — requesting reconnect for origin:', origin);
-          const reconnectResponse: RPCResponseMessage = {
-            requestId: request.id,
-            id: crypto.randomUUID() as MessageID,
-            sender: '', // no session → no popup public key; this response carries no secret
-            correlationId: request.correlationId,
-            content: {
-              failure: {
-                code: standardErrorCodes.provider.disconnected,
-                message: 'No session in this context; reconnect required',
-                data: { reason: RECONNECT_REQUIRED },
-              },
-            },
-            timestamp: new Date(),
-          };
-          // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          communicator.sendMessage(reconnectResponse as any);
+          emitReconnectRequired('No session in iframe partition');
           return;
         }
         console.error('❌ No session found for origin:', origin);
@@ -459,8 +484,25 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       // Verify and update peer key if changed
       await cryptoHandler.verifyAndUpdatePeerKey(request);
 
-      // Decrypt the request
-      const decrypted = await cryptoHandler.decryptRequest(request);
+      // Decrypt the request. A stale iframe session (keys no longer match the
+      // SDK's) fails here with an AES-GCM auth-tag mismatch — Web Crypto's
+      // OperationError. Treat ONLY that, and only when embedded, like a missing
+      // session: drop it and ask the SDK to reconnect + retry, instead of
+      // dead-ending on an undecryptable request. Any other error (malformed
+      // envelope, bug, corrupted ciphertext) must surface, not be masked behind a
+      // reconnect cycle that would fail identically on retry.
+      let decrypted: Awaited<ReturnType<typeof cryptoHandler.decryptRequest>>;
+      try {
+        decrypted = await cryptoHandler.decryptRequest(request);
+      } catch (decryptErr) {
+        const isStaleSession = decryptErr instanceof DOMException && decryptErr.name === 'OperationError';
+        if (communicator.isEmbedded() && isStaleSession) {
+          await cryptoHandler.getSessionManager().deleteSession(origin);
+          emitReconnectRequired('Stale iframe session (decrypt failed)');
+          return;
+        }
+        throw decryptErr;
+      }
 
       const method = decrypted.action.method;
       const params = decrypted.action.params;
@@ -1039,6 +1081,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
+              preferredCredentialId={hintedCredentialId ?? undefined}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data
@@ -1105,6 +1148,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               chainConfig={pendingRequest?.chain}
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
+              preferredCredentialId={hintedCredentialId ?? undefined}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data

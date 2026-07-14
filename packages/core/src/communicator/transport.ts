@@ -30,6 +30,15 @@ export type TransportOptions = {
      */
     getLastAccount?: () => AccountHintData | undefined;
     /**
+     * Returns the dApp's API key (from the SDK store), sent on the transport
+     * config message so the keys app can bootstrap its account screen before the
+     * handshake arrives. A getter — read at send time, not captured — and always
+     * the dApp's own key, never a keys-app fallback (which would misattribute ENS
+     * subname issuance and billing). The handshake's chain.rpcUrl key overrides
+     * it as the authoritative source.
+     */
+    getApiKey?: () => string | undefined;
+    /**
      * Invoked when the user dismisses the dialog/popup (Escape, click-outside,
      * window close, or a keys-side cancel) — i.e. any close that is NOT a
      * requestId-matched response. The facade (Communicator) wires this to reject

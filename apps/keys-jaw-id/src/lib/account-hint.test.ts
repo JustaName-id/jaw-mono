@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { PasskeyManager, createMemoryStorage, type SyncStorage } from '@jaw.id/core';
 
-import { seedAccountsFromHint } from './account-hint';
+import { applyAccountHint } from './account-hint';
 
 const validHint = { credentialId: 'A1b2-C3d4_E5f6' };
 
@@ -12,24 +12,27 @@ const serverPasskey = {
 };
 
 /**
- * When embedded, our storage is partitioned per top-level site — and wiped
- * between visits in Brave/Safari. The SDK sends back the last connected
- * account's credentialId on the handshake; seeding it restores the "Continue
- * as" screen. The hint is a pointer only: the public key (which derives the
- * smart account address in Account.get) and the display name come from the
- * backend registry, never from the dApp-controlled hint — so a forged hint
- * can only point at a credential whose ceremony the user cannot complete.
- * Seeding touches only the account list — auth state is written exclusively
- * by a real passkey ceremony.
+ * When embedded, our storage is partitioned per top-level site — wiped between
+ * visits in Brave/Safari, and never updated by flows that run in the POPUP's
+ * first-party world (e.g. a Safari account switch). The SDK sends the
+ * credentialId of the account the dApp is currently connected as on the
+ * handshake; applying it ensures the "Continue as" screen offers that
+ * identity — whether the partition came up empty or holds a stale one. The
+ * hint is a pointer only: the public key (which derives the smart account
+ * address in Account.get) and the display name come from the backend
+ * registry, never from the dApp-controlled hint — so a forged hint can only
+ * point at a credential whose ceremony the user cannot complete. Applying
+ * touches only the account list — auth state is written exclusively by a
+ * real passkey ceremony.
  */
-describe('seedAccountsFromHint', () => {
+describe('applyAccountHint', () => {
   it('seeds the account list from the backend-resolved passkey without touching auth state', async () => {
     const storage = createMemoryStorage();
     const lookup = vi.fn().mockResolvedValue(serverPasskey);
 
-    const seeded = await seedAccountsFromHint(validHint, { apiKey: 'key-1', storage, lookup });
+    const applied = await applyAccountHint(validHint, { apiKey: 'key-1', storage, lookup });
 
-    expect(seeded).toBe(true);
+    expect(applied).toBe(validHint.credentialId);
     expect(lookup).toHaveBeenCalledWith(validHint.credentialId, 'key-1');
     const manager = new PasskeyManager(storage);
     const accounts = manager.fetchAccounts();
@@ -41,8 +44,6 @@ describe('seedAccountsFromHint', () => {
       isImported: false,
     });
     // Auth state stays untouched: only the passkey ceremony may write it.
-    // The "Continue as" default still resolves — selectDefaultAccount falls
-    // back to the most recent account when no auth state exists.
     expect(manager.fetchActiveCredentialId()).toBeNull();
     expect(manager.checkAuth().isAuthenticated).toBe(false);
   });
@@ -58,18 +59,21 @@ describe('seedAccountsFromHint', () => {
       username: 'vitalik.eth',
     };
 
-    const seeded = await seedAccountsFromHint(forgedHint, {
+    const applied = await applyAccountHint(forgedHint, {
       storage,
       lookup: async () => serverPasskey,
     });
 
-    expect(seeded).toBe(true);
+    expect(applied).toBe(validHint.credentialId);
     const accounts = new PasskeyManager(storage).fetchAccounts();
     expect(accounts[0].publicKey).toBe(serverPasskey.publicKey);
     expect(accounts[0].username).toBe(serverPasskey.displayName);
   });
 
-  it('does not touch storage that already has accounts, and never hits the backend', async () => {
+  it('appends to a non-empty list without removing or replacing existing accounts', async () => {
+    // Safari popup-switch desync: the partition holds the OLD identity while
+    // the dApp is connected as a NEW one. The hint must land in the list (so
+    // it can be the "Continue as" default) while local accounts stay intact.
     const storage = createMemoryStorage();
     const manager = new PasskeyManager(storage);
     manager.addAccountToList({
@@ -79,70 +83,89 @@ describe('seedAccountsFromHint', () => {
       creationDate: new Date().toISOString(),
       isImported: false,
     });
+
+    const applied = await applyAccountHint(validHint, { storage, lookup: async () => serverPasskey });
+
+    expect(applied).toBe(validHint.credentialId);
+    const accounts = manager.fetchAccounts();
+    expect(accounts).toHaveLength(2);
+    expect(accounts.map((a) => a.credentialId)).toEqual(['ExistingCred', validHint.credentialId]);
+  });
+
+  it('short-circuits an already-listed credentialId without hitting the backend', async () => {
+    const storage = createMemoryStorage();
+    const manager = new PasskeyManager(storage);
+    manager.addAccountToList({
+      username: serverPasskey.displayName,
+      credentialId: validHint.credentialId,
+      publicKey: serverPasskey.publicKey,
+      creationDate: new Date().toISOString(),
+      isImported: false,
+    });
     const lookup = vi.fn().mockResolvedValue(serverPasskey);
 
-    const seeded = await seedAccountsFromHint(validHint, { storage, lookup });
+    const applied = await applyAccountHint(validHint, { storage, lookup });
 
-    expect(seeded).toBe(false);
+    expect(applied).toBe(validHint.credentialId);
     expect(lookup).not.toHaveBeenCalled();
-    const accounts = manager.fetchAccounts();
-    expect(accounts).toHaveLength(1);
-    expect(accounts[0].credentialId).toBe('ExistingCred');
+    expect(manager.fetchAccounts()).toHaveLength(1);
   });
 
   it('rejects malformed hints without hitting the backend or writing anything', async () => {
     const storage = createMemoryStorage();
     const lookup = vi.fn().mockResolvedValue(serverPasskey);
 
-    expect(await seedAccountsFromHint(null, { storage, lookup })).toBe(false);
-    expect(await seedAccountsFromHint({}, { storage, lookup })).toBe(false);
-    expect(await seedAccountsFromHint({ credentialId: '<script>' }, { storage, lookup })).toBe(false);
-    expect(await seedAccountsFromHint({ credentialId: '' }, { storage, lookup })).toBe(false);
+    expect(await applyAccountHint(null, { storage, lookup })).toBeNull();
+    expect(await applyAccountHint({}, { storage, lookup })).toBeNull();
+    expect(await applyAccountHint({ credentialId: '<script>' }, { storage, lookup })).toBeNull();
+    expect(await applyAccountHint({ credentialId: '' }, { storage, lookup })).toBeNull();
 
     expect(lookup).not.toHaveBeenCalled();
     expect(new PasskeyManager(storage).fetchAccounts()).toHaveLength(0);
   });
 
-  it('is idempotent for the same hint', async () => {
+  it('is idempotent for the same hint (no duplicate list entries, one lookup)', async () => {
     const storage = createMemoryStorage();
-    const lookup = () => Promise.resolve(serverPasskey);
+    const lookup = vi.fn().mockResolvedValue(serverPasskey);
 
-    expect(await seedAccountsFromHint(validHint, { storage, lookup })).toBe(true);
-    expect(await seedAccountsFromHint(validHint, { storage, lookup })).toBe(false);
+    expect(await applyAccountHint(validHint, { storage, lookup })).toBe(validHint.credentialId);
+    expect(await applyAccountHint(validHint, { storage, lookup })).toBe(validHint.credentialId);
 
+    expect(lookup).toHaveBeenCalledTimes(1);
     expect(new PasskeyManager(storage).fetchAccounts()).toHaveLength(1);
   });
 
-  it('returns false when the backend lookup fails (unregistered or unreachable)', async () => {
+  it('returns null when the backend lookup fails (unregistered or unreachable)', async () => {
     const storage = createMemoryStorage();
 
-    const seeded = await seedAccountsFromHint(validHint, {
+    const applied = await applyAccountHint(validHint, {
       storage,
       lookup: () => Promise.reject(new Error('Passkey not found')),
     });
 
-    expect(seeded).toBe(false);
+    expect(applied).toBeNull();
     expect(new PasskeyManager(storage).fetchAccounts()).toHaveLength(0);
   });
 
-  it('returns false when the backend lookup hangs past the timeout', async () => {
+  it('returns null when the backend lookup hangs past the timeout', async () => {
     // A hung lookup must not wedge the dialog: checkForPasskeys waits on the
-    // seed, so it has to settle — degrading to the no-hint experience.
+    // apply, so it has to settle — degrading to the no-hint experience.
     const storage = createMemoryStorage();
 
-    const seeded = await seedAccountsFromHint(validHint, {
+    const applied = await applyAccountHint(validHint, {
       storage,
       lookup: () => new Promise(() => undefined),
       timeoutMs: 10,
     });
 
-    expect(seeded).toBe(false);
+    expect(applied).toBeNull();
     expect(new PasskeyManager(storage).fetchAccounts()).toHaveLength(0);
   });
 
-  it('returns false instead of throwing when storage writes fail', async () => {
+  it('returns null instead of throwing when storage writes fail', async () => {
     // Simulates Safari private browsing / an exhausted partition quota. The
-    // seed runs on the handshake path, so a throw here would block connect.
+    // hint is applied on the handshake path, so a throw here would block
+    // connect entirely.
     const backing = createMemoryStorage();
     const failingStorage: SyncStorage = {
       getItem: <T>(key: string) => backing.getItem<T>(key),
@@ -153,6 +176,6 @@ describe('seedAccountsFromHint', () => {
     };
     const lookup = () => Promise.resolve(serverPasskey);
 
-    await expect(seedAccountsFromHint(validHint, { storage: failingStorage, lookup })).resolves.toBe(false);
+    await expect(applyAccountHint(validHint, { storage: failingStorage, lookup })).resolves.toBeNull();
   });
 });

@@ -66,6 +66,7 @@ export class PopupTransport implements Transport {
                         theme: this.options.theme,
                         location: window.location.toString(),
                         lastAccount: this.options.getLastAccount?.(),
+                        apiKey: this.options.getApiKey?.(),
                     },
                 });
                 return message.id;

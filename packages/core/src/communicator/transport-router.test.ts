@@ -1,10 +1,12 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
 import type { AppMetadata, JawProviderPreference } from '../provider/interface.js';
-import type { TransportMode, TransportOptions } from './transport.js';
+import type { Transport, TransportMode, TransportOptions } from './transport.js';
 import type { PopupTransport } from './popup-transport.js';
 import type { IframeTransport } from './iframe-transport.js';
+import type { Message } from '../messages/message.js';
 import { TransportRouter, TransportRouterConfig, CREDENTIAL_CREATING_METHODS } from './transport-router.js';
+import { getRouteContext } from './communicator.js';
 import { JAW_KEYS_URL } from '../constants.js';
 
 const appMetadata: AppMetadata = {
@@ -590,5 +592,51 @@ describe('TransportRouter.ownsSource', () => {
         const { router } = createRouter({ mode: 'iframe' });
         const src = { tag: 'src' } as unknown as MessageEventSource;
         expect(router.ownsSource(src)).toBe(false);
+    });
+});
+
+/**
+ * Regression: the ready-time acquire (waitForPopupLoaded) and the send-time
+ * acquire (postRequestAndWaitForResponse via getRouteContext) must land on the
+ * SAME transport. Encrypted envelopes route method-less, so their ready must be
+ * method-less too — threading the plaintext method (e.g. wallet_connect from
+ * handleWalletConnect) into the ready would, on Safari + auto mode, open a
+ * popup while the encrypted request goes to the iframe (and force a pointless
+ * iframe reload via pendingIframeReload).
+ */
+describe('ready/send routing consistency for encrypted envelopes', () => {
+    const encryptedEnvelope = {
+        id: 'req-1',
+        sender: '04deadbeef',
+        content: { encrypted: { iv: new Uint8Array(12), cipherText: new ArrayBuffer(8) } },
+        timestamp: new Date(),
+    } as unknown as Message;
+
+    it('getRouteContext yields no method for an encrypted envelope', () => {
+        expect(getRouteContext(encryptedEnvelope)).toEqual({});
+    });
+
+    it('a method-less ready acquires the same transport the encrypted send routes to (Safari + auto)', async () => {
+        const { router, popupMock, iframeMock } = createRouter({ mode: 'auto', safari: true, trusted: true });
+
+        const readied = await router.acquire({}); // waitForPopupLoaded() — method-less
+        const posted = await router.acquire(getRouteContext(encryptedEnvelope)); // the actual send
+
+        expect(readied).toBe(posted);
+        expect(posted).toBe(iframeMock as unknown as Transport);
+        expect(popupMock.ensureReady).not.toHaveBeenCalled();
+        expect(iframeMock.reload).not.toHaveBeenCalled();
+    });
+
+    it('documents the divergence a method-threaded ready would cause (Safari + auto)', async () => {
+        const { router, popupMock, iframeMock } = createRouter({ mode: 'auto', safari: true, trusted: true });
+
+        await router.acquire({}); // live iframe exists (prewarm / earlier business request)
+        const readied = await router.acquire({ method: 'wallet_connect' }); // the buggy ready
+        const posted = await router.acquire(getRouteContext(encryptedEnvelope));
+
+        expect(readied).toBe(popupMock as unknown as Transport); // stray popup opened...
+        expect(posted).toBe(iframeMock as unknown as Transport); // ...request goes elsewhere
+        expect(iframeMock.reload).toHaveBeenCalledTimes(1); // and the live frame got reloaded
     });
 });
