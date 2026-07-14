@@ -188,18 +188,25 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         // wrong passkey. Apply the dApp-side hint (the account the dApp is
         // actually connected as) before checkForPasskeys reads the list:
         // append-only on the account list, and preferred as the "Continue as"
-        // default. Popup/standalone contexts have real first-party storage
-        // and take no hint.
+        // default. The hint is only a credentialId pointer — the public key
+        // and display name are resolved from the backend registry, never
+        // trusted from the dApp. The apply is async (backend roundtrip,
+        // bounded by a timeout), so only checkForPasskeys waits on it; the
+        // handshake ack below must not. Popup/standalone contexts have real
+        // first-party storage and take no hint.
         if (communicator.isEmbedded()) {
-          const hinted = applyAccountHint(message.data.lastAccount);
-          if (hinted) {
-            setHintedCredentialId(hinted);
-            debugLog('🌱 Applied dApp-side lastAccount hint as the Continue-as default');
-          }
+          void applyAccountHint(message.data.lastAccount, { apiKey: message.data.apiKey }).then((hinted) => {
+            if (hinted) {
+              setHintedCredentialId(hinted);
+              debugLog('🌱 Applied backend-resolved lastAccount hint as the Continue-as default');
+            }
+            // Always show account selection UI - never auto-authenticate
+            checkForPasskeys();
+          });
+        } else {
+          // Always show account selection UI - never auto-authenticate
+          checkForPasskeys();
         }
-
-        // Always show account selection UI - never auto-authenticate
-        checkForPasskeys();
 
         communicator.sendPopupReady(message.requestId);
       }

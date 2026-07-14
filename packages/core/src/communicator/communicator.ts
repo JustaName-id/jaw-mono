@@ -147,8 +147,10 @@ export class Communicator {
 
         // Persist a picked copy, never the raw wire object — anything extra
         // riding on the message must not reach storage or later handshakes.
-        const { username, credentialId, publicKey } = message.data;
-        accountStore.set({ lastAccount: { username, credentialId, publicKey } });
+        // The hint is credentialId-only by design: publicKey and display name
+        // are resolved from the backend at seed time, never carried here.
+        const { credentialId } = message.data;
+        accountStore.set({ lastAccount: { credentialId } });
     };
 
     /** Routes SwitchTransport requests from the keys dialog. */

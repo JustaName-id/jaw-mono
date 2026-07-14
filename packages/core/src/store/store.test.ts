@@ -85,11 +85,7 @@ describe('store', () => {
             // clear() runs on disconnect and on session-TTL expiry — exactly the
             // moments after which the next connect should still show "Continue
             // as". The hint must outlive the connection state.
-            const lastAccount = {
-                username: 'ghadi.jaw.id',
-                credentialId: 'A1b2-C3d4_E5f6',
-                publicKey: '0xdeadbeef' as const,
-            };
+            const lastAccount = { credentialId: 'A1b2-C3d4_E5f6' };
             account.set({
                 accounts: ['0x1234567890123456789012345678901234567890'],
                 lastAccount,
