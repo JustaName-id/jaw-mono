@@ -182,7 +182,7 @@ export async function simulateAssetChanges({
     encodeFunctionData({ abi: erc20MetadataAbi, functionName: 'balanceOf', args: [account] })
   );
   const batchCalls: SimCall[] = normalizedCalls.map((c) => ({ ...c, from: account }));
-  const [preBlock, , postBlock, decimalsBlock, symbolsBlock, erc165Block] = await simulateBlocks(client, {
+  const [preBlock, batchBlock, postBlock, decimalsBlock, symbolsBlock, erc165Block] = await simulateBlocks(client, {
     blocks: [
       balanceOfBlock,
       { calls: batchCalls },
@@ -194,6 +194,9 @@ export async function simulateAssetChanges({
       ),
     ],
   });
+  // Chain state can move between the two simulations; if the batch reverts in this run,
+  // the balance diffs are meaningless and the run-1 deltas would be stale.
+  if (batchBlock.calls.some((c) => c.status !== 'success')) return { deltas: [], willRevert: true };
 
   const probeData = (block: typeof preBlock | undefined, i: number): `0x${string}` | null => {
     const call = block?.calls[i];
