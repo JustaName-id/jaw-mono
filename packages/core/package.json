@@ -1,7 +1,7 @@
 {
   "name": "@jaw.id/core",
   "description": "Core SDK - EIP-1193 provider, smart account operations, passkey management",
-  "version": "1.0.5",
+  "version": "1.0.6",
   "license": "MIT",
   "type": "module",
   "main": "./dist/cjs/index.cjs",
@@ -86,7 +86,7 @@
     "ox": "0.9.6",
     "qs": "6.14.1",
     "tslib": "2.8.1",
-    "viem": "^2.38.2",
+    "viem": "^2.55.0",
     "zustand": "^5.0.8"
   },
   "devDependencies": {

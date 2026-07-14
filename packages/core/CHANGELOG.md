@@ -1,3 +1,13 @@
+## 1.0.6 (2026-07-10)
+
+### 🩹 Fixes
+
+- add Robinhood Chain support ([#237](https://github.com/JustaName-id/jaw-mono/pull/237))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.0.5 (2026-07-06)
 
 ### 🩹 Fixes

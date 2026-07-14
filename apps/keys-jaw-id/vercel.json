@@ -1,0 +1,8 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "framework": "nextjs",
+  "installCommand": "cd ../../ && bun install --frozen-lockfile",
+  "buildCommand": "cd ../../ && bunx nx run-many -t build -p @jaw.id/core @jaw.id/ui && bunx nx build @jaw-mono/keys-jaw-id",
+  "outputDirectory": ".next",
+  "git": { "deploymentEnabled": { "main": false } }
+}

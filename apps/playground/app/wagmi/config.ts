@@ -3,6 +3,7 @@ import type { Chain } from 'viem';
 import { jaw } from '@jaw.id/wagmi';
 import { Mode, SUPPORTED_CHAINS, type PaymasterConfig, type JawTheme } from '@jaw.id/core';
 import { ReactUIHandler } from '@jaw.id/ui';
+import { resolveKeysUrl } from '../../lib/keys-url';
 
 export type ModeType = (typeof Mode)[keyof typeof Mode];
 
@@ -20,6 +21,8 @@ export function createWagmiConfig(
 
   const transports = Object.fromEntries(SUPPORTED_CHAINS.map((chain) => [chain.id, http()]));
 
+  const keysUrl = resolveKeysUrl();
+
   return createConfig({
     chains: SUPPORTED_CHAINS as unknown as readonly [Chain, ...Chain[]],
     connectors: [
@@ -29,9 +32,7 @@ export function createWagmiConfig(
         appLogoUrl: 'https://avatars.githubusercontent.com/u/159771991?s=200&v=4',
         defaultChainId,
         preference: {
-          ...(process.env.NEXT_PUBLIC_KEYS_URL && {
-            keysUrl: process.env.NEXT_PUBLIC_KEYS_URL,
-          }),
+          ...(keysUrl && { keysUrl }),
           showTestnets: true,
           mode: mode,
           ...(transportMode && { transportMode }),
@@ -46,9 +47,11 @@ export function createWagmiConfig(
   });
 }
 
-// Default config for type declarations
-export const config = createWagmiConfig(Mode.AppSpecific);
-
+// Register the config's inferred type with wagmi for end-to-end type safety.
+// Derived from the factory's return type — we intentionally do NOT construct a
+// module-scope config instance (that would run on every SSR pass with no
+// `window`, building and discarding a throwaway connector); the live config is
+// built client-side in WagmiProviders via useMemo.
 declare module 'wagmi' {
   interface Register {
     config: ReturnType<typeof createWagmiConfig>;
