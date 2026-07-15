@@ -286,8 +286,11 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             // costing a second biometric. When the connect routes to the iframe,
             // re-run the handshake now so connecting establishes the iframe
             // session; signing then just signs. No effect off Safari or on the
-            // popup route.
+            // popup route. Cross-platform only: AppSpecific never uses the
+            // iframe/popup transport (it drives its own UIHandler), so the
+            // communicator's routing does not apply there.
             if (
+                signerType === 'crossPlatform' &&
                 (args.method === 'eth_requestAccounts' || args.method === 'wallet_connect') &&
                 isSafari() &&
                 (await this.communicator.willRouteToIframe(args.method))

@@ -35,8 +35,11 @@ import {
   type SyncStorage,
 } from '@jaw.id/core';
 
-/** Bound on the backend lookup: past this, degrade to the no-hint experience. */
-const LOOKUP_TIMEOUT_MS = 5000;
+// Bound on the backend lookup. Doubles as the ceiling on how long the embedded
+// account screen waits before showing (checkForPasskeys runs after this), so it
+// is kept modest: past this the flow degrades to the no-hint experience. A
+// healthy registry answers in well under a second; this is the slow-path cap.
+const LOOKUP_TIMEOUT_MS = 3000;
 
 export type ApplyAccountHintOptions = {
   /** API key forwarded on the handshake config; authenticates the lookup */

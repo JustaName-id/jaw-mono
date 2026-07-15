@@ -98,7 +98,7 @@ function createRouter(env: RouterEnv = {}) {
         getLocation: () => ({
             hostname: env.hostname ?? 'dapp.example.com',
         }),
-        getLastAccount: () => (env.hasAccount ? { username: 'x', credentialId: 'abc', publicKey: '0x01' } : undefined),
+        getLastAccount: () => (env.hasAccount ? { credentialId: 'abc' } : undefined),
     };
 
     return { router: new TransportRouter(config), popupMock, iframeMock, popupFactory, iframeFactory };
