@@ -5,6 +5,7 @@ import { Spinner } from '../ui/spinner';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
 import { computeCalldataDigest } from '../../utils/erc8213';
 import { IdentityAvatar } from '../IdentityAvatar';
+import { TokenIcon } from '../TokenIcon';
 import { DigestRow } from '../VerificationDigest';
 import { ClearSignedView } from './ClearSignedView';
 
@@ -231,10 +232,15 @@ export const DecodedCalldata = ({
                   <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
                 </div>
                 <div className="flex flex-row items-center gap-1">
-                  <IdentityAvatar src={resolvedAvatar} fallback={null} />
+                  {resolvedAvatar && <IdentityAvatar src={resolvedAvatar} fallback={null} />}
                   <p className="text-foreground break-all font-mono text-xs leading-[150%]">
                     {resolvedName ? `${resolvedName} (${formatAddress(param.rawValue!)})` : param.value}
                   </p>
+                  {param.rawValue && param.rawValue.toLowerCase() !== ZERO_ADDRESS && !resolvedAvatar && (
+                    // Address params with no ENS avatar: known token contracts get their logo after the address.
+                    // The zero address is excluded — tokenIconUrl maps it to the native icon, wrong for calldata params.
+                    <TokenIcon chainId={chainId} address={param.rawValue} className="size-4" />
+                  )}
                 </div>
               </div>
             );
