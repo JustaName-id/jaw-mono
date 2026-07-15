@@ -273,8 +273,21 @@ export class Communicator {
 
     /**
      * Mount and handshake the iframe in the background (no-op in popup mode).
+     *
+     * Awaits the bounded trusted-hosts refresh first: on browsers without IOv2
+     * the refresh is what flips the routing decision from popup
+     * (clickjacking-guard) to iframe, and prewarm runs at construction — before
+     * the fetch settles — so deciding immediately would no-op and leave no
+     * iframe mounted. That matters beyond warmth: the first connect on Safari
+     * runs in a popup whose post-approval session handoff needs a live keys
+     * iframe to deliver to (see keys-jaw-id lib/session-handoff.ts); without
+     * this wait, the first flow after page load loses the handoff and the next
+     * action falls back to the reconnect ceremony. No user gesture is at stake
+     * here (background call), so the wait is free — unlike acquire, which must
+     * skip it on gesture-driven popup routes.
      */
     async prewarm(): Promise<void> {
+        await this.trustedHostsReady;
         await this.router.prewarm();
     }
 

@@ -4,7 +4,7 @@ import { useCallback, useEffect, useState, useRef } from 'react';
 import { debugLog } from '../lib/debug-log';
 import { useAuth, usePasskeys } from '../hooks';
 import { SignInScreen, type AuthenticatedAccount } from '../components/OnboardingSection';
-import { type PasskeyAccount } from '@jaw.id/core';
+import { PasskeyManager, type PasskeyAccount } from '@jaw.id/core';
 import { SignatureModal } from '../components/SignatureModal';
 import { SiweModal } from '../components/SiweModal';
 import { Eip712Modal } from '../components/Eip712Modal';
@@ -19,6 +19,7 @@ import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
 import { applyAccountHint } from '../lib/account-hint';
 import { isSilentContinueAsConnect } from '../lib/continue-as-connect';
+import { sendSessionHandoff, registerSessionHandoffListener } from '../lib/session-handoff';
 import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/core';
 import { RECONNECT_REQUIRED } from '@jaw.id/core';
@@ -124,6 +125,59 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     },
     [communicator]
   );
+
+  // Latest auth refetch for the (once-registered) handoff listener below —
+  // same stale-closure guard as stateRef.
+  const refetchAuthRef = useRef(authQuery.refetch);
+  refetchAuthRef.current = authQuery.refetch;
+
+  /**
+   * Popup context only: after the user approves a connection, hand the
+   * freshly authenticated session to the embedded keys iframe in the dApp
+   * page, so the next embedded action decrypts directly instead of walking
+   * the user through reconnect + a second "Continue as" passkey ceremony
+   * (Safari storage partitioning). Best-effort — see lib/session-handoff.ts.
+   */
+  const handOffSessionToEmbedded = useCallback(
+    async (origin: string) => {
+      if (communicator.getContext() !== 'popup') return;
+      try {
+        const session = await cryptoHandler.getSession(origin);
+        if (session?.authState) {
+          sendSessionHandoff({ dappOrigin: origin, session });
+        } else {
+          debugLog('[SessionHandoff] not sent: no session/authState for', origin);
+        }
+      } catch {
+        /* best-effort: the reconnect + Continue-as flow remains the fallback */
+      }
+    },
+    [communicator, cryptoHandler]
+  );
+
+  // Embedded only: accept a session handed off by the same-origin popup. This
+  // listens on the raw window on purpose — the sender is the popup, not the
+  // communicator counterpart (the parent), so the communicator's
+  // source-checked channel does not apply (see lib/session-handoff.ts).
+  useEffect(() => {
+    if (!communicator.isEmbedded()) return;
+    return registerSessionHandoffListener({
+      isEmbedded: () => communicator.isEmbedded(),
+      getEmbedderOrigin: () => communicator.getOrigin(),
+      importSession: (origin, session) => cryptoHandler.getSessionManager().importSession(origin, session),
+      seedAccountList: (authState) =>
+        new PasskeyManager().addAccountToList({
+          username: authState.username,
+          credentialId: authState.credentialId,
+          publicKey: authState.publicKey,
+          creationDate: new Date().toISOString(),
+          isImported: false,
+        }),
+      onImported: () => {
+        void refetchAuthRef.current();
+      },
+    });
+  }, [communicator, cryptoHandler]);
 
   // Single useEffect for all message handling
   useEffect(() => {
@@ -1328,6 +1382,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 if (authQuery.authState) {
                   communicator.sendAccountHint(authQuery.authState);
                 }
+                // Popup only: hand the session to the embedded iframe so the
+                // next embedded action skips the second passkey ceremony.
+                await handOffSessionToEmbedded(pendingRequest.origin);
                 setState('success');
                 scheduleClose(CLOSE_DELAY_MS);
               } catch (err) {
@@ -1384,6 +1441,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               if (authQuery.authState) {
                 communicator.sendAccountHint(authQuery.authState);
               }
+              // Popup only: hand the session to the embedded iframe so the
+              // next embedded action skips the second passkey ceremony.
+              await handOffSessionToEmbedded(pendingRequest.origin);
               setState('success');
               scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
