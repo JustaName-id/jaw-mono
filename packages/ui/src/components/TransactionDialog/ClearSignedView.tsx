@@ -1,7 +1,9 @@
 import { useEffect, useRef, useState } from 'react';
+import { ethAddress } from 'viem';
 import type { ClearSigningDisplay, DisplayRow } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
+import { TokenIcon } from '../TokenIcon';
 
 interface ClearSignedViewProps {
   display: ClearSigningDisplay;
@@ -15,12 +17,15 @@ function formatGrouped(value: string): string {
   return fracPart ? `${grouped}.${fracPart}` : grouped;
 }
 
-function TokenAmountValue({ row }: { row: DisplayRow }) {
+function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }) {
   return (
-    <p className="text-foreground break-all font-mono text-xs leading-[150%]">
-      <span className="font-semibold">{formatGrouped(row.value)}</span>
-      {row.symbol && <span className="text-muted-foreground"> {row.symbol}</span>}
-    </p>
+    <div className="flex flex-row items-center gap-1.5">
+      <TokenIcon chainId={chainId} address={row.tokenAddress ?? ethAddress} symbol={row.symbol} className="size-4" />
+      <p className="text-foreground break-all font-mono text-xs leading-[150%]">
+        <span className="font-semibold">{formatGrouped(row.value)}</span>
+        {row.symbol && <span className="text-muted-foreground"> {row.symbol}</span>}
+      </p>
+    </div>
   );
 }
 
@@ -118,7 +123,7 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
               <div key={i} className="flex flex-col gap-0.5">
                 <span className="text-muted-foreground text-xs font-semibold">{row.label}</span>
                 {row.kind === 'tokenAmount' || row.kind === 'amount' ? (
-                  <TokenAmountValue row={row} />
+                  <TokenAmountValue row={row} chainId={chainId} />
                 ) : row.kind === 'address' ? (
                   <AddressValue row={row} resolvedName={resolvedName} avatarSrc={avatarSrc} />
                 ) : (

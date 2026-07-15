@@ -337,6 +337,7 @@ export const TransactionDialog = ({
                 error={assetPreviewError ?? false}
                 willRevert={assetPreviewWillRevert ?? false}
                 nativeSymbol={nativeSymbol}
+                chainId={currentTransaction?.chainId}
               />
 
               {/* Value */}
@@ -427,6 +428,7 @@ export const TransactionDialog = ({
                           {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
+                              chainId={currentTransaction?.chainId}
                               selectedToken={selectedFeeToken}
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
@@ -463,6 +465,7 @@ export const TransactionDialog = ({
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
+                              chainId={currentTransaction?.chainId}
                               selectedToken={selectedFeeToken ?? null}
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
@@ -577,6 +580,7 @@ export const TransactionDialog = ({
                 error={assetPreviewError ?? false}
                 willRevert={assetPreviewWillRevert ?? false}
                 nativeSymbol={nativeSymbol}
+                chainId={currentTransaction?.chainId}
               />
 
               {/* Accordion for Transactions */}
@@ -808,6 +812,7 @@ export const TransactionDialog = ({
                           {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
+                              chainId={currentTransaction?.chainId}
                               selectedToken={selectedFeeToken}
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
@@ -844,6 +849,7 @@ export const TransactionDialog = ({
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
+                              chainId={currentTransaction?.chainId}
                               selectedToken={selectedFeeToken ?? null}
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}

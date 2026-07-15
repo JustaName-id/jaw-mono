@@ -1,6 +1,8 @@
+import { ethAddress } from 'viem';
 import { Info } from 'lucide-react';
 import { AssetDelta, formatAssetAmount } from '../../utils/assetPreview';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { TokenIcon } from '../TokenIcon';
 
 interface AssetPreviewProps {
   assetsOut: AssetDelta[];
@@ -8,6 +10,8 @@ interface AssetPreviewProps {
   error: boolean;
   willRevert: boolean;
   nativeSymbol: string;
+  /** Enables token icons in rows; when absent, rows render text-only. */
+  chainId?: number;
 }
 
 function symbolFor(delta: AssetDelta, nativeSymbol: string): string {
@@ -19,11 +23,13 @@ function AmountRow({
   label,
   colorClass,
   nativeSymbol,
+  chainId,
 }: {
   delta: AssetDelta;
   label: string;
   colorClass: string;
   nativeSymbol: string;
+  chainId?: number;
 }) {
   const sign = delta.direction === 'out' ? '-' : '+';
   const symbol = symbolFor(delta, nativeSymbol);
@@ -31,9 +37,20 @@ function AmountRow({
   const hasMore = rounded !== delta.amountFormatted;
 
   const amount = (
-    <span className={`flex-1 break-all text-right text-lg font-medium leading-[150%] ${colorClass}`}>
-      {sign}
-      {rounded} {symbol}
+    <span className={`flex min-w-0 flex-1 flex-row items-center justify-end gap-1.5 ${colorClass}`}>
+      <span className="break-all text-right text-lg font-medium leading-[150%]">
+        {sign}
+        {rounded}
+      </span>
+      {chainId !== undefined && (
+        <TokenIcon
+          chainId={chainId}
+          address={delta.isNative ? ethAddress : delta.address}
+          symbol={symbol}
+          className="size-5"
+        />
+      )}
+      {symbol && <span className="whitespace-nowrap text-lg font-medium leading-[150%]">{symbol}</span>}
     </span>
   );
 
@@ -57,7 +74,7 @@ function AmountRow({
   );
 }
 
-export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSymbol }: AssetPreviewProps) => {
+export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSymbol, chainId }: AssetPreviewProps) => {
   if (willRevert) {
     return (
       <div className="flex items-center gap-1 px-3.5">
@@ -92,6 +109,7 @@ export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSym
             label="You send"
             colorClass="text-red-500"
             nativeSymbol={nativeSymbol}
+            chainId={chainId}
           />
         ))}
         {assetsIn.map((d) => (
@@ -101,6 +119,7 @@ export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSym
             label="You receive"
             colorClass="text-green-500"
             nativeSymbol={nativeSymbol}
+            chainId={chainId}
           />
         ))}
       </div>
