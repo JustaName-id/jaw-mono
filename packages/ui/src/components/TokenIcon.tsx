@@ -1,6 +1,5 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
-import { GenericTokenIcon } from '../icons';
 import { cn } from '../lib/utils';
 import { hasIconFailed, markIconFailed, tokenIconUrl } from '../utils/tokenIcon';
 
@@ -14,16 +13,16 @@ interface TokenIconProps {
   className?: string;
   /** Overrides the endpoint URL (e.g. a token-list logoURI). */
   src?: string;
-  /** Rendered on 404/load error. Defaults to GenericTokenIcon. */
+  /** Rendered on 404/load error. Defaults to nothing — rows collapse to text-only. */
   fallback?: ReactNode;
 }
 
-/** Token logo from the public icon endpoint; renders `fallback` when no URL is available or the image fails. */
-export const TokenIcon = ({ chainId, address, symbol, className, src, fallback }: TokenIconProps) => {
+/** Token logo from the public icon endpoint; renders `fallback` (nothing by default) when no URL is available or the image fails. */
+export const TokenIcon = ({ chainId, address, symbol, className, src, fallback = null }: TokenIconProps) => {
   const [erroredSrc, setErroredSrc] = useState<string>();
   const url = src ?? (chainId !== undefined && address ? tokenIconUrl(chainId, address) : undefined);
   if (!url || erroredSrc === url || hasIconFailed(url)) {
-    return <>{fallback ?? <GenericTokenIcon className={cn('shrink-0', className)} />}</>;
+    return <>{fallback}</>;
   }
   return (
     <img
