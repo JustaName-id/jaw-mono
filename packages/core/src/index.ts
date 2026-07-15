@@ -1,5 +1,6 @@
 /**  Constants **/
 export {
+    JAW_BASE_URL,
     JAW_RPC_URL,
     JAW_PAYMASTER_URL,
     JAW_WALLET_ICON,
