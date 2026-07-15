@@ -239,7 +239,7 @@ export const DecodedCalldata = ({
                   {param.rawValue && param.rawValue.toLowerCase() !== ZERO_ADDRESS && !resolvedAvatar && (
                     // Address params with no ENS avatar: known token contracts get their logo after the address.
                     // The zero address is excluded — tokenIconUrl maps it to the native icon, wrong for calldata params.
-                    <TokenIcon chainId={chainId} address={param.rawValue} className="size-4" />
+                    <TokenIcon chainId={chainId} address={param.rawValue} className="ml-0.5 size-4" />
                   )}
                 </div>
               </div>
