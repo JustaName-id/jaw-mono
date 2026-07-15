@@ -1,3 +1,4 @@
+import { Info } from 'lucide-react';
 import { AssetDelta, formatAssetAmount } from '../../utils/assetPreview';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 
@@ -5,6 +6,7 @@ interface AssetPreviewProps {
   assetsOut: AssetDelta[];
   assetsIn: AssetDelta[];
   error: boolean;
+  willRevert: boolean;
   nativeSymbol: string;
 }
 
@@ -55,7 +57,28 @@ function AmountRow({
   );
 }
 
-export const AssetPreview = ({ assetsOut, assetsIn, error, nativeSymbol }: AssetPreviewProps) => {
+export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSymbol }: AssetPreviewProps) => {
+  if (willRevert) {
+    return (
+      <div className="flex items-center gap-1 px-3.5">
+        <p className="text-xs leading-[133%] text-red-500">Transaction is likely to fail</p>
+        <TooltipProvider delayDuration={0}>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <Info className="size-3 cursor-help text-red-500" />
+            </TooltipTrigger>
+            <TooltipContent side="top" className="max-w-[240px] text-xs">
+              <p>
+                Simulation shows this transaction reverting on-chain. You can still submit it, but it will probably fail
+                and consume gas.
+              </p>
+            </TooltipContent>
+          </Tooltip>
+        </TooltipProvider>
+      </div>
+    );
+  }
+
   if (error || (assetsOut.length === 0 && assetsIn.length === 0)) return null;
 
   return (
