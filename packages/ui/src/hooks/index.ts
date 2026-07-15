@@ -1,4 +1,5 @@
 export * from './useIsMobile';
+export * from './useDialogMobileFullScreen';
 export * from './useChainIconURI';
 export * from './useFeeTokenPrice';
 export * from './useGasEstimation';

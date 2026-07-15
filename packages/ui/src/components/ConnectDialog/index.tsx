@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { BadgeDollarIcon, EyeIcon, CopyIcon, CopiedIcon } from '../../icons';
-import { useIsMobile } from '../../hooks';
+import { useDialogMobileFullScreen } from '../../hooks';
 import { DefaultDialog } from '../DefaultDialog';
 import { Button } from '../ui/button';
 import { ConnectDialogProps } from './types';
@@ -29,7 +29,7 @@ export const ConnectDialog = ({
   showPermissions = true,
   isProcessing,
 }: ConnectDialogProps) => {
-  const isMobile = useIsMobile();
+  const mobileFullScreen = useDialogMobileFullScreen();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
   const [isAddressCopied, setIsAddressCopied] = useState(false);
 
@@ -136,7 +136,7 @@ export const ConnectDialog = ({
         </div>
       }
       contentStyle={
-        isMobile
+        mobileFullScreen
           ? {
               width: '100%',
               height: '100%',

@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { DefaultDialog } from '../DefaultDialog';
 import { Eip712DialogProps } from './types';
-import { useIsMobile, useClearSigningTypedData } from '../../hooks';
+import { useDialogMobileFullScreen, useClearSigningTypedData } from '../../hooks';
 import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
 import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
 import { Eip712VerificationDigests } from '../VerificationDigest';
@@ -274,7 +274,7 @@ export const Eip712Dialog = ({
   // Ref for scrollable container
   const scrollableRef = useRef<HTMLDivElement>(null);
 
-  const isMobile = useIsMobile();
+  const mobileFullScreen = useDialogMobileFullScreen();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
 
   // Parse typed data
@@ -387,7 +387,7 @@ export const Eip712Dialog = ({
         </div>
       }
       contentStyle={
-        isMobile
+        mobileFullScreen
           ? {
               width: '100%',
               height: '100%',
