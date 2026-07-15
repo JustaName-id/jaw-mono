@@ -1,3 +1,17 @@
+## 1.2.8 (2026-07-15)
+
+### 🩹 Fixes
+
+- add icons to the tx screen ([#242](https://github.com/JustaName-id/jaw-mono/pull/242))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.0.7
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.2.7 (2026-07-14)
 
 ### 🩹 Fixes
