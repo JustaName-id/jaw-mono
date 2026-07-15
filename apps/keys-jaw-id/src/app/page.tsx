@@ -18,6 +18,7 @@ import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
 import { applyAccountHint } from '../lib/account-hint';
+import { isSilentContinueAsConnect } from '../lib/continue-as-connect';
 import type { SessionAuthState } from '../lib/session-manager';
 import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/core';
 import { RECONNECT_REQUIRED } from '@jaw.id/core';
@@ -1177,7 +1178,27 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
                   // If there's a pending connect request, show approval screen immediately
                   if (pendingRequest?.type === SDKRequestType.CONNECT) {
-                    setState('account-selection');
+                    if (
+                      isSilentContinueAsConnect({
+                        isEmbedded: communicator.isEmbedded(),
+                        hintedCredentialId,
+                        authenticatedCredentialId: authenticatedAccount.credentialId,
+                        params: pendingRequest.params,
+                      })
+                    ) {
+                      // Embedded "Continue as" fast path (see lib/continue-as-connect):
+                      // the user already approved this exact origin+account pairing
+                      // (the hint only persists post-approval) and just re-confirmed
+                      // it via the Continue-as passkey ceremony — approve without
+                      // re-showing the Connect screen. Mirrors ConnectModal.onSuccess.
+                      setState('processing');
+                      await pendingRequest.onApprove({ accounts: [{ address: authenticatedAccount.address }] });
+                      communicator.sendAccountHint({ credentialId: authenticatedAccount.credentialId });
+                      setState('success');
+                      scheduleClose(CLOSE_DELAY_MS);
+                    } else {
+                      setState('account-selection');
+                    }
                   } else if (
                     pendingRequest?.type === SDKRequestType.SIGN_MESSAGE ||
                     pendingRequest?.type === SDKRequestType.SIGN_TYPED_DATA ||
