@@ -1,4 +1,5 @@
 import { Message } from '../messages/message.js';
+import type { AccountHintData } from '../messages/configMessage.js';
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
 import type { JawTheme } from '../ui/theme.js';
 
@@ -19,6 +20,24 @@ export type TransportOptions = {
     preference: JawProviderPreference;
     /** dApp theme tokens, forwarded to the keys app so the dialog matches its look & feel. */
     theme?: JawTheme;
+    /**
+     * Returns the last account the user connected with (persisted dApp-side
+     * from the keys app's AccountHint), sent on the handshake as
+     * `lastAccount`. A getter — not a value — because the hint can be stored
+     * mid-session (first connect) and must ride the next handshake/reload.
+     * The keys app uses it to seed its "Continue as" screen when its own
+     * (partitioned, Brave/Safari-ephemeral) storage came up empty.
+     */
+    getLastAccount?: () => AccountHintData | undefined;
+    /**
+     * Returns the dApp's API key (from the SDK store), sent on the transport
+     * config message so the keys app can bootstrap its account screen before the
+     * handshake arrives. A getter — read at send time, not captured — and always
+     * the dApp's own key, never a keys-app fallback (which would misattribute ENS
+     * subname issuance and billing). The handshake's chain.rpcUrl key overrides
+     * it as the authoritative source.
+     */
+    getApiKey?: () => string | undefined;
     /**
      * Invoked when the user dismisses the dialog/popup (Escape, click-outside,
      * window close, or a keys-side cancel) — i.e. any close that is NOT a

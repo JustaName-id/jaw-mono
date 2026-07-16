@@ -2,8 +2,10 @@ export {
     type ConfigMessage,
     type ConfigEvent,
     type SignerType,
+    type AccountHintData,
     RECONNECT_REQUIRED,
     isReconnectRequiredFailure,
+    isValidAccountHint,
 } from './configMessage.js';
 
 export { type MessageID, type Message } from './message.js';

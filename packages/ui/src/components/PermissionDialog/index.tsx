@@ -6,12 +6,13 @@ import { Button } from '../ui/button';
 import { DefaultDialog } from '../DefaultDialog';
 import { FeeTokenSelector } from '../FeeTokenSelector';
 import { PermissionDialogProps } from './types';
-import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
+import { useDialogMobileFullScreen, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { CopiedIcon, CopyIcon } from '../../icons';
 import { useState, useEffect, useRef } from 'react';
 import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
 import { IdentityAvatar } from '../IdentityAvatar';
+import { TokenIcon } from '../TokenIcon';
 
 export const PermissionDialog = ({
   open,
@@ -52,7 +53,7 @@ export const PermissionDialog = ({
   // Ref for scrollable container
   const scrollableRef = useRef<HTMLDivElement>(null);
 
-  const isMobile = useIsMobile();
+  const mobileFullScreen = useDialogMobileFullScreen();
 
   // Get native token symbol from feeTokens, falling back to chain's native currency
   const nativeToken = feeTokens?.find((t) => t.isNative);
@@ -224,7 +225,7 @@ export const PermissionDialog = ({
         </div>
       }
       contentStyle={
-        isMobile
+        mobileFullScreen
           ? {
               width: '100%',
               height: '100%',
@@ -332,9 +333,17 @@ export const PermissionDialog = ({
                       <div className="bg-border h-full min-h-[40px] w-[1px] flex-shrink-0 rounded-full" />
                       <div className="flex flex-1 flex-col gap-0.5">
                         <p className="text-muted-foreground text-xs font-bold leading-[133%]">Token</p>
-                        <p className="text-foreground text-base font-normal leading-[150%]">
-                          {isNativeToken(spend.tokenAddress) ? `Native (${nativeSymbol})` : spend.token}
-                        </p>
+                        <div className="flex flex-row items-center gap-1.5">
+                          <TokenIcon
+                            chainId={chainId}
+                            address={spend.tokenAddress}
+                            symbol={spend.token}
+                            className="size-4"
+                          />
+                          <p className="text-foreground text-base font-normal leading-[150%]">
+                            {isNativeToken(spend.tokenAddress) ? `Native (${nativeSymbol})` : spend.token}
+                          </p>
+                        </div>
                       </div>
                     </div>
                   </div>
@@ -460,6 +469,7 @@ export const PermissionDialog = ({
                       {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
                         <FeeTokenSelector
                           tokens={feeTokens}
+                          chainId={chainId}
                           selectedToken={selectedFeeToken ?? null}
                           onSelect={onFeeTokenSelect}
                           isLoading={feeTokensLoading ?? false}
@@ -510,6 +520,7 @@ export const PermissionDialog = ({
                       {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
                         <FeeTokenSelector
                           tokens={feeTokens}
+                          chainId={chainId}
                           selectedToken={selectedFeeToken}
                           onSelect={onFeeTokenSelect}
                           isLoading={feeTokensLoading ?? false}
@@ -538,6 +549,7 @@ export const PermissionDialog = ({
                       {showFeeTokenSelector && feeTokens && onFeeTokenSelect && selectedFeeToken && (
                         <FeeTokenSelector
                           tokens={feeTokens}
+                          chainId={chainId}
                           selectedToken={selectedFeeToken}
                           onSelect={onFeeTokenSelect}
                           isLoading={feeTokensLoading ?? false}

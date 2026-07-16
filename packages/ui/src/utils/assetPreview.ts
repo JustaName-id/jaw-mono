@@ -1,6 +1,17 @@
-import { createPublicClient, ethAddress, formatUnits, http, type Address } from 'viem';
-import { simulateCalls } from 'viem/actions';
+import {
+  createPublicClient,
+  decodeFunctionResult,
+  encodeFunctionData,
+  ethAddress,
+  formatUnits,
+  hexToBigInt,
+  http,
+  zeroAddress,
+  type Address,
+} from 'viem';
+import { simulateBlocks, simulateCalls } from 'viem/actions';
 import { JAW_RPC_URL, type TransactionCall } from '@jaw.id/core';
+import { deriveTransferDeltas, type SimulatedLog } from './transferDeltas';
 
 export interface RawAssetChange {
   token: { address: string; decimals?: number; symbol?: string };
@@ -91,37 +102,35 @@ const erc165Abi = [
   },
 ] as const;
 
-/**
- * Confirm which of `addresses` are ERC-721 via ERC-165 `supportsInterface`. One `eth_call`
- * per address; failures (no ERC-165 support, e.g. a real ERC-20) resolve to `false`.
- * Returns the confirmed addresses lowercased.
- */
-async function detectErc721(client: ReturnType<typeof createPublicClient>, addresses: string[]): Promise<Set<string>> {
-  const confirmed = new Set<string>();
-  if (addresses.length === 0) return confirmed;
-
-  const checks = await Promise.all(
-    addresses.map((address) =>
-      client
-        .readContract({
-          address: address as Address,
-          abi: erc165Abi,
-          functionName: 'supportsInterface',
-          args: [ERC721_INTERFACE_ID],
-        })
-        .catch(() => false)
-    )
-  );
-
-  addresses.forEach((address, i) => {
-    if (checks[i] === true) confirmed.add(address.toLowerCase());
-  });
-  return confirmed;
+export interface AssetSimulationResult {
+  deltas: AssetDelta[];
+  /** True when any call in the batch reverted during simulation — the batch would fail on-chain. */
+  willRevert: boolean;
 }
+
+const erc20MetadataAbi = [
+  {
+    type: 'function',
+    name: 'balanceOf',
+    stateMutability: 'view',
+    inputs: [{ type: 'address' }],
+    outputs: [{ type: 'uint256' }],
+  },
+  { type: 'function', name: 'symbol', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
+  { type: 'function', name: 'decimals', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
+] as const;
 
 /**
  * Simulate the batch against current chain state and return the net per-asset balance
  * changes for `account`. Throws on simulation failure — the caller owns the fallback.
+ *
+ * Candidate assets are every contract that emitted a log during the batch, and changes
+ * are measured as actual `balanceOf` diffs probed before/after the batch in a second
+ * simulation (native ETH via `traceTransfers` pseudo-logs). This replaces viem's
+ * `traceAssetChanges`, whose per-call `eth_createAccessList` discovery runs each call
+ * against *current* state — in dependent batches (approve → swap) the swap probe reverts
+ * at the allowance check, which both loses the output token and, as of viem 2.55,
+ * rejects the whole simulation.
  */
 export async function simulateAssetChanges({
   chainId,
@@ -133,35 +142,91 @@ export async function simulateAssetChanges({
   apiKey?: string;
   account: Address;
   calls: TransactionCall[];
-}): Promise<AssetDelta[]> {
+}): Promise<AssetSimulationResult> {
   const client = getClient(chainId, apiKey);
   const normalizedCalls = calls.map((c) => ({
     to: c.to as Address,
     value: c.value === undefined ? undefined : typeof c.value === 'string' ? BigInt(c.value) : c.value,
     data: c.data,
   }));
-  const { assetChanges } = await simulateCalls(client, {
+  const { results } = await simulateCalls(client, {
     account,
     calls: normalizedCalls,
-    traceAssetChanges: true,
+    traceTransfers: true,
   });
-  const raw = assetChanges as readonly RawAssetChange[];
+  if (results.some((r) => r.status !== 'success')) return { deltas: [], willRevert: true };
 
-  // viem reports NFT decimals as `1` or `undefined`; probe only those entries (the common
-  // ERC-20/native path has real decimals and is skipped) so confirmed ERC-721s render as
-  // whole-token counts instead of "0.1" or being dropped.
-  const candidates = [
-    ...new Set(
-      raw
-        .filter(
-          (c) =>
-            c.value.diff !== 0n &&
-            c.token.address.toLowerCase() !== ethAddress &&
-            (c.token.decimals === undefined || c.token.decimals === 1)
-        )
-        .map((c) => c.token.address)
-    ),
-  ];
-  const erc721 = await detectErc721(client, candidates);
-  return mapAssetChanges(raw, erc721);
+  const logs = results.flatMap((r) => (r.logs ?? []) as SimulatedLog[]);
+
+  // The simulation charges no gas, so the account's ETH delta is exactly the net of the
+  // traceTransfers pseudo-logs (emitted from viem's ETH pseudo-address).
+  const ethEntries: RawAssetChange[] = deriveTransferDeltas(logs, account)
+    .filter((d) => d.address === ethAddress)
+    .map((d) => ({
+      token: { address: ethAddress, decimals: 18, symbol: 'ETH' },
+      value: { pre: 0n, post: d.diff, diff: d.diff },
+    }));
+
+  const candidates = [...new Set(logs.map((l) => l.address.toLowerCase()))].filter((a) => a !== ethAddress);
+  if (candidates.length === 0) return { deltas: mapAssetChanges(ethEntries), willRevert: false };
+
+  // Probe balances before/after the batch, plus metadata and ERC-165, all as extra blocks
+  // of ONE simulation — the whole preview costs exactly two RPC requests regardless of
+  // candidate count. Non-token contracts fail the probes and are skipped.
+  type SimCall = { to: Address; data?: `0x${string}`; value?: bigint; from: Address; nonce?: number };
+  const probeBlock = (data: `0x${string}`) => ({
+    calls: candidates.map((address, i): SimCall => ({ to: address as Address, data, from: zeroAddress, nonce: i })),
+    stateOverrides: [{ address: zeroAddress, nonce: 0 }],
+  });
+  const balanceOfBlock = probeBlock(
+    encodeFunctionData({ abi: erc20MetadataAbi, functionName: 'balanceOf', args: [account] })
+  );
+  const batchCalls: SimCall[] = normalizedCalls.map((c) => ({ ...c, from: account }));
+  const [preBlock, batchBlock, postBlock, decimalsBlock, symbolsBlock, erc165Block] = await simulateBlocks(client, {
+    blocks: [
+      balanceOfBlock,
+      { calls: batchCalls },
+      balanceOfBlock,
+      probeBlock(encodeFunctionData({ abi: erc20MetadataAbi, functionName: 'decimals' })),
+      probeBlock(encodeFunctionData({ abi: erc20MetadataAbi, functionName: 'symbol' })),
+      probeBlock(
+        encodeFunctionData({ abi: erc165Abi, functionName: 'supportsInterface', args: [ERC721_INTERFACE_ID] })
+      ),
+    ],
+  });
+  // Chain state can move between the two simulations; if the batch reverts in this run,
+  // the balance diffs are meaningless and the run-1 deltas would be stale.
+  if (batchBlock.calls.some((c) => c.status !== 'success')) return { deltas: [], willRevert: true };
+
+  const probeData = (block: typeof preBlock | undefined, i: number): `0x${string}` | null => {
+    const call = block?.calls[i];
+    return call?.status === 'success' && call.data && call.data !== '0x' ? call.data : null;
+  };
+  const toBigInt = (data: `0x${string}` | null): bigint | null => (data === null ? null : hexToBigInt(data));
+
+  const erc721 = new Set<string>();
+  const tokenEntries: RawAssetChange[] = [];
+  candidates.forEach((address, i) => {
+    const pre = toBigInt(probeData(preBlock, i));
+    const post = toBigInt(probeData(postBlock, i));
+    if (pre === null || post === null || pre === post) return;
+
+    const rawDecimals = toBigInt(probeData(decimalsBlock, i));
+    const decimals = rawDecimals === null ? undefined : Number(rawDecimals);
+    const symbolData = probeData(symbolsBlock, i);
+    let symbol: string | undefined;
+    try {
+      if (symbolData)
+        symbol = decodeFunctionResult({ abi: erc20MetadataAbi, functionName: 'symbol', data: symbolData });
+    } catch {
+      symbol = undefined;
+    }
+    // A balanceOf diff on an ERC-721 is a whole-token count; confirm via ERC-165 (checked
+    // only when decimals are missing/1) so NFTs render as counts instead of being dropped.
+    if ((decimals === undefined || decimals === 1) && toBigInt(probeData(erc165Block, i)) === 1n) erc721.add(address);
+
+    tokenEntries.push({ token: { address, symbol, decimals }, value: { pre, post, diff: post - pre } });
+  });
+
+  return { deltas: mapAssetChanges([...ethEntries, ...tokenEntries], erc721), willRevert: false };
 }

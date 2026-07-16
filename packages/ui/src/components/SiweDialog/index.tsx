@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useId, useState } from 'react';
-import { useIsMobile } from '../../hooks';
+import { useDialogMobileFullScreen } from '../../hooks';
 import { CopyIcon } from '../../icons';
 import {
   reverseResolveAddresses,
@@ -35,7 +35,7 @@ export const SiweDialog = ({
   canSign,
   warningMessage,
 }: SiweDialogProps) => {
-  const isMobile = useIsMobile();
+  const mobileFullScreen = useDialogMobileFullScreen();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
 
   // appName is externally-controlled (dApp metadata or SIWE message body); sanitize before display.
@@ -111,7 +111,7 @@ export const SiweDialog = ({
         </div>
       }
       contentStyle={
-        isMobile
+        mobileFullScreen
           ? {
               width: '100%',
               height: '100%',

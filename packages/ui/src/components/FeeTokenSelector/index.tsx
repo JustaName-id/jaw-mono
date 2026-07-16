@@ -1,12 +1,14 @@
 'use client';
 
 import { useState } from 'react';
+import { ethAddress } from 'viem';
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover';
 import { Button } from '../ui/button';
 import { Spinner } from '../ui/spinner';
 import { EthIcon, UsdcIcon, UsdtIcon, GenericTokenIcon } from '../../icons';
 import { cn } from '../../lib/utils';
 import { ChevronDown, X } from 'lucide-react';
+import { TokenIcon } from '../TokenIcon';
 
 export interface FeeTokenOption {
   uid: string;
@@ -36,29 +38,12 @@ interface FeeTokenSelectorProps {
   disabled?: boolean;
   nativeTokenPrice?: number;
   estimatedGasEth?: string;
+  /** Enables endpoint icon lookup for tokens without a logoURI. */
+  chainId?: number;
 }
 
-// Get token icon - use logoURI if available, otherwise fall back to symbol-based icons
-const getTokenIcon = (symbol: string, className?: string, logoURI?: string) => {
-  const iconClass = cn('size-8 shrink-0', className);
-
-  // Use logoURI if available
-  if (logoURI) {
-    return (
-      <img
-        src={logoURI}
-        alt={symbol}
-        className={cn(iconClass, 'rounded-full object-cover')}
-        onError={(e) => {
-          // Fallback to generic icon if image fails to load
-          e.currentTarget.style.display = 'none';
-          e.currentTarget.nextElementSibling?.classList.remove('hidden');
-        }}
-      />
-    );
-  }
-
-  // Fallback to symbol-based icons
+// Symbol-based SVG fallback used when neither logoURI nor the icon endpoint has an image
+const symbolIcon = (symbol: string, iconClass: string) => {
   switch (symbol.toUpperCase()) {
     case 'ETH':
       return <EthIcon className={iconClass} />;
@@ -69,6 +54,20 @@ const getTokenIcon = (symbol: string, className?: string, logoURI?: string) => {
     default:
       return <GenericTokenIcon className={iconClass} />;
   }
+};
+
+const getTokenIcon = (token: FeeTokenOption, chainId?: number, className?: string) => {
+  const iconClass = cn('size-8 shrink-0', className);
+  return (
+    <TokenIcon
+      chainId={chainId}
+      address={token.isNative ? ethAddress : token.address}
+      symbol={token.symbol}
+      src={token.logoURI}
+      className={iconClass}
+      fallback={symbolIcon(token.symbol, iconClass)}
+    />
+  );
 };
 
 // Format balance for display (max 6 decimal places, min 4 for small values)
@@ -101,6 +100,7 @@ export const FeeTokenSelector = ({
   disabled,
   nativeTokenPrice = 0,
   estimatedGasEth,
+  chainId,
 }: FeeTokenSelectorProps) => {
   const [open, setOpen] = useState(false);
 
@@ -113,14 +113,20 @@ export const FeeTokenSelector = ({
     );
   }
 
-  // Don't render if no ERC-20 tokens available (only native)
-  const hasErc20Options = tokens.some((t) => !t.isNative);
-  if (!hasErc20Options) {
-    return null;
-  }
-
   const nativeToken = tokens.find((t) => t.isNative);
   const erc20Tokens = tokens.filter((t) => !t.isNative);
+
+  // No ERC-20 alternatives: show a non-interactive native badge instead of the picker
+  const hasErc20Options = erc20Tokens.length > 0;
+  if (!hasErc20Options) {
+    if (!nativeToken) return null;
+    return (
+      <div className="border-muted-foreground/30 flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium">
+        {getTokenIcon(nativeToken, chainId, 'size-3.5')}
+        <span>{nativeToken.symbol}</span>
+      </div>
+    );
+  }
 
   const handleSelect = (token: FeeTokenOption) => {
     if (token.isSelectable) {
@@ -227,7 +233,7 @@ export const FeeTokenSelector = ({
         )}
       >
         {/* Token Icon */}
-        {getTokenIcon(token.symbol, 'size-6', token.logoURI)}
+        {getTokenIcon(token, chainId, 'size-6')}
 
         {/* Token Info */}
         <div className="min-w-0 flex-1 text-left">
@@ -270,7 +276,7 @@ export const FeeTokenSelector = ({
           disabled={disabled}
           className="border-muted-foreground/30 h-7 gap-1 rounded-md px-2 text-xs font-medium"
         >
-          {selectedToken && getTokenIcon(selectedToken.symbol, 'size-3.5', selectedToken.logoURI)}
+          {selectedToken && getTokenIcon(selectedToken, chainId, 'size-3.5')}
           <span>{selectedToken?.symbol || 'Select'}</span>
           <ChevronDown className="size-3 opacity-50" />
         </Button>

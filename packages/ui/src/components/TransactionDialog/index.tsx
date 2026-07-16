@@ -10,10 +10,11 @@ import { useState, useEffect } from 'react';
 import { formatEther } from 'viem';
 import { Info } from 'lucide-react';
 import { TransactionDialogProps } from './types';
-import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
+import { useDialogMobileFullScreen, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
+import { TokenIcon } from '../TokenIcon';
 import { DecodedCalldata } from './DecodedCalldata';
 import { AssetPreview } from './AssetPreview';
 
@@ -29,6 +30,7 @@ export const TransactionDialog = ({
   assetsOut,
   assetsIn,
   assetPreviewError,
+  assetPreviewWillRevert,
   onConfirm,
   onCancel,
   isProcessing,
@@ -46,7 +48,7 @@ export const TransactionDialog = ({
   mainnetRpcUrl,
   nativeCurrencySymbol,
 }: TransactionDialogProps) => {
-  const isMobile = useIsMobile();
+  const mobileFullScreen = useDialogMobileFullScreen();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
   const [isAddressCopied, setIsAddressCopied] = useState<{
     [key: string]: boolean;
@@ -262,7 +264,7 @@ export const TransactionDialog = ({
         </div>
       }
       contentStyle={
-        isMobile
+        mobileFullScreen
           ? {
               width: '100%',
               height: '100%',
@@ -297,7 +299,19 @@ export const TransactionDialog = ({
                 <div className="text-foreground flex min-w-0 flex-col gap-0.5">
                   <p className="text-xs font-bold leading-[133%]">To</p>
                   <div className="flex min-w-0 flex-row items-center gap-1">
-                    <IdentityAvatar src={currentTransaction?.to ? resolvedAvatars[currentTransaction.to] : undefined} />
+                    {currentTransaction?.to && !resolvedAvatars[currentTransaction.to] ? (
+                      // Recipient with no ENS avatar: known token contracts get their logo, everything else the wallet glyph.
+                      <TokenIcon
+                        chainId={currentTransaction.chainId}
+                        address={currentTransaction.to}
+                        className="size-5"
+                        fallback={<IdentityAvatar />}
+                      />
+                    ) : (
+                      <IdentityAvatar
+                        src={currentTransaction?.to ? resolvedAvatars[currentTransaction.to] : undefined}
+                      />
+                    )}
                     <p className="break-all text-base font-normal leading-[150%]">{displayToAddress}</p>
                     {currentTransaction?.to &&
                       (isAddressCopied['single-to'] ? (
@@ -334,7 +348,9 @@ export const TransactionDialog = ({
                 assetsOut={assetsOut ?? []}
                 assetsIn={assetsIn ?? []}
                 error={assetPreviewError ?? false}
+                willRevert={assetPreviewWillRevert ?? false}
                 nativeSymbol={nativeSymbol}
+                chainId={currentTransaction?.chainId}
               />
 
               {/* Value */}
@@ -425,6 +441,7 @@ export const TransactionDialog = ({
                           {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
+                              chainId={currentTransaction?.chainId}
                               selectedToken={selectedFeeToken}
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
@@ -461,6 +478,7 @@ export const TransactionDialog = ({
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
+                              chainId={currentTransaction?.chainId}
                               selectedToken={selectedFeeToken ?? null}
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
@@ -573,7 +591,9 @@ export const TransactionDialog = ({
                 assetsOut={assetsOut ?? []}
                 assetsIn={assetsIn ?? []}
                 error={assetPreviewError ?? false}
+                willRevert={assetPreviewWillRevert ?? false}
                 nativeSymbol={nativeSymbol}
+                chainId={currentTransaction?.chainId}
               />
 
               {/* Accordion for Transactions */}
@@ -626,7 +646,16 @@ export const TransactionDialog = ({
                               )}
                             </div>
                             <div className="flex flex-row items-center gap-1">
-                              <IdentityAvatar src={transaction.to ? resolvedAvatars[transaction.to] : undefined} />
+                              {transaction.to && !resolvedAvatars[transaction.to] ? (
+                                <TokenIcon
+                                  chainId={transaction.chainId}
+                                  address={transaction.to}
+                                  className="size-5"
+                                  fallback={<IdentityAvatar />}
+                                />
+                              ) : (
+                                <IdentityAvatar src={transaction.to ? resolvedAvatars[transaction.to] : undefined} />
+                              )}
                               <p className="text-sm font-normal leading-[150%]">
                                 {displayContractAddress(transaction.to)}
                               </p>
@@ -805,6 +834,7 @@ export const TransactionDialog = ({
                           {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
+                              chainId={currentTransaction?.chainId}
                               selectedToken={selectedFeeToken}
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}
@@ -841,6 +871,7 @@ export const TransactionDialog = ({
                           {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
                             <FeeTokenSelector
                               tokens={feeTokens}
+                              chainId={currentTransaction?.chainId}
                               selectedToken={selectedFeeToken ?? null}
                               onSelect={onFeeTokenSelect}
                               isLoading={feeTokensLoading ?? false}

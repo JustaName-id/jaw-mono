@@ -1,5 +1,6 @@
 /**  Constants **/
 export {
+    JAW_BASE_URL,
     JAW_RPC_URL,
     JAW_PAYMASTER_URL,
     JAW_WALLET_ICON,
@@ -100,6 +101,8 @@ export {
 /** Passkey exports (used with Account class) **/
 export {
     PasskeyManager,
+    lookupPasskeyFromBackend,
+    type PasskeyLookupResponse,
     type PasskeyAccount,
     type NativePasskeyGetFn,
     type NativePasskeyCreateFn,
@@ -107,7 +110,7 @@ export {
 } from './passkey-manager/index.js';
 
 /** Storage exports (used with AccountConfig.storage for React Native) **/
-export { type SyncStorage } from './storage-manager/index.js';
+export { type SyncStorage, createMemoryStorage } from './storage-manager/index.js';
 
 /** Key Manager exports **/
 export { KeyManager } from './key-manager/index.js';

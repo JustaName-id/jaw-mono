@@ -439,6 +439,47 @@ export class SessionManager {
   }
 
   /**
+   * Imports a complete session produced in another same-origin context (the
+   * popup's first-party world) into this context's storage, overwriting any
+   * session already stored for the origin — the imported session is newer by
+   * construction (it comes from the flow the user just completed).
+   *
+   * Trust boundary: callers must only feed this sessions received over a
+   * channel whose sender is this same origin (see lib/session-handoff.ts);
+   * the session's authState is accepted as-is, without a passkey ceremony.
+   *
+   * @param origin - The app origin the session belongs to
+   * @param session - The full session to import
+   * @returns The imported session, or null if validation or persistence fails
+   */
+  async importSession(origin: string, session: AppSession): Promise<AppSession | null> {
+    if (!isValidOrigin(origin)) {
+      console.error(`${LOG_PREFIX} Cannot import session: invalid origin`);
+      return null;
+    }
+
+    if (!isValidSession(session)) {
+      console.error(`${LOG_PREFIX} Cannot import session: invalid session data`);
+      return null;
+    }
+
+    const hashedOrigin = await hashOrigin(origin);
+    const imported: AppSession = { ...session, lastUsedAt: Date.now() };
+
+    const sessions = this.ensureCache();
+    sessions[hashedOrigin] = imported;
+    this.cache = sessions;
+
+    if (!this.saveToStorage()) {
+      console.error(`${LOG_PREFIX} Failed to persist imported session`);
+      return null;
+    }
+
+    console.log(`${LOG_PREFIX} Session imported for:`, origin);
+    return { ...imported };
+  }
+
+  /**
    * Updates an existing session.
    *
    * @param origin - The app origin
