@@ -317,6 +317,25 @@ describe('JAWProvider', () => {
             expect(storeSignerType).not.toHaveBeenCalled();
             expect((provider as any).signer).toBeNull();
         });
+
+        // Regression: on Safari, a first connect routes the handshake to the popup
+        // (no lastAccount hint yet). The popup flow persists the hint mid-call, so
+        // by the time the handshake returns, willRouteToIframe flips to true — and
+        // the Safari re-handshake block (meant for a RESTORED signer) must not fire
+        // for the signer this very call just handshaked, or the user is walked
+        // through a second ceremony in the iframe right after the popup one.
+        it('does NOT re-run the handshake when the popup flow flips routing to the iframe mid-call (Safari first connect)', async () => {
+            (isSafari as Mock).mockReturnValue(true);
+            (provider as any).communicator.willRouteToIframe = vi.fn().mockResolvedValue(true);
+            const request: RequestArguments = { method: 'eth_requestAccounts' };
+            (mockSigner.handshake as Mock).mockResolvedValue(undefined);
+            (mockSigner.request as Mock).mockResolvedValue(['0x1234567890123456789012345678901234567890']);
+
+            await provider.request(request);
+
+            expect(mockSigner.handshake).toHaveBeenCalledTimes(1);
+            expect(mockSigner.request).toHaveBeenCalledWith(request);
+        });
     });
 
     // Regression: on Safari, selecting/switching an account happens in the popup

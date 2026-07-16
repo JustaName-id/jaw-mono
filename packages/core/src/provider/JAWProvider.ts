@@ -149,7 +149,18 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
 
                         this.signer = signer;
                         storeSignerType(signerType);
-                        break;
+                        // Return directly (like wallet_connect above) instead of
+                        // falling through: the Safari re-handshake below is for a
+                        // signer RESTORED from a previous visit. This call's own
+                        // handshake just ran — but on Safari's popup route it
+                        // persists the lastAccount hint mid-call, which flips
+                        // willRouteToIframe to true and would walk the user
+                        // through a second ceremony in the iframe right after
+                        // the popup one. The popup→iframe session handoff (keys
+                        // lib/session-handoff.ts) is what seeds the iframe
+                        // session on this path.
+                        const result = await signer.request(args);
+                        return result as T;
                     }
                     case 'wallet_connect': {
                         const signer = this.initSigner(signerType);
