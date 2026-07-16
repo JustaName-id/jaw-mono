@@ -1,9 +1,10 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import { payAndFetchSchema } from '../tools.js';
+import { payAndFetchSchema, x402LogSchema } from '../tools.js';
 import { mcpError, mcpResult } from '../helpers.js';
 import { loadConfig } from '../../lib/config.js';
 import { Eip3009EoaPayer } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
+import { appendX402Log, readX402Log } from '../../x402/ledger.js';
 
 interface PayAndFetchParams {
   url: string;
@@ -59,7 +60,46 @@ export function registerPayTool(server: McpServer): void {
           }
         }
 
+        // Record payment attempts (not free passthroughs) to the audit ledger.
+        const settled = result.payment ?? result.attemptedPayment;
+        const isPaymentEvent =
+          result.paid || !!result.attemptedPayment || (result.status === 402 && !!result.refusedReason);
+        if (isPaymentEvent) {
+          appendX402Log({
+            at: new Date().toISOString(),
+            url: params.url,
+            payer: result.payer,
+            status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
+            amount: settled?.amount,
+            asset: settled?.asset,
+            network: settled?.network,
+            payTo: settled?.payTo,
+            nonce: settled?.nonce,
+            txHash: result.payment?.txHash,
+            reason: result.refusedReason,
+          });
+        }
+
         return mcpResult(result);
+      } catch (err) {
+        return mcpError(err);
+      }
+    }
+  );
+
+  server.registerTool(
+    'jaw_x402_log',
+    {
+      description:
+        'Read the local x402 payment ledger — every jaw_pay_and_fetch attempt (paid, failed, or ' +
+        'refused) with amount, asset, network, payTo, nonce, and txHash. Use it to audit spend or ' +
+        'reconcile an ambiguous settlement by nonce. Pass limit to get only the most recent entries.',
+      inputSchema: x402LogSchema,
+      annotations: { readOnlyHint: true },
+    },
+    async (params: { limit?: number }) => {
+      try {
+        return mcpResult(readX402Log(params.limit));
       } catch (err) {
         return mcpError(err);
       }

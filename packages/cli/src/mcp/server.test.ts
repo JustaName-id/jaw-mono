@@ -19,6 +19,7 @@ vi.mock('../lib/paths.js', () => {
       relay: p.join(root, 'relay.json'),
       keystore: p.join(root, 'keystore.json'),
       sessionConfig: p.join(root, 'session-config.json'),
+      x402Log: p.join(root, 'x402-log.jsonl'),
     },
   };
 });
@@ -360,6 +361,32 @@ describe('jaw_pay_and_fetch', () => {
     // Distinct from sessionAddress (the smart account) — this is where USDC goes.
     expect(parsed.payerAddress.toLowerCase()).toBe('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
     expect(parsed.sessionAddress).toBe('0xSmartAccount');
+  });
+
+  it('records a paid call in the x402 ledger, readable via jaw_x402_log', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore(PK, '0xSmartAccount');
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}'))
+      .mockResolvedValueOnce(mkRes(200, { 'PAYMENT-RESPONSE': RECEIPT }, JSON.stringify({ data: 'ok' })));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/paid' } });
+
+      const log = JSON.parse(toolText(await client.callTool({ name: 'jaw_x402_log', arguments: {} })));
+      expect(log).toHaveLength(1);
+      expect(log[0]).toMatchObject({
+        status: 'paid',
+        amount: '1000',
+        txHash: '0xtx',
+        url: 'https://api.example.com/paid',
+      });
+    } finally {
+      vi.unstubAllGlobals();
+    }
   });
 });
 

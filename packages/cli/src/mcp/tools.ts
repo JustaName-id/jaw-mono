@@ -53,3 +53,7 @@ export const payAndFetchSchema = {
   asset: z.string().optional().describe('Require a specific asset contract address.'),
   network: z.string().optional().describe('Require a specific CAIP-2 network, e.g. eip155:8453 (Base).'),
 };
+
+export const x402LogSchema = {
+  limit: z.number().optional().describe('Return only the most recent N ledger entries (default: all).'),
+};

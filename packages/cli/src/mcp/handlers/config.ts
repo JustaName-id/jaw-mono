@@ -19,6 +19,8 @@ export function registerConfigTools(server: McpServer): void {
     }
   );
 
+  // @ts-expect-error — MCP SDK deep tool-handler generic inference (TS2589) once
+  // enough tools are registered; the handler itself is correctly typed.
   server.registerTool(
     'jaw_config_set',
     {
