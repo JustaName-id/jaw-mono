@@ -226,6 +226,43 @@ describe('jaw_session_status', () => {
   });
 });
 
+describe('jaw_pay_and_fetch', () => {
+  it('errors clearly when no session exists', async () => {
+    const client = await connectClient();
+    const result = await client.callTool({
+      name: 'jaw_pay_and_fetch',
+      arguments: { url: 'https://api.example.com/paid' },
+    });
+    expect(result.isError).toBe(true);
+    expect(toolText(result)).toContain('jaw session setup');
+  });
+
+  it('passes a free (non-402) resource through without paying', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    // A valid session key so the payer can be built; the free path never signs.
+    saveKeystore('0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d', '0xSessionAddr');
+
+    const fetchMock = vi.fn().mockResolvedValue({
+      status: 200,
+      headers: { get: () => null },
+      text: async () => JSON.stringify({ free: true }),
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      const parsed = JSON.parse(
+        toolText(await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/free' } }))
+      );
+      expect(parsed.paid).toBe(false);
+      expect(parsed.status).toBe(200);
+      expect(parsed.body).toEqual({ free: true });
+      expect(fetchMock).toHaveBeenCalledTimes(1); // no retry / no payment
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe('jaw_status', () => {
   it('reports no relay session when relay.json is missing', async () => {
     const client = await connectClient();

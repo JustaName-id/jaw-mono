@@ -1,6 +1,6 @@
 import * as fs from 'node:fs';
 import { PATHS } from './paths.js';
-import type { JawConfig } from './types.js';
+import type { JawConfig, SettableConfigKey } from './types.js';
 import { isValidKeysUrl, isValidRelayUrl } from './validation.js';
 
 export function ensureDir(dir: string): void {
@@ -71,7 +71,7 @@ export function redactConfig(config: JawConfig): Record<string, unknown> {
   };
 }
 
-export function setConfigValue(key: keyof JawConfig, value: string | number): void {
+export function setConfigValue(key: SettableConfigKey, value: string | number): void {
   if (key === 'keysUrl' && typeof value === 'string' && !isValidKeysUrl(value)) {
     throw new Error(`Untrusted keysUrl: ${value}. Must be a *.jaw.id domain (HTTPS) or localhost.`);
   }
