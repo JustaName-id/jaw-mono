@@ -10,22 +10,14 @@
 import * as fs from 'node:fs';
 import * as crypto from 'node:crypto';
 import { PATHS } from './paths.js';
-import { ensureDir, loadConfig } from './config.js';
+import { loadConfig } from './config.js';
 import { WSBridge } from './ws-bridge.js';
 import { isValidKeysUrl, isValidRelayUrl } from './validation.js';
 import { generateKeyPair, exportKeyToHex } from './crypto.js';
+import { type RelaySession, loadRelaySession, saveRelaySession, deleteRelaySession } from './relay-session.js';
 
 const DEFAULT_KEYS_URL = 'https://keys.jaw.id';
 const DEFAULT_RELAY_URL = 'wss://relay.jaw.id';
-
-interface RelaySession {
-  session: string;
-  relayUrl: string;
-  privateKey: string;
-  publicKey: string;
-  peerPublicKey: string | null;
-  startedAt: string;
-}
 
 export interface BridgeOptions {
   keysUrl?: string;
@@ -35,37 +27,6 @@ export interface BridgeOptions {
   ens?: string;
   paymasterUrl?: string;
   timeout?: number;
-}
-
-function loadRelaySession(): RelaySession | null {
-  try {
-    if (!fs.existsSync(PATHS.relay)) return null;
-    const raw = fs.readFileSync(PATHS.relay, 'utf-8');
-    const parsed = JSON.parse(raw) as RelaySession;
-    // Basic validation
-    if (!parsed.session || !parsed.relayUrl || !parsed.privateKey || !parsed.publicKey) {
-      return null;
-    }
-    return parsed;
-  } catch {
-    return null;
-  }
-}
-
-function saveRelaySession(info: RelaySession): void {
-  ensureDir(PATHS.root);
-  fs.writeFileSync(PATHS.relay, JSON.stringify(info, null, 2) + '\n', {
-    encoding: 'utf-8',
-    mode: 0o600,
-  });
-}
-
-function deleteRelaySession(): void {
-  try {
-    if (fs.existsSync(PATHS.relay)) fs.unlinkSync(PATHS.relay);
-  } catch {
-    // ignore
-  }
 }
 
 /**

@@ -2,45 +2,103 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { rpcMethodSchema } from '../tools.js';
 import { mcpError, mcpResult } from '../helpers.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
+import { SessionBridge } from '../../lib/session-bridge.js';
+import { supportsSessionMode } from '../../lib/rpc-classifier.js';
 import { loadConfig } from '../../lib/config.js';
+import type { JawConfig } from '../../lib/types.js';
 
-function resolveApiKey(): string {
-  const apiKey = process.env['JAW_API_KEY'] ?? loadConfig().apiKey;
+function resolveApiKey(config: JawConfig): string {
+  const apiKey = process.env['JAW_API_KEY'] ?? config.apiKey;
   if (!apiKey) {
     throw new Error('API key required. Set JAW_API_KEY env var or run: jaw config set apiKey <key>');
   }
   return apiKey;
 }
 
+function resolveChainId(paramChainId: number | undefined, config: JawConfig): number {
+  if (paramChainId) return paramChainId;
+  const envChainId = parseInt(process.env['JAW_CHAIN_ID'] ?? '', 10);
+  if (Number.isInteger(envChainId) && envChainId > 0) return envChainId;
+  return config.defaultChain ?? 1;
+}
+
+function envSessionEnabled(): boolean {
+  const value = process.env['JAW_SESSION']?.toLowerCase();
+  return value === '1' || value === 'true';
+}
+
+// Autonomous (session) signing has no per-call human confirmation, so a
+// prompt-injected agent could burst signing calls and silently drain the
+// session key's on-chain allowance. A small client-side rate limit on signing
+// methods bounds that; the on-chain permission scope remains the hard cap.
+const SIGN_RATE_WINDOW_MS = 60_000;
+const MAX_SIGNS_PER_WINDOW = 5;
+const SESSION_SIGNING_METHODS = ['wallet_sendCalls', 'personal_sign', 'eth_signTypedData_v4'];
+
 export function registerRpcTool(server: McpServer): void {
-  // @ts-expect-error — MCP SDK deep type inference with z.any() in schema
-  server.tool(
+  // Per-server (per-process) sliding window over recent autonomous signs.
+  const recentSigns: number[] = [];
+  function assertUnderSignLimit(): void {
+    const now = Date.now();
+    while (recentSigns.length && now - recentSigns[0] > SIGN_RATE_WINDOW_MS) recentSigns.shift();
+    if (recentSigns.length >= MAX_SIGNS_PER_WINDOW) {
+      throw new Error('Autonomous signing rate limit reached, retry shortly or call again with session: false.');
+    }
+    recentSigns.push(now);
+  }
+
+  server.registerTool(
     'jaw_rpc',
-    'Execute any JAW.id wallet RPC method via the browser bridge. ' +
-      'Supports transactions, signing, permissions, and queries. ' +
-      'Methods that require signing will open the browser for passkey authentication. ' +
-      'IMPORTANT: Read the jaw://api-reference resource for the full list of methods, ' +
-      'and jaw://api-reference/{method} for detailed parameter formats and examples.',
-    rpcMethodSchema,
-    async (params) => {
-      const config = loadConfig();
-      const apiKey = resolveApiKey();
-      const chainId = params.chainId ?? config.defaultChain ?? 1;
-      const pm = config.paymasters?.[chainId];
-      const bridge = await getBridge({
-        keysUrl: config.keysUrl,
-        apiKey,
-        chainId,
-        ens: config.ens,
-        paymasterUrl: pm?.url,
-      });
+    {
+      description:
+        'Execute any JAW.id wallet RPC method. ' +
+        'Supports transactions, signing, permissions, and queries. ' +
+        'By default, methods that require signing open the browser for passkey authentication. ' +
+        'Pass session: true to sign autonomously with the local session key instead ' +
+        '(requires a session created via `jaw session setup` — check jaw_session_status). ' +
+        'IMPORTANT: Read the jaw://api-reference resource for the full list of methods, ' +
+        'and jaw://api-reference/{method} for detailed parameter formats and examples.',
+      inputSchema: rpcMethodSchema,
+    },
+    // @ts-expect-error — MCP SDK deep type inference with z.any() in schema
+    async (params: { method: string; params?: unknown; chainId?: number; session?: boolean }) => {
       try {
-        const result = await bridge.request(params.method, params.params);
-        return mcpResult(result);
+        const config = loadConfig();
+        const apiKey = resolveApiKey(config);
+        const chainId = resolveChainId(params.chainId, config);
+        const useSession = params.session ?? envSessionEnabled();
+
+        let bridge: { request(method: string, params?: unknown): Promise<unknown>; close(): void };
+
+        if (useSession) {
+          if (!supportsSessionMode(params.method)) {
+            throw new Error(
+              `Method ${params.method} is not supported in session mode. ` +
+                'Call again with session: false to route through the browser bridge.'
+            );
+          }
+          if (SESSION_SIGNING_METHODS.includes(params.method)) {
+            assertUnderSignLimit();
+          }
+          bridge = new SessionBridge({ apiKey, chainId });
+        } else {
+          bridge = await getBridge({
+            keysUrl: config.keysUrl,
+            apiKey,
+            chainId,
+            ens: config.ens,
+            paymasterUrl: config.paymasters?.[chainId]?.url,
+          });
+        }
+
+        try {
+          const result = await bridge.request(params.method, params.params);
+          return mcpResult(result);
+        } finally {
+          bridge.close();
+        }
       } catch (err) {
         return mcpError(err);
-      } finally {
-        bridge.close();
       }
     }
   );

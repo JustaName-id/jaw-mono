@@ -18,7 +18,7 @@ vi.mock('./paths.js', () => {
     },
   };
 });
-const { loadConfig, saveConfig, setConfigValue } = await import('./config.js');
+const { loadConfig, saveConfig, setConfigValue, redactConfig } = await import('./config.js');
 const { PATHS } = await import('./paths.js');
 
 beforeEach(() => {
@@ -58,6 +58,43 @@ describe('config', () => {
     saveConfig({ apiKey: 'old-key' });
     setConfigValue('apiKey', 'new-key');
     expect(loadConfig().apiKey).toBe('new-key');
+  });
+});
+
+describe('redactConfig', () => {
+  it('masks the apiKey', () => {
+    const redacted = redactConfig({ apiKey: 'abcdefgh-rest-is-secret' });
+    expect(redacted.apiKey).toBe('abcdefgh...');
+  });
+
+  it('masks query-string secrets in paymaster URLs', () => {
+    const redacted = redactConfig({
+      paymasters: { 84532: { url: 'https://api.pimlico.io/v2/84532/rpc?apikey=pim_secret123' } },
+    }) as { paymasters: Record<number, { url: string }> };
+    expect(redacted.paymasters[84532].url).not.toContain('pim_secret123');
+    expect(redacted.paymasters[84532].url).toContain('https://api.pimlico.io/v2/84532/rpc');
+  });
+
+  it('leaves paymaster URLs without query strings intact', () => {
+    const redacted = redactConfig({
+      paymasters: { 1: { url: 'https://paymaster.example.com/rpc' } },
+    }) as { paymasters: Record<number, { url: string }> };
+    expect(redacted.paymasters[1].url).toBe('https://paymaster.example.com/rpc');
+  });
+
+  it('masks the free-form paymaster context (a provider could stash a token there)', () => {
+    const redacted = redactConfig({
+      paymasters: { 84532: { url: 'https://pm.example.com/rpc', context: { sponsorshipPolicyId: 'sp_secret' } } },
+    }) as { paymasters: Record<number, { url: string; context?: unknown }> };
+    expect(redacted.paymasters[84532].context).toBe('***');
+    expect(JSON.stringify(redacted)).not.toContain('sp_secret');
+  });
+
+  it('leaves the context undefined when there is none', () => {
+    const redacted = redactConfig({
+      paymasters: { 1: { url: 'https://pm.example.com/rpc' } },
+    }) as { paymasters: Record<number, { context?: unknown }> };
+    expect(redacted.paymasters[1].context).toBeUndefined();
   });
 });
 

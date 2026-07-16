@@ -2,8 +2,10 @@ import { type McpServer, ResourceTemplate } from '@modelcontextprotocol/sdk/serv
 
 const DOCS_BASE = 'https://docs.jaw.id/api-reference';
 
+const FETCH_TIMEOUT_MS = 15_000;
+
 async function fetchDocs(url: string): Promise<string> {
-  const res = await fetch(url);
+  const res = await fetch(url, { signal: AbortSignal.timeout(FETCH_TIMEOUT_MS) });
   if (!res.ok) {
     throw new Error(`Failed to fetch docs: ${res.status} ${res.statusText}`);
   }
@@ -26,7 +28,7 @@ async function fetchDocs(url: string): Promise<string> {
 
 export function registerResources(server: McpServer): void {
   // Overview of all RPC methods
-  server.resource(
+  server.registerResource(
     'api-reference',
     'jaw://api-reference',
     {
@@ -47,7 +49,7 @@ export function registerResources(server: McpServer): void {
   );
 
   // Per-method documentation with parameter details
-  server.resource(
+  server.registerResource(
     'api-reference-method',
     new ResourceTemplate('jaw://api-reference/{method}', { list: undefined }),
     {

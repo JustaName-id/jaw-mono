@@ -22,9 +22,18 @@ export const rpcMethodSchema = {
     .number()
     .optional()
     .describe('Target chain ID (overrides default). E.g., 1 for Ethereum, 8453 for Base, 84532 for Base Sepolia'),
+  session: z
+    .boolean()
+    .optional()
+    .describe(
+      'Sign with the local session key instead of opening the browser (requires `jaw session setup`; ' +
+        'check jaw_session_status first). Supported methods only: eth_requestAccounts, eth_accounts, ' +
+        'wallet_sendCalls, wallet_getCallsStatus, personal_sign, eth_signTypedData_v4. ' +
+        'Defaults to the JAW_SESSION env var.'
+    ),
 };
 
 export const configSetSchema = {
-  key: z.enum(['apiKey', 'defaultChain', 'keysUrl', 'ens', 'relayUrl']).describe('Config key'),
+  key: z.enum(['apiKey', 'defaultChain', 'keysUrl', 'ens', 'relayUrl', 'sessionExpiry']).describe('Config key'),
   value: z.string().describe('Config value'),
 };
