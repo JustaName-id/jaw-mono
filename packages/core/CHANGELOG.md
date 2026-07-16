@@ -1,3 +1,13 @@
+## 1.0.8 (2026-07-16)
+
+### 🩹 Fixes
+
+- **core,keys:** persist 'Continue as' across visits in embedded mode ([#238](https://github.com/JustaName-id/jaw-mono/pull/238))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.0.7 (2026-07-15)
 
 ### 🩹 Fixes
