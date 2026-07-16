@@ -218,6 +218,11 @@ export async function payAndFetch(
   const receipt = b64json<X402SettleResponse>(paid.headers.get(X402_HEADERS.response));
   const body = await readBody(paid);
   if (paid.status >= 400) {
+    // On rejection the server re-challenges with a fresh PAYMENT-REQUIRED whose
+    // `error` carries the real reason (e.g. `invalid_exact_evm_insufficient_balance`),
+    // which is far more actionable than the bare status. Prefer a settle receipt
+    // error, then the re-challenge error, then the status.
+    const reChallenge = b64json<X402PaymentRequired>(paid.headers.get(X402_HEADERS.required));
     return {
       status: paid.status,
       body,
@@ -226,7 +231,7 @@ export async function payAndFetch(
       // The payment was signed and sent; surface it so an ambiguous settlement
       // (facilitator may have broadcast) can be reconciled by nonce.
       attemptedPayment: details,
-      refusedReason: receipt?.errorReason ?? `settlement failed with status ${paid.status}`,
+      refusedReason: receipt?.errorReason ?? reChallenge?.error ?? `settlement failed with status ${paid.status}`,
     };
   }
 

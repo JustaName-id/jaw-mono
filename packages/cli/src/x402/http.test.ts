@@ -145,6 +145,26 @@ describe('payAndFetch', () => {
     expect(result.payer).toBe(payer.address);
   });
 
+  it('surfaces the re-challenge error when settlement fails without a receipt', async () => {
+    // What JAW's own staging server actually does: reject with a fresh 402 whose
+    // PAYMENT-REQUIRED.error carries the reason, and no PAYMENT-RESPONSE.
+    const reChallenge = b64({
+      x402Version: 2,
+      error: 'invalid_exact_evm_insufficient_balance',
+      resource: { url: URL_UNDER_TEST },
+      accepts: [REQUIREMENT],
+    });
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': reChallenge }, body: '{}' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toBe('invalid_exact_evm_insufficient_balance');
+    expect(result.attemptedPayment?.nonce).toBe('0x' + '00'.repeat(32));
+  });
+
   it('picks the cheapest acceptable option when the server offers several', async () => {
     const dearer: X402PaymentRequirement = { ...REQUIREMENT, amount: '5000' };
     const cheaper: X402PaymentRequirement = { ...REQUIREMENT, amount: '750' };
