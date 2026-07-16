@@ -1496,8 +1496,8 @@ function TransactionDialogWrapper({
     onReject(UIError.userRejected());
   };
 
-  // Determine if fee token selector should be shown (not sponsored and has ERC-20 options)
-  const showFeeTokenSelector = !isSponsored && feeTokens.some((t) => !t.isNative);
+  // Determine if fee token selector should be shown (not sponsored and has fee tokens)
+  const showFeeTokenSelector = !isSponsored && feeTokens.length > 0;
 
   return (
     <TransactionDialog
@@ -1835,8 +1835,8 @@ function SendTransactionDialogWrapper({
     onReject(UIError.userRejected());
   };
 
-  // Determine if fee token selector should be shown (not sponsored and has ERC-20 options)
-  const showFeeTokenSelector = !isSponsored && feeTokens.some((t) => !t.isNative);
+  // Determine if fee token selector should be shown (not sponsored and has fee tokens)
+  const showFeeTokenSelector = !isSponsored && feeTokens.length > 0;
 
   return (
     <TransactionDialog
@@ -2425,7 +2425,7 @@ function PermissionDialogWrapper({
       feeTokensLoading={feeTokensLoading}
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
-      showFeeTokenSelector={!isSponsored && feeTokens.some((t) => !t.isNative)}
+      showFeeTokenSelector={!isSponsored && feeTokens.length > 0}
       isPayingWithErc20={isPayingWithErc20}
       nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />
@@ -2981,7 +2981,7 @@ function RevokePermissionDialogWrapper({
       feeTokensLoading={feeTokensLoading}
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
-      showFeeTokenSelector={!isSponsored && feeTokens.some((t) => !t.isNative)}
+      showFeeTokenSelector={!isSponsored && feeTokens.length > 0}
       isPayingWithErc20={isPayingWithErc20}
       nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
     />

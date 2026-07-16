@@ -258,7 +258,7 @@ export const TransactionModal = ({
   }, [selectedFeeToken, effectivePaymasterContext, tokenEstimates]);
 
   // Determine if fee token selector should be shown
-  const showFeeTokenSelector = !isSponsored && feeTokens.some((t) => !t.isNative);
+  const showFeeTokenSelector = !isSponsored && feeTokens.length > 0;
 
   // Fetch fee tokens when not sponsored (for ERC-20 paymaster option)
   useEffect(() => {
