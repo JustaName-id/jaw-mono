@@ -1,3 +1,13 @@
+## 1.2.11 (2026-07-16)
+
+### 🩹 Fixes
+
+- native only gas fee icons ([#244](https://github.com/JustaName-id/jaw-mono/pull/244))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.2.10 (2026-07-16)
 
 ### 🧱 Updated Dependencies
