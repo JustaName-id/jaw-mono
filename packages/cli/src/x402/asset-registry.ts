@@ -1,7 +1,6 @@
 // USDC asset registry, mirrored from the backend's
-// `apps/ens/src/external/payment/asset-registry.ts` (and the reference payer at
-// `apps/ens/examples/paid-client`). Keep this in sync when the server adds a
-// chain. `wireNetwork` is the CAIP-2 id used on the x402 v2 wire.
+// `apps/ens/src/external/payment/asset-registry.ts`. Keep this in sync when the
+// server adds a chain. `wireNetwork` is the CAIP-2 id used on the x402 v2 wire.
 
 export interface UsdcAsset {
   address: `0x${string}`;

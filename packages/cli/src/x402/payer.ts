@@ -5,14 +5,14 @@ import type { X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
 /**
  * Produces the x402 payment for a chosen requirement. The interface is
- * settlement-mode agnostic so the same tool surface serves both paths of the
- * payer decision (see the x402 research):
+ * settlement-mode agnostic so the same tool surface can serve both settlement
+ * styles:
  *
- *  - pull (`Eip3009EoaPayer`, MVP): the session-key EOA signs an EIP-3009
+ *  - pull (`Eip3009EoaPayer`): the session-key EOA signs an EIP-3009
  *    authorization; the facilitator broadcasts. `from` is the EOA, funds live
  *    in it, capped by the tool policy + its own balance.
- *  - push (later): the smart account executes via `wallet_sendCalls(permissionId)`
- *    and returns a receipt, bounded by the on-chain permission.
+ *  - push: the smart account executes via `wallet_sendCalls(permissionId)` and
+ *    returns a receipt, bounded by the on-chain permission.
  */
 export interface Payer {
   /** The paying address — `from` in the authorization. */
@@ -23,8 +23,8 @@ export interface Payer {
 
 /**
  * Pull-mode payer: the local session-key EOA signs the EIP-3009 authorization
- * directly (`eth_signTypedData_v4` semantics via viem). This is Option A — the
- * fast, standard path — and the funds must sit in this EOA.
+ * directly (`eth_signTypedData_v4` semantics via viem). The funds must sit in
+ * this EOA.
  */
 export class Eip3009EoaPayer implements Payer {
   readonly address: `0x${string}`;

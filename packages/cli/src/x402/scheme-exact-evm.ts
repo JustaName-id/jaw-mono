@@ -3,7 +3,7 @@ import { usdcForNetwork } from './asset-registry.js';
 import type { X402EIP3009Authorization, X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
 // EIP-712 struct for USDC's EIP-3009 `transferWithAuthorization`, the `exact`
-// scheme's on-chain settlement. Ported from the backend reference payer.
+// scheme's on-chain settlement.
 export const TRANSFER_WITH_AUTHORIZATION_TYPES = {
   TransferWithAuthorization: [
     { name: 'from', type: 'address' },
@@ -32,8 +32,8 @@ export interface ExactTypedData {
 
 /**
  * Signs the typed data and returns the 65-byte `r||s||v` signature. Injected so
- * the payer decides the key: pull mode signs with the session-key EOA; a future
- * push payer settles differently (see the x402 research, payer.ts).
+ * the payer decides the key: pull mode signs with the session-key EOA; a push
+ * payer would settle without an off-chain signature.
  */
 export type ExactSigner = (typedData: ExactTypedData) => Promise<`0x${string}`>;
 
@@ -70,8 +70,8 @@ export async function buildExactPayment(
   // MINED, which includes verify + submit + block time on top of our signing.
   // A server's advertised maxTimeoutSeconds is often as low as 60s — too tight,
   // so the auth can expire before settlement and the transfer reverts. Give a
-  // generous floor (the backend reference payer uses 600s); a longer-valid
-  // authorization is harmless because the EIP-3009 nonce is single-use.
+  // generous floor; a longer-valid authorization is harmless because the
+  // EIP-3009 nonce is single-use.
   const SETTLEMENT_WINDOW_FLOOR = 600;
   const window = Math.max(requirement.maxTimeoutSeconds || 0, SETTLEMENT_WINDOW_FLOOR);
   const validBefore = String(nowSec + window);

@@ -1,6 +1,6 @@
 // x402 v2 wire types — the client-side subset the CLI needs. Names mirror the
 // backend's `apps/ens/src/external/payment/x402-types.ts` so the buyer and
-// seller halves stay spec-compatible. v2 only (no v1 `X-PAYMENT` / `maxAmountRequired`).
+// seller sides stay wire-compatible. v2 only (no v1 `X-PAYMENT` / `maxAmountRequired`).
 
 /** One acceptable payment option from the server's `accepts` list. */
 export interface X402PaymentRequirement {
