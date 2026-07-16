@@ -1,3 +1,13 @@
+## 0.1.17 (2026-07-16)
+
+### 🩹 Fixes
+
+- **cli:** bring MCP server in sync with CLI capabilities ([#230](https://github.com/JustaName-id/jaw-mono/pull/230))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 0.1.16 (2026-07-16)
 
 ### 🧱 Updated Dependencies
