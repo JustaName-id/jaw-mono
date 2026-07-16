@@ -12,6 +12,22 @@ import {
 } from './session-handoff';
 import { SessionManager, type AppSession } from './session-manager';
 
+// Node 22 / bun expose an experimental global `localStorage` (see the
+// `--localstorage-file` warning) whose API is broken without a backing file,
+// and it shadows jsdom's. Pin a deterministic in-memory implementation so the
+// SessionManager persistence tests behave the same on every runtime.
+const memStore = new Map<string, string>();
+vi.stubGlobal('localStorage', {
+  getItem: (k: string) => (memStore.has(k) ? memStore.get(k)! : null),
+  setItem: (k: string, v: string) => void memStore.set(k, String(v)),
+  removeItem: (k: string) => void memStore.delete(k),
+  clear: () => memStore.clear(),
+  key: (i: number) => [...memStore.keys()][i] ?? null,
+  get length() {
+    return memStore.size;
+  },
+});
+
 const SELF_ORIGIN = 'https://keys.jaw.id';
 const DAPP_ORIGIN = 'https://dapp.example.com';
 
