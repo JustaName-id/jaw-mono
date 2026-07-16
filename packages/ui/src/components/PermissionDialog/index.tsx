@@ -6,7 +6,7 @@ import { Button } from '../ui/button';
 import { DefaultDialog } from '../DefaultDialog';
 import { FeeTokenSelector } from '../FeeTokenSelector';
 import { PermissionDialogProps } from './types';
-import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
+import { useDialogMobileFullScreen, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { CopiedIcon, CopyIcon } from '../../icons';
 import { useState, useEffect, useRef } from 'react';
 import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
@@ -53,7 +53,7 @@ export const PermissionDialog = ({
   // Ref for scrollable container
   const scrollableRef = useRef<HTMLDivElement>(null);
 
-  const isMobile = useIsMobile();
+  const mobileFullScreen = useDialogMobileFullScreen();
 
   // Get native token symbol from feeTokens, falling back to chain's native currency
   const nativeToken = feeTokens?.find((t) => t.isNative);
@@ -225,7 +225,7 @@ export const PermissionDialog = ({
         </div>
       }
       contentStyle={
-        isMobile
+        mobileFullScreen
           ? {
               width: '100%',
               height: '100%',

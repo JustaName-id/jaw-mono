@@ -10,7 +10,7 @@ import { useState, useEffect } from 'react';
 import { formatEther } from 'viem';
 import { Info } from 'lucide-react';
 import { TransactionDialogProps } from './types';
-import { useIsMobile, useChainIconURI, useFeeTokenPrice } from '../../hooks';
+import { useDialogMobileFullScreen, useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
@@ -48,7 +48,7 @@ export const TransactionDialog = ({
   mainnetRpcUrl,
   nativeCurrencySymbol,
 }: TransactionDialogProps) => {
-  const isMobile = useIsMobile();
+  const mobileFullScreen = useDialogMobileFullScreen();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
   const [isAddressCopied, setIsAddressCopied] = useState<{
     [key: string]: boolean;
@@ -264,7 +264,7 @@ export const TransactionDialog = ({
         </div>
       }
       contentStyle={
-        isMobile
+        mobileFullScreen
           ? {
               width: '100%',
               height: '100%',

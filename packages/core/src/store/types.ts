@@ -1,5 +1,6 @@
 import { Address, AppMetadata, JawProviderPreference } from '../provider/interface.js';
 import type { WalletConnectResponse } from '../rpc/index.js';
+import type { AccountHintData } from '../messages/configMessage.js';
 
 /**
  * Paymaster configuration for a chain
@@ -50,6 +51,14 @@ export type Account = {
     chain?: Chain;
     /** Timestamp (in ms) when the account was connected */
     connectedAt?: number;
+    /**
+     * Last account the user connected with, as reported by the keys app
+     * (AccountHint). Persisted here — in the dApp's first-party storage —
+     * because the embedded keys iframe's own storage is partitioned and, in
+     * Brave/Safari, wiped between visits. Sent back on the handshake so the
+     * keys app can show "Continue as" again.
+     */
+    lastAccount?: AccountHintData;
 };
 
 export type Config = {

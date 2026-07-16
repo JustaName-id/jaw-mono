@@ -3,7 +3,7 @@
 import { Button } from '../ui/button';
 import { DefaultDialog } from '../DefaultDialog';
 import { SignatureDialogProps } from './types';
-import { useIsMobile } from '../../hooks';
+import { useDialogMobileFullScreen } from '../../hooks';
 import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
 import { useState, useEffect } from 'react';
 
@@ -24,7 +24,7 @@ export const SignatureDialog = ({
   signatureStatus,
   canSign,
 }: SignatureDialogProps) => {
-  const isMobile = useIsMobile();
+  const mobileFullScreen = useDialogMobileFullScreen();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
 
   // Resolve account address to human-readable name
@@ -86,7 +86,7 @@ export const SignatureDialog = ({
         </div>
       }
       contentStyle={
-        isMobile
+        mobileFullScreen
           ? {
               width: '100%',
               height: '100%',

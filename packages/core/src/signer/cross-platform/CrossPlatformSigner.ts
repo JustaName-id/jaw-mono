@@ -39,9 +39,11 @@ export class CrossPlatformSigner extends JAWSigner {
     override async handshake(args: RequestArguments): Promise<void> {
         const correlationId = this.getCorrelationId(args);
 
-        // Open the popup before constructing the request message.
-        // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
-        await this.communicator.waitForPopupLoaded?.();
+        // Ready the transport this handshake routes to, before other async work.
+        // On the popup route this opens the window as the first thing after the
+        // click (so Safari's popup blocker allows it); on the iframe route
+        // (embedded Safari connect) it readies the live frame instead.
+        await this.communicator.waitForPopupLoaded?.(args.method);
 
         const chains = store.getState().chains;
         const chain = chains?.find((c) => c.id === this.chain.id) ?? this.chain;
@@ -79,7 +81,11 @@ export class CrossPlatformSigner extends JAWSigner {
             return cachedResponse;
         }
 
-        // Wait for the popup to be loaded before making async calls
+        // Ready the routed transport before async calls. No method here: the
+        // outgoing message is an encrypted envelope, which routes method-less
+        // (getRouteContext) — passing the plaintext method would ready a
+        // different transport than the send uses (on Safari, wallet_connect
+        // would open a popup the encrypted request never reaches).
         await this.communicator.waitForPopupLoaded?.();
 
         // Validate and inject capabilities using base class method
@@ -90,7 +96,11 @@ export class CrossPlatformSigner extends JAWSigner {
     }
 
     protected override async handleWalletConnectUnauthenticated(request: RequestArguments): Promise<unknown> {
-        // Wait for the popup to be loaded before making async calls
+        // Ready the routed transport before async calls. No method here: the
+        // outgoing message is an encrypted envelope, which routes method-less
+        // (getRouteContext) — passing the plaintext method would ready a
+        // different transport than the send uses (on Safari, wallet_connect
+        // would open a popup the encrypted request never reaches).
         await this.communicator.waitForPopupLoaded?.();
 
         // Validate and inject capabilities using base class method
@@ -183,8 +193,11 @@ export class CrossPlatformSigner extends JAWSigner {
         overrideChain?: SDKChain,
         isReconnectRetry = false
     ): Promise<unknown> {
-        // Open the popup before constructing the request message.
-        // This is to ensure that the popup is not blocked by some browsers (i.e. Safari)
+        // Ready the routed transport first. Method-less on purpose: the message
+        // sent below is an encrypted envelope, which the router routes with no
+        // method (getRouteContext) — threading the plaintext method here would
+        // diverge from the send on Safari (credential methods route to popup,
+        // the encrypted envelope to the iframe).
         await this.communicator.waitForPopupLoaded?.();
 
         try {
