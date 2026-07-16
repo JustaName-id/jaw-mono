@@ -57,3 +57,10 @@ export const payAndFetchSchema = {
 export const x402LogSchema = {
   limit: z.number().optional().describe('Return only the most recent N ledger entries (default: all).'),
 };
+
+export const x402BalanceSchema = {
+  network: z
+    .string()
+    .optional()
+    .describe('CAIP-2 network to check the USDC balance on, e.g. eip155:8453 (Base) or eip155:84532 (Base Sepolia).'),
+};
