@@ -113,14 +113,20 @@ export const FeeTokenSelector = ({
     );
   }
 
-  // Don't render if no ERC-20 tokens available (only native)
-  const hasErc20Options = tokens.some((t) => !t.isNative);
-  if (!hasErc20Options) {
-    return null;
-  }
-
   const nativeToken = tokens.find((t) => t.isNative);
   const erc20Tokens = tokens.filter((t) => !t.isNative);
+
+  // No ERC-20 alternatives: show a non-interactive native badge instead of the picker
+  const hasErc20Options = erc20Tokens.length > 0;
+  if (!hasErc20Options) {
+    if (!nativeToken) return null;
+    return (
+      <div className="border-muted-foreground/30 flex h-7 items-center gap-1 rounded-md border px-2 text-xs font-medium">
+        {getTokenIcon(nativeToken, chainId, 'size-3.5')}
+        <span>{nativeToken.symbol}</span>
+      </div>
+    );
+  }
 
   const handleSelect = (token: FeeTokenOption) => {
     if (token.isSelectable) {

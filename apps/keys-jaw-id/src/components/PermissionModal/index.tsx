@@ -829,7 +829,7 @@ export const PermissionModal = ({
       feeTokensLoading={feeTokensLoading}
       selectedFeeToken={selectedFeeToken}
       onFeeTokenSelect={setSelectedFeeToken}
-      showFeeTokenSelector={!isSponsored && feeTokens.some((t) => !t.isNative)}
+      showFeeTokenSelector={!isSponsored && feeTokens.length > 0}
       isPayingWithErc20={isPayingWithErc20}
     />
   );
