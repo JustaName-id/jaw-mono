@@ -1,3 +1,13 @@
+## 1.0.9 (2026-07-16)
+
+### 🩹 Fixes
+
+- **core:** don't re-handshake at the iframe after a first popup conne… ([#243](https://github.com/JustaName-id/jaw-mono/pull/243))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.0.8 (2026-07-16)
 
 ### 🩹 Fixes
