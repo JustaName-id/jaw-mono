@@ -66,7 +66,15 @@ export async function buildExactPayment(
 
   const nowSec = opts.now ?? Math.floor(Date.now() / 1000);
   const validAfter = '0';
-  const validBefore = String(nowSec + (requirement.maxTimeoutSeconds || 60));
+  // The authorization must stay valid until the facilitator's settlement tx is
+  // MINED, which includes verify + submit + block time on top of our signing.
+  // A server's advertised maxTimeoutSeconds is often as low as 60s — too tight,
+  // so the auth can expire before settlement and the transfer reverts. Give a
+  // generous floor (the backend reference payer uses 600s); a longer-valid
+  // authorization is harmless because the EIP-3009 nonce is single-use.
+  const SETTLEMENT_WINDOW_FLOOR = 600;
+  const window = Math.max(requirement.maxTimeoutSeconds || 0, SETTLEMENT_WINDOW_FLOOR);
+  const validBefore = String(nowSec + window);
   const nonce = opts.nonce ?? (`0x${randomBytes(32).toString('hex')}` as `0x${string}`);
 
   const authorization: X402EIP3009Authorization = {

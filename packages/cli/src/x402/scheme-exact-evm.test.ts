@@ -33,7 +33,7 @@ describe('buildExactPayment', () => {
     expect(auth.to).toBe(requirement.payTo);
     expect(auth.value).toBe('1000');
     expect(auth.validAfter).toBe('0');
-    expect(auth.validBefore).toBe(String(1_000_000 + 60));
+    expect(auth.validBefore).toBe(String(1_000_000 + 600));
     expect(auth.nonce).toBe(NONCE);
 
     // The signature must recover to the payer under the exact-scheme domain.
@@ -46,7 +46,7 @@ describe('buildExactPayment', () => {
         to: requirement.payTo,
         value: 1000n,
         validAfter: 0n,
-        validBefore: BigInt(1_000_000 + 60),
+        validBefore: BigInt(1_000_000 + 600),
         nonce: NONCE,
       },
       signature: payload.payload.signature,
@@ -68,7 +68,7 @@ describe('buildExactPayment', () => {
         to: requirement.payTo,
         value: 1000n,
         validAfter: 0n,
-        validBefore: BigInt(1_000_000 + 60),
+        validBefore: BigInt(1_000_000 + 600),
         nonce: NONCE,
       },
       signature: payload.payload.signature,
