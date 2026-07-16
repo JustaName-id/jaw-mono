@@ -56,4 +56,12 @@ describe('checkPolicy', () => {
     expect(checkPolicy({ ...base, amount: 'abc' }, {}).ok).toBe(false);
     expect(checkPolicy({ ...base, amount: '-1' }, {}).ok).toBe(false);
   });
+
+  it('refuses cleanly (no throw) on a malformed policy cap', () => {
+    expect(checkPolicy(base, { maxAmountPerPayment: 'not-a-number' })).toEqual({
+      ok: false,
+      reason: expect.stringContaining('invalid maxAmountPerPayment'),
+    });
+    expect(checkPolicy(base, { maxTotalPerSession: 'oops' }).ok).toBe(false);
+  });
 });

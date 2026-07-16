@@ -77,16 +77,30 @@ export function checkPolicy(
     return { ok: false, reason: `negative amount: ${requirement.amount}` };
   }
 
-  if (policy.maxAmountPerPayment !== undefined && amount > BigInt(policy.maxAmountPerPayment)) {
-    return {
-      ok: false,
-      reason: `amount ${requirement.amount} exceeds maxAmountPerPayment ${policy.maxAmountPerPayment}`,
-    };
+  if (policy.maxAmountPerPayment !== undefined) {
+    let cap: bigint;
+    try {
+      cap = BigInt(policy.maxAmountPerPayment);
+    } catch {
+      return { ok: false, reason: `invalid maxAmountPerPayment in config: ${policy.maxAmountPerPayment}` };
+    }
+    if (amount > cap) {
+      return {
+        ok: false,
+        reason: `amount ${requirement.amount} exceeds maxAmountPerPayment ${policy.maxAmountPerPayment}`,
+      };
+    }
   }
 
   if (policy.maxTotalPerSession !== undefined) {
+    let cap: bigint;
+    try {
+      cap = BigInt(policy.maxTotalPerSession);
+    } catch {
+      return { ok: false, reason: `invalid maxTotalPerSession in config: ${policy.maxTotalPerSession}` };
+    }
     const spent = ctx.spentThisSession ?? 0n;
-    if (spent + amount > BigInt(policy.maxTotalPerSession)) {
+    if (spent + amount > cap) {
       return {
         ok: false,
         reason: `payment ${requirement.amount} would exceed maxTotalPerSession ${policy.maxTotalPerSession} (already spent ${spent})`,

@@ -25,12 +25,33 @@ export interface PayAndFetchOptions {
   network?: string;
 }
 
+/** A payment as built/signed — the fields needed to audit or reconcile it. */
+export interface PaymentDetails {
+  amount: string;
+  asset: string;
+  network: string;
+  payTo: string;
+  /** The EIP-3009 nonce — lets you reconcile an on-chain transfer to this attempt. */
+  nonce: `0x${string}`;
+  /** Settlement tx hash, once the server reports it. */
+  txHash?: string;
+}
+
 export interface PayAndFetchResult {
   status: number;
   body: unknown;
   /** True once a payment was made and the resource returned. */
   paid: boolean;
-  payment?: { amount: string; asset: string; network: string; payTo: string; txHash?: string };
+  /** The address funds are paid from — where the agent's USDC must live. */
+  payer: `0x${string}`;
+  /** Present on a successful payment. */
+  payment?: PaymentDetails;
+  /**
+   * Present when a payment was signed and sent but settlement did not confirm.
+   * In pull mode the facilitator may still have broadcast the transfer, so this
+   * carries the nonce/amount to reconcile against — never assume no money moved.
+   */
+  attemptedPayment?: PaymentDetails;
   /** Set when a `402` could not (or should not) be paid. */
   refusedReason?: string;
 }
@@ -71,14 +92,16 @@ interface Selection {
   reason?: string;
 }
 
-/** Pick the first `accepts` entry that satisfies the caller constraints + policy. */
-function selectRequirement(
-  accepts: X402PaymentRequirement[],
-  opts: PayAndFetchOptions,
-  ctx: PolicyContext
-): Selection {
+/**
+ * Pick the CHEAPEST `accepts` entry that satisfies the caller constraints +
+ * policy. Choosing the lowest amount (rather than the first that passes) means a
+ * multi-option server can't steer the agent onto a pricier option.
+ */
+function selectRequirement(accepts: X402PaymentRequirement[], opts: PayAndFetchOptions, ctx: PolicyContext): Selection {
   const policy = opts.policy ?? {};
   let reason = 'no acceptable payment option in the 402 challenge';
+  let best: X402PaymentRequirement | undefined;
+  let bestAmount = 0n;
 
   for (const req of accepts) {
     if (req.scheme !== 'exact') {
@@ -93,25 +116,41 @@ function selectRequirement(
       reason = `asset ${req.asset} does not match requested ${opts.asset}`;
       continue;
     }
+
+    let amount: bigint;
+    try {
+      amount = BigInt(req.amount);
+    } catch {
+      reason = `invalid amount: ${req.amount}`;
+      continue;
+    }
     if (opts.maxAmount !== undefined) {
+      let cap: bigint;
       try {
-        if (BigInt(req.amount) > BigInt(opts.maxAmount)) {
-          reason = `amount ${req.amount} exceeds maxAmount ${opts.maxAmount}`;
-          continue;
-        }
+        cap = BigInt(opts.maxAmount);
       } catch {
-        reason = `invalid amount: ${req.amount}`;
+        reason = `invalid maxAmount: ${opts.maxAmount}`;
+        continue;
+      }
+      if (amount > cap) {
+        reason = `amount ${req.amount} exceeds maxAmount ${opts.maxAmount}`;
         continue;
       }
     }
+
     const verdict = checkPolicy(req, policy, ctx);
     if (!verdict.ok) {
       reason = verdict.reason ?? reason;
       continue;
     }
-    return { requirement: req };
+
+    if (!best || amount < bestAmount) {
+      best = req;
+      bestAmount = amount;
+    }
   }
-  return { reason };
+
+  return best ? { requirement: best } : { reason };
 }
 
 /**
@@ -133,7 +172,7 @@ export async function payAndFetch(
   // 1. First attempt. Anything but 402 passes through unchanged.
   const first = await fetch(url, { method, headers: baseHeaders, body: opts.body });
   if (first.status !== 402) {
-    return { status: first.status, body: await readBody(first), paid: false };
+    return { status: first.status, body: await readBody(first), paid: false, payer: payer.address };
   }
 
   // 2. The v2 challenge lives in the PAYMENT-REQUIRED header (body is opaque).
@@ -143,6 +182,7 @@ export async function payAndFetch(
       status: 402,
       body: await readBody(first),
       paid: false,
+      payer: payer.address,
       refusedReason: 'missing or malformed PAYMENT-REQUIRED challenge',
     };
   }
@@ -151,11 +191,20 @@ export async function payAndFetch(
   const ctx: PolicyContext = { host: hostOf(url), spentThisSession: opts.spentThisSession };
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {
-    return { status: 402, body: await readBody(first), paid: false, refusedReason: reason };
+    return { status: 402, body: await readBody(first), paid: false, payer: payer.address, refusedReason: reason };
   }
 
-  // 4. Build + sign the payment.
-  const proof = encodePaymentPayload(await payer.pay(requirement));
+  // 4. Build + sign the payment. Keep the payload so the nonce is recoverable
+  //    even if settlement later fails (money may still have moved in pull mode).
+  const payload = await payer.pay(requirement);
+  const details = {
+    amount: requirement.amount,
+    asset: requirement.asset,
+    network: requirement.network,
+    payTo: requirement.payTo,
+    nonce: payload.payload.authorization.nonce,
+  };
+  const proof = encodePaymentPayload(payload);
 
   // 5. Retry with the proof. A fresh nonce means the server's replay
   //    protection is fine with the re-request.
@@ -173,6 +222,10 @@ export async function payAndFetch(
       status: paid.status,
       body,
       paid: false,
+      payer: payer.address,
+      // The payment was signed and sent; surface it so an ambiguous settlement
+      // (facilitator may have broadcast) can be reconciled by nonce.
+      attemptedPayment: details,
       refusedReason: receipt?.errorReason ?? `settlement failed with status ${paid.status}`,
     };
   }
@@ -181,12 +234,7 @@ export async function payAndFetch(
     status: paid.status,
     body,
     paid: true,
-    payment: {
-      amount: requirement.amount,
-      asset: requirement.asset,
-      network: requirement.network,
-      payTo: requirement.payTo,
-      txHash: receipt?.transaction,
-    },
+    payer: payer.address,
+    payment: { ...details, txHash: receipt?.transaction },
   };
 }

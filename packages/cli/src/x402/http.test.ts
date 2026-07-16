@@ -121,7 +121,7 @@ describe('payAndFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
-  it('surfaces a settlement failure reason instead of throwing', async () => {
+  it('surfaces a settlement failure reason + the attempted payment (nonce) instead of throwing', async () => {
     fetchMock
       .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
       .mockResolvedValueOnce(
@@ -136,5 +136,29 @@ describe('payAndFetch', () => {
 
     expect(result.paid).toBe(false);
     expect(result.refusedReason).toBe('insufficient_funds');
+    // The signed payment must be recoverable — money may have moved in pull mode.
+    expect(result.attemptedPayment).toMatchObject({
+      amount: '1000',
+      payTo: REQUIREMENT.payTo,
+      nonce: '0x' + '00'.repeat(32),
+    });
+    expect(result.payer).toBe(payer.address);
+  });
+
+  it('picks the cheapest acceptable option when the server offers several', async () => {
+    const dearer: X402PaymentRequirement = { ...REQUIREMENT, amount: '5000' };
+    const cheaper: X402PaymentRequirement = { ...REQUIREMENT, amount: '750' };
+    const multi = b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts: [dearer, cheaper] });
+
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': multi }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.paid).toBe(true);
+    expect(result.payment?.amount).toBe('750'); // the cheaper option, not the first-listed
   });
 });

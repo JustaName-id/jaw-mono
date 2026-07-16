@@ -251,7 +251,9 @@ describe('jaw_pay_and_fetch', () => {
     try {
       const client = await connectClient();
       const parsed = JSON.parse(
-        toolText(await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/free' } }))
+        toolText(
+          await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/free' } })
+        )
       );
       expect(parsed.paid).toBe(false);
       expect(parsed.status).toBe(200);
@@ -260,6 +262,104 @@ describe('jaw_pay_and_fetch', () => {
     } finally {
       vi.unstubAllGlobals();
     }
+  });
+
+  // Hardhat test key #1 → EOA 0x70997970C51812dc3A010C7d01b50e0d17dc79C8.
+  const PK = '0x59c6995e998f97a5a0044966f0945389dc9e86dae88c7a8412f4603b6b78690d';
+  const CHALLENGE = Buffer.from(
+    JSON.stringify({
+      x402Version: 2,
+      resource: { url: 'https://api.example.com/paid' },
+      accepts: [
+        {
+          scheme: 'exact',
+          network: 'eip155:84532',
+          amount: '1000',
+          asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+          payTo: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+          maxTimeoutSeconds: 60,
+        },
+      ],
+    })
+  ).toString('base64');
+  const RECEIPT = Buffer.from(JSON.stringify({ success: true, transaction: '0xtx' })).toString('base64');
+  const mkRes = (status: number, hdrs: Record<string, string>, body: string) =>
+    ({ status, headers: { get: (k: string) => hdrs[k] ?? null }, text: async () => body }) as unknown as Response;
+
+  it('pays a 402 with the real session-key payer and returns a receipt', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore(PK, '0xSmartAccount');
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}'))
+      .mockResolvedValueOnce(mkRes(200, { 'PAYMENT-RESPONSE': RECEIPT }, JSON.stringify({ data: 'ok' })));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      const parsed = JSON.parse(
+        toolText(
+          await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/paid' } })
+        )
+      );
+      expect(parsed.paid).toBe(true);
+      expect(parsed.payment.txHash).toBe('0xtx');
+      expect(parsed.payment.nonce).toMatch(/^0x[0-9a-f]{64}$/);
+      expect(parsed.payer.toLowerCase()).toBe('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
+      // The retry carried a real signed proof from the session key.
+      const retryInit = fetchMock.mock.calls[1][1] as { headers: Record<string, string> };
+      expect(retryInit.headers['PAYMENT-SIGNATURE']).toBeTruthy();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('enforces maxTotalPerSession across calls (refuses the second)', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore(PK, '0xSmartAccount');
+    saveConfig({ x402: { maxTotalPerSession: '1500' } });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}')) // call 1: challenge
+      .mockResolvedValueOnce(mkRes(200, { 'PAYMENT-RESPONSE': RECEIPT }, JSON.stringify({ ok: true }))) // call 1: paid (1000)
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}')); // call 2: challenge (refused before paying)
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      const first = JSON.parse(
+        toolText(await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/a' } }))
+      );
+      expect(first.paid).toBe(true);
+
+      const second = JSON.parse(
+        toolText(await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/b' } }))
+      );
+      expect(second.paid).toBe(false);
+      expect(second.refusedReason).toMatch(/maxTotalPerSession/);
+      // 2 fetches for the first call (challenge + pay), 1 for the second (refused pre-payment).
+      expect(fetchMock).toHaveBeenCalledTimes(3);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('reports the payer address (the EOA to fund) in jaw_session_status', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    const { saveSessionConfig } = await import('../lib/session-config.js');
+    saveKeystore(PK, '0xSmartAccount');
+    saveSessionConfig({
+      ownerAddress: '0xOwner',
+      sessionAddress: '0xSmartAccount',
+      permissionId: '0xPerm',
+      chainId: 84532,
+      expiry: Math.floor(Date.now() / 1000) + 86400,
+    });
+    const client = await connectClient();
+    const parsed = JSON.parse(toolText(await client.callTool({ name: 'jaw_session_status', arguments: {} })));
+    // Distinct from sessionAddress (the smart account) — this is where USDC goes.
+    expect(parsed.payerAddress.toLowerCase()).toBe('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
+    expect(parsed.sessionAddress).toBe('0xSmartAccount');
   });
 });
 
