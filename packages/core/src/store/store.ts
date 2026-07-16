@@ -148,9 +148,14 @@ export const account = {
         }));
     },
     clear: () => {
-        sdkstore.setState({
-            account: {},
-        });
+        sdkstore.setState((state) => ({
+            // Keep lastAccount: clear() fires on disconnect and session-TTL
+            // expiry, and the "Continue as" hint must survive both so the
+            // next connect can still offer the previous account. It is a UX
+            // pointer, not authorization — reconnecting always re-runs the
+            // passkey ceremony.
+            account: state.account.lastAccount ? { lastAccount: state.account.lastAccount } : {},
+        }));
     },
 };
 

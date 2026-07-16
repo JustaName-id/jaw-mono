@@ -9,11 +9,21 @@ import { fetchRPCRequest, checkErrorForInvalidRequestArgs, buildHandleJawRpcUrl 
 import { createSigner, loadSignerType, storeSignerType } from '../signer/index.js';
 import { waitForReceiptInBackground } from '../rpc/index.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
+import { isSafari } from '../utils/user-agent.js';
 import type { AppMetadata, ConstructorOptions, RequestArguments } from './interface.js';
 import type { Signer } from '../signer/index.js';
 
 // Mock all dependencies
 vi.mock('../communicator/index.js');
+vi.mock('../utils/user-agent.js', async (importOriginal) => {
+    const actual = await importOriginal<typeof import('../utils/user-agent.js')>();
+    return {
+        ...actual,
+        // Default: not Safari, so the embedded-connect force-handshake path is
+        // skipped unless a test opts in. Overridden per-test below.
+        isSafari: vi.fn(() => false),
+    };
+});
 vi.mock('../errors/index.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../errors/index.js')>();
     return {
@@ -306,6 +316,85 @@ describe('JAWProvider', () => {
             await expect(provider.request(request)).rejects.toThrow('Handshake failed');
             expect(storeSignerType).not.toHaveBeenCalled();
             expect((provider as any).signer).toBeNull();
+        });
+    });
+
+    // Regression: on Safari, selecting/switching an account happens in the popup
+    // (credential create), but signing runs in the iframe — a different, partitioned
+    // storage. Reconnecting must re-establish the session in the iframe so the two
+    // don't diverge (the account shown/selected in the popup vs the one the iframe
+    // holds). With a known account the connect routes to the iframe and the provider
+    // forces the handshake there; without it, no discrepancy fix is needed.
+    describe('_request - Safari embedded connect: reconnect establishes the iframe session', () => {
+        beforeEach(() => {
+            provider = new JAWProvider(mockConstructorOptions);
+            (mockSigner.handshake as Mock).mockResolvedValue(undefined);
+            (mockSigner.request as Mock).mockResolvedValue(['0x1234567890123456789012345678901234567890']);
+            // A session already exists (returning user / restored signer): this is the
+            // reconnect path where the popup/iframe discrepancy could otherwise appear.
+            (provider as any).signer = mockSigner;
+        });
+
+        it('re-runs the handshake against the iframe when the connect routes there, so the account is not left stranded in the popup partition', async () => {
+            (isSafari as Mock).mockReturnValue(true);
+            (provider as any).communicator.willRouteToIframe = vi.fn().mockResolvedValue(true);
+
+            await provider.request({ method: 'eth_requestAccounts' });
+
+            expect((provider as any).communicator.willRouteToIframe).toHaveBeenCalledWith('eth_requestAccounts');
+            // The forced handshake is what re-establishes the session in the iframe.
+            expect(mockSigner.handshake).toHaveBeenCalledWith({ method: 'eth_requestAccounts' });
+            expect(mockSigner.request).toHaveBeenCalledWith({ method: 'eth_requestAccounts' });
+        });
+
+        it('forces the handshake for wallet_connect too when it routes to the iframe', async () => {
+            (isSafari as Mock).mockReturnValue(true);
+            (provider as any).communicator.willRouteToIframe = vi.fn().mockResolvedValue(true);
+
+            const request: RequestArguments = { method: 'wallet_connect', params: [{ capabilities: {} }] };
+            await provider.request(request);
+
+            expect(mockSigner.handshake).toHaveBeenCalledWith(request);
+            expect(mockSigner.request).toHaveBeenCalledWith(request);
+        });
+
+        it('does NOT force the handshake when the connect stays on the popup (no known account → routes to popup)', async () => {
+            (isSafari as Mock).mockReturnValue(true);
+            (provider as any).communicator.willRouteToIframe = vi.fn().mockResolvedValue(false);
+
+            await provider.request({ method: 'eth_requestAccounts' });
+
+            expect(mockSigner.handshake).not.toHaveBeenCalled();
+            expect(mockSigner.request).toHaveBeenCalledWith({ method: 'eth_requestAccounts' });
+        });
+
+        it('does NOT force the handshake off Safari (Chrome keeps one consistent partition)', async () => {
+            (isSafari as Mock).mockReturnValue(false);
+            (provider as any).communicator.willRouteToIframe = vi.fn().mockResolvedValue(true);
+
+            await provider.request({ method: 'eth_requestAccounts' });
+
+            // Short-circuits before consulting the router when not on Safari.
+            expect((provider as any).communicator.willRouteToIframe).not.toHaveBeenCalled();
+            expect(mockSigner.handshake).not.toHaveBeenCalled();
+            expect(mockSigner.request).toHaveBeenCalledWith({ method: 'eth_requestAccounts' });
+        });
+
+        it('does NOT force the handshake in AppSpecific mode (it drives its own UIHandler, not the iframe/popup transport)', async () => {
+            const appSpecificProvider = new JAWProvider({
+                ...mockConstructorOptions,
+                preference: { ...mockConstructorOptions.preference, mode: 'AppSpecific' },
+            });
+            (appSpecificProvider as any).signer = mockSigner;
+            (isSafari as Mock).mockReturnValue(true);
+            (appSpecificProvider as any).communicator.willRouteToIframe = vi.fn().mockResolvedValue(true);
+
+            await appSpecificProvider.request({ method: 'eth_requestAccounts' });
+
+            // Mode gate short-circuits before the router is consulted.
+            expect((appSpecificProvider as any).communicator.willRouteToIframe).not.toHaveBeenCalled();
+            expect(mockSigner.handshake).not.toHaveBeenCalled();
+            expect(mockSigner.request).toHaveBeenCalledWith({ method: 'eth_requestAccounts' });
         });
     });
 

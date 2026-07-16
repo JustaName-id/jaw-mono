@@ -29,6 +29,14 @@ interface SignInScreenProps {
   chainConfig?: { id: number; rpcUrl?: string; paymasterUrl?: string };
   subnameTextRecords?: SubnameTextRecordCapabilityRequest;
   origin?: string; // Origin for per-origin auth session
+  /**
+   * CredentialId to prefer as the "Continue as" default (embedded only: the
+   * account the dApp is currently connected as, from the handshake hint).
+   * Takes precedence over this partition's own last-authenticated marker,
+   * which goes stale when an account switch happens in the popup's
+   * first-party world (Safari routes credential methods there).
+   */
+  preferredCredentialId?: string;
 }
 
 export function SignInScreen({
@@ -39,6 +47,7 @@ export function SignInScreen({
   chainConfig,
   subnameTextRecords,
   origin,
+  preferredCredentialId,
 }: SignInScreenProps) {
   const { accounts, accountsLoading, refetchAccounts } = usePasskeys({ apiKey });
   const { mutateAsync: login } = useLogin();
@@ -51,7 +60,13 @@ export function SignInScreen({
     return apiKey ? `${JAW_RPC_URL}?chainId=1&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=1`;
   }, [apiKey]);
 
-  const lastAuthenticatedCredentialId = useMemo(() => getLastAuthenticatedCredentialId(apiKey), [apiKey]);
+  // The dApp's connected account (hint) outranks this partition's own
+  // last-authenticated marker; selectDefaultAccount ignores it gracefully if
+  // it doesn't match a listed account.
+  const lastAuthenticatedCredentialId = useMemo(
+    () => preferredCredentialId ?? getLastAuthenticatedCredentialId(apiKey),
+    [preferredCredentialId, apiKey]
+  );
 
   debugLog('✅ OnboardingSection: ENS Config =', ensConfig || 'NOT PROVIDED');
   debugLog('✅ OnboardingSection: ChainId =', chainId || 'NOT PROVIDED');

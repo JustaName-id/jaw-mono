@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RECONNECT_REQUIRED, isReconnectRequiredFailure } from './configMessage.js';
+import { RECONNECT_REQUIRED, isReconnectRequiredFailure, isValidAccountHint } from './configMessage.js';
 
 /**
  * isReconnectRequiredFailure is the gate for the Safari iframe reconnect path.
@@ -38,5 +38,48 @@ describe('isReconnectRequiredFailure', () => {
 
     it('sentinel value is stable (shared wire contract with the keys app)', () => {
         expect(RECONNECT_REQUIRED).toBe('JAW_RECONNECT_REQUIRED');
+    });
+});
+
+/**
+ * isValidAccountHint gates the "last account" hint on both sides of the wire:
+ * the SDK persists it into dApp-side storage and the keys app resolves it
+ * against the backend on a handshake — so a malformed payload must never
+ * pass. The hint is credentialId-only by design: publicKey and display name
+ * never travel, they are looked up server-side at seed time.
+ */
+describe('isValidAccountHint', () => {
+    const valid = {
+        credentialId: 'A1b2-C3d4_E5f6',
+    };
+
+    it('returns true for a well-formed hint', () => {
+        expect(isValidAccountHint(valid)).toBe(true);
+    });
+
+    it('tolerates extra fields (consumers pick credentialId only)', () => {
+        expect(isValidAccountHint({ ...valid, username: 'x', publicKey: '0xdead' })).toBe(true);
+    });
+
+    it('returns false for non-object / nullish values', () => {
+        expect(isValidAccountHint(null)).toBe(false);
+        expect(isValidAccountHint(undefined)).toBe(false);
+        expect(isValidAccountHint('hint')).toBe(false);
+        expect(isValidAccountHint(42)).toBe(false);
+    });
+
+    it('returns false when credentialId is empty, missing, or has invalid characters', () => {
+        expect(isValidAccountHint({ ...valid, credentialId: '' })).toBe(false);
+        expect(isValidAccountHint({ ...valid, credentialId: '<script>' })).toBe(false);
+        expect(isValidAccountHint({ ...valid, credentialId: undefined })).toBe(false);
+        expect(isValidAccountHint({ ...valid, credentialId: 7 })).toBe(false);
+    });
+
+    it('returns false when credentialId exceeds the length cap', () => {
+        // The validator gates writes into localStorage on both sides of the
+        // wire — an unbounded string could blow the storage quota. The cap is
+        // 1364: the base64url length of a spec-maximum 1023-byte credential ID.
+        expect(isValidAccountHint({ credentialId: 'a'.repeat(1364) })).toBe(true);
+        expect(isValidAccountHint({ credentialId: 'a'.repeat(1365) })).toBe(false);
     });
 });

@@ -294,6 +294,46 @@ describe('requestSwitchToPopup', () => {
   });
 });
 
+describe('sendAccountHint', () => {
+  const hint = {
+    credentialId: 'A1b2-C3d4_E5f6',
+  };
+  // Callers pass session auth state, which carries more (address, publicKey,
+  // username, …); only the credentialId may reach the wire — the seeding side
+  // resolves everything else from the backend registry.
+  const sessionAuthState = {
+    ...hint,
+    username: 'ghadi.jaw.id',
+    publicKey: '0xdeadbeef' as const,
+    address: '0x1234567890abcdef1234567890abcdef12345678' as const,
+  };
+
+  it('embedded context: posts AccountHint to the locked origin, stripped to the credentialId', () => {
+    const win = createFakeWindow({ embedded: true, ancestorOrigins: [SDK_ORIGIN] });
+    new PopupCommunicator(win).sendAccountHint(sessionAuthState);
+
+    expect(win.counterpartPost).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'AccountHint', data: hint }),
+      SDK_ORIGIN
+    );
+  });
+
+  it('popup context: also posts AccountHint (stores the hint for future embedded visits)', () => {
+    const { win, opener } = createPopupWindow();
+    new PopupCommunicator(win).sendAccountHint(sessionAuthState);
+
+    expect(opener.postMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ event: 'AccountHint', data: hint }),
+      SDK_ORIGIN
+    );
+  });
+
+  it('standalone context: is a no-op', () => {
+    const win = createFakeWindow();
+    expect(() => new PopupCommunicator(win).sendAccountHint(sessionAuthState)).not.toThrow();
+  });
+});
+
 describe('lifecycle', () => {
   it('popup context: sends PopupUnload on beforeunload', () => {
     const { win, opener } = createPopupWindow();

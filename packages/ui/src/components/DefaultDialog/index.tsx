@@ -1,5 +1,7 @@
 import { Dialog, DialogContent, DialogTitle, DialogTrigger } from '../ui/dialog';
-import { FC, ReactNode } from 'react';
+import { FC, ReactNode, useContext } from 'react';
+
+import { DialogAnchorContext } from '../../lib/utils';
 
 export interface DefaultDialogProps {
   open?: boolean;
@@ -22,6 +24,12 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
   innerStyle = {},
   contentStyle = {},
 }) => {
+  // In the embedded drawer presentation ('top-sheet') the dialog must render
+  // as a full-width, content-sized top sheet. The per-dialog contentStyle
+  // sizing (fixed desktop widths, mobile 100% height) is inline style, so it
+  // would beat DialogContent's sheet classes — override it here, after the
+  // spread, keeping the decision in one place instead of in every dialog.
+  const topSheet = useContext(DialogAnchorContext) === 'top-sheet' && !fullScreen;
   return (
     <Dialog modal={true} open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
@@ -45,6 +53,17 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
           borderRadius: fullScreen ? '0' : undefined,
           boxSizing: 'content-box',
           ...contentStyle,
+          ...(topSheet
+            ? {
+                width: '100%',
+                minWidth: 0,
+                maxWidth: 'none',
+                height: 'auto',
+                minHeight: 0,
+                maxHeight: '85vh',
+                borderRadius: undefined,
+              }
+            : {}),
         }}
       >
         <DialogTitle style={{ display: 'none' }}></DialogTitle>

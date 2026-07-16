@@ -97,13 +97,14 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
 
   return (
     // The Radix-based modals (Connect, Transaction, …) portal to document.body,
-    // escaping this card and Radix-centering at 50% by default. Anchor them to
-    // the top via context so they line up with the card's inline screens; the
-    // same context makes their overlay transparent, matching this shell's
-    // scrim-free backdrop. Drawer presentation keeps 'center': the dialogs
-    // style themselves full-size on small viewports, where a top offset would
-    // misplace them (and their scrim is hidden behind them anyway).
-    <DialogAnchorContext.Provider value={active && presentation === 'floating' ? 'top' : 'center'}>
+    // escaping this card and Radix-centering at 50% by default. Anchor them via
+    // context so they line up with the card's inline screens; the same context
+    // makes their overlay transparent, matching this shell's scrim-free
+    // backdrop. 'top' matches the floating card; 'top-sheet' matches the
+    // drawer card (full-width, top-pinned, content-sized) and suppresses the
+    // dialogs' own mobile full-screen sizing, which is meant for
+    // popup/standalone contexts.
+    <DialogAnchorContext.Provider value={active ? (presentation === 'floating' ? 'top' : 'top-sheet') : 'center'}>
       <div
         className={
           // Transparent (no scrim): the dApp shows through around the card.

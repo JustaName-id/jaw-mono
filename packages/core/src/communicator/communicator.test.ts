@@ -121,6 +121,41 @@ describe('Communicator', () => {
         window.removeEventListener = originalRemoveEventListener;
     });
 
+    describe('prewarm', () => {
+        it('waits for the trusted-hosts refresh before delegating to the router', async () => {
+            // The refresh can flip the routing decision from popup
+            // (clickjacking-guard) to iframe on browsers without IOv2. Deciding
+            // before the fetch settles would no-op prewarm — leaving no iframe
+            // mounted for the first popup flow's session handoff to deliver to.
+            const originalFetch = globalThis.fetch;
+            let resolveFetch!: (response: Response) => void;
+            globalThis.fetch = vi.fn(
+                () => new Promise<Response>((resolve) => (resolveFetch = resolve))
+            ) as typeof fetch;
+
+            try {
+                const prewarmCommunicator = new Communicator({
+                    metadata: appMetadata,
+                    preference: { keysUrl: JAW_KEYS_URL, transportMode: 'iframe' },
+                });
+                const routerPrewarm = vi
+                    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                    .spyOn((prewarmCommunicator as any).router, 'prewarm')
+                    .mockResolvedValue(undefined);
+
+                const prewarmPromise = prewarmCommunicator.prewarm();
+                await new Promise((resolve) => setTimeout(resolve, 0));
+                expect(routerPrewarm).not.toHaveBeenCalled();
+
+                resolveFetch(Response.json({ hosts: ['localhost'] }));
+                await prewarmPromise;
+                expect(routerPrewarm).toHaveBeenCalledTimes(1);
+            } finally {
+                globalThis.fetch = originalFetch;
+            }
+        });
+    });
+
     describe('onMessage', () => {
         it('should add and remove event listener', async () => {
             const mockRequest: Message = {

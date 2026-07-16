@@ -16,6 +16,7 @@ import {
 import type { JawTheme } from '../ui/theme.js';
 
 import { hexStringFromNumber, checkErrorForInvalidRequestArgs } from '../utils/index.js';
+import { isSafari } from '../utils/user-agent.js';
 
 import { correlationIds } from '../store/index.js';
 
@@ -276,6 +277,25 @@ export class JAWProvider extends ProviderEventEmitter implements ProviderInterfa
             if (args.method === 'wallet_disconnect') {
                 await this.disconnect();
                 return null as T;
+            }
+
+            // Interactive connect with a signer already present: on Safari this
+            // would return the cached accounts instantly, WITHOUT a live session
+            // in the embedded iframe's (partitioned, Brave/Safari-ephemeral)
+            // storage — so the first signing action later has to reconnect,
+            // costing a second biometric. When the connect routes to the iframe,
+            // re-run the handshake now so connecting establishes the iframe
+            // session; signing then just signs. No effect off Safari or on the
+            // popup route. Cross-platform only: AppSpecific never uses the
+            // iframe/popup transport (it drives its own UIHandler), so the
+            // communicator's routing does not apply there.
+            if (
+                signerType === 'crossPlatform' &&
+                (args.method === 'eth_requestAccounts' || args.method === 'wallet_connect') &&
+                isSafari() &&
+                (await this.communicator.willRouteToIframe(args.method))
+            ) {
+                await this.signer.handshake(args);
             }
 
             // Handle requests when signer exists

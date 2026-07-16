@@ -80,6 +80,23 @@ describe('store', () => {
             const state = account.get();
             expect(state).toEqual({});
         });
+
+        it('should preserve lastAccount across clear (disconnect / session expiry)', () => {
+            // clear() runs on disconnect and on session-TTL expiry — exactly the
+            // moments after which the next connect should still show "Continue
+            // as". The hint must outlive the connection state.
+            const lastAccount = { credentialId: 'A1b2-C3d4_E5f6' };
+            account.set({
+                accounts: ['0x1234567890123456789012345678901234567890'],
+                lastAccount,
+            });
+
+            account.clear();
+
+            const state = account.get();
+            expect(state.accounts).toBeUndefined();
+            expect(state.lastAccount).toEqual(lastAccount);
+        });
     });
 
     describe('chains actions', () => {

@@ -1,6 +1,8 @@
 import { JAW_KEYS_URL } from '../constants.js';
 import { Message, MessageID } from '../messages/message.js';
+import { isValidAccountHint } from '../messages/configMessage.js';
 import { standardErrors } from '../errors/errors.js';
+import { account as accountStore, config as configStore } from '../store/store.js';
 
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
 import type { JawTheme } from '../ui/theme.js';
@@ -15,6 +17,14 @@ import { TransportRouter } from './transport-router.js';
  * the pending request rather than hang. Only runs while a request is in flight.
  */
 const TRANSPORT_LIVENESS_POLL_MS = 500;
+
+/**
+ * Upper bound on how long the first transport acquire waits for the
+ * trusted-hosts refresh before proceeding on the baseline. Short enough to keep
+ * connect responsive on a slow/dead keys endpoint; long enough that a healthy
+ * localhost/prod fetch settles first.
+ */
+const TRUSTED_HOSTS_READY_TIMEOUT_MS = 1500;
 
 export type CommunicatorOptions = {
     metadata: AppMetadata;
@@ -93,6 +103,14 @@ export class Communicator {
             metadata,
             preference,
             theme,
+            // Handshake-time read: the hint lands in the store mid-session
+            // (AccountHint after the first connect approval) and must ride
+            // the next handshake, not the state at construction.
+            getLastAccount: () => accountStore.get().lastAccount,
+            // Read at send time so the transport config message carries the
+            // dApp's own key (bootstraps the keys account screen before the
+            // handshake); the handshake's rpcUrl key then takes over.
+            getApiKey: () => configStore.get().apiKey,
             mode: normalizeTransportMode(preference.transportMode),
             isTrustedHostFn: (hostname) => this.trustedHosts.has(hostname),
             // Bridge transport-level dismissal (Escape, click-outside, window
@@ -102,11 +120,60 @@ export class Communicator {
             onDismiss: () => this.rejectPendingRequests(),
         });
 
-        // Best-effort, non-blocking: routing works off the baseline until (and
-        // if) this resolves. Swallow failures — refreshFrom is already fail-soft.
-        void this.trustedHosts.refreshFrom(this.url).catch(() => {
-            /* fail-soft: keep the baseline */
-        });
+        // Kick off the trusted-hosts refresh. Routing works off the baseline
+        // until this resolves; an acquire routed to popup ONLY by the
+        // clickjacking guard awaits it (bounded) so a Safari embedded connect —
+        // which needs the embedder trusted at connect time — doesn't lose a
+        // deterministic race against the fetch and fall back to the popup.
+        // Fail-soft: on error/timeout the baseline stands.
+        const refresh = this.trustedHosts
+            .refreshFrom(this.url)
+            .then(() => undefined)
+            .catch(() => undefined);
+        const timeout = new Promise<void>((resolve) => setTimeout(resolve, TRUSTED_HOSTS_READY_TIMEOUT_MS));
+        this.trustedHostsReady = Promise.race([refresh, timeout]);
+    }
+
+    /** Resolves once the trusted-hosts refresh has completed, failed, or timed out. */
+    private readonly trustedHostsReady: Promise<void>;
+
+    /**
+     * Acquire the routed transport. Waits for the trusted-hosts refresh ONLY
+     * when the pending list could change the decision — i.e. the route is popup
+     * purely because the embedder isn't (yet) trusted. Every other popup reason
+     * is trust-independent, and there the wait must be skipped: it would spend
+     * the click's transient activation, and Safari then blocks the popup's
+     * window.open.
+     */
+    private async acquire(ctx: RouteContext): Promise<Transport> {
+        if (this.router.decide(ctx).reason === 'clickjacking-guard') {
+            await this.trustedHostsReady;
+        }
+        return this.router.acquire(ctx);
+    }
+
+    /**
+     * Whether a request with this method would route to the embedded iframe
+     * (rather than the popup). Used by the connect flow to decide whether to
+     * establish the session in the iframe's own storage partition.
+     *
+     * Awaits the bounded trusted-hosts refresh when the ONLY thing keeping the
+     * route on the popup is an as-yet-unconfirmed embedder trust — mirroring
+     * `acquire` — so this answer matches the transport the request will actually
+     * get. Without the await a cold-start (trust list still loading) would read
+     * the pre-refresh state, report popup, skip the forced handshake, and then
+     * route the real request to the iframe with no session — costing the extra
+     * reconnect biometric this feature exists to avoid.
+     *
+     * Reflects the static routing decision only, not the single-use
+     * popup/iframe-reconnect overrides (those live in the transport's acquire).
+     */
+    async willRouteToIframe(method?: string): Promise<boolean> {
+        const ctx: RouteContext = method !== undefined ? { method } : {};
+        if (this.router.decide(ctx).reason === 'clickjacking-guard') {
+            await this.trustedHostsReady;
+        }
+        return this.router.decide(ctx).kind === 'iframe';
     }
 
     /**
@@ -118,7 +185,30 @@ export class Communicator {
         if (this.switchListenerArmed || typeof window === 'undefined') return;
         this.switchListenerArmed = true;
         window.addEventListener('message', this.handleSwitchTransport);
+        window.addEventListener('message', this.handleAccountHint);
     }
+
+    /**
+     * Persists the keys app's AccountHint into the dApp-side store. The
+     * embedded keys iframe's storage is partitioned (and wiped between visits
+     * in Brave/Safari), so the dApp's first-party storage is the only place
+     * the "last account" can durably live; the next handshake carries it back
+     * as `lastAccount` so keys can seed its "Continue as" screen.
+     */
+    private handleAccountHint = (event: MessageEvent): void => {
+        if (event.origin !== this.url.origin) return;
+        if (!this.router.ownsSource(event.source)) return;
+        const message = event.data as { event?: string; data?: unknown } | undefined;
+        if (message?.event !== 'AccountHint') return;
+        if (!isValidAccountHint(message.data)) return;
+
+        // Persist a picked copy, never the raw wire object — anything extra
+        // riding on the message must not reach storage or later handshakes.
+        // The hint is credentialId-only by design: publicKey and display name
+        // are resolved from the backend at seed time, never carried here.
+        const { credentialId } = message.data;
+        accountStore.set({ lastAccount: { credentialId } });
+    };
 
     /** Routes SwitchTransport requests from the keys dialog. */
     private handleSwitchTransport = (event: MessageEvent): void => {
@@ -138,7 +228,7 @@ export class Communicator {
             const entries = [...this.inflight.values()];
             if (entries.length === 0) return;
             try {
-                const transport = await this.router.acquire(getRouteContext(entries[0].request));
+                const transport = await this.acquire(getRouteContext(entries[0].request));
                 for (const { request } of entries) {
                     await transport.postMessage(request);
                 }
@@ -155,9 +245,21 @@ export class Communicator {
 
     /**
      * Wait for the keys app to load and complete the handshake.
+     *
+     * Pass the RPC method ONLY when the outgoing message is a handshake
+     * envelope — those carry the method on the wire, so the send-time acquire
+     * (getRouteContext) routes by it and the transport readied here matches.
+     * This matters on Safari: a connect that routes to the popup must call
+     * window.open as the FIRST thing after the user's click — a method-less
+     * acquire would ready the iframe instead, and the popup opened afterwards
+     * (past the gesture) gets blocked.
+     *
+     * Encrypted envelopes route method-less; their ready must be method-less
+     * too, or the two acquires diverge (Safari would open a popup while the
+     * encrypted request goes to the iframe).
      */
-    async waitForPopupLoaded(): Promise<Window> {
-        const transport = await this.router.acquire({});
+    async waitForPopupLoaded(method?: string): Promise<Window> {
+        const transport = await this.acquire(method !== undefined ? { method } : {});
         return transport.ensureReady();
     }
 
@@ -171,8 +273,21 @@ export class Communicator {
 
     /**
      * Mount and handshake the iframe in the background (no-op in popup mode).
+     *
+     * Awaits the bounded trusted-hosts refresh first: on browsers without IOv2
+     * the refresh is what flips the routing decision from popup
+     * (clickjacking-guard) to iframe, and prewarm runs at construction — before
+     * the fetch settles — so deciding immediately would no-op and leave no
+     * iframe mounted. That matters beyond warmth: the first connect on Safari
+     * runs in a popup whose post-approval session handoff needs a live keys
+     * iframe to deliver to (see keys-jaw-id lib/session-handoff.ts); without
+     * this wait, the first flow after page load loses the handoff and the next
+     * action falls back to the reconnect ceremony. No user gesture is at stake
+     * here (background call), so the wait is free — unlike acquire, which must
+     * skip it on gesture-driven popup routes.
      */
     async prewarm(): Promise<void> {
+        await this.trustedHostsReady;
         await this.router.prewarm();
     }
 
@@ -190,7 +305,7 @@ export class Communicator {
      */
     postMessage = async (message: Message) => {
         this.ensureSwitchListener();
-        const transport = await this.router.acquire(getRouteContext(message));
+        const transport = await this.acquire(getRouteContext(message));
         await transport.postMessage(message);
     };
 
@@ -207,7 +322,7 @@ export class Communicator {
             // its window for an abrupt close (popup killed before it can post
             // PopupUnload) so the request rejects instead of hanging.
             this.ensureSwitchListener();
-            const transport = await this.router.acquire(getRouteContext(request));
+            const transport = await this.acquire(getRouteContext(request));
             await transport.postMessage(request);
             return await this.awaitResponseOrClosed(transport, promise);
         } catch (error) {
@@ -340,6 +455,7 @@ export class Communicator {
 
         if (this.switchListenerArmed) {
             window.removeEventListener('message', this.handleSwitchTransport);
+            window.removeEventListener('message', this.handleAccountHint);
             this.switchListenerArmed = false;
         }
 
