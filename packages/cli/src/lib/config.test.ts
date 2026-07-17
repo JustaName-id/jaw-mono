@@ -18,7 +18,7 @@ vi.mock('./paths.js', () => {
     },
   };
 });
-const { loadConfig, saveConfig, setConfigValue, redactConfig } = await import('./config.js');
+const { loadConfig, saveConfig, setConfigValue, setX402PolicyValue, redactConfig } = await import('./config.js');
 const { PATHS } = await import('./paths.js');
 
 beforeEach(() => {
@@ -95,6 +95,27 @@ describe('redactConfig', () => {
       paymasters: { 1: { url: 'https://pm.example.com/rpc' } },
     }) as { paymasters: Record<number, { context?: unknown }> };
     expect(redacted.paymasters[1].context).toBeUndefined();
+  });
+});
+
+describe('setX402PolicyValue', () => {
+  it('sets a scalar cap and merges into the x402 block', () => {
+    setX402PolicyValue('maxAmountPerPayment', '50000');
+    setX402PolicyValue('maxTotalPerSession', '1000000');
+    expect(loadConfig().x402).toEqual({ maxAmountPerPayment: '50000', maxTotalPerSession: '1000000' });
+  });
+
+  it('comma-splits an allow-list field', () => {
+    setX402PolicyValue('allowedNetworks', 'eip155:8453, eip155:84532');
+    expect(loadConfig().x402?.allowedNetworks).toEqual(['eip155:8453', 'eip155:84532']);
+  });
+
+  it('does not disturb other config keys', () => {
+    saveConfig({ apiKey: 'keep-me' });
+    setX402PolicyValue('maxAmountPerPayment', '10');
+    const config = loadConfig();
+    expect(config.apiKey).toBe('keep-me');
+    expect(config.x402?.maxAmountPerPayment).toBe('10');
   });
 });
 

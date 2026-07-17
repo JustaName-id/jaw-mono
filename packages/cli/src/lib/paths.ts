@@ -10,4 +10,5 @@ export const PATHS = {
   relay: path.join(JAW_DIR, 'relay.json'),
   keystore: path.join(JAW_DIR, 'keystore.json'),
   sessionConfig: path.join(JAW_DIR, 'session-config.json'),
+  x402Log: path.join(JAW_DIR, 'x402-log.jsonl'),
 } as const;

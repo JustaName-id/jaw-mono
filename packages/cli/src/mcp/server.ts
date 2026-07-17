@@ -4,6 +4,7 @@ import { registerRpcTool } from './handlers/rpc.js';
 import { registerConfigTools } from './handlers/config.js';
 import { registerDaemonTools } from './handlers/daemon.js';
 import { registerSessionTools } from './handlers/session.js';
+import { registerPayTool } from './handlers/pay.js';
 import { registerResources } from './handlers/resources.js';
 
 export function createMcpServer(version = '0.0.0'): McpServer {
@@ -16,6 +17,7 @@ export function createMcpServer(version = '0.0.0'): McpServer {
   registerConfigTools(server);
   registerDaemonTools(server);
   registerSessionTools(server);
+  registerPayTool(server);
   registerResources(server);
 
   return server;

@@ -37,3 +37,30 @@ export const configSetSchema = {
   key: z.enum(['apiKey', 'defaultChain', 'keysUrl', 'ens', 'relayUrl', 'sessionExpiry']).describe('Config key'),
   value: z.string().describe('Config value'),
 };
+
+export const payAndFetchSchema = {
+  url: z.string().url().describe('Resource URL to fetch. If it answers HTTP 402 (x402), pay and retry.'),
+  method: z.string().optional().describe('HTTP method (default GET).'),
+  headers: z.record(z.string()).optional().describe('Extra request headers.'),
+  body: z.string().optional().describe('Request body (for POST/PUT/etc.).'),
+  maxAmount: z
+    .string()
+    .optional()
+    .describe(
+      'Hard ceiling for THIS call, in the asset base units (e.g. 6-decimals for USDC). ' +
+        'If the 402 asks for more, the payment is refused, not made.'
+    ),
+  asset: z.string().optional().describe('Require a specific asset contract address.'),
+  network: z.string().optional().describe('Require a specific CAIP-2 network, e.g. eip155:8453 (Base).'),
+};
+
+export const x402LogSchema = {
+  limit: z.number().optional().describe('Return only the most recent N ledger entries (default: all).'),
+};
+
+export const x402BalanceSchema = {
+  network: z
+    .string()
+    .optional()
+    .describe('CAIP-2 network to check the USDC balance on, e.g. eip155:8453 (Base) or eip155:84532 (Base Sepolia).'),
+};
