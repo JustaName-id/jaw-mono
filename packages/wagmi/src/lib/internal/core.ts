@@ -149,10 +149,13 @@ export async function grantPermissions<config extends Config>(
 ): Promise<grantPermissions.ReturnType> {
   const { address, chainId, connector, expiry, spender, permissions } = parameters;
 
+  // The wallet resolves the target chain from the hex chainId in params —
+  // the connector does not need to be switched to that chain.
   const client = await getConnectorClient(config, {
     account: address,
     chainId,
     connector,
+    assertChainId: false,
   });
 
   const result = await client.request({
@@ -195,10 +198,12 @@ export async function getPermissions<config extends Config>(
 ): Promise<getPermissions.ReturnType> {
   const { address, chainId, connector } = parameters;
 
+  // Chain-agnostic relay read — no need for the connector to be on chainId.
   const client = await getConnectorClient(config, {
     account: address,
     chainId,
     connector,
+    assertChainId: false,
   });
 
   const result = await client.request({
@@ -236,10 +241,13 @@ export async function revokePermissions<config extends Config>(
 ): Promise<revokePermissions.ReturnType> {
   const { address, chainId, connector, id } = parameters;
 
+  // The wallet derives the chain from the permission record itself (fetched
+  // from the relay by id), so the connector's current chain is irrelevant.
   const client = await getConnectorClient(config, {
     account: address,
     chainId,
     connector,
+    assertChainId: false,
   });
 
   const result = await client.request({
@@ -323,10 +331,13 @@ export async function getAssets<config extends Config>(
 ): Promise<getAssets.ReturnType> {
   const { address, chainId, connector, chainFilter, assetTypeFilter, assetFilter } = parameters;
 
+  // Multi-chain read scoped by chainFilter — no need for the connector to be
+  // on chainId.
   const client = await getConnectorClient(config, {
     account: address,
     chainId,
     connector,
+    assertChainId: false,
   });
 
   const result = await client.request({
@@ -392,10 +403,13 @@ export async function getCapabilities<config extends Config>(
 ): Promise<getCapabilities.ReturnType> {
   const { address, chainId, connector, chainFilter } = parameters;
 
+  // Multi-chain read scoped by chainFilter — no need for the connector to be
+  // on chainId.
   const client = await getConnectorClient(config, {
     account: address,
     chainId,
     connector,
+    assertChainId: false,
   });
 
   const result = await client.request({
@@ -457,15 +471,24 @@ export async function sign<config extends Config>(
 ): Promise<sign.ReturnType> {
   const { address, chainId, connector, request } = parameters;
 
+  // The wallet resolves the target chain from the hex chainId in params
+  // (ERC-7871) — the connector does not need to be switched to that chain.
   const client = await getConnectorClient(config, {
     account: address,
     chainId,
     connector,
+    assertChainId: false,
   });
 
   const result = await client.request({
     method: 'wallet_sign' as never,
-    params: [{ request }] as never,
+    params: [
+      {
+        request,
+        address,
+        chainId: chainId ? `0x${chainId.toString(16)}` : undefined,
+      },
+    ] as never,
   });
 
   return result as sign.ReturnType;
@@ -522,10 +545,13 @@ export async function getCallsHistory<config extends Config>(
 ): Promise<getCallsHistory.ReturnType> {
   const { address, chainId, connector, index, limit, sort } = parameters;
 
+  // chainId here is a history filter, not a routing target — no need for the
+  // connector to be on that chain.
   const client = await getConnectorClient(config, {
     account: address,
     chainId,
     connector,
+    assertChainId: false,
   });
 
   const result = await client.request({
