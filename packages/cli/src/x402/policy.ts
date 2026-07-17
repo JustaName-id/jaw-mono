@@ -22,6 +22,15 @@ export interface X402Policy {
   allowedPayTo?: string[];
 }
 
+/** Policy keys settable from the CLI, split by value shape. */
+export const X402_SCALAR_KEYS = ['maxAmountPerPayment', 'maxTotalPerSession'] as const;
+export const X402_ARRAY_KEYS = ['allowedAssets', 'allowedNetworks', 'allowedHosts', 'allowedPayTo'] as const;
+export type X402PolicyKey = (typeof X402_SCALAR_KEYS)[number] | (typeof X402_ARRAY_KEYS)[number];
+
+export function isX402PolicyKey(key: string): key is X402PolicyKey {
+  return (X402_SCALAR_KEYS as readonly string[]).includes(key) || (X402_ARRAY_KEYS as readonly string[]).includes(key);
+}
+
 export interface PolicyContext {
   /** Hostname of the resource being paid for (for `allowedHosts`). */
   host?: string;

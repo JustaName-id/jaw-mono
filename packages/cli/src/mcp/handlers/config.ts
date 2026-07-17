@@ -2,6 +2,7 @@ import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { configSetSchema } from '../tools.js';
 import { mcpError, mcpResult } from '../helpers.js';
 import { loadConfig, setConfigValue, redactConfig } from '../../lib/config.js';
+import type { SettableConfigKey } from '../../lib/types.js';
 
 export function registerConfigTools(server: McpServer): void {
   server.registerTool(
@@ -19,15 +20,14 @@ export function registerConfigTools(server: McpServer): void {
     }
   );
 
-  // @ts-expect-error — MCP SDK deep tool-handler generic inference (TS2589) once
-  // enough tools are registered; the handler itself is correctly typed.
   server.registerTool(
     'jaw_config_set',
     {
       description: 'Set a CLI configuration value (apiKey, defaultChain, keysUrl, ens, relayUrl, sessionExpiry).',
       inputSchema: configSetSchema,
     },
-    async (params) => {
+    // @ts-expect-error — MCP SDK deep type inference (TS2589) with the zod schema
+    async (params: { key: SettableConfigKey; value: string }) => {
       try {
         if (params.key === 'defaultChain' || params.key === 'sessionExpiry') {
           const num = parseInt(params.value, 10);

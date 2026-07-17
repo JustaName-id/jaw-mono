@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { PATHS } from './paths.js';
 import type { JawConfig, SettableConfigKey } from './types.js';
+import type { X402Policy, X402PolicyKey } from '../x402/policy.js';
 import { isValidKeysUrl, isValidRelayUrl } from './validation.js';
 
 export function ensureDir(dir: string): void {
@@ -69,6 +70,25 @@ export function redactConfig(config: JawConfig): Record<string, unknown> {
       ),
     }),
   };
+}
+
+/**
+ * Set one field of the `x402` payment policy. Array fields (allow-lists) are
+ * comma-split. Intentionally NOT reachable from the MCP tool surface: an agent
+ * must not be able to raise its own spending caps — only a human at the CLI.
+ */
+export function setX402PolicyValue(key: X402PolicyKey, value: string): void {
+  const config = loadConfig();
+  const x402: X402Policy = { ...(config.x402 ?? {}) };
+  if (key === 'maxAmountPerPayment' || key === 'maxTotalPerSession') {
+    x402[key] = value;
+  } else {
+    x402[key] = value
+      .split(',')
+      .map((v) => v.trim())
+      .filter(Boolean);
+  }
+  saveConfig({ ...config, x402 });
 }
 
 export function setConfigValue(key: SettableConfigKey, value: string | number): void {
