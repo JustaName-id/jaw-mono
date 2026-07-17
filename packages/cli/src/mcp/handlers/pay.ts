@@ -6,6 +6,7 @@ import { Eip3009EoaPayer, sessionPayerAddress } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
 import { appendX402Log, readX402Log } from '../../x402/ledger.js';
 import { usdcBalance } from '../../x402/balance.js';
+import { resolveX402Policy } from '../../x402/policy.js';
 
 interface PayAndFetchParams {
   url: string;
@@ -30,8 +31,9 @@ export function registerPayTool(server: McpServer): void {
         'session key when one appears (USDC via EIP-3009, no browser). Free resources pass ' +
         'straight through, so this also works as a plain fetch. Every payment is bounded by the ' +
         '`x402` policy in config (see jaw_config_show) and the optional `maxAmount` for this call; ' +
-        'an over-cap, wrong-asset, wrong-network, or disallowed-recipient payment is refused, ' +
-        'never silently paid. Requires a session — run `jaw session setup` first ' +
+        'if no policy is configured, conservative default caps apply (1 USDC per payment, 10 USDC ' +
+        'per session). An over-cap, wrong-asset, wrong-network, or disallowed-recipient payment is ' +
+        'refused, never silently paid. Requires a session — run `jaw session setup` first ' +
         '(check jaw_session_status).',
       inputSchema: payAndFetchSchema,
     },
@@ -46,7 +48,7 @@ export function registerPayTool(server: McpServer): void {
           method: params.method,
           headers: params.headers,
           body: params.body,
-          policy: config.x402 ?? {},
+          policy: resolveX402Policy(config.x402),
           spentThisSession: sessionSpent,
           maxAmount: params.maxAmount,
           asset: params.asset,

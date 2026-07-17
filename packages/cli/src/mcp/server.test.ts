@@ -388,6 +388,43 @@ describe('jaw_pay_and_fetch', () => {
       vi.unstubAllGlobals();
     }
   });
+
+  it('applies the conservative default cap when no x402 policy is configured', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore(PK, '0xSmartAccount');
+    // 2 USDC, over the 1 USDC default per-payment cap, with no config.x402 set.
+    const bigChallenge = Buffer.from(
+      JSON.stringify({
+        x402Version: 2,
+        resource: { url: 'https://api.example.com/pricey' },
+        accepts: [
+          {
+            scheme: 'exact',
+            network: 'eip155:84532',
+            amount: '2000000',
+            asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+            payTo: '0x3C44CdDdB6a900fa2b585dd299e03d12FA4293BC',
+            maxTimeoutSeconds: 60,
+          },
+        ],
+      })
+    ).toString('base64');
+    const fetchMock = vi.fn().mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': bigChallenge }, '{}'));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      const parsed = JSON.parse(
+        toolText(
+          await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/pricey' } })
+        )
+      );
+      expect(parsed.paid).toBe(false);
+      expect(parsed.refusedReason).toMatch(/maxAmountPerPayment/);
+      expect(fetchMock).toHaveBeenCalledTimes(1); // refused before paying
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
 });
 
 describe('jaw_status', () => {
@@ -463,5 +500,15 @@ describe('jaw_config_set', () => {
     const client = await connectClient();
     const result = await client.callTool({ name: 'jaw_config_set', arguments: { key: 'defaultChain', value: 'nope' } });
     expect(result.isError).toBe(true);
+  });
+});
+
+describe('jaw://x402 resource', () => {
+  it('serves a guide to the payment tools', async () => {
+    const client = await connectClient();
+    const res = await client.readResource({ uri: 'jaw://x402' });
+    const text = (res.contents[0] as { text: string }).text;
+    expect(text).toContain('jaw_pay_and_fetch');
+    expect(text).toContain('payerAddress');
   });
 });

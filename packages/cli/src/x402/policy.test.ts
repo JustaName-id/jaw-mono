@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkPolicy } from './policy.js';
+import { checkPolicy, resolveX402Policy, DEFAULT_X402_POLICY } from './policy.js';
 import type { X402PaymentRequirement } from './types.js';
 
 const base: X402PaymentRequirement = {
@@ -63,5 +63,18 @@ describe('checkPolicy', () => {
       reason: expect.stringContaining('invalid maxAmountPerPayment'),
     });
     expect(checkPolicy(base, { maxTotalPerSession: 'oops' }).ok).toBe(false);
+  });
+});
+
+describe('resolveX402Policy', () => {
+  it('applies conservative defaults when nothing is configured', () => {
+    expect(resolveX402Policy()).toEqual(DEFAULT_X402_POLICY);
+    expect(resolveX402Policy().maxAmountPerPayment).toBe('1000000'); // 1 USDC
+  });
+
+  it('lets config override a default per field', () => {
+    const policy = resolveX402Policy({ maxAmountPerPayment: '50' });
+    expect(policy.maxAmountPerPayment).toBe('50');
+    expect(policy.maxTotalPerSession).toBe(DEFAULT_X402_POLICY.maxTotalPerSession);
   });
 });

@@ -22,6 +22,21 @@ export interface X402Policy {
   allowedPayTo?: string[];
 }
 
+/**
+ * Conservative caps applied when the user has not configured `x402` limits, so a
+ * fresh setup is never unbounded. USDC has 6 decimals: 1_000_000 = 1 USDC.
+ * Override per field via `jaw config set x402.*`.
+ */
+export const DEFAULT_X402_POLICY: X402Policy = {
+  maxAmountPerPayment: '1000000', // 1 USDC per payment
+  maxTotalPerSession: '10000000', // 10 USDC per process
+};
+
+/** Merge the configured policy over the safe defaults (config wins per field). */
+export function resolveX402Policy(configPolicy?: X402Policy): X402Policy {
+  return { ...DEFAULT_X402_POLICY, ...(configPolicy ?? {}) };
+}
+
 /** Policy keys settable from the CLI, split by value shape. */
 export const X402_SCALAR_KEYS = ['maxAmountPerPayment', 'maxTotalPerSession'] as const;
 export const X402_ARRAY_KEYS = ['allowedAssets', 'allowedNetworks', 'allowedHosts', 'allowedPayTo'] as const;
