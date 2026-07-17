@@ -20,14 +20,22 @@ export function registerConfigTools(server: McpServer): void {
     }
   );
 
-  server.registerTool(
+  // The SDK's registerTool generic inference is excessively deep for this schema
+  // and trips TS2589 in some TS builds but not others, which makes a
+  // `@ts-expect-error` unreliable (it flips to "unused" where it doesn't fire).
+  // Call it through an explicit signature so the deep instantiation never happens.
+  type RegisterConfigSet = (
+    name: string,
+    config: { description: string; inputSchema: typeof configSetSchema },
+    handler: (params: { key: SettableConfigKey; value: string }) => Promise<unknown>
+  ) => void;
+  (server.registerTool as unknown as RegisterConfigSet)(
     'jaw_config_set',
     {
       description: 'Set a CLI configuration value (apiKey, defaultChain, keysUrl, ens, relayUrl, sessionExpiry).',
       inputSchema: configSetSchema,
     },
-    // @ts-expect-error — MCP SDK deep type inference (TS2589) with the zod schema
-    async (params: { key: SettableConfigKey; value: string }) => {
+    async (params) => {
       try {
         if (params.key === 'defaultChain' || params.key === 'sessionExpiry') {
           const num = parseInt(params.value, 10);
