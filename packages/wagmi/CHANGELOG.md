@@ -1,3 +1,13 @@
+## 1.0.10 (2026-07-17)
+
+### 🩹 Fixes
+
+- **wagmi:** forward chainId and address in wallet_sign params ([#246](https://github.com/JustaName-id/jaw-mono/pull/246))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.0.9 (2026-07-16)
 
 ### 🧱 Updated Dependencies
