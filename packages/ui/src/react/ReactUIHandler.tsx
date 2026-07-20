@@ -998,7 +998,11 @@ function OnboardingDialogWrapper({
       contentStyle={{
         width: 'fit-content',
         maxWidth: '450px',
+        background: 'transparent',
+        border: 'none',
+        boxShadow: 'none',
       }}
+      innerStyle={{ padding: 0, overflow: 'visible' }}
     >
       <OnboardingDialog
         accounts={accounts}

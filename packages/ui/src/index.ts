@@ -1,6 +1,8 @@
 import './styles.css';
 
 export * from './components/DefaultDialog';
+export * from './components/DialogShell';
+export * from './components/AccountIdenticon';
 export * from './components/OrSeparator';
 export * from './components/OnboardingDialog';
 export * from './components/TransactionDialog';

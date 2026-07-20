@@ -3,13 +3,14 @@
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Spinner } from '../ui/spinner';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '../ui/card';
-import { ArrowRightLeft, Fingerprint } from 'lucide-react';
-import { OrSeparator } from '../OrSeparator';
-import { OnboardingDialogProps } from './types';
+import { ArrowRightLeft, ChevronLeft, ChevronRight, Fingerprint, ScanFace } from 'lucide-react';
+import { DialogShell } from '../DialogShell';
+import { AccountIdenticon } from '../AccountIdenticon';
+import { OnboardingDialogProps, LocalStorageAccount } from './types';
 import { selectDefaultAccount } from './selectDefaultAccount';
 import { useState, useEffect, useMemo } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { cn } from '../../lib/utils';
 import { toCoinType } from 'viem';
 
 // Props needed by the create form — the create-related subset of OnboardingDialogProps.
@@ -27,9 +28,22 @@ type CreateAccountFormProps = Pick<
   | 'subnameTextRecords'
 >;
 
+/** Hairline divider with a small mono uppercase label ("NEW TO JAW?", "OR"). */
+function MonoDivider({ label, className }: { label: string; className?: string }) {
+  return (
+    <div className={cn('flex items-center gap-2.5', className)}>
+      <span className="bg-border h-px flex-1" />
+      <span className="text-muted-foreground font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
+        {label}
+      </span>
+      <span className="bg-border h-px flex-1" />
+    </div>
+  );
+}
+
 /**
  * Username input + availability check + Create button + error display.
- * Shared between Layout B (inline) and the Layout A "Create Account" sub-view.
+ * Shared between the fresh sign-in view and the "Create new account" path.
  */
 function CreateAccountForm({
   onCreateAccount,
@@ -181,58 +195,61 @@ function CreateAccountForm({
 
   return (
     <div className="flex flex-col gap-2">
-      <div className="flex flex-row items-center gap-2">
-        <Input
-          placeholder="Username"
-          value={username}
-          onChange={(e) => setUsername(e.target.value)}
-          className="flex-1"
-          // Prevent password-manager extensions (1Password, LastPass, Dashlane,
-          // Bitwarden) from attaching their inline overlay to this field. Their
-          // overlay covers the embedded iframe, which the clickjacking guard
-          // (EnsureVisibility) then reads as occlusion and disables interaction.
-          autoComplete="off"
-          data-1p-ignore
-          data-lpignore="true"
-          data-form-type="other"
-          data-bwignore
-          right={ensDomain ? <span className="text-foreground text-sm font-bold">{`.${ensDomain}`}</span> : undefined}
-        />
-        {isCreating ? (
-          <Spinner className="h-10 w-10" />
-        ) : (
-          <Button
-            onClick={async () => {
-              try {
-                await handleCreateAccountClick();
-              } catch (err) {
-                console.error('❌ Button onClick caught error:', err);
-              }
-            }}
-            disabled={!isValid || isLoading}
-          >
-            Create Account
-          </Button>
-        )}
-      </div>
+      <Input
+        placeholder="username"
+        value={username}
+        onChange={(e) => setUsername(e.target.value)}
+        className="h-11 rounded-[10.5px] bg-white/[.04] font-mono text-[13px]"
+        // Prevent password-manager extensions (1Password, LastPass, Dashlane,
+        // Bitwarden) from attaching their inline overlay to this field. Their
+        // overlay covers the embedded iframe, which the clickjacking guard
+        // (EnsureVisibility) then reads as occlusion and disables interaction.
+        autoComplete="off"
+        data-1p-ignore
+        data-lpignore="true"
+        data-form-type="other"
+        data-bwignore
+        right={
+          ensDomain ? <span className="text-muted-foreground font-mono text-xs">{`.${ensDomain}`}</span> : undefined
+        }
+      />
       {username.length > 0 && message && !error && (
-        <div className="flex items-center justify-between px-1">
-          <span
-            className={`text-xs font-medium ${
-              isLoading ? 'text-muted-foreground' : isValid ? 'text-success' : 'text-destructive'
-            }`}
-          >
-            {message}
-          </span>
+        <span
+          className={`px-1 text-xs font-medium ${
+            isLoading ? 'text-muted-foreground' : isValid ? 'text-success' : 'text-destructive'
+          }`}
+        >
+          {message}
+        </span>
+      )}
+      {isCreating ? (
+        <div className="flex h-11 items-center justify-center">
+          <Spinner className="h-6 w-6" />
         </div>
+      ) : (
+        <Button
+          variant="outline"
+          onClick={async () => {
+            try {
+              await handleCreateAccountClick();
+            } catch (err) {
+              console.error('❌ Button onClick caught error:', err);
+            }
+          }}
+          disabled={!isValid || isLoading}
+          className="text-secondary-foreground h-11 w-full rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
+        >
+          <ScanFace className="!h-4 !w-4" />
+          Create Account
+        </Button>
       )}
       {error && (
-        <div className="bg-destructive/10 border-destructive/20 flex flex-col gap-2 overflow-hidden rounded-md border px-1 py-2">
-          <span className="text-destructive break-all text-xs font-medium">{error}</span>
+        <div className="bg-destructive/10 border-destructive/20 flex flex-col gap-2 overflow-hidden rounded-md border px-2 py-2">
+          <span className="text-destructive-foreground break-all text-xs font-medium">{error}</span>
           <Button
             onClick={() => setError(null)}
             variant="ghost"
-            className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-6 text-xs"
+            className="text-destructive-foreground hover:text-destructive-foreground/80 hover:bg-destructive/10 h-6 text-xs"
           >
             Dismiss
           </Button>
@@ -241,6 +258,8 @@ function CreateAccountForm({
     </div>
   );
 }
+
+type OnboardingView = 'welcome' | 'switch' | 'signin';
 
 export function OnboardingDialog({
   accounts,
@@ -265,6 +284,9 @@ export function OnboardingDialog({
     [accounts, lastAuthenticatedCredentialId]
   );
 
+  const [view, setView] = useState<OnboardingView>(defaultAccount ? 'welcome' : 'signin');
+  const isBusy = loggingInAccount !== null || isImporting || isCreating;
+
   const createForm = (
     <CreateAccountForm
       onCreateAccount={onCreateAccount}
@@ -280,89 +302,153 @@ export function OnboardingDialog({
     />
   );
 
-  // Layout A — a last account exists: one-tap Continue + Switch Account, with the
-  // create form inline below so a returning user can still spin up a new account.
-  if (defaultAccount) {
-    const isBusy = loggingInAccount !== null;
+  const passkeyButton = (
+    <Button
+      onClick={onImportAccount}
+      disabled={isBusy}
+      className="h-11 w-full rounded-[10.5px] text-[13px] font-semibold"
+    >
+      <Fingerprint className="!h-4 !w-4" />
+      {isImporting ? 'Opening Passkey...' : 'Sign in with Passkey'}
+    </Button>
+  );
+
+  // Fresh sign-in / create view — also the "Create new account" destination.
+  if (view === 'signin' || !defaultAccount) {
     return (
-      <Card className="w-full max-w-md shadow-xl">
-        <CardHeader className="flex flex-col gap-1">
-          <CardTitle className="text-xl font-normal">Welcome back</CardTitle>
-          <CardDescription className="text-xs font-medium">
-            Continue with your last used account, switch to another, or create a new one.
-          </CardDescription>
-        </CardHeader>
+      <DialogShell>
+        <div className="flex flex-col p-6 pt-7">
+          <h2 className="text-foreground text-[26px] font-bold leading-none tracking-[-0.03em]">
+            Sign <span className="italic">in.</span>
+          </h2>
+          <p className="text-muted-foreground mt-2 text-[13px]">Use a saved passkey, or create a new account.</p>
 
-        <CardContent className="flex flex-col gap-5">
-          <div className="flex flex-col gap-2">
-            <Button
-              onClick={() => onAccountSelect(defaultAccount)}
-              disabled={isBusy || isImporting}
-              className="flex h-12 w-full flex-row items-center justify-center gap-2"
+          <div className="mt-6">{passkeyButton}</div>
+
+          <MonoDivider label={`New to ${ensDomain ?? 'JAW'}?`} className="my-5" />
+
+          {createForm}
+
+          {defaultAccount && (
+            <button
+              onClick={() => setView('welcome')}
+              disabled={isBusy}
+              className="text-muted-foreground hover:text-foreground mx-auto mt-4 flex cursor-pointer items-center gap-1 bg-transparent text-xs font-medium transition-colors"
             >
-              {loggingInAccount === defaultAccount.username ? (
-                <Spinner className="!h-5 !w-5" />
-              ) : (
-                <>
-                  <Fingerprint className="!h-6 !w-6" />
-                  <span className="flex min-w-0 flex-row items-center gap-1.5">
-                    <span className="opacity-70">Continue as</span>
-                    <span className="max-w-full truncate">{defaultAccount.username || 'your account'}</span>
-                  </span>
-                </>
-              )}
-            </Button>
-            <Button
-              onClick={onImportAccount}
-              variant="outline"
-              className="mx-auto flex h-auto w-auto flex-row items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-medium"
-              disabled={isImporting || isBusy}
-            >
-              <ArrowRightLeft className="!h-3.5 !w-3.5" />
-              <span>{isImporting ? 'Opening Passkey...' : 'Switch account'}</span>
-            </Button>
-          </div>
-
-          <OrSeparator />
-
-          <div className="flex flex-col gap-2">
-            <span className="text-muted-foreground text-xs font-medium">Create a new account</span>
-            {createForm}
-          </div>
-        </CardContent>
-      </Card>
+              <ChevronLeft className="h-3.5 w-3.5" />
+              Back
+            </button>
+          )}
+        </div>
+      </DialogShell>
     );
   }
 
-  // Layout B — no stored account: Sign In (OS passkey picker) + inline create
-  return (
-    <Card className="w-full max-w-md shadow-xl">
-      <CardHeader className="flex flex-col gap-1">
-        <CardTitle className="text-xl font-normal">Sign In</CardTitle>
-        <CardDescription className="text-xs font-medium">
-          Sign in with an existing account, or create a new one.
-        </CardDescription>
-      </CardHeader>
+  // Switch-account view — pick a stored account or use a different passkey.
+  if (view === 'switch') {
+    return (
+      <DialogShell>
+        <div className="flex flex-col p-6 pt-5">
+          <button
+            onClick={() => setView('welcome')}
+            disabled={isBusy}
+            className="text-muted-foreground hover:text-foreground -ml-1 flex cursor-pointer items-center gap-1 self-start bg-transparent py-1 text-[11px] font-medium transition-colors"
+          >
+            <ChevronLeft className="h-3.5 w-3.5" />
+            Back
+          </button>
+          <h2 className="text-foreground mt-2 text-[22px] font-bold leading-none tracking-[-0.03em]">
+            Switch <span className="italic">account.</span>
+          </h2>
 
-      <CardContent className="flex flex-col gap-5">
-        <Button
-          onClick={onImportAccount}
-          variant="outline"
-          className="flex h-10 w-full flex-row items-center gap-2"
-          disabled={isImporting}
+          <div className="mt-4 flex flex-col">
+            {accounts.map((account: LocalStorageAccount) => (
+              <button
+                key={account.credentialId ?? account.username}
+                onClick={() => onAccountSelect(account)}
+                disabled={isBusy}
+                className="border-border hover:bg-accent flex cursor-pointer items-center gap-3 border-b bg-transparent px-1 py-3 text-left transition-colors first:border-t disabled:cursor-default disabled:opacity-60"
+              >
+                <AccountIdenticon seed={account.username} size={36} />
+                <span className="text-foreground min-w-0 flex-1 truncate text-sm font-semibold">
+                  {account.username}
+                </span>
+                {loggingInAccount === account.username ? (
+                  <Spinner className="!h-4 !w-4" />
+                ) : (
+                  <ChevronRight className="text-muted-foreground h-4 w-4 flex-none" />
+                )}
+              </button>
+            ))}
+          </div>
+
+          <MonoDivider label="or" className="my-4" />
+
+          <Button
+            onClick={onImportAccount}
+            disabled={isBusy}
+            variant="outline"
+            className="text-secondary-foreground h-11 w-full rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
+          >
+            <Fingerprint className="!h-4 !w-4" />
+            {isImporting ? 'Opening Passkey...' : 'Use a different passkey'}
+          </Button>
+        </div>
+      </DialogShell>
+    );
+  }
+
+  // Welcome-back view — one-tap continue with the last account.
+  return (
+    <DialogShell>
+      <div className="flex flex-col p-6 pt-7">
+        <h2 className="text-foreground text-[26px] font-bold leading-none tracking-[-0.03em]">
+          Welcome <span className="italic">back.</span>
+        </h2>
+        <p className="text-muted-foreground mt-2 text-[13px]">Pick up where you left off.</p>
+
+        <button
+          onClick={() => onAccountSelect(defaultAccount)}
+          disabled={isBusy}
+          className="bg-primary hover:bg-primary/90 mt-6 flex cursor-pointer items-center gap-3 rounded-[12px] p-3 text-left transition-colors disabled:cursor-default disabled:opacity-70"
         >
-          <Fingerprint className="!h-6 !w-6" />
-          <span>{isImporting ? 'Opening Passkey...' : 'Sign In'}</span>
+          <AccountIdenticon seed={defaultAccount.username} size={40} />
+          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+            <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
+              Continue as
+            </span>
+            <span className="text-primary-foreground truncate text-[15px] font-semibold">
+              {defaultAccount.username || 'your account'}
+            </span>
+          </span>
+          {loggingInAccount === defaultAccount.username ? (
+            <Spinner className="!h-4 !w-4 text-[#0B0F1A]" />
+          ) : (
+            <ChevronRight className="text-primary-foreground/70 h-4 w-4 flex-none" />
+          )}
+        </button>
+
+        <MonoDivider label="or" className="my-5" />
+
+        <Button
+          onClick={() => setView('switch')}
+          disabled={isBusy}
+          variant="outline"
+          className="text-secondary-foreground h-11 w-full rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
+        >
+          <ArrowRightLeft className="!h-3.5 !w-3.5" />
+          Switch account
         </Button>
 
-        <OrSeparator />
-
-        <div className="flex flex-col gap-2">
-          <span className="text-muted-foreground text-xs font-medium">Create a new account</span>
-          {createForm}
-        </div>
-      </CardContent>
-    </Card>
+        <button
+          onClick={() => setView('signin')}
+          disabled={isBusy}
+          className="text-muted-foreground hover:text-foreground mx-auto mt-4 cursor-pointer bg-transparent text-xs font-medium transition-colors"
+        >
+          Create new account
+        </button>
+      </div>
+    </DialogShell>
   );
 }
 

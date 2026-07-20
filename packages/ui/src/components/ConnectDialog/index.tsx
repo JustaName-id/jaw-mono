@@ -1,9 +1,10 @@
 'use client';
 
 import { useState, useEffect } from 'react';
-import { BadgeDollarIcon, EyeIcon, CopyIcon, CopiedIcon } from '../../icons';
-import { useDialogMobileFullScreen } from '../../hooks';
+import { Eye, CircleDollarSign, ShieldCheck, Globe } from 'lucide-react';
 import { DefaultDialog } from '../DefaultDialog';
+import { DialogShell } from '../DialogShell';
+import { AccountIdenticon } from '../AccountIdenticon';
 import { Button } from '../ui/button';
 import { ConnectDialogProps } from './types';
 import { reverseResolveAddresses } from '../../utils/reverseResolve';
@@ -11,13 +12,18 @@ import { getChainLabel } from '../../utils/resolveChainLabel';
 import { sanitizeDisplayName } from '../../utils/sanitize';
 import { isSafeImageUrl } from '../../utils/safeUrl';
 
+const CAPABILITY_ROWS = [
+  { Icon: Eye, label: 'Can see your address' },
+  { Icon: CircleDollarSign, label: 'Can propose transactions' },
+  { Icon: ShieldCheck, label: "Can't move funds without approval" },
+] as const;
+
 export const ConnectDialog = ({
   open,
   onOpenChange,
   appName,
   appLogoUrl,
   origin,
-  timestamp,
   accountName,
   walletAddress,
   chainName,
@@ -29,9 +35,7 @@ export const ConnectDialog = ({
   showPermissions = true,
   isProcessing,
 }: ConnectDialogProps) => {
-  const mobileFullScreen = useDialogMobileFullScreen();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
-  const [isAddressCopied, setIsAddressCopied] = useState(false);
 
   // Resolve wallet address to human-readable name
   useEffect(() => {
@@ -50,9 +54,6 @@ export const ConnectDialog = ({
     }
   }, [walletAddress, chainId]);
 
-  // Use resolved address, then accountName prop, then truncated address.
-  const displayName = resolvedAddress || accountName;
-
   // appName is externally-controlled (dApp metadata); sanitize before display.
   const safeAppName = sanitizeDisplayName(appName) || 'dApp';
 
@@ -66,186 +67,126 @@ export const ConnectDialog = ({
     }
   };
 
-  const copyToClipboard = (text: string) => {
-    if (typeof window !== 'undefined' && navigator?.clipboard) {
-      navigator.clipboard.writeText(text).catch(() => undefined);
-      setIsAddressCopied(true);
-      setTimeout(() => setIsAddressCopied(false), 3000);
-    }
-  };
-
   // Format wallet address for display
   const formatAddress = (address: string) => {
     if (!address || address.length < 10) return address;
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
+  // Use resolved address, then accountName prop, then truncated address.
+  const displayName = resolvedAddress || accountName || formatAddress(walletAddress);
+
+  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
+    <img src={appLogoUrl} alt={`${safeAppName} logo`} className="h-full w-full rounded-full object-cover" />
+  ) : (
+    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
+  );
+
   return (
     <DefaultDialog
       open={open}
       onOpenChange={!isProcessing ? onOpenChange : undefined}
-      header={
-        <div className="flex flex-col gap-2.5 p-3.5">
-          <p className="text-muted-foreground text-xs font-bold leading-[100%]">
-            {timestamp.toLocaleDateString('en-US', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-            })}{' '}
-            at{' '}
-            {timestamp.toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              timeZoneName: 'short',
-            })}
-          </p>
-          <div className="flex flex-col gap-1">
-            <div className="flex flex-row items-center gap-1">
-              <p className="text-muted-foreground text-sm leading-none">
-                Sign in as {displayName || formatAddress(walletAddress)}
-              </p>
-              {!displayName &&
-                (isAddressCopied ? (
-                  <CopiedIcon width={10} height={10} className="flex-shrink-0" />
-                ) : (
-                  <CopyIcon
-                    width={10}
-                    height={10}
-                    onClick={() => copyToClipboard(walletAddress)}
-                    className="flex-shrink-0 cursor-pointer"
+      contentStyle={{
+        width: 'fit-content',
+        background: 'transparent',
+        border: 'none',
+        boxShadow: 'none',
+      }}
+      innerStyle={{ padding: 0, overflow: 'visible' }}
+    >
+      <DialogShell>
+        {isProcessing ? (
+          // Connecting state — secure session being established.
+          <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
+            <div className="flex items-center gap-3">
+              <AccountIdenticon seed={displayName} size={44} />
+              <span className="flex items-center gap-1.5">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="jaw-flow-dot bg-foreground/70 h-1.5 w-1.5 rounded-full"
+                    style={{ animationDelay: `${i * 0.2}s` }}
                   />
                 ))}
-            </div>
-            {displayName && (
-              <div className="flex flex-row items-center gap-1">
-                <p className="text-muted-foreground text-sm leading-none">{formatAddress(walletAddress)}</p>
-                {isAddressCopied ? (
-                  <CopiedIcon width={10} height={10} className="flex-shrink-0" />
-                ) : (
-                  <CopyIcon
-                    width={10}
-                    height={10}
-                    onClick={() => copyToClipboard(walletAddress)}
-                    className="flex-shrink-0 cursor-pointer"
-                  />
-                )}
-              </div>
-            )}
-          </div>
-        </div>
-      }
-      contentStyle={
-        mobileFullScreen
-          ? {
-              width: '100%',
-              height: '100%',
-              maxWidth: 'none',
-              maxHeight: 'none',
-            }
-          : {
-              width: '450px',
-              minWidth: '450px',
-            }
-      }
-    >
-      <div className="flex h-full min-h-0 flex-col gap-3 overflow-y-auto">
-        {/* App Logo and Title */}
-        <div className="flex flex-1 flex-col items-center justify-center p-3.5">
-          {isSafeImageUrl(appLogoUrl) && (
-            <img src={appLogoUrl} alt={`${safeAppName} logo`} className="mb-3 h-[72px] w-[72px] rounded-full" />
-          )}
-          <div className="text-foreground flex flex-col items-center gap-1">
-            <p className="text-2xl font-normal leading-[133%]">Connect to {safeAppName}</p>
-            <p className="text-muted-foreground text-base leading-[150%]">This app wants to connect to your wallet</p>
-          </div>
-        </div>
-
-        {/* Account Details Card */}
-        {/* <div className="flex-1 p-3.5 bg-secondary border border-border rounded-[6px]">
-          <div className="flex flex-col gap-2">
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-foreground">Account</span>
-              <span className="text-sm font-medium text-foreground">
-                {accountName || 'Wallet'}
+              </span>
+              <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
+                {appAvatar}
               </span>
             </div>
-            <div className="flex justify-between items-center">
-              <span className="text-xs font-bold text-foreground">Address</span>
-              <span className="text-sm font-mono font-medium text-foreground">
-                {formatAddress(walletAddress)}
-              </span>
+            <div className="flex flex-col gap-1">
+              <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Connecting...</h2>
+              <p className="text-muted-foreground text-xs">Establishing a secure session with {safeAppName}</p>
             </div>
-            {supportedChains && supportedChains.length > 0 && (
-              <div className="flex justify-between items-center">
-                <span className="text-xs font-bold text-foreground">Chains</span>
-                <span className="text-sm font-medium text-foreground">
-                  {supportedChains.length} {supportedChains.length === 1 ? 'chain' : 'chains'}
+          </div>
+        ) : (
+          <div className="flex flex-1 flex-col p-6 pt-7">
+            {/* App identity */}
+            <div className="flex items-center gap-3">
+              <span className="relative flex-none">
+                <span className="bg-secondary flex h-12 w-12 items-center justify-center overflow-hidden rounded-full shadow-[inset_0_0_0_1px_rgba(255,255,255,.10)]">
+                  {appAvatar}
                 </span>
+                {chainIcon && (
+                  <span
+                    title={chainName}
+                    className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center overflow-hidden rounded-full shadow-[0_0_0_2.5px_#0A1020] [&>*]:h-full [&>*]:w-full"
+                  >
+                    {chainIcon}
+                  </span>
+                )}
+              </span>
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-foreground truncate text-[17px] font-semibold tracking-[-0.02em]">
+                  {safeAppName}
+                </span>
+                <span className="text-muted-foreground truncate font-mono text-[10px]">{formatOrigin(origin)}</span>
+              </span>
+            </div>
+
+            {/* Connecting account */}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Connecting to</h2>
+              <span className="bg-secondary border-border flex min-w-0 items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5">
+                <AccountIdenticon seed={displayName} size={15} />
+                <span className="text-secondary-foreground truncate font-mono text-[10.5px]">{displayName}</span>
+              </span>
+            </div>
+
+            {/* Capability rows */}
+            {showPermissions && (
+              <div className="border-border mt-4 flex flex-col overflow-hidden rounded-[10.5px] border">
+                {CAPABILITY_ROWS.map(({ Icon, label }) => (
+                  <div key={label} className="border-border flex items-center gap-2.5 border-b p-3 last:border-b-0">
+                    <span className="bg-secondary border-border flex h-6 w-6 flex-none items-center justify-center rounded-[7px] border">
+                      <Icon className="text-secondary-foreground h-3.5 w-3.5" strokeWidth={1.5} />
+                    </span>
+                    <p className="text-foreground text-[13px]">{label}</p>
+                  </div>
+                ))}
               </div>
             )}
-          </div>
-        </div> */}
 
-        {/* Permissions Section */}
-        {showPermissions && (
-          <div className="flex flex-col gap-2">
-            <div className="border-border flex flex-row items-center gap-2.5 rounded-[6px] border p-3.5">
-              <EyeIcon className="h-4 w-4 flex-shrink-0" />
-              <p className="text-foreground text-xs font-normal leading-[150%]">Allow the app to see your addresses</p>
-            </div>
-            <div className="border-border flex flex-row items-center gap-2.5 rounded-[6px] border p-3.5">
-              <BadgeDollarIcon className="h-4 w-4 flex-shrink-0" />
-              <p className="text-foreground text-xs font-normal leading-[150%]">
-                Allow the app to propose transactions
-              </p>
-            </div>
-            <div className="border-border flex flex-row items-center gap-2.5 rounded-[6px] border p-3.5">
-              <BadgeDollarIcon className="h-4 w-4 flex-shrink-0" />
-              <p className="text-foreground text-xs font-normal leading-[150%]">
-                The app cannot move funds without your permission
-              </p>
+            {/* Actions */}
+            <div className="mt-auto flex gap-2 pt-5">
+              <Button
+                variant="outline"
+                onClick={onCancel}
+                disabled={isProcessing}
+                className="text-secondary-foreground h-11 flex-1 rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={onConnect}
+                disabled={isProcessing}
+                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold"
+              >
+                Connect
+              </Button>
             </div>
           </div>
         )}
-
-        {/* Network and URL Information */}
-        <div className="border-border flex flex-row gap-4 rounded-[6px] border p-2">
-          {/* Network Column */}
-          {chainName && (
-            <>
-              <div className="flex flex-1 flex-col gap-1">
-                <p className="text-foreground text-xs font-bold">Network</p>
-                <div className="flex flex-row items-center gap-2">
-                  {chainIcon && (
-                    <div className="flex h-6 w-6 min-w-4 flex-shrink-0 items-center justify-center">{chainIcon}</div>
-                  )}
-                  <p className="text-foreground text-sm font-normal">{chainName}</p>
-                </div>
-              </div>
-              {/* Vertical Separator */}
-              <div className="bg-border min-h-[40px] w-[1px]"></div>
-            </>
-          )}
-          {/* URL Column */}
-          <div className="flex flex-1 flex-col gap-1">
-            <p className="text-foreground text-xs font-bold">URL</p>
-            <p className="text-foreground text-sm font-normal">{formatOrigin(origin)}</p>
-          </div>
-        </div>
-
-        {/* Action Buttons Section */}
-        <div className="mt-3 flex flex-shrink-0">
-          <div className="flex w-full justify-between gap-2">
-            <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
-              Cancel
-            </Button>
-            <Button onClick={onConnect} disabled={isProcessing} className="flex-1">
-              {isProcessing ? 'Connecting...' : 'Connect'}
-            </Button>
-          </div>
-        </div>
-      </div>
+      </DialogShell>
     </DefaultDialog>
   );
 };

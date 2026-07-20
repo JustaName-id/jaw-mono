@@ -316,3 +316,59 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+/* DialogShell halo — rotating conic ring lighting the card edge */
+@keyframes jaw-ring-rotate {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes jaw-ring-pulse {
+  0%,
+  100% {
+    opacity: 0.35;
+  }
+  50% {
+    opacity: 1;
+  }
+}
+
+@keyframes jaw-flow-dot {
+  0%,
+  100% {
+    opacity: 0.2;
+    transform: scale(0.65);
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.jaw-halo-ring {
+  background: conic-gradient(
+    from 135deg,
+    rgba(240, 242, 246, 0.9) 0deg,
+    rgba(240, 242, 246, 0.12) 100deg,
+    rgba(240, 242, 246, 0.45) 195deg,
+    rgba(240, 242, 246, 0.14) 275deg,
+    rgba(240, 242, 246, 0.9) 360deg
+  );
+  filter: blur(2px);
+  opacity: 0.12;
+  animation:
+    jaw-ring-pulse 9s ease-in-out infinite,
+    jaw-ring-rotate 14s linear infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jaw-halo-ring,
+  .jaw-flow-dot {
+    animation: none;
+  }
+}
+
+.jaw-flow-dot {
+  animation: jaw-flow-dot 1.6s ease-in-out infinite;
+}

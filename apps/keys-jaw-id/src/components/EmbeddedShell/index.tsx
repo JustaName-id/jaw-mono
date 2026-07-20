@@ -116,7 +116,14 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
             which must not stretch the card to the full viewport */}
         <div
           role={active ? 'document' : undefined}
-          className={active ? `bg-background overflow-y-auto shadow-xl [&_.min-h-screen]:min-h-0 ${card}` : 'contents'}
+          className={
+            active
+              ? // Screens that bring their own DialogShell card (the revamped design)
+                // get no extra chrome — the shell IS the card. Legacy screens keep
+                // the classic card look until they migrate.
+                `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:bg-transparent has-[[data-jaw-shell]]:shadow-none [&_.min-h-screen]:min-h-0 ${card}`
+              : 'contents'
+          }
         >
           <EnsureVisibility communicator={communicator} active={active}>
             {children}
