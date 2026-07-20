@@ -1,13 +1,11 @@
+import { useMemo } from 'react';
+import { minidenticon } from 'minidenticons';
+
 import { cn } from '../../lib/utils';
 
-// Curated hues — no green, so green stays reserved for success states
-// (rose, orange, amber, cyan, sky, indigo, violet, purple, magenta).
-const HUES = [350, 25, 42, 195, 212, 245, 275, 300, 330];
-
-// minidenticons hash (laurentpayot/minidenticons)
-function hashSeed(seed: string): number {
-  return seed.split('').reduce((hash, ch) => (hash ^ ch.charCodeAt(0)) * -5, 5) >>> 2;
-}
+// Canvas Blob parameters, passed through minidenticons' own API.
+const SATURATION = 88;
+const LIGHTNESS = 52;
 
 export interface AccountIdenticonProps {
   /** Account identity the pattern is derived from (username / ENS name / address). */
@@ -18,20 +16,14 @@ export interface AccountIdenticonProps {
 }
 
 /**
- * Deterministic account avatar: a 5x5 minidenticon on a light tile, hue picked
- * from a curated no-green palette so every account is visually distinct.
+ * Deterministic account avatar: a minidenticon (laurentpayot/minidenticons)
+ * on a light tile. Pattern and color both come from the library.
  */
 export function AccountIdenticon({ seed, size = 40, className }: AccountIdenticonProps) {
-  const hash = hashSeed(seed);
-  const hue = HUES[hash % HUES.length];
-
-  const rects = [];
-  for (let i = 0; i < 25; i++) {
-    if (hash & (1 << i % 15)) {
-      const x = i > 14 ? 7 - Math.floor(i / 5) : Math.floor(i / 5);
-      rects.push(<rect key={i} x={x} y={i % 5} width={1} height={1} />);
-    }
-  }
+  const svgUri = useMemo(
+    () => 'data:image/svg+xml;utf8,' + encodeURIComponent(minidenticon(seed, SATURATION, LIGHTNESS)),
+    [seed]
+  );
 
   return (
     <span
@@ -46,14 +38,7 @@ export function AccountIdenticon({ seed, size = 40, className }: AccountIdentico
         boxShadow: 'inset 0 0 0 1px rgba(15,23,42,.08)',
       }}
     >
-      <svg
-        viewBox="-1.5 -1.5 8 8"
-        xmlns="http://www.w3.org/2000/svg"
-        fill={`hsl(${hue} 88% 52%)`}
-        style={{ width: '100%', height: '100%', display: 'block' }}
-      >
-        {rects}
-      </svg>
+      <img src={svgUri} alt="" style={{ width: '100%', height: '100%', display: 'block' }} />
     </span>
   );
 }
