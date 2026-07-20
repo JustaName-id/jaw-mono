@@ -24,7 +24,6 @@ export const ConnectDialog = ({
   appName,
   appLogoUrl,
   origin,
-  accountName,
   walletAddress,
   chainName,
   chainId,
@@ -73,8 +72,9 @@ export const ConnectDialog = ({
     return `${address.slice(0, 6)}...${address.slice(-4)}`;
   };
 
-  // Use resolved address, then accountName prop, then truncated address.
-  const displayName = resolvedAddress || accountName || formatAddress(walletAddress);
+  // Reverse-resolved ENS name when available, otherwise the truncated address —
+  // never the raw local username (not a portable identity).
+  const displayName = resolvedAddress || formatAddress(walletAddress);
 
   const appAvatar = isSafeImageUrl(appLogoUrl) ? (
     <img src={appLogoUrl} alt={`${safeAppName} logo`} className="h-full w-full rounded-full object-cover" />
@@ -99,7 +99,7 @@ export const ConnectDialog = ({
           // Connecting state — secure session being established.
           <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
             <div className="flex items-center gap-3">
-              <AccountIdenticon seed={displayName} size={44} />
+              <AccountIdenticon seed={walletAddress.toLowerCase()} size={44} />
               <span className="flex items-center gap-1.5">
                 {[0, 1, 2].map((i) => (
                   <span
@@ -129,7 +129,9 @@ export const ConnectDialog = ({
                 {chainIcon && (
                   <span
                     title={chainName}
-                    className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center overflow-hidden rounded-full shadow-[0_0_0_2.5px_#0A1020] [&>*]:h-full [&>*]:w-full"
+                    // The chain icon arrives pre-sized (inline 24px from useChainIconURI),
+                    // so it must be forced down to the badge size or it renders cropped.
+                    className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center overflow-hidden rounded-full shadow-[0_0_0_2.5px_#0A1020] [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0"
                   >
                     {chainIcon}
                   </span>
@@ -147,7 +149,7 @@ export const ConnectDialog = ({
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Connecting to</h2>
               <span className="bg-secondary border-border flex min-w-0 items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5">
-                <AccountIdenticon seed={displayName} size={15} />
+                <AccountIdenticon seed={walletAddress.toLowerCase()} size={15} />
                 <span className="text-secondary-foreground truncate font-mono text-[10.5px]">{displayName}</span>
               </span>
             </div>
