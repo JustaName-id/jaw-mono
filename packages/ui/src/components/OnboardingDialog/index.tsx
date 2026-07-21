@@ -286,7 +286,6 @@ export function OnboardingDialog({
   onImportAccount,
   isImporting,
   onCreateNewAccount,
-  startInCreate,
   onCreateAccount,
   onAccountCreationComplete,
   onAccountCreationError,
@@ -304,7 +303,7 @@ export function OnboardingDialog({
     [accounts, lastAuthenticatedCredentialId]
   );
 
-  const [view, setView] = useState<OnboardingView>(defaultAccount && !startInCreate ? 'welcome' : 'signin');
+  const [view, setView] = useState<OnboardingView>(defaultAccount ? 'welcome' : 'signin');
   const isBusy = loggingInAccount !== null || isImporting || isCreating;
 
   // Addresses for the switch-account chips and avatar resolution. New records

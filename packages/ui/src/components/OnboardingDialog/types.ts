@@ -39,13 +39,6 @@ export interface OnboardingDialogProps {
    */
   onCreateNewAccount?: () => void;
 
-  /**
-   * Open on the sign-in/create view even when a default account exists.
-   * Set by the keys popup when it was opened via the Safari create escape
-   * (the SDK's config carries intent: 'create').
-   */
-  startInCreate?: boolean;
-
   // Create new account section
   onCreateAccount: (username: string) => Promise<CreatedAccountData>;
   onAccountCreationComplete: (account: CreatedAccountData) => Promise<void>;

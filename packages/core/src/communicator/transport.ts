@@ -30,14 +30,6 @@ export type TransportOptions = {
      */
     getLastAccount?: () => AccountHintData | undefined;
     /**
-     * One-shot intent for the NEXT popup handshake, consumed at config-send
-     * time. Set when a SwitchTransport arrives with reason
-     * 'webauthn-unsupported': the iframe escaped specifically so the user can
-     * CREATE a passkey, so the popup opens on its create view instead of
-     * "Continue as".
-     */
-    consumePopupIntent?: () => 'create' | undefined;
-    /**
      * Returns the dApp's API key (from the SDK store), sent on the transport
      * config message so the keys app can bootstrap its account screen before the
      * handshake arrives. A getter — read at send time, not captured — and always
