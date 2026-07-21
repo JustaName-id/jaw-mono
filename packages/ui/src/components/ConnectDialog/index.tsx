@@ -12,6 +12,7 @@ import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
 import { sanitizeDisplayName } from '../../utils/sanitize';
 import { isSafeImageUrl } from '../../utils/safeUrl';
+import { cn } from '../../lib/utils';
 
 const CAPABILITY_ROWS = [
   { Icon: Eye, label: 'Can see your address' },
@@ -161,7 +162,16 @@ export const ConnectDialog = ({
                   className="h-[15px] w-[15px] rounded-full"
                   fallback={<AccountIdenticon seed={walletAddress.toLowerCase()} size={15} />}
                 />
-                <span className="text-secondary-foreground truncate font-mono text-[10.5px]">{displayName}</span>
+                {/* Long ENS names step down in size to render in full — an
+                    ellipsized name misrepresents the identity. */}
+                <span
+                  className={cn(
+                    'text-secondary-foreground truncate font-mono',
+                    displayName.length > 40 ? 'text-[9px]' : 'text-[10.5px]'
+                  )}
+                >
+                  {displayName}
+                </span>
               </span>
             </div>
 

@@ -33,6 +33,20 @@ type CreateAccountFormProps = Pick<
   | 'subnameTextRecords'
 >;
 
+/**
+ * Font-size class for an account name, stepped down by length so long ENS
+ * names render in FULL — an ellipsized name misrepresents the identity.
+ * `base` is the size used for comfortably short names; truncation remains only
+ * as a backstop for pathological lengths (60+ chars).
+ */
+function nameFitClass(name: string, base: string): string {
+  if (name.length > 36) return 'text-[9px]';
+  if (name.length > 32) return 'text-[10px]';
+  if (name.length > 26) return 'text-[11px]';
+  if (name.length > 20) return 'text-[13px]';
+  return base;
+}
+
 /** Hairline divider with a small mono uppercase label ("NEW TO JAW?", "OR"). */
 function MonoDivider({ label, className }: { label: string; className?: string }) {
   return (
@@ -314,7 +328,7 @@ export function OnboardingDialog({
   const addressOf = (account: LocalStorageAccount) =>
     account.address ?? (account.credentialId ? addressByCredentialId[account.credentialId] : undefined);
 
-  const [avatarByAddress, setAvatarByAddress] = useState<Record<string, string>>({});
+  const [identityByAddress, setIdentityByAddress] = useState<Record<string, { name: string; avatar?: string }>>({});
   const attemptedAvatarsRef = useRef<Set<string>>(new Set());
   const knownAddresses = accounts
     .map((account) => addressOf(account)?.toLowerCase())
@@ -327,18 +341,18 @@ export function OnboardingDialog({
 
     let cancelled = false;
     reverseResolveWithAvatars(
-      unique.map((address) => ({ address, chainId: chainId || 1 })),
+      unique.map((address) => ({ address, chainId: 1 })),
       mainnetRpcUrl
     )
       .then((resolved) => {
         if (cancelled) return;
-        const nextAvatars: Record<string, string> = {};
+        const next: Record<string, { name: string; avatar?: string }> = {};
         for (const address of unique) {
           const identity = resolved[address];
-          if (identity?.avatar) nextAvatars[address] = identity.avatar;
+          if (identity?.name) next[address] = { name: identity.name, avatar: identity.avatar };
         }
-        if (Object.keys(nextAvatars).length > 0) {
-          setAvatarByAddress((prev) => ({ ...prev, ...nextAvatars }));
+        if (Object.keys(next).length > 0) {
+          setIdentityByAddress((prev) => ({ ...prev, ...next }));
         }
       })
       .catch(() => {
@@ -346,12 +360,15 @@ export function OnboardingDialog({
       });
     return () => {
       cancelled = true;
+      unique.forEach((address) => attemptedAvatarsRef.current.delete(address));
     };
   }, [knownAddressKey, chainId, mainnetRpcUrl]);
-  const avatarFor = (account: LocalStorageAccount) => {
+  const identityOf = (account: LocalStorageAccount) => {
     const address = addressOf(account);
-    return address ? avatarByAddress[address.toLowerCase()] : undefined;
+    return address ? identityByAddress[address.toLowerCase()] : undefined;
   };
+  const avatarFor = (account: LocalStorageAccount) => identityOf(account)?.avatar;
+  const displayNameOf = (account: LocalStorageAccount) => identityOf(account)?.name ?? account.username;
 
   const [copiedCredentialId, setCopiedCredentialId] = useState<string | null>(null);
   const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -454,7 +471,14 @@ export function OnboardingDialog({
                     fallback={<AccountIdenticon seed={account.username} size={36} />}
                   />
                   <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
-                    <span className="text-foreground w-full truncate text-sm font-semibold">{account.username}</span>
+                    <span
+                      className={cn(
+                        'text-foreground w-full truncate font-semibold',
+                        nameFitClass(displayNameOf(account), 'text-sm')
+                      )}
+                    >
+                      {displayNameOf(account)}
+                    </span>
                     {address && (
                       // Plain span, not a nested interactive element (invalid inside
                       // a <button>): mouse-only copy affordance, row stays the sole
@@ -525,8 +549,13 @@ export function OnboardingDialog({
             <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
               Continue as
             </span>
-            <span className="text-primary-foreground truncate text-[15px] font-semibold">
-              {defaultAccount.username || 'your account'}
+            <span
+              className={cn(
+                'text-primary-foreground truncate font-semibold',
+                nameFitClass(displayNameOf(defaultAccount), 'text-[15px]')
+              )}
+            >
+              {displayNameOf(defaultAccount) || 'your account'}
             </span>
           </span>
           {loggingInAccount === defaultAccount.username ? (
