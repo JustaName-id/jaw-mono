@@ -12,7 +12,7 @@ import { selectDefaultAccount } from './selectDefaultAccount';
 import { backfillLocalAccountAddresses } from './accountHelpers';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
-import { ensMetadataAvatarUrl } from '../../utils/reverseResolve';
+import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
 import { formatAddress } from '../../utils';
 import { CopyIcon, CopiedIcon } from '../../icons';
 import { cn } from '../../lib/utils';
@@ -292,22 +292,9 @@ export function OnboardingDialog({
   const [view, setView] = useState<OnboardingView>(defaultAccount ? 'welcome' : 'signin');
   const isBusy = loggingInAccount !== null || isImporting || isCreating;
 
-  // ENS avatar straight from the DISPLAYED name (the stored username, plus the
-  // configured domain for bare labels). No resolution round-trip: the metadata
-  // proxy resolves the record server-side and IdentityAvatar falls back to the
-  // blob when the name has no avatar (404) or isn't registered.
-  const avatarFor = (account: LocalStorageAccount) => {
-    const name = account.username.includes('.')
-      ? account.username
-      : ensDomain
-        ? `${account.username}.${ensDomain}`
-        : null;
-    return name ? ensMetadataAvatarUrl(name) : undefined;
-  };
-
-  // Addresses for the switch-account chips. New records carry them; legacy
-  // records get a one-time ceremony-free factory derivation, persisted back so
-  // subsequent opens are pure localStorage reads.
+  // Addresses for the switch-account chips and avatar resolution. New records
+  // carry them; legacy records get a one-time ceremony-free factory derivation,
+  // persisted back so subsequent opens are pure localStorage reads.
   const [addressByCredentialId, setAddressByCredentialId] = useState<Record<string, string>>({});
   const hasAddressGaps = accounts.some((a) => !a.address && a.credentialId);
   useEffect(() => {
@@ -326,6 +313,45 @@ export function OnboardingDialog({
   }, [hasAddressGaps, chainId, apiKey]);
   const addressOf = (account: LocalStorageAccount) =>
     account.address ?? (account.credentialId ? addressByCredentialId[account.credentialId] : undefined);
+
+  const [avatarByAddress, setAvatarByAddress] = useState<Record<string, string>>({});
+  const attemptedAvatarsRef = useRef<Set<string>>(new Set());
+  const knownAddresses = accounts
+    .map((account) => addressOf(account)?.toLowerCase())
+    .filter((address): address is string => !!address);
+  const knownAddressKey = [...new Set(knownAddresses)].sort().join(',');
+  useEffect(() => {
+    const unique = knownAddressKey.split(',').filter((a) => a && !attemptedAvatarsRef.current.has(a));
+    if (unique.length === 0) return;
+    unique.forEach((address) => attemptedAvatarsRef.current.add(address));
+
+    let cancelled = false;
+    reverseResolveWithAvatars(
+      unique.map((address) => ({ address, chainId: chainId || 1 })),
+      mainnetRpcUrl
+    )
+      .then((resolved) => {
+        if (cancelled) return;
+        const nextAvatars: Record<string, string> = {};
+        for (const address of unique) {
+          const identity = resolved[address];
+          if (identity?.avatar) nextAvatars[address] = identity.avatar;
+        }
+        if (Object.keys(nextAvatars).length > 0) {
+          setAvatarByAddress((prev) => ({ ...prev, ...nextAvatars }));
+        }
+      })
+      .catch(() => {
+        // Blobs remain
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [knownAddressKey, chainId, mainnetRpcUrl]);
+  const avatarFor = (account: LocalStorageAccount) => {
+    const address = addressOf(account);
+    return address ? avatarByAddress[address.toLowerCase()] : undefined;
+  };
 
   const [copiedCredentialId, setCopiedCredentialId] = useState<string | null>(null);
   const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
