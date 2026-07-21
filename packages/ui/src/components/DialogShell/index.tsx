@@ -49,13 +49,13 @@ export function DialogShell({ children, halo = true, className, contentClassName
   return (
     <div
       data-jaw-shell
-      className={cn('relative mx-auto w-fit overflow-hidden rounded-[18px] p-[1.5px]', className)}
+      className={cn('relative mx-auto w-fit overflow-hidden rounded-[18px] p-[1.5px]', 'lg:[zoom:1.15]', className)}
       style={{ background: 'rgba(240,242,246,.16)', ...SHELL_TOKENS }}
     >
       {halo && <div aria-hidden className="jaw-halo-ring absolute inset-[-60%] z-0" />}
       <div
         className={cn(
-          'relative z-[1] flex max-h-[477px] min-h-[234px] w-[345px] max-w-full flex-col overflow-y-auto overflow-x-hidden rounded-[16.5px]',
+          'relative z-[1] flex max-h-[min(477px,90dvh)] min-h-[234px] w-[345px] max-w-full flex-col overflow-y-auto overflow-x-hidden rounded-[16.5px]',
           contentClassName
         )}
         style={{
