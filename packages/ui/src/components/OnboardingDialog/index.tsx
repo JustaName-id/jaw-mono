@@ -2,6 +2,7 @@
 
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
+import { Skeleton } from '../ui/skeleton';
 import { Spinner } from '../ui/spinner';
 import { ArrowRightLeft, ChevronLeft, ChevronRight, Fingerprint, ScanFace } from 'lucide-react';
 import { DialogShell } from '../DialogShell';
@@ -308,16 +309,21 @@ export function OnboardingDialog({
   // carry them; legacy records get a one-time ceremony-free factory derivation,
   // persisted back so subsequent opens are pure localStorage reads.
   const [addressByCredentialId, setAddressByCredentialId] = useState<Record<string, string>>({});
+  const [backfillInFlight, setBackfillInFlight] = useState(false);
   const hasAddressGaps = accounts.some((a) => !a.address && a.credentialId);
   useEffect(() => {
     if (!hasAddressGaps || !apiKey) return;
     let cancelled = false;
+    setBackfillInFlight(true);
     backfillLocalAccountAddresses({ chainId, apiKey })
       .then((byCredentialId) => {
         if (!cancelled) setAddressByCredentialId(byCredentialId);
       })
       .catch(() => {
         // Rows simply render without an address chip
+      })
+      .finally(() => {
+        if (!cancelled) setBackfillInFlight(false);
       });
     return () => {
       cancelled = true;
@@ -327,6 +333,7 @@ export function OnboardingDialog({
     account.address ?? (account.credentialId ? addressByCredentialId[account.credentialId] : undefined);
 
   const [identityByAddress, setIdentityByAddress] = useState<Record<string, { name: string; avatar?: string }>>({});
+  const [settledAddresses, setSettledAddresses] = useState<ReadonlySet<string>>(new Set());
   const attemptedAvatarsRef = useRef<Set<string>>(new Set());
   const knownAddresses = accounts
     .map((account) => addressOf(account)?.toLowerCase())
@@ -352,9 +359,11 @@ export function OnboardingDialog({
         if (Object.keys(next).length > 0) {
           setIdentityByAddress((prev) => ({ ...prev, ...next }));
         }
+        setSettledAddresses((prev) => new Set([...prev, ...unique]));
       })
       .catch(() => {
-        // Blobs remain
+        // Blobs remain — but the addresses are settled, stop the skeleton
+        setSettledAddresses((prev) => new Set([...prev, ...unique]));
       });
     return () => {
       cancelled = true;
@@ -367,6 +376,17 @@ export function OnboardingDialog({
   };
   const avatarFor = (account: LocalStorageAccount) => identityOf(account)?.avatar;
   const displayNameOf = (account: LocalStorageAccount) => identityOf(account)?.name ?? account.username;
+  /**
+   * True while this account's final identity is still unknown: either its
+   * address is being backfilled, or the address's reverse resolution hasn't
+   * settled. Drives the skeleton so the tile reveals once, without the
+   * blob→avatar / username→name flip.
+   */
+  const identityPending = (account: LocalStorageAccount) => {
+    const address = addressOf(account);
+    if (address) return !settledAddresses.has(address.toLowerCase());
+    return backfillInFlight && !!account.credentialId;
+  };
 
   const createForm = (
     <CreateAccountForm
@@ -439,24 +459,41 @@ export function OnboardingDialog({
           disabled={isBusy}
           className="bg-primary hover:bg-primary/90 mt-6 flex cursor-pointer items-center gap-3 rounded-[12px] p-3 text-left transition-colors disabled:cursor-default disabled:opacity-70"
         >
-          <IdentityAvatar
-            src={avatarFor(defaultAccount)}
-            className="h-10 w-10 rounded-[12px]"
-            fallback={<AccountIdenticon seed={defaultAccount.username} size={40} />}
-          />
-          <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-            <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-              Continue as
-            </span>
-            <span
-              className={cn(
-                'text-primary-foreground truncate font-semibold',
-                nameFitClass(displayNameOf(defaultAccount), 'text-[15px]')
-              )}
-            >
-              {displayNameOf(defaultAccount) || 'your account'}
-            </span>
-          </span>
+          {identityPending(defaultAccount) ? (
+            // Skeleton until the identity settles — one reveal, no
+            // blob→avatar / username→name flip.
+            <>
+              {/* bg override: the default bg-accent token is near-invisible on this white tile */}
+              <Skeleton className="bg-primary-foreground/10 h-10 w-10 flex-none rounded-[12px]" />
+              <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+                <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
+                  Continue as
+                </span>
+                <Skeleton className="bg-primary-foreground/10 h-3.5 w-36 rounded" />
+              </span>
+            </>
+          ) : (
+            <>
+              <IdentityAvatar
+                src={avatarFor(defaultAccount)}
+                className="h-10 w-10 rounded-[12px]"
+                fallback={<AccountIdenticon seed={defaultAccount.username} size={40} />}
+              />
+              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
+                <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
+                  Continue as
+                </span>
+                <span
+                  className={cn(
+                    'text-primary-foreground truncate font-semibold',
+                    nameFitClass(displayNameOf(defaultAccount), 'text-[15px]')
+                  )}
+                >
+                  {displayNameOf(defaultAccount) || 'your account'}
+                </span>
+              </span>
+            </>
+          )}
           {loggingInAccount === defaultAccount.username ? (
             <Spinner className="!h-4 !w-4 text-[#0B0F1A]" />
           ) : (

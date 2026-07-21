@@ -3,6 +3,7 @@
 import { ANY_TARGET, ANY_FN_SEL } from '@jaw.id/core';
 import { isNativeToken } from '../../utils/tokenBalance';
 import { Button } from '../ui/button';
+import { Skeleton } from '../ui/skeleton';
 import { DefaultDialog } from '../DefaultDialog';
 import { FeeTokenSelector } from '../FeeTokenSelector';
 import { PermissionDialogProps } from './types';
@@ -313,7 +314,7 @@ export const PermissionDialog = ({
                     <div className="flex flex-col gap-0.5">
                       <p className="text-muted-foreground text-xs font-bold leading-[133%]">Amount</p>
                       {isLoadingTokenInfo ? (
-                        <div className="bg-muted h-[30px] w-32 animate-pulse rounded" />
+                        <Skeleton className="bg-muted h-[30px] w-32 rounded" />
                       ) : (
                         <div className="flex items-center gap-2">
                           <p className="text-foreground text-xl font-normal leading-[150%]">{spend.amount}</p>
