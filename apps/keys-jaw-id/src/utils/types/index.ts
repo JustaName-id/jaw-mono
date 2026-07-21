@@ -24,6 +24,13 @@ export interface PopupConfig {
    */
   apiKey?: string;
   /**
+   * One-shot popup intent from the SDK: 'create' when the embedded iframe
+   * escaped to this popup so the user can CREATE a passkey (Safari blocks
+   * WebAuthn create() in cross-origin iframes) — open on the create view
+   * instead of "Continue as".
+   */
+  intent?: 'create';
+  /**
    * Last account the user connected with, persisted dApp-side by the SDK.
    * Seeds the "Continue as" screen when our own (partitioned, Brave/Safari-
    * ephemeral) storage came up empty. Untrusted input — a credentialId

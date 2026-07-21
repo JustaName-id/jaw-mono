@@ -100,6 +100,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   // switch it can otherwise never see. UI pointer only — auth state still
   // comes exclusively from the passkey ceremony.
   const [hintedCredentialId, setHintedCredentialId] = useState<string | null>(null);
+  // Popup only: the SDK's config said this popup exists so the user can
+  // CREATE a passkey (Safari iframe escape) — open on the create view.
+  const [startInCreate, setStartInCreate] = useState(false);
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
@@ -238,6 +241,10 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         // chain.rpcUrl remains the authoritative source and overrides it.
         if (message.data.apiKey) {
           setApiKey(message.data.apiKey);
+        }
+
+        if (message.data.intent === 'create') {
+          setStartInCreate(true);
         }
 
         // Apply the dApp's theme tokens so the embedded dialog matches its
@@ -1150,6 +1157,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               origin={currentOrigin || undefined}
               preferredCredentialId={hintedCredentialId ?? undefined}
               onCreateNewAccount={createEscapesToPopup ? switchToPopupForCreate : undefined}
+              startInCreate={startInCreate}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data
@@ -1218,6 +1226,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               origin={currentOrigin || undefined}
               preferredCredentialId={hintedCredentialId ?? undefined}
               onCreateNewAccount={createEscapesToPopup ? switchToPopupForCreate : undefined}
+              startInCreate={startInCreate}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data

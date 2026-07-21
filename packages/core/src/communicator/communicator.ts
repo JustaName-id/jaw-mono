@@ -96,6 +96,13 @@ export class Communicator {
      */
     private readonly trustedHosts = new TrustedHostsRegistry();
 
+    /**
+     * One-shot popup intent, set by a 'webauthn-unsupported' SwitchTransport
+     * (the iframe escaped so the user can CREATE a passkey) and consumed by
+     * the popup transport's next config message.
+     */
+    private popupIntent: 'create' | undefined;
+
     constructor({ metadata, preference, theme }: CommunicatorOptions) {
         this.url = new URL(preference.keysUrl ?? JAW_KEYS_URL);
         this.router = new TransportRouter({
@@ -107,6 +114,11 @@ export class Communicator {
             // (AccountHint after the first connect approval) and must ride
             // the next handshake, not the state at construction.
             getLastAccount: () => accountStore.get().lastAccount,
+            consumePopupIntent: () => {
+                const intent = this.popupIntent;
+                this.popupIntent = undefined;
+                return intent;
+            },
             // Read at send time so the transport config message carries the
             // dApp's own key (bootstraps the keys account screen before the
             // handshake); the handshake's rpcUrl key then takes over.
@@ -214,8 +226,12 @@ export class Communicator {
     private handleSwitchTransport = (event: MessageEvent): void => {
         if (event.origin !== this.url.origin) return;
         if (!this.router.ownsSource(event.source)) return;
-        const message = event.data as { event?: string } | undefined;
+        const message = event.data as { event?: string; data?: { reason?: string } } | undefined;
         if (message?.event !== 'SwitchTransport') return;
+
+        // A webauthn-unsupported escape means the user is trying to CREATE a
+        // passkey the iframe cannot — tell the popup to open on its create view.
+        if (message.data?.reason === 'webauthn-unsupported') this.popupIntent = 'create';
 
         this.router.forcePopupOnce();
 
