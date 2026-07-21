@@ -13,8 +13,6 @@ import { backfillLocalAccountAddresses } from './accountHelpers';
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
 import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
-import { formatAddress } from '../../utils';
-import { CopyIcon, CopiedIcon } from '../../icons';
 import { cn } from '../../lib/utils';
 import { toCoinType } from 'viem';
 
@@ -278,7 +276,7 @@ function CreateAccountForm({
   );
 }
 
-type OnboardingView = 'welcome' | 'switch' | 'signin';
+type OnboardingView = 'welcome' | 'signin';
 
 export function OnboardingDialog({
   accounts,
@@ -370,17 +368,6 @@ export function OnboardingDialog({
   const avatarFor = (account: LocalStorageAccount) => identityOf(account)?.avatar;
   const displayNameOf = (account: LocalStorageAccount) => identityOf(account)?.name ?? account.username;
 
-  const [copiedCredentialId, setCopiedCredentialId] = useState<string | null>(null);
-  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const copyAddress = (account: LocalStorageAccount) => {
-    const address = addressOf(account);
-    if (!address || typeof navigator === 'undefined' || !navigator.clipboard) return;
-    navigator.clipboard.writeText(address).catch(() => undefined);
-    setCopiedCredentialId(account.credentialId ?? account.username);
-    if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
-    copyResetTimer.current = setTimeout(() => setCopiedCredentialId(null), 2000);
-  };
-
   const createForm = (
     <CreateAccountForm
       onCreateAccount={onCreateAccount}
@@ -419,7 +406,7 @@ export function OnboardingDialog({
 
           <div className="mt-6">{passkeyButton}</div>
 
-          <MonoDivider label={`New to ${ensDomain ?? 'JAW'}?`} className="my-5" />
+          <MonoDivider label="New to JAW?" className="my-5" />
 
           {createForm}
 
@@ -433,94 +420,6 @@ export function OnboardingDialog({
               Back
             </button>
           )}
-        </div>
-      </DialogShell>
-    );
-  }
-
-  // Switch-account view — pick a stored account or use a different passkey.
-  if (view === 'switch') {
-    return (
-      <DialogShell>
-        <div className="flex flex-col p-6 pt-5">
-          <button
-            onClick={() => setView('welcome')}
-            disabled={isBusy}
-            className="text-muted-foreground hover:text-foreground -ml-1 flex cursor-pointer items-center gap-1 self-start bg-transparent py-1 text-[11px] font-medium transition-colors"
-          >
-            <ChevronLeft className="h-3.5 w-3.5" />
-            Back
-          </button>
-          <h2 className="text-foreground mt-2 text-[22px] font-bold leading-none tracking-[-0.03em]">
-            Switch <span className="italic">account.</span>
-          </h2>
-
-          <div className="mt-4 flex flex-col">
-            {accounts.map((account: LocalStorageAccount) => {
-              const address = addressOf(account);
-              return (
-                <button
-                  key={account.credentialId ?? account.username}
-                  onClick={() => onAccountSelect(account)}
-                  disabled={isBusy}
-                  className="border-border hover:bg-accent flex cursor-pointer items-center gap-3 border-b bg-transparent px-1 py-3 text-left transition-colors first:border-t disabled:cursor-default disabled:opacity-60"
-                >
-                  <IdentityAvatar
-                    src={avatarFor(account)}
-                    className="h-9 w-9 rounded-[10px]"
-                    fallback={<AccountIdenticon seed={account.username} size={36} />}
-                  />
-                  <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
-                    <span
-                      className={cn(
-                        'text-foreground w-full truncate font-semibold',
-                        nameFitClass(displayNameOf(account), 'text-sm')
-                      )}
-                    >
-                      {displayNameOf(account)}
-                    </span>
-                    {address && (
-                      // Plain span, not a nested interactive element (invalid inside
-                      // a <button>): mouse-only copy affordance, row stays the sole
-                      // focus target.
-                      <span
-                        title="Copy address"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          copyAddress(account);
-                        }}
-                        className="bg-secondary border-border text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-[6px] border px-1.5 py-0.5 font-mono text-[9px] transition-colors"
-                      >
-                        {formatAddress(address)}
-                        {copiedCredentialId === (account.credentialId ?? account.username) ? (
-                          <CopiedIcon width={9} height={9} />
-                        ) : (
-                          <CopyIcon width={9} height={9} />
-                        )}
-                      </span>
-                    )}
-                  </span>
-                  {loggingInAccount === account.username ? (
-                    <Spinner className="!h-4 !w-4" />
-                  ) : (
-                    <ChevronRight className="text-muted-foreground h-4 w-4 flex-none" />
-                  )}
-                </button>
-              );
-            })}
-          </div>
-
-          <MonoDivider label="or" className="my-4" />
-
-          <Button
-            onClick={onImportAccount}
-            disabled={isBusy}
-            variant="outline"
-            className="text-secondary-foreground h-11 w-full rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
-          >
-            <Fingerprint className="!h-4 !w-4" />
-            {isImporting ? 'Opening Passkey...' : 'Use a different passkey'}
-          </Button>
         </div>
       </DialogShell>
     );
@@ -568,13 +467,13 @@ export function OnboardingDialog({
         <MonoDivider label="or" className="my-5" />
 
         <Button
-          onClick={() => setView('switch')}
+          onClick={onImportAccount}
           disabled={isBusy}
           variant="outline"
           className="text-secondary-foreground h-11 w-full rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
         >
           <ArrowRightLeft className="!h-3.5 !w-3.5" />
-          Switch account
+          {isImporting ? 'Opening Passkey...' : 'Switch account'}
         </Button>
 
         <button
