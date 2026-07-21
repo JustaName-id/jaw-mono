@@ -9,9 +9,12 @@ import { AccountIdenticon } from '../AccountIdenticon';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { OnboardingDialogProps, LocalStorageAccount } from './types';
 import { selectDefaultAccount } from './selectDefaultAccount';
-import { useState, useEffect, useMemo } from 'react';
+import { backfillLocalAccountAddresses } from './accountHelpers';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
 import { ensMetadataAvatarUrl } from '../../utils/reverseResolve';
+import { formatAddress } from '../../utils';
+import { CopyIcon, CopiedIcon } from '../../icons';
 import { cn } from '../../lib/utils';
 import { toCoinType } from 'viem';
 
@@ -302,6 +305,39 @@ export function OnboardingDialog({
     return name ? ensMetadataAvatarUrl(name) : undefined;
   };
 
+  // Addresses for the switch-account chips. New records carry them; legacy
+  // records get a one-time ceremony-free factory derivation, persisted back so
+  // subsequent opens are pure localStorage reads.
+  const [addressByCredentialId, setAddressByCredentialId] = useState<Record<string, string>>({});
+  const hasAddressGaps = accounts.some((a) => !a.address && a.credentialId);
+  useEffect(() => {
+    if (!hasAddressGaps || !apiKey) return;
+    let cancelled = false;
+    backfillLocalAccountAddresses({ chainId, apiKey })
+      .then((byCredentialId) => {
+        if (!cancelled) setAddressByCredentialId(byCredentialId);
+      })
+      .catch(() => {
+        // Rows simply render without an address chip
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [hasAddressGaps, chainId, apiKey]);
+  const addressOf = (account: LocalStorageAccount) =>
+    account.address ?? (account.credentialId ? addressByCredentialId[account.credentialId] : undefined);
+
+  const [copiedCredentialId, setCopiedCredentialId] = useState<string | null>(null);
+  const copyResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const copyAddress = (account: LocalStorageAccount) => {
+    const address = addressOf(account);
+    if (!address || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    navigator.clipboard.writeText(address).catch(() => undefined);
+    setCopiedCredentialId(account.credentialId ?? account.username);
+    if (copyResetTimer.current) clearTimeout(copyResetTimer.current);
+    copyResetTimer.current = setTimeout(() => setCopiedCredentialId(null), 2000);
+  };
+
   const createForm = (
     <CreateAccountForm
       onCreateAccount={onCreateAccount}
@@ -377,28 +413,51 @@ export function OnboardingDialog({
           </h2>
 
           <div className="mt-4 flex flex-col">
-            {accounts.map((account: LocalStorageAccount) => (
-              <button
-                key={account.credentialId ?? account.username}
-                onClick={() => onAccountSelect(account)}
-                disabled={isBusy}
-                className="border-border hover:bg-accent flex cursor-pointer items-center gap-3 border-b bg-transparent px-1 py-3 text-left transition-colors first:border-t disabled:cursor-default disabled:opacity-60"
-              >
-                <IdentityAvatar
-                  src={avatarFor(account)}
-                  className="h-9 w-9 rounded-[10px]"
-                  fallback={<AccountIdenticon seed={account.username} size={36} />}
-                />
-                <span className="text-foreground min-w-0 flex-1 truncate text-sm font-semibold">
-                  {account.username}
-                </span>
-                {loggingInAccount === account.username ? (
-                  <Spinner className="!h-4 !w-4" />
-                ) : (
-                  <ChevronRight className="text-muted-foreground h-4 w-4 flex-none" />
-                )}
-              </button>
-            ))}
+            {accounts.map((account: LocalStorageAccount) => {
+              const address = addressOf(account);
+              return (
+                <button
+                  key={account.credentialId ?? account.username}
+                  onClick={() => onAccountSelect(account)}
+                  disabled={isBusy}
+                  className="border-border hover:bg-accent flex cursor-pointer items-center gap-3 border-b bg-transparent px-1 py-3 text-left transition-colors first:border-t disabled:cursor-default disabled:opacity-60"
+                >
+                  <IdentityAvatar
+                    src={avatarFor(account)}
+                    className="h-9 w-9 rounded-[10px]"
+                    fallback={<AccountIdenticon seed={account.username} size={36} />}
+                  />
+                  <span className="flex min-w-0 flex-1 flex-col items-start gap-1">
+                    <span className="text-foreground w-full truncate text-sm font-semibold">{account.username}</span>
+                    {address && (
+                      // Plain span, not a nested interactive element (invalid inside
+                      // a <button>): mouse-only copy affordance, row stays the sole
+                      // focus target.
+                      <span
+                        title="Copy address"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          copyAddress(account);
+                        }}
+                        className="bg-secondary border-border text-muted-foreground hover:text-foreground flex items-center gap-1 rounded-[6px] border px-1.5 py-0.5 font-mono text-[9px] transition-colors"
+                      >
+                        {formatAddress(address)}
+                        {copiedCredentialId === (account.credentialId ?? account.username) ? (
+                          <CopiedIcon width={9} height={9} />
+                        ) : (
+                          <CopyIcon width={9} height={9} />
+                        )}
+                      </span>
+                    )}
+                  </span>
+                  {loggingInAccount === account.username ? (
+                    <Spinner className="!h-4 !w-4" />
+                  ) : (
+                    <ChevronRight className="text-muted-foreground h-4 w-4 flex-none" />
+                  )}
+                </button>
+              );
+            })}
           </div>
 
           <MonoDivider label="or" className="my-4" />

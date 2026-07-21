@@ -140,6 +140,18 @@ export class PasskeyManager {
     }
 
     /**
+     * Persist the address for a stored account that predates address
+     * persistence. No-op when the account is missing or already has one.
+     */
+    setAccountAddress(credentialId: string, address: string): void {
+        const accounts = this.fetchAccounts();
+        const index = accounts.findIndex((account) => account.credentialId === credentialId);
+        if (index === -1 || accounts[index].address) return;
+        const updated = accounts.map((account, i) => (i === index ? { ...account, address } : account));
+        this.storage.setItem('accounts', updated);
+    }
+
+    /**
      * Create a new WebAuthn passkey
      * @param username - The username for the passkey
      * @param rpId - The relying party identifier (e.g., domain name)
@@ -254,6 +266,7 @@ export class PasskeyManager {
             username: name.trim(),
             credentialId,
             publicKey,
+            address,
             creationDate: new Date().toISOString(),
             isImported: false,
         };
@@ -284,6 +297,7 @@ export class PasskeyManager {
             username: passkeyData.displayName.trim(),
             credentialId,
             publicKey: passkeyData.publicKey as `0x${string}`,
+            address,
             creationDate: new Date().toISOString(),
             isImported: true,
         };

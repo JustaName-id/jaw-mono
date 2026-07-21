@@ -170,6 +170,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           username: authState.username,
           credentialId: authState.credentialId,
           publicKey: authState.publicKey,
+          address: authState.address,
           creationDate: new Date().toISOString(),
           isImported: false,
         }),

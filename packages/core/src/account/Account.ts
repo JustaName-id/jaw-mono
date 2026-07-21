@@ -170,6 +170,49 @@ export class Account {
     // ============================================
 
     /**
+     * Derive and persist addresses for stored accounts that predate address
+     * persistence, returning the (updated) stored list.
+     *
+     * Ceremony-free: builds a WebAuthn account object from the stored publicKey
+     * (nothing is ever signed) and asks the factory for the counterfactual
+     * address — the same derivation Account.get performs at login. Failures are
+     * per-record and non-fatal; a record left without an address is retried on
+     * the next call.
+     */
+    static async backfillStoredAccountAddresses(config: AccountConfig): Promise<PasskeyAccount[]> {
+        const { chainId, apiKey, paymasterUrl } = config;
+        const passkeyManager = new PasskeyManager(config.storage, undefined, apiKey);
+        const accounts = passkeyManager.fetchAccounts();
+        const missing = accounts.filter((account) => !account.address);
+        if (missing.length === 0) return accounts;
+
+        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+        const bundlerClient = getBundlerClient(chain);
+
+        await Promise.all(
+            missing.map(async (account) => {
+                try {
+                    const webAuthnAccount = toWebAuthnAccount({
+                        credential: {
+                            id: account.credentialId,
+                            publicKey: account.publicKey,
+                        },
+                    });
+                    const smartAccount = await createSmartAccount(
+                        webAuthnAccount,
+                        bundlerClient as JustanAccountImplementation['client']
+                    );
+                    account.address = await smartAccount.getAddress();
+                    passkeyManager.setAccountAddress(account.credentialId, account.address);
+                } catch {
+                    /* leave the record without an address; next call retries */
+                }
+            })
+        );
+        return accounts;
+    }
+
+    /**
      * Get an account - restores if already authenticated, or triggers login if credentialId provided
      *
      * This is the primary method to get an Account instance:

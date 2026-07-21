@@ -5,6 +5,8 @@ export interface LocalStorageAccount {
   creationDate: Date;
   credentialId?: string;
   isImported?: boolean;
+  /** Smart-account address; absent on records stored before it was persisted. */
+  address?: string;
 }
 
 /**
