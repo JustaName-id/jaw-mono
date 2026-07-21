@@ -100,6 +100,14 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   // switch it can otherwise never see. UI pointer only — auth state still
   // comes exclusively from the passkey ceremony.
   const [hintedCredentialId, setHintedCredentialId] = useState<string | null>(null);
+  // This popup was opened by the SDK because the embedded iframe couldn't run
+  // WebAuthn create() (the reason WE sent rides back on the URL) — the user
+  // was creating an account, so open on the create view.
+  const [startInCreate] = useState(
+    () =>
+      typeof window !== 'undefined' &&
+      new URLSearchParams(window.location.search).get('switch-reason') === 'webauthn-unsupported'
+  );
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
   const configRef = useRef<PopupConfig | null>(null);
@@ -1150,6 +1158,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               origin={currentOrigin || undefined}
               preferredCredentialId={hintedCredentialId ?? undefined}
               onCreateNewAccount={createEscapesToPopup ? switchToPopupForCreate : undefined}
+              startInCreate={startInCreate}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data
@@ -1218,6 +1227,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               origin={currentOrigin || undefined}
               preferredCredentialId={hintedCredentialId ?? undefined}
               onCreateNewAccount={createEscapesToPopup ? switchToPopupForCreate : undefined}
+              startInCreate={startInCreate}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data

@@ -1,6 +1,6 @@
 import { JAW_KEYS_URL } from '../constants.js';
 import { Message, MessageID } from '../messages/message.js';
-import { isValidAccountHint } from '../messages/configMessage.js';
+import { isValidAccountHint, type SwitchTransportData } from '../messages/configMessage.js';
 import { standardErrors } from '../errors/errors.js';
 import { account as accountStore, config as configStore } from '../store/store.js';
 
@@ -96,6 +96,9 @@ export class Communicator {
      */
     private readonly trustedHosts = new TrustedHostsRegistry();
 
+    /** One-shot: reason of the last SwitchTransport, forwarded on the popup URL so keys can read back the reason it sent. */
+    private switchReason: SwitchTransportData['reason'] | undefined;
+
     constructor({ metadata, preference, theme }: CommunicatorOptions) {
         this.url = new URL(preference.keysUrl ?? JAW_KEYS_URL);
         this.router = new TransportRouter({
@@ -107,6 +110,11 @@ export class Communicator {
             // (AccountHint after the first connect approval) and must ride
             // the next handshake, not the state at construction.
             getLastAccount: () => accountStore.get().lastAccount,
+            consumeSwitchReason: () => {
+                const reason = this.switchReason;
+                this.switchReason = undefined;
+                return reason;
+            },
             // Read at send time so the transport config message carries the
             // dApp's own key (bootstraps the keys account screen before the
             // handshake); the handshake's rpcUrl key then takes over.
@@ -214,8 +222,10 @@ export class Communicator {
     private handleSwitchTransport = (event: MessageEvent): void => {
         if (event.origin !== this.url.origin) return;
         if (!this.router.ownsSource(event.source)) return;
-        const message = event.data as { event?: string } | undefined;
+        const message = event.data as { event?: string; data?: SwitchTransportData } | undefined;
         if (message?.event !== 'SwitchTransport') return;
+
+        this.switchReason = message.data?.reason;
 
         this.router.forcePopupOnce();
 
