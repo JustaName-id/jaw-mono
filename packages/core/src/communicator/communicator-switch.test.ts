@@ -87,6 +87,47 @@ describe('Communicator SwitchTransport handling', () => {
         await expect(responsePromise).resolves.toEqual({ requestId: request.id });
     });
 
+    it('reopens the popup with the switch reason on its URL (webauthn-unsupported escape)', async () => {
+        const request: Message & { id: MessageID } = { id: 'req-id-9-9-9', data: {} };
+
+        queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
+
+        const responsePromise = communicator.postRequestAndWaitForResponse(request);
+        await vi.waitFor(() => {
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+        });
+
+        // The first open carries no switch reason
+        const opens = (window.open as ReturnType<typeof vi.fn>).mock.calls;
+        expect(String(opens[0][0])).not.toContain('switch-reason');
+
+        // The popup of the earlier flow closed; the escape must REOPEN it and
+        // hand keys the reason it sent — this is what the create escape relies on.
+        (mockPopup as { closed: boolean }).closed = true;
+        (window.open as ReturnType<typeof vi.fn>).mockImplementation(() => {
+            (mockPopup as { closed: boolean }).closed = false;
+            return mockPopup as Window;
+        });
+        queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-2' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-2' } });
+
+        dispatchMessageEvent({
+            data: { event: 'SwitchTransport', data: { to: 'popup', reason: 'webauthn-unsupported' } },
+            origin: urlOrigin,
+        });
+
+        await vi.waitFor(() => {
+            const calls = (window.open as ReturnType<typeof vi.fn>).mock.calls;
+            expect(calls.length).toBe(2);
+            expect(String(calls[1][0])).toContain('switch-reason=webauthn-unsupported');
+        });
+
+        // The in-flight request still resolves after the switch
+        dispatchMessageEvent({ data: { requestId: request.id }, origin: urlOrigin });
+        await expect(responsePromise).resolves.toEqual({ requestId: request.id });
+    });
+
     it('ignores SwitchTransport messages from other origins', async () => {
         const request: Message & { id: MessageID } = { id: 'req-id-2-2-2', data: {} };
 
