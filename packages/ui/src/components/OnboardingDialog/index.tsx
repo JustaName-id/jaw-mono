@@ -6,10 +6,12 @@ import { Spinner } from '../ui/spinner';
 import { ArrowRightLeft, ChevronLeft, ChevronRight, Fingerprint, ScanFace } from 'lucide-react';
 import { DialogShell } from '../DialogShell';
 import { AccountIdenticon } from '../AccountIdenticon';
+import { IdentityAvatar } from '../IdentityAvatar';
 import { OnboardingDialogProps, LocalStorageAccount } from './types';
 import { selectDefaultAccount } from './selectDefaultAccount';
 import { useState, useEffect, useMemo } from 'react';
 import { getJustaNameInstance } from '../../utils/justaNameInstance';
+import { ensMetadataAvatarUrl } from '../../utils/reverseResolve';
 import { cn } from '../../lib/utils';
 import { toCoinType } from 'viem';
 
@@ -287,6 +289,19 @@ export function OnboardingDialog({
   const [view, setView] = useState<OnboardingView>(defaultAccount ? 'welcome' : 'signin');
   const isBusy = loggingInAccount !== null || isImporting || isCreating;
 
+  // ENS avatar straight from the DISPLAYED name (the stored username, plus the
+  // configured domain for bare labels). No resolution round-trip: the metadata
+  // proxy resolves the record server-side and IdentityAvatar falls back to the
+  // blob when the name has no avatar (404) or isn't registered.
+  const avatarFor = (account: LocalStorageAccount) => {
+    const name = account.username.includes('.')
+      ? account.username
+      : ensDomain
+        ? `${account.username}.${ensDomain}`
+        : null;
+    return name ? ensMetadataAvatarUrl(name) : undefined;
+  };
+
   const createForm = (
     <CreateAccountForm
       onCreateAccount={onCreateAccount}
@@ -369,7 +384,11 @@ export function OnboardingDialog({
                 disabled={isBusy}
                 className="border-border hover:bg-accent flex cursor-pointer items-center gap-3 border-b bg-transparent px-1 py-3 text-left transition-colors first:border-t disabled:cursor-default disabled:opacity-60"
               >
-                <AccountIdenticon seed={account.username} size={36} />
+                <IdentityAvatar
+                  src={avatarFor(account)}
+                  className="h-9 w-9 rounded-[10px]"
+                  fallback={<AccountIdenticon seed={account.username} size={36} />}
+                />
                 <span className="text-foreground min-w-0 flex-1 truncate text-sm font-semibold">
                   {account.username}
                 </span>
@@ -412,7 +431,11 @@ export function OnboardingDialog({
           disabled={isBusy}
           className="bg-primary hover:bg-primary/90 mt-6 flex cursor-pointer items-center gap-3 rounded-[12px] p-3 text-left transition-colors disabled:cursor-default disabled:opacity-70"
         >
-          <AccountIdenticon seed={defaultAccount.username} size={40} />
+          <IdentityAvatar
+            src={avatarFor(defaultAccount)}
+            className="h-10 w-10 rounded-[12px]"
+            fallback={<AccountIdenticon seed={defaultAccount.username} size={40} />}
+          />
           <span className="flex min-w-0 flex-1 flex-col gap-0.5">
             <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
               Continue as

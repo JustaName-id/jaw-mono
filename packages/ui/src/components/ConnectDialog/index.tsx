@@ -5,9 +5,10 @@ import { Eye, CircleDollarSign, ShieldCheck, Globe } from 'lucide-react';
 import { DefaultDialog } from '../DefaultDialog';
 import { DialogShell } from '../DialogShell';
 import { AccountIdenticon } from '../AccountIdenticon';
+import { IdentityAvatar } from '../IdentityAvatar';
 import { Button } from '../ui/button';
 import { ConnectDialogProps } from './types';
-import { reverseResolveAddresses } from '../../utils/reverseResolve';
+import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
 import { sanitizeDisplayName } from '../../utils/sanitize';
 import { isSafeImageUrl } from '../../utils/safeUrl';
@@ -35,16 +36,18 @@ export const ConnectDialog = ({
   isProcessing,
 }: ConnectDialogProps) => {
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
-  // Resolve wallet address to human-readable name
+  // Resolve wallet address to human-readable name + ENS avatar
   useEffect(() => {
     if (walletAddress && chainId) {
-      reverseResolveAddresses([{ address: walletAddress, chainId }], mainnetRpcUrl)
+      reverseResolveWithAvatars([{ address: walletAddress, chainId }], mainnetRpcUrl)
         .then(async (resolved) => {
-          const name = resolved[walletAddress.toLowerCase()];
-          if (name) {
+          const identity = resolved[walletAddress.toLowerCase()];
+          if (identity) {
             const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setResolvedAddress(label ? `${name}@${label}` : name);
+            setResolvedAddress(label ? `${identity.name}@${label}` : identity.name);
+            setAvatarUrl(identity.avatar ?? null);
           }
         })
         .catch(() => {
@@ -99,7 +102,11 @@ export const ConnectDialog = ({
           // Connecting state — secure session being established.
           <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
             <div className="flex items-center gap-3">
-              <AccountIdenticon seed={walletAddress.toLowerCase()} size={44} />
+              <IdentityAvatar
+                src={avatarUrl ?? undefined}
+                className="h-11 w-11 rounded-[13px]"
+                fallback={<AccountIdenticon seed={walletAddress.toLowerCase()} size={44} />}
+              />
               <span className="flex items-center gap-1.5">
                 {[0, 1, 2].map((i) => (
                   <span
@@ -149,7 +156,11 @@ export const ConnectDialog = ({
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Connecting to</h2>
               <span className="bg-secondary border-border flex min-w-0 items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5">
-                <AccountIdenticon seed={walletAddress.toLowerCase()} size={15} />
+                <IdentityAvatar
+                  src={avatarUrl ?? undefined}
+                  className="h-[15px] w-[15px] rounded-full"
+                  fallback={<AccountIdenticon seed={walletAddress.toLowerCase()} size={15} />}
+                />
                 <span className="text-secondary-foreground truncate font-mono text-[10.5px]">{displayName}</span>
               </span>
             </div>
