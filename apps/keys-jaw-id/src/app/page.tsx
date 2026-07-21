@@ -18,6 +18,7 @@ import { PopupCommunicator, type Message } from '../lib/popup-communicator';
 import { EmbeddedShell } from '../components/EmbeddedShell';
 import { CryptoHandler } from '../lib/crypto-handler';
 import { applyAccountHint } from '../lib/account-hint';
+import { iframeBlocksPasskeyCreation } from '../lib/embedded-ui';
 import { isSilentContinueAsConnect } from '../lib/continue-as-connect';
 import { sendSessionHandoff, registerSessionHandoffListener } from '../lib/session-handoff';
 import type { SessionAuthState } from '../lib/session-manager';
@@ -130,6 +131,16 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   // same stale-closure guard as stateRef.
   const refetchAuthRef = useRef(authQuery.refetch);
   refetchAuthRef.current = authQuery.refetch;
+
+  // Safari cannot CREATE passkeys inside the cross-origin iframe (get() works,
+  // so "Continue as" stays embedded). The create action must escape to the
+  // popup synchronously within the user's click — an attempt-then-switch loses
+  // the transient activation and Safari blocks the popup window.
+  const createEscapesToPopup = communicator.isEmbedded() && iframeBlocksPasskeyCreation();
+  const switchToPopupForCreate = useCallback(
+    () => communicator.requestSwitchToPopup('webauthn-unsupported'),
+    [communicator]
+  );
 
   /**
    * Popup context only: after the user approves a connection, hand the
@@ -1138,6 +1149,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
               preferredCredentialId={hintedCredentialId ?? undefined}
+              onCreateNewAccount={createEscapesToPopup ? switchToPopupForCreate : undefined}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data
@@ -1205,6 +1217,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               subnameTextRecords={extractSubnameTextRecords(pendingRequest)}
               origin={currentOrigin || undefined}
               preferredCredentialId={hintedCredentialId ?? undefined}
+              onCreateNewAccount={createEscapesToPopup ? switchToPopupForCreate : undefined}
               onComplete={async (authenticatedAccount: AuthenticatedAccount) => {
                 try {
                   // Set the current account from the passed data

@@ -285,6 +285,7 @@ export function OnboardingDialog({
   loggingInAccount,
   onImportAccount,
   isImporting,
+  onCreateNewAccount,
   onCreateAccount,
   onAccountCreationComplete,
   onAccountCreationError,
@@ -514,7 +515,7 @@ export function OnboardingDialog({
         </Button>
 
         <button
-          onClick={() => setView('signin')}
+          onClick={onCreateNewAccount ?? (() => setView('signin'))}
           disabled={isBusy}
           className="text-muted-foreground hover:text-foreground mx-auto mt-4 cursor-pointer bg-transparent text-xs font-medium transition-colors"
         >

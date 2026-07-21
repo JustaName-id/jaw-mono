@@ -30,6 +30,15 @@ export interface OnboardingDialogProps {
   onImportAccount: () => void;
   isImporting: boolean;
 
+  /**
+   * Overrides the Welcome card's "Create new account" navigation. Hosts set
+   * this when passkey creation cannot run in the current context (Safari
+   * blocks WebAuthn create() in cross-origin iframes) and the flow must
+   * escape to a popup — invoked synchronously from the click so the popup
+   * opens within the user-activation window.
+   */
+  onCreateNewAccount?: () => void;
+
   // Create new account section
   onCreateAccount: (username: string) => Promise<CreatedAccountData>;
   onAccountCreationComplete: (account: CreatedAccountData) => Promise<void>;

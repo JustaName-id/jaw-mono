@@ -3,6 +3,8 @@
  * Kept logic-only so they can be unit-tested without a DOM.
  */
 
+import { isSafari } from '@jaw.id/core';
+
 export const EMBEDDED_BREAKPOINT_PX = 460;
 
 export type EmbeddedPresentation = 'drawer' | 'floating';
@@ -38,6 +40,18 @@ export function isOccluded(entry: VisibilityEntry): boolean {
  * cross-origin iframe. EmbeddedShell listens and escapes to a popup.
  */
 export const WEBAUTHN_IFRAME_UNSUPPORTED_EVENT = 'jaw:webauthn-iframe-unsupported';
+
+/**
+ * True when this browser cannot create WebAuthn credentials inside a
+ * cross-origin iframe (Safari, desktop and iOS — WebKit standards-positions
+ * #304). UA-detected because no feature detection exists; same check core's
+ * transport router uses. Used to escape to the popup PROACTIVELY, inside
+ * the user's click — an attempt-then-switch loses the transient activation
+ * and Safari blocks the popup.
+ */
+export function iframeBlocksPasskeyCreation(): boolean {
+  return isSafari();
+}
 
 /**
  * Matches the known "WebAuthn create() not available in this iframe" errors:
