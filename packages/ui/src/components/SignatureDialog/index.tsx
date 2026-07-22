@@ -6,6 +6,7 @@ import { DialogAppHeader } from '../DialogAppHeader';
 import { AccountPill } from '../AccountPill';
 import { AccountIdenticon } from '../AccountIdenticon';
 import { IdentityAvatar } from '../IdentityAvatar';
+import { SuccessCheck } from '../SuccessCheck';
 import { Button } from '../ui/button';
 import { SignatureDialogProps } from './types';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
@@ -29,6 +30,7 @@ export const SignatureDialog = ({
   onSign,
   onCancel,
   isProcessing,
+  isSuccess,
   signatureStatus,
   canSign,
 }: SignatureDialogProps) => {
@@ -65,7 +67,13 @@ export const SignatureDialog = ({
       {/* Taller floor than the default shell so the message box has room and the
           card doesn't jump between short and long messages (canvas: min 447). */}
       <DialogShell contentClassName="min-h-[447px]">
-        {isProcessing ? (
+        {isSuccess ? (
+          // Brief success beat before the parent closes the dialog.
+          <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
+            <SuccessCheck size={52} />
+            <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Signed</h2>
+          </div>
+        ) : isProcessing ? (
           // Signing in progress — passkey ceremony running.
           <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
             <div className="flex items-center gap-3">
@@ -108,14 +116,16 @@ export const SignatureDialog = ({
               <AccountPill seedAddress={signerAddress} label={displayName} avatarUrl={avatarUrl} />
             </div>
 
-            {/* Message */}
-            <div className="border-border mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10.5px] border p-3">
-              <span className="text-muted-foreground mb-1.5 font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+            {/* Message — label sits at the card column, aligned with "Signing as" */}
+            <div className="mt-4 flex min-h-0 flex-1 flex-col gap-1.5">
+              <span className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
                 Message
               </span>
-              <p className="text-foreground min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.65]">
-                {message || 'No message provided'}
-              </p>
+              <div className="border-border flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10.5px] border p-3">
+                <p className="text-foreground min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.65]">
+                  {message || 'No message provided'}
+                </p>
+              </div>
             </div>
 
             {hasError && (
@@ -130,14 +140,14 @@ export const SignatureDialog = ({
                 variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold"
+                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
               >
                 Cancel
               </Button>
               <Button
                 onClick={onSign}
                 disabled={!canSign}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold"
+                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
               >
                 Sign
               </Button>

@@ -31,7 +31,6 @@ export const ConnectModal = ({
   onError,
 }: ConnectModalProps) => {
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [timestamp] = useState(() => new Date());
 
   // Extract API key from rpcUrl if not provided as prop
   const effectiveApiKey = useMemo(() => {
@@ -96,7 +95,6 @@ export const ConnectModal = ({
       appName={appName}
       appLogoUrl={appLogoUrl}
       origin={origin}
-      timestamp={timestamp}
       accountName={accountName}
       walletAddress={walletAddress}
       chainName={chainName}

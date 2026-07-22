@@ -25,6 +25,8 @@ export interface SignatureDialogProps {
 
   // Status
   isProcessing: boolean;
+  /** Briefly true after a successful sign so the dialog can play a success tick before closing. */
+  isSuccess?: boolean;
   signatureStatus: string;
   canSign: boolean;
 }

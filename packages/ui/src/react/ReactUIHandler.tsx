@@ -1004,7 +1004,6 @@ function OnboardingDialogWrapper({
         appName={request.data.appName || 'dApp'}
         appLogoUrl={request.data.appLogoUrl ?? undefined}
         origin={origin}
-        timestamp={new Date()}
         accountName={authenticatedAccountName || 'Account'}
         walletAddress={authenticatedWalletAddress}
         chainName={chainName}

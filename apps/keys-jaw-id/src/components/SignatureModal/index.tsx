@@ -43,7 +43,12 @@ export const SignatureModal = ({
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
+
+  // Brief success-tick beat before the dialog closes. The signature is already
+  // delivered (onSuccess), so this only holds the visual confirmation.
+  const SUCCESS_HOLD_MS = 850;
 
   // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
@@ -80,8 +85,10 @@ export const SignatureModal = ({
       const signature = await account.signMessage(messageToSign, { address: address as `0x${string}` | undefined });
 
       setSignatureStatus('Signature created successfully!');
-
-      // Call onSuccess immediately - parent will handle closing
+      // Show the success tick, then hand the signature to the parent (which
+      // closes the dialog). The delay is purely the confirmation animation.
+      setIsSuccess(true);
+      await new Promise((resolve) => setTimeout(resolve, SUCCESS_HOLD_MS));
       onSuccess(signature, messageToSign);
     } catch (error) {
       console.error('Error signing message:', error);
@@ -125,6 +132,7 @@ export const SignatureModal = ({
       onSign={signMessage}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
       canSign={canSign}
     />

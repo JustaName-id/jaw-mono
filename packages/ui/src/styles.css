@@ -372,6 +372,48 @@
 .jaw-flow-dot {
   animation: jaw-flow-dot 1.6s ease-in-out infinite;
 }
+
+/* Success checkmark: circle pops in, then the tick strokes on */
+@keyframes jaw-check-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  60% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+    opacity: 1;
+  }
+}
+
+@keyframes jaw-check-draw {
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+.jaw-check-pop {
+  animation: jaw-check-pop 0.32s cubic-bezier(0.2, 0.8, 0.3, 1) both;
+}
+
+.jaw-check-draw {
+  stroke-dasharray: 22;
+  stroke-dashoffset: 22;
+  animation: jaw-check-draw 0.3s ease-out 0.18s forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .jaw-check-pop {
+    animation: none;
+  }
+  .jaw-check-draw {
+    animation: none;
+    stroke-dashoffset: 0;
+  }
+}
 dialog[data-jaw-modal-container]::backdrop {
   background: transparent;
 }

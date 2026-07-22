@@ -8,7 +8,6 @@ export interface ConnectDialogProps {
   appName: string;
   appLogoUrl?: string;
   origin: string;
-  timestamp: Date;
 
   // User account information
   accountName?: string;
