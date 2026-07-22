@@ -31,7 +31,7 @@ export function DialogShell({ children, halo = true, className, contentClassName
       {halo && <div aria-hidden className="jaw-halo-ring absolute inset-[-60%] z-0 hidden dark:block" />}
       <div
         className={cn(
-          'bg-popover text-popover-foreground border-border relative z-[1] flex max-h-[min(477px,90dvh)] min-h-[234px] w-[345px] max-w-full flex-col overflow-y-auto overflow-x-hidden rounded-[16.5px] border shadow-xl',
+          'bg-popover text-popover-foreground border-border relative z-[1] flex max-h-[min(550px,90dvh)] min-h-[234px] w-[400px] max-w-full flex-col overflow-y-auto overflow-x-hidden rounded-[16.5px] border shadow-xl',
           contentClassName
         )}
       >

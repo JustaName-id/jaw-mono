@@ -1,6 +1,8 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { SUPPORTED_CHAINS } from '@jaw.id/core';
+import { CopyIcon, CopiedIcon } from '../../icons';
 
 // EIP-712 TypedData structure (mirrors the dialog's local type).
 interface TypedData {
@@ -17,6 +19,7 @@ type TreeNode = {
   kind: 'leaf' | 'group';
   badge?: string; // solidity type (leaves)
   value?: string; // formatted, truncated value (leaves)
+  copyValue?: string; // full untruncated value to copy (address/bytes leaves)
   children?: TreeNode[];
 };
 
@@ -26,9 +29,47 @@ const MAX_DEPTH = 12;
 const isArrayType = (type: string) => /\[\d*\]$/.test(type);
 const baseType = (type: string) => type.replace(/\[\d*\]$/, '');
 
-/** Truncate + annotate a primitive value by its solidity type. */
-function formatValue(type: string, value: unknown): string {
+// Plausible unix-timestamp window (2000-01-01 .. 2100-01-01) for date detection.
+const TS_MIN = 946684800n;
+const TS_MAX = 4102444800n;
+
+/** Largest value a `uint<bits>` can hold — used to spot "unlimited"/"no expiry" sentinels. */
+function maxUint(type: string): bigint | null {
+  const m = /^uint(\d*)$/.exec(type);
+  if (!m) return null;
+  const bits = m[1] ? Number(m[1]) : 256;
+  return (1n << BigInt(bits)) - 1n;
+}
+
+/** Thousands-separate a decimal integer string. */
+function groupDigits(s: string): string {
+  const neg = s.startsWith('-');
+  const digits = neg ? s.slice(1) : s;
+  return (neg ? '-' : '') + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+}
+
+function formatDate(seconds: bigint): string {
+  const d = new Date(Number(seconds) * 1000);
+  if (Number.isNaN(d.getTime())) return groupDigits(seconds.toString());
+  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
+}
+
+/** Network name for a chainId, e.g. "Ethereum · 1"; bare id when unrecognised. */
+function networkLabel(id: number): string {
+  const chain = SUPPORTED_CHAINS.find((c) => c.id === id);
+  return chain ? `${chain.name} · ${id}` : String(id);
+}
+
+/**
+ * Format a primitive leaf by its solidity type AND field name. The field name
+ * lets us render the *meaning* rather than the raw integer: `deadline`→date,
+ * `chainId`→network, amount-like→grouped ("Unlimited" at max-uint). We never
+ * apply token decimals here (unknown in the raw fallback) — that's clear-signing's
+ * job; integers are grouped, not truncated like a hash.
+ */
+function formatValue(type: string, value: unknown, fieldName = ''): string {
   if (value === null || value === undefined) return '—';
+  const name = fieldName.toLowerCase();
 
   if (type === 'address') {
     const v = String(value);
@@ -46,14 +87,34 @@ function formatValue(type: string, value: unknown): string {
   }
 
   if (/^(u?int)\d*$/.test(type)) {
-    const v = String(value);
-    return v.length > 9 ? `${v.slice(0, 4)}…${v.slice(-4)}` : v;
+    let big: bigint | null = null;
+    try {
+      big = BigInt(String(value));
+    } catch {
+      return String(value);
+    }
+
+    if (name === 'chainid' || name.endsWith('chainid')) return networkLabel(Number(big));
+
+    const isTimestamp = /(deadline|expir|validuntil|validafter|validbefore|validto|notbefore|notafter|timestamp)/.test(
+      name
+    );
+    const isAmount = /(amount|value|allowance|limit|balance|price|cost|fee|total|wad)/.test(name);
+
+    const mx = maxUint(type);
+    if (mx !== null && big === mx) {
+      if (isTimestamp) return 'No expiry';
+      if (isAmount) return 'Unlimited';
+    }
+    if (isTimestamp && big >= TS_MIN && big <= TS_MAX) return formatDate(big);
+
+    return groupDigits(big.toString());
   }
 
   if (type === 'bool') return String(value);
 
   const v = String(value);
-  return v.length > 24 ? `${v.slice(0, 22)}…` : v;
+  return v.length > 80 ? `${v.slice(0, 78)}…` : v;
 }
 
 /** Build one node (recursively for structs/arrays) from a type + value. */
@@ -98,8 +159,17 @@ function buildNode(
     };
   }
 
-  // Leaf
-  return { id, depth, label, kind: 'leaf', badge: type, value: formatValue(type, value) };
+  // Leaf. Address/bytes are truncated for display, so keep the full value to copy.
+  const copyable = type === 'address' || /^bytes\d*$/.test(type);
+  return {
+    id,
+    depth,
+    label,
+    kind: 'leaf',
+    badge: type,
+    value: formatValue(type, value, label),
+    copyValue: copyable && value != null ? String(value) : undefined,
+  };
 }
 
 /** Depth-ordered guide rails behind the row content. */
@@ -116,6 +186,32 @@ function Spines({ depth }: { depth: number }) {
         />
       ))}
     </>
+  );
+}
+
+/** Right-aligned leaf value with an optional copy button (address/bytes). */
+function LeafValue({ display, copyValue }: { display?: string; copyValue?: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = () => {
+    if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(copyValue)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => undefined);
+  };
+  return (
+    <span className="ml-auto flex min-w-0 items-center justify-end gap-1">
+      <span className="text-foreground min-w-0 break-all text-right font-mono text-[10px] font-medium">{display}</span>
+      {copyValue &&
+        (copied ? (
+          <CopiedIcon className="size-3 flex-none" />
+        ) : (
+          <CopyIcon className="size-3 flex-none cursor-pointer" onClick={onCopy} />
+        ))}
+    </span>
   );
 }
 
@@ -195,16 +291,14 @@ export function Eip712Tree({ typedData }: { typedData: TypedData }) {
           return (
             <div key={r.id} className={`relative py-[7px] pl-[9px] pr-[10.5px] ${border}`}>
               <Spines depth={r.depth} />
-              <div className="flex items-baseline gap-1.5" style={{ paddingLeft: pad }}>
+              <div className="flex items-center gap-1.5" style={{ paddingLeft: pad }}>
                 <span className="text-muted-foreground flex-none font-mono text-[9px] font-medium">{r.label}</span>
                 {r.badge && (
                   <span className="text-muted-foreground/70 bg-foreground/5 flex-none rounded-[4px] px-1 py-px font-mono text-[7px] font-medium">
                     {r.badge}
                   </span>
                 )}
-                <span className="text-foreground ml-auto min-w-0 break-all text-right font-mono text-[10px] font-medium">
-                  {r.value}
-                </span>
+                <LeafValue display={r.value} copyValue={r.copyValue} />
               </div>
             </div>
           );

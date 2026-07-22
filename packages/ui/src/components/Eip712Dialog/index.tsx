@@ -121,7 +121,7 @@ export const Eip712Dialog = ({
       }}
       innerStyle={{ padding: 0, overflow: 'visible' }}
     >
-      <DialogShell contentClassName="min-h-[447px]">
+      <DialogShell contentClassName="min-h-[510px]">
         {isSuccess ? (
           // Brief success beat before the parent closes the dialog.
           <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
