@@ -1127,7 +1127,6 @@ function SignatureDialogWrapper({
       }}
       message={request.data.message}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
-      timestamp={new Date(request.timestamp)}
       appName={appName}
       appLogoUrl={appLogoUrl}
       accountAddress={request.data.address}

@@ -1,18 +1,18 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { Globe } from 'lucide-react';
 import { DefaultDialog } from '../DefaultDialog';
 import { DialogShell } from '../DialogShell';
+import { DialogAppHeader } from '../DialogAppHeader';
+import { AccountPill } from '../AccountPill';
 import { AccountIdenticon } from '../AccountIdenticon';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { Button } from '../ui/button';
 import { SignatureDialogProps } from './types';
-import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
-import { getChainLabel } from '../../utils/resolveChainLabel';
+import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { sanitizeDisplayName } from '../../utils/sanitize';
 import { isSafeImageUrl } from '../../utils/safeUrl';
-import { cn } from '../../lib/utils';
+import { formatAddress } from '../../utils/formatAddress';
+import { Globe } from 'lucide-react';
 
 export const SignatureDialog = ({
   open,
@@ -32,58 +32,13 @@ export const SignatureDialog = ({
   signatureStatus,
   canSign,
 }: SignatureDialogProps) => {
-  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
-  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-
-  // Resolve the signer address to an ENS name + avatar. The pill shows the
-  // truncated address immediately and upgrades in place when this resolves —
-  // on a signing screen the address is the ground truth and shouldn't wait
-  // behind a placeholder; the address→ENS swap is a refinement, same identity.
-  useEffect(() => {
-    setResolvedAddress(null);
-    setAvatarUrl(null);
-    if (!accountAddress || !chainId) return;
-    let cancelled = false;
-    reverseResolveWithAvatars([{ address: accountAddress, chainId }], mainnetRpcUrl)
-      .then(async (resolved) => {
-        if (cancelled) return;
-        const identity = resolved[accountAddress.toLowerCase()];
-        if (identity) {
-          const label = await getChainLabel(chainId, mainnetRpcUrl);
-          if (cancelled) return;
-          setResolvedAddress(label ? `${identity.name}@${label}` : identity.name);
-          setAvatarUrl(identity.avatar ?? null);
-        }
-      })
-      .catch(() => {
-        // Silently fall back to the truncated address + blob
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [accountAddress, chainId]);
-
-  // appName is externally-controlled (dApp metadata); sanitize before display.
-  const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
-
-  const formatOrigin = (url: string) => {
-    try {
-      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
-      return urlObj.hostname.replace('www.', '');
-    } catch {
-      return origin;
-    }
-  };
-
-  const formatAddress = (address: string) => {
-    if (!address || address.length < 10) return address;
-    return `${address.slice(0, 6)}...${address.slice(-4)}`;
-  };
-
-  // Reverse-resolved ENS name when available, otherwise the truncated address.
   const signerAddress = accountAddress ?? '';
-  const displayName = resolvedAddress || formatAddress(signerAddress);
+  const { name: resolvedName, avatar: avatarUrl } = useReverseIdentity(accountAddress, chainId, mainnetRpcUrl);
+
+  // ENS name when resolved, otherwise the truncated address (address-first).
+  const displayName = resolvedName || formatAddress(signerAddress);
   const hasError = signatureStatus.includes('Error');
+  const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
 
   const appAvatar = isSafeImageUrl(appLogoUrl) ? (
     <img
@@ -139,47 +94,18 @@ export const SignatureDialog = ({
           </div>
         ) : (
           <div className="flex min-h-0 flex-1 flex-col p-6 pt-7">
-            {/* App identity */}
-            <div className="flex items-center gap-3">
-              <span className="relative flex-none">
-                <span className="bg-secondary flex h-12 w-12 items-center justify-center overflow-hidden rounded-full shadow-[inset_0_0_0_1px_rgba(255,255,255,.10)]">
-                  {appAvatar}
-                </span>
-                {chainIcon && (
-                  <span
-                    title={chainName}
-                    className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center overflow-hidden rounded-full shadow-[0_0_0_2.5px_#0A1020] [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0"
-                  >
-                    {chainIcon}
-                  </span>
-                )}
-              </span>
-              <span className="flex min-w-0 flex-col gap-0.5">
-                <span className="text-foreground truncate text-[17px] font-semibold tracking-[-0.02em]">
-                  {safeAppName}
-                </span>
-                <span className="text-muted-foreground truncate font-mono text-[10px]">{formatOrigin(origin)}</span>
-              </span>
-            </div>
+            <DialogAppHeader
+              appName={appName}
+              appLogoUrl={appLogoUrl}
+              origin={origin}
+              chainName={chainName}
+              chainIcon={chainIcon}
+            />
 
             {/* Signing account */}
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Signing as</h2>
-              <span className="bg-secondary border-border flex min-w-0 items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5">
-                <IdentityAvatar
-                  src={avatarUrl ?? undefined}
-                  className="h-[15px] w-[15px] rounded-full"
-                  fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={15} />}
-                />
-                <span
-                  className={cn(
-                    'text-secondary-foreground truncate font-mono',
-                    displayName.length > 40 ? 'text-[9px]' : 'text-[10.5px]'
-                  )}
-                >
-                  {displayName}
-                </span>
-              </span>
+              <AccountPill seedAddress={signerAddress} label={displayName} avatarUrl={avatarUrl} />
             </div>
 
             {/* Message */}
@@ -187,24 +113,24 @@ export const SignatureDialog = ({
               <span className="text-muted-foreground mb-1.5 font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
                 Message
               </span>
-              <p className="text-secondary-foreground min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.65]">
+              <p className="text-foreground min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.65]">
                 {message || 'No message provided'}
               </p>
             </div>
 
             {hasError && (
               <div className="bg-destructive/10 border-destructive/20 mt-3 rounded-[10.5px] border px-3 py-2">
-                <span className="text-destructive-foreground break-words text-xs">{signatureStatus}</span>
+                <span className="text-destructive break-words text-xs">{signatureStatus}</span>
               </div>
             )}
 
             {/* Actions */}
             <div className="mt-4 flex gap-2">
               <Button
-                variant="outline"
+                variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="text-secondary-foreground h-11 flex-1 rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
+                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold"
               >
                 Cancel
               </Button>

@@ -44,7 +44,6 @@ export const SignatureModal = ({
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [timestamp] = useState(() => new Date());
 
   // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
@@ -116,7 +115,6 @@ export const SignatureModal = ({
       }}
       message={messageToSign}
       origin={origin}
-      timestamp={timestamp}
       appName={appName}
       appLogoUrl={appLogoUrl}
       accountAddress={address || walletAddress || undefined}

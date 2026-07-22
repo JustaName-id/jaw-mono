@@ -6,7 +6,6 @@ export interface SignatureDialogProps {
   // Message data
   message: string;
   origin: string;
-  timestamp: Date;
 
   // Requesting dApp identity (matches ConnectDialog)
   appName?: string;

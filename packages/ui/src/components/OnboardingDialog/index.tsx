@@ -217,7 +217,7 @@ function CreateAccountForm({
         placeholder="username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        className="h-11 rounded-[10.5px] bg-white/[.04] font-mono text-[13px]"
+        className="bg-muted h-11 rounded-[10.5px] font-mono text-[13px]"
         // Prevent password-manager extensions (1Password, LastPass, Dashlane,
         // Bitwarden) from attaching their inline overlay to this field. Their
         // overlay covers the embedded iframe, which the clickjacking guard
@@ -246,7 +246,7 @@ function CreateAccountForm({
         </div>
       ) : (
         <Button
-          variant="outline"
+          variant="secondary"
           onClick={async () => {
             try {
               await handleCreateAccountClick();
@@ -255,7 +255,7 @@ function CreateAccountForm({
             }
           }}
           disabled={!isValid || isLoading}
-          className="text-secondary-foreground h-11 w-full rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
+          className="h-11 w-full rounded-[10.5px] text-[13px] font-semibold"
         >
           <ScanFace className="!h-4 !w-4" />
           Create Account
@@ -497,7 +497,7 @@ export function OnboardingDialog({
             </>
           )}
           {loggingInAccount === defaultAccount.username ? (
-            <Spinner className="!h-4 !w-4 text-[#0B0F1A]" />
+            <Spinner className="text-primary-foreground !h-4 !w-4" />
           ) : (
             <ChevronRight className="text-primary-foreground/70 h-4 w-4 flex-none" />
           )}
@@ -508,8 +508,8 @@ export function OnboardingDialog({
         <Button
           onClick={onImportAccount}
           disabled={isBusy}
-          variant="outline"
-          className="text-secondary-foreground h-11 w-full rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
+          variant="secondary"
+          className="h-11 w-full rounded-[10.5px] text-[13px] font-semibold"
         >
           <ArrowRightLeft className="!h-3.5 !w-3.5" />
           {isImporting ? 'Opening Passkey...' : 'Switch account'}
