@@ -5,6 +5,7 @@ import { DialogShell } from '../DialogShell';
 import { DialogAppHeader } from '../DialogAppHeader';
 import { SuccessCheck } from '../SuccessCheck';
 import { Eip712Tree } from './Eip712Tree';
+import { Eip712DomainCard } from './Eip712DomainCard';
 import { Button } from '../ui/button';
 import { Eip712DialogProps } from './types';
 import { useClearSigningTypedData } from '../../hooks';
@@ -81,6 +82,20 @@ export const Eip712Dialog = ({
 
   const hasError = signatureStatus.includes('Error');
   const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
+
+  // Domain the signature is bound to (which contract accepts it, on which chain).
+  const domainName = typedData?.domain?.name as string | undefined;
+  const verifyingContract = typedData?.domain?.verifyingContract as string | undefined;
+  const domainChainId = useMemo(() => {
+    const raw = typedData?.domain?.chainId;
+    if (typeof raw === 'number') return raw;
+    if (typeof raw === 'bigint') return Number(raw);
+    if (typeof raw === 'string' && raw.length > 0) {
+      const n = raw.startsWith('0x') ? Number.parseInt(raw, 16) : Number(raw);
+      return Number.isFinite(n) ? n : undefined;
+    }
+    return undefined;
+  }, [typedData]);
 
   const appAvatar = isSafeImageUrl(appLogoUrl) ? (
     <img
@@ -171,6 +186,16 @@ export const Eip712Dialog = ({
                 </>
               ) : (
                 rawTree
+              )}
+
+              {/* Where the signature goes — verifying contract + the domain's network. */}
+              {typedData && (
+                <Eip712DomainCard
+                  domainName={domainName}
+                  verifyingContract={verifyingContract}
+                  chainId={domainChainId}
+                  apiKey={apiKey}
+                />
               )}
 
               {/* ERC-8213 verification digests — only when typed data parsed. */}

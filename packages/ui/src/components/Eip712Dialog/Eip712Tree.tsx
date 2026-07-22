@@ -17,7 +17,6 @@ type TreeNode = {
   kind: 'leaf' | 'group';
   badge?: string; // solidity type (leaves)
   value?: string; // formatted, truncated value (leaves)
-  meta?: string; // right-aligned hint (groups: type name / "N items" / "of N")
   children?: TreeNode[];
 };
 
@@ -73,19 +72,13 @@ function buildNode(
   if (isArrayType(type)) {
     const base = baseType(type);
     const arr = Array.isArray(value) ? value : [];
-    const structElem = !!types[base];
     return {
       id,
       depth,
       label,
       kind: 'group',
-      meta: `${arr.length} item${arr.length === 1 ? '' : 's'}`,
-      children: arr.map((el, i) => {
-        const child = buildNode(types, base, el, structElem ? `${base} ${i}` : `[${i}]`, `${id}[${i}]`, depth + 1);
-        // Array-element structs read "of N" (their index within the list), not the type name.
-        if (structElem && child.kind === 'group') child.meta = `of ${arr.length}`;
-        return child;
-      }),
+      // Generic index labels — never derive from the element's struct type name.
+      children: arr.map((el, i) => buildNode(types, base, el, `[${i}]`, `${id}[${i}]`, depth + 1)),
     };
   }
 
@@ -101,7 +94,6 @@ function buildNode(
       depth,
       label,
       kind: 'group',
-      meta: type,
       children: fields.map((f) => buildNode(types, f.type, obj?.[f.name], f.name, `${id}.${f.name}`, depth + 1)),
     };
   }
@@ -197,9 +189,6 @@ export function Eip712Tree({ typedData }: { typedData: TypedData }) {
                 <Spines depth={r.depth} />
                 <Caret open={open} />
                 <span className="text-foreground/90 font-mono text-[9px] font-medium">{r.label}</span>
-                {r.meta && (
-                  <span className="text-muted-foreground ml-auto font-mono text-[8px] font-medium">{r.meta}</span>
-                )}
               </button>
             );
           }
