@@ -1,18 +1,26 @@
 'use client';
 
-import { Button } from '../ui/button';
-import { DefaultDialog } from '../DefaultDialog';
-import { SignatureDialogProps } from './types';
-import { useDialogMobileFullScreen } from '../../hooks';
-import { reverseResolveAddresses, getDisplayAddress, getChainLabel } from '../../utils';
 import { useState, useEffect } from 'react';
+import { Globe } from 'lucide-react';
+import { DefaultDialog } from '../DefaultDialog';
+import { DialogShell } from '../DialogShell';
+import { AccountIdenticon } from '../AccountIdenticon';
+import { IdentityAvatar } from '../IdentityAvatar';
+import { Button } from '../ui/button';
+import { SignatureDialogProps } from './types';
+import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
+import { getChainLabel } from '../../utils/resolveChainLabel';
+import { sanitizeDisplayName } from '../../utils/sanitize';
+import { isSafeImageUrl } from '../../utils/safeUrl';
+import { cn } from '../../lib/utils';
 
 export const SignatureDialog = ({
   open,
   onOpenChange,
   message,
   origin,
-  timestamp,
+  appName,
+  appLogoUrl,
   accountAddress,
   chainName,
   chainId,
@@ -24,30 +32,30 @@ export const SignatureDialog = ({
   signatureStatus,
   canSign,
 }: SignatureDialogProps) => {
-  const mobileFullScreen = useDialogMobileFullScreen();
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
 
-  // Resolve account address to human-readable name
+  // Resolve the signer address to an ENS name + avatar for the "Signing as" pill.
   useEffect(() => {
     if (accountAddress && chainId) {
-      reverseResolveAddresses([{ address: accountAddress, chainId }], mainnetRpcUrl)
+      reverseResolveWithAvatars([{ address: accountAddress, chainId }], mainnetRpcUrl)
         .then(async (resolved) => {
-          const name = resolved[accountAddress.toLowerCase()];
-          if (name) {
+          const identity = resolved[accountAddress.toLowerCase()];
+          if (identity) {
             const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setResolvedAddress(label ? `${name}@${label}` : name);
+            setResolvedAddress(label ? `${identity.name}@${label}` : identity.name);
+            setAvatarUrl(identity.avatar ?? null);
           }
         })
         .catch(() => {
-          // Silently fail if resolution fails
+          // Silently fall back to the truncated address + blob
         });
     }
   }, [accountAddress, chainId]);
 
-  // Get display address - use resolved name or formatted address
-  const displayAddress = getDisplayAddress(resolvedAddress, accountAddress || '');
+  // appName is externally-controlled (dApp metadata); sanitize before display.
+  const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
 
-  // Format origin to display only domain (remove protocol)
   const formatOrigin = (url: string) => {
     try {
       const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
@@ -57,108 +65,150 @@ export const SignatureDialog = ({
     }
   };
 
+  const formatAddress = (address: string) => {
+    if (!address || address.length < 10) return address;
+    return `${address.slice(0, 6)}...${address.slice(-4)}`;
+  };
+
+  // Reverse-resolved ENS name when available, otherwise the truncated address.
+  const signerAddress = accountAddress ?? '';
+  const displayName = resolvedAddress || formatAddress(signerAddress);
+  const hasError = signatureStatus.includes('Error');
+
+  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
+    <img
+      src={appLogoUrl ?? undefined}
+      alt={`${safeAppName} logo`}
+      className="h-full w-full rounded-full object-cover"
+    />
+  ) : (
+    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
+  );
+
   return (
     <DefaultDialog
       open={open}
       onOpenChange={!isProcessing ? onOpenChange : undefined}
-      header={
-        <div className="flex flex-col gap-2.5 p-3.5">
-          <div className="flex flex-row items-center justify-between">
-            <p className="text-muted-foreground text-xs font-bold leading-[100%]">
-              {timestamp.toLocaleDateString('en-US', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-              })}{' '}
-              at{' '}
-              {timestamp.toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                timeZoneName: 'short',
-              })}
-            </p>
-            {/* <InfoIcon /> */}
-          </div>
-          {/* Title */}
-          <p className="text-foreground text-[30px] font-medium leading-[100%]">Signature request</p>
-          <p className="text-muted-foreground text-sm">{displayAddress}</p>
-        </div>
-      }
-      contentStyle={
-        mobileFullScreen
-          ? {
-              width: '100%',
-              height: '100%',
-              maxWidth: 'none',
-              maxHeight: 'none',
-            }
-          : {
-              width: '500px',
-              minWidth: '500px',
-            }
-      }
+      contentStyle={{
+        width: 'fit-content',
+        background: 'transparent',
+        border: 'none',
+        boxShadow: 'none',
+      }}
+      innerStyle={{ padding: 0, overflow: 'visible' }}
     >
-      <div className="flex h-full min-h-0 flex-col max-md:pb-2">
-        {/* Main Content Area - Large scrollable message box */}
-        <div className="bg-card border-border max-h-[50vh] min-h-[300px] flex-1 overflow-y-auto rounded-[6px] border p-4">
-          <p className="text-foreground whitespace-pre-wrap break-words text-sm font-normal leading-relaxed">
-            {message || 'No message provided'}
-          </p>
-        </div>
+      {/* Taller floor than the default shell so the message box has room and the
+          card doesn't jump between short and long messages (canvas: min 447). */}
+      <DialogShell contentClassName="min-h-[447px]">
+        {isProcessing ? (
+          // Signing in progress — passkey ceremony running.
+          <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
+            <div className="flex items-center gap-3">
+              <IdentityAvatar
+                src={avatarUrl ?? undefined}
+                className="h-11 w-11 rounded-[13px]"
+                fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={44} />}
+              />
+              <span className="flex items-center gap-1.5">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="jaw-flow-dot bg-foreground/70 h-1.5 w-1.5 rounded-full"
+                    style={{ animationDelay: `${i * 0.2}s` }}
+                  />
+                ))}
+              </span>
+              <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
+                {appAvatar}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Signing...</h2>
+              <p className="text-muted-foreground text-xs">Confirm with your passkey</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col p-6 pt-7">
+            {/* App identity */}
+            <div className="flex items-center gap-3">
+              <span className="relative flex-none">
+                <span className="bg-secondary flex h-12 w-12 items-center justify-center overflow-hidden rounded-full shadow-[inset_0_0_0_1px_rgba(255,255,255,.10)]">
+                  {appAvatar}
+                </span>
+                {chainIcon && (
+                  <span
+                    title={chainName}
+                    className="absolute -bottom-0.5 -right-0.5 flex h-4 w-4 items-center justify-center overflow-hidden rounded-full shadow-[0_0_0_2.5px_#0A1020] [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0"
+                  >
+                    {chainIcon}
+                  </span>
+                )}
+              </span>
+              <span className="flex min-w-0 flex-col gap-0.5">
+                <span className="text-foreground truncate text-[17px] font-semibold tracking-[-0.02em]">
+                  {safeAppName}
+                </span>
+                <span className="text-muted-foreground truncate font-mono text-[10px]">{formatOrigin(origin)}</span>
+              </span>
+            </div>
 
-        {/* Footer Information Section - Network and URL */}
-        <div className="bg-card border-border mt-3 rounded-[6px] border p-2">
-          <div className="flex flex-row gap-4">
-            {/* Network Column */}
-            {chainName && (
-              <div className="flex flex-1 flex-col gap-1">
-                <p className="text-foreground text-xs font-bold">Network</p>
-                <div className="flex flex-row items-center gap-2">
-                  {chainIcon && (
-                    <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center">{chainIcon}</div>
+            {/* Signing account */}
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Signing as</h2>
+              <span className="bg-secondary border-border flex min-w-0 items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5">
+                <IdentityAvatar
+                  src={avatarUrl ?? undefined}
+                  className="h-[15px] w-[15px] rounded-full"
+                  fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={15} />}
+                />
+                <span
+                  className={cn(
+                    'text-secondary-foreground truncate font-mono',
+                    displayName.length > 40 ? 'text-[9px]' : 'text-[10.5px]'
                   )}
-                  <p className="text-foreground text-sm font-normal">{chainName}</p>
-                </div>
+                >
+                  {displayName}
+                </span>
+              </span>
+            </div>
+
+            {/* Message */}
+            <div className="border-border mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10.5px] border p-3">
+              <span className="text-muted-foreground mb-1.5 font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+                Message
+              </span>
+              <p className="text-secondary-foreground min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.65]">
+                {message || 'No message provided'}
+              </p>
+            </div>
+
+            {hasError && (
+              <div className="bg-destructive/10 border-destructive/20 mt-3 rounded-[10.5px] border px-3 py-2">
+                <span className="text-destructive-foreground break-words text-xs">{signatureStatus}</span>
               </div>
             )}
 
-            {/* Vertical Separator */}
-            {chainName && <div className="bg-border min-h-[40px] w-[1px]"></div>}
-
-            {/* URL Column */}
-            <div className="flex flex-1 flex-col gap-1">
-              <p className="text-foreground text-xs font-bold">URL</p>
-              <p className="text-foreground text-sm font-normal">{formatOrigin(origin)}</p>
+            {/* Actions */}
+            <div className="mt-4 flex gap-2">
+              <Button
+                variant="outline"
+                onClick={onCancel}
+                disabled={isProcessing}
+                className="text-secondary-foreground h-11 flex-1 rounded-[10.5px] border-white/[.14] bg-transparent text-[13px] font-semibold"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={onSign}
+                disabled={!canSign}
+                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold"
+              >
+                Sign
+              </Button>
             </div>
           </div>
-        </div>
-
-        {/* Status Message */}
-        {signatureStatus && (
-          <div
-            className={`mt-3 rounded-lg p-3 text-sm ${
-              signatureStatus.includes('Error')
-                ? 'bg-destructive/10 text-destructive'
-                : signatureStatus.includes('successfully')
-                  ? 'bg-success/10 text-success'
-                  : 'bg-info/10 text-info'
-            }`}
-          >
-            {signatureStatus}
-          </div>
         )}
-
-        {/* Action Buttons */}
-        <div className="flex flex-shrink-0 gap-3 p-3.5">
-          <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
-            Cancel
-          </Button>
-          <Button onClick={onSign} disabled={!canSign} className="flex-1">
-            {isProcessing ? 'Signing...' : 'Sign'}
-          </Button>
-        </div>
-      </div>
+      </DialogShell>
     </DefaultDialog>
   );
 };

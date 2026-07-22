@@ -8,6 +8,10 @@ export interface SignatureDialogProps {
   origin: string;
   timestamp: Date;
 
+  // Requesting dApp identity (matches ConnectDialog)
+  appName?: string;
+  appLogoUrl?: string | null;
+
   accountAddress?: string;
   chainName?: string;
   chainId?: number;

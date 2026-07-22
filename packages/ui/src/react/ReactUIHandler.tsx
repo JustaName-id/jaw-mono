@@ -378,6 +378,8 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
       }
@@ -1062,6 +1064,8 @@ function SignatureDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: SignatureUIRequest;
   onApprove: (data: any) => void;
@@ -1069,6 +1073,8 @@ function SignatureDialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1122,6 +1128,8 @@ function SignatureDialogWrapper({
       message={request.data.message}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       timestamp={new Date(request.timestamp)}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       accountAddress={request.data.address}
       chainName={chainName}
       chainId={chainId}

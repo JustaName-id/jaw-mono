@@ -14,6 +14,8 @@ export interface SignatureModalProps {
   address?: string;
   chain: chain;
   apiKey?: string;
+  appName?: string;
+  appLogoUrl?: string;
   onSuccess: (signature: string, message: string) => void;
   onError: (error: Error, errorCode?: number) => void;
 }
@@ -24,11 +26,17 @@ export const SignatureModal = ({
   address,
   chain,
   apiKey,
+  appName,
+  appLogoUrl,
   onSuccess,
   onError,
 }: SignatureModalProps) => {
   // Single hook handles session lookup + account restoration
-  const { account, isLoading: isAccountLoading } = useSessionAccount({
+  const {
+    account,
+    walletAddress,
+    isLoading: isAccountLoading,
+  } = useSessionAccount({
     origin,
     chain,
     apiKey,
@@ -109,7 +117,9 @@ export const SignatureModal = ({
       message={messageToSign}
       origin={origin}
       timestamp={timestamp}
-      accountAddress={address}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
+      accountAddress={address || walletAddress || undefined}
       chainName={chainName}
       chainIcon={chainIcon}
       chainId={chain.id}
