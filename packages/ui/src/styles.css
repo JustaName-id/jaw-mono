@@ -372,3 +372,6 @@
 .jaw-flow-dot {
   animation: jaw-flow-dot 1.6s ease-in-out infinite;
 }
+dialog[data-jaw-modal-container]::backdrop {
+  background: transparent;
+}
