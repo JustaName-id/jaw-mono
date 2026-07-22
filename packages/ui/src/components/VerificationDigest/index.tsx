@@ -72,14 +72,25 @@ export const Eip712VerificationDigests = ({ typedDataJson }: { typedDataJson: st
   }
 
   return (
-    <details className="text-xs">
-      <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
-        Show verification digests
+    <details className="border-border group overflow-hidden rounded-[8.5px] border text-xs [&_summary::-webkit-details-marker]:hidden">
+      <summary className="hover:bg-foreground/[0.03] flex cursor-pointer list-none items-center justify-between px-3 py-2">
+        <span className="text-muted-foreground text-[11px] font-medium">Digests data</span>
+        <svg
+          className="text-muted-foreground h-3 w-3 transition-transform group-open:rotate-180"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinecap="round"
+          strokeLinejoin="round"
+        >
+          <path d="M6 9l6 6 6-6" />
+        </svg>
       </summary>
-      <div className="border-border mt-2 flex flex-col gap-2.5 rounded-[6px] border p-3.5">
-        <DigestRow label="EIP-712 Digest" value={digests.eip712Digest} prominent />
+      <div className="border-border flex flex-col gap-2.5 border-t p-3">
         <DigestRow label="Domain Hash" value={digests.domainHash} />
         <DigestRow label="Message Hash" value={digests.messageHash} />
+        <DigestRow label="EIP-712 Digest" value={digests.eip712Digest} prominent />
       </div>
     </details>
   );

@@ -14,6 +14,8 @@ export interface Eip712ModalProps {
   address?: string;
   chain: chain;
   apiKey?: string;
+  appName?: string;
+  appLogoUrl?: string;
   onSuccess: (signature: string) => void;
   onError: (error: Error, errorCode?: number) => void;
 }
@@ -32,6 +34,8 @@ export const Eip712Modal = ({
   address,
   chain,
   apiKey,
+  appName,
+  appLogoUrl,
   onSuccess,
   onError,
 }: Eip712ModalProps) => {
@@ -43,8 +47,12 @@ export const Eip712Modal = ({
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [timestamp] = useState(() => new Date());
+
+  // Brief success-tick beat before the dialog closes. The signature is already
+  // delivered (onSuccess), so this only holds the visual confirmation.
+  const SUCCESS_HOLD_MS = 850;
 
   // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
@@ -103,8 +111,10 @@ export const Eip712Modal = ({
       );
 
       setSignatureStatus('Signature created successfully!');
-
-      // Call onSuccess immediately - parent will handle closing
+      // Show the success tick, then hand the signature to the parent (which
+      // closes the dialog). The delay is purely the confirmation animation.
+      setIsSuccess(true);
+      await new Promise((resolve) => setTimeout(resolve, SUCCESS_HOLD_MS));
       onSuccess(signature);
     } catch (error) {
       console.error('Error signing typed data:', error);
@@ -138,7 +148,8 @@ export const Eip712Modal = ({
       }}
       typedDataJson={typedDataJson}
       origin={origin}
-      timestamp={timestamp}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       accountAddress={address}
       chainName={chainName}
       chainIcon={chainIcon}
@@ -147,6 +158,7 @@ export const Eip712Modal = ({
       onSign={signTypedData}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
       canSign={canSign}
     />

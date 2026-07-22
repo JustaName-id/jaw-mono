@@ -6,7 +6,10 @@ export interface Eip712DialogProps {
   // EIP-712 typed data (JSON string)
   typedDataJson: string;
   origin: string;
-  timestamp: Date;
+
+  // Requesting dApp identity (matches ConnectDialog/SignatureDialog)
+  appName?: string;
+  appLogoUrl?: string | null;
 
   accountAddress?: string;
   chainName?: string;
@@ -19,6 +22,8 @@ export interface Eip712DialogProps {
 
   // Status
   isProcessing: boolean;
+  /** Briefly true after a successful sign so the dialog can play a success tick before closing. */
+  isSuccess?: boolean;
   signatureStatus: string;
   canSign: boolean;
 
