@@ -48,7 +48,7 @@ export const DigestRow = ({
           <CopyIcon className="h-4 w-4 flex-shrink-0 cursor-pointer" onClick={onCopy} />
         )}
       </div>
-      <div className="bg-secondary overflow-x-auto rounded-[6px] p-2">
+      <div className="bg-secondary rounded-[6px] p-2">
         <p className="text-foreground break-all font-mono text-xs leading-[150%]">{value}</p>
       </div>
     </div>

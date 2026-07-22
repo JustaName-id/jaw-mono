@@ -98,6 +98,14 @@ export interface DescriptorDeployment {
 }
 
 export interface Descriptor {
+  /**
+   * ERC-7730 `includes`: a relative path to a base descriptor whose `display`/`context`
+   * this file extends. The registry uses it heavily — e.g. every token's Permit binding
+   * includes `ercs/eip712-erc2612-permit.json` for the shared display formats. Must be
+   * resolved (merged) before reading `display.formats`, or include-based descriptors look
+   * empty and silently fall back to the raw decode.
+   */
+  includes?: string;
   context: {
     $id?: string;
     contract?: { deployments?: DescriptorDeployment[]; abi?: unknown };
@@ -331,6 +339,66 @@ export function getDefaultDescriptorSource(): DescriptorSource {
 /** Build a CAIP-10 identifier (`eip155:<chainId>:<address.lowercased>`) used by the ERC-7730 indexes. */
 export const caip10 = (chainId: number, address: string) => `eip155:${chainId}:${address.toLowerCase()}`;
 
+/** Resolve an ERC-7730 `includes` path (e.g. `../../ercs/foo.json`) relative to the including file. */
+function resolveRelativePath(basePath: string, rel: string): string {
+  const segs = basePath.split('/').slice(0, -1); // dirname
+  for (const s of rel.split('/')) {
+    if (s === '..') segs.pop();
+    else if (s === '.' || s === '') continue;
+    else segs.push(s);
+  }
+  return segs.join('/');
+}
+
+/** Deep-merge a base (included) descriptor with a local one; local values win. */
+function mergeDescriptor(base: Descriptor, local: Descriptor): Descriptor {
+  return {
+    ...base,
+    ...local,
+    context: {
+      ...base.context,
+      ...local.context,
+      eip712: { ...base.context?.eip712, ...local.context?.eip712 },
+      contract: { ...base.context?.contract, ...local.context?.contract },
+    },
+    metadata: { ...base.metadata, ...local.metadata },
+    display: {
+      ...base.display,
+      ...local.display,
+      formats: { ...base.display?.formats, ...local.display?.formats },
+      definitions: { ...base.display?.definitions, ...local.display?.definitions },
+    },
+  };
+}
+
+/**
+ * Fetch a descriptor and fully resolve its `includes` chain (base merged first,
+ * local overrides). Without this, include-based registry entries (all token Permits,
+ * many calldata descriptors) carry no `display.formats` and never clear-sign.
+ */
+async function loadDescriptor(source: DescriptorSource, path: string): Promise<Descriptor> {
+  let descriptor = await source.getDescriptor(path);
+  let currentPath = path;
+  let hops = 0;
+  while (descriptor.includes && hops < 5) {
+    const incPath = resolveRelativePath(currentPath, descriptor.includes);
+    let base: Descriptor;
+    try {
+      base = await source.getDescriptor(incPath);
+    } catch {
+      break; // include unavailable — proceed with what we have
+    }
+    const merged = mergeDescriptor(base, descriptor);
+    // Continue up the chain via the base's own `includes` (not the local pointer we just consumed).
+    merged.includes = base.includes;
+    descriptor = merged;
+    currentPath = incPath;
+    hops++;
+  }
+  delete descriptor.includes;
+  return descriptor;
+}
+
 /**
  * Compute the 4-byte selector for a descriptor's `display.formats` key.
  *
@@ -402,7 +470,7 @@ export async function resolveCalldataDescriptor(
 
   let descriptor: Descriptor;
   try {
-    descriptor = await source.getDescriptor(path);
+    descriptor = await loadDescriptor(source, path);
   } catch {
     return null;
   }
@@ -563,7 +631,7 @@ export async function resolveEip712Descriptor(
 
   let descriptor: Descriptor;
   try {
-    descriptor = await source.getDescriptor(chosen.path);
+    descriptor = await loadDescriptor(source, chosen.path);
   } catch {
     return null;
   }
@@ -766,6 +834,14 @@ async function formatField(
           symbol: ctx.nativeSymbol ?? 'ETH',
           rawValue: amount?.toString(),
         };
+      }
+
+      // EIP-712 default: a token amount whose `tokenPath` didn't resolve is denominated in
+      // the signature's verifyingContract — the token being permitted (EIP-2612 registry
+      // entries carry a calldata-style `tokenPath: "@.to"` that has no target in a permit).
+      // Calldata tx contexts have no verifyingContract, so this only affects typed-data.
+      if (!tokenAddr && typeof ctx.tx?.verifyingContract === 'string') {
+        tokenAddr = ctx.tx.verifyingContract;
       }
 
       let info: TokenInfo | null = null;

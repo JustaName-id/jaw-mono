@@ -12,7 +12,7 @@ import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
 import { Eip712VerificationDigests } from '../VerificationDigest';
 import { sanitizeDisplayName } from '../../utils/sanitize';
 import { isSafeImageUrl } from '../../utils/safeUrl';
-import { useMemo } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { Globe } from 'lucide-react';
 
 // EIP-712 TypedData structure
@@ -62,6 +62,22 @@ export const Eip712Dialog = ({
   }, [mainnetRpcUrl]);
 
   const { display: clearSigned } = useClearSigningTypedData(typedDataJson, chainId ?? 1, apiKey);
+
+  // Inside a Radix modal, native wheel/trackpad scrolling of a nested overflow
+  // container can get eaten. Drive scrollTop manually so the content region always
+  // scrolls. (Restored from the pre-revamp dialog.)
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollHeight <= el.clientHeight) return;
+      el.scrollTop += e.deltaY;
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [open, isProcessing, isSuccess, clearSigned]);
 
   const hasError = signatureStatus.includes('Error');
   const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
@@ -135,25 +151,17 @@ export const Eip712Dialog = ({
               </h2>
             </div>
 
-            {/* Scrollable content — masked fade top/bottom (canvas). */}
-            <div
-              className="flex min-h-0 flex-1 flex-col gap-2.5 overflow-y-auto px-6 pb-2.5 pt-2.5"
-              style={{
-                maskImage:
-                  'linear-gradient(to bottom, transparent 0, black 12px, black calc(100% - 12px), transparent 100%)',
-                WebkitMaskImage:
-                  'linear-gradient(to bottom, transparent 0, black 12px, black calc(100% - 12px), transparent 100%)',
-              }}
-            >
+            {/* Scrollable content. Block layout (not flex-col) is deliberate: a flex
+                column shrinks its children to fit instead of letting them overflow, so
+                the region would never scroll. space-y gives the gaps. */}
+            <div ref={scrollRef} className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-2.5">
               {!typedData ? (
                 <div className="bg-destructive/10 border-destructive/20 rounded-[10.5px] border p-4">
                   <p className="text-destructive text-sm">Failed to parse typed data</p>
                 </div>
               ) : clearSigned && clearSigned.rows.length > 0 ? (
                 <>
-                  <div className="border-border rounded-[10.5px] border p-3">
-                    <ClearSignedView display={clearSigned} chainId={chainId ?? 1} mainnetRpcUrl={mainnetRpcUrl} />
-                  </div>
+                  <ClearSignedView display={clearSigned} chainId={chainId ?? 1} mainnetRpcUrl={mainnetRpcUrl} />
                   <details className="text-xs">
                     <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
                       Show raw details

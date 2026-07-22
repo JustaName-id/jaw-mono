@@ -19,9 +19,14 @@ function formatGrouped(value: string): string {
 
 function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }) {
   return (
-    <div className="flex flex-row items-center gap-1.5">
-      <TokenIcon chainId={chainId} address={row.tokenAddress ?? ethAddress} symbol={row.symbol} className="size-4" />
-      <p className="text-foreground break-all font-mono text-xs leading-[150%]">
+    <div className="flex min-w-0 flex-row items-center justify-end gap-1.5">
+      <TokenIcon
+        chainId={chainId}
+        address={row.tokenAddress ?? ethAddress}
+        symbol={row.symbol}
+        className="size-4 flex-none"
+      />
+      <p className="text-foreground truncate font-mono text-[11px]">
         <span className="font-semibold">{formatGrouped(row.value)}</span>
         {row.symbol && <span className="text-muted-foreground"> {row.symbol}</span>}
       </p>
@@ -40,11 +45,12 @@ function AddressValue({
 }) {
   const addr = row.rawValue ?? row.value;
   return (
-    <div className="flex flex-row items-center gap-1">
+    <div className="flex min-w-0 flex-row items-center justify-end gap-1.5">
       <IdentityAvatar src={avatarSrc} fallback={null} />
-      <p className="text-foreground break-all font-mono text-xs leading-[150%]">
-        {resolvedName ? `${resolvedName} (${formatAddress(addr)})` : addr}
-      </p>
+      {/* Truncate — the raw column is right-aligned and must never wrap the row. */}
+      <span className="text-foreground truncate font-mono text-[11px]">
+        {resolvedName ? resolvedName : formatAddress(addr)}
+      </span>
     </div>
   );
 }
@@ -107,28 +113,29 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
   if (!hasHeader && !hasRows) return null;
 
   return (
-    <div className="bg-secondary flex flex-col rounded-[6px]">
+    <div className="border-border rounded-[10.5px] border p-3">
       {hasHeader && (
-        <div className={`flex items-center gap-2 px-2 pt-2 ${hasRows ? 'pb-1.5' : 'pb-2'}`}>
-          <span className="text-foreground text-xs font-semibold capitalize">{display.intent}</span>
-        </div>
+        <div className={`text-foreground text-[12px] font-semibold ${hasRows ? 'mb-2.5' : ''}`}>{display.intent}</div>
       )}
       {hasRows && (
-        <div className={`flex flex-col gap-1 px-2 pb-2 ${hasHeader ? 'border-border/40 border-t pt-2' : 'pt-2'}`}>
+        <div className="divide-border/40 flex flex-col divide-y">
           {display.rows.map((row, i) => {
             const lookup = row.rawValue?.toLowerCase();
             const resolvedName = lookup ? resolved[lookup] : undefined;
             const avatarSrc = lookup ? avatars[lookup] : undefined;
             return (
-              <div key={i} className="flex flex-col gap-0.5">
-                <span className="text-muted-foreground text-xs font-semibold">{row.label}</span>
-                {row.kind === 'tokenAmount' || row.kind === 'amount' ? (
-                  <TokenAmountValue row={row} chainId={chainId} />
-                ) : row.kind === 'address' ? (
-                  <AddressValue row={row} resolvedName={resolvedName} avatarSrc={avatarSrc} />
-                ) : (
-                  <p className="text-foreground break-all font-mono text-xs leading-[150%]">{row.value}</p>
-                )}
+              // Row-wise: label left, value right — one line each, value truncates.
+              <div key={i} className="flex items-baseline justify-between gap-3 py-[7px] first:pt-0 last:pb-0">
+                <span className="text-muted-foreground flex-none text-[11px] font-medium">{row.label}</span>
+                <div className="min-w-0 text-right">
+                  {row.kind === 'tokenAmount' || row.kind === 'amount' ? (
+                    <TokenAmountValue row={row} chainId={chainId} />
+                  ) : row.kind === 'address' ? (
+                    <AddressValue row={row} resolvedName={resolvedName} avatarSrc={avatarSrc} />
+                  ) : (
+                    <span className="text-foreground break-all font-mono text-[11px]">{row.value}</span>
+                  )}
+                </div>
               </div>
             );
           })}

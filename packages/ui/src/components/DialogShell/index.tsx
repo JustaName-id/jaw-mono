@@ -25,12 +25,8 @@ export function DialogShell({ children, halo = true, className, contentClassName
     <div
       data-jaw-shell
       // `bg-border` paints the 1.5px ring in the theme border color; on dark the
-      // halo overlays it. `lg:[zoom:1.15]` scales the card up on large screens.
-      className={cn(
-        'bg-border relative mx-auto w-fit overflow-hidden rounded-[18px] p-[1.5px]',
-        'lg:[zoom:1.15]',
-        className
-      )}
+      // halo overlays it.
+      className={cn('bg-border relative mx-auto w-fit overflow-hidden rounded-[18px] p-[1.5px]', className)}
     >
       {halo && <div aria-hidden className="jaw-halo-ring absolute inset-[-60%] z-0 hidden dark:block" />}
       <div
