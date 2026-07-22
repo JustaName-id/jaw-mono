@@ -110,22 +110,21 @@ export const SignatureDialog = ({
               chainIcon={chainIcon}
             />
 
-            {/* Signing account */}
+            {/* Signing account — flush with the header logo and the message-box
+                border (the card content column). */}
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Signing as</h2>
               <AccountPill seedAddress={signerAddress} label={displayName} avatarUrl={avatarUrl} />
             </div>
 
-            {/* Message — label sits at the card column, aligned with "Signing as" */}
-            <div className="mt-4 flex min-h-0 flex-1 flex-col gap-1.5">
-              <span className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+            {/* Message */}
+            <div className="border-border mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10.5px] border p-3">
+              <span className="text-muted-foreground mb-1.5 font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
                 Message
               </span>
-              <div className="border-border flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10.5px] border p-3">
-                <p className="text-foreground min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.65]">
-                  {message || 'No message provided'}
-                </p>
-              </div>
+              <p className="text-foreground min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.65]">
+                {message || 'No message provided'}
+              </p>
             </div>
 
             {hasError && (
