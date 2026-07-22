@@ -236,7 +236,13 @@ export class Communicator {
         // (matched by requestId), so they stay armed.
         void (async () => {
             const entries = [...this.inflight.values()];
-            if (entries.length === 0) return;
+            if (entries.length === 0) {
+                // No in-flight request to replay, so this switch opens no popup
+                // now. Drop the one-shot reason so it cannot ride a later,
+                // unrelated popup open.
+                this.switchReason = undefined;
+                return;
+            }
             try {
                 const transport = await this.acquire(getRouteContext(entries[0].request));
                 for (const { request } of entries) {
@@ -249,6 +255,12 @@ export class Communicator {
                 // leaving the callers to hang forever.
                 const reason = error instanceof Error ? error : standardErrors.rpc.internal('Transport switch failed');
                 for (const { reject } of entries) reject(reason);
+            } finally {
+                // One-shot: openPopup consumes the reason only when it actually
+                // opens a new window. If the acquire reused an already-open popup,
+                // it was not consumed, so clear it here to stop a stale reason
+                // from attaching to a later popup open.
+                this.switchReason = undefined;
             }
         })();
     };
