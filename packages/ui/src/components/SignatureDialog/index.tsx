@@ -6,7 +6,6 @@ import { DefaultDialog } from '../DefaultDialog';
 import { DialogShell } from '../DialogShell';
 import { AccountIdenticon } from '../AccountIdenticon';
 import { IdentityAvatar } from '../IdentityAvatar';
-import { Skeleton } from '../ui/skeleton';
 import { Button } from '../ui/button';
 import { SignatureDialogProps } from './types';
 import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
@@ -35,21 +34,15 @@ export const SignatureDialog = ({
 }: SignatureDialogProps) => {
   const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
   const [avatarUrl, setAvatarUrl] = useState<string | null>(null);
-  // False until reverse-resolution finishes (or there's nothing to resolve), so
-  // the pill reveals once as name-or-address instead of flashing the address and
-  // then jumping to the ENS name.
-  const [identitySettled, setIdentitySettled] = useState(false);
 
-  // Resolve the signer address to an ENS name + avatar for the "Signing as" pill.
+  // Resolve the signer address to an ENS name + avatar. The pill shows the
+  // truncated address immediately and upgrades in place when this resolves —
+  // on a signing screen the address is the ground truth and shouldn't wait
+  // behind a placeholder; the address→ENS swap is a refinement, same identity.
   useEffect(() => {
     setResolvedAddress(null);
     setAvatarUrl(null);
-    setIdentitySettled(false);
-    if (!accountAddress) return; // signer not known yet → stay skeletal
-    if (!chainId) {
-      setIdentitySettled(true); // can't reverse-resolve → reveal the address
-      return;
-    }
+    if (!accountAddress || !chainId) return;
     let cancelled = false;
     reverseResolveWithAvatars([{ address: accountAddress, chainId }], mainnetRpcUrl)
       .then(async (resolved) => {
@@ -64,9 +57,6 @@ export const SignatureDialog = ({
       })
       .catch(() => {
         // Silently fall back to the truncated address + blob
-      })
-      .finally(() => {
-        if (!cancelled) setIdentitySettled(true);
       });
     return () => {
       cancelled = true;
@@ -175,26 +165,21 @@ export const SignatureDialog = ({
             {/* Signing account */}
             <div className="mt-4 flex flex-wrap items-center gap-2">
               <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Signing as</h2>
-              {identitySettled ? (
-                <span className="bg-secondary border-border flex min-w-0 items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5">
-                  <IdentityAvatar
-                    src={avatarUrl ?? undefined}
-                    className="h-[15px] w-[15px] rounded-full"
-                    fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={15} />}
-                  />
-                  <span
-                    className={cn(
-                      'text-secondary-foreground truncate font-mono',
-                      displayName.length > 40 ? 'text-[9px]' : 'text-[10.5px]'
-                    )}
-                  >
-                    {displayName}
-                  </span>
+              <span className="bg-secondary border-border flex min-w-0 items-center gap-1.5 rounded-full border py-1 pl-1.5 pr-2.5">
+                <IdentityAvatar
+                  src={avatarUrl ?? undefined}
+                  className="h-[15px] w-[15px] rounded-full"
+                  fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={15} />}
+                />
+                <span
+                  className={cn(
+                    'text-secondary-foreground truncate font-mono',
+                    displayName.length > 40 ? 'text-[9px]' : 'text-[10.5px]'
+                  )}
+                >
+                  {displayName}
                 </span>
-              ) : (
-                // One clean reveal — no address→ENS flash.
-                <Skeleton className="h-[27px] w-32 rounded-full" />
-              )}
+              </span>
             </div>
 
             {/* Message */}

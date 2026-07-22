@@ -5,8 +5,15 @@ import { cn } from '../../lib/utils';
 /**
  * Design-language surface tokens for the revamped dialogs. The surface is dark
  * regardless of the host theme (the canvas frames are dark-only), so the shell
- * re-scopes the --jaw-color-* variables for everything rendered inside it —
- * existing primitives (Button, Input, Separator) pick these up unchanged.
+ * re-scopes the --jaw-color-* variables for the ui package's own primitives
+ * (Button, Input, Separator) that reference them directly.
+ *
+ * These alone are NOT enough: host apps render text/surfaces through Tailwind
+ * utilities (text-foreground, bg-secondary, border-border, …) that resolve via
+ * the SHORT aliases (--foreground, --secondary, …), not --jaw-color-*. Those
+ * short aliases follow the HOST theme — in a light host they are near-black, so
+ * text goes dark-on-dark inside our forced-dark card. The `dark` class on the
+ * shell (below) re-scopes the short aliases to the dark palette for this subtree.
  */
 const SHELL_TOKENS = {
   '--jaw-color-background': '#0A1020',
@@ -49,8 +56,20 @@ export function DialogShell({ children, halo = true, className, contentClassName
   return (
     <div
       data-jaw-shell
-      className={cn('relative mx-auto w-fit overflow-hidden rounded-[18px] p-[1.5px]', 'lg:[zoom:1.15]', className)}
-      style={{ background: 'rgba(240,242,246,.16)', ...SHELL_TOKENS }}
+      className={cn(
+        'dark relative mx-auto w-fit overflow-hidden rounded-[18px] p-[1.5px]',
+        'lg:[zoom:1.15]',
+        className
+      )}
+      style={
+        {
+          background: 'rgba(240,242,246,.16)',
+          ...SHELL_TOKENS,
+          '--primary': 'inherit',
+          '--primary-foreground': 'inherit',
+          '--ring': 'inherit',
+        } as CSSProperties
+      }
     >
       {halo && <div aria-hidden className="jaw-halo-ring absolute inset-[-60%] z-0" />}
       <div
