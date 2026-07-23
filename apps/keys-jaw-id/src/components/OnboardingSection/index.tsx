@@ -37,6 +37,10 @@ interface SignInScreenProps {
    * first-party world (Safari routes credential methods there).
    */
   preferredCredentialId?: string;
+  /** Escape hatch for contexts where passkey creation cannot run (Safari iframe) — see OnboardingDialogProps.onCreateNewAccount. */
+  onCreateNewAccount?: () => void;
+  /** Open on the create view — see OnboardingDialogProps.startInCreate. */
+  startInCreate?: boolean;
 }
 
 export function SignInScreen({
@@ -48,6 +52,8 @@ export function SignInScreen({
   subnameTextRecords,
   origin,
   preferredCredentialId,
+  onCreateNewAccount,
+  startInCreate,
 }: SignInScreenProps) {
   const { accounts, accountsLoading, refetchAccounts } = usePasskeys({ apiKey });
   const { mutateAsync: login } = useLogin();
@@ -203,6 +209,8 @@ export function SignInScreen({
       loggingInAccount={loggingInAccount}
       onImportAccount={handleImportAccount}
       isImporting={isImportingPasskey}
+      onCreateNewAccount={onCreateNewAccount}
+      startInCreate={startInCreate}
       onCreateAccount={handleCreateAccount}
       onAccountCreationComplete={handleAccountCreationComplete}
       isCreating={isCreatingPasskey}

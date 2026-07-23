@@ -1,5 +1,5 @@
 import { Message } from '../messages/message.js';
-import type { AccountHintData } from '../messages/configMessage.js';
+import type { AccountHintData, SwitchTransportData } from '../messages/configMessage.js';
 import { AppMetadata, JawProviderPreference } from '../provider/interface.js';
 import type { JawTheme } from '../ui/theme.js';
 
@@ -29,6 +29,8 @@ export type TransportOptions = {
      * (partitioned, Brave/Safari-ephemeral) storage came up empty.
      */
     getLastAccount?: () => AccountHintData | undefined;
+    /** One-shot: reason of the SwitchTransport that forced the next popup, appended to the popup URL verbatim (keys sent it and interprets it back). */
+    consumeSwitchReason?: () => SwitchTransportData['reason'] | undefined;
     /**
      * Returns the dApp's API key (from the SDK store), sent on the transport
      * config message so the keys app can bootstrap its account screen before the

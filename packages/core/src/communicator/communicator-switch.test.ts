@@ -87,6 +87,96 @@ describe('Communicator SwitchTransport handling', () => {
         await expect(responsePromise).resolves.toEqual({ requestId: request.id });
     });
 
+    it('reopens the popup with the switch reason on its URL (webauthn-unsupported escape)', async () => {
+        const request: Message & { id: MessageID } = { id: 'req-id-9-9-9', data: {} };
+
+        queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
+
+        const responsePromise = communicator.postRequestAndWaitForResponse(request);
+        await vi.waitFor(() => {
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+        });
+
+        // The first open carries no switch reason
+        const opens = (window.open as ReturnType<typeof vi.fn>).mock.calls;
+        expect(String(opens[0][0])).not.toContain('switch-reason');
+
+        // The popup of the earlier flow closed; the escape must REOPEN it and
+        // hand keys the reason it sent — this is what the create escape relies on.
+        (mockPopup as { closed: boolean }).closed = true;
+        (window.open as ReturnType<typeof vi.fn>).mockImplementation(() => {
+            (mockPopup as { closed: boolean }).closed = false;
+            return mockPopup as Window;
+        });
+        queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-2' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-2' } });
+
+        dispatchMessageEvent({
+            data: { event: 'SwitchTransport', data: { to: 'popup', reason: 'webauthn-unsupported' } },
+            origin: urlOrigin,
+        });
+
+        await vi.waitFor(() => {
+            const calls = (window.open as ReturnType<typeof vi.fn>).mock.calls;
+            expect(calls.length).toBe(2);
+            expect(String(calls[1][0])).toContain('switch-reason=webauthn-unsupported');
+        });
+
+        // The in-flight request still resolves after the switch
+        dispatchMessageEvent({ data: { requestId: request.id }, origin: urlOrigin });
+        await expect(responsePromise).resolves.toEqual({ requestId: request.id });
+    });
+
+    it('drops the switch reason when the popup is reused, so a later popup carries no stale reason', async () => {
+        const request: Message & { id: MessageID } = { id: 'req-reuse-1-1-1', data: {} };
+
+        queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
+
+        const responsePromise = communicator.postRequestAndWaitForResponse(request);
+        await vi.waitFor(() => {
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+        });
+
+        // Baseline: the first open carries no reason.
+        expect(String((window.open as ReturnType<typeof vi.fn>).mock.calls[0][0])).not.toContain('switch-reason');
+
+        // Switch arrives while the popup is still open, so it is reused (no
+        // reopen) and the reason is never consumed by openPopup.
+        dispatchMessageEvent({
+            data: { event: 'SwitchTransport', data: { to: 'popup', reason: 'webauthn-unsupported' } },
+            origin: urlOrigin,
+        });
+        await vi.waitFor(() => {
+            expect((mockPopup.postMessage as ReturnType<typeof vi.fn>).mock.calls.length).toBe(3);
+            expect((window.open as ReturnType<typeof vi.fn>).mock.calls.length).toBe(1);
+        });
+        dispatchMessageEvent({ data: { requestId: request.id }, origin: urlOrigin });
+        await expect(responsePromise).resolves.toEqual({ requestId: request.id });
+
+        // The popup closes; a later request must reopen it — and that reopen must
+        // NOT carry the stale reason, since it was reused and never consumed.
+        (mockPopup as { closed: boolean }).closed = true;
+        (window.open as ReturnType<typeof vi.fn>).mockImplementation(() => {
+            (mockPopup as { closed: boolean }).closed = false;
+            return mockPopup as Window;
+        });
+
+        const later: Message & { id: MessageID } = { id: 'req-reuse-2-2-2', data: {} };
+        queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-2' } });
+        queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-2' } });
+        const laterPromise = communicator.postRequestAndWaitForResponse(later);
+
+        await vi.waitFor(() => {
+            expect((window.open as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);
+        });
+        expect(String((window.open as ReturnType<typeof vi.fn>).mock.calls[1][0])).not.toContain('switch-reason');
+
+        dispatchMessageEvent({ data: { requestId: later.id }, origin: urlOrigin });
+        await expect(laterPromise).resolves.toEqual({ requestId: later.id });
+    });
+
     it('ignores SwitchTransport messages from other origins', async () => {
         const request: Message & { id: MessageID } = { id: 'req-id-2-2-2', data: {} };
 

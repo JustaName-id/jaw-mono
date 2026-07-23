@@ -5,6 +5,8 @@ export interface LocalStorageAccount {
   creationDate: Date;
   credentialId?: string;
   isImported?: boolean;
+  /** Smart-account address; absent on records stored before it was persisted. */
+  address?: string;
 }
 
 /**
@@ -27,6 +29,18 @@ export interface OnboardingDialogProps {
   // Import existing account section
   onImportAccount: () => void;
   isImporting: boolean;
+
+  /**
+   * Overrides the Welcome card's "Create new account" navigation. Hosts set
+   * this when passkey creation cannot run in the current context (Safari
+   * blocks WebAuthn create() in cross-origin iframes) and the flow must
+   * escape to a popup — invoked synchronously from the click so the popup
+   * opens within the user-activation window.
+   */
+  onCreateNewAccount?: () => void;
+
+  /** Open on the sign-in/create view even when a default account exists (popup opened via the Safari create escape). */
+  startInCreate?: boolean;
 
   // Create new account section
   onCreateAccount: (username: string) => Promise<CreatedAccountData>;

@@ -8,12 +8,36 @@ export function toLocalStorageAccount(account: PasskeyAccount): LocalStorageAcco
     creationDate: new Date(account.creationDate),
     credentialId: account.credentialId,
     isImported: account.isImported,
+    address: account.address,
   };
 }
 
 /** Stored accounts in the OnboardingDialog account shape. */
 export function getStoredLocalAccounts(apiKey?: string): LocalStorageAccount[] {
   return Account.getStoredAccounts(apiKey).map(toLocalStorageAccount);
+}
+
+/**
+ * Derive + persist addresses for stored records that predate address
+ * persistence (ceremony-free factory derivation), returning credentialId →
+ * address for every record that has one.
+ */
+export async function backfillLocalAccountAddresses(params: {
+  chainId?: number;
+  apiKey?: string;
+}): Promise<Record<string, string>> {
+  // Derivation is an authenticated RPC call; without a key every record would
+  // just fail-and-retry, so don't bother.
+  if (!params.apiKey) return {};
+  const accounts = await Account.backfillStoredAccountAddresses({
+    chainId: params.chainId ?? 1,
+    apiKey: params.apiKey,
+  });
+  const byCredentialId: Record<string, string> = {};
+  for (const account of accounts) {
+    if (account.credentialId && account.address) byCredentialId[account.credentialId] = account.address;
+  }
+  return byCredentialId;
 }
 
 /**
