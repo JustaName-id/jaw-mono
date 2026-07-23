@@ -2,6 +2,7 @@ import './styles.css';
 
 export * from './components/DefaultDialog';
 export * from './components/DialogShell';
+export * from './components/ShellDialog';
 export * from './components/DialogAppHeader';
 export * from './components/AccountPill';
 export * from './components/AccountIdenticon';
