@@ -104,7 +104,10 @@ export abstract class JAWSigner implements Signer {
     private reportSignature(request: RequestArguments): void {
         if (!JAWSigner.TRACKED_SIGN_METHODS.has(request.method)) return;
         // `.at(0)` (unlike `[0]`) is typed Address | undefined: the accounts
-        // array is empty when signing is reached unauthenticated.
+        // array is empty when signing is reached unauthenticated. An
+        // unauthenticated wallet_sign without an address param therefore
+        // goes unreported on purpose — without an address there is no
+        // meaningful per-wallet metric to record.
         const address = this.extractSignerAddress(request) ?? this.accounts.at(0);
         const apiKey = store.getState().config.apiKey;
         if (!address || !apiKey) return;
