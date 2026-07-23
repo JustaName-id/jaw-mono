@@ -82,12 +82,14 @@ export abstract class JAWSigner implements Signer {
     protected abstract handleSigningRequest(request: RequestArguments): Promise<unknown>;
 
     /**
-     * Runs a signing request and, when it succeeds, reports message
-     * signatures (wallet_sign, personal_sign, eth_signTypedData_v4) to the
-     * analytics endpoint. Reporting is fire-and-forget and never affects
-     * the signing flow.
+     * Dispatches a signing-routed request. When it succeeds and the method
+     * is a message signature (wallet_sign, personal_sign,
+     * eth_signTypedData_v4), the signature is reported to the analytics
+     * endpoint; other signing-routed methods (wallet_sendCalls, permission
+     * management) pass through unreported. Reporting is fire-and-forget and
+     * never affects the signing flow.
      */
-    private async handleTrackedSigningRequest(request: RequestArguments): Promise<unknown> {
+    private async dispatchSigningRequest(request: RequestArguments): Promise<unknown> {
         const result = await this.handleSigningRequest(request);
         this.reportSignature(request);
         return result;
@@ -101,7 +103,9 @@ export abstract class JAWSigner implements Signer {
 
     private reportSignature(request: RequestArguments): void {
         if (!JAWSigner.TRACKED_SIGN_METHODS.has(request.method)) return;
-        const address = this.extractSignerAddress(request) ?? this.accounts[0];
+        // `.at(0)` (unlike `[0]`) is typed Address | undefined: the accounts
+        // array is empty when signing is reached unauthenticated.
+        const address = this.extractSignerAddress(request) ?? this.accounts.at(0);
         const apiKey = store.getState().config.apiKey;
         if (!address || !apiKey) return;
         logSignature({ address, apiKey });
@@ -179,7 +183,7 @@ export abstract class JAWSigner implements Signer {
             case 'wallet_sign':
             case 'wallet_grantPermissions':
             case 'wallet_revokePermissions': {
-                return this.handleTrackedSigningRequest(request);
+                return this.dispatchSigningRequest(request);
             }
 
             default:
@@ -286,7 +290,7 @@ export abstract class JAWSigner implements Signer {
             case 'eth_signTypedData_v4':
             case 'wallet_grantPermissions':
             case 'wallet_revokePermissions':
-                return this.handleTrackedSigningRequest(request);
+                return this.dispatchSigningRequest(request);
 
             case 'eth_sign':
             case 'eth_ecRecover':
