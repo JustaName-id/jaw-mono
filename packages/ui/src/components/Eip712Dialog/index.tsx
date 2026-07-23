@@ -2,6 +2,9 @@
 
 import { ShellDialog } from '../ShellDialog';
 import { DialogAppHeader } from '../DialogAppHeader';
+import { AccountPill } from '../AccountPill';
+import { AccountIdenticon } from '../AccountIdenticon';
+import { IdentityAvatar } from '../IdentityAvatar';
 import { SignedSuccess } from '../SignedSuccess';
 import { Eip712Tree } from './Eip712Tree';
 import { Eip712DomainCard } from './Eip712DomainCard';
@@ -13,6 +16,7 @@ import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
 import { Eip712VerificationDigests } from '../VerificationDigest';
 import { sanitizeDisplayName } from '../../utils/sanitize';
 import { isSafeImageUrl } from '../../utils/safeUrl';
+import { formatAddress } from '../../utils/formatAddress';
 import { useEffect, useMemo, useRef } from 'react';
 import { Globe } from 'lucide-react';
 
@@ -43,8 +47,11 @@ export const Eip712Dialog = ({
   signatureStatus,
   canSign,
 }: Eip712DialogProps) => {
-  // Signing account — used for the "Signed" success beat's identicon/avatar.
-  const { avatar: signerAvatar } = useReverseIdentity(accountAddress, chainId, mainnetRpcUrl);
+  // Signing account — shown as a pill on the review screen and as the identicon in
+  // the signing/success beats.
+  const signerAddress = accountAddress ?? '';
+  const { name: resolvedName, avatar: signerAvatar } = useReverseIdentity(accountAddress, chainId, mainnetRpcUrl);
+  const displayName = resolvedName || formatAddress(signerAddress);
   // Parse typed data
   const typedData = useMemo(() => {
     try {
@@ -121,9 +128,11 @@ export const Eip712Dialog = ({
         // Signing in progress — passkey ceremony running.
         <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
           <div className="flex items-center gap-3">
-            <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
-              {appAvatar}
-            </span>
+            <IdentityAvatar
+              src={signerAvatar ?? undefined}
+              className="h-11 w-11 rounded-[13px]"
+              fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={44} />}
+            />
             <span className="flex items-center gap-1.5">
               {[0, 1, 2].map((i) => (
                 <span
@@ -132,6 +141,9 @@ export const Eip712Dialog = ({
                   style={{ animationDelay: `${i * 0.2}s` }}
                 />
               ))}
+            </span>
+            <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
+              {appAvatar}
             </span>
           </div>
           <div className="flex flex-col gap-1">
@@ -150,7 +162,17 @@ export const Eip712Dialog = ({
               chainName={chainName}
               chainIcon={chainIcon}
             />
-            <h2 className="text-foreground mt-4 pl-2.5 text-[17px] font-medium tracking-[-0.03em]">You are signing</h2>
+            <div className="mt-4 flex flex-wrap items-center gap-2">
+              <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Signing as</h2>
+              {signerAddress && (
+                <AccountPill
+                  seedAddress={signerAddress}
+                  label={displayName}
+                  avatarUrl={signerAvatar}
+                  copyValue={signerAddress}
+                />
+              )}
+            </div>
           </div>
 
           {/* Scrollable content. Block layout (not flex-col) is deliberate: a flex
