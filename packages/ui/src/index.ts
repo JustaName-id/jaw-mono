@@ -7,6 +7,7 @@ export * from './components/DialogAppHeader';
 export * from './components/AccountPill';
 export * from './components/AccountIdenticon';
 export * from './components/SuccessCheck';
+export * from './components/SignedSuccess';
 export * from './components/OrSeparator';
 export * from './components/OnboardingDialog';
 export * from './components/TransactionDialog';

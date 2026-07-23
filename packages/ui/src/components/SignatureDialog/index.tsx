@@ -5,7 +5,7 @@ import { DialogAppHeader } from '../DialogAppHeader';
 import { AccountPill } from '../AccountPill';
 import { AccountIdenticon } from '../AccountIdenticon';
 import { IdentityAvatar } from '../IdentityAvatar';
-import { SuccessCheck } from '../SuccessCheck';
+import { SignedSuccess } from '../SignedSuccess';
 import { Button } from '../ui/button';
 import { SignatureDialogProps } from './types';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
@@ -57,10 +57,7 @@ export const SignatureDialog = ({
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[447px]">
       {isSuccess ? (
         // Brief success beat before the parent closes the dialog.
-        <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-          <SuccessCheck size={52} />
-          <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Signed</h2>
-        </div>
+        <SignedSuccess seedAddress={signerAddress} avatarUrl={avatarUrl} />
       ) : isProcessing ? (
         // Signing in progress — passkey ceremony running.
         <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
@@ -102,7 +99,12 @@ export const SignatureDialog = ({
                 border (the card content column). */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Signing as</h2>
-            <AccountPill seedAddress={signerAddress} label={displayName} avatarUrl={avatarUrl} />
+            <AccountPill
+              seedAddress={signerAddress}
+              label={displayName}
+              avatarUrl={avatarUrl}
+              copyValue={signerAddress}
+            />
           </div>
 
           {/* Message */}

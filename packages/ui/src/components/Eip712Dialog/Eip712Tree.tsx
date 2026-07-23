@@ -159,8 +159,10 @@ function buildNode(
     };
   }
 
-  // Leaf. Address/bytes are truncated for display, so keep the full value to copy.
-  const copyable = type === 'address' || /^bytes\d*$/.test(type);
+  // Leaf. Keep the full value to copy whenever the display is truncated — addresses,
+  // bytes, and any long string/value that formatValue shortened.
+  const raw = value == null ? undefined : String(value);
+  const copyable = raw != null && (type === 'address' || /^bytes\d*$/.test(type) || raw.length > 60);
   return {
     id,
     depth,
@@ -168,7 +170,7 @@ function buildNode(
     kind: 'leaf',
     badge: type,
     value: formatValue(type, value, label),
-    copyValue: copyable && value != null ? String(value) : undefined,
+    copyValue: copyable ? raw : undefined,
   };
 }
 

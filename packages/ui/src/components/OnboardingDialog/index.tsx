@@ -479,7 +479,15 @@ export function OnboardingDialog({
               <IdentityAvatar
                 src={avatarFor(defaultAccount)}
                 className="h-10 w-10 rounded-[12px]"
-                fallback={<AccountIdenticon seed={defaultAccount.username} size={40} />}
+                fallback={
+                  // Seed by address (matching the signing pills) so the same account
+                  // shows the same identicon everywhere; fall back to username for
+                  // older records that predate address persistence.
+                  <AccountIdenticon
+                    seed={(defaultAccount.address ?? defaultAccount.username).toLowerCase()}
+                    size={40}
+                  />
+                }
               />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">

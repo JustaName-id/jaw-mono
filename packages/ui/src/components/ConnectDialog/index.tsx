@@ -94,7 +94,12 @@ export const ConnectDialog = ({
           {/* Connecting account */}
           <div className="mt-4 flex flex-wrap items-center gap-2">
             <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Connecting to</h2>
-            <AccountPill seedAddress={walletAddress} label={displayName} avatarUrl={avatarUrl} />
+            <AccountPill
+              seedAddress={walletAddress}
+              label={displayName}
+              avatarUrl={avatarUrl}
+              copyValue={walletAddress}
+            />
           </div>
 
           {/* Capability rows */}

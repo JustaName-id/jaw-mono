@@ -50,10 +50,6 @@ export const Eip712Modal = ({
   const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
 
-  // Brief success-tick beat before the dialog closes. The signature is already
-  // delivered (onSuccess), so this only holds the visual confirmation.
-  const SUCCESS_HOLD_MS = 850;
-
   // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
     if (apiKey) return apiKey;
@@ -111,10 +107,9 @@ export const Eip712Modal = ({
       );
 
       setSignatureStatus('Signature created successfully!');
-      // Show the success tick, then hand the signature to the parent (which
-      // closes the dialog). The delay is purely the confirmation animation.
+      // Deliver to the dApp immediately — never block on the animation. The
+      // parent's success state + close delay carry the visual beat after delivery.
       setIsSuccess(true);
-      await new Promise((resolve) => setTimeout(resolve, SUCCESS_HOLD_MS));
       onSuccess(signature);
     } catch (error) {
       console.error('Error signing typed data:', error);

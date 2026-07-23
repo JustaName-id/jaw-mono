@@ -5,6 +5,8 @@
  * https://eips.ethereum.org/EIPS/eip-4361
  */
 
+import { parseSiweMessage as viemParseSiweMessage } from 'viem/siwe';
+
 /**
  * Converts a hex string (with or without 0x prefix) to UTF-8.
  */
@@ -62,8 +64,18 @@ export interface SiweMessageFields {
   resources?: string[];
 }
 
+const toIsoString = (d: Date | undefined): string | undefined =>
+  d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString() : undefined;
+
 /**
  * Parses a SIWE message into its fields, or null if it isn't a valid SIWE message.
+ *
+ * Delegates the field extraction to viem's `parseSiweMessage`, whose grammar is
+ * strictly anchored to the EIP-4361 structure: the free-text `statement` is a
+ * SINGLE line (`.*`) captured between the address and the field block, and the
+ * fields are matched as one ordered, contiguous run. That makes it impossible for
+ * a dApp to spoof what the user sees by embedding `URI:` / `Chain ID:` lines in
+ * the statement — a mistake a whole-message "first match wins" regex is prone to.
  */
 export function parseSiweMessage(message: string): SiweMessageFields | null {
   if (!isSiweMessage(message)) {
@@ -72,50 +84,23 @@ export function parseSiweMessage(message: string): SiweMessageFields | null {
 
   try {
     const decoded = message.startsWith('0x') ? hexToUtf8(message) : message;
-    // Regex extraction over the whole message (not line-split) so a payload whose
-    // newlines were collapsed to spaces — as some transports/inputs do — still
-    // parses. EIP-4361 fields are single-token, so this stays unambiguous. Keeping
-    // this consistent with isSiweMessage (also newline-agnostic) avoids the split
-    // where the message validates as SIWE but its fields come back empty.
-    const first = (re: RegExp): string | undefined => decoded.match(re)?.[1]?.trim();
-
-    const domain = first(/^\s*(.+?)\s+wants you to sign in with your Ethereum account/) || '';
-    const address = first(/Ethereum account:\s*(0x[a-fA-F0-9]{40})/) || '';
-    const uri = first(/URI:\s*(\S+)/) || '';
-    const version = first(/Version:\s*(\d+)/) || '';
-    const chainId = parseInt(first(/Chain ID:\s*(\d+)/) || '1', 10);
-    const nonce = first(/Nonce:\s*([a-zA-Z0-9]+)/) || '';
-    const issuedAt = first(/Issued At:\s*(\S+)/) || '';
-
-    // Statement (optional): the line(s) between the address and the URI field.
-    // Newline-delimited per spec; best-effort, so a whitespace-collapsed message
-    // simply yields no statement rather than mis-slicing the fields above.
-    let statement: string | undefined;
-    const lines = decoded.split('\n');
-    if (lines.length > 2) {
-      const uriIdx = lines.findIndex((l) => l.startsWith('URI:'));
-      if (uriIdx > 2) {
-        statement =
-          lines
-            .slice(2, uriIdx)
-            .map((l) => l.trim())
-            .filter(Boolean)
-            .join('\n') || undefined;
-      }
-    }
+    const parsed = viemParseSiweMessage(decoded);
+    // Domain + address anchor the message head; without them it isn't a usable SIWE.
+    if (!parsed.domain || !parsed.address) return null;
 
     return {
-      domain,
-      address,
-      statement,
-      uri,
-      version,
-      chainId,
-      nonce,
-      issuedAt,
-      expirationTime: first(/Expiration Time:\s*(\S+)/),
-      notBefore: first(/Not Before:\s*(\S+)/),
-      requestId: first(/Request ID:\s*(\S+)/),
+      domain: parsed.domain,
+      address: parsed.address,
+      statement: parsed.statement || undefined,
+      uri: parsed.uri ?? '',
+      version: parsed.version ?? '',
+      chainId: parsed.chainId ?? 1,
+      nonce: parsed.nonce ?? '',
+      issuedAt: toIsoString(parsed.issuedAt) ?? '',
+      expirationTime: toIsoString(parsed.expirationTime),
+      notBefore: toIsoString(parsed.notBefore),
+      requestId: parsed.requestId,
+      resources: parsed.resources,
     };
   } catch (error) {
     console.error('Error parsing SIWE message:', error);

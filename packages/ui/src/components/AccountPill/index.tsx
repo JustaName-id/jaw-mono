@@ -1,5 +1,9 @@
+'use client';
+
+import { useState } from 'react';
 import { AccountIdenticon } from '../AccountIdenticon';
 import { IdentityAvatar } from '../IdentityAvatar';
+import { CopyIcon, CopiedIcon } from '../../icons';
 import { cn } from '../../lib/utils';
 
 export interface AccountPillProps {
@@ -9,6 +13,8 @@ export interface AccountPillProps {
   label: string;
   /** ENS avatar URL, if resolved (else the identicon blob shows). */
   avatarUrl?: string | null;
+  /** When set, a copy button is shown that copies this full value (e.g. the address). */
+  copyValue?: string;
   className?: string;
 }
 
@@ -17,7 +23,19 @@ export interface AccountPillProps {
  * Long ENS names step down a size so they render in full rather than ellipsizing.
  * Theme-adaptive via semantic tokens.
  */
-export function AccountPill({ seedAddress, label, avatarUrl, className }: AccountPillProps) {
+export function AccountPill({ seedAddress, label, avatarUrl, copyValue, className }: AccountPillProps) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = () => {
+    if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(copyValue)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => undefined);
+  };
+
   return (
     <span
       className={cn(
@@ -38,6 +56,12 @@ export function AccountPill({ seedAddress, label, avatarUrl, className }: Accoun
       >
         {label}
       </span>
+      {copyValue &&
+        (copied ? (
+          <CopiedIcon className="text-muted-foreground size-3 flex-none" />
+        ) : (
+          <CopyIcon className="text-muted-foreground size-3 flex-none cursor-pointer" onClick={onCopy} />
+        ))}
     </span>
   );
 }

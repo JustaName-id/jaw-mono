@@ -56,6 +56,13 @@ type PopupState =
 // comfortable headroom.
 const CLOSE_DELAY_MS = 300;
 
+// After a signature is delivered, hold the "Signed ✓" confirmation on screen this
+// long before flipping to the terminal 'success' state (which hides the modal) and
+// closing. This delays ONLY the window close — the signature is already posted to
+// the dApp via `await onApprove(...)` before the hold — so the dApp never waits on
+// the animation.
+const SIGNED_TICK_MS = 850;
+
 export default function KeysJawIdApp() {
   // Single communicator instance, shared by the embedded shell (presentation
   // + iframe escape hatches) and the app content (message flow).
@@ -848,6 +855,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             try {
               await pendingRequest.onApprove(signature);
               debugLog('✅ Signature sent successfully');
+              // Signature already delivered — hold the tick, then close.
+              await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
               setState('success');
               scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {
@@ -921,6 +930,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             try {
               await pendingRequest.onApprove(signature);
               debugLog('✅ Typed data signature sent successfully');
+              // Signature already delivered — hold the tick, then close.
+              await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
               setState('success');
               scheduleClose(CLOSE_DELAY_MS);
             } catch (err) {

@@ -82,6 +82,12 @@ export const SiweDialog = ({
   const safeAppName = sanitizeDisplayName(appName) || 'dApp';
   const hasError = siweStatus.includes('Error');
 
+  // The message names an account; the signature is produced by the connected
+  // account. If they differ, the signature won't verify for the named account —
+  // surface it (advisory, not a hard gate).
+  const addressMismatch =
+    !!accountAddress && !!parsed?.address && accountAddress.toLowerCase() !== parsed.address.toLowerCase();
+
   // Require a fresh acknowledgement of the phishing warning for every request.
   const ackId = useId();
   const [acknowledged, setAcknowledged] = useState(false);
@@ -112,15 +118,10 @@ export const SiweDialog = ({
   // Parsed SIWE fields → the row-wise box (only rows with a value).
   const fields: Array<{ label: string; value: string; copyValue?: string }> = [];
   if (parsed) {
-    // Account: show the reverse-resolved name when we have one; otherwise the
-    // truncated address with a copy button for the full value.
+    // Account: show the reverse-resolved name when we have one, else the truncated
+    // address. Either way expose a copy button for the full address.
     const account = parsed.address || accountAddress;
-    if (account)
-      fields.push(
-        resolvedName
-          ? { label: 'Account', value: resolvedName }
-          : { label: 'Account', value: formatAddress(account), copyValue: account }
-      );
+    if (account) fields.push({ label: 'Account', value: resolvedName || formatAddress(account), copyValue: account });
     if (parsed.uri) fields.push({ label: 'URL', value: parsed.uri });
     if (parsed.version) fields.push({ label: 'Version', value: parsed.version });
     if (parsed.chainId) {
@@ -131,6 +132,10 @@ export const SiweDialog = ({
     }
     if (parsed.nonce) fields.push({ label: 'Nonce', value: parsed.nonce });
     if (parsed.issuedAt) fields.push({ label: 'Issued at', value: parsed.issuedAt });
+    // Surface validity window — a long/absent expiry on a capability grant is
+    // exactly what a user must be able to see before signing.
+    if (parsed.expirationTime) fields.push({ label: 'Expires', value: parsed.expirationTime });
+    if (parsed.notBefore) fields.push({ label: 'Not before', value: parsed.notBefore });
   }
 
   return (
@@ -176,9 +181,15 @@ export const SiweDialog = ({
               <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Sign In as</h2>
               <AccountPill seedAddress={signerAddress} label={displayName} avatarUrl={avatarUrl} />
             </div>
-            <p className="text-muted-foreground mt-2 pl-2.5 text-[10px] leading-[1.5]">
-              A site wants you to sign in to prove you own this account.
-            </p>
+            {/* The EIP-4361 statement is the actual consent text — show it verbatim
+                (readable, not muted) when present; fall back to a generic line. */}
+            {parsed?.statement ? (
+              <p className="text-foreground mt-2 pl-2.5 text-[11px] leading-[1.5]">{parsed.statement}</p>
+            ) : (
+              <p className="text-muted-foreground mt-2 pl-2.5 text-[10px] leading-[1.5]">
+                A site wants you to sign in to prove you own this account.
+              </p>
+            )}
           </div>
 
           {/* Scrollable content (block layout so children overflow, not shrink). */}
@@ -195,6 +206,23 @@ export const SiweDialog = ({
                 <p className="text-foreground whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.6]">
                   {message || 'No message provided'}
                 </p>
+              </div>
+            )}
+
+            {/* Resources — ReCap/EIP-5573 capability grants the signature authorizes.
+                Security-relevant, so listed explicitly rather than hidden. */}
+            {parsed?.resources && parsed.resources.length > 0 && (
+              <div className="border-border rounded-[10.5px] border p-3">
+                <span className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+                  Resources
+                </span>
+                <div className="mt-1.5 flex flex-col gap-1">
+                  {parsed.resources.map((r, i) => (
+                    <span key={i} className="text-foreground break-all font-mono text-[10px] leading-[1.5]">
+                      {r}
+                    </span>
+                  ))}
+                </div>
               </div>
             )}
 
@@ -226,6 +254,17 @@ export const SiweDialog = ({
             {hasError && (
               <div className="bg-destructive/10 border-destructive/20 rounded-[10.5px] border px-3 py-2">
                 <span className="text-destructive break-words text-xs">{siweStatus}</span>
+              </div>
+            )}
+
+            {/* Advisory: message account ≠ connected account. */}
+            {addressMismatch && (
+              <div className="border-destructive/30 bg-destructive/10 flex items-start gap-2 rounded-[10.5px] border p-3">
+                <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
+                <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">
+                  This request names a different account than the one you're connected with, so the signature won't be
+                  valid for it.
+                </p>
               </div>
             )}
 

@@ -2,12 +2,13 @@
 
 import { ShellDialog } from '../ShellDialog';
 import { DialogAppHeader } from '../DialogAppHeader';
-import { SuccessCheck } from '../SuccessCheck';
+import { SignedSuccess } from '../SignedSuccess';
 import { Eip712Tree } from './Eip712Tree';
 import { Eip712DomainCard } from './Eip712DomainCard';
 import { Button } from '../ui/button';
 import { Eip712DialogProps } from './types';
 import { useClearSigningTypedData } from '../../hooks';
+import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
 import { Eip712VerificationDigests } from '../VerificationDigest';
 import { sanitizeDisplayName } from '../../utils/sanitize';
@@ -30,6 +31,7 @@ export const Eip712Dialog = ({
   origin,
   appName,
   appLogoUrl,
+  accountAddress,
   chainName,
   chainId,
   chainIcon,
@@ -41,6 +43,8 @@ export const Eip712Dialog = ({
   signatureStatus,
   canSign,
 }: Eip712DialogProps) => {
+  // Signing account — used for the "Signed" success beat's identicon/avatar.
+  const { avatar: signerAvatar } = useReverseIdentity(accountAddress, chainId, mainnetRpcUrl);
   // Parse typed data
   const typedData = useMemo(() => {
     try {
@@ -112,10 +116,7 @@ export const Eip712Dialog = ({
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
       {isSuccess ? (
         // Brief success beat before the parent closes the dialog.
-        <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
-          <SuccessCheck size={52} />
-          <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Signed</h2>
-        </div>
+        <SignedSuccess seedAddress={accountAddress ?? ''} avatarUrl={signerAvatar} />
       ) : isProcessing ? (
         // Signing in progress — passkey ceremony running.
         <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">

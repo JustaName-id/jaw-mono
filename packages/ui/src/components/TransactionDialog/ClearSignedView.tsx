@@ -4,6 +4,27 @@ import type { ClearSigningDisplay, DisplayRow } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { TokenIcon } from '../TokenIcon';
+import { CopyIcon, CopiedIcon } from '../../icons';
+
+/** Small copy-to-clipboard button that copies the full address. */
+function CopyAddress({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = () => {
+    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(value)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => undefined);
+  };
+  return copied ? (
+    <CopiedIcon className="size-3 flex-none" />
+  ) : (
+    <CopyIcon className="text-muted-foreground size-3 flex-none cursor-pointer" onClick={onCopy} />
+  );
+}
 
 interface ClearSignedViewProps {
   display: ClearSigningDisplay;
@@ -51,6 +72,7 @@ function AddressValue({
       <span className="text-foreground truncate font-mono text-[11px]">
         {resolvedName ? resolvedName : formatAddress(addr)}
       </span>
+      <CopyAddress value={addr} />
     </div>
   );
 }
