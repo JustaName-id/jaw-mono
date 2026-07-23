@@ -129,7 +129,7 @@ describe('Communicator SwitchTransport handling', () => {
     });
 
     it('drops the switch reason when the popup is reused, so a later popup carries no stale reason', async () => {
-        const request: Message & { id: MessageID } = { id: 'req-reuse-1', data: {} };
+        const request: Message & { id: MessageID } = { id: 'req-reuse-1-1-1', data: {} };
 
         queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-id' } });
         queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-id' } });
@@ -163,7 +163,7 @@ describe('Communicator SwitchTransport handling', () => {
             return mockPopup as Window;
         });
 
-        const later: Message & { id: MessageID } = { id: 'req-reuse-2', data: {} };
+        const later: Message & { id: MessageID } = { id: 'req-reuse-2-2-2', data: {} };
         queueMessageEvent({ data: { event: 'PopupLoaded', id: 'popup-loaded-2' } });
         queueMessageEvent({ data: { event: 'PopupReady', requestId: 'popup-loaded-2' } });
         const laterPromise = communicator.postRequestAndWaitForResponse(later);
