@@ -42,7 +42,6 @@ export const SiweModal = ({
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
-  const [timestamp] = useState(() => new Date());
 
   // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
@@ -114,7 +113,6 @@ export const SiweModal = ({
       }}
       message={messageToSign}
       origin={origin}
-      timestamp={timestamp}
       appName={appName || 'dApp'}
       appLogoUrl={appLogoUrl}
       accountAddress={address}

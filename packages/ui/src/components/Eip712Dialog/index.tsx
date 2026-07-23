@@ -169,7 +169,7 @@ export const Eip712Dialog = ({
             {/* Scrollable content. Block layout (not flex-col) is deliberate: a flex
                 column shrinks its children to fit instead of letting them overflow, so
                 the region would never scroll. space-y gives the gaps. */}
-            <div ref={scrollRef} className="min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-2.5">
+            <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-2.5">
               {!typedData ? (
                 <div className="bg-destructive/10 border-destructive/20 rounded-[10.5px] border p-4">
                   <p className="text-destructive text-sm">Failed to parse typed data</p>

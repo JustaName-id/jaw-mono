@@ -978,7 +978,6 @@ function OnboardingDialogWrapper({
           }}
           message={siweMessage}
           origin={origin}
-          timestamp={new Date()}
           appName={request.data.appName || 'dApp'}
           appLogoUrl={request.data.appLogoUrl ?? undefined}
           accountAddress={authenticatedWalletAddress}
@@ -2579,7 +2578,6 @@ function SiweDialogWrapper({
       }}
       message={decodedMessage}
       origin={origin}
-      timestamp={new Date(request.timestamp)}
       appName={appName}
       accountAddress={request.data.address}
       chainName={chainName}

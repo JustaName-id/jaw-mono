@@ -6,7 +6,6 @@ export interface SiweDialogProps {
   // Message data
   message: string;
   origin: string;
-  timestamp: Date;
 
   // App information
   appName: string;

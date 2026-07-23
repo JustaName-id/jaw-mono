@@ -71,51 +71,51 @@ export function parseSiweMessage(message: string): SiweMessageFields | null {
   }
 
   try {
-    const decodedMessage = message.startsWith('0x') ? hexToUtf8(message) : message;
-    const lines = decodedMessage.split('\n');
+    const decoded = message.startsWith('0x') ? hexToUtf8(message) : message;
+    // Regex extraction over the whole message (not line-split) so a payload whose
+    // newlines were collapsed to spaces — as some transports/inputs do — still
+    // parses. EIP-4361 fields are single-token, so this stays unambiguous. Keeping
+    // this consistent with isSiweMessage (also newline-agnostic) avoids the split
+    // where the message validates as SIWE but its fields come back empty.
+    const first = (re: RegExp): string | undefined => decoded.match(re)?.[1]?.trim();
 
-    // Domain (first line, before "wants you to sign in") and address (second line)
-    const domain = lines[0]?.match(/^(.+?)\s+wants you to sign in/)?.[1] || '';
-    const address = lines[1]?.trim() || '';
+    const domain = first(/^\s*(.+?)\s+wants you to sign in with your Ethereum account/) || '';
+    const address = first(/Ethereum account:\s*(0x[a-fA-F0-9]{40})/) || '';
+    const uri = first(/URI:\s*(\S+)/) || '';
+    const version = first(/Version:\s*(\d+)/) || '';
+    const chainId = parseInt(first(/Chain ID:\s*(\d+)/) || '1', 10);
+    const nonce = first(/Nonce:\s*([a-zA-Z0-9]+)/) || '';
+    const issuedAt = first(/Issued At:\s*(\S+)/) || '';
 
-    // Statement (optional, between address and the URI field)
-    let statement = '';
-    let fieldStartIndex = 2;
-    for (let i = 2; i < lines.length; i++) {
-      if (lines[i].startsWith('URI:')) {
-        fieldStartIndex = i;
-        break;
-      }
-      if (lines[i].trim() && i === 2) {
-        statement = lines[i].trim();
-      } else if (lines[i].trim() && i > 2) {
-        statement += '\n' + lines[i].trim();
-      }
-    }
-
-    // Structured key: value fields
-    const fields: Record<string, string> = {};
-    for (let i = fieldStartIndex; i < lines.length; i++) {
-      const line = lines[i];
-      const colonIndex = line.indexOf(':');
-      if (colonIndex > 0) {
-        fields[line.slice(0, colonIndex).trim()] = line.slice(colonIndex + 1).trim();
+    // Statement (optional): the line(s) between the address and the URI field.
+    // Newline-delimited per spec; best-effort, so a whitespace-collapsed message
+    // simply yields no statement rather than mis-slicing the fields above.
+    let statement: string | undefined;
+    const lines = decoded.split('\n');
+    if (lines.length > 2) {
+      const uriIdx = lines.findIndex((l) => l.startsWith('URI:'));
+      if (uriIdx > 2) {
+        statement =
+          lines
+            .slice(2, uriIdx)
+            .map((l) => l.trim())
+            .filter(Boolean)
+            .join('\n') || undefined;
       }
     }
 
     return {
       domain,
       address,
-      statement: statement || undefined,
-      uri: fields['URI'] || '',
-      version: fields['Version'] || '',
-      chainId: parseInt(fields['Chain ID'] || '1', 10),
-      nonce: fields['Nonce'] || '',
-      issuedAt: fields['Issued At'] || '',
-      expirationTime: fields['Expiration Time'],
-      notBefore: fields['Not Before'],
-      requestId: fields['Request ID'],
-      resources: fields['Resources']?.split('\n').filter((r) => r.trim()) || undefined,
+      statement,
+      uri,
+      version,
+      chainId,
+      nonce,
+      issuedAt,
+      expirationTime: first(/Expiration Time:\s*(\S+)/),
+      notBefore: first(/Not Before:\s*(\S+)/),
+      requestId: first(/Request ID:\s*(\S+)/),
     };
   } catch (error) {
     console.error('Error parsing SIWE message:', error);

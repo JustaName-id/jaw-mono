@@ -1,26 +1,40 @@
 'use client';
 
-import { useEffect, useId, useState } from 'react';
-import { useDialogMobileFullScreen } from '../../hooks';
-import { CopyIcon } from '../../icons';
-import {
-  reverseResolveAddresses,
-  getDisplayAddress,
-  getChainLabel,
-  sanitizeDisplayName,
-  isSafeImageUrl,
-} from '../../utils';
+import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { DefaultDialog } from '../DefaultDialog';
+import { DialogShell } from '../DialogShell';
+import { DialogAppHeader } from '../DialogAppHeader';
+import { AccountPill } from '../AccountPill';
+import { AccountIdenticon } from '../AccountIdenticon';
+import { IdentityAvatar } from '../IdentityAvatar';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { SiweDialogProps } from './types';
+import { SUPPORTED_CHAINS } from '@jaw.id/core';
+import { useReverseIdentity } from '../../hooks/useReverseIdentity';
+import { parseSiweMessage } from '../../utils/siwe';
+import { formatAddress } from '../../utils/formatAddress';
+import { sanitizeDisplayName } from '../../utils/sanitize';
+import { isSafeImageUrl } from '../../utils/safeUrl';
+import { Globe, TriangleAlert } from 'lucide-react';
+
+/** One label/value row in the parsed-fields box. */
+function Field({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="border-foreground/[0.06] flex items-center justify-between gap-2.5 border-t px-[11.5px] py-[8.5px] first:border-t-0">
+      <span className="text-muted-foreground flex-none font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+        {label}
+      </span>
+      <span className="text-foreground min-w-0 break-all text-right font-mono text-[10px] font-medium">{value}</span>
+    </div>
+  );
+}
 
 export const SiweDialog = ({
   open,
   onOpenChange,
   message,
   origin,
-  timestamp,
   appName,
   appLogoUrl,
   accountAddress,
@@ -35,204 +49,211 @@ export const SiweDialog = ({
   canSign,
   warningMessage,
 }: SiweDialogProps) => {
-  const mobileFullScreen = useDialogMobileFullScreen();
-  const [resolvedAddress, setResolvedAddress] = useState<string | null>(null);
+  const parsed = useMemo(() => parseSiweMessage(message), [message]);
+  // Effective account: the passed signer, else the address declared in the message.
+  const signerAddress = accountAddress || parsed?.address || '';
+  // Resolve the account actually being shown (not just the prop), so the pill's ENS
+  // name still appears when the address comes from the SIWE message body.
+  const { name: resolvedName, avatar: avatarUrl } = useReverseIdentity(
+    signerAddress || undefined,
+    chainId,
+    mainnetRpcUrl
+  );
+  const displayName = resolvedName || formatAddress(signerAddress);
+  const safeAppName = sanitizeDisplayName(appName) || 'dApp';
+  const hasError = siweStatus.includes('Error');
 
-  // appName is externally-controlled (dApp metadata or SIWE message body); sanitize before display.
-  const displayName = sanitizeDisplayName(appName) || 'dApp';
-
-  // Require fresh acknowledgement of the phishing warning for each request
+  // Require a fresh acknowledgement of the phishing warning for every request.
   const ackId = useId();
   const [acknowledged, setAcknowledged] = useState(false);
   useEffect(() => {
     setAcknowledged(false);
   }, [message, warningMessage]);
 
-  // Resolve account address to human-readable name
+  // Radix modal eats native wheel scroll of a nested container — drive it manually.
+  const scrollRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (accountAddress && chainId) {
-      reverseResolveAddresses([{ address: accountAddress, chainId }], mainnetRpcUrl)
-        .then(async (resolved) => {
-          const name = resolved[accountAddress.toLowerCase()];
-          if (name) {
-            const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setResolvedAddress(label ? `${name}@${label}` : name);
-          }
-        })
-        .catch(() => {
-          // Silently fail if resolution fails
-        });
-    }
-  }, [accountAddress, chainId]);
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollHeight <= el.clientHeight) return;
+      el.scrollTop += e.deltaY;
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [open, isProcessing, parsed]);
 
-  // Get display address - use resolved name or formatted address
-  const displayAddress = getDisplayAddress(resolvedAddress, accountAddress || '');
+  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
+    <img src={appLogoUrl} alt={`${safeAppName} logo`} className="h-full w-full rounded-full object-cover" />
+  ) : (
+    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
+  );
 
-  // Format origin to display only domain (remove protocol)
-  const formatOrigin = (url: string) => {
-    try {
-      const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
-      return urlObj.hostname.replace('www.', '');
-    } catch {
-      return url;
+  // Parsed SIWE fields → the row-wise box (only rows with a value).
+  const fields: Array<{ label: string; value: string }> = [];
+  if (parsed) {
+    // Full address (not truncated): the pill above already shows the friendly ENS
+    // name, so this row is the exact, verifiable account being attested.
+    const account = parsed.address || accountAddress;
+    if (account) fields.push({ label: 'Account', value: account });
+    if (parsed.uri) fields.push({ label: 'URL', value: parsed.uri });
+    if (parsed.version) fields.push({ label: 'Version', value: parsed.version });
+    if (parsed.chainId) {
+      // Resolve the name from the MESSAGE's chainId (what's being signed), not the
+      // connected chain — otherwise "Chain ID: 1" wrongly reads as the wallet's chain.
+      const name = SUPPORTED_CHAINS.find((c) => c.id === parsed.chainId)?.name;
+      fields.push({ label: 'Chain ID', value: name ? `${parsed.chainId} · ${name}` : String(parsed.chainId) });
     }
-  };
-
-  const onCopyMessageHandler = () => {
-    if (typeof window !== 'undefined' && navigator?.clipboard) {
-      navigator.clipboard.writeText(message).catch(() => undefined);
-    }
-  };
+    if (parsed.nonce) fields.push({ label: 'Nonce', value: parsed.nonce });
+    if (parsed.issuedAt) fields.push({ label: 'Issued at', value: parsed.issuedAt });
+  }
 
   return (
     <DefaultDialog
       open={open}
       onOpenChange={!isProcessing ? onOpenChange : undefined}
-      header={
-        <div className="flex flex-col gap-2.5 p-3.5">
-          <div className="flex flex-row items-center justify-between">
-            <p className="text-muted-foreground text-xs font-bold leading-[100%]">
-              {timestamp.toLocaleDateString('en-US', {
-                weekday: 'long',
-                day: 'numeric',
-                month: 'long',
-              })}{' '}
-              at{' '}
-              {timestamp.toLocaleTimeString('en-US', {
-                hour: '2-digit',
-                minute: '2-digit',
-                second: '2-digit',
-                timeZoneName: 'short',
-              })}
-            </p>
-            {/* <InfoIcon /> */}
-          </div>
-          <p className="text-muted-foreground text-sm">{displayAddress}</p>
-        </div>
-      }
-      contentStyle={
-        mobileFullScreen
-          ? {
-              width: '100%',
-              height: '100%',
-              maxWidth: 'none',
-              maxHeight: 'none',
-            }
-          : {
-              width: '500px',
-              minWidth: '500px',
-            }
-      }
+      contentStyle={{ width: 'fit-content', background: 'transparent', border: 'none', boxShadow: 'none' }}
+      innerStyle={{ padding: 0, overflow: 'visible' }}
     >
-      <div className="flex h-full min-h-0 flex-col gap-3 max-md:pb-2">
-        <div className="flex flex-1 flex-col items-center justify-center p-3.5">
-          {isSafeImageUrl(appLogoUrl) && (
-            <img src={appLogoUrl} alt={`${displayName} logo`} className="mb-3 h-[72px] w-[72px] rounded-full" />
-          )}
-          <div className="text-foreground flex flex-col items-center gap-1">
-            <p className="text-2xl font-normal leading-[133%]">Sign in Request</p>
-            <p className="text-base font-bold leading-[150%]">{displayName}</p>
-          </div>
-        </div>
-        {/* Main Content Area - Large scrollable message box */}
-        <div className="bg-card border-border flex flex-1 flex-col gap-2.5 rounded-[6px] border p-3.5">
-          <div className="flex flex-row items-center justify-between">
-            <p className="text-foreground text-xs font-bold leading-[150%]">Message</p>
-            <CopyIcon className="h-4 w-4 cursor-pointer" onClick={onCopyMessageHandler} />
-          </div>
-          <div className="bg-secondary flex max-h-[35vh] overflow-y-auto rounded-[6px] p-2.5">
-            <p className="text-foreground whitespace-pre-wrap break-words text-sm font-normal leading-relaxed">
-              {message || 'No message provided'}
-            </p>
-          </div>
-        </div>
-
-        {/* Footer Information Section */}
-        {/* Chain Information */}
-        <div className="border-border flex flex-row gap-4 rounded-[6px] border p-2">
-          {/* Network Column */}
-          {chainName && (
-            <>
-              <div className="flex flex-1 flex-col gap-1">
-                <p className="text-foreground text-xs font-bold">Network</p>
-                <div className="flex flex-row items-center gap-2">
-                  {chainIcon && (
-                    <div className="flex h-6 w-6 flex-shrink-0 items-center justify-center">{chainIcon}</div>
-                  )}
-                  <p className="text-foreground text-sm font-normal">{chainName}</p>
-                </div>
-              </div>
-              {/* Vertical Separator */}
-              <div className="bg-border min-h-[40px] w-[1px]"></div>
-            </>
-          )}
-          {/* URL Column */}
-          <div className="flex flex-1 flex-col gap-1">
-            <p className="text-foreground text-xs font-bold">URL</p>
-            <p className="text-foreground text-sm font-normal">{formatOrigin(origin)}</p>
-          </div>
-        </div>
-
-        {/* Origin Mismatch Warning */}
-        {warningMessage && (
-          <div className="border-destructive/30 bg-destructive/10 flex flex-col gap-3 rounded-[6px] border p-3.5">
-            <div className="flex items-start gap-2.5">
-              <div className="text-destructive mt-0.5 flex-shrink-0">
-                <svg width="16" height="16" viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <path
-                    d="M8 1.5L1 14.5H15L8 1.5Z"
-                    stroke="currentColor"
-                    strokeWidth="1.5"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
+      <DialogShell contentClassName="min-h-[510px]">
+        {isProcessing ? (
+          <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
+            <div className="flex items-center gap-3">
+              <IdentityAvatar
+                src={avatarUrl ?? undefined}
+                className="h-11 w-11 rounded-[13px]"
+                fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={44} />}
+              />
+              <span className="flex items-center gap-1.5">
+                {[0, 1, 2].map((i) => (
+                  <span
+                    key={i}
+                    className="jaw-flow-dot bg-foreground/70 h-1.5 w-1.5 rounded-full"
+                    style={{ animationDelay: `${i * 0.2}s` }}
                   />
-                  <path d="M8 6V9" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
-                  <circle cx="8" cy="11.5" r="0.5" fill="currentColor" />
-                </svg>
+                ))}
+              </span>
+              <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
+                {appAvatar}
+              </span>
+            </div>
+            <div className="flex flex-col gap-1">
+              <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Signing in...</h2>
+              <p className="text-muted-foreground text-xs">Confirm with your passkey</p>
+            </div>
+          </div>
+        ) : (
+          <div className="flex min-h-0 flex-1 flex-col">
+            {/* Pinned header */}
+            <div className="flex-none px-6 pt-6">
+              <DialogAppHeader
+                appName={appName}
+                appLogoUrl={appLogoUrl}
+                origin={origin}
+                chainName={chainName}
+                chainIcon={chainIcon}
+              />
+              <div className="mt-4 flex flex-wrap items-center gap-2">
+                <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Sign In as</h2>
+                <AccountPill seedAddress={signerAddress} label={displayName} avatarUrl={avatarUrl} />
               </div>
-              <div className="flex flex-col gap-1">
-                <p className="text-destructive text-xs font-bold leading-[133%]">Security Warning</p>
-                <p className="text-foreground text-xs font-normal leading-[150%]">{warningMessage}</p>
+              <p className="text-muted-foreground mt-2 pl-2.5 text-[10px] leading-[1.5]">
+                A site wants you to sign in to prove you own this account.
+              </p>
+            </div>
+
+            {/* Scrollable content (block layout so children overflow, not shrink). */}
+            <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
+              {fields.length > 0 ? (
+                <div className="border-border overflow-hidden rounded-[10.5px] border">
+                  {fields.map((f) => (
+                    <Field key={f.label} label={f.label} value={f.value} />
+                  ))}
+                </div>
+              ) : (
+                // Fallback: message didn't parse as SIWE — show it raw.
+                <div className="border-border rounded-[10.5px] border p-3">
+                  <p className="text-foreground whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.6]">
+                    {message || 'No message provided'}
+                  </p>
+                </div>
+              )}
+
+              {/* Raw message under a disclosure (canvas: "Message text"). */}
+              {fields.length > 0 && (
+                <details className="border-border group overflow-hidden rounded-[8.5px] border [&_summary::-webkit-details-marker]:hidden">
+                  <summary className="hover:bg-foreground/[0.03] flex cursor-pointer list-none items-center justify-between px-3 py-2">
+                    <span className="text-muted-foreground text-[11px] font-medium">Message text</span>
+                    <svg
+                      className="text-muted-foreground h-3 w-3 transition-transform group-open:rotate-180"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                    >
+                      <path d="M6 9l6 6 6-6" />
+                    </svg>
+                  </summary>
+                  <div className="border-border border-t p-3">
+                    <p className="text-muted-foreground whitespace-pre-wrap break-words font-mono text-[9px] leading-[1.6]">
+                      {message}
+                    </p>
+                  </div>
+                </details>
+              )}
+
+              {hasError && (
+                <div className="bg-destructive/10 border-destructive/20 rounded-[10.5px] border px-3 py-2">
+                  <span className="text-destructive break-words text-xs">{siweStatus}</span>
+                </div>
+              )}
+
+              {/* Phishing warning + acknowledgement gate (error state). In the scroll
+                  flow — below the expandable message, not pinned over it. */}
+              {warningMessage && (
+                <div className="border-destructive/30 bg-destructive/10 rounded-[10.5px] border p-3">
+                  <div className="flex items-start gap-2">
+                    <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
+                    <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">{warningMessage}</p>
+                  </div>
+                  <label htmlFor={ackId} className="mt-2.5 flex cursor-pointer items-center gap-2">
+                    <Checkbox
+                      id={ackId}
+                      checked={acknowledged}
+                      onCheckedChange={(checked) => setAcknowledged(checked === true)}
+                    />
+                    <span className="text-destructive text-[11px] font-medium">I accept the risk</span>
+                  </label>
+                </div>
+              )}
+            </div>
+
+            {/* Pinned actions */}
+            <div className="border-border flex-none border-t px-6 py-3.5">
+              <div className="flex gap-2">
+                <Button
+                  variant="secondary"
+                  onClick={onCancel}
+                  disabled={isProcessing}
+                  className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                >
+                  Cancel
+                </Button>
+                <Button
+                  onClick={onSign}
+                  disabled={!canSign || (!!warningMessage && !acknowledged)}
+                  className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                >
+                  Sign In
+                </Button>
               </div>
             </div>
-            <label htmlFor={ackId} className="flex cursor-pointer items-center gap-2">
-              <Checkbox
-                id={ackId}
-                checked={acknowledged}
-                onCheckedChange={(checked) => setAcknowledged(checked === true)}
-              />
-              <span className="text-foreground text-xs font-medium leading-[150%]">
-                I understand the risk and want to continue
-              </span>
-            </label>
           </div>
         )}
-
-        {/* Status Message */}
-        {siweStatus && (
-          <div
-            className={`mt-3 rounded-lg p-3 text-sm ${
-              siweStatus.includes('Error')
-                ? 'bg-destructive/10 text-destructive'
-                : siweStatus.includes('successfully')
-                  ? 'bg-success/10 text-success'
-                  : 'bg-info/10 text-info'
-            }`}
-          >
-            {siweStatus}
-          </div>
-        )}
-
-        {/* Action Buttons */}
-        <div className="flex flex-shrink-0 gap-3 p-3.5">
-          <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
-            Cancel
-          </Button>
-          <Button onClick={onSign} disabled={!canSign || (!!warningMessage && !acknowledged)} className="flex-1">
-            {isProcessing ? 'Signing...' : 'Sign'}
-          </Button>
-        </div>
-      </div>
+      </DialogShell>
     </DefaultDialog>
   );
 };
