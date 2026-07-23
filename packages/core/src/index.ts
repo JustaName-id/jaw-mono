@@ -125,7 +125,13 @@ export * from './utils/index.js';
 export { type Chain, type FeeToken, type FeeTokenCapability } from './store/index.js';
 
 /** Analytics exports **/
-export { logAccountIssuance, type LogAccountIssuanceParams, type IssuanceType } from './analytics/index.js';
+export {
+    logAccountIssuance,
+    logSignature,
+    type LogAccountIssuanceParams,
+    type LogSignatureParams,
+    type IssuanceType,
+} from './analytics/index.js';
 
 /** UI Handler exports (for app-specific mode) **/
 export type {
