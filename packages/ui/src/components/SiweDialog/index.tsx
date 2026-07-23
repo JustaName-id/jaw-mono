@@ -16,16 +16,36 @@ import { parseSiweMessage } from '../../utils/siwe';
 import { formatAddress } from '../../utils/formatAddress';
 import { sanitizeDisplayName } from '../../utils/sanitize';
 import { isSafeImageUrl } from '../../utils/safeUrl';
+import { CopyIcon, CopiedIcon } from '../../icons';
 import { Globe, TriangleAlert } from 'lucide-react';
 
-/** One label/value row in the parsed-fields box. */
-function Field({ label, value }: { label: string; value: string }) {
+/** One label/value row. Pass `copyValue` to append a copy button (copies the full value). */
+function Field({ label, value, copyValue }: { label: string; value: string; copyValue?: string }) {
+  const [copied, setCopied] = useState(false);
+  const onCopy = () => {
+    if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
+    navigator.clipboard
+      .writeText(copyValue)
+      .then(() => {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 1500);
+      })
+      .catch(() => undefined);
+  };
   return (
     <div className="border-foreground/[0.06] flex items-center justify-between gap-2.5 border-t px-[11.5px] py-[8.5px] first:border-t-0">
       <span className="text-muted-foreground flex-none font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
         {label}
       </span>
-      <span className="text-foreground min-w-0 break-all text-right font-mono text-[10px] font-medium">{value}</span>
+      <span className="flex min-w-0 items-center justify-end gap-1.5">
+        <span className="text-foreground min-w-0 break-all text-right font-mono text-[10px] font-medium">{value}</span>
+        {copyValue &&
+          (copied ? (
+            <CopiedIcon className="size-3 flex-none" />
+          ) : (
+            <CopyIcon className="size-3 flex-none cursor-pointer" onClick={onCopy} />
+          ))}
+      </span>
     </div>
   );
 }
@@ -50,10 +70,10 @@ export const SiweDialog = ({
   warningMessage,
 }: SiweDialogProps) => {
   const parsed = useMemo(() => parseSiweMessage(message), [message]);
-  // Effective account: the passed signer, else the address declared in the message.
-  const signerAddress = accountAddress || parsed?.address || '';
-  // Resolve the account actually being shown (not just the prop), so the pill's ENS
-  // name still appears when the address comes from the SIWE message body.
+  // The account being attested is the one DECLARED IN THE SIWE MESSAGE, not the
+  // wallet's connected account. Prefer the message address so the pill + account row
+  // (and their reverse resolution) describe what's actually being signed.
+  const signerAddress = parsed?.address || accountAddress || '';
   const { name: resolvedName, avatar: avatarUrl } = useReverseIdentity(
     signerAddress || undefined,
     chainId,
@@ -91,12 +111,17 @@ export const SiweDialog = ({
   );
 
   // Parsed SIWE fields → the row-wise box (only rows with a value).
-  const fields: Array<{ label: string; value: string }> = [];
+  const fields: Array<{ label: string; value: string; copyValue?: string }> = [];
   if (parsed) {
-    // Full address (not truncated): the pill above already shows the friendly ENS
-    // name, so this row is the exact, verifiable account being attested.
+    // Account: show the reverse-resolved name when we have one; otherwise the
+    // truncated address with a copy button for the full value.
     const account = parsed.address || accountAddress;
-    if (account) fields.push({ label: 'Account', value: account });
+    if (account)
+      fields.push(
+        resolvedName
+          ? { label: 'Account', value: resolvedName }
+          : { label: 'Account', value: formatAddress(account), copyValue: account }
+      );
     if (parsed.uri) fields.push({ label: 'URL', value: parsed.uri });
     if (parsed.version) fields.push({ label: 'Version', value: parsed.version });
     if (parsed.chainId) {
@@ -168,7 +193,7 @@ export const SiweDialog = ({
               {fields.length > 0 ? (
                 <div className="border-border overflow-hidden rounded-[10.5px] border">
                   {fields.map((f) => (
-                    <Field key={f.label} label={f.label} value={f.value} />
+                    <Field key={f.label} label={f.label} value={f.value} copyValue={f.copyValue} />
                   ))}
                 </div>
               ) : (
