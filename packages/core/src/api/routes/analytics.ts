@@ -20,11 +20,24 @@ export interface LogAccountIssuanceRequest {
 }
 
 /**
+ * Request payload for logging a wallet signature
+ */
+export interface LogSignatureRequest {
+    address: Address;
+}
+
+/**
  * Route definitions for analytics operations
  */
 export interface AnalyticsRoutes {
     LOG_ACCOUNT_ISSUANCE: {
         request: LogAccountIssuanceRequest;
+        response: void;
+        headers: Record<string, string>;
+        pathParams?: never;
+    };
+    LOG_SIGNATURE: {
+        request: LogSignatureRequest;
         response: void;
         headers: Record<string, string>;
         pathParams?: never;

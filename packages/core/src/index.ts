@@ -126,6 +126,7 @@ export { type Chain, type FeeToken, type FeeTokenCapability } from './store/inde
 
 /** Analytics exports **/
 export { logAccountIssuance, type LogAccountIssuanceParams, type IssuanceType } from './analytics/index.js';
+export { logSignature, type LogSignatureParams } from './analytics/index.js';
 
 /** UI Handler exports (for app-specific mode) **/
 export type {

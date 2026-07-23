@@ -19,6 +19,7 @@ export const Routes: Record<keyof ROUTES, string> = {
     GET_PERMISSION: `${PERMISSIONS_ROUTE}/:hash`,
     DELETE_PERMISSION: `${PERMISSIONS_ROUTE}/:hash`,
     LOG_ACCOUNT_ISSUANCE: ANALYTICS_ROUTE,
+    LOG_SIGNATURE: `${ANALYTICS_ROUTE}/signature`,
     UPDATE_CALL_STATUS: `${CALLS_HISTORY_ROUTE}/:id`,
     GET_CALLS_HISTORY: CALLS_HISTORY_ROUTE,
 };
@@ -28,7 +29,7 @@ export type { PasskeyRoutes } from './passkey.js';
 export { PERMISSIONS_ROUTE } from './permissions.js';
 export type { PermissionsRoutes } from './permissions.js';
 export { ANALYTICS_ROUTE } from './analytics.js';
-export type { AnalyticsRoutes, LogAccountIssuanceRequest, IssuanceType } from './analytics.js';
+export type { AnalyticsRoutes, LogAccountIssuanceRequest, LogSignatureRequest, IssuanceType } from './analytics.js';
 export { CALLS_HISTORY_ROUTE } from './callsHistory.js';
 export type {
     CallsHistoryRoutes,
