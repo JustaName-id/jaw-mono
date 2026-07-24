@@ -40,6 +40,10 @@ describe('isSiweMessage', () => {
   it('rejects a plain personal_sign message', () => {
     expect(isSiweMessage('Hello, World!')).toBe(false);
   });
+
+  it('accepts a short/weak nonce (so the dialog can flag it, not fall back to plain sign)', () => {
+    expect(isSiweMessage(siwe({ nonce: '1234' }))).toBe(true);
+  });
 });
 
 describe('parseSiweMessage', () => {

@@ -95,6 +95,10 @@ export const SiweDialog = ({
   const addressMismatch =
     !!accountAddress && !!parsed?.address && accountAddress.toLowerCase() !== parsed.address.toLowerCase();
 
+  // EIP-4361 requires the nonce to be at least 8 alphanumeric chars; a shorter one
+  // means the site's replay protection is weak. Advisory (amber), not a hard gate.
+  const weakNonce = !!parsed?.nonce && parsed.nonce.length < 8;
+
   // Require a fresh acknowledgement of the phishing warning for every request.
   const ackId = useId();
   const [acknowledged, setAcknowledged] = useState(false);
@@ -173,19 +177,27 @@ export const SiweDialog = ({
               displayName={displayName}
               avatarUrl={avatarUrl}
             />
-            {/* The EIP-4361 statement is the actual consent text — show it verbatim
-                (readable, not muted) when present; fall back to a generic line. */}
-            {parsed?.statement ? (
-              <p className="text-foreground mt-2 pl-2.5 text-[11px] leading-[1.5]">{parsed.statement}</p>
-            ) : (
-              <p className="text-muted-foreground mt-2 pl-2.5 text-[10px] leading-[1.5]">
-                A site wants you to sign in to prove you own this account.
-              </p>
-            )}
+            {/* Generic wallet-chrome line describing the action. The dApp's own
+                statement text is NOT shown here — it goes in a quarantined,
+                labelled box in the scroll area so it can't masquerade as chrome. */}
+            <p className="text-muted-foreground mt-2 pl-2.5 text-[10px] leading-[1.5]">
+              A site wants you to sign in to prove you own this account.
+            </p>
           </div>
 
           {/* Scrollable content (block layout so children overflow, not shrink). */}
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
+            {/* The dApp's statement, quarantined: a left-accented, labelled box so
+                this attacker-supplied text is unmistakably content, never chrome. */}
+            {parsed?.statement && (
+              <div className="border-border bg-foreground/[0.03] border-l-foreground/25 rounded-[10.5px] border border-l-2 p-3">
+                <span className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+                  Statement · from the site
+                </span>
+                <p className="text-foreground mt-1.5 break-words text-[11px] leading-[1.5]">{parsed.statement}</p>
+              </div>
+            )}
+
             {fields.length > 0 ? (
               <div className="border-border overflow-hidden rounded-[10.5px] border">
                 {fields.map((f) => (
@@ -256,6 +268,17 @@ export const SiweDialog = ({
                 <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">
                   This request names a different account than the one you're connected with, so the signature won't be
                   valid for it.
+                </p>
+              </div>
+            )}
+
+            {/* Advisory: weak nonce (< 8 chars) → weak replay protection. */}
+            {weakNonce && (
+              <div className="flex items-start gap-2 rounded-[10.5px] border border-amber-500/30 bg-amber-500/10 p-3">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-amber-500" strokeWidth={2} />
+                <p className="min-w-0 text-[11px] leading-[1.45] text-amber-600 dark:text-amber-500">
+                  This sign-in uses a short nonce ({parsed?.nonce.length} chars). EIP-4361 recommends at least 8 — a
+                  weak nonce means the site's replay protection is easy to bypass.
                 </p>
               </div>
             )}

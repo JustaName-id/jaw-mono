@@ -1,6 +1,7 @@
 'use client';
 
 import { useMemo, useState } from 'react';
+import { TriangleAlert } from 'lucide-react';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { CopyIcon, CopiedIcon } from '../../icons';
 import {
@@ -27,7 +28,7 @@ type TreeNode = {
   kind: 'leaf' | 'group';
   badge?: string; // solidity type (leaves)
   value?: string; // formatted, truncated value (leaves)
-  tone?: DateTone; // deadline state (leaves): expired → warn, far → soft warn
+  tone?: DateTone; // warning state (leaves): expired → red, far/Unlimited/No-expiry → amber
   copyValue?: string; // full untruncated value to copy (address/bytes leaves)
   children?: TreeNode[];
 };
@@ -93,7 +94,7 @@ function formatValue(type: string, value: unknown, fieldName = ''): FormattedLea
     const mx = maxUintFor(type);
     if (mx !== null && big === mx) {
       if (isTimestamp) return { text: 'No expiry', tone: 'far' };
-      if (isAmount) return { text: 'Unlimited' };
+      if (isAmount) return { text: 'Unlimited', tone: 'far' };
     }
     if (isTimestamp && isUnixTimestamp(big)) {
       const tone = dateTone(big);
@@ -201,6 +202,9 @@ function LeafValue({ display, copyValue, tone }: { display?: string; copyValue?:
   const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
   return (
     <span className="ml-auto flex min-w-0 items-center justify-end gap-1">
+      {(tone === 'far' || tone === 'expired') && (
+        <TriangleAlert className={`size-3 flex-none ${toneClass}`} strokeWidth={2} />
+      )}
       <span className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${toneClass}`}>
         {display}
         {tone === 'expired' && <span className="font-semibold"> · Expired</span>}

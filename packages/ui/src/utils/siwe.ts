@@ -35,12 +35,15 @@ export function isSiweMessage(message: string): boolean {
       return false;
     }
 
-    // Required SIWE fields
+    // Required SIWE fields. The nonce need only be present + alphanumeric here — we
+    // deliberately DON'T enforce the 8-char minimum for detection, so a message with
+    // a weak/short nonce still renders as SIWE and the dialog can flag it, rather than
+    // silently falling back to the plain personal_sign screen.
     return (
       /URI:\s*.+/.test(decodedMessage) &&
       /Version:\s*1/.test(decodedMessage) &&
       /Chain ID:\s*\d+/.test(decodedMessage) &&
-      /Nonce:\s*[a-zA-Z0-9]{8,}/.test(decodedMessage) &&
+      /Nonce:\s*[a-zA-Z0-9]+/.test(decodedMessage) &&
       /Issued At:\s*.+/.test(decodedMessage)
     );
   } catch (error) {

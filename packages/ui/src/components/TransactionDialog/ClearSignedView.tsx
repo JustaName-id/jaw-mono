@@ -3,6 +3,7 @@ import { ethAddress } from 'viem';
 import type { ClearSigningDisplay, DisplayRow } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
 import { dateTone, formatUnixDate, groupNumber, isUnlimitedAmount } from '../../utils/displayFormat';
+import { TriangleAlert } from 'lucide-react';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { TokenIcon } from '../TokenIcon';
 import { CopyIcon, CopiedIcon } from '../../icons';
@@ -35,19 +36,24 @@ interface ClearSignedViewProps {
 
 function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }) {
   // Max-uint approvals read as "Unlimited" (matching the raw tree) rather than a
-  // 78-digit number. Full amounts wrap to the next line — never truncate a value.
+  // 78-digit number, and carry a warning tone (amber + triangle) — an unbounded
+  // allowance is exactly what a user must notice. Full amounts wrap, never truncate.
   const unlimited = isUnlimitedAmount(row.rawValue);
   return (
     <div className="flex min-w-0 flex-row items-center justify-end gap-1.5">
-      <TokenIcon
-        chainId={chainId}
-        address={row.tokenAddress ?? ethAddress}
-        symbol={row.symbol}
-        className="size-4 flex-none"
-      />
-      <p className="text-foreground break-all font-mono text-[11px]">
+      {unlimited ? (
+        <TriangleAlert className="size-3.5 flex-none text-amber-500" strokeWidth={2} />
+      ) : (
+        <TokenIcon
+          chainId={chainId}
+          address={row.tokenAddress ?? ethAddress}
+          symbol={row.symbol}
+          className="size-4 flex-none"
+        />
+      )}
+      <p className={`break-all font-mono text-[11px] ${unlimited ? 'text-amber-500' : 'text-foreground'}`}>
         <span className="font-semibold">{unlimited ? 'Unlimited' : groupNumber(row.value)}</span>
-        {row.symbol && <span className="text-muted-foreground"> {row.symbol}</span>}
+        {row.symbol && <span className={unlimited ? '' : 'text-muted-foreground'}> {row.symbol}</span>}
       </p>
     </div>
   );
