@@ -2,10 +2,9 @@
 
 import { ShellDialog } from '../ShellDialog';
 import { DialogAppHeader } from '../DialogAppHeader';
-import { AccountPill } from '../AccountPill';
-import { AccountIdenticon } from '../AccountIdenticon';
-import { IdentityAvatar } from '../IdentityAvatar';
-import { SignedSuccess } from '../SignedSuccess';
+import { AccountHeaderRow } from '../AccountHeaderRow';
+import { SuccessScreen } from '../SuccessScreen';
+import { ProcessingScreen } from '../ProcessingScreen';
 import { Button } from '../ui/button';
 import { SignatureDialogProps } from './types';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
@@ -57,34 +56,16 @@ export const SignatureDialog = ({
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[447px]">
       {isSuccess ? (
         // Brief success beat before the parent closes the dialog.
-        <SignedSuccess seedAddress={signerAddress} avatarUrl={avatarUrl} />
+        <SuccessScreen seedAddress={signerAddress} avatarUrl={avatarUrl} />
       ) : isProcessing ? (
         // Signing in progress — passkey ceremony running.
-        <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
-          <div className="flex items-center gap-3">
-            <IdentityAvatar
-              src={avatarUrl ?? undefined}
-              className="h-11 w-11 rounded-[13px]"
-              fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={44} />}
-            />
-            <span className="flex items-center gap-1.5">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="jaw-flow-dot bg-foreground/70 h-1.5 w-1.5 rounded-full"
-                  style={{ animationDelay: `${i * 0.2}s` }}
-                />
-              ))}
-            </span>
-            <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
-              {appAvatar}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Signing...</h2>
-            <p className="text-muted-foreground text-xs">Confirm with your passkey</p>
-          </div>
-        </div>
+        <ProcessingScreen
+          seedAddress={signerAddress}
+          avatarUrl={avatarUrl}
+          appAvatar={appAvatar}
+          title="Signing..."
+          subtitle="Confirm with your passkey"
+        />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col p-6 pt-7">
           <DialogAppHeader
@@ -97,15 +78,12 @@ export const SignatureDialog = ({
 
           {/* Signing account — flush with the header logo and the message-box
                 border (the card content column). */}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Signing as</h2>
-            <AccountPill
-              seedAddress={signerAddress}
-              label={displayName}
-              avatarUrl={avatarUrl}
-              copyValue={signerAddress}
-            />
-          </div>
+          <AccountHeaderRow
+            label="Signing as"
+            seedAddress={signerAddress}
+            displayName={displayName}
+            avatarUrl={avatarUrl}
+          />
 
           {/* Message */}
           <div className="border-border mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10.5px] border p-3">

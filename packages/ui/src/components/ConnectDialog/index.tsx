@@ -3,9 +3,8 @@
 import { Eye, CircleDollarSign, ShieldCheck, Globe } from 'lucide-react';
 import { ShellDialog } from '../ShellDialog';
 import { DialogAppHeader } from '../DialogAppHeader';
-import { AccountPill } from '../AccountPill';
-import { AccountIdenticon } from '../AccountIdenticon';
-import { IdentityAvatar } from '../IdentityAvatar';
+import { AccountHeaderRow } from '../AccountHeaderRow';
+import { ProcessingScreen } from '../ProcessingScreen';
 import { Button } from '../ui/button';
 import { ConnectDialogProps } from './types';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
@@ -56,31 +55,13 @@ export const ConnectDialog = ({
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing}>
       {isProcessing ? (
         // Connecting state — secure session being established.
-        <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
-          <div className="flex items-center gap-3">
-            <IdentityAvatar
-              src={avatarUrl ?? undefined}
-              className="h-11 w-11 rounded-[13px]"
-              fallback={<AccountIdenticon seed={walletAddress.toLowerCase()} size={44} />}
-            />
-            <span className="flex items-center gap-1.5">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="jaw-flow-dot bg-foreground/70 h-1.5 w-1.5 rounded-full"
-                  style={{ animationDelay: `${i * 0.2}s` }}
-                />
-              ))}
-            </span>
-            <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
-              {appAvatar}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Connecting...</h2>
-            <p className="text-muted-foreground text-xs">Establishing a secure session with {safeAppName}</p>
-          </div>
-        </div>
+        <ProcessingScreen
+          seedAddress={walletAddress}
+          avatarUrl={avatarUrl}
+          appAvatar={appAvatar}
+          title="Connecting..."
+          subtitle={`Establishing a secure session with ${safeAppName}`}
+        />
       ) : (
         <div className="flex flex-1 flex-col p-6 pt-7">
           <DialogAppHeader
@@ -92,15 +73,12 @@ export const ConnectDialog = ({
           />
 
           {/* Connecting account */}
-          <div className="mt-4 flex flex-wrap items-center gap-2">
-            <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Connecting to</h2>
-            <AccountPill
-              seedAddress={walletAddress}
-              label={displayName}
-              avatarUrl={avatarUrl}
-              copyValue={walletAddress}
-            />
-          </div>
+          <AccountHeaderRow
+            label="Connecting to"
+            seedAddress={walletAddress}
+            displayName={displayName}
+            avatarUrl={avatarUrl}
+          />
 
           {/* Capability rows */}
           {showPermissions && (

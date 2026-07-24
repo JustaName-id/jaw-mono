@@ -3,6 +3,7 @@
 import { useMemo, useState } from 'react';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { CopyIcon, CopiedIcon } from '../../icons';
+import { formatUnixDate, groupNumber, isUnixTimestamp, maxUintFor } from '../../utils/displayFormat';
 
 // EIP-712 TypedData structure (mirrors the dialog's local type).
 interface TypedData {
@@ -28,31 +29,6 @@ const MAX_DEPTH = 12;
 
 const isArrayType = (type: string) => /\[\d*\]$/.test(type);
 const baseType = (type: string) => type.replace(/\[\d*\]$/, '');
-
-// Plausible unix-timestamp window (2000-01-01 .. 2100-01-01) for date detection.
-const TS_MIN = 946684800n;
-const TS_MAX = 4102444800n;
-
-/** Largest value a `uint<bits>` can hold — used to spot "unlimited"/"no expiry" sentinels. */
-function maxUint(type: string): bigint | null {
-  const m = /^uint(\d*)$/.exec(type);
-  if (!m) return null;
-  const bits = m[1] ? Number(m[1]) : 256;
-  return (1n << BigInt(bits)) - 1n;
-}
-
-/** Thousands-separate a decimal integer string. */
-function groupDigits(s: string): string {
-  const neg = s.startsWith('-');
-  const digits = neg ? s.slice(1) : s;
-  return (neg ? '-' : '') + digits.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-}
-
-function formatDate(seconds: bigint): string {
-  const d = new Date(Number(seconds) * 1000);
-  if (Number.isNaN(d.getTime())) return groupDigits(seconds.toString());
-  return d.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' });
-}
 
 /** Network name for a chainId, e.g. "Ethereum · 1"; bare id when unrecognised. */
 function networkLabel(id: number): string {
@@ -101,14 +77,14 @@ function formatValue(type: string, value: unknown, fieldName = ''): string {
     );
     const isAmount = /(amount|value|allowance|limit|balance|price|cost|fee|total|wad)/.test(name);
 
-    const mx = maxUint(type);
+    const mx = maxUintFor(type);
     if (mx !== null && big === mx) {
       if (isTimestamp) return 'No expiry';
       if (isAmount) return 'Unlimited';
     }
-    if (isTimestamp && big >= TS_MIN && big <= TS_MAX) return formatDate(big);
+    if (isTimestamp && isUnixTimestamp(big)) return formatUnixDate(big);
 
-    return groupDigits(big.toString());
+    return groupNumber(big.toString());
   }
 
   if (type === 'bool') return String(value);

@@ -6,8 +6,7 @@ import { Skeleton } from '../ui/skeleton';
 import { Spinner } from '../ui/spinner';
 import { ArrowRightLeft, ChevronLeft, ChevronRight, Fingerprint, ScanFace } from 'lucide-react';
 import { DialogShell } from '../DialogShell';
-import { AccountIdenticon } from '../AccountIdenticon';
-import { IdentityAvatar } from '../IdentityAvatar';
+import { AccountAvatar } from '../AccountAvatar';
 import { OnboardingDialogProps, LocalStorageAccount } from './types';
 import { selectDefaultAccount } from './selectDefaultAccount';
 import { backfillLocalAccountAddresses } from './accountHelpers';
@@ -476,18 +475,14 @@ export function OnboardingDialog({
             </>
           ) : (
             <>
-              <IdentityAvatar
-                src={avatarFor(defaultAccount)}
+              {/* Seed by address (matching the signing pills) so the same account shows
+                  the same identicon everywhere; fall back to username for older records
+                  that predate address persistence. */}
+              <AccountAvatar
+                seed={defaultAccount.address ?? defaultAccount.username}
+                avatarUrl={avatarFor(defaultAccount)}
+                size={40}
                 className="h-10 w-10 rounded-[12px]"
-                fallback={
-                  // Seed by address (matching the signing pills) so the same account
-                  // shows the same identicon everywhere; fall back to username for
-                  // older records that predate address persistence.
-                  <AccountIdenticon
-                    seed={(defaultAccount.address ?? defaultAccount.username).toLowerCase()}
-                    size={40}
-                  />
-                }
               />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">

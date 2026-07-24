@@ -2,10 +2,9 @@
 
 import { ShellDialog } from '../ShellDialog';
 import { DialogAppHeader } from '../DialogAppHeader';
-import { AccountPill } from '../AccountPill';
-import { AccountIdenticon } from '../AccountIdenticon';
-import { IdentityAvatar } from '../IdentityAvatar';
-import { SignedSuccess } from '../SignedSuccess';
+import { AccountHeaderRow } from '../AccountHeaderRow';
+import { SuccessScreen } from '../SuccessScreen';
+import { ProcessingScreen } from '../ProcessingScreen';
 import { Eip712Tree } from './Eip712Tree';
 import { Eip712DomainCard } from './Eip712DomainCard';
 import { Button } from '../ui/button';
@@ -123,34 +122,16 @@ export const Eip712Dialog = ({
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
       {isSuccess ? (
         // Brief success beat before the parent closes the dialog.
-        <SignedSuccess seedAddress={accountAddress ?? ''} avatarUrl={signerAvatar} />
+        <SuccessScreen seedAddress={signerAddress} avatarUrl={signerAvatar} />
       ) : isProcessing ? (
         // Signing in progress — passkey ceremony running.
-        <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
-          <div className="flex items-center gap-3">
-            <IdentityAvatar
-              src={signerAvatar ?? undefined}
-              className="h-11 w-11 rounded-[13px]"
-              fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={44} />}
-            />
-            <span className="flex items-center gap-1.5">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="jaw-flow-dot bg-foreground/70 h-1.5 w-1.5 rounded-full"
-                  style={{ animationDelay: `${i * 0.2}s` }}
-                />
-              ))}
-            </span>
-            <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
-              {appAvatar}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Signing...</h2>
-            <p className="text-muted-foreground text-xs">Confirm with your passkey</p>
-          </div>
-        </div>
+        <ProcessingScreen
+          seedAddress={signerAddress}
+          avatarUrl={signerAvatar}
+          appAvatar={appAvatar}
+          title="Signing..."
+          subtitle="Confirm with your passkey"
+        />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Pinned header */}
@@ -162,17 +143,12 @@ export const Eip712Dialog = ({
               chainName={chainName}
               chainIcon={chainIcon}
             />
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Signing as</h2>
-              {signerAddress && (
-                <AccountPill
-                  seedAddress={signerAddress}
-                  label={displayName}
-                  avatarUrl={signerAvatar}
-                  copyValue={signerAddress}
-                />
-              )}
-            </div>
+            <AccountHeaderRow
+              label="Signing as"
+              seedAddress={signerAddress}
+              displayName={displayName}
+              avatarUrl={signerAvatar}
+            />
           </div>
 
           {/* Scrollable content. Block layout (not flex-col) is deliberate: a flex

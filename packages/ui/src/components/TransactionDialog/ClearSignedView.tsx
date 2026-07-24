@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ethAddress } from 'viem';
 import type { ClearSigningDisplay, DisplayRow } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
+import { formatUnixDate, groupNumber, isUnlimitedAmount } from '../../utils/displayFormat';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { TokenIcon } from '../TokenIcon';
 import { CopyIcon, CopiedIcon } from '../../icons';
@@ -32,13 +33,10 @@ interface ClearSignedViewProps {
   mainnetRpcUrl?: string;
 }
 
-function formatGrouped(value: string): string {
-  const [intPart, fracPart] = value.split('.');
-  const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
-  return fracPart ? `${grouped}.${fracPart}` : grouped;
-}
-
 function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }) {
+  // Max-uint approvals read as "Unlimited" (matching the raw tree) rather than a
+  // 78-digit number. Full amounts wrap to the next line — never truncate a value.
+  const unlimited = isUnlimitedAmount(row.rawValue);
   return (
     <div className="flex min-w-0 flex-row items-center justify-end gap-1.5">
       <TokenIcon
@@ -47,8 +45,8 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
         symbol={row.symbol}
         className="size-4 flex-none"
       />
-      <p className="text-foreground truncate font-mono text-[11px]">
-        <span className="font-semibold">{formatGrouped(row.value)}</span>
+      <p className="text-foreground break-all font-mono text-[11px]">
+        <span className="font-semibold">{unlimited ? 'Unlimited' : groupNumber(row.value)}</span>
         {row.symbol && <span className="text-muted-foreground"> {row.symbol}</span>}
       </p>
     </div>
@@ -155,7 +153,9 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
                   ) : row.kind === 'address' ? (
                     <AddressValue row={row} resolvedName={resolvedName} avatarSrc={avatarSrc} />
                   ) : (
-                    <span className="text-foreground break-all font-mono text-[11px]">{row.value}</span>
+                    <span className="text-foreground break-all font-mono text-[11px]">
+                      {row.kind === 'date' && row.rawValue ? formatUnixDate(row.rawValue) : row.value}
+                    </span>
                   )}
                 </div>
               </div>

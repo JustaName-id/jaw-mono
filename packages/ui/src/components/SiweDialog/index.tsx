@@ -3,9 +3,8 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import { ShellDialog } from '../ShellDialog';
 import { DialogAppHeader } from '../DialogAppHeader';
-import { AccountPill } from '../AccountPill';
-import { AccountIdenticon } from '../AccountIdenticon';
-import { IdentityAvatar } from '../IdentityAvatar';
+import { AccountHeaderRow } from '../AccountHeaderRow';
+import { ProcessingScreen } from '../ProcessingScreen';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { SiweDialogProps } from './types';
@@ -141,31 +140,13 @@ export const SiweDialog = ({
   return (
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
       {isProcessing ? (
-        <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
-          <div className="flex items-center gap-3">
-            <IdentityAvatar
-              src={avatarUrl ?? undefined}
-              className="h-11 w-11 rounded-[13px]"
-              fallback={<AccountIdenticon seed={signerAddress.toLowerCase()} size={44} />}
-            />
-            <span className="flex items-center gap-1.5">
-              {[0, 1, 2].map((i) => (
-                <span
-                  key={i}
-                  className="jaw-flow-dot bg-foreground/70 h-1.5 w-1.5 rounded-full"
-                  style={{ animationDelay: `${i * 0.2}s` }}
-                />
-              ))}
-            </span>
-            <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
-              {appAvatar}
-            </span>
-          </div>
-          <div className="flex flex-col gap-1">
-            <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">Signing in...</h2>
-            <p className="text-muted-foreground text-xs">Confirm with your passkey</p>
-          </div>
-        </div>
+        <ProcessingScreen
+          seedAddress={signerAddress}
+          avatarUrl={avatarUrl}
+          appAvatar={appAvatar}
+          title="Signing in..."
+          subtitle="Confirm with your passkey"
+        />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Pinned header */}
@@ -177,10 +158,12 @@ export const SiweDialog = ({
               chainName={chainName}
               chainIcon={chainIcon}
             />
-            <div className="mt-4 flex flex-wrap items-center gap-2">
-              <h2 className="text-foreground text-base font-semibold tracking-[-0.02em]">Sign In as</h2>
-              <AccountPill seedAddress={signerAddress} label={displayName} avatarUrl={avatarUrl} />
-            </div>
+            <AccountHeaderRow
+              label="Sign In as"
+              seedAddress={signerAddress}
+              displayName={displayName}
+              avatarUrl={avatarUrl}
+            />
             {/* The EIP-4361 statement is the actual consent text — show it verbatim
                 (readable, not muted) when present; fall back to a generic line. */}
             {parsed?.statement ? (

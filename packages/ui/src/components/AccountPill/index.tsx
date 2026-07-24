@@ -1,8 +1,7 @@
 'use client';
 
 import { useState } from 'react';
-import { AccountIdenticon } from '../AccountIdenticon';
-import { IdentityAvatar } from '../IdentityAvatar';
+import { AccountAvatar } from '../AccountAvatar';
 import { CopyIcon, CopiedIcon } from '../../icons';
 import { cn } from '../../lib/utils';
 
@@ -43,11 +42,7 @@ export function AccountPill({ seedAddress, label, avatarUrl, copyValue, classNam
         className
       )}
     >
-      <IdentityAvatar
-        src={avatarUrl ?? undefined}
-        className="h-[15px] w-[15px] rounded-full"
-        fallback={<AccountIdenticon seed={seedAddress.toLowerCase()} size={15} />}
-      />
+      <AccountAvatar seed={seedAddress} avatarUrl={avatarUrl} size={15} className="h-[15px] w-[15px] rounded-full" />
       <span
         className={cn(
           'text-secondary-foreground truncate font-mono',
