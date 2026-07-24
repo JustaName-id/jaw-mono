@@ -189,7 +189,7 @@ export class Account {
         const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
         const bundlerClient = getBundlerClient(chain);
 
-        await Promise.all(
+        const derived = await Promise.all(
             missing.map(async (account) => {
                 try {
                     const webAuthnAccount = toWebAuthnAccount({
@@ -203,11 +203,18 @@ export class Account {
                         bundlerClient as JustanAccountImplementation['client']
                     );
                     account.address = await smartAccount.getAddress();
-                    passkeyManager.setAccountAddress(account.credentialId, account.address);
+                    return { credentialId: account.credentialId, address: account.address };
                 } catch {
                     /* leave the record without an address; next call retries */
+                    return null;
                 }
             })
+        );
+
+        // One batched write: a setAccountAddress per result would race the reads
+        // and drop all but the last address.
+        passkeyManager.setAccountAddresses(
+            derived.filter((entry): entry is NonNullable<typeof entry> => entry !== null)
         );
         return accounts;
     }

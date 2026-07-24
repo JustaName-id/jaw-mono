@@ -117,7 +117,8 @@ export class PasskeyManager {
 
     /**
      * Add a passkey account to the stored list
-     * If account already exists (by credentialId), updates the isImported flag if needed
+     * If account already exists (by credentialId), fills in any fields the
+     * stored entry is missing (isImported once true, and the address once known)
      */
     addAccountToList(account: PasskeyAccount): void {
         const existingAccounts = this.fetchAccounts();
@@ -130,25 +131,49 @@ export class PasskeyManager {
         if (existingIndex === -1) {
             const updated = [...existingAccounts, account];
             this.storage.setItem('accounts', updated);
-        } else if (account.isImported && !existingAccounts[existingIndex].isImported) {
-            // Update existing account's isImported flag if importing an existing local account
-            const updated = existingAccounts.map((acc, i) =>
-                i === existingIndex ? { ...acc, isImported: true } : acc
-            );
-            this.storage.setItem('accounts', updated);
+            return;
         }
+
+        // Merge fields the stored entry lacks. The create path adds the account
+        // via createPasskey (no address yet), then re-adds it here once the
+        // address is derived — so the address must be filled in on the existing
+        // entry rather than dropped.
+        const existing = existingAccounts[existingIndex];
+        const patch: Partial<PasskeyAccount> = {};
+        if (account.isImported && !existing.isImported) patch.isImported = true;
+        if (account.address && !existing.address) patch.address = account.address;
+
+        if (Object.keys(patch).length === 0) return;
+
+        const updated = existingAccounts.map((acc, i) => (i === existingIndex ? { ...acc, ...patch } : acc));
+        this.storage.setItem('accounts', updated);
     }
 
     /**
      * Persist the address for a stored account that predates address
      * persistence. No-op when the account is missing or already has one.
      */
-    setAccountAddress(credentialId: string, address: string): void {
+    setAccountAddress(credentialId: string, address: `0x${string}`): void {
+        this.setAccountAddresses([{ credentialId, address }]);
+    }
+
+    /**
+     * Persist addresses for several stored accounts in a single read-modify-write.
+     * Callers that derive addresses concurrently must batch through here: issuing
+     * one `setAccountAddress` per result races the reads and loses writes.
+     */
+    setAccountAddresses(entries: Array<{ credentialId: string; address: `0x${string}` }>): void {
+        if (entries.length === 0) return;
+        const byCredential = new Map(entries.map((entry) => [entry.credentialId, entry.address]));
         const accounts = this.fetchAccounts();
-        const index = accounts.findIndex((account) => account.credentialId === credentialId);
-        if (index === -1 || accounts[index].address) return;
-        const updated = accounts.map((account, i) => (i === index ? { ...account, address } : account));
-        this.storage.setItem('accounts', updated);
+        let changed = false;
+        const updated = accounts.map((account) => {
+            const address = byCredential.get(account.credentialId);
+            if (!address || account.address) return account;
+            changed = true;
+            return { ...account, address };
+        });
+        if (changed) this.storage.setItem('accounts', updated);
     }
 
     /**
