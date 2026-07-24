@@ -187,14 +187,11 @@ export const SiweDialog = ({
 
           {/* Scrollable content (block layout so children overflow, not shrink). */}
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
-            {/* The dApp's statement, quarantined: a left-accented, labelled box so
-                this attacker-supplied text is unmistakably content, never chrome. */}
+            {/* The dApp's statement, quarantined in its own box so this
+                attacker-supplied text is unmistakably content, never chrome. */}
             {parsed?.statement && (
-              <div className="border-border bg-foreground/[0.03] border-l-foreground/25 rounded-[10.5px] border border-l-2 p-3">
-                <span className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-                  Statement · from the site
-                </span>
-                <p className="text-foreground mt-1.5 break-words text-[11px] leading-[1.5]">{parsed.statement}</p>
+              <div className="border-border bg-foreground/[0.03] rounded-[10.5px] border p-3">
+                <p className="text-foreground break-words text-[11px] leading-[1.5]">{parsed.statement}</p>
               </div>
             )}
 
