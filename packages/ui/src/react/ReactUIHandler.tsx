@@ -378,6 +378,8 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
       }
@@ -457,6 +459,8 @@ export class ReactUIHandler implements UIHandler {
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
               paymasters={this.config.paymasters}
+              appName={this.config.appName}
+              appLogoUrl={this.config.appLogoUrl}
             />
           );
         } else {
@@ -474,6 +478,8 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
@@ -972,7 +978,6 @@ function OnboardingDialogWrapper({
           }}
           message={siweMessage}
           origin={origin}
-          timestamp={new Date()}
           appName={request.data.appName || 'dApp'}
           appLogoUrl={request.data.appLogoUrl ?? undefined}
           accountAddress={authenticatedWalletAddress}
@@ -1002,7 +1007,6 @@ function OnboardingDialogWrapper({
         appName={request.data.appName || 'dApp'}
         appLogoUrl={request.data.appLogoUrl ?? undefined}
         origin={origin}
-        timestamp={new Date()}
         accountName={authenticatedAccountName || 'Account'}
         walletAddress={authenticatedWalletAddress}
         chainName={chainName}
@@ -1062,6 +1066,8 @@ function SignatureDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: SignatureUIRequest;
   onApprove: (data: any) => void;
@@ -1069,6 +1075,8 @@ function SignatureDialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1121,7 +1129,8 @@ function SignatureDialogWrapper({
       }}
       message={request.data.message}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
-      timestamp={new Date(request.timestamp)}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       accountAddress={request.data.address}
       chainName={chainName}
       chainId={chainId}
@@ -1143,6 +1152,8 @@ function Eip712DialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: TypedDataUIRequest;
   onApprove: (data: any) => void;
@@ -1150,6 +1161,8 @@ function Eip712DialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1157,6 +1170,8 @@ function Eip712DialogWrapper({
 
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
+  const chainName = getChainNameFromId(chainId);
+  const chainIcon = useChainIconURI(chainId, apiKey, 24);
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -1212,8 +1227,12 @@ function Eip712DialogWrapper({
       }}
       typedDataJson={request.data.typedData}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
-      timestamp={new Date(request.timestamp)}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       accountAddress={request.data.address}
+      chainName={chainName}
+      chainId={chainId}
+      chainIcon={chainIcon}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
@@ -2559,7 +2578,6 @@ function SiweDialogWrapper({
       }}
       message={decodedMessage}
       origin={origin}
-      timestamp={new Date(request.timestamp)}
       appName={appName}
       accountAddress={request.data.address}
       chainName={chainName}

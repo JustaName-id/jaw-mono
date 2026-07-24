@@ -6,7 +6,6 @@ export interface SiweDialogProps {
   // Message data
   message: string;
   origin: string;
-  timestamp: Date;
 
   // App information
   appName: string;
@@ -23,6 +22,8 @@ export interface SiweDialogProps {
 
   // Status
   isProcessing: boolean;
+  /** After the signature is delivered — shows the "Signed in ✓" beat before the dialog closes. */
+  isSuccess?: boolean;
   siweStatus: string;
   canSign: boolean;
 

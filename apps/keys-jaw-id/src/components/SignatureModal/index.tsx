@@ -14,6 +14,8 @@ export interface SignatureModalProps {
   address?: string;
   chain: chain;
   apiKey?: string;
+  appName?: string;
+  appLogoUrl?: string;
   onSuccess: (signature: string, message: string) => void;
   onError: (error: Error, errorCode?: number) => void;
 }
@@ -24,19 +26,25 @@ export const SignatureModal = ({
   address,
   chain,
   apiKey,
+  appName,
+  appLogoUrl,
   onSuccess,
   onError,
 }: SignatureModalProps) => {
   // Single hook handles session lookup + account restoration
-  const { account, isLoading: isAccountLoading } = useSessionAccount({
+  const {
+    account,
+    walletAddress,
+    isLoading: isAccountLoading,
+  } = useSessionAccount({
     origin,
     chain,
     apiKey,
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [timestamp] = useState(() => new Date());
 
   // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
@@ -73,8 +81,10 @@ export const SignatureModal = ({
       const signature = await account.signMessage(messageToSign, { address: address as `0x${string}` | undefined });
 
       setSignatureStatus('Signature created successfully!');
-
-      // Call onSuccess immediately - parent will handle closing
+      // Deliver the signature to the dApp immediately — never block on the
+      // animation. `setIsSuccess` flips the confirmation view; the parent's own
+      // success state + close delay carry the visual beat after delivery.
+      setIsSuccess(true);
       onSuccess(signature, messageToSign);
     } catch (error) {
       console.error('Error signing message:', error);
@@ -108,8 +118,9 @@ export const SignatureModal = ({
       }}
       message={messageToSign}
       origin={origin}
-      timestamp={timestamp}
-      accountAddress={address}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
+      accountAddress={address || walletAddress || undefined}
       chainName={chainName}
       chainIcon={chainIcon}
       chainId={chain.id}
@@ -117,6 +128,7 @@ export const SignatureModal = ({
       onSign={signMessage}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
       canSign={canSign}
     />

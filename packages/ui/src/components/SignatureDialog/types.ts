@@ -6,7 +6,10 @@ export interface SignatureDialogProps {
   // Message data
   message: string;
   origin: string;
-  timestamp: Date;
+
+  // Requesting dApp identity (matches ConnectDialog)
+  appName?: string;
+  appLogoUrl?: string | null;
 
   accountAddress?: string;
   chainName?: string;
@@ -22,6 +25,8 @@ export interface SignatureDialogProps {
 
   // Status
   isProcessing: boolean;
+  /** Briefly true after a successful sign so the dialog can play a success tick before closing. */
+  isSuccess?: boolean;
   signatureStatus: string;
   canSign: boolean;
 }

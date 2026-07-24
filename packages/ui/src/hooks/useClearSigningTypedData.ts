@@ -21,6 +21,17 @@ interface UseClearSigningTypedDataResult {
   isLoading: boolean;
 }
 
+/** Coerce an EIP-712 domain chainId (number, bigint, hex or decimal string) to a number. */
+function toChainId(v: unknown): number | undefined {
+  if (typeof v === 'number') return v;
+  if (typeof v === 'bigint') return Number(v);
+  if (typeof v === 'string' && v.length > 0) {
+    const n = v.startsWith('0x') ? Number.parseInt(v, 16) : Number(v);
+    return Number.isFinite(n) ? n : undefined;
+  }
+  return undefined;
+}
+
 /**
  * Resolve an ERC-7730 descriptor for `(chainId, verifyingContract, primaryType)`
  * and produce a ClearSigningDisplay over the typed-data message.
@@ -58,6 +69,11 @@ export function useClearSigningTypedData(
       return;
     }
 
+    // A typed-data signature is bound to the chain in its own `domain`, not to whatever
+    // chain the wallet happens to be connected to. Resolve the descriptor (and read token
+    // metadata) against the domain's chainId; fall back to the connected chain when absent.
+    const effectiveChainId = toChainId(parsed.domain?.chainId) ?? chainId;
+
     let cancelled = false;
     setIsLoading(true);
 
@@ -65,7 +81,7 @@ export function useClearSigningTypedData(
       try {
         const match = await resolveEip712Descriptor(
           getDefaultDescriptorSource(),
-          chainId,
+          effectiveChainId,
           verifyingContract,
           primaryType,
           parsed.types,
@@ -84,11 +100,11 @@ export function useClearSigningTypedData(
           // verifyingContract, numeric chainId) win when a dApp ships a differently-cased
           // address or a hex chainId. Renderer reads from this; we don't want descriptor
           // rows to surface dApp-controlled spelling.
-          tx: { ...parsed.domain, chainId, verifyingContract: verifyingContract.toLowerCase() },
-          chainId,
-          nativeSymbol: getNativeSymbol(chainId),
-          nativeDecimals: getNativeDecimals(chainId),
-          resolveToken: createTokenResolver(chainId, apiKey),
+          tx: { ...parsed.domain, chainId: effectiveChainId, verifyingContract: verifyingContract.toLowerCase() },
+          chainId: effectiveChainId,
+          nativeSymbol: getNativeSymbol(effectiveChainId),
+          nativeDecimals: getNativeDecimals(effectiveChainId),
+          resolveToken: createTokenResolver(effectiveChainId, apiKey),
         });
 
         if (!cancelled) {
