@@ -41,21 +41,26 @@ export const ConnectDialog = ({
 
   // Resolve wallet address to human-readable name + ENS avatar
   useEffect(() => {
-    if (walletAddress && chainId) {
-      reverseResolveWithAvatars([{ address: walletAddress, chainId }], mainnetRpcUrl)
-        .then(async (resolved) => {
-          const identity = resolved[walletAddress.toLowerCase()];
-          if (identity) {
-            const label = await getChainLabel(chainId, mainnetRpcUrl);
-            setResolvedAddress(label ? `${identity.name}@${label}` : identity.name);
-            setAvatarUrl(identity.avatar ?? null);
-          }
-        })
-        .catch(() => {
-          // Silently fail if resolution fails
-        });
-    }
-  }, [walletAddress, chainId]);
+    if (!walletAddress || !chainId) return;
+    // Guard against a slower resolution for a previous address overwriting a
+    // newer one after the dialog switches accounts.
+    let cancelled = false;
+    reverseResolveWithAvatars([{ address: walletAddress, chainId }], mainnetRpcUrl)
+      .then(async (resolved) => {
+        const identity = resolved[walletAddress.toLowerCase()];
+        if (!identity) return;
+        const label = await getChainLabel(chainId, mainnetRpcUrl);
+        if (cancelled) return;
+        setResolvedAddress(label ? `${identity.name}@${label}` : identity.name);
+        setAvatarUrl(identity.avatar ?? null);
+      })
+      .catch(() => {
+        // Silently fail if resolution fails
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [walletAddress, chainId, mainnetRpcUrl]);
 
   // appName is externally-controlled (dApp metadata); sanitize before display.
   const safeAppName = sanitizeDisplayName(appName) || 'dApp';
