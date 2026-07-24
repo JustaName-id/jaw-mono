@@ -22,6 +22,8 @@ export interface SiweDialogProps {
 
   // Status
   isProcessing: boolean;
+  /** After the signature is delivered — shows the "Signed in ✓" beat before the dialog closes. */
+  isSuccess?: boolean;
   siweStatus: string;
   canSign: boolean;
 

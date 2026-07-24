@@ -5,6 +5,7 @@ import { ShellDialog } from '../ShellDialog';
 import { DialogAppHeader } from '../DialogAppHeader';
 import { AccountHeaderRow } from '../AccountHeaderRow';
 import { ProcessingScreen } from '../ProcessingScreen';
+import { SuccessScreen } from '../SuccessScreen';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
 import { SiweDialogProps } from './types';
@@ -63,6 +64,7 @@ export const SiweDialog = ({
   onSign,
   onCancel,
   isProcessing,
+  isSuccess,
   siweStatus,
   canSign,
   warningMessage,
@@ -81,6 +83,9 @@ export const SiweDialog = ({
     mainnetRpcUrl
   );
   const displayName = resolvedName || formatAddress(signerAddress);
+  // Separately reverse-resolve the MESSAGE's declared account (on the message's own
+  // chain) for the Account row — a forward-verified name the address provably owns.
+  const { name: messageAccountName } = useReverseIdentity(parsed?.address || undefined, parsed?.chainId, mainnetRpcUrl);
   const safeAppName = sanitizeDisplayName(appName) || 'dApp';
   const hasError = siweStatus.includes('Error');
 
@@ -121,7 +126,8 @@ export const SiweDialog = ({
   const fields: Array<{ label: string; value: string; copyValue?: string }> = [];
   if (parsed) {
     const account = parsed.address;
-    if (account) fields.push({ label: 'Account', value: formatAddress(account), copyValue: account });
+    if (account)
+      fields.push({ label: 'Account', value: messageAccountName || formatAddress(account), copyValue: account });
     if (parsed.uri) fields.push({ label: 'URL', value: parsed.uri });
     if (parsed.version) fields.push({ label: 'Version', value: parsed.version });
     if (parsed.chainId) {
@@ -140,7 +146,9 @@ export const SiweDialog = ({
 
   return (
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
-      {isProcessing ? (
+      {isSuccess ? (
+        <SuccessScreen seedAddress={signerAddress} avatarUrl={avatarUrl} label="Signed in" />
+      ) : isProcessing ? (
         <ProcessingScreen
           seedAddress={signerAddress}
           avatarUrl={avatarUrl}

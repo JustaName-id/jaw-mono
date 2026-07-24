@@ -814,6 +814,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               try {
                 await pendingRequest.onApprove(signature);
                 debugLog('✅ SIWE signature sent successfully');
+                // Signature already delivered — hold the "Signed in" tick, then close.
+                await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
                 setState('success');
                 scheduleClose(CLOSE_DELAY_MS);
               } catch (err) {
@@ -1424,6 +1426,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 // Popup only: hand the session to the embedded iframe so the
                 // next embedded action skips the second passkey ceremony.
                 await handOffSessionToEmbedded(pendingRequest.origin);
+                // Response already delivered — hold the "Signed in" tick, then close.
+                await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
                 setState('success');
                 scheduleClose(CLOSE_DELAY_MS);
               } catch (err) {

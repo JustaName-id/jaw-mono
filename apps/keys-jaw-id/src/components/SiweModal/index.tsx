@@ -41,6 +41,7 @@ export const SiweModal = ({
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
 
   // Extract API key for other uses (chain icon, mainnet RPC)
@@ -79,7 +80,9 @@ export const SiweModal = ({
 
       setSiweStatus('Sign in successful!');
 
-      // Call onSuccess immediately - parent will handle closing
+      // Flip to the success tick, then deliver immediately — the parent holds the
+      // dialog open briefly (SIGNED_TICK_MS) so the "Signed in ✓" beat is visible.
+      setIsSuccess(true);
       onSuccess(signature, messageToSign);
     } catch (error) {
       console.error('Error signing SIWE message:', error);
@@ -123,6 +126,7 @@ export const SiweModal = ({
       onSign={signMessage}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       siweStatus={siweStatus}
       canSign={canSign}
       warningMessage={warningMessage}
