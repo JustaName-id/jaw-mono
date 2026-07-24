@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { ethAddress } from 'viem';
 import type { ClearSigningDisplay, DisplayRow } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
-import { formatUnixDate, groupNumber, isUnlimitedAmount } from '../../utils/displayFormat';
+import { dateTone, formatUnixDate, groupNumber, isUnlimitedAmount } from '../../utils/displayFormat';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { TokenIcon } from '../TokenIcon';
 import { CopyIcon, CopiedIcon } from '../../icons';
@@ -50,6 +50,18 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
         {row.symbol && <span className="text-muted-foreground"> {row.symbol}</span>}
       </p>
     </div>
+  );
+}
+
+/** Deadline/expiry value: "1 Jan 2030", tinted + flagged when expired (past) or far-future. */
+function DateValue({ raw }: { raw: string }) {
+  const tone = dateTone(raw);
+  const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
+  return (
+    <span className={`break-all font-mono text-[11px] ${toneClass}`}>
+      {formatUnixDate(raw)}
+      {tone === 'expired' && <span className="font-semibold"> · Expired</span>}
+    </span>
   );
 }
 
@@ -152,10 +164,10 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
                     <TokenAmountValue row={row} chainId={chainId} />
                   ) : row.kind === 'address' ? (
                     <AddressValue row={row} resolvedName={resolvedName} avatarSrc={avatarSrc} />
+                  ) : row.kind === 'date' && row.rawValue ? (
+                    <DateValue raw={row.rawValue} />
                   ) : (
-                    <span className="text-foreground break-all font-mono text-[11px]">
-                      {row.kind === 'date' && row.rawValue ? formatUnixDate(row.rawValue) : row.value}
-                    </span>
+                    <span className="text-foreground break-all font-mono text-[11px]">{row.value}</span>
                   )}
                 </div>
               </div>

@@ -120,6 +120,25 @@ class MustMatchViolation extends Error {
 }
 
 /**
+ * Thrown when a descriptor field resolves to a struct/array where the template
+ * expects a scalar (e.g. Permit2 `PermitBatch.details` is a `PermitDetails[]`, but
+ * a flat "Amount allowance" slot can't represent it). Caught in `applyFormat` to
+ * abandon the descriptor and fall back to the raw tree — never stringify a struct
+ * into a template slot and pass it off as a legible "Amount"/"Expires".
+ */
+class MappingFailure extends Error {
+  constructor(public readonly field: string) {
+    super(`descriptor field ${field} mapped to a non-scalar value`);
+    this.name = 'MappingFailure';
+  }
+}
+
+/** Scalars are the only thing a flat display row can honestly render; arrays/objects are a mapping failure. */
+function isScalar(value: unknown): boolean {
+  return value === null || value === undefined || typeof value !== 'object';
+}
+
+/**
  * Case-insensitive (for hex addresses) membership check used by `mustMatch` / `ifNotIn`.
  * Values can be addresses, enum strings, or numeric strings; we normalize both sides to
  * lowercase so descriptor authors don't have to pick a casing convention.
@@ -141,6 +160,10 @@ async function formatField(
   const label = defaultLabel(field);
   const value = resolvePath(field.path, ctx);
   if (value === undefined) return null;
+
+  // The path pointed at a struct/array (e.g. an unindexed `PermitBatch.details`).
+  // A flat row can't represent it — abandon the descriptor and fall back to the tree.
+  if (!isScalar(value)) throw new MappingFailure(field.path);
 
   // ERC-7730 MUST: `mustMatch` violation invalidates the descriptor for this tx.
   // Thrown — `applyFormat` catches and aborts so the UI can fall back to raw decode.
@@ -273,9 +296,11 @@ export async function applyFormat(
   const rows: DisplayRow[] = [];
   try {
     for (const f of format.fields ?? []) {
-      // v1: array-iteration fields render as raw (the underlying array literal).
+      // v1: array-iteration fields render as raw (the underlying array literal) —
+      // but only for scalar arrays; an array of structs can't collapse to one row.
       if (f.path.endsWith('.[]')) {
         const val = resolvePath(f.path, ctx);
+        if (Array.isArray(val) && val.some((el) => !isScalar(el))) throw new MappingFailure(f.path);
         rows.push(rawRow(defaultLabel(mergeField(descriptor, f)), val));
         continue;
       }
@@ -283,10 +308,10 @@ export async function applyFormat(
       if (row) rows.push(row);
     }
   } catch (err) {
-    // ERC-7730: a `mustMatch` violation invalidates the descriptor for this tx.
-    // Return null so the hook falls back to raw-decode UI instead of rendering
-    // descriptor labels for an interaction the author didn't vouch for.
-    if (err instanceof MustMatchViolation) return null;
+    // A `mustMatch` violation (author didn't vouch for this value set) or a mapping
+    // failure (struct/array where a scalar was expected) invalidates the descriptor.
+    // Return null so the hook falls back to the raw tree instead of a misleading card.
+    if (err instanceof MustMatchViolation || err instanceof MappingFailure) return null;
     throw err;
   }
 

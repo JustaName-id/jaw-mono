@@ -45,6 +45,31 @@ export function isUnixTimestamp(n: bigint): boolean {
   return n >= TS_MIN && n <= TS_MAX;
 }
 
+export type DateTone = 'expired' | 'far' | 'normal';
+
+// A deadline more than ~1 year out is "far" — a soft warning for unusually long-lived
+// approvals/permits (a max-uint sentinel is handled separately as "No expiry").
+const ONE_YEAR_SECONDS = 31_536_000n;
+
+/**
+ * Classify a unix-seconds deadline relative to now:
+ *  - `expired` — already in the past (a signature with this deadline is unexecutable → warn)
+ *  - `far`     — more than a year out (soft warn)
+ *  - `normal`  — within the next year
+ */
+export function dateTone(raw: string | bigint): DateTone {
+  let n: bigint;
+  try {
+    n = typeof raw === 'bigint' ? raw : BigInt(raw);
+  } catch {
+    return 'normal';
+  }
+  const now = BigInt(Math.floor(Date.now() / 1000));
+  if (n < now) return 'expired';
+  if (n > now + ONE_YEAR_SECONDS) return 'far';
+  return 'normal';
+}
+
 /** Format unix seconds as "1 Jan 2030" (day-first, abbreviated month). Falls back to the grouped integer. */
 export function formatUnixDate(raw: string | bigint): string {
   let n: bigint;

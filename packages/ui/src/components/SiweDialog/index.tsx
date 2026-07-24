@@ -68,10 +68,13 @@ export const SiweDialog = ({
   warningMessage,
 }: SiweDialogProps) => {
   const parsed = useMemo(() => parseSiweMessage(message), [message]);
-  // The account being attested is the one DECLARED IN THE SIWE MESSAGE, not the
-  // wallet's connected account. Prefer the message address so the pill + account row
-  // (and their reverse resolution) describe what's actually being signed.
-  const signerAddress = parsed?.address || accountAddress || '';
+
+  // "Sign In as" = the CONNECTED account — the one whose key actually produces the
+  // signature. It's the user's own account, so reverse-resolving it to an ENS name +
+  // avatar is safe and aids recognition. The address the MESSAGE declares is shown raw
+  // in the Account row below (dApp-chosen → never dressed in a friendly name), and the
+  // mismatch warning fires when the two differ.
+  const signerAddress = accountAddress ?? '';
   const { name: resolvedName, avatar: avatarUrl } = useReverseIdentity(
     signerAddress || undefined,
     chainId,
@@ -117,10 +120,8 @@ export const SiweDialog = ({
   // Parsed SIWE fields → the row-wise box (only rows with a value).
   const fields: Array<{ label: string; value: string; copyValue?: string }> = [];
   if (parsed) {
-    // Account: show the reverse-resolved name when we have one, else the truncated
-    // address. Either way expose a copy button for the full address.
-    const account = parsed.address || accountAddress;
-    if (account) fields.push({ label: 'Account', value: resolvedName || formatAddress(account), copyValue: account });
+    const account = parsed.address;
+    if (account) fields.push({ label: 'Account', value: formatAddress(account), copyValue: account });
     if (parsed.uri) fields.push({ label: 'URL', value: parsed.uri });
     if (parsed.version) fields.push({ label: 'Version', value: parsed.version });
     if (parsed.chainId) {

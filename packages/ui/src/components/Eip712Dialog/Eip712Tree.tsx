@@ -3,7 +3,14 @@
 import { useMemo, useState } from 'react';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { CopyIcon, CopiedIcon } from '../../icons';
-import { formatUnixDate, groupNumber, isUnixTimestamp, maxUintFor } from '../../utils/displayFormat';
+import {
+  dateTone,
+  formatUnixDate,
+  groupNumber,
+  isUnixTimestamp,
+  maxUintFor,
+  type DateTone,
+} from '../../utils/displayFormat';
 
 // EIP-712 TypedData structure (mirrors the dialog's local type).
 interface TypedData {
@@ -20,6 +27,7 @@ type TreeNode = {
   kind: 'leaf' | 'group';
   badge?: string; // solidity type (leaves)
   value?: string; // formatted, truncated value (leaves)
+  tone?: DateTone; // deadline state (leaves): expired → warn, far → soft warn
   copyValue?: string; // full untruncated value to copy (address/bytes leaves)
   children?: TreeNode[];
 };
@@ -43,13 +51,18 @@ function networkLabel(id: number): string {
  * apply token decimals here (unknown in the raw fallback) — that's clear-signing's
  * job; integers are grouped, not truncated like a hash.
  */
-function formatValue(type: string, value: unknown, fieldName = ''): string {
-  if (value === null || value === undefined) return '—';
+interface FormattedLeaf {
+  text: string;
+  tone?: DateTone;
+}
+
+function formatValue(type: string, value: unknown, fieldName = ''): FormattedLeaf {
+  if (value === null || value === undefined) return { text: '—' };
   const name = fieldName.toLowerCase();
 
   if (type === 'address') {
     const v = String(value);
-    return v.length > 12 ? `${v.slice(0, 6)}…${v.slice(-4)}` : v;
+    return { text: v.length > 12 ? `${v.slice(0, 6)}…${v.slice(-4)}` : v };
   }
 
   if (/^bytes\d*$/.test(type)) {
@@ -57,9 +70,9 @@ function formatValue(type: string, value: unknown, fieldName = ''): string {
     if (v.startsWith('0x')) {
       const byteLen = (v.length - 2) / 2;
       const body = v.length > 20 ? `${v.slice(0, 10)}…${v.slice(-6)}` : v;
-      return `${body} ${byteLen}b`;
+      return { text: `${body} ${byteLen}b` };
     }
-    return v;
+    return { text: v };
   }
 
   if (/^(u?int)\d*$/.test(type)) {
@@ -67,10 +80,10 @@ function formatValue(type: string, value: unknown, fieldName = ''): string {
     try {
       big = BigInt(String(value));
     } catch {
-      return String(value);
+      return { text: String(value) };
     }
 
-    if (name === 'chainid' || name.endsWith('chainid')) return networkLabel(Number(big));
+    if (name === 'chainid' || name.endsWith('chainid')) return { text: networkLabel(Number(big)) };
 
     const isTimestamp = /(deadline|expir|validuntil|validafter|validbefore|validto|notbefore|notafter|timestamp)/.test(
       name
@@ -79,18 +92,21 @@ function formatValue(type: string, value: unknown, fieldName = ''): string {
 
     const mx = maxUintFor(type);
     if (mx !== null && big === mx) {
-      if (isTimestamp) return 'No expiry';
-      if (isAmount) return 'Unlimited';
+      if (isTimestamp) return { text: 'No expiry', tone: 'far' };
+      if (isAmount) return { text: 'Unlimited' };
     }
-    if (isTimestamp && isUnixTimestamp(big)) return formatUnixDate(big);
+    if (isTimestamp && isUnixTimestamp(big)) {
+      const tone = dateTone(big);
+      return { text: formatUnixDate(big), tone: tone === 'normal' ? undefined : tone };
+    }
 
-    return groupNumber(big.toString());
+    return { text: groupNumber(big.toString()) };
   }
 
-  if (type === 'bool') return String(value);
+  if (type === 'bool') return { text: String(value) };
 
   const v = String(value);
-  return v.length > 80 ? `${v.slice(0, 78)}…` : v;
+  return { text: v.length > 80 ? `${v.slice(0, 78)}…` : v };
 }
 
 /** Build one node (recursively for structs/arrays) from a type + value. */
@@ -139,13 +155,15 @@ function buildNode(
   // bytes, and any long string/value that formatValue shortened.
   const raw = value == null ? undefined : String(value);
   const copyable = raw != null && (type === 'address' || /^bytes\d*$/.test(type) || raw.length > 60);
+  const formatted = formatValue(type, value, label);
   return {
     id,
     depth,
     label,
     kind: 'leaf',
     badge: type,
-    value: formatValue(type, value, label),
+    value: formatted.text,
+    tone: formatted.tone,
     copyValue: copyable ? raw : undefined,
   };
 }
@@ -167,8 +185,8 @@ function Spines({ depth }: { depth: number }) {
   );
 }
 
-/** Right-aligned leaf value with an optional copy button (address/bytes). */
-function LeafValue({ display, copyValue }: { display?: string; copyValue?: string }) {
+/** Right-aligned leaf value with an optional copy button (address/bytes) and deadline tone. */
+function LeafValue({ display, copyValue, tone }: { display?: string; copyValue?: string; tone?: DateTone }) {
   const [copied, setCopied] = useState(false);
   const onCopy = () => {
     if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
@@ -180,9 +198,13 @@ function LeafValue({ display, copyValue }: { display?: string; copyValue?: strin
       })
       .catch(() => undefined);
   };
+  const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
   return (
     <span className="ml-auto flex min-w-0 items-center justify-end gap-1">
-      <span className="text-foreground min-w-0 break-all text-right font-mono text-[10px] font-medium">{display}</span>
+      <span className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${toneClass}`}>
+        {display}
+        {tone === 'expired' && <span className="font-semibold"> · Expired</span>}
+      </span>
       {copyValue &&
         (copied ? (
           <CopiedIcon className="size-3 flex-none" />
@@ -276,7 +298,7 @@ export function Eip712Tree({ typedData }: { typedData: TypedData }) {
                     {r.badge}
                   </span>
                 )}
-                <LeafValue display={r.value} copyValue={r.copyValue} />
+                <LeafValue display={r.value} copyValue={r.copyValue} tone={r.tone} />
               </div>
             </div>
           );
