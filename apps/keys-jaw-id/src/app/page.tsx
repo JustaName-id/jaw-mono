@@ -1395,7 +1395,6 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             appLogoUrl={pendingRequest.metadata?.appLogoUrl}
             warningMessage={siweWarning}
             onSuccess={async (signature: string, message: string) => {
-              setState('processing');
               try {
                 debugLog('✅ User signed SIWE message');
 
