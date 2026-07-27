@@ -370,7 +370,9 @@ export function OnboardingDialog({
       cancelled = true;
       unique.forEach((address) => attemptedAvatarsRef.current.delete(address));
     };
-  }, [knownAddressKey, chainId, mainnetRpcUrl]);
+    // chainId is intentionally omitted: ENS always resolves on mainnet (chainId 1
+    // is hardcoded above), so a dApp chain switch must not re-fire this fetch.
+  }, [knownAddressKey, mainnetRpcUrl]);
   const identityOf = (account: LocalStorageAccount) => {
     const address = addressOf(account);
     return address ? identityByAddress[address.toLowerCase()] : undefined;
