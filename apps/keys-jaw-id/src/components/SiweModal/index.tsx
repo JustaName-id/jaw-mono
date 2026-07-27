@@ -34,7 +34,11 @@ export const SiweModal = ({
   onError,
 }: SiweModalProps) => {
   // Single hook handles session lookup + account restoration
-  const { account, isLoading: isAccountLoading } = useSessionAccount({
+  const {
+    account,
+    walletAddress,
+    isLoading: isAccountLoading,
+  } = useSessionAccount({
     origin,
     chain,
     apiKey,
@@ -118,7 +122,7 @@ export const SiweModal = ({
       origin={origin}
       appName={appName || 'dApp'}
       appLogoUrl={appLogoUrl}
-      accountAddress={address}
+      accountAddress={address || walletAddress || undefined}
       chainName={chainName}
       chainIcon={chainIcon}
       chainId={chain.id}

@@ -40,7 +40,11 @@ export const Eip712Modal = ({
   onError,
 }: Eip712ModalProps) => {
   // Single hook handles session lookup + account restoration
-  const { account, isLoading: isAccountLoading } = useSessionAccount({
+  const {
+    account,
+    walletAddress,
+    isLoading: isAccountLoading,
+  } = useSessionAccount({
     origin,
     chain,
     apiKey,
@@ -145,7 +149,7 @@ export const Eip712Modal = ({
       origin={origin}
       appName={appName}
       appLogoUrl={appLogoUrl}
-      accountAddress={address}
+      accountAddress={address || walletAddress || undefined}
       chainName={chainName}
       chainIcon={chainIcon}
       chainId={chain.id}
