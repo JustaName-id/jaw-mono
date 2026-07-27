@@ -1,3 +1,13 @@
+## 1.1.0 (2026-07-27)
+
+### 🚀 Features
+
+- **core:** report wallet signatures for per-workspace analytics ([#250](https://github.com/JustaName-id/jaw-mono/pull/250))
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
 ## 1.0.9 (2026-07-16)
 
 ### 🩹 Fixes

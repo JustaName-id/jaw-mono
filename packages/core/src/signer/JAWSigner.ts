@@ -13,6 +13,7 @@ import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 import { handleGetCallsHistoryRequest } from '../rpc/wallet_getCallsHistory.js';
 
+import { logSignature } from '../analytics/index.js';
 import { standardErrors } from '../errors/index.js';
 import { RPCResponse } from '../messages/index.js';
 import { AppMetadata, ProviderEventCallback, RequestArguments } from '../provider/index.js';
@@ -80,6 +81,80 @@ export abstract class JAWSigner implements Signer {
      */
     protected abstract handleSigningRequest(request: RequestArguments): Promise<unknown>;
 
+    /**
+     * Dispatches a signing-routed request. When it succeeds and the method
+     * is a message signature (wallet_sign, personal_sign,
+     * eth_signTypedData_v4), the signature is reported to the analytics
+     * endpoint; other signing-routed methods (wallet_sendCalls, permission
+     * management) pass through unreported. Reporting is fire-and-forget and
+     * never affects the signing flow.
+     */
+    private async dispatchSigningRequest(request: RequestArguments): Promise<unknown> {
+        const result = await this.handleSigningRequest(request);
+        try {
+            this.reportSignature(request);
+        } catch {
+            // Reporting must never affect the signing flow
+        }
+        return result;
+    }
+
+    private static readonly TRACKED_SIGN_METHODS: ReadonlySet<string> = new Set([
+        'wallet_sign',
+        'personal_sign',
+        'eth_signTypedData_v4',
+    ]);
+
+    private reportSignature(request: RequestArguments): void {
+        if (!JAWSigner.TRACKED_SIGN_METHODS.has(request.method)) return;
+        // `.at(0)` (unlike `[0]`) is typed Address | undefined: the accounts
+        // array is empty when signing is reached unauthenticated. An
+        // unauthenticated wallet_sign without an address param therefore
+        // goes unreported on purpose — without an address there is no
+        // meaningful per-wallet metric to record.
+        const address = this.extractSignerAddress(request) ?? this.accounts.at(0);
+        const apiKey = store.getState().config.apiKey;
+        if (!address || !apiKey) return;
+        logSignature({ address, apiKey });
+    }
+
+    /**
+     * Reports SIWE signatures produced during a fresh wallet_connect. Each
+     * account whose signInWithEthereum capability resolved with a signature
+     * counts as one wallet signature; error-shaped capability results and
+     * connects without the capability are skipped. Cached wallet_connect
+     * replays never reach this method, so a signature is only counted once.
+     * Fire-and-forget: it never affects the connect flow.
+     */
+    protected reportSiweSignatures(response: WalletConnectResponse | null | undefined): void {
+        try {
+            const apiKey = store.getState().config.apiKey;
+            if (!apiKey || !response?.accounts) return;
+            for (const account of response.accounts) {
+                const siwe = account.capabilities?.signInWithEthereum;
+                if (siwe && 'signature' in siwe && account.address) {
+                    logSignature({ address: account.address, apiKey });
+                }
+            }
+        } catch {
+            // Reporting must never affect the connect flow
+        }
+    }
+
+    private extractSignerAddress(request: RequestArguments): Address | undefined {
+        const params = request.params as unknown[] | undefined;
+        switch (request.method) {
+            case 'personal_sign':
+                return (params as [string, Address] | undefined)?.[1];
+            case 'eth_signTypedData_v4':
+                return (params as [Address, string] | undefined)?.[0];
+            case 'wallet_sign':
+                return (params as [{ address?: Address }] | undefined)?.[0]?.address;
+            default:
+                return undefined;
+        }
+    }
+
     async request<T>(request: RequestArguments): Promise<T> {
         const result = await this._request(request);
         return result as T;
@@ -138,7 +213,7 @@ export abstract class JAWSigner implements Signer {
             case 'wallet_sign':
             case 'wallet_grantPermissions':
             case 'wallet_revokePermissions': {
-                return this.handleSigningRequest(request);
+                return this.dispatchSigningRequest(request);
             }
 
             default:
@@ -245,7 +320,7 @@ export abstract class JAWSigner implements Signer {
             case 'eth_signTypedData_v4':
             case 'wallet_grantPermissions':
             case 'wallet_revokePermissions':
-                return this.handleSigningRequest(request);
+                return this.dispatchSigningRequest(request);
 
             case 'eth_sign':
             case 'eth_ecRecover':
@@ -315,6 +390,7 @@ export abstract class JAWSigner implements Signer {
                 // Store the full response so handleWalletConnect can return it
                 // with capabilities on fresh connections (before falling through to cached path)
                 this.pendingWalletConnectResponse = walletResponse;
+                this.reportSiweSignatures(walletResponse);
 
                 const accounts_ = [this.accounts[0]];
                 this.callback?.('accountsChanged', accounts_);
