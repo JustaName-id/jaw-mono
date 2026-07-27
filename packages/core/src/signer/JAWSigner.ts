@@ -91,7 +91,11 @@ export abstract class JAWSigner implements Signer {
      */
     private async dispatchSigningRequest(request: RequestArguments): Promise<unknown> {
         const result = await this.handleSigningRequest(request);
-        this.reportSignature(request);
+        try {
+            this.reportSignature(request);
+        } catch {
+            // Reporting must never affect the signing flow
+        }
         return result;
     }
 
@@ -112,6 +116,29 @@ export abstract class JAWSigner implements Signer {
         const apiKey = store.getState().config.apiKey;
         if (!address || !apiKey) return;
         logSignature({ address, apiKey });
+    }
+
+    /**
+     * Reports SIWE signatures produced during a fresh wallet_connect. Each
+     * account whose signInWithEthereum capability resolved with a signature
+     * counts as one wallet signature; error-shaped capability results and
+     * connects without the capability are skipped. Cached wallet_connect
+     * replays never reach this method, so a signature is only counted once.
+     * Fire-and-forget: it never affects the connect flow.
+     */
+    protected reportSiweSignatures(response: WalletConnectResponse | null | undefined): void {
+        try {
+            const apiKey = store.getState().config.apiKey;
+            if (!apiKey || !response?.accounts) return;
+            for (const account of response.accounts) {
+                const siwe = account.capabilities?.signInWithEthereum;
+                if (siwe && 'signature' in siwe && account.address) {
+                    logSignature({ address: account.address, apiKey });
+                }
+            }
+        } catch {
+            // Reporting must never affect the connect flow
+        }
     }
 
     private extractSignerAddress(request: RequestArguments): Address | undefined {
@@ -363,6 +390,7 @@ export abstract class JAWSigner implements Signer {
                 // Store the full response so handleWalletConnect can return it
                 // with capabilities on fresh connections (before falling through to cached path)
                 this.pendingWalletConnectResponse = walletResponse;
+                this.reportSiweSignatures(walletResponse);
 
                 const accounts_ = [this.accounts[0]];
                 this.callback?.('accountsChanged', accounts_);

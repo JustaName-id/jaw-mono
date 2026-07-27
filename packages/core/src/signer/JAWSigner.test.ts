@@ -6,6 +6,8 @@ import { sdkstore } from '../store/index.js';
 import { SDK_VERSION } from '../sdk-info.js';
 import { logSignature } from '../analytics/index.js';
 import type { ProviderEventCallback, RequestArguments } from '../provider/index.js';
+import type { RPCResponse } from '../messages/index.js';
+import type { WalletConnectResponse } from '../rpc/wallet_connect.js';
 
 vi.mock('../analytics/index.js', async (importOriginal) => {
     const actual = await importOriginal<typeof import('../analytics/index.js')>();
@@ -219,6 +221,114 @@ describe('JAWSigner signature analytics reporting', () => {
 
         // Then signing still succeeds and nothing is reported
         expect(result).toBe('0xsignature');
+        expect(logSignature).not.toHaveBeenCalled();
+    });
+
+    it('still returns the signature when reporting itself throws synchronously', async () => {
+        // Given an authenticated session and a reporting pipeline that blows up
+        seedAuthenticatedSession(API_KEY);
+        const signer = makeSigningSigner();
+        vi.mocked(logSignature).mockImplementationOnce(() => {
+            throw new Error('analytics exploded');
+        });
+
+        // When a personal_sign request resolves successfully
+        const result = await signer.request({
+            method: 'personal_sign',
+            params: ['0xdeadbeef', SIGNER_ADDRESS],
+        });
+
+        // Then the signing flow is unaffected by the reporting failure
+        expect(result).toBe('0xsignature');
+    });
+});
+
+describe('JAWSigner SIWE signature reporting (wallet_connect)', () => {
+    const API_KEY = 'test-api-key';
+    const SIWE_SUCCESS = { message: 'app.example wants you to sign in', signature: '0xsiwesig' as const };
+    const SIWE_ERROR = { code: 4001, message: 'User rejected the request' };
+
+    /** Exposes the protected fresh-response path a real signer feeds wallet_connect results through. */
+    class ConnectTestSigner extends TestSigner {
+        async deliverWalletConnectResponse(value: WalletConnectResponse): Promise<unknown> {
+            const response: RPCResponse = { result: { value } };
+            return this.handleResponse({ method: 'wallet_connect' }, response);
+        }
+    }
+
+    function seedConfig(apiKey?: string) {
+        sdkstore.setState(
+            {
+                chains: [],
+                keys: {},
+                account: {},
+                config: { version: SDK_VERSION, apiKey },
+                callStatuses: {},
+            },
+            true
+        );
+    }
+
+    function makeConnectSigner(): ConnectTestSigner {
+        return new ConnectTestSigner({ metadata: { name: 'test', defaultChainId: 1 } as never, callback: null });
+    }
+
+    beforeEach(() => {
+        vi.mocked(logSignature).mockReset();
+    });
+
+    it('reports a signature when a fresh wallet_connect carries a successful SIWE capability', async () => {
+        // Given an API key and a fresh connect whose SIWE capability resolved
+        seedConfig(API_KEY);
+        const signer = makeConnectSigner();
+
+        // When the wallet_connect response is processed
+        await signer.deliverWalletConnectResponse({
+            accounts: [{ address: ACCOUNT, capabilities: { signInWithEthereum: SIWE_SUCCESS } }],
+        });
+
+        // Then the SIWE signature is reported for the connected account
+        expect(logSignature).toHaveBeenCalledExactlyOnceWith({ address: ACCOUNT, apiKey: API_KEY });
+    });
+
+    it('does not report when the SIWE capability resolved to an error', async () => {
+        // Given an API key and a connect whose SIWE capability failed
+        seedConfig(API_KEY);
+        const signer = makeConnectSigner();
+
+        // When the wallet_connect response is processed
+        await signer.deliverWalletConnectResponse({
+            accounts: [{ address: ACCOUNT, capabilities: { signInWithEthereum: SIWE_ERROR } }],
+        });
+
+        // Then nothing is reported
+        expect(logSignature).not.toHaveBeenCalled();
+    });
+
+    it('does not report a plain wallet_connect without a SIWE capability', async () => {
+        // Given an API key and a connect without capabilities
+        seedConfig(API_KEY);
+        const signer = makeConnectSigner();
+
+        // When the wallet_connect response is processed
+        await signer.deliverWalletConnectResponse({ accounts: [{ address: ACCOUNT }] });
+
+        // Then nothing is reported
+        expect(logSignature).not.toHaveBeenCalled();
+    });
+
+    it('skips reporting silently when no API key is configured', async () => {
+        // Given no API key and a connect with a successful SIWE capability
+        seedConfig(undefined);
+        const signer = makeConnectSigner();
+
+        // When the wallet_connect response is processed
+        const result = await signer.deliverWalletConnectResponse({
+            accounts: [{ address: ACCOUNT, capabilities: { signInWithEthereum: SIWE_SUCCESS } }],
+        });
+
+        // Then the connect still succeeds and nothing is reported
+        expect(result).toBeDefined();
         expect(logSignature).not.toHaveBeenCalled();
     });
 });
