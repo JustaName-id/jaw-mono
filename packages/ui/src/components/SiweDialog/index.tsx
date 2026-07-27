@@ -11,6 +11,7 @@ import { Checkbox } from '../ui/checkbox';
 import { SiweDialogProps } from './types';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
+import { dateTone } from '../../utils/displayFormat';
 import { parseSiweMessage } from '../../utils/siwe';
 import { formatAddress } from '../../utils/formatAddress';
 import { sanitizeDisplayName } from '../../utils/sanitize';
@@ -98,6 +99,14 @@ export const SiweDialog = ({
   // EIP-4361 requires the nonce to be at least 8 alphanumeric chars; a shorter one
   // means the site's replay protection is weak. Advisory (amber), not a hard gate.
   const weakNonce = !!parsed?.nonce && parsed.nonce.length < 8;
+
+  // Validity window. `expirationTime` is an ISO string; classify it relative to now.
+  //  - no expiry     → the signature never expires (amber note)
+  //  - past          → already expired, unusable (red note)
+  //  - far (>1yr out) → unusually long-lived (amber note)
+  const expiresSec = parsed?.expirationTime ? Math.floor(Date.parse(parsed.expirationTime) / 1000) : null;
+  const expiryTone = expiresSec !== null && !Number.isNaN(expiresSec) ? dateTone(String(expiresSec)) : null;
+  const noExpiration = !!parsed && !parsed.expirationTime;
 
   // Require a fresh acknowledgement of the phishing warning for every request.
   const ackId = useId();
@@ -276,6 +285,36 @@ export const SiweDialog = ({
                 <p className="min-w-0 text-[11px] leading-[1.45] text-amber-600 dark:text-amber-500">
                   This sign-in uses a short nonce ({parsed?.nonce.length} chars). EIP-4361 recommends at least 8 — a
                   weak nonce means the site's replay protection is easy to bypass.
+                </p>
+              </div>
+            )}
+
+            {/* Advisory: already-expired sign-in (unusable). */}
+            {expiryTone === 'expired' && (
+              <div className="border-destructive/30 bg-destructive/10 flex items-start gap-2 rounded-[10.5px] border p-3">
+                <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
+                <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">
+                  This sign-in has already expired, so the signature can't be used.
+                </p>
+              </div>
+            )}
+
+            {/* Advisory: far-future expiry (unusually long-lived sign-in). */}
+            {expiryTone === 'far' && (
+              <div className="flex items-start gap-2 rounded-[10.5px] border border-amber-500/30 bg-amber-500/10 p-3">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-amber-500" strokeWidth={2} />
+                <p className="min-w-0 text-[11px] leading-[1.45] text-amber-600 dark:text-amber-500">
+                  This sign-in stays valid for over a year — an unusually long-lived session.
+                </p>
+              </div>
+            )}
+
+            {/* Advisory: no expiry set (signature valid forever). */}
+            {noExpiration && (
+              <div className="flex items-start gap-2 rounded-[10.5px] border border-amber-500/30 bg-amber-500/10 p-3">
+                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-amber-500" strokeWidth={2} />
+                <p className="min-w-0 text-[11px] leading-[1.45] text-amber-600 dark:text-amber-500">
+                  This sign-in has no expiration — the signature stays valid forever.
                 </p>
               </div>
             )}
