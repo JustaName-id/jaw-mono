@@ -22,12 +22,12 @@ await jaw.provider.request({
 
 ### Parameters
 
-| Name              | Type          | Required | Description                                   |
-| ----------------- | ------------- | -------- | --------------------------------------------- |
-| `account`         | `string`      | Yes      | Account address to query                      |
+| Name              | Type          | Required | Description                                      |
+| ----------------- | ------------- | -------- | ------------------------------------------------ |
+| `account`         | `string`      | Yes      | Account address to query                         |
 | `chainFilter`     | `string[]`    | No       | Limit to specific chains (hex chain IDs, max 20) |
-| `assetTypeFilter` | `AssetType[]` | No       | Filter by asset type: `'native'` or `'erc20'` |
-| `assetFilter`     | `AssetFilter` | No       | Filter by specific assets per chain           |
+| `assetTypeFilter` | `AssetType[]` | No       | Filter by asset type: `'native'` or `'erc20'`    |
+| `assetFilter`     | `AssetFilter` | No       | Filter by specific assets per chain              |
 
 ### Types
 
@@ -169,8 +169,8 @@ type Asset = {
 
 | Code   | Description                                                                              |
 | ------ | ---------------------------------------------------------------------------------------- |
-| -32602 | `chainFilter` is present but not an array, or is empty                                    |
-| -32602 | `chainFilter` has more than 20 entries                                                    |
+| -32602 | `chainFilter` is present but not an array, or is empty                                   |
+| -32602 | `chainFilter` has more than 20 entries                                                   |
 | -32602 | A `chainFilter` entry is not a hex chain ID, is `0x0`, or exceeds the safe integer range |
 
 ## Example
