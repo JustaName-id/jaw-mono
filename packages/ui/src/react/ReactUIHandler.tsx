@@ -64,6 +64,11 @@ import { resolveTheme } from '../theme/resolve-theme.js';
 import { applyThemeToContainer } from '../theme/apply-theme.js';
 import { getSystemColorScheme, useColorScheme } from '../theme/use-color-scheme.js';
 
+// How long the signing dialogs hold the "Signed ✓" tick after delivery, before the
+// dialog tears down. The dApp's promise is already resolved by then (see the hold
+// path in `handleApprove`), so this never delays the dApp — it's purely the beat.
+const SIGNED_TICK_MS = 850;
+
 // ============================================================================
 // Chain Utilities
 // ============================================================================
@@ -273,13 +278,18 @@ export class ReactUIHandler implements UIHandler {
           }
         };
 
-        const handleApprove = (data: T) => {
-          cleanup();
-          resolve({
-            id: request.id,
-            approved: true,
-            data,
-          });
+        const handleApprove = (data: T, holdMs = 0) => {
+          if (holdMs > 0) {
+            // Success-beat path (signing dialogs): deliver to the dApp FIRST (resolve
+            // its awaited promise), then keep the dialog mounted for `holdMs` so the
+            // "Signed ✓" tick is visible — WITHOUT delaying the dApp's response.
+            resolve({ id: request.id, approved: true, data });
+            setTimeout(cleanup, holdMs);
+          } else {
+            // Default path (connect/tx/etc.): tear down immediately, then resolve.
+            cleanup();
+            resolve({ id: request.id, approved: true, data });
+          }
         };
 
         const handleReject = (error?: Error) => {
@@ -1070,7 +1080,7 @@ function SignatureDialogWrapper({
   appLogoUrl,
 }: {
   request: SignatureUIRequest;
-  onApprove: (data: any) => void;
+  onApprove: (data: any, holdMs?: number) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
@@ -1080,6 +1090,7 @@ function SignatureDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
@@ -1098,7 +1109,10 @@ function SignatureDialogWrapper({
       const signature = await account.signMessage(request.data.message, { address: request.data.address });
 
       setSignatureStatus('Signature successful!');
-      onApprove(signature);
+      // Deliver to the dApp, then hold the tick — `onApprove` resolves the promise
+      // immediately and defers the dialog teardown by SIGNED_TICK_MS, so no delay.
+      onApprove(signature, SIGNED_TICK_MS);
+      setIsSuccess(true);
     } catch (error) {
       console.error('Signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -1139,6 +1153,7 @@ function SignatureDialogWrapper({
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
       canSign={!isProcessing && !!request.data.message}
     />
@@ -1156,7 +1171,7 @@ function Eip712DialogWrapper({
   appLogoUrl,
 }: {
   request: TypedDataUIRequest;
-  onApprove: (data: any) => void;
+  onApprove: (data: any, holdMs?: number) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
@@ -1166,6 +1181,7 @@ function Eip712DialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
@@ -1196,7 +1212,9 @@ function Eip712DialogWrapper({
       );
 
       setSignatureStatus('Signature successful!');
-      onApprove(signature);
+      // Deliver to the dApp, then hold the tick (no delay — see handleApprove).
+      onApprove(signature, SIGNED_TICK_MS);
+      setIsSuccess(true);
     } catch (error) {
       console.error('EIP-712 signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -1237,6 +1255,7 @@ function Eip712DialogWrapper({
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
       canSign={true}
     />
@@ -2494,7 +2513,7 @@ function SiweDialogWrapper({
   paymasters,
 }: {
   request: SignatureUIRequest;
-  onApprove: (data: any) => void;
+  onApprove: (data: any, holdMs?: number) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
@@ -2502,6 +2521,7 @@ function SiweDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
@@ -2547,7 +2567,11 @@ function SiweDialogWrapper({
       const signature = await account.signMessage(request.data.message);
 
       setSiweStatus('Sign-in successful!');
-      onApprove(signature);
+      // Deliver to the dApp, then hold the tick — `onApprove` resolves the promise
+      // in-process immediately and defers the dialog teardown by SIGNED_TICK_MS, so
+      // the "Signed in ✓" beat shows without delaying the dApp's response.
+      onApprove(signature, SIGNED_TICK_MS);
+      setIsSuccess(true);
     } catch (error) {
       console.error('SIWE signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -2587,6 +2611,7 @@ function SiweDialogWrapper({
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       siweStatus={siweStatus}
       canSign={!isProcessing}
       warningMessage={warningMessage}

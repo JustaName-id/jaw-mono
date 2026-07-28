@@ -17,6 +17,7 @@ export interface SiweModalProps {
   appName?: string;
   appLogoUrl?: string;
   warningMessage?: string;
+  isSuccess?: boolean;
   onSuccess: (signature: string, message: string) => void;
   onError: (error: Error, errorCode?: number) => void;
 }
@@ -30,6 +31,7 @@ export const SiweModal = ({
   appName,
   appLogoUrl,
   warningMessage,
+  isSuccess,
   onSuccess,
   onError,
 }: SiweModalProps) => {
@@ -45,7 +47,6 @@ export const SiweModal = ({
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
 
   // Extract API key for other uses (chain icon, mainnet RPC)
@@ -84,9 +85,6 @@ export const SiweModal = ({
 
       setSiweStatus('Sign in successful!');
 
-      // Flip to the success tick, then deliver immediately — the parent holds the
-      // dialog open briefly (SIGNED_TICK_MS) so the "Signed in ✓" beat is visible.
-      setIsSuccess(true);
       onSuccess(signature, messageToSign);
     } catch (error) {
       console.error('Error signing SIWE message:', error);

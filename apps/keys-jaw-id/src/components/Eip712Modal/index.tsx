@@ -16,6 +16,7 @@ export interface Eip712ModalProps {
   apiKey?: string;
   appName?: string;
   appLogoUrl?: string;
+  isSuccess?: boolean;
   onSuccess: (signature: string) => void;
   onError: (error: Error, errorCode?: number) => void;
 }
@@ -36,6 +37,7 @@ export const Eip712Modal = ({
   apiKey,
   appName,
   appLogoUrl,
+  isSuccess,
   onSuccess,
   onError,
 }: Eip712ModalProps) => {
@@ -51,7 +53,6 @@ export const Eip712Modal = ({
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Extract API key for other uses (chain icon, mainnet RPC)
@@ -111,9 +112,6 @@ export const Eip712Modal = ({
       );
 
       setSignatureStatus('Signature created successfully!');
-      // Deliver to the dApp immediately — never block on the animation. The
-      // parent's success state + close delay carry the visual beat after delivery.
-      setIsSuccess(true);
       onSuccess(signature);
     } catch (error) {
       console.error('Error signing typed data:', error);

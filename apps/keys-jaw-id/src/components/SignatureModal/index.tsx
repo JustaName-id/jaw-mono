@@ -16,6 +16,7 @@ export interface SignatureModalProps {
   apiKey?: string;
   appName?: string;
   appLogoUrl?: string;
+  isSuccess?: boolean;
   onSuccess: (signature: string, message: string) => void;
   onError: (error: Error, errorCode?: number) => void;
 }
@@ -28,6 +29,7 @@ export const SignatureModal = ({
   apiKey,
   appName,
   appLogoUrl,
+  isSuccess,
   onSuccess,
   onError,
 }: SignatureModalProps) => {
@@ -43,7 +45,6 @@ export const SignatureModal = ({
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
-  const [isSuccess, setIsSuccess] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Extract API key for other uses (chain icon, mainnet RPC)
@@ -81,10 +82,6 @@ export const SignatureModal = ({
       const signature = await account.signMessage(messageToSign, { address: address as `0x${string}` | undefined });
 
       setSignatureStatus('Signature created successfully!');
-      // Deliver the signature to the dApp immediately — never block on the
-      // animation. `setIsSuccess` flips the confirmation view; the parent's own
-      // success state + close delay carry the visual beat after delivery.
-      setIsSuccess(true);
       onSuccess(signature, messageToSign);
     } catch (error) {
       console.error('Error signing message:', error);
