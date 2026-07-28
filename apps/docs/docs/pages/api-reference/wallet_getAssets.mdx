@@ -25,7 +25,7 @@ await jaw.provider.request({
 | Name              | Type          | Required | Description                                   |
 | ----------------- | ------------- | -------- | --------------------------------------------- |
 | `account`         | `string`      | Yes      | Account address to query                      |
-| `chainFilter`     | `string[]`    | No       | Limit to specific chains (hex chain IDs)      |
+| `chainFilter`     | `string[]`    | No       | Limit to specific chains (hex chain IDs, max 20) |
 | `assetTypeFilter` | `AssetType[]` | No       | Filter by asset type: `'native'` or `'erc20'` |
 | `assetFilter`     | `AssetFilter` | No       | Filter by specific assets per chain           |
 
@@ -37,7 +37,8 @@ type AssetType = 'native' | 'erc20';
 type AssetFilter = Record<`0x${string}`, AssetFilterEntry[]>;
 
 type AssetFilterEntry = {
-  address: `0x${string}`;
+  /** Token address; use null (or the 0xEeee… sentinel) to select the native token */
+  address: `0x${string}` | null;
   type: AssetType;
 };
 ```
@@ -159,9 +160,18 @@ type Asset = {
 
 - Includes native tokens (ETH, MATIC, etc.)
 - Includes ERC-20 tokens with non-zero balances
-- Auto-filters by `showTestnets` SDK preference
+- When called **through the SDK**, auto-filters by the `showTestnets` preference — this filter is client-side; direct RPC calls are not testnet-filtered
 - Can be called without authentication
 - Returns only tokens with non-zero balances
+- Scans at most **20 chains per request** — this cap applies both to an explicit `chainFilter` and to the implicit all-supported-chains fallback when the filter is omitted
+
+## Errors
+
+| Code   | Description                                                             |
+| ------ | ----------------------------------------------------------------------- |
+| -32602 | `chainFilter` is present but empty                                       |
+| -32602 | More than 20 chains requested (explicitly or via the all-chains fallback) |
+| -32602 | A `chainFilter` entry is not a hex chain ID, is `0x0`, or exceeds the safe integer range |
 
 ## Example
 

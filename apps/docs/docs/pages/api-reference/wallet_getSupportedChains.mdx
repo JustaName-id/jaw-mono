@@ -1,0 +1,58 @@
+# wallet_getSupportedChains
+
+Get the list of chains supported by the wallet infrastructure.
+
+**Authentication Required:** No
+
+## Request
+
+```typescript
+await jaw.provider.request({
+  method: 'wallet_getSupportedChains',
+  params: [{ showTestnets: true }],
+});
+```
+
+### Parameters
+
+| Name           | Type      | Required | Description                                      |
+| -------------- | --------- | -------- | ------------------------------------------------ |
+| `showTestnets` | `boolean` | No       | Include testnet chains. Defaults to `false`      |
+
+Params may be omitted entirely; the default returns mainnet chains only.
+
+```json
+[{ "showTestnets": false }]
+```
+
+## Response
+
+Returns an array of supported chain IDs in hex format.
+
+**Type:** `string[]`
+
+### Example
+
+```json
+["0x1", "0x2105", "0xa4b1"]
+```
+
+## Behavior
+
+- Can be called without authentication
+- Returns mainnet chains by default; pass `showTestnets: true` to include testnets
+- Unlike `wallet_getCapabilities` and `wallet_getAssets`, the testnet filter for this method is applied **server-side**
+
+## Example
+
+```typescript
+const chains = await jaw.provider.request({
+  method: 'wallet_getSupportedChains',
+});
+// ["0x1", "0x2105", ...]
+```
+
+## Related Methods
+
+- [wallet_getCapabilities](/api-reference/wallet_getCapabilities) - Capabilities per supported chain
+- [wallet_switchEthereumChain](/api-reference/wallet_switchEthereumChain) - Switch the active chain

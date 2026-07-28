@@ -92,6 +92,7 @@ Returns connection result with accounts and capabilities.
 - If `signInWithEthereum` capability is requested:
   - Generates and signs a SIWE message with the provided parameters
   - Returns the signed message in the response capabilities
+  - On a fresh connect, the SDK fires a fire-and-forget usage report counting one signature per account that granted SIWE (address only — the SIWE message is never sent); cached reconnects are not re-reported
 - If `subnameTextRecords` capability is provided and `ens` is configured in SDK preferences:
   - Attaches the provided text records to the subname
 - Returns accounts with capability responses

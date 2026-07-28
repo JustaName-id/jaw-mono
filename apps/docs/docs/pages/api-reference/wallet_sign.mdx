@@ -56,6 +56,7 @@ Returns the signature as a hexadecimal string.
 - Uses currently connected chain if `chainId` not specified
 - Opens popup for user approval
 - Returns signature in same format as the underlying method
+- On success, the SDK fires a fire-and-forget usage report counting the signature for the workspace (signer address only — message content is never sent); unauthenticated calls without an address are not reported
 
 ## Errors
 

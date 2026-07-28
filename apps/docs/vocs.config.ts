@@ -182,6 +182,10 @@ export default defineConfig({
             link: '/api-reference/wallet_getCapabilities',
           },
           {
+            text: 'wallet_getSupportedChains',
+            link: '/api-reference/wallet_getSupportedChains',
+          },
+          {
             text: 'wallet_getPermissions',
             link: '/api-reference/wallet_getPermissions',
           },
