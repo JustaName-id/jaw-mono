@@ -43,7 +43,7 @@ Returns an array of supported chain IDs in hex format.
 
 ## Behavior
 
-- Can be called without authentication
+- Requires an API key but no user session
 - Returns mainnet chains by default; pass `showTestnets: true` to include testnets
 - Unlike `wallet_getCapabilities` and `wallet_getAssets`, the testnet filter for this method is applied **server-side**
 
