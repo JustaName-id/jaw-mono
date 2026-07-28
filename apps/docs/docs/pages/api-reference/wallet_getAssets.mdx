@@ -160,10 +160,10 @@ type Asset = {
 
 - Includes native tokens (ETH, MATIC, etc.)
 - Includes ERC-20 tokens with non-zero balances
-- When called **through the SDK**, auto-filters by the `showTestnets` preference — this filter is client-side; direct RPC calls are not testnet-filtered
+- Auto-filters by the `showTestnets` preference
 - Can be called without authentication
 - Returns only tokens with non-zero balances
-- Scans at most **20 chains per request**: an explicit `chainFilter` with more than 20 entries is rejected, while the implicit all-supported-chains fallback (no filter) is silently limited to the first 20 supported chains
+- An explicit `chainFilter` accepts at most **20 entries**; omit it to scan all supported chains
 
 ## Errors
 
