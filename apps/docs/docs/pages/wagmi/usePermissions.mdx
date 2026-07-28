@@ -73,6 +73,8 @@ Returns a TanStack React Query result:
 When successful, `data` is an array of permissions:
 
 ```typescript
+type SpendPeriod = 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
+
 type WalletGetPermissionsResponse = StorePermissionApiResponse[];
 
 interface StorePermissionApiResponse {
@@ -87,7 +89,7 @@ interface StorePermissionApiResponse {
   /** End timestamp (unix seconds, exclusive) */
   end: number;
   /** Salt for permission uniqueness (hex) */
-  salt: Hex;
+  salt: `0x${string}`;
   /** Call permissions */
   calls: Array<{ target: string; selector: string; checker?: string }>;
   /** Spend limits */
