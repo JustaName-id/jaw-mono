@@ -15,9 +15,10 @@ await jaw.provider.request({
 
 ### Parameters
 
-| Name      | Type     | Required | Description              |
-| --------- | -------- | -------- | ------------------------ |
-| `address` | `string` | No\*     | Account address to query |
+| Name      | Type     | Required | Description                                                        |
+| --------- | -------- | -------- | ------------------------------------------------------------------ |
+| `address` | `string` | No\*     | Account address to query                                           |
+| `chainId` | `string` | No       | Hex chain ID to filter by (e.g. `"0x2105"`); omit to get all chains |
 
 \*Required if not authenticated. Auto-injected if authenticated and not provided.
 
@@ -89,6 +90,8 @@ Returns an array of permission objects.
 - Can be called without authentication if address provided
 - Auto-injects connected address if authenticated
 - Returns empty array if no permissions found
+- Returns permissions **unfiltered**: expired and not-yet-started permissions are included so clients can render those states (e.g. offer a re-grant for an expired permission, or show when a future one activates)
+- On-chain, a permission is only executable inside its `[start, end)` window — executing outside it reverts. Always validate `start <= now < end` before executing; treat `end <= now` as expired and `start > now` as not yet active
 
 ## Errors
 

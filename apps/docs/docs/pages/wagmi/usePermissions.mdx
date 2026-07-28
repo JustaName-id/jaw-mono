@@ -73,23 +73,25 @@ Returns a TanStack React Query result:
 When successful, `data` is an array of permissions:
 
 ```typescript
-type WalletGetPermissionsResponse = Permission[];
+type WalletGetPermissionsResponse = StorePermissionApiResponse[];
 
-interface Permission {
+interface StorePermissionApiResponse {
   /** Permission identifier (hash) */
-  id: Hex;
+  permissionId: string;
   /** Smart account address */
-  account: Address;
+  account: string;
   /** Spender address */
-  spender: Address;
-  /** Start timestamp */
+  spender: string;
+  /** Start timestamp (unix seconds, inclusive) */
   start: number;
-  /** Expiry timestamp */
-  expiry: number;
+  /** End timestamp (unix seconds, exclusive) */
+  end: number;
+  /** Salt for permission uniqueness (hex) */
+  salt: Hex;
   /** Call permissions */
-  calls: CallPermissionDetail[];
-  /** Spend permissions */
-  spends: SpendPermissionDetail[];
+  calls: Array<{ target: string; selector: string; checker?: string }>;
+  /** Spend limits */
+  spends: Array<{ token: string; allowance: string; unit: SpendPeriod; multiplier: number }>;
 }
 ```
 
@@ -99,6 +101,8 @@ interface Permission {
 2. **Listens for changes** via `permissionsChanged` event
 3. **Auto-refetches** when permissions change on-chain
 4. **Caches indefinitely** until invalidated by events
+5. **Returns permissions unfiltered** — expired and not-yet-started permissions are included so you can render those states
+6. **Validity is a function of time, not of the fetch**: because the list is cached, always compare `start`/`end` against the current time at render (or before executing), never assume a cached permission is still active
 
 ## Examples
 
@@ -116,15 +120,23 @@ function PermissionsList() {
   if (isLoading) return <p>Loading permissions...</p>;
 
   if (!permissions?.length) {
-    return <p>No active permissions</p>;
+    return <p>No permissions</p>;
   }
+
+  const now = Math.floor(Date.now() / 1000);
 
   return (
     <ul>
       {permissions.map((permission) => (
-        <li key={permission.id}>
+        <li key={permission.permissionId}>
           <p>Spender: {permission.spender}</p>
-          <p>Expires: {new Date(permission.expiry * 1000).toLocaleString()}</p>
+          <p>
+            {permission.end <= now
+              ? 'Expired — grant again to continue'
+              : permission.start > now
+                ? `Activates: ${new Date(permission.start * 1000).toLocaleString()}`
+                : `Expires: ${new Date(permission.end * 1000).toLocaleString()}`}
+          </p>
           <p>Calls: {permission.calls.length}</p>
           <p>Spends: {permission.spends.length}</p>
         </li>
