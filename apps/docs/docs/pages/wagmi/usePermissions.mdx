@@ -75,9 +75,7 @@ When successful, `data` is an array of permissions:
 ```typescript
 type SpendPeriod = 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
 
-type WalletGetPermissionsResponse = StorePermissionApiResponse[];
-
-interface StorePermissionApiResponse {
+type WalletGetPermissionsResponse = {
   /** Permission identifier (hash) */
   permissionId: string;
   /** Smart account address */
@@ -94,7 +92,7 @@ interface StorePermissionApiResponse {
   calls: Array<{ target: string; selector: string; checker?: string }>;
   /** Spend limits */
   spends: Array<{ token: string; allowance: string; unit: SpendPeriod; multiplier: number }>;
-}
+}[];
 ```
 
 ## Behavior
