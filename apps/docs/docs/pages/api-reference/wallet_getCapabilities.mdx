@@ -133,6 +133,7 @@ Indicates the supported fee tokens for gas payments on each chain.
 - Filters by chain IDs if `chainIds` parameter provided
 - When called **through the SDK** with `showTestnets` disabled (default), only mainnet chains are returned — this filter is applied client-side by the SDK; direct RPC calls receive all supported chains
 - Chains may also expose a `chainMetadata` capability: a free-form metadata object for the chain (the internal `rpc` entry is stripped server-side, so provider URLs are never exposed)
+- The response keys double as the list of supported chains — use them to enumerate which chains the wallet supports; there is no separate chain-listing method
 
 ## Example
 
