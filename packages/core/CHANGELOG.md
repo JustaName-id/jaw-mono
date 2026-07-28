@@ -1,3 +1,13 @@
+## 1.1.1 (2026-07-28)
+
+### 🩹 Fixes
+
+- add soneium support ([#252](https://github.com/JustaName-id/jaw-mono/pull/252))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.1.0 (2026-07-27)
 
 ### 🚀 Features
