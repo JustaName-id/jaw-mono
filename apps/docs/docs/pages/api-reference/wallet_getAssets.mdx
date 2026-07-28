@@ -163,14 +163,14 @@ type Asset = {
 - When called **through the SDK**, auto-filters by the `showTestnets` preference — this filter is client-side; direct RPC calls are not testnet-filtered
 - Can be called without authentication
 - Returns only tokens with non-zero balances
-- Scans at most **20 chains per request** — this cap applies both to an explicit `chainFilter` and to the implicit all-supported-chains fallback when the filter is omitted
+- Scans at most **20 chains per request**: an explicit `chainFilter` with more than 20 entries is rejected, while the implicit all-supported-chains fallback (no filter) is silently limited to the first 20 supported chains
 
 ## Errors
 
-| Code   | Description                                                             |
-| ------ | ----------------------------------------------------------------------- |
-| -32602 | `chainFilter` is present but empty                                       |
-| -32602 | More than 20 chains requested (explicitly or via the all-chains fallback) |
+| Code   | Description                                                                              |
+| ------ | ---------------------------------------------------------------------------------------- |
+| -32602 | `chainFilter` is present but not an array, or is empty                                    |
+| -32602 | `chainFilter` has more than 20 entries                                                    |
 | -32602 | A `chainFilter` entry is not a hex chain ID, is `0x0`, or exceeds the safe integer range |
 
 ## Example

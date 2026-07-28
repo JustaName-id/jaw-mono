@@ -2,15 +2,19 @@
 
 Get the list of chains supported by the wallet infrastructure.
 
-**Authentication Required:** No
+**Authentication Required:** API key (as `x-api-key` header or `api-key` query param); no user session needed
+
+:::warning
+This method is served by the RPC proxy but is **not exposed through the SDK provider** — `jaw.provider.request({ method: 'wallet_getSupportedChains' })` throws `unsupported method`. Call the proxy's JSON-RPC endpoint directly. SDK users can derive the supported chains from the keys of [wallet_getCapabilities](/api-reference/wallet_getCapabilities) instead.
+:::
 
 ## Request
 
-```typescript
-await jaw.provider.request({
-  method: 'wallet_getSupportedChains',
-  params: [{ showTestnets: true }],
-});
+```bash
+curl -X POST https://api.justaname.id/proxy/v1/rpc/handle \
+  -H 'Content-Type: application/json' \
+  -H 'x-api-key: <your-api-key>' \
+  -d '{"jsonrpc":"2.0","id":1,"method":"wallet_getSupportedChains","params":[{"showTestnets":true}]}'
 ```
 
 ### Parameters
@@ -42,15 +46,6 @@ Returns an array of supported chain IDs in hex format.
 - Can be called without authentication
 - Returns mainnet chains by default; pass `showTestnets: true` to include testnets
 - Unlike `wallet_getCapabilities` and `wallet_getAssets`, the testnet filter for this method is applied **server-side**
-
-## Example
-
-```typescript
-const chains = await jaw.provider.request({
-  method: 'wallet_getSupportedChains',
-});
-// ["0x1", "0x2105", ...]
-```
 
 ## Related Methods
 
