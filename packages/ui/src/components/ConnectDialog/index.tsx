@@ -38,7 +38,10 @@ export const ConnectDialog = ({
 
   // ENS name when resolved, otherwise the truncated address — never the raw
   // local username (not a portable identity). Address-first, upgrades in place.
+  // The stale-write guard for account switches now lives in useReverseIdentity.
   const displayName = resolvedName || formatAddress(walletAddress);
+
+  // appName is externally-controlled (dApp metadata); sanitize before display.
   const safeAppName = sanitizeDisplayName(appName) || 'dApp';
 
   const appAvatar = isSafeImageUrl(appLogoUrl) ? (
