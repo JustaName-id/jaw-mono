@@ -55,9 +55,13 @@ function networkLabel(id: number): string {
 interface FormattedLeaf {
   text: string;
   tone?: DateTone;
+  // Raw underlying value to copy when `text` is a derived form (e.g. a date leaf
+  // hides its unix integer) — lets the UI keep a copy button the truncation rule alone
+  // wouldn't grant a short integer.
+  copyValue?: string;
 }
 
-function formatValue(type: string, value: unknown, fieldName = ''): FormattedLeaf {
+export function formatValue(type: string, value: unknown, fieldName = ''): FormattedLeaf {
   if (value === null || value === undefined) return { text: '—' };
   const name = fieldName.toLowerCase();
 
@@ -89,7 +93,7 @@ function formatValue(type: string, value: unknown, fieldName = ''): FormattedLea
     const isTimestamp = /(deadline|expir|validuntil|validafter|validbefore|validto|notbefore|notafter|timestamp)/.test(
       name
     );
-    const isAmount = /(amount|value|allowance|limit|balance|price|cost|fee|total|wad)/.test(name);
+    const isAmount = /(amount|value|allowance|limit|balance|price|cost|fee|total|wad|shares|qty)/.test(name);
 
     const mx = maxUintFor(type);
     if (mx !== null && big === mx) {
@@ -98,7 +102,7 @@ function formatValue(type: string, value: unknown, fieldName = ''): FormattedLea
     }
     if (isTimestamp && isUnixTimestamp(big)) {
       const tone = dateTone(big);
-      return { text: formatUnixDate(big), tone: tone === 'normal' ? undefined : tone };
+      return { text: formatUnixDate(big), tone: tone === 'normal' ? undefined : tone, copyValue: big.toString() };
     }
 
     return { text: groupNumber(big.toString()) };
@@ -165,7 +169,9 @@ function buildNode(
     badge: type,
     value: formatted.text,
     tone: formatted.tone,
-    copyValue: copyable ? raw : undefined,
+    // A derived leaf (e.g. a date) carries its own raw value to copy; otherwise fall back
+    // to the truncation rule (addresses/bytes/long values).
+    copyValue: formatted.copyValue ?? (copyable ? raw : undefined),
   };
 }
 
