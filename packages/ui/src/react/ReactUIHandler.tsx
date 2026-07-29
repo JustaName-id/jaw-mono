@@ -57,7 +57,7 @@ import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
-import { getSiweOriginWarning, isSiweMessage, hexToUtf8 } from '../utils/siwe';
+import { getSiweOriginWarning, isSiweMessage, parseSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
 import type { JawTheme } from '@jaw.id/core';
 import { resolveTheme } from '../theme/resolve-theme.js';
@@ -2549,11 +2549,12 @@ function SiweDialogWrapper({
     return match ? match[1] : 'dApp';
   }, [decodedMessage]);
 
-  // Warn if the SIWE domain/uri doesn't match the origin the user is on
+  // Origin/phishing check — ONLY when the message parses. An unparseable request runs
+  // no checks (shown raw with a "couldn't read" note), rather than warnings from
+  // data we couldn't validate.
   const warningMessage = useMemo(() => {
-    const domain = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/)?.[1];
-    const uri = decodedMessage.match(/URI:\s*(.+)/)?.[1]?.trim();
-    return getSiweOriginWarning(origin, { domain, uri });
+    const parsed = parseSiweMessage(decodedMessage);
+    return parsed ? getSiweOriginWarning(origin, { domain: parsed.domain, uri: parsed.uri }) : undefined;
   }, [decodedMessage, origin]);
 
   const handleSign = async () => {

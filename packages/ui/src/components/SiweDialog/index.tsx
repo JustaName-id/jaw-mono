@@ -108,6 +108,12 @@ export const SiweDialog = ({
   const expiryTone = expiresSec !== null && !Number.isNaN(expiresSec) ? dateTone(String(expiresSec)) : null;
   const noExpiration = !!parsed && !parsed.expirationTime;
 
+  // The message looked like SIWE (it was routed here) but failed to parse into fields,
+  // so none of the structured advisories above ran. Surface that explicitly rather than
+  // present a Sign In with no review. (The origin/phishing warning still fires — it's
+  // derived from the raw message upstream, not from `parsed`.)
+  const parseFailed = !parsed;
+
   // Require a fresh acknowledgement of the phishing warning for every request.
   const ackId = useId();
   const [acknowledged, setAcknowledged] = useState(false);
@@ -196,6 +202,18 @@ export const SiweDialog = ({
 
           {/* Scrollable content (block layout so children overflow, not shrink). */}
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
+            {/* Couldn't parse this SIWE request → no checks ran (an unparseable request
+                is shown raw, not run through origin/field checks — see the modals). Tell
+                the user plainly; the raw message is shown below to read manually. */}
+            {parseFailed && (
+              <div className="border-destructive/30 bg-destructive/10 flex items-start gap-2 rounded-[10.5px] border p-3">
+                <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
+                <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">
+                  We couldn't read the full sign-in request. Review the raw message below carefully before signing.
+                </p>
+              </div>
+            )}
+
             {/* The dApp's statement, quarantined in its own box so this
                 attacker-supplied text is unmistakably content, never chrome. */}
             {parsed?.statement && (

@@ -805,11 +805,14 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
       // Render SiweModal for SIWE messages, SignatureModal for regular messages
       if (isSiwe) {
+        // Only run the origin/phishing check when the message actually PARSES. An
+        // unparseable request runs no checks at all — it's shown raw with a "couldn't
+        // read" note (see SiweDialog), rather than warnings derived from data we
+        // couldn't validate.
         const parsedSiwe = parseSiweMessage(messageToSign);
-        const siweWarning = getSiweOriginWarning(pendingRequest.origin, {
-          domain: parsedSiwe?.domain,
-          uri: parsedSiwe?.uri,
-        });
+        const siweWarning = parsedSiwe
+          ? getSiweOriginWarning(pendingRequest.origin, { domain: parsedSiwe.domain, uri: parsedSiwe.uri })
+          : undefined;
         return (
           <SiweModal
             origin={pendingRequest.origin}
