@@ -1,9 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// format.ts imports JAW_RPC_URL + SUPPORTED_CHAINS from @jaw.id/core, but only to build
-// the on-chain resolver / native-coin helpers we never invoke here (the tests inject
-// `resolveToken` via ctx). Stub the module so the suite stays hermetic and doesn't pull
-// core's source graph under the node test env.
+// Stub core (only needed for the on-chain resolver we don't invoke — tests inject
+// `resolveToken` via ctx) so the suite stays hermetic.
 vi.mock('@jaw.id/core', () => ({ JAW_RPC_URL: {}, SUPPORTED_CHAINS: [] }));
 
 import { applyFormat } from './format';
@@ -12,9 +10,8 @@ import { applyFormat } from './format';
 
 const USDC = '0x0b2C639c533813f4Aa9D7837CAf62653d097Ff85';
 
-// A permit-style tokenAmount field: `tokenPath: "@.to"` is a calldata idiom that never
-// resolves in a typed-data envelope (which carries verifyingContract, not `to`), so it
-// exercises the verifyingContract fallback.
+// Permit-style field: tokenPath `@.to` never resolves in typed-data, exercising the
+// verifyingContract fallback.
 const amountField = { path: 'value', label: 'Amount', format: 'tokenAmount', params: { tokenPath: '@.to' } };
 
 const baseCtx = () => ({
@@ -49,8 +46,7 @@ describe('applyFormat — verifyingContract token fallback (P2#7 opt-in gate)', 
     expect(row.kind).toBe('raw');
     expect(row.value).toBe('1000000');
     expect(row.symbol).toBeUndefined();
-    // The gate short-circuits before any on-chain read — a non-token verifyingContract
-    // that happens to implement decimals()/symbol() can't get a convincing-but-wrong unit.
+    // Gate short-circuits before any on-chain read.
     expect(resolveToken).not.toHaveBeenCalled();
   });
 });
@@ -70,8 +66,7 @@ describe('applyFormat — MappingFailure', () => {
   it('aborts the whole descriptor (returns null) when a field maps to a non-scalar struct', async () => {
     const descriptor = { context: {} } as any;
     const format = { fields: [{ path: 'details', label: 'Details' }] } as any;
-    // `details` is a struct (à la Permit2 PermitDetails) — a flat row can't honestly hold
-    // it, so the descriptor is abandoned in favour of the raw tree.
+    // `details` is a struct — a flat row can't hold it, so the descriptor is abandoned.
     const ctx = { args: { details: { token: USDC, amount: '1' } }, tx: {}, chainId: 1 } as any;
 
     const out = await applyFormat(descriptor, format, ctx);

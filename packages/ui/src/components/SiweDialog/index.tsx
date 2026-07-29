@@ -72,11 +72,9 @@ export const SiweDialog = ({
 }: SiweDialogProps) => {
   const parsed = useMemo(() => parseSiweMessage(message), [message]);
 
-  // "Sign In as" = the CONNECTED account — the one whose key actually produces the
-  // signature. It's the user's own account, so reverse-resolving it to an ENS name +
-  // avatar is safe and aids recognition. The address the MESSAGE declares is shown raw
-  // in the Account row below (dApp-chosen → never dressed in a friendly name), and the
-  // mismatch warning fires when the two differ.
+  // "Sign In as" = the CONNECTED account (whose key signs) — safe to reverse-resolve to an
+  // ENS name + avatar. The MESSAGE's declared address is resolved separately for the
+  // Account row (forward-verified); the mismatch warning fires when the two differ.
   const signerAddress = accountAddress ?? '';
   const { name: resolvedName, avatar: avatarUrl } = useReverseIdentity(
     signerAddress || undefined,
@@ -84,8 +82,6 @@ export const SiweDialog = ({
     mainnetRpcUrl
   );
   const displayName = resolvedName || formatAddress(signerAddress);
-  // Separately reverse-resolve the MESSAGE's declared account (on the message's own
-  // chain) for the Account row — a forward-verified name the address provably owns.
   const { name: messageAccountName } = useReverseIdentity(parsed?.address || undefined, parsed?.chainId, mainnetRpcUrl);
   const safeAppName = sanitizeDisplayName(appName) || 'dApp';
   const hasError = siweStatus.includes('Error');
@@ -108,10 +104,8 @@ export const SiweDialog = ({
   const expiryTone = expiresSec !== null && !Number.isNaN(expiresSec) ? dateTone(String(expiresSec)) : null;
   const noExpiration = !!parsed && !parsed.expirationTime;
 
-  // The message looked like SIWE (it was routed here) but failed to parse into fields,
-  // so none of the structured advisories above ran. Surface that explicitly rather than
-  // present a Sign In with no review. (The origin/phishing warning still fires — it's
-  // derived from the raw message upstream, not from `parsed`.)
+  // Looked like SIWE but didn't parse → no advisories ran, and the origin check is
+  // parse-gated upstream so it didn't either. Surface the gap rather than a blind Sign In.
   const parseFailed = !parsed;
 
   // Require a fresh acknowledgement of the phishing warning for every request.
@@ -133,7 +127,8 @@ export const SiweDialog = ({
     };
     el.addEventListener('wheel', onWheel, { passive: false });
     return () => el.removeEventListener('wheel', onWheel);
-  }, [open, isProcessing, parsed]);
+    // Re-attach on isSuccess too (success view changes scroll height), like Eip712.
+  }, [open, isProcessing, isSuccess, parsed]);
 
   const appAvatar = isSafeImageUrl(appLogoUrl) ? (
     <img src={appLogoUrl} alt={`${safeAppName} logo`} className="h-full w-full rounded-full object-cover" />
@@ -202,9 +197,7 @@ export const SiweDialog = ({
 
           {/* Scrollable content (block layout so children overflow, not shrink). */}
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
-            {/* Couldn't parse this SIWE request → no checks ran (an unparseable request
-                is shown raw, not run through origin/field checks — see the modals). Tell
-                the user plainly; the raw message is shown below to read manually. */}
+            {/* Unparseable → no checks ran; tell the user plainly, raw message shown below. */}
             {parseFailed && (
               <div className="border-destructive/30 bg-destructive/10 flex items-start gap-2 rounded-[10.5px] border p-3">
                 <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />

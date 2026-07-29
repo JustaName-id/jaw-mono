@@ -55,9 +55,7 @@ function networkLabel(id: number): string {
 interface FormattedLeaf {
   text: string;
   tone?: DateTone;
-  // Raw underlying value to copy when `text` is a derived form (e.g. a date leaf
-  // hides its unix integer) — lets the UI keep a copy button the truncation rule alone
-  // wouldn't grant a short integer.
+  // Raw value to copy when `text` is a derived form (e.g. a date hiding its unix integer).
   copyValue?: string;
 }
 
@@ -169,8 +167,7 @@ function buildNode(
     badge: type,
     value: formatted.text,
     tone: formatted.tone,
-    // A derived leaf (e.g. a date) carries its own raw value to copy; otherwise fall back
-    // to the truncation rule (addresses/bytes/long values).
+    // Derived leaves (dates) carry their own raw copy value; else the truncation rule.
     copyValue: formatted.copyValue ?? (copyable ? raw : undefined),
   };
 }

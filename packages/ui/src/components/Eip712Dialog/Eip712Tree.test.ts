@@ -1,7 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
-// Eip712Tree imports SUPPORTED_CHAINS from core for the chainId branch, which these
-// cases don't touch. Stub core so the test doesn't pull its source graph under node.
+// Stub core (only used by the chainId branch these cases don't touch).
 vi.mock('@jaw.id/core', () => ({ SUPPORTED_CHAINS: [] }));
 
 import { formatValue } from './Eip712Tree';
@@ -23,8 +22,7 @@ describe('formatValue — date leaf keeps the raw integer to copy', () => {
   it('exposes the unix integer as copyValue behind the formatted date', () => {
     const leaf = formatValue('uint256', '1893456000', 'deadline'); // 2030-01-01
     expect(leaf.copyValue).toBe('1893456000');
-    // The visible text is a derived date, not the bare integer — hence the need to keep
-    // the raw value copyable.
+    // Visible text is a derived date, not the bare integer.
     expect(leaf.text).not.toBe('1893456000');
   });
 

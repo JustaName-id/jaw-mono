@@ -91,10 +91,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   const [state, setState] = useState<PopupState>('initializing');
   const [config, setConfig] = useState<PopupConfig | null>(null);
   const [pendingRequest, setPendingRequest] = useState<PendingRequest | null>(null);
-  // Owned by the parent (not the signing modals) so the "Signed ✓" tick can ONLY
-  // appear AFTER `onApprove` confirms delivery to the dApp — never before. Flipped
-  // true right after a successful `onApprove`, held for SIGNED_TICK_MS, then the flow
-  // moves to 'success'. Reset per request so a prior tick can't bleed into the next.
+  // Parent-owned so the "Signed ✓" tick appears only AFTER onApprove confirms delivery,
+  // never before. Reset per request (below) so a prior tick can't bleed into the next.
   const [signDelivered, setSignDelivered] = useState(false);
   const [currentAccount, setCurrentAccount] = useState<PasskeyAccount | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,8 +120,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   );
   const effectiveChainId = (chainId ?? pendingRequest?.chain?.id ?? 1) as ChainId;
 
-  // Reset the delivered-tick flag whenever a new request arrives, so a completed
-  // sign can't leave the next request's modal showing a stale success check.
+  // Reset the tick on each new request so a prior success can't bleed into the next.
   useEffect(() => {
     setSignDelivered(false);
   }, [pendingRequest]);
@@ -805,10 +802,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
       // Render SiweModal for SIWE messages, SignatureModal for regular messages
       if (isSiwe) {
-        // Only run the origin/phishing check when the message actually PARSES. An
-        // unparseable request runs no checks at all — it's shown raw with a "couldn't
-        // read" note (see SiweDialog), rather than warnings derived from data we
-        // couldn't validate.
+        // Origin/phishing check only when the message parses (unparseable runs no checks).
         const parsedSiwe = parseSiweMessage(messageToSign);
         const siweWarning = parsedSiwe
           ? getSiweOriginWarning(pendingRequest.origin, { domain: parsedSiwe.domain, uri: parsedSiwe.uri })
@@ -829,7 +823,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               try {
                 await pendingRequest.onApprove(signature);
                 debugLog('✅ SIWE signature sent successfully');
-                // Delivery confirmed — NOW show the tick, hold it, then close.
+                // Delivery confirmed — show the tick, hold, then close.
                 setSignDelivered(true);
                 await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
                 setState('success');
@@ -874,7 +868,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             try {
               await pendingRequest.onApprove(signature);
               debugLog('✅ Signature sent successfully');
-              // Delivery confirmed — NOW show the tick, hold it, then close.
+              // Delivery confirmed — show the tick, hold, then close.
               setSignDelivered(true);
               await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
               setState('success');
@@ -951,7 +945,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             try {
               await pendingRequest.onApprove(signature);
               debugLog('✅ Typed data signature sent successfully');
-              // Delivery confirmed — NOW show the tick, hold it, then close.
+              // Delivery confirmed — show the tick, hold, then close.
               setSignDelivered(true);
               await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
               setState('success');
@@ -1416,6 +1410,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             warningMessage={siweWarning}
             isSuccess={signDelivered}
             onSuccess={async (signature: string, message: string) => {
+              // Connect owns its own post-delivery continuation below, so — unlike the
+              // standalone signing handlers — we intentionally don't switch to 'processing'.
               try {
                 debugLog('✅ User signed SIWE message');
 
@@ -1436,7 +1432,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
                 debugLog('✅ SIWE response:', response);
                 await pendingRequest.onApprove(response);
-                // Delivery confirmed — NOW show the tick (held through the handoff + beat).
+                // Delivery confirmed — show the tick (held through the handoff + beat).
                 setSignDelivered(true);
                 // Only after approval (never on mere authentication, which the
                 // user may still cancel): let the SDK persist the account hint

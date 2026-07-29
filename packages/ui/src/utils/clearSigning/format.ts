@@ -199,14 +199,9 @@ async function formatField(
         };
       }
 
-      // EIP-712 default: a token amount whose `tokenPath` didn't resolve is denominated in
-      // the signature's verifyingContract — the token being permitted (EIP-2612 registry
-      // entries carry a calldata-style `tokenPath: "@.to"` that has no target in a permit).
-      // Gated on `metadata.token`: the author must opt in by declaring the signature is
-      // about a token. Otherwise a non-token verifyingContract that happens to implement
-      // decimals()/symbol() could get a convincing-but-wrong denomination. Descriptors that
-      // don't opt in fall through to the raw render below.
-      // (Calldata tx contexts have no verifyingContract, so this only affects typed-data.)
+      // Permit-style default: an unresolved tokenPath denominates in the verifyingContract
+      // (the permitted token). Gated on `metadata.token` so a non-token contract that
+      // implements decimals()/symbol() can't get a convincing-but-wrong denomination.
       if (!tokenAddr && descriptor.metadata?.token && typeof ctx.tx?.verifyingContract === 'string') {
         tokenAddr = ctx.tx.verifyingContract;
       }

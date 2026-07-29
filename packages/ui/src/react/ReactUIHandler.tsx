@@ -64,9 +64,8 @@ import { resolveTheme } from '../theme/resolve-theme.js';
 import { applyThemeToContainer } from '../theme/apply-theme.js';
 import { getSystemColorScheme, useColorScheme } from '../theme/use-color-scheme.js';
 
-// How long the signing dialogs hold the "Signed ✓" tick after delivery, before the
-// dialog tears down. The dApp's promise is already resolved by then (see the hold
-// path in `handleApprove`), so this never delays the dApp — it's purely the beat.
+// How long signing dialogs hold the "Signed ✓" tick after delivery (dApp promise is
+// already resolved by then — see handleApprove — so it never delays the dApp).
 const SIGNED_TICK_MS = 850;
 
 // ============================================================================
@@ -280,13 +279,10 @@ export class ReactUIHandler implements UIHandler {
 
         const handleApprove = (data: T, holdMs = 0) => {
           if (holdMs > 0) {
-            // Success-beat path (signing dialogs): deliver to the dApp FIRST (resolve
-            // its awaited promise), then keep the dialog mounted for `holdMs` so the
-            // "Signed ✓" tick is visible — WITHOUT delaying the dApp's response.
+            // Signing dialogs: resolve the dApp first, then defer teardown so the tick shows.
             resolve({ id: request.id, approved: true, data });
             setTimeout(cleanup, holdMs);
           } else {
-            // Default path (connect/tx/etc.): tear down immediately, then resolve.
             cleanup();
             resolve({ id: request.id, approved: true, data });
           }
@@ -1113,8 +1109,7 @@ function SignatureDialogWrapper({
       const signature = await account.signMessage(request.data.message, { address: request.data.address });
 
       setSignatureStatus('Signature successful!');
-      // Deliver to the dApp, then hold the tick — `onApprove` resolves the promise
-      // immediately and defers the dialog teardown by SIGNED_TICK_MS, so no delay.
+      // Deliver, then hold the tick (onApprove resolves now, defers teardown — no delay).
       onApprove(signature, SIGNED_TICK_MS);
       setIsSuccess(true);
     } catch (error) {
@@ -2551,16 +2546,13 @@ function SiweDialogWrapper({
     return msg;
   }, [request.data.message]);
 
-  // Fallback app name from the SIWE message's domain line, used only when the SDK
-  // config didn't supply one (sanitized for display by SiweDialog).
+  // Fallback app name from the SIWE domain line, used only when config supplies none.
   const messageAppName = useMemo(() => {
     const match = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/);
     return match ? match[1] : 'dApp';
   }, [decodedMessage]);
 
-  // Origin/phishing check — ONLY when the message parses. An unparseable request runs
-  // no checks (shown raw with a "couldn't read" note), rather than warnings from
-  // data we couldn't validate.
+  // Origin/phishing check — only when the message parses (unparseable runs no checks).
   const warningMessage = useMemo(() => {
     const parsed = parseSiweMessage(decodedMessage);
     return parsed ? getSiweOriginWarning(origin, { domain: parsed.domain, uri: parsed.uri }) : undefined;
@@ -2577,9 +2569,7 @@ function SiweDialogWrapper({
       const signature = await account.signMessage(request.data.message);
 
       setSiweStatus('Sign-in successful!');
-      // Deliver to the dApp, then hold the tick — `onApprove` resolves the promise
-      // in-process immediately and defers the dialog teardown by SIGNED_TICK_MS, so
-      // the "Signed in ✓" beat shows without delaying the dApp's response.
+      // Deliver, then hold the tick (onApprove resolves now, defers teardown — no delay).
       onApprove(signature, SIGNED_TICK_MS);
       setIsSuccess(true);
     } catch (error) {

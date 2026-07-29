@@ -15,7 +15,7 @@ export interface DialogShellProps {
 }
 
 /**
- * The revamped dialog frame: 345px card, min 234 / max 477 height with internal
+ * The revamped dialog frame: 400px card, min 234 / max 550 height with internal
  * scroll. Surface, border and text use the semantic theme tokens so the card
  * MIRRORS the host dApp's theme — light card on a light dApp, dark on a dark
  * dApp — rather than forcing a single palette. The halo is dark-only.
