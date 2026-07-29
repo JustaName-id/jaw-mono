@@ -41,8 +41,14 @@ export function eip712TypeHash(types: Eip712Types, primaryType: string): Hex | n
 }
 
 /** Normalize a chainId that may arrive as a number, hex string, or decimal string. */
-function normalizeChainId(v: unknown): number | undefined {
-  if (typeof v === 'number') return v;
+/**
+ * Coerce an EIP-712 domain chainId (number, bigint, hex or decimal string) to a number.
+ * A non-finite number (e.g. NaN from a bogus domain) returns undefined rather than
+ * flowing through — `NaN ?? fallback` wouldn't catch it, and a NaN chainId silently
+ * breaks descriptor resolution. Shared with the clear-signing hook.
+ */
+export function normalizeChainId(v: unknown): number | undefined {
+  if (typeof v === 'number') return Number.isFinite(v) ? v : undefined;
   if (typeof v === 'bigint') return Number(v);
   if (typeof v === 'string' && v.length > 0) {
     const n = v.startsWith('0x') ? Number.parseInt(v, 16) : Number(v);

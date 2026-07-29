@@ -377,6 +377,8 @@ export class ReactUIHandler implements UIHandler {
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
               paymasters={this.config.paymasters}
+              appName={this.config.appName}
+              appLogoUrl={this.config.appLogoUrl}
             />
           );
         }
@@ -423,6 +425,8 @@ export class ReactUIHandler implements UIHandler {
                 apiKey={this.config.apiKey}
                 defaultChainId={this.config.defaultChainId}
                 paymasters={this.config.paymasters}
+                appName={this.config.appName}
+                appLogoUrl={this.config.appLogoUrl}
               />
             );
           }
@@ -2511,6 +2515,8 @@ function SiweDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: SignatureUIRequest;
   onApprove: (data: any, holdMs?: number) => void;
@@ -2518,6 +2524,8 @@ function SiweDialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -2543,8 +2551,9 @@ function SiweDialogWrapper({
     return msg;
   }, [request.data.message]);
 
-  // Extract app name from SIWE message (sanitized for display by SiweDialog).
-  const appName = useMemo(() => {
+  // Fallback app name from the SIWE message's domain line, used only when the SDK
+  // config didn't supply one (sanitized for display by SiweDialog).
+  const messageAppName = useMemo(() => {
     const match = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/);
     return match ? match[1] : 'dApp';
   }, [decodedMessage]);
@@ -2603,7 +2612,8 @@ function SiweDialogWrapper({
       }}
       message={decodedMessage}
       origin={origin}
-      appName={appName}
+      appName={appName ?? messageAppName}
+      appLogoUrl={appLogoUrl ?? undefined}
       accountAddress={request.data.address}
       chainName={chainName}
       chainId={chainId}

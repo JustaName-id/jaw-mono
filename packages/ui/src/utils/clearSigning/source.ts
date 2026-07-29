@@ -87,7 +87,15 @@ export function mergeDescriptor(base: Descriptor, local: Descriptor): Descriptor
     context: {
       ...base.context,
       ...local.context,
-      eip712: { ...base.context?.eip712, ...local.context?.eip712 },
+      eip712: {
+        ...base.context?.eip712,
+        ...local.context?.eip712,
+        // Deep-merge the domain: a shallow spread would let `local.domain` replace
+        // `base.domain` wholesale, dropping fields the base declared (e.g. base sets
+        // name+version, local sets only chainId) and weakening the domain-match check.
+        // Local wins on overlapping keys; base fills the gaps.
+        domain: { ...base.context?.eip712?.domain, ...local.context?.eip712?.domain },
+      },
       contract: { ...base.context?.contract, ...local.context?.contract },
     },
     metadata: { ...base.metadata, ...local.metadata },
@@ -107,10 +115,15 @@ export function mergeDescriptor(base: Descriptor, local: Descriptor): Descriptor
  */
 export async function loadDescriptor(source: DescriptorSource, path: string): Promise<Descriptor> {
   let descriptor = await source.getDescriptor(path);
+  // Track resolved paths so an include cycle (A→B→A…) stops immediately instead of
+  // burning fetches up to the hop cap. The hop cap remains a hard backstop.
+  const visited = new Set<string>([path]);
   let currentPath = path;
   let hops = 0;
   while (descriptor.includes && hops < 5) {
     const incPath = resolveRelativePath(currentPath, descriptor.includes);
+    if (visited.has(incPath)) break; // cycle — stop before re-fetching a seen file
+    visited.add(incPath);
     let base: Descriptor;
     try {
       base = await source.getDescriptor(incPath);

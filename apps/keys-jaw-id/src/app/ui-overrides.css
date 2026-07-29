@@ -38,6 +38,8 @@
   --accent-foreground: inherit !important;
   --destructive: inherit !important;
   --destructive-foreground: inherit !important;
+  --success: inherit !important;
+  --success-foreground: inherit !important;
   --border: inherit !important;
   --input: inherit !important;
   --ring: inherit !important;
@@ -162,4 +164,10 @@
     animation: none;
     stroke-dashoffset: 0;
   }
+}
+
+/* Mirrored from dialog-runtime.css: keep the native <dialog> backdrop transparent so
+   the shell's own overlay isn't double-dimmed. */
+dialog[data-jaw-modal-container]::backdrop {
+  background: transparent;
 }
