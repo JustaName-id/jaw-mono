@@ -51,11 +51,11 @@ import {
     avalanche,
     bsc,
     ink,
-    inkSepolia,
     dosChain,
     gnosis,
     arcTestnet,
     robinhood,
+    soneium,
 } from 'viem/chains';
 import { PERMISSIONS_MANAGER_ADDRESS, FACTORY_ADDRESS } from '../constants.js';
 import { standardErrors } from '../errors/errors.js';
@@ -107,6 +107,7 @@ export const MAINNET_CHAINS = [
     dosChain,
     gnosis,
     robinhood,
+    soneium,
 ];
 
 export const TESTNET_CHAINS = [
@@ -116,7 +117,6 @@ export const TESTNET_CHAINS = [
     arbitrumSepolia,
     celoSepolia,
     avalancheFuji,
-    inkSepolia,
     arcTestnet,
 ];
 

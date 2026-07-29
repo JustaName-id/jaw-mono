@@ -159,6 +159,7 @@ export class AppSpecificSigner extends JAWSigner {
 
         // Only emit first account in array (same as CrossPlatformSigner handleResponse for wallet_connect)
         this.callback?.('accountsChanged', [accounts[0]]);
+        this.reportSiweSignatures(response.data);
         return response.data;
     }
 
