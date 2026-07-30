@@ -307,7 +307,12 @@ describe('jaw_pay_and_fetch', () => {
     });
 
     // Empty payer -> the funder must refill through the permission first.
-    usdcBalanceMock.mockResolvedValue({ network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', raw: '0', formatted: '0' });
+    usdcBalanceMock.mockResolvedValue({
+      network: 'eip155:84532',
+      asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
+      raw: '0',
+      formatted: '0',
+    });
     sessionRequestMock.mockImplementation(async (method: string) => {
       if (method === 'wallet_sendCalls') return { id: '0xtopupbatch', chainId: 84532 };
       if (method === 'wallet_getCallsStatus') return { status: 200 };
