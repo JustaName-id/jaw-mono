@@ -1,3 +1,25 @@
+## 1.2.14 (2026-07-28)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.1.1
+
+## 1.2.13 (2026-07-27)
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.1.0
+
+## 1.2.12 (2026-07-17)
+
+### 🩹 Fixes
+
+- **ui:** render app-specific dialogs in a native <dialog> top layer ([#247](https://github.com/JustaName-id/jaw-mono/pull/247))
+
+### ❤️ Thank You
+
+- AngeloAyranji @AngeloAyranji
+
 ## 1.2.11 (2026-07-16)
 
 ### 🩹 Fixes

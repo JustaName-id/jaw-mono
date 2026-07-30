@@ -45,3 +45,33 @@ export function logAccountIssuance(params: LogAccountIssuanceParams): void {
         // Silently swallow any synchronous errors
     }
 }
+
+/**
+ * Parameters for logging a wallet signature
+ */
+export interface LogSignatureParams {
+    /** The address that produced the signature */
+    address: Address;
+    /** API key for authentication */
+    apiKey: string;
+}
+
+/**
+ * Log a wallet signature for analytics purposes (per-workspace volume metric).
+ *
+ * This function is fire-and-forget - it does not block and silently
+ * swallows any errors to ensure it never affects the signing flow.
+ *
+ * @param params - The signature parameters
+ */
+export function logSignature(params: LogSignatureParams): void {
+    try {
+        const { address, apiKey } = params;
+
+        restCall('LOG_SIGNATURE', 'POST', { address }, { 'x-api-key': apiKey }).catch(() => {
+            // Silently swallow async errors
+        });
+    } catch {
+        // Silently swallow any synchronous errors
+    }
+}

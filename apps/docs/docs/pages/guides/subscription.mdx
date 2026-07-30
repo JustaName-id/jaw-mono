@@ -296,7 +296,7 @@ async function cancelSubscription(userAddress: Address, permissionId: string) {
 :::
 
 :::info
-**Listing Permissions**: Use `usePermissions()` (Wagmi) or `wallet_getPermissions` (Core SDK) to retrieve all active permissions for a user.
+**Listing Permissions**: Use `usePermissions()` (Wagmi) or `wallet_getPermissions` (Core SDK) to retrieve all permissions for a user. The list is unfiltered — it includes expired and not-yet-started permissions — so check `start`/`end` against the current time before treating one as executable.
 :::
 
 ## Permission Parameters Reference

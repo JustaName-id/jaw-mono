@@ -22,12 +22,12 @@ await jaw.provider.request({
 
 ### Parameters
 
-| Name              | Type          | Required | Description                                   |
-| ----------------- | ------------- | -------- | --------------------------------------------- |
-| `account`         | `string`      | Yes      | Account address to query                      |
-| `chainFilter`     | `string[]`    | No       | Limit to specific chains (hex chain IDs)      |
-| `assetTypeFilter` | `AssetType[]` | No       | Filter by asset type: `'native'` or `'erc20'` |
-| `assetFilter`     | `AssetFilter` | No       | Filter by specific assets per chain           |
+| Name              | Type          | Required | Description                                      |
+| ----------------- | ------------- | -------- | ------------------------------------------------ |
+| `account`         | `string`      | Yes      | Account address to query                         |
+| `chainFilter`     | `string[]`    | No       | Limit to specific chains (hex chain IDs, max 20) |
+| `assetTypeFilter` | `AssetType[]` | No       | Filter by asset type: `'native'` or `'erc20'`    |
+| `assetFilter`     | `AssetFilter` | No       | Filter by specific assets per chain              |
 
 ### Types
 
@@ -37,7 +37,8 @@ type AssetType = 'native' | 'erc20';
 type AssetFilter = Record<`0x${string}`, AssetFilterEntry[]>;
 
 type AssetFilterEntry = {
-  address: `0x${string}`;
+  /** Token address; use null (or the 0xEeee… sentinel) to select the native token */
+  address: `0x${string}` | null;
   type: AssetType;
 };
 ```
@@ -159,9 +160,18 @@ type Asset = {
 
 - Includes native tokens (ETH, MATIC, etc.)
 - Includes ERC-20 tokens with non-zero balances
-- Auto-filters by `showTestnets` SDK preference
+- Auto-filters by the `showTestnets` preference
 - Can be called without authentication
 - Returns only tokens with non-zero balances
+- An explicit `chainFilter` accepts at most **20 entries**; omit it to scan all supported chains
+
+## Errors
+
+| Code   | Description                                                                              |
+| ------ | ---------------------------------------------------------------------------------------- |
+| -32602 | `chainFilter` is present but not an array, or is empty                                   |
+| -32602 | `chainFilter` has more than 20 entries                                                   |
+| -32602 | A `chainFilter` entry is not a hex chain ID, is `0x0`, or exceeds the safe integer range |
 
 ## Example
 

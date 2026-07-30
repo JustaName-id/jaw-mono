@@ -316,3 +316,7 @@
 .scrollbar-hide::-webkit-scrollbar {
   display: none;
 }
+
+dialog[data-jaw-modal-container]::backdrop {
+  background: transparent;
+}

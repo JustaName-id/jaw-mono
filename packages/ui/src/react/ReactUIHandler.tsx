@@ -194,7 +194,7 @@ export class ReactUIHandler implements UIHandler {
   async request<T = unknown>(request: UIRequest): Promise<UIResponse<T>> {
     return new Promise((resolve, reject) => {
       try {
-        const container = document.createElement('div');
+        const container = document.createElement('dialog');
         container.setAttribute('data-jaw-modal-container', '');
 
         // Style isolation: prevent consumer app CSS from leaking into SDK modals.
@@ -219,6 +219,20 @@ export class ReactUIHandler implements UIHandler {
           WebkitFontSmoothing: 'antialiased',
           MozOsxFontSmoothing: 'grayscale',
           WebkitTapHighlightColor: 'transparent',
+          // Reset native <dialog> chrome: the container is an invisible
+          // full-viewport top layer; the Radix components inside draw the
+          // actual overlay and dialog card exactly as before.
+          position: 'fixed',
+          inset: '0',
+          width: '100vw',
+          height: '100vh',
+          maxWidth: 'none',
+          maxHeight: 'none',
+          margin: '0',
+          padding: '0',
+          border: 'none',
+          background: 'transparent',
+          pointerEvents: 'auto',
         });
 
         // Apply theme: resolves --jaw-* CSS variables onto the container.
@@ -229,6 +243,17 @@ export class ReactUIHandler implements UIHandler {
         // Append to body - Radix UI Dialog will handle all positioning
         document.body.appendChild(container);
 
+        // Top-layer modal: the browser makes the rest of the page inert, so a
+        // host app's own modal focus trap cannot steal focus from our inputs
+        // (same mechanism as the iframe transport's <dialog data-jaw>).
+        // Escape must keep flowing through Radix's close logic, not the
+        // native dialog's instant close.
+        const preventNativeClose = (e: Event) => e.preventDefault();
+        if (typeof container.showModal === 'function') {
+          container.addEventListener('cancel', preventNativeClose);
+          container.showModal();
+        }
+
         const root = createRoot(container);
 
         const cleanup = () => {
@@ -236,6 +261,10 @@ export class ReactUIHandler implements UIHandler {
             document.body.style.removeProperty('pointer-events');
 
             root.unmount();
+            container.removeEventListener('cancel', preventNativeClose);
+            if (container.open) {
+              container.close();
+            }
             if (container.parentNode) {
               container.parentNode.removeChild(container);
             }
