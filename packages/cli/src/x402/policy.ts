@@ -20,6 +20,12 @@ export interface X402Policy {
   allowedHosts?: string[];
   /** Allowed `payTo` addresses (case-insensitive). Empty/undefined = any. */
   allowedPayTo?: string[];
+  /**
+   * Flow 2b: refill target (base units) for the session payer when a top-up
+   * runs. Unset = top up exactly the shortfall. Bounded on-chain by the
+   * permission either way.
+   */
+  topUpFloat?: string;
 }
 
 /**

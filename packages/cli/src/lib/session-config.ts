@@ -24,6 +24,10 @@ export function saveSessionConfig(input: Omit<SessionConfig, 'createdAt'>): void
   fs.chmodSync(PATHS.sessionConfig, 0o600);
 }
 
+export function sessionConfigExists(): boolean {
+  return fs.existsSync(PATHS.sessionConfig);
+}
+
 export function loadSessionConfig(): SessionConfig {
   if (!fs.existsSync(PATHS.sessionConfig)) {
     throw new Error('No session configured. Run `jaw session setup` first.');

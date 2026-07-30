@@ -23,6 +23,15 @@ export interface PayAndFetchOptions {
   asset?: string;
   /** Require a specific CAIP-2 network. */
   network?: string;
+  /**
+   * Optional funding hook, run after the policy approved a requirement and
+   * before the payment is signed. Flow 2b plugs the permission top-up in here;
+   * a `{ok:false}` outcome becomes a refusal with its reason, never a throw.
+   */
+  ensureFunds?: (
+    requirement: X402PaymentRequirement,
+    payerAddress: `0x${string}`
+  ) => Promise<{ ok: boolean; reason?: string; amount?: string; batchId?: string; skipped?: boolean }>;
 }
 
 /** A payment as built/signed — the fields needed to audit or reconcile it. */
@@ -192,6 +201,26 @@ export async function payAndFetch(
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {
     return { status: 402, body: await readBody(first), paid: false, payer: payer.address, refusedReason: reason };
+  }
+
+  // 3.5 Funding hook (flow 2b): make sure the payer can actually cover the
+  //     price, topping it up through the on-chain permission when it can't.
+  //     A refusal here is a policy-shaped outcome, not an error.
+  let topUp: { amount?: string; batchId?: string } | undefined;
+  if (opts.ensureFunds) {
+    const funded = await opts.ensureFunds(requirement, payer.address);
+    if (!funded.ok) {
+      return {
+        status: 402,
+        body: await readBody(first),
+        paid: false,
+        payer: payer.address,
+        refusedReason: funded.reason ?? 'payer funding failed',
+      };
+    }
+    if (!funded.skipped) {
+      topUp = { amount: funded.amount, batchId: funded.batchId };
+    }
   }
 
   // 4. Build + sign the payment. Keep the payload so the nonce is recoverable

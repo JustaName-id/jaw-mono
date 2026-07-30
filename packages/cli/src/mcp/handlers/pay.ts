@@ -7,6 +7,10 @@ import { payAndFetch } from '../../x402/http.js';
 import { appendX402Log, readX402Log } from '../../x402/ledger.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { resolveX402Policy } from '../../x402/policy.js';
+import { ensurePayerFunds } from '../../x402/topup.js';
+import { SessionBridge } from '../../lib/session-bridge.js';
+import { sessionConfigExists, loadSessionConfig } from '../../lib/session-config.js';
+import type { X402PaymentRequirement } from '../../x402/types.js';
 
 interface PayAndFetchParams {
   url: string;
@@ -43,12 +47,27 @@ export function registerPayTool(server: McpServer): void {
         const config = loadConfig();
         // Throws a clear "run jaw session setup" error when no session exists.
         const payer = Eip3009EoaPayer.fromSessionKey();
+        const policy = resolveX402Policy(config.x402);
+
+        // Flow 2b: when a session (and its on-chain permission) exists, refill
+        // the payer EOA through the permission whenever it can't cover a price.
+        // Funds stay in the user's account until the moment a payment needs
+        // them; JustaPermissionManager caps every refill on-chain.
+        let ensureFunds;
+        if (sessionConfigExists() && config.apiKey) {
+          const session = loadSessionConfig();
+          const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
+          const floatTarget = config.x402?.topUpFloat ? BigInt(config.x402.topUpFloat) : undefined;
+          ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
+            ensurePayerFunds(requirement, payerAddress, bridge, { floatTarget });
+        }
 
         const result = await payAndFetch(params.url, payer, {
           method: params.method,
           headers: params.headers,
           body: params.body,
-          policy: resolveX402Policy(config.x402),
+          policy,
+          ensureFunds,
           spentThisSession: sessionSpent,
           maxAmount: params.maxAmount,
           asset: params.asset,
