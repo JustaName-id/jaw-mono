@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { CopyIcon, CopiedIcon } from '../../icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import {
   dateTone,
   formatUnixDate,
@@ -203,15 +204,21 @@ function LeafValue({ display, copyValue, tone }: { display?: string; copyValue?:
       .catch(() => undefined);
   };
   const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
+  const toneLabel =
+    tone === 'expired' ? 'This date is in the past.' : tone === 'far' ? 'More than a year in the future.' : undefined;
   return (
     <span className="ml-auto flex min-w-0 items-center justify-end gap-1">
-      {(tone === 'far' || tone === 'expired') && (
-        <TriangleAlert className={`size-3 flex-none ${toneClass}`} strokeWidth={2} />
+      {toneLabel && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span tabIndex={0} aria-label={toneLabel} className="flex-none cursor-help">
+              <TriangleAlert className={`size-3 ${toneClass}`} strokeWidth={2} />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{toneLabel}</TooltipContent>
+        </Tooltip>
       )}
-      <span className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${toneClass}`}>
-        {display}
-        {tone === 'expired' && <span className="font-semibold"> · Expired</span>}
-      </span>
+      <span className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${toneClass}`}>{display}</span>
       {copyValue &&
         (copied ? (
           <CopiedIcon className="size-3 flex-none" />

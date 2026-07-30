@@ -8,6 +8,7 @@ import { ProcessingScreen } from '../ProcessingScreen';
 import { SuccessScreen } from '../SuccessScreen';
 import { Button } from '../ui/button';
 import { Checkbox } from '../ui/checkbox';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import { SiweDialogProps } from './types';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
@@ -19,8 +20,21 @@ import { isSafeImageUrl } from '../../utils/safeUrl';
 import { CopyIcon, CopiedIcon } from '../../icons';
 import { Globe, TriangleAlert } from 'lucide-react';
 
-/** One label/value row. Pass `copyValue` to append a copy button (copies the full value). */
-function Field({ label, value, copyValue }: { label: string; value: string; copyValue?: string }) {
+/**
+ * One label/value row. Pass `copyValue` to append a copy button; pass `warning` to flag
+ * the row with a red danger icon whose text shows on hover (and colour the value red).
+ */
+function Field({
+  label,
+  value,
+  copyValue,
+  warning,
+}: {
+  label: string;
+  value: string;
+  copyValue?: string;
+  warning?: string;
+}) {
   const [copied, setCopied] = useState(false);
   const onCopy = () => {
     if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
@@ -38,7 +52,21 @@ function Field({ label, value, copyValue }: { label: string; value: string; copy
         {label}
       </span>
       <span className="flex min-w-0 items-center justify-end gap-1.5">
-        <span className="text-foreground min-w-0 break-all text-right font-mono text-[10px] font-medium">{value}</span>
+        {warning && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <span tabIndex={0} aria-label={warning} className="flex-none cursor-help">
+                <TriangleAlert className="text-destructive size-3" strokeWidth={2} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{warning}</TooltipContent>
+          </Tooltip>
+        )}
+        <span
+          className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${warning ? 'text-destructive' : 'text-foreground'}`}
+        >
+          {value}
+        </span>
         {copyValue &&
           (copied ? (
             <CopiedIcon className="size-3 flex-none" />
@@ -96,13 +124,12 @@ export const SiweDialog = ({
   // means the site's replay protection is weak. Advisory (amber), not a hard gate.
   const weakNonce = !!parsed?.nonce && parsed.nonce.length < 8;
 
-  // Validity window. `expirationTime` is an ISO string; classify it relative to now.
-  //  - no expiry     → the signature never expires (amber note)
-  //  - past          → already expired, unusable (red note)
-  //  - far (>1yr out) → unusually long-lived (amber note)
+  // Only an already-expired sign-in is worth flagging (its signature can't be used). A
+  // missing or long-lived expiry isn't a risk on its own — SIWE replay protection is the
+  // nonce — so we don't warn on those; it'd fire on the common case and dull the warnings
+  // that matter.
   const expiresSec = parsed?.expirationTime ? Math.floor(Date.parse(parsed.expirationTime) / 1000) : null;
   const expiryTone = expiresSec !== null && !Number.isNaN(expiresSec) ? dateTone(String(expiresSec)) : null;
-  const noExpiration = !!parsed && !parsed.expirationTime;
 
   // Looked like SIWE but didn't parse → no advisories ran, and the origin check is
   // parse-gated upstream so it didn't either. Surface the gap rather than a blind Sign In.
@@ -137,7 +164,7 @@ export const SiweDialog = ({
   );
 
   // Parsed SIWE fields → the row-wise box (only rows with a value).
-  const fields: Array<{ label: string; value: string; copyValue?: string }> = [];
+  const fields: Array<{ label: string; value: string; copyValue?: string; warning?: string }> = [];
   if (parsed) {
     const account = parsed.address;
     if (account)
@@ -152,9 +179,15 @@ export const SiweDialog = ({
     }
     if (parsed.nonce) fields.push({ label: 'Nonce', value: parsed.nonce });
     if (parsed.issuedAt) fields.push({ label: 'Issued at', value: parsed.issuedAt });
-    // Surface validity window — a long/absent expiry on a capability grant is
-    // exactly what a user must be able to see before signing.
-    if (parsed.expirationTime) fields.push({ label: 'Expires', value: parsed.expirationTime });
+    // Surface the expiration as data when present. Only an already-expired one is flagged
+    // (red icon + hover note on the row) — a long/absent expiry isn't a risk on its own.
+    if (parsed.expirationTime)
+      fields.push({
+        label: 'Expires',
+        value: parsed.expirationTime,
+        warning:
+          expiryTone === 'expired' ? "This sign-in has already expired, so the signature can't be used." : undefined,
+      });
     if (parsed.notBefore) fields.push({ label: 'Not before', value: parsed.notBefore });
   }
 
@@ -218,7 +251,7 @@ export const SiweDialog = ({
             {fields.length > 0 ? (
               <div className="border-border overflow-hidden rounded-[10.5px] border">
                 {fields.map((f) => (
-                  <Field key={f.label} label={f.label} value={f.value} copyValue={f.copyValue} />
+                  <Field key={f.label} label={f.label} value={f.value} copyValue={f.copyValue} warning={f.warning} />
                 ))}
               </div>
             ) : (
@@ -296,36 +329,6 @@ export const SiweDialog = ({
                 <p className="min-w-0 text-[11px] leading-[1.45] text-amber-600 dark:text-amber-500">
                   This sign-in uses a short nonce ({parsed?.nonce.length} chars). EIP-4361 recommends at least 8 — a
                   weak nonce means the site's replay protection is easy to bypass.
-                </p>
-              </div>
-            )}
-
-            {/* Advisory: already-expired sign-in (unusable). */}
-            {expiryTone === 'expired' && (
-              <div className="border-destructive/30 bg-destructive/10 flex items-start gap-2 rounded-[10.5px] border p-3">
-                <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
-                <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">
-                  This sign-in has already expired, so the signature can't be used.
-                </p>
-              </div>
-            )}
-
-            {/* Advisory: far-future expiry (unusually long-lived sign-in). */}
-            {expiryTone === 'far' && (
-              <div className="flex items-start gap-2 rounded-[10.5px] border border-amber-500/30 bg-amber-500/10 p-3">
-                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-amber-500" strokeWidth={2} />
-                <p className="min-w-0 text-[11px] leading-[1.45] text-amber-600 dark:text-amber-500">
-                  This sign-in stays valid for over a year — an unusually long-lived session.
-                </p>
-              </div>
-            )}
-
-            {/* Advisory: no expiry set (signature valid forever). */}
-            {noExpiration && (
-              <div className="flex items-start gap-2 rounded-[10.5px] border border-amber-500/30 bg-amber-500/10 p-3">
-                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-amber-500" strokeWidth={2} />
-                <p className="min-w-0 text-[11px] leading-[1.45] text-amber-600 dark:text-amber-500">
-                  This sign-in has no expiration — the signature stays valid forever.
                 </p>
               </div>
             )}
