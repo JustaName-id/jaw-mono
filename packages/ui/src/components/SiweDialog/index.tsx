@@ -21,19 +21,21 @@ import { CopyIcon, CopiedIcon } from '../../icons';
 import { Globe, TriangleAlert } from 'lucide-react';
 
 /**
- * One label/value row. Pass `copyValue` to append a copy button; pass `warning` to flag
- * the row with a red danger icon whose text shows on hover (and colour the value red).
+ * One label/value row. Pass `copyValue` for a copy button; pass `warning` to flag the row
+ * with a hover-only danger icon (and tint the value) — `warningTone` picks red vs amber.
  */
 function Field({
   label,
   value,
   copyValue,
   warning,
+  warningTone = 'danger',
 }: {
   label: string;
   value: string;
   copyValue?: string;
   warning?: string;
+  warningTone?: 'danger' | 'warning';
 }) {
   const [copied, setCopied] = useState(false);
   const onCopy = () => {
@@ -46,6 +48,8 @@ function Field({
       })
       .catch(() => undefined);
   };
+  const warnText = warningTone === 'warning' ? 'text-amber-600 dark:text-amber-500' : 'text-destructive';
+  const warnIcon = warningTone === 'warning' ? 'text-amber-500' : 'text-destructive';
   return (
     <div className="border-foreground/[0.06] flex items-center justify-between gap-2.5 border-t px-[11.5px] py-[8.5px] first:border-t-0">
       <span className="text-muted-foreground flex-none font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
@@ -58,14 +62,14 @@ function Field({
               {/* Hover-only (no tabIndex): a focusable trigger would auto-open when the
                   dialog moves focus in on mount. aria-label keeps the text for SRs. */}
               <span aria-label={warning} className="flex-none cursor-help">
-                <TriangleAlert className="text-destructive size-3" strokeWidth={2} />
+                <TriangleAlert className={`size-3 ${warnIcon}`} strokeWidth={2} />
               </span>
             </TooltipTrigger>
             <TooltipContent>{warning}</TooltipContent>
           </Tooltip>
         )}
         <span
-          className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${warning ? 'text-destructive' : 'text-foreground'}`}
+          className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${warning ? warnText : 'text-foreground'}`}
         >
           {value}
         </span>
@@ -166,11 +170,24 @@ export const SiweDialog = ({
   );
 
   // Parsed SIWE fields → the row-wise box (only rows with a value).
-  const fields: Array<{ label: string; value: string; copyValue?: string; warning?: string }> = [];
+  const fields: Array<{
+    label: string;
+    value: string;
+    copyValue?: string;
+    warning?: string;
+    warningTone?: 'danger' | 'warning';
+  }> = [];
   if (parsed) {
     const account = parsed.address;
     if (account)
-      fields.push({ label: 'Account', value: messageAccountName || formatAddress(account), copyValue: account });
+      fields.push({
+        label: 'Account',
+        value: messageAccountName || formatAddress(account),
+        copyValue: account,
+        warning: addressMismatch
+          ? "This request names a different account than the one you're connected with, so the signature won't be valid for it."
+          : undefined,
+      });
     if (parsed.uri) fields.push({ label: 'URL', value: parsed.uri });
     if (parsed.version) fields.push({ label: 'Version', value: parsed.version });
     if (parsed.chainId) {
@@ -179,7 +196,15 @@ export const SiweDialog = ({
       const name = SUPPORTED_CHAINS.find((c) => c.id === parsed.chainId)?.name;
       fields.push({ label: 'Chain ID', value: name ? `${parsed.chainId} · ${name}` : String(parsed.chainId) });
     }
-    if (parsed.nonce) fields.push({ label: 'Nonce', value: parsed.nonce });
+    if (parsed.nonce)
+      fields.push({
+        label: 'Nonce',
+        value: parsed.nonce,
+        warning: weakNonce
+          ? `Short nonce (${parsed.nonce.length} chars). EIP-4361 recommends at least 8 — weak replay protection.`
+          : undefined,
+        warningTone: 'warning',
+      });
     if (parsed.issuedAt) fields.push({ label: 'Issued at', value: parsed.issuedAt });
     // Surface the expiration as data when present. Only an already-expired one is flagged
     // (red icon + hover note on the row) — a long/absent expiry isn't a risk on its own.
@@ -253,7 +278,14 @@ export const SiweDialog = ({
             {fields.length > 0 ? (
               <div className="border-border overflow-hidden rounded-[10.5px] border">
                 {fields.map((f) => (
-                  <Field key={f.label} label={f.label} value={f.value} copyValue={f.copyValue} warning={f.warning} />
+                  <Field
+                    key={f.label}
+                    label={f.label}
+                    value={f.value}
+                    copyValue={f.copyValue}
+                    warning={f.warning}
+                    warningTone={f.warningTone}
+                  />
                 ))}
               </div>
             ) : (
@@ -310,28 +342,6 @@ export const SiweDialog = ({
             {hasError && (
               <div className="bg-destructive/10 border-destructive/20 rounded-[10.5px] border px-3 py-2">
                 <span className="text-destructive break-words text-xs">{siweStatus}</span>
-              </div>
-            )}
-
-            {/* Advisory: message account ≠ connected account. */}
-            {addressMismatch && (
-              <div className="border-destructive/30 bg-destructive/10 flex items-start gap-2 rounded-[10.5px] border p-3">
-                <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
-                <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">
-                  This request names a different account than the one you're connected with, so the signature won't be
-                  valid for it.
-                </p>
-              </div>
-            )}
-
-            {/* Advisory: weak nonce (< 8 chars) → weak replay protection. */}
-            {weakNonce && (
-              <div className="flex items-start gap-2 rounded-[10.5px] border border-amber-500/30 bg-amber-500/10 p-3">
-                <TriangleAlert className="mt-0.5 h-3.5 w-3.5 flex-none text-amber-500" strokeWidth={2} />
-                <p className="min-w-0 text-[11px] leading-[1.45] text-amber-600 dark:text-amber-500">
-                  This sign-in uses a short nonce ({parsed?.nonce.length} chars). EIP-4361 recommends at least 8 — a
-                  weak nonce means the site's replay protection is easy to bypass.
-                </p>
               </div>
             )}
 
