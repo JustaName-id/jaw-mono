@@ -55,7 +55,9 @@ function Field({
         {warning && (
           <Tooltip>
             <TooltipTrigger asChild>
-              <span tabIndex={0} aria-label={warning} className="flex-none cursor-help">
+              {/* Hover-only (no tabIndex): a focusable trigger would auto-open when the
+                  dialog moves focus in on mount. aria-label keeps the text for SRs. */}
+              <span aria-label={warning} className="flex-none cursor-help">
                 <TriangleAlert className="text-destructive size-3" strokeWidth={2} />
               </span>
             </TooltipTrigger>

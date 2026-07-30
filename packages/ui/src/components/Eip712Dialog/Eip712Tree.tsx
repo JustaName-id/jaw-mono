@@ -211,7 +211,8 @@ function LeafValue({ display, copyValue, tone }: { display?: string; copyValue?:
       {toneLabel && (
         <Tooltip>
           <TooltipTrigger asChild>
-            <span tabIndex={0} aria-label={toneLabel} className="flex-none cursor-help">
+            {/* Hover-only (no tabIndex) so it doesn't auto-open when a dialog focuses in. */}
+            <span aria-label={toneLabel} className="flex-none cursor-help">
               <TriangleAlert className={`size-3 ${toneClass}`} strokeWidth={2} />
             </span>
           </TooltipTrigger>
