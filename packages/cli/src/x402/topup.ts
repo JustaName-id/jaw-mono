@@ -182,11 +182,12 @@ export async function ensurePayerFunds(
       return {
         ok: false,
         reason: 'top-up transaction failed on-chain (spending cap reached, or permission expired/revoked)',
+        amount: amount.toString(),
         batchId,
       };
     }
     if (now() >= deadline) {
-      return { ok: false, reason: `top-up not confirmed after ${timeoutMs}ms`, batchId };
+      return { ok: false, reason: `top-up not confirmed after ${timeoutMs}ms`, amount: amount.toString(), batchId };
     }
     await sleep(pollMs);
   }

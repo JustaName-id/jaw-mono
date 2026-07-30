@@ -32,7 +32,9 @@ export function registerPayTool(server: McpServer): void {
     {
       description:
         'Fetch an HTTP resource, automatically paying an x402 `402` challenge with the local ' +
-        'session key when one appears (USDC via EIP-3009, no browser). Free resources pass ' +
+        'session key when one appears (USDC via EIP-3009, no browser). With an active session ' +
+        'permission, a short payer balance refills itself from the user’s account first, bounded ' +
+        'by the on-chain cap. Free resources pass ' +
         'straight through, so this also works as a plain fetch. Every payment is bounded by the ' +
         '`x402` policy in config (see jaw_config_show) and the optional `maxAmount` for this call; ' +
         'if no policy is configured, conservative default caps apply (1 USDC per payment, 10 USDC ' +

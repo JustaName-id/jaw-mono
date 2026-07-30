@@ -221,6 +221,9 @@ export async function payAndFetch(
         paid: false,
         payer: payer.address,
         refusedReason: funded.reason ?? 'payer funding failed',
+        // A refused funding may still have broadcast the transfer (e.g. a
+        // confirmation timeout) — keep the trace so it can be reconciled.
+        ...(funded.batchId ? { topUp: { amount: funded.amount, batchId: funded.batchId } } : {}),
       };
     }
     if (!funded.skipped) {

@@ -127,6 +127,24 @@ describe('payAndFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // never retried with a payment
   });
 
+  it('keeps the top-up trace when funding is refused after a broadcast (reconciliation)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      ensureFunds: async () => ({
+        ok: false,
+        reason: 'top-up not confirmed after 90000ms',
+        amount: '750000',
+        batchId: '0xbatch9',
+      }),
+    });
+
+    expect(result.paid).toBe(false);
+    expect(result.topUp).toEqual({ amount: '750000', batchId: '0xbatch9' });
+  });
+
   it('refuses to pay above the policy cap (no payment attempt)', async () => {
     fetchMock.mockResolvedValueOnce(
       mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
