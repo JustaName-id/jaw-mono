@@ -31,6 +31,7 @@ type TreeNode = {
   value?: string; // formatted, truncated value (leaves)
   tone?: DateTone; // warning state (leaves): expired → red, far/Unlimited/No-expiry → amber
   copyValue?: string; // full untruncated value to copy (address/bytes leaves)
+  note?: string; // hover-tooltip text explaining the tone (leaves)
   children?: TreeNode[];
 };
 
@@ -58,6 +59,9 @@ interface FormattedLeaf {
   tone?: DateTone;
   // Raw value to copy when `text` is a derived form (e.g. a date hiding its unix integer).
   copyValue?: string;
+  // Hover-tooltip text explaining the tone. Semantic per case (an Unlimited amount and a
+  // far-future date both use tone 'far' but must NOT share the same message).
+  note?: string;
 }
 
 export function formatValue(type: string, value: unknown, fieldName = ''): FormattedLeaf {
@@ -96,12 +100,22 @@ export function formatValue(type: string, value: unknown, fieldName = ''): Forma
 
     const mx = maxUintFor(type);
     if (mx !== null && big === mx) {
-      if (isTimestamp) return { text: 'No expiry', tone: 'far' };
-      if (isAmount) return { text: 'Unlimited', tone: 'far' };
+      if (isTimestamp) return { text: 'No expiry', tone: 'far', note: 'This value never expires.' };
+      if (isAmount) return { text: 'Unlimited', tone: 'far', note: 'Unlimited — the maximum possible value.' };
     }
     if (isTimestamp && isUnixTimestamp(big)) {
       const tone = dateTone(big);
-      return { text: formatUnixDate(big), tone: tone === 'normal' ? undefined : tone, copyValue: big.toString() };
+      return {
+        text: formatUnixDate(big),
+        tone: tone === 'normal' ? undefined : tone,
+        copyValue: big.toString(),
+        note:
+          tone === 'expired'
+            ? 'This date is in the past.'
+            : tone === 'far'
+              ? 'More than a year in the future.'
+              : undefined,
+      };
     }
 
     return { text: groupNumber(big.toString()) };
@@ -168,6 +182,7 @@ function buildNode(
     badge: type,
     value: formatted.text,
     tone: formatted.tone,
+    note: formatted.note,
     // Derived leaves (dates) carry their own raw copy value; else the truncation rule.
     copyValue: formatted.copyValue ?? (copyable ? raw : undefined),
   };
@@ -191,7 +206,17 @@ function Spines({ depth }: { depth: number }) {
 }
 
 /** Right-aligned leaf value with an optional copy button (address/bytes) and deadline tone. */
-function LeafValue({ display, copyValue, tone }: { display?: string; copyValue?: string; tone?: DateTone }) {
+function LeafValue({
+  display,
+  copyValue,
+  tone,
+  note,
+}: {
+  display?: string;
+  copyValue?: string;
+  tone?: DateTone;
+  note?: string;
+}) {
   const [copied, setCopied] = useState(false);
   const onCopy = () => {
     if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
@@ -204,19 +229,17 @@ function LeafValue({ display, copyValue, tone }: { display?: string; copyValue?:
       .catch(() => undefined);
   };
   const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
-  const toneLabel =
-    tone === 'expired' ? 'This date is in the past.' : tone === 'far' ? 'More than a year in the future.' : undefined;
   return (
     <span className="ml-auto flex min-w-0 items-center justify-end gap-1">
-      {toneLabel && (
+      {note && (
         <Tooltip>
           <TooltipTrigger asChild>
             {/* Hover-only (no tabIndex) so it doesn't auto-open when a dialog focuses in. */}
-            <span aria-label={toneLabel} className="flex-none cursor-help">
+            <span aria-label={note} className="flex-none cursor-help">
               <TriangleAlert className={`size-3 ${toneClass}`} strokeWidth={2} />
             </span>
           </TooltipTrigger>
-          <TooltipContent>{toneLabel}</TooltipContent>
+          <TooltipContent>{note}</TooltipContent>
         </Tooltip>
       )}
       <span className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${toneClass}`}>{display}</span>
@@ -313,7 +336,7 @@ export function Eip712Tree({ typedData }: { typedData: TypedData }) {
                     {r.badge}
                   </span>
                 )}
-                <LeafValue display={r.value} copyValue={r.copyValue} tone={r.tone} />
+                <LeafValue display={r.value} copyValue={r.copyValue} tone={r.tone} note={r.note} />
               </div>
             </div>
           );

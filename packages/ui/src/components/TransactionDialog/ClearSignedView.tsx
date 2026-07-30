@@ -7,6 +7,7 @@ import { TriangleAlert } from 'lucide-react';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { TokenIcon } from '../TokenIcon';
 import { CopyIcon, CopiedIcon } from '../../icons';
+import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 
 /** Small copy-to-clipboard button that copies the full address. */
 function CopyAddress({ value }: { value: string }) {
@@ -42,7 +43,14 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
   return (
     <div className="flex min-w-0 flex-row items-center justify-end gap-1.5">
       {unlimited ? (
-        <TriangleAlert className="size-3.5 flex-none text-amber-500" strokeWidth={2} />
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span aria-label="Unlimited — the maximum possible value." className="flex-none cursor-help">
+              <TriangleAlert className="size-3.5 text-amber-500" strokeWidth={2} />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>Unlimited — the maximum possible value.</TooltipContent>
+        </Tooltip>
       ) : (
         <TokenIcon
           chainId={chainId}
@@ -59,14 +67,25 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
   );
 }
 
-/** Deadline/expiry value: "1 Jan 2030", tinted + flagged when expired (past) or far-future. */
+/** Deadline/expiry value: "1 Jan 2030", tinted + a hover ⚠ when expired (past) or far-future. */
 function DateValue({ raw }: { raw: string }) {
   const tone = dateTone(raw);
   const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
+  const note =
+    tone === 'expired' ? 'This date is in the past.' : tone === 'far' ? 'More than a year in the future.' : undefined;
   return (
-    <span className={`break-all font-mono text-[11px] ${toneClass}`}>
+    <span className={`flex min-w-0 items-center justify-end gap-1.5 break-all font-mono text-[11px] ${toneClass}`}>
+      {note && (
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <span aria-label={note} className="flex-none cursor-help">
+              <TriangleAlert className={`size-3.5 ${toneClass}`} strokeWidth={2} />
+            </span>
+          </TooltipTrigger>
+          <TooltipContent>{note}</TooltipContent>
+        </Tooltip>
+      )}
       {formatUnixDate(raw)}
-      {tone === 'expired' && <span className="font-semibold"> · Expired</span>}
     </span>
   );
 }
