@@ -1,5 +1,6 @@
 import { type Config, type Connector, getConnectorClient, disconnect as wagmiDisconnect } from '@wagmi/core';
 import type { Address, Hex } from 'viem';
+import { numberToHex } from 'viem';
 import {
   type PermissionsDetail,
   type WalletGrantPermissionsResponse,
@@ -208,7 +209,9 @@ export async function getPermissions<config extends Config>(
 
   const result = await client.request({
     method: 'wallet_getPermissions' as never,
-    params: [{ address }] as never,
+    // The relay filters by chain when chainId travels in the params; without
+    // it the response spans every chain.
+    params: [{ address, ...(chainId !== undefined ? { chainId: numberToHex(chainId) } : {}) }] as never,
   });
 
   return result as getPermissions.ReturnType;
