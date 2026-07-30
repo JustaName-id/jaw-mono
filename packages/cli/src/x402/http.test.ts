@@ -229,3 +229,41 @@ describe('payAndFetch', () => {
     expect(result.payment?.amount).toBe('750'); // the cheaper option, not the first-listed
   });
 });
+describe('payAndFetch against a demo-server-shaped x402 endpoint', () => {
+  it('reads the price, refills via the hook, pays with the proof, and returns the resource + receipt', async () => {
+    const priced = { ...REQUIREMENT, amount: '10000' };
+    const challenge = b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts: [priced] });
+    const receipt = b64({ success: true, transaction: '0xfeed', network: priced.network, amount: '10000' });
+
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challenge }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({
+          status: 200,
+          headers: { 'PAYMENT-RESPONSE': receipt },
+          body: JSON.stringify({ email: 'agent@example.com' }),
+        })
+      );
+
+    let sawRequirementAmount: string | undefined;
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      ensureFunds: async (req) => {
+        sawRequirementAmount = req.amount; // the hook sees the real priced requirement
+        return { ok: true, amount: '2000000', batchId: '0xtop' };
+      },
+    });
+
+    // Funding ran before payment, for the advertised price.
+    expect(sawRequirementAmount).toBe('10000');
+    // The proof carried the exact advertised amount + payTo (server would accept it).
+    const retryInit = fetchMock.mock.calls[1][1] as { headers: Record<string, string> };
+    const proof = JSON.parse(Buffer.from(retryInit.headers['PAYMENT-SIGNATURE'], 'base64').toString());
+    expect(proof.accepted.amount).toBe('10000');
+    expect(proof.payload.authorization.to.toLowerCase()).toBe(priced.payTo.toLowerCase());
+    // Result surfaces the resource, receipt tx, and the top-up trace together.
+    expect(result.paid).toBe(true);
+    expect(result.body).toEqual({ email: 'agent@example.com' });
+    expect(result.payment?.txHash).toBe('0xfeed');
+    expect(result.topUp).toEqual({ amount: '2000000', batchId: '0xtop' });
+  });
+});
