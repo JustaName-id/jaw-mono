@@ -71,6 +71,7 @@ describe('SiweDialog — parent-owned success tick (blocker 1)', () => {
   // Error path: the tick must not appear before the parent confirms delivery.
   it('does NOT show the tick mid-delivery (isProcessing, isSuccess still false)', async () => {
     const html = await render(props({ isProcessing: true, isSuccess: false }));
+    expect(html).toContain('Signing in'); // the processing screen is up (guards against a trivial empty render)
     expect(html).not.toContain('Signed in');
   });
 
@@ -89,6 +90,8 @@ describe('SiweDialog — parse failure surfaced, not silent (blocker 3)', () => 
     );
   });
   it('does not show it for a well-formed SIWE message', async () => {
-    expect(await render(props({ message: VALID_SIWE }))).not.toContain("couldn't read the full sign-in request");
+    const html = await render(props({ message: VALID_SIWE }));
+    expect(html).toContain('Sign In'); // the review screen is up (guards against a trivial empty render)
+    expect(html).not.toContain("couldn't read the full sign-in request");
   });
 });
