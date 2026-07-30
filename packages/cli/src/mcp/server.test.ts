@@ -47,6 +47,12 @@ vi.mock('../lib/session-bridge.js', () => ({
   },
 }));
 
+const usdcBalanceMock = vi.fn();
+vi.mock('../x402/balance.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('../x402/balance.js')>();
+  return { ...actual, usdcBalance: (...args: unknown[]) => usdcBalanceMock(...args) };
+});
+
 const { createMcpServer } = await import('./server.js');
 const { saveConfig } = await import('../lib/config.js');
 const { PATHS } = await import('../lib/paths.js');
@@ -286,6 +292,52 @@ describe('jaw_pay_and_fetch', () => {
   const RECEIPT = Buffer.from(JSON.stringify({ success: true, transaction: '0xtx' })).toString('base64');
   const mkRes = (status: number, hdrs: Record<string, string>, body: string) =>
     ({ status, headers: { get: (k: string) => hdrs[k] ?? null }, text: async () => body }) as unknown as Response;
+
+  it('tops up the payer through the session permission when the balance is short, then pays', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    const { saveSessionConfig } = await import('../lib/session-config.js');
+    saveKeystore(PK, '0xSmartAccount');
+    saveConfig({ apiKey: 'test-key' });
+    saveSessionConfig({
+      ownerAddress: '0xOwner',
+      sessionAddress: '0xSmartAccount',
+      permissionId: '0xperm1',
+      chainId: 84532,
+      expiry: Math.floor(Date.now() / 1000) + 3600,
+    });
+
+    // Empty payer -> the funder must refill through the permission first.
+    usdcBalanceMock.mockResolvedValue({ network: 'eip155:84532', asset: '0x036CbD53842c5426634e7929541eC2318f3dCF7e', raw: '0', formatted: '0' });
+    sessionRequestMock.mockImplementation(async (method: string) => {
+      if (method === 'wallet_sendCalls') return { id: '0xtopupbatch', chainId: 84532 };
+      if (method === 'wallet_getCallsStatus') return { status: 200 };
+      throw new Error(`unexpected ${method}`);
+    });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}'))
+      .mockResolvedValueOnce(mkRes(200, { 'PAYMENT-RESPONSE': RECEIPT }, JSON.stringify({ data: 'ok' })));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      const parsed = JSON.parse(
+        toolText(
+          await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/paid' } })
+        )
+      );
+
+      expect(parsed.paid).toBe(true);
+      expect(parsed.topUp).toEqual({ amount: '1000', batchId: '0xtopupbatch' });
+      // The transfer went through the session bridge with the granted permission.
+      const send = sessionRequestMock.mock.calls.find((c) => c[0] === 'wallet_sendCalls');
+      expect(send).toBeTruthy();
+    } finally {
+      vi.unstubAllGlobals();
+      sessionRequestMock.mockReset();
+      usdcBalanceMock.mockReset();
+    }
+  });
 
   it('pays a 402 with the real session-key payer and returns a receipt', async () => {
     const { saveKeystore } = await import('../lib/keystore.js');
