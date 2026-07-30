@@ -165,10 +165,18 @@ export async function ensurePayerFunds(
     }
     batchId = id;
   } catch (err) {
-    // The permission is the security boundary: an execution revert here is,
-    // in practice, the on-chain cap or an expired/revoked permission saying no.
+    // The permission is the security boundary: a revert here means it said no.
+    // The two common causes read very differently to a user, so hint at both:
+    // the granted permission must both allow a USDC transfer to the payer
+    // (calls whitelist) and have budget left (spend allowance).
     const msg = err instanceof Error ? err.message : String(err);
-    return { ok: false, reason: `top-up refused on-chain: ${msg}` };
+    return {
+      ok: false,
+      reason:
+        `top-up refused on-chain (${msg}). The session permission must allow a USDC ` +
+        `transfer to the payer and still have spend allowance this period; check the grant ` +
+        `from \`jaw session setup\` or the remaining cap.`,
+    };
   }
 
   const now = opts.now ?? Date.now;
