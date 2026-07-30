@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { checkPolicy, resolveX402Policy, DEFAULT_X402_POLICY } from './policy.js';
+import { checkPolicy, resolveX402Policy, DEFAULT_X402_POLICY, isX402PolicyKey, X402_SCALAR_KEYS } from './policy.js';
 import type { X402PaymentRequirement } from './types.js';
 
 const base: X402PaymentRequirement = {
@@ -78,3 +78,10 @@ describe('resolveX402Policy', () => {
     expect(policy.maxTotalPerSession).toBe(DEFAULT_X402_POLICY.maxTotalPerSession);
   });
 });
+describe('topUpFloat as a settable policy key', () => {
+  it('Given topUpFloat, When validated as a config key, Then it is accepted as a scalar', () => {
+    expect(isX402PolicyKey('topUpFloat')).toBe(true);
+    expect((X402_SCALAR_KEYS as readonly string[]).includes('topUpFloat')).toBe(true);
+  });
+});
+

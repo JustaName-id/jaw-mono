@@ -44,7 +44,7 @@ export function resolveX402Policy(configPolicy?: X402Policy): X402Policy {
 }
 
 /** Policy keys settable from the CLI, split by value shape. */
-export const X402_SCALAR_KEYS = ['maxAmountPerPayment', 'maxTotalPerSession'] as const;
+export const X402_SCALAR_KEYS = ['maxAmountPerPayment', 'maxTotalPerSession', 'topUpFloat'] as const;
 export const X402_ARRAY_KEYS = ['allowedAssets', 'allowedNetworks', 'allowedHosts', 'allowedPayTo'] as const;
 export type X402PolicyKey = (typeof X402_SCALAR_KEYS)[number] | (typeof X402_ARRAY_KEYS)[number];
 
