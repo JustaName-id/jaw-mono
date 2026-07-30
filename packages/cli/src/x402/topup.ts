@@ -142,9 +142,16 @@ export async function ensurePayerFunds(
 
   let batchId: string;
   try {
-    batchId = (await executor.request('wallet_sendCalls', [
+    // Account.sendCalls resolves to `{ id, chainId }` (EIP-5792 shape); accept
+    // a bare string too so the funder doesn't couple to one bridge version.
+    const sent = await executor.request('wallet_sendCalls', [
       { calls: [{ to: asset.address, data }] },
-    ])) as string;
+    ]);
+    const id = typeof sent === 'string' ? sent : (sent as { id?: string } | null)?.id;
+    if (!id) {
+      return { ok: false, reason: 'top-up submitted but no call id returned; cannot confirm it' };
+    }
+    batchId = id;
   } catch (err) {
     // The permission is the security boundary: an execution revert here is,
     // in practice, the on-chain cap or an expired/revoked permission saying no.

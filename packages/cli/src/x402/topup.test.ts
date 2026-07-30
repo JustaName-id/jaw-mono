@@ -25,7 +25,8 @@ function fakeExecutor(overrides?: {
     async request(method, params) {
       requests.push({ method, params });
       if (method === 'wallet_sendCalls') {
-        return overrides?.sendCalls ? overrides.sendCalls(params) : '0xbatch1';
+        // Real bridge shape: Account.sendCalls resolves to { id, chainId }.
+        return overrides?.sendCalls ? overrides.sendCalls(params) : { id: '0xbatch1', chainId: 84532 };
       }
       if (method === 'wallet_getCallsStatus') {
         return overrides?.status ? overrides.status() : { status: 200 };
@@ -128,6 +129,30 @@ describe('ensurePayerFunds', () => {
     expect(out.ok).toBe(false);
     expect(out.reason).toContain('not confirmed after');
     expect(out.batchId).toBe('0xbatch1');
+  });
+
+  test('Given a bridge that returns a bare string id, When topping up, Then it still confirms (shape tolerance)', async () => {
+    const { executor } = fakeExecutor({ sendCalls: async () => '0xbatch2' });
+
+    const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
+      balanceReader: async () => 0n,
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(true);
+    expect(out.batchId).toBe('0xbatch2');
+  });
+
+  test('Given a bridge that returns no call id, When topping up, Then it refuses because the transfer cannot be confirmed', async () => {
+    const { executor } = fakeExecutor({ sendCalls: async () => ({ chainId: 84532 }) });
+
+    const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
+      balanceReader: async () => 0n,
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.reason).toContain('no call id');
   });
 
   test('Given the payment network differs from the session chain, When ensuring funds, Then it refuses instead of transferring on the wrong chain', async () => {
