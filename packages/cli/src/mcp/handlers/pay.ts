@@ -22,6 +22,16 @@ interface PayAndFetchParams {
   network?: string;
 }
 
+function safeBigInt(value: string | undefined): bigint | undefined {
+  if (!value) return undefined;
+  try {
+    const n = BigInt(value);
+    return n >= 0n ? n : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export function registerPayTool(server: McpServer): void {
   // Cumulative spend for this process, enforced against the policy's
   // maxTotalPerSession so an agent cannot chain many small payments past the cap.
@@ -59,10 +69,14 @@ export function registerPayTool(server: McpServer): void {
         if (sessionConfigExists() && config.apiKey) {
           const session = loadSessionConfig();
           const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
-          const floatTarget = config.x402?.topUpFloat ? BigInt(config.x402.topUpFloat) : undefined;
+          // Defensive: a hand-edited, non-numeric amount must degrade to "no
+          // float / no bound", never throw and take down every payment.
+          const floatTarget = safeBigInt(config.x402?.topUpFloat);
+          const maxTopUp = safeBigInt(config.x402?.maxTotalPerSession);
           ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
             ensurePayerFunds(requirement, payerAddress, bridge, {
               floatTarget,
+              maxTopUp,
               sessionChainId: session.chainId,
             });
         }

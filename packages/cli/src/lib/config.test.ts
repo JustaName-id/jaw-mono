@@ -113,6 +113,12 @@ describe('setX402PolicyValue', () => {
     expect(() => BigInt(stored as string)).not.toThrow();
   });
 
+  it('rejects a non-numeric scalar amount instead of storing a footgun', () => {
+    expect(() => setX402PolicyValue('topUpFloat', 'abc')).toThrow(/non-negative integer/);
+    expect(() => setX402PolicyValue('maxAmountPerPayment', '-5')).toThrow(/non-negative integer/);
+    expect(loadConfig().x402?.topUpFloat).toBeUndefined();
+  });
+
   it('comma-splits an allow-list field', () => {
     setX402PolicyValue('allowedNetworks', 'eip155:8453, eip155:84532');
     expect(loadConfig().x402?.allowedNetworks).toEqual(['eip155:8453', 'eip155:84532']);

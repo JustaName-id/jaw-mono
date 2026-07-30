@@ -85,6 +85,34 @@ describe('ensurePayerFunds', () => {
     expect(out.amount).toBe('5000000');
   });
 
+  test('Given a float target above the session cap, When topping up, Then the refill is clamped to the session cap (blast-radius bound)', async () => {
+    const { executor } = fakeExecutor();
+
+    const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
+      balanceReader: async () => 0n,
+      floatTarget: 100_000_000n, // 100 USDC float requested
+      maxTopUp: 10_000_000n, // but the session can only ever spend 10 USDC
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(true);
+    expect(out.amount).toBe('10000000'); // clamped to the session cap, not the float
+  });
+
+  test('Given a session cap below the price is impossible in practice, When shortfall exceeds maxTopUp, Then the shortfall is still covered (payment already cleared policy)', async () => {
+    const { executor } = fakeExecutor();
+
+    const out = await ensurePayerFunds(requirement('5000000'), PAYER, executor, {
+      balanceReader: async () => 0n,
+      maxTopUp: 1_000_000n, // pathological: below the price
+      ...instantly,
+    });
+
+    // The clamp must never starve the actual payment.
+    expect(out.ok).toBe(true);
+    expect(out.amount).toBe('5000000');
+  });
+
   test('Given the on-chain cap rejects the transfer, When topping up, Then it refuses with the on-chain reason and no payment proceeds', async () => {
     const { executor } = fakeExecutor({
       sendCalls: async () => {

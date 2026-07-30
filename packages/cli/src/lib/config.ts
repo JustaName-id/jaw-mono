@@ -81,7 +81,13 @@ export function setX402PolicyValue(key: X402PolicyKey, value: string): void {
   const config = loadConfig();
   const x402: X402Policy = { ...(config.x402 ?? {}) };
   if (key === 'maxAmountPerPayment' || key === 'maxTotalPerSession' || key === 'topUpFloat') {
-    x402[key] = value;
+    // These are base-unit amounts read via BigInt() on the hot payment path;
+    // reject anything that isn't a non-negative integer here so a bad value
+    // can never turn into a per-payment failure later.
+    if (!/^\d+$/.test(value.trim())) {
+      throw new Error(`${key} must be a non-negative integer (base units), got: ${value}`);
+    }
+    x402[key] = value.trim();
   } else {
     x402[key] = value
       .split(',')
