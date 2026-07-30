@@ -84,4 +84,3 @@ describe('topUpFloat as a settable policy key', () => {
     expect((X402_SCALAR_KEYS as readonly string[]).includes('topUpFloat')).toBe(true);
   });
 });
-

@@ -144,9 +144,7 @@ export async function ensurePayerFunds(
   try {
     // Account.sendCalls resolves to `{ id, chainId }` (EIP-5792 shape); accept
     // a bare string too so the funder doesn't couple to one bridge version.
-    const sent = await executor.request('wallet_sendCalls', [
-      { calls: [{ to: asset.address, data }] },
-    ]);
+    const sent = await executor.request('wallet_sendCalls', [{ calls: [{ to: asset.address, data }] }]);
     const id = typeof sent === 'string' ? sent : (sent as { id?: string } | null)?.id;
     if (!id) {
       return { ok: false, reason: 'top-up submitted but no call id returned; cannot confirm it' };
