@@ -59,7 +59,10 @@ export function registerPayTool(server: McpServer): void {
           const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
           const floatTarget = config.x402?.topUpFloat ? BigInt(config.x402.topUpFloat) : undefined;
           ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
-            ensurePayerFunds(requirement, payerAddress, bridge, { floatTarget });
+            ensurePayerFunds(requirement, payerAddress, bridge, {
+              floatTarget,
+              sessionChainId: session.chainId,
+            });
         }
 
         const result = await payAndFetch(params.url, payer, {

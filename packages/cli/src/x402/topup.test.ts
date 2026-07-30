@@ -130,6 +130,35 @@ describe('ensurePayerFunds', () => {
     expect(out.batchId).toBe('0xbatch1');
   });
 
+  test('Given the payment network differs from the session chain, When ensuring funds, Then it refuses instead of transferring on the wrong chain', async () => {
+    const { executor, requests } = fakeExecutor();
+
+    const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
+      balanceReader: async () => 0n,
+      sessionChainId: 8453,
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(false);
+    expect(out.reason).toContain('session is on chain 8453');
+    expect(out.reason).toContain('needs chain 84532');
+    expect(requests).toHaveLength(0);
+  });
+
+  test('Given a requirement for a non-USDC asset, When ensuring funds, Then it defers to scheme validation instead of funding the wrong token', async () => {
+    const { executor, requests } = fakeExecutor();
+
+    const out = await ensurePayerFunds(
+      { ...requirement(), asset: '0x9999999999999999999999999999999999999999' } as X402PaymentRequirement,
+      PAYER,
+      executor,
+      { balanceReader: async () => 0n, ...instantly }
+    );
+
+    expect(out).toEqual({ ok: true, skipped: true });
+    expect(requests).toHaveLength(0);
+  });
+
   test('Given an unsupported network, When ensuring funds, Then it defers to the scheme validation (no-op)', async () => {
     const { executor, requests } = fakeExecutor();
 

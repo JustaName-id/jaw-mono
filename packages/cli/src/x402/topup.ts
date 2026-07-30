@@ -22,6 +22,13 @@ export interface TopUpExecutor {
 
 export interface TopUpOptions {
   /**
+   * The chain the session (and its permission) lives on. When set, a payment
+   * on any other chain refuses to top up instead of executing a transfer on
+   * the wrong chain — an ERC-20 call to an address with no code there would
+   * "succeed" without moving anything.
+   */
+  sessionChainId?: number;
+  /**
    * Refill target in base units. When set, a needed top-up brings the payer
    * balance up to this float (fewer on-chain hops for bursts of payments);
    * when unset, the top-up is exactly the shortfall (minimum idle funds).
@@ -90,6 +97,21 @@ export async function ensurePayerFunds(
   if (!asset) {
     // Unsupported networks are the scheme validator's problem, not the funder's.
     return { ok: true, skipped: true };
+  }
+
+  if (requirement.asset && requirement.asset.toLowerCase() !== asset.address.toLowerCase()) {
+    // The requirement wants a token we don't know how to fund; let the scheme
+    // validation refuse it rather than topping up the wrong asset.
+    return { ok: true, skipped: true };
+  }
+
+  if (opts.sessionChainId !== undefined && opts.sessionChainId !== asset.chainId) {
+    return {
+      ok: false,
+      reason:
+        `session is on chain ${opts.sessionChainId} but the payment needs chain ${asset.chainId}; ` +
+        `run \`jaw session setup --chain ${asset.chainId}\` to pay on this network`,
+    };
   }
 
   let price: bigint;
