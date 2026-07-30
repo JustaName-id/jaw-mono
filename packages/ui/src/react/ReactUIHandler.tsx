@@ -444,6 +444,8 @@ export class ReactUIHandler implements UIHandler {
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
               paymasters={this.config.paymasters}
+              appName={this.config.appName}
+              appLogoUrl={this.config.appLogoUrl}
             />
           );
         } else if (signType === '0x01') {
