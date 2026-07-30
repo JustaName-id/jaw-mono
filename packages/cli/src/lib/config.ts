@@ -80,7 +80,7 @@ export function redactConfig(config: JawConfig): Record<string, unknown> {
 export function setX402PolicyValue(key: X402PolicyKey, value: string): void {
   const config = loadConfig();
   const x402: X402Policy = { ...(config.x402 ?? {}) };
-  if (key === 'maxAmountPerPayment' || key === 'maxTotalPerSession') {
+  if (key === 'maxAmountPerPayment' || key === 'maxTotalPerSession' || key === 'topUpFloat') {
     x402[key] = value;
   } else {
     x402[key] = value

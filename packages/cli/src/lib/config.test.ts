@@ -105,6 +105,14 @@ describe('setX402PolicyValue', () => {
     expect(loadConfig().x402).toEqual({ maxAmountPerPayment: '50000', maxTotalPerSession: '1000000' });
   });
 
+  it('stores topUpFloat as a scalar string, not an array (BigInt-safe at read time)', () => {
+    setX402PolicyValue('topUpFloat', '2000000');
+    const stored = loadConfig().x402?.topUpFloat;
+    expect(stored).toBe('2000000');
+    // Regression guard: the funder does BigInt(topUpFloat); an array would throw.
+    expect(() => BigInt(stored as string)).not.toThrow();
+  });
+
   it('comma-splits an allow-list field', () => {
     setX402PolicyValue('allowedNetworks', 'eip155:8453, eip155:84532');
     expect(loadConfig().x402?.allowedNetworks).toEqual(['eip155:8453', 'eip155:84532']);
