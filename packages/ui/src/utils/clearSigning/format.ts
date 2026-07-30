@@ -237,11 +237,12 @@ async function formatField(
       // Token denomination unknown (decimals/symbol read failed or token addr missing).
       // Render the raw wei as kind='raw' with no symbol — never pretend we know the unit, since
       // a malicious token could revert decimals() and have the wallet display "1e18" as a tidy
-      // "amount" with a token-icon styling.
+      // "amount" with a token-icon styling. Exception: a max-uint "Unlimited" has no unit to
+      // fake, so keep kind='tokenAmount' — it earns the amber warning treatment in the UI.
       return {
         label,
         value: unlimited ? 'Unlimited' : amount !== null ? amount.toString() : asString(value),
-        kind: 'raw',
+        kind: unlimited ? 'tokenAmount' : 'raw',
         rawValue: amount?.toString(),
       };
     }

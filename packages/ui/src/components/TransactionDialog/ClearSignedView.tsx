@@ -43,14 +43,7 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
   return (
     <div className="flex min-w-0 flex-row items-center justify-end gap-1.5">
       {unlimited ? (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <span aria-label="Unlimited — the maximum possible value." className="flex-none cursor-help">
-              <TriangleAlert className="size-3.5 text-amber-500" strokeWidth={2} />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>Unlimited — the maximum possible value.</TooltipContent>
-        </Tooltip>
+        <TriangleAlert className="size-3.5 flex-none text-amber-500" strokeWidth={2} />
       ) : (
         <TokenIcon
           chainId={chainId}

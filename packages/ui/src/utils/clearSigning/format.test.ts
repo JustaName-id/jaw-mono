@@ -63,15 +63,18 @@ describe('applyFormat — max-uint tokenAmount renders "Unlimited"', () => {
     if (!out) throw new Error('expected a clear-signing display');
     expect(out.rows[0].value).toBe('Unlimited');
     expect(out.rows[0].symbol).toBe('USDC');
+    expect(out.rows[0].kind).toBe('tokenAmount');
   });
 
-  it('shows "Unlimited" for a Permit2 uint160-max even when no token resolves (raw path)', async () => {
+  it('shows "Unlimited" (kind tokenAmount, so it keeps the warning treatment) even when no token resolves', async () => {
     const descriptor = { context: {}, metadata: { owner: 'x' } } as any;
     const format = { fields: [amountField] } as any;
 
     const out = await applyFormat(descriptor, format, { ...baseCtx(), args: { value: MAX_U160 } } as any);
     if (!out) throw new Error('expected a clear-signing display');
     expect(out.rows[0].value).toBe('Unlimited');
+    // Not demoted to 'raw' — otherwise the UI renders plain white text with no amber ⚠.
+    expect(out.rows[0].kind).toBe('tokenAmount');
   });
 });
 

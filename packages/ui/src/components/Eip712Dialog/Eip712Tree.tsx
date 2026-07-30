@@ -100,8 +100,9 @@ export function formatValue(type: string, value: unknown, fieldName = ''): Forma
 
     const mx = maxUintFor(type);
     if (mx !== null && big === mx) {
-      if (isTimestamp) return { text: 'No expiry', tone: 'far', note: 'This value never expires.' };
-      if (isAmount) return { text: 'Unlimited', tone: 'far', note: 'Unlimited — the maximum possible value.' };
+      // "No expiry" / "Unlimited" are self-explanatory — amber icon only, no redundant note.
+      if (isTimestamp) return { text: 'No expiry', tone: 'far' };
+      if (isAmount) return { text: 'Unlimited', tone: 'far' };
     }
     if (isTimestamp && isUnixTimestamp(big)) {
       const tone = dateTone(big);
@@ -229,19 +230,25 @@ function LeafValue({
       .catch(() => undefined);
   };
   const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
+  const showIcon = tone === 'expired' || tone === 'far';
   return (
     <span className="ml-auto flex min-w-0 items-center justify-end gap-1">
-      {note && (
-        <Tooltip>
-          <TooltipTrigger asChild>
-            {/* Hover-only (no tabIndex) so it doesn't auto-open when a dialog focuses in. */}
-            <span aria-label={note} className="flex-none cursor-help">
-              <TriangleAlert className={`size-3 ${toneClass}`} strokeWidth={2} />
-            </span>
-          </TooltipTrigger>
-          <TooltipContent>{note}</TooltipContent>
-        </Tooltip>
-      )}
+      {showIcon &&
+        (note ? (
+          // Icon reveals the note on hover (dates: why it's flagged).
+          <Tooltip>
+            <TooltipTrigger asChild>
+              {/* Hover-only (no tabIndex) so it doesn't auto-open when a dialog focuses in. */}
+              <span aria-label={note} className="flex-none cursor-help">
+                <TriangleAlert className={`size-3 ${toneClass}`} strokeWidth={2} />
+              </span>
+            </TooltipTrigger>
+            <TooltipContent>{note}</TooltipContent>
+          </Tooltip>
+        ) : (
+          // Self-explanatory (Unlimited / No expiry) — icon only, no note.
+          <TriangleAlert className={`size-3 flex-none ${toneClass}`} strokeWidth={2} />
+        ))}
       <span className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${toneClass}`}>{display}</span>
       {copyValue &&
         (copied ? (
