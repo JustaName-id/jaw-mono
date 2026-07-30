@@ -1,3 +1,17 @@
+## 1.0.13 (2026-07-30)
+
+### 🩹 Fixes
+
+- **wagmi,core:** forward the chainId param in wallet_getPermissions ([#253](https://github.com/JustaName-id/jaw-mono/pull/253))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.1.2
+
+### ❤️ Thank You
+
+- Mariano Aguero @mariano-aguero
+
 ## 1.0.12 (2026-07-28)
 
 ### 🧱 Updated Dependencies
