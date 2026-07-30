@@ -61,6 +61,11 @@ export interface PayAndFetchResult {
    * carries the nonce/amount to reconcile against — never assume no money moved.
    */
   attemptedPayment?: PaymentDetails;
+  /**
+   * Present when the payer was refilled from the user's account through the
+   * on-chain permission before this payment. User funds moved: always surfaced.
+   */
+  topUp?: { amount?: string; batchId?: string };
   /** Set when a `402` could not (or should not) be paid. */
   refusedReason?: string;
 }
@@ -260,6 +265,7 @@ export async function payAndFetch(
       // The payment was signed and sent; surface it so an ambiguous settlement
       // (facilitator may have broadcast) can be reconciled by nonce.
       attemptedPayment: details,
+      topUp,
       refusedReason: receipt?.errorReason ?? reChallenge?.error ?? `settlement failed with status ${paid.status}`,
     };
   }
@@ -268,6 +274,7 @@ export async function payAndFetch(
     status: paid.status,
     body,
     paid: true,
+    topUp,
     payer: payer.address,
     payment: { ...details, txHash: receipt?.transaction },
   };

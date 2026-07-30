@@ -21,6 +21,10 @@ export interface X402LogEntry {
   payTo?: string;
   nonce?: string;
   txHash?: string;
+  /** Base units refilled into the payer through the permission, when a top-up ran. */
+  topUpAmount?: string;
+  /** wallet_sendCalls id of that top-up, for on-chain reconciliation. */
+  topUpBatchId?: string;
   /** Reason for a refused/failed attempt. */
   reason?: string;
 }

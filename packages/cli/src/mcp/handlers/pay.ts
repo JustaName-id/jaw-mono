@@ -101,6 +101,8 @@ export function registerPayTool(server: McpServer): void {
             payTo: settled?.payTo,
             nonce: settled?.nonce,
             txHash: result.payment?.txHash,
+            topUpAmount: result.topUp?.amount,
+            topUpBatchId: result.topUp?.batchId,
             reason: result.refusedReason,
           });
         }
@@ -135,9 +137,11 @@ export function registerPayTool(server: McpServer): void {
     'jaw_x402_balance',
     {
       description:
-        'Read the session payer EOA’s USDC balance on a network, so you can tell whether a payment ' +
-        'is affordable before calling jaw_pay_and_fetch, or confirm one landed after. Defaults to the ' +
-        'first allowed network in the x402 config, else Base. Requires a session (jaw session setup).',
+        'Read the session payer EOA’s USDC balance on a network. This is the payment float, not the ' +
+        'budget: with an active session permission a shortfall refills itself from the user’s account ' +
+        'on payment (bounded by the on-chain cap), so a low balance does not mean a payment will ' +
+        'fail. Useful to confirm a settlement or top-up landed. Defaults to the first allowed ' +
+        'network in the x402 config, else Base. Requires a session (jaw session setup).',
       inputSchema: x402BalanceSchema,
       annotations: { readOnlyHint: true },
     },

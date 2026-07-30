@@ -98,6 +98,35 @@ describe('payAndFetch', () => {
     expect(retryInit.headers['Idempotency-Key']).toBeTruthy();
   });
 
+  it('runs the funding hook before paying and surfaces the top-up in the result', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      ensureFunds: async () => ({ ok: true, amount: '750000', batchId: '0xbatch1' }),
+    });
+
+    expect(result.paid).toBe(true);
+    expect(result.topUp).toEqual({ amount: '750000', batchId: '0xbatch1' });
+  });
+
+  it('refuses with the funding reason when the hook cannot cover the price, without signing anything', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      ensureFunds: async () => ({ ok: false, reason: 'spending cap reached' }),
+    });
+
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toBe('spending cap reached');
+    expect(fetchMock).toHaveBeenCalledTimes(1); // never retried with a payment
+  });
+
   it('refuses to pay above the policy cap (no payment attempt)', async () => {
     fetchMock.mockResolvedValueOnce(
       mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
