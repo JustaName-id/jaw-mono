@@ -51,6 +51,30 @@ describe('applyFormat — verifyingContract token fallback (P2#7 opt-in gate)', 
   });
 });
 
+describe('applyFormat — max-uint tokenAmount renders "Unlimited"', () => {
+  const MAX_U256 = (2n ** 256n - 1n).toString();
+  const MAX_U160 = (2n ** 160n - 1n).toString();
+
+  it('shows "Unlimited" (with symbol) instead of a 78-digit number when the token resolves', async () => {
+    const descriptor = { context: {}, metadata: { token: { ticker: 'USDC', decimals: 6 } } } as any;
+    const format = { fields: [amountField] } as any;
+
+    const out = await applyFormat(descriptor, format, { ...baseCtx(), args: { value: MAX_U256 } } as any);
+    if (!out) throw new Error('expected a clear-signing display');
+    expect(out.rows[0].value).toBe('Unlimited');
+    expect(out.rows[0].symbol).toBe('USDC');
+  });
+
+  it('shows "Unlimited" for a Permit2 uint160-max even when no token resolves (raw path)', async () => {
+    const descriptor = { context: {}, metadata: { owner: 'x' } } as any;
+    const format = { fields: [amountField] } as any;
+
+    const out = await applyFormat(descriptor, format, { ...baseCtx(), args: { value: MAX_U160 } } as any);
+    if (!out) throw new Error('expected a clear-signing display');
+    expect(out.rows[0].value).toBe('Unlimited');
+  });
+});
+
 describe('applyFormat — MappingFailure', () => {
   it('renders a scalar field into a row (positive: no failure)', async () => {
     const descriptor = { context: {} } as any;

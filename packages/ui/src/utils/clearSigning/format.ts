@@ -22,6 +22,7 @@
 import { createPublicClient, formatUnits, http, isAddress, parseAbiItem } from 'viem';
 import { JAW_RPC_URL, SUPPORTED_CHAINS } from '@jaw.id/core';
 import { resolvePath } from './path';
+import { isUnlimitedAmount } from '../displayFormat';
 import type {
   ClearSigningDisplay,
   Descriptor,
@@ -182,6 +183,9 @@ async function formatField(
 
     case 'tokenAmount': {
       const amount = toBigInt(value);
+      // A max-uint approval (uint256/uint160 max) is "unlimited" — render it that way here
+      // too, not as a raw 78-digit number (the raw tree already does this).
+      const unlimited = amount !== null && isUnlimitedAmount(amount);
       let tokenAddr: string | undefined;
       if (field.params?.tokenPath) {
         const tokenVal = resolvePath(field.params.tokenPath, ctx);
@@ -189,7 +193,11 @@ async function formatField(
       }
 
       if (isNativeSentinel(tokenAddr) || (!tokenAddr && field.params?.nativeCurrencyAddress)) {
-        const formatted = amount !== null ? formatUnits(amount, ctx.nativeDecimals ?? 18) : asString(value);
+        const formatted = unlimited
+          ? 'Unlimited'
+          : amount !== null
+            ? formatUnits(amount, ctx.nativeDecimals ?? 18)
+            : asString(value);
         return {
           label,
           value: formatted,
@@ -218,7 +226,7 @@ async function formatField(
       if (info && amount !== null) {
         return {
           label,
-          value: formatUnits(amount, info.decimals),
+          value: unlimited ? 'Unlimited' : formatUnits(amount, info.decimals),
           kind: 'tokenAmount',
           symbol: info.symbol,
           rawValue: amount.toString(),
@@ -232,7 +240,7 @@ async function formatField(
       // "amount" with a token-icon styling.
       return {
         label,
-        value: amount !== null ? amount.toString() : asString(value),
+        value: unlimited ? 'Unlimited' : amount !== null ? amount.toString() : asString(value),
         kind: 'raw',
         rawValue: amount?.toString(),
       };
