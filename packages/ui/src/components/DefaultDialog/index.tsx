@@ -36,6 +36,7 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
 
       <DialogContent
         fullScreen={fullScreen}
+        className="jaw-scroll"
         onInteractOutside={(e) => {
           // Only stop propagation for click/pointer events, NOT wheel events
           // This allows scrolling to work inside the dialog
@@ -70,7 +71,7 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
 
         <div
           onWheel={(e) => e.nativeEvent.stopPropagation()}
-          className={`flex p-2.5 ${fullScreen ? 'rounded-none' : 'rounded-3xl'} box-border flex-1 flex-col gap-5 overflow-auto md:max-h-[calc(100%-45px)]`}
+          className={`jaw-scroll flex p-2.5 ${fullScreen ? 'rounded-none' : 'rounded-3xl'} box-border flex-1 flex-col gap-5 overflow-auto md:max-h-[calc(100%-45px)]`}
           style={{
             ...innerStyle,
           }}

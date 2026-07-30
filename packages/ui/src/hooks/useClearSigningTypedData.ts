@@ -5,6 +5,7 @@ import {
   getDefaultDescriptorSource,
   getNativeDecimals,
   getNativeSymbol,
+  normalizeChainId,
   resolveEip712Descriptor,
   type ClearSigningDisplay,
 } from '../utils/clearSigning';
@@ -58,6 +59,11 @@ export function useClearSigningTypedData(
       return;
     }
 
+    // A typed-data signature is bound to the chain in its own `domain`, not to whatever
+    // chain the wallet happens to be connected to. Resolve the descriptor (and read token
+    // metadata) against the domain's chainId; fall back to the connected chain when absent.
+    const effectiveChainId = normalizeChainId(parsed.domain?.chainId) ?? chainId;
+
     let cancelled = false;
     setIsLoading(true);
 
@@ -65,7 +71,7 @@ export function useClearSigningTypedData(
       try {
         const match = await resolveEip712Descriptor(
           getDefaultDescriptorSource(),
-          chainId,
+          effectiveChainId,
           verifyingContract,
           primaryType,
           parsed.types,
@@ -84,11 +90,11 @@ export function useClearSigningTypedData(
           // verifyingContract, numeric chainId) win when a dApp ships a differently-cased
           // address or a hex chainId. Renderer reads from this; we don't want descriptor
           // rows to surface dApp-controlled spelling.
-          tx: { ...parsed.domain, chainId, verifyingContract: verifyingContract.toLowerCase() },
-          chainId,
-          nativeSymbol: getNativeSymbol(chainId),
-          nativeDecimals: getNativeDecimals(chainId),
-          resolveToken: createTokenResolver(chainId, apiKey),
+          tx: { ...parsed.domain, chainId: effectiveChainId, verifyingContract: verifyingContract.toLowerCase() },
+          chainId: effectiveChainId,
+          nativeSymbol: getNativeSymbol(effectiveChainId),
+          nativeDecimals: getNativeDecimals(effectiveChainId),
+          resolveToken: createTokenResolver(effectiveChainId, apiKey),
         });
 
         if (!cancelled) {

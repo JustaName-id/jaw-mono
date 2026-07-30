@@ -57,12 +57,16 @@ import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
-import { getSiweOriginWarning, isSiweMessage, hexToUtf8 } from '../utils/siwe';
+import { getSiweOriginWarning, isSiweMessage, parseSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
 import type { JawTheme } from '@jaw.id/core';
 import { resolveTheme } from '../theme/resolve-theme.js';
 import { applyThemeToContainer } from '../theme/apply-theme.js';
 import { getSystemColorScheme, useColorScheme } from '../theme/use-color-scheme.js';
+
+// How long signing dialogs hold the "Signed ✓" tick after delivery (dApp promise is
+// already resolved by then — see handleApprove — so it never delays the dApp).
+const SIGNED_TICK_MS = 850;
 
 // ============================================================================
 // Chain Utilities
@@ -273,13 +277,15 @@ export class ReactUIHandler implements UIHandler {
           }
         };
 
-        const handleApprove = (data: T) => {
-          cleanup();
-          resolve({
-            id: request.id,
-            approved: true,
-            data,
-          });
+        const handleApprove = (data: T, holdMs = 0) => {
+          if (holdMs > 0) {
+            // Signing dialogs: resolve the dApp first, then defer teardown so the tick shows.
+            resolve({ id: request.id, approved: true, data });
+            setTimeout(cleanup, holdMs);
+          } else {
+            cleanup();
+            resolve({ id: request.id, approved: true, data });
+          }
         };
 
         const handleReject = (error?: Error) => {
@@ -367,6 +373,8 @@ export class ReactUIHandler implements UIHandler {
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
               paymasters={this.config.paymasters}
+              appName={this.config.appName}
+              appLogoUrl={this.config.appLogoUrl}
             />
           );
         }
@@ -378,6 +386,8 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
       }
@@ -411,6 +421,8 @@ export class ReactUIHandler implements UIHandler {
                 apiKey={this.config.apiKey}
                 defaultChainId={this.config.defaultChainId}
                 paymasters={this.config.paymasters}
+                appName={this.config.appName}
+                appLogoUrl={this.config.appLogoUrl}
               />
             );
           }
@@ -432,6 +444,8 @@ export class ReactUIHandler implements UIHandler {
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
               paymasters={this.config.paymasters}
+              appName={this.config.appName}
+              appLogoUrl={this.config.appLogoUrl}
             />
           );
         } else if (signType === '0x01') {
@@ -457,6 +471,8 @@ export class ReactUIHandler implements UIHandler {
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
               paymasters={this.config.paymasters}
+              appName={this.config.appName}
+              appLogoUrl={this.config.appLogoUrl}
             />
           );
         } else {
@@ -474,6 +490,8 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
@@ -972,7 +990,6 @@ function OnboardingDialogWrapper({
           }}
           message={siweMessage}
           origin={origin}
-          timestamp={new Date()}
           appName={request.data.appName || 'dApp'}
           appLogoUrl={request.data.appLogoUrl ?? undefined}
           accountAddress={authenticatedWalletAddress}
@@ -1002,7 +1019,6 @@ function OnboardingDialogWrapper({
         appName={request.data.appName || 'dApp'}
         appLogoUrl={request.data.appLogoUrl ?? undefined}
         origin={origin}
-        timestamp={new Date()}
         accountName={authenticatedAccountName || 'Account'}
         walletAddress={authenticatedWalletAddress}
         chainName={chainName}
@@ -1062,16 +1078,21 @@ function SignatureDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: SignatureUIRequest;
-  onApprove: (data: any) => void;
+  onApprove: (data: any, holdMs?: number) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
@@ -1090,7 +1111,9 @@ function SignatureDialogWrapper({
       const signature = await account.signMessage(request.data.message, { address: request.data.address });
 
       setSignatureStatus('Signature successful!');
-      onApprove(signature);
+      // Deliver, then hold the tick (onApprove resolves now, defers teardown — no delay).
+      onApprove(signature, SIGNED_TICK_MS);
+      setIsSuccess(true);
     } catch (error) {
       console.error('Signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -1121,7 +1144,8 @@ function SignatureDialogWrapper({
       }}
       message={request.data.message}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
-      timestamp={new Date(request.timestamp)}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       accountAddress={request.data.address}
       chainName={chainName}
       chainId={chainId}
@@ -1130,6 +1154,7 @@ function SignatureDialogWrapper({
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
       canSign={!isProcessing && !!request.data.message}
     />
@@ -1143,20 +1168,27 @@ function Eip712DialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: TypedDataUIRequest;
-  onApprove: (data: any) => void;
+  onApprove: (data: any, holdMs?: number) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
+  const chainName = getChainNameFromId(chainId);
+  const chainIcon = useChainIconURI(chainId, apiKey, 24);
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -1181,7 +1213,9 @@ function Eip712DialogWrapper({
       );
 
       setSignatureStatus('Signature successful!');
-      onApprove(signature);
+      // Deliver to the dApp, then hold the tick (no delay — see handleApprove).
+      onApprove(signature, SIGNED_TICK_MS);
+      setIsSuccess(true);
     } catch (error) {
       console.error('EIP-712 signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -1212,12 +1246,17 @@ function Eip712DialogWrapper({
       }}
       typedDataJson={request.data.typedData}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
-      timestamp={new Date(request.timestamp)}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       accountAddress={request.data.address}
+      chainName={chainName}
+      chainId={chainId}
+      chainIcon={chainIcon}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
       canSign={true}
     />
@@ -2473,16 +2512,21 @@ function SiweDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: SignatureUIRequest;
-  onApprove: (data: any) => void;
+  onApprove: (data: any, holdMs?: number) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
@@ -2504,17 +2548,16 @@ function SiweDialogWrapper({
     return msg;
   }, [request.data.message]);
 
-  // Extract app name from SIWE message (sanitized for display by SiweDialog).
-  const appName = useMemo(() => {
+  // Fallback app name from the SIWE domain line, used only when config supplies none.
+  const messageAppName = useMemo(() => {
     const match = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/);
     return match ? match[1] : 'dApp';
   }, [decodedMessage]);
 
-  // Warn if the SIWE domain/uri doesn't match the origin the user is on
+  // Origin/phishing check — only when the message parses (unparseable runs no checks).
   const warningMessage = useMemo(() => {
-    const domain = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/)?.[1];
-    const uri = decodedMessage.match(/URI:\s*(.+)/)?.[1]?.trim();
-    return getSiweOriginWarning(origin, { domain, uri });
+    const parsed = parseSiweMessage(decodedMessage);
+    return parsed ? getSiweOriginWarning(origin, { domain: parsed.domain, uri: parsed.uri }) : undefined;
   }, [decodedMessage, origin]);
 
   const handleSign = async () => {
@@ -2528,7 +2571,9 @@ function SiweDialogWrapper({
       const signature = await account.signMessage(request.data.message);
 
       setSiweStatus('Sign-in successful!');
-      onApprove(signature);
+      // Deliver, then hold the tick (onApprove resolves now, defers teardown — no delay).
+      onApprove(signature, SIGNED_TICK_MS);
+      setIsSuccess(true);
     } catch (error) {
       console.error('SIWE signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -2559,8 +2604,8 @@ function SiweDialogWrapper({
       }}
       message={decodedMessage}
       origin={origin}
-      timestamp={new Date(request.timestamp)}
-      appName={appName}
+      appName={appName ?? messageAppName}
+      appLogoUrl={appLogoUrl ?? undefined}
       accountAddress={request.data.address}
       chainName={chainName}
       chainId={chainId}
@@ -2569,6 +2614,7 @@ function SiweDialogWrapper({
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       siweStatus={siweStatus}
       canSign={!isProcessing}
       warningMessage={warningMessage}

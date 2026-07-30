@@ -5,6 +5,8 @@
  * https://eips.ethereum.org/EIPS/eip-4361
  */
 
+import { parseSiweMessage as viemParseSiweMessage } from 'viem/siwe';
+
 /**
  * Converts a hex string (with or without 0x prefix) to UTF-8.
  */
@@ -33,12 +35,15 @@ export function isSiweMessage(message: string): boolean {
       return false;
     }
 
-    // Required SIWE fields
+    // Required SIWE fields. The nonce need only be present + alphanumeric here — we
+    // deliberately DON'T enforce the 8-char minimum for detection, so a message with
+    // a weak/short nonce still renders as SIWE and the dialog can flag it, rather than
+    // silently falling back to the plain personal_sign screen.
     return (
       /URI:\s*.+/.test(decodedMessage) &&
       /Version:\s*1/.test(decodedMessage) &&
       /Chain ID:\s*\d+/.test(decodedMessage) &&
-      /Nonce:\s*[a-zA-Z0-9]{8,}/.test(decodedMessage) &&
+      /Nonce:\s*[a-zA-Z0-9]+/.test(decodedMessage) &&
       /Issued At:\s*.+/.test(decodedMessage)
     );
   } catch (error) {
@@ -62,8 +67,18 @@ export interface SiweMessageFields {
   resources?: string[];
 }
 
+const toIsoString = (d: Date | undefined): string | undefined =>
+  d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString() : undefined;
+
 /**
  * Parses a SIWE message into its fields, or null if it isn't a valid SIWE message.
+ *
+ * Delegates the field extraction to viem's `parseSiweMessage`, whose grammar is
+ * strictly anchored to the EIP-4361 structure: the free-text `statement` is a
+ * SINGLE line (`.*`) captured between the address and the field block, and the
+ * fields are matched as one ordered, contiguous run. That makes it impossible for
+ * a dApp to spoof what the user sees by embedding `URI:` / `Chain ID:` lines in
+ * the statement — a mistake a whole-message "first match wins" regex is prone to.
  */
 export function parseSiweMessage(message: string): SiweMessageFields | null {
   if (!isSiweMessage(message)) {
@@ -71,51 +86,24 @@ export function parseSiweMessage(message: string): SiweMessageFields | null {
   }
 
   try {
-    const decodedMessage = message.startsWith('0x') ? hexToUtf8(message) : message;
-    const lines = decodedMessage.split('\n');
-
-    // Domain (first line, before "wants you to sign in") and address (second line)
-    const domain = lines[0]?.match(/^(.+?)\s+wants you to sign in/)?.[1] || '';
-    const address = lines[1]?.trim() || '';
-
-    // Statement (optional, between address and the URI field)
-    let statement = '';
-    let fieldStartIndex = 2;
-    for (let i = 2; i < lines.length; i++) {
-      if (lines[i].startsWith('URI:')) {
-        fieldStartIndex = i;
-        break;
-      }
-      if (lines[i].trim() && i === 2) {
-        statement = lines[i].trim();
-      } else if (lines[i].trim() && i > 2) {
-        statement += '\n' + lines[i].trim();
-      }
-    }
-
-    // Structured key: value fields
-    const fields: Record<string, string> = {};
-    for (let i = fieldStartIndex; i < lines.length; i++) {
-      const line = lines[i];
-      const colonIndex = line.indexOf(':');
-      if (colonIndex > 0) {
-        fields[line.slice(0, colonIndex).trim()] = line.slice(colonIndex + 1).trim();
-      }
-    }
+    const decoded = message.startsWith('0x') ? hexToUtf8(message) : message;
+    const parsed = viemParseSiweMessage(decoded);
+    // Domain + address anchor the message head; without them it isn't a usable SIWE.
+    if (!parsed.domain || !parsed.address) return null;
 
     return {
-      domain,
-      address,
-      statement: statement || undefined,
-      uri: fields['URI'] || '',
-      version: fields['Version'] || '',
-      chainId: parseInt(fields['Chain ID'] || '1', 10),
-      nonce: fields['Nonce'] || '',
-      issuedAt: fields['Issued At'] || '',
-      expirationTime: fields['Expiration Time'],
-      notBefore: fields['Not Before'],
-      requestId: fields['Request ID'],
-      resources: fields['Resources']?.split('\n').filter((r) => r.trim()) || undefined,
+      domain: parsed.domain,
+      address: parsed.address,
+      statement: parsed.statement || undefined,
+      uri: parsed.uri ?? '',
+      version: parsed.version ?? '',
+      chainId: parsed.chainId ?? 1,
+      nonce: parsed.nonce ?? '',
+      issuedAt: toIsoString(parsed.issuedAt) ?? '',
+      expirationTime: toIsoString(parsed.expirationTime),
+      notBefore: toIsoString(parsed.notBefore),
+      requestId: parsed.requestId,
+      resources: parsed.resources,
     };
   } catch (error) {
     console.error('Error parsing SIWE message:', error);

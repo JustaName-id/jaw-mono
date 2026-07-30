@@ -13,6 +13,8 @@ export type ParameterDefinition = {
   autoFill?: 'address' | 'chainId'; // Auto-fill from connected state
   /** Only show this field when another param has a specific value */
   showWhen?: { param: string; value: string };
+  /** Render a multi-line textarea (e.g. SIWE messages need real newlines). */
+  multiline?: boolean;
 };
 
 export type MethodCategory =
@@ -406,8 +408,9 @@ console.log('History:', history);`,
         name: 'message',
         type: 'string',
         label: 'Message',
-        description: 'Message to sign (will be hex encoded)',
+        description: 'Message to sign (will be hex encoded). Supports multi-line — paste a SIWE message here.',
         required: true,
+        multiline: true,
         defaultValue: 'Hello, World!',
       },
     ],
@@ -519,8 +522,9 @@ console.log('Signature:', signature);`,
         name: 'message',
         type: 'string',
         label: 'Message (for 0x45)',
-        description: 'Plain text message to sign',
+        description: 'Plain text message to sign. Supports multi-line — paste a SIWE message here.',
         required: false,
+        multiline: true,
         defaultValue: 'Hello, World!',
       },
       {

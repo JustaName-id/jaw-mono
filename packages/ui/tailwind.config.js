@@ -11,7 +11,7 @@ module.exports = {
     // Color variants for all semantic colors
     {
       pattern:
-        /^(bg|text|border|ring)-(background|foreground|card|popover|primary|secondary|muted|accent|destructive|input|border|ring)/,
+        /^(bg|text|border|ring)-(background|foreground|card|popover|primary|secondary|muted|accent|destructive|success|input|border|ring)/,
       variants: ['hover', 'focus', 'active', 'dark'],
     },
     // Common utilities used in dialogs
@@ -101,6 +101,10 @@ module.exports = {
         destructive: {
           DEFAULT: 'var(--destructive)',
           foreground: 'var(--destructive-foreground)',
+        },
+        success: {
+          DEFAULT: 'var(--success)',
+          foreground: 'var(--success-foreground)',
         },
         border: 'var(--border)',
         input: 'var(--input)',
