@@ -13,7 +13,8 @@ const CHAINS: Record<number, Chain> = {
 // wasted setup once balance checks run more than once per payment.
 const clients = new Map<number, PublicClient>();
 
-function clientFor(chainId: number): PublicClient {
+/** Shared per-chain public client for the x402 modules (reads only). */
+export function publicClientFor(chainId: number): PublicClient {
   let client = clients.get(chainId);
   if (!client) {
     client = createPublicClient({ chain: CHAINS[chainId], transport: http() });
@@ -26,7 +27,7 @@ function clientFor(chainId: number): PublicClient {
 export type BalanceReader = (asset: UsdcAsset, owner: `0x${string}`) => Promise<bigint>;
 
 const readOnChain: BalanceReader = (asset, owner) =>
-  clientFor(asset.chainId).readContract({
+  publicClientFor(asset.chainId).readContract({
     address: asset.address,
     abi: erc20Abi,
     functionName: 'balanceOf',

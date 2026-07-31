@@ -50,7 +50,14 @@ vi.mock('../lib/session-bridge.js', () => ({
 const usdcBalanceMock = vi.fn();
 vi.mock('../x402/balance.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../x402/balance.js')>();
-  return { ...actual, usdcBalance: (...args: unknown[]) => usdcBalanceMock(...args) };
+  return {
+    ...actual,
+    usdcBalance: (...args: unknown[]) => usdcBalanceMock(...args),
+    // The payer probes the session EOA for an EIP-7702 delegation designator
+    // before signing; a real client here would hit the stubbed global fetch
+    // and eat the mocked 402/200 response sequence. No delegation in E2E.
+    publicClientFor: () => ({ getCode: async () => undefined }),
+  };
 });
 
 const { createMcpServer } = await import('./server.js');

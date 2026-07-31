@@ -1,6 +1,15 @@
 import { privateKeyToAccount } from 'viem/accounts';
+import { parseAbi } from 'viem';
 import { keystoreExists, loadSessionKey } from '../lib/keystore.js';
-import { buildExactPayment, type BuildExactOptions, type ExactSigner } from './scheme-exact-evm.js';
+import {
+  buildExactPayment,
+  type BuildExactOptions,
+  type ExactSigner,
+  type ExactTypedData,
+} from './scheme-exact-evm.js';
+import { erc7739Digest, wrapErc7739Signature, type AccountEip712Domain } from './erc7739.js';
+import { publicClientFor } from './balance.js';
+import { usdcForNetwork } from './asset-registry.js';
 import type { X402PaymentPayload, X402PaymentRequirement } from './types.js';
 
 /**
@@ -21,18 +30,38 @@ export interface Payer {
   pay(requirement: X402PaymentRequirement, opts?: BuildExactOptions): Promise<X402PaymentPayload>;
 }
 
+/** EIP-7702 delegation designator prefix (the EOA "has code" once delegated). */
+const EIP7702_CODE_PREFIX = '0xef0100';
+
+const EIP712_DOMAIN_ABI = parseAbi([
+  'function eip712Domain() view returns (bytes1 fields, string name, string version, uint256 chainId, address verifyingContract, bytes32 salt, uint256[] extensions)',
+]);
+
 /**
- * Pull-mode payer: the local session-key EOA signs the EIP-3009 authorization
- * directly (`eth_signTypedData_v4` semantics via viem). The funds must sit in
- * this EOA.
+ * Pull-mode payer: the local session-key EOA signs the EIP-3009 authorization.
+ * The funds must sit in this EOA.
+ *
+ * Delegation-aware: while the EOA has no code the signature is the plain
+ * typed-data one (ecrecover path). Once the session was upgraded in place via
+ * EIP-7702 (`jaw session setup --eip7702` + first userOp), USDC validates
+ * through EIP-1271/ERC-7739 instead — the payer detects the delegation
+ * designator and signs the wrapped TypedDataSign envelope (see erc7739.ts).
  */
 export class Eip3009EoaPayer implements Payer {
   readonly address: `0x${string}`;
-  private readonly sign: ExactSigner;
+  private readonly signTypedData: ExactSigner;
+  private readonly signHash: (hash: `0x${string}`) => Promise<`0x${string}`>;
+  /** eip712Domain() of the delegate, cached after the first wrapped payment. */
+  private accountDomain: AccountEip712Domain | null = null;
 
-  private constructor(address: `0x${string}`, sign: ExactSigner) {
+  private constructor(
+    address: `0x${string}`,
+    signTypedData: ExactSigner,
+    signHash: (hash: `0x${string}`) => Promise<`0x${string}`>
+  ) {
     this.address = address;
-    this.sign = sign;
+    this.signTypedData = signTypedData;
+    this.signHash = signHash;
   }
 
   /** Load the session key from the keystore and build a pull-mode payer. */
@@ -43,12 +72,51 @@ export class Eip3009EoaPayer implements Payer {
     const account = privateKeyToAccount(loadSessionKey() as `0x${string}`);
     // viem's strict TypedData generics don't line up with our concrete
     // ExactTypedData shape; the runtime call is identical.
-    const sign: ExactSigner = (typedData) => account.signTypedData(typedData as never);
-    return new Eip3009EoaPayer(account.address, sign);
+    const signTypedData: ExactSigner = (typedData) => account.signTypedData(typedData as never);
+    const signHash = (hash: `0x${string}`) => account.sign({ hash });
+    return new Eip3009EoaPayer(account.address, signTypedData, signHash);
   }
 
-  pay(requirement: X402PaymentRequirement, opts?: BuildExactOptions): Promise<X402PaymentPayload> {
-    return buildExactPayment(requirement, this.address, this.sign, opts);
+  async pay(requirement: X402PaymentRequirement, opts?: BuildExactOptions): Promise<X402PaymentPayload> {
+    const sign = (await this.isDelegated(requirement.network)) ? this.wrappedSigner() : this.signTypedData;
+    return buildExactPayment(requirement, this.address, sign, opts);
+  }
+
+  /** True once the EOA carries an EIP-7702 delegation designator on-chain. */
+  private async isDelegated(network: string): Promise<boolean> {
+    const asset = usdcForNetwork(network);
+    if (!asset) return false;
+    try {
+      const code = await publicClientFor(asset.chainId).getCode({ address: this.address });
+      return (code ?? '0x').toLowerCase().startsWith(EIP7702_CODE_PREFIX);
+    } catch {
+      // Unreachable RPC: sign raw — the pre-delegation default. If the EOA is
+      // actually delegated the settlement fails with a clear signature error
+      // instead of this payer guessing.
+      return false;
+    }
+  }
+
+  /** ERC-7739 wrapped signer for the delegated (EIP-1271) validation path. */
+  private wrappedSigner(): ExactSigner {
+    return async (typedData: ExactTypedData) => {
+      const accountDomain = await this.readAccountDomain(typedData.domain.chainId);
+      const { digest, appDomainSeparator, contentsHash } = erc7739Digest(typedData, accountDomain);
+      const signature = await this.signHash(digest);
+      return wrapErc7739Signature(signature, appDomainSeparator, contentsHash);
+    };
+  }
+
+  /** Read (once) the delegate's EIP-712 domain straight from the account. */
+  private async readAccountDomain(chainId: number): Promise<AccountEip712Domain> {
+    if (this.accountDomain) return this.accountDomain;
+    const [, name, version, domainChainId, verifyingContract, salt] = await publicClientFor(chainId).readContract({
+      address: this.address,
+      abi: EIP712_DOMAIN_ABI,
+      functionName: 'eip712Domain',
+    });
+    this.accountDomain = { name, version, chainId: domainChainId, verifyingContract, salt };
+    return this.accountDomain;
   }
 }
 
