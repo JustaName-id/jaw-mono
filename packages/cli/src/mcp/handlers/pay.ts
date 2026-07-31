@@ -32,10 +32,40 @@ function safeBigInt(value: string | undefined): bigint | undefined {
   }
 }
 
+/**
+ * Sum this payer's settled payments from the audit ledger, scoped to the
+ * current session (entries since its `createdAt`; the payer's full history when
+ * no session config exists). `maxTotalPerSession` must survive a process
+ * restart — an in-memory counter alone would reset to zero and let an agent
+ * relaunch its way past the cap.
+ */
+function seedSessionSpent(payerAddress: string): bigint {
+  let since: string | undefined;
+  if (sessionConfigExists()) {
+    try {
+      since = loadSessionConfig().createdAt;
+    } catch {
+      /* unreadable session config: fall through and count the full history */
+    }
+  }
+  const payer = payerAddress.toLowerCase();
+  return readX402Log().reduce((total, entry) => {
+    if (entry.status !== 'paid' || !entry.amount || entry.payer?.toLowerCase() !== payer) return total;
+    if (since && entry.at < since) return total;
+    try {
+      return total + BigInt(entry.amount);
+    } catch {
+      return total;
+    }
+  }, 0n);
+}
+
 export function registerPayTool(server: McpServer): void {
-  // Cumulative spend for this process, enforced against the policy's
-  // maxTotalPerSession so an agent cannot chain many small payments past the cap.
-  let sessionSpent = 0n;
+  // Cumulative spend for the session, enforced against the policy's
+  // maxTotalPerSession so an agent cannot chain many small payments past the
+  // cap. Seeded lazily from the ledger (see seedSessionSpent), then kept in
+  // memory across calls.
+  let sessionSpent: bigint | null = null;
 
   server.registerTool(
     'jaw_pay_and_fetch',
@@ -48,7 +78,8 @@ export function registerPayTool(server: McpServer): void {
         'straight through, so this also works as a plain fetch. Every payment is bounded by the ' +
         '`x402` policy in config (see jaw_config_show) and the optional `maxAmount` for this call; ' +
         'if no policy is configured, conservative default caps apply (1 USDC per payment, 10 USDC ' +
-        'per session). An over-cap, wrong-asset, wrong-network, or disallowed-recipient payment is ' +
+        'per session, known USDC deployments on supported networks only). An over-cap, ' +
+        'wrong-asset, wrong-network, or disallowed-recipient payment is ' +
         'refused, never silently paid. Requires a session — run `jaw session setup` first ' +
         '(check jaw_session_status).',
       inputSchema: payAndFetchSchema,
@@ -60,6 +91,7 @@ export function registerPayTool(server: McpServer): void {
         // Throws a clear "run jaw session setup" error when no session exists.
         const payer = Eip3009EoaPayer.fromSessionKey();
         const policy = resolveX402Policy(config.x402);
+        if (sessionSpent === null) sessionSpent = seedSessionSpent(payer.address);
 
         // Flow 2b: when a session (and its on-chain permission) exists, refill
         // the payer EOA through the permission whenever it can't cover a price.

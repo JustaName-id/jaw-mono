@@ -77,6 +77,17 @@ describe('resolveX402Policy', () => {
     expect(policy.maxAmountPerPayment).toBe('50');
     expect(policy.maxTotalPerSession).toBe(DEFAULT_X402_POLICY.maxTotalPerSession);
   });
+
+  it('defaults restrict assets and networks to the USDC registry', () => {
+    const policy = resolveX402Policy();
+    expect(policy.allowedNetworks).toContain('eip155:8453');
+    expect(policy.allowedAssets).toContain('0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913');
+    // An unconfigured setup pays the known USDC but refuses any other token a
+    // server may ask for, even on an allowed network.
+    expect(checkPolicy(base, policy).ok).toBe(true);
+    expect(checkPolicy({ ...base, asset: '0x0000000000000000000000000000000000000bad' }, policy).ok).toBe(false);
+    expect(checkPolicy({ ...base, network: 'eip155:1' }, policy).ok).toBe(false);
+  });
 });
 describe('topUpFloat as a settable policy key', () => {
   it('Given topUpFloat, When validated as a config key, Then it is accepted as a scalar', () => {

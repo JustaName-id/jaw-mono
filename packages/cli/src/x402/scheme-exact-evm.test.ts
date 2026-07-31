@@ -81,6 +81,13 @@ describe('buildExactPayment', () => {
       /Unsupported x402 network/
     );
   });
+
+  it('rejects a server-chosen asset that is not the registry USDC for the network', async () => {
+    // The asset becomes the EIP-712 verifyingContract — signing whatever the
+    // server sends would authorize a transfer on an arbitrary ERC-3009 token.
+    const rogue = { ...requirement, asset: '0x0000000000000000000000000000000000000bad' as `0x${string}` };
+    await expect(buildExactPayment(rogue, account.address, signer)).rejects.toThrow(/asset mismatch/);
+  });
 });
 
 describe('encodePaymentPayload', () => {

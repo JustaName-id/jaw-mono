@@ -1,4 +1,5 @@
 import { randomBytes } from 'node:crypto';
+import { z } from 'zod';
 import { encodePaymentPayload } from './scheme-exact-evm.js';
 import { checkPolicy, type PolicyContext, type X402Policy } from './policy.js';
 import type { Payer } from './payer.js';
@@ -101,6 +102,31 @@ function idempotencyKey(): string {
   return `jaw-${randomBytes(6).toString('hex')}`;
 }
 
+const hexAddress = z
+  .string()
+  .regex(/^0x[0-9a-fA-F]{40}$/, 'must be a 20-byte hex address') as unknown as z.ZodType<`0x${string}`>;
+
+/**
+ * Shape of one server-supplied `accepts` entry. The challenge is untrusted
+ * input: validating here turns a malformed option into one clear refusal
+ * reason instead of a confusing failure deeper in the signing path. `scheme`
+ * stays a plain string so unsupported schemes still get their own message.
+ * The parsed object is echoed back to the server as `accepted`, which must
+ * match the option as-advertised — hence passthrough (unknown fields survive)
+ * and no defaults (nothing is injected that was not on the wire).
+ */
+const requirementSchema = z
+  .object({
+    scheme: z.string(),
+    network: z.string().min(1),
+    amount: z.string().regex(/^\d+$/, 'amount must be a base-10 integer string'),
+    asset: hexAddress,
+    payTo: hexAddress,
+    maxTimeoutSeconds: z.number().nonnegative().optional(),
+    extra: z.record(z.unknown()).optional(),
+  })
+  .passthrough();
+
 interface Selection {
   requirement?: X402PaymentRequirement;
   reason?: string;
@@ -111,13 +137,20 @@ interface Selection {
  * policy. Choosing the lowest amount (rather than the first that passes) means a
  * multi-option server can't steer the agent onto a pricier option.
  */
-function selectRequirement(accepts: X402PaymentRequirement[], opts: PayAndFetchOptions, ctx: PolicyContext): Selection {
+function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: PolicyContext): Selection {
   const policy = opts.policy ?? {};
   let reason = 'no acceptable payment option in the 402 challenge';
   let best: X402PaymentRequirement | undefined;
   let bestAmount = 0n;
 
-  for (const req of accepts) {
+  for (const raw of accepts) {
+    const parsed = requirementSchema.safeParse(raw);
+    if (!parsed.success) {
+      const issue = parsed.error.issues[0];
+      reason = `malformed payment option${issue ? ` (${issue.path.join('.')}: ${issue.message})` : ''}`;
+      continue;
+    }
+    const req = parsed.data as X402PaymentRequirement;
     if (req.scheme !== 'exact') {
       reason = `unsupported scheme: ${req.scheme}`;
       continue;

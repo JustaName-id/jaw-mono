@@ -168,6 +168,60 @@ describe('payAndFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
+  it('refuses a malformed accepts entry with a clear reason (no payment attempt)', async () => {
+    // payTo is not an address and amount is not an integer string — the schema
+    // at the challenge boundary must refuse, not fail deep in the signing path.
+    const malformed = b64({
+      x402Version: 2,
+      resource: { url: URL_UNDER_TEST },
+      accepts: [{ ...REQUIREMENT, payTo: 'not-an-address', amount: '1.5' }],
+    });
+    fetchMock.mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': malformed }, body: '{}' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toMatch(/malformed payment option/);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // never retried / paid
+  });
+
+  it('echoes the accepted option exactly as advertised (nothing injected or stripped)', async () => {
+    // No maxTimeoutSeconds and an unknown future field: the server verifies
+    // `accepted` against what it advertised, so validation must not inject
+    // defaults into it nor strip fields it does not know.
+    const { maxTimeoutSeconds: _omitted, ...rest } = REQUIREMENT;
+    const wireEntry = { ...rest, futureField: 'kept' };
+    const challenge = b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts: [wireEntry] });
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challenge }, body: '{}' }))
+      .mockResolvedValueOnce(mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: '{}' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.paid).toBe(true);
+    const retryInit = fetchMock.mock.calls[1][1] as { headers: Record<string, string> };
+    const proof = JSON.parse(Buffer.from(retryInit.headers['PAYMENT-SIGNATURE'], 'base64').toString());
+    expect(proof.accepted).toEqual(wireEntry);
+  });
+
+  it('still pays a valid option when a malformed sibling entry sits beside it', async () => {
+    const mixed = b64({
+      x402Version: 2,
+      resource: { url: URL_UNDER_TEST },
+      accepts: [{ ...REQUIREMENT, asset: 'garbage' }, REQUIREMENT],
+    });
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': mixed }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.paid).toBe(true);
+    expect(result.payment?.payTo).toBe(REQUIREMENT.payTo);
+  });
+
   it('surfaces a settlement failure reason + the attempted payment (nonce) instead of throwing', async () => {
     fetchMock
       .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))

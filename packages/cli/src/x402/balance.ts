@@ -1,4 +1,4 @@
-import { createPublicClient, http, erc20Abi, formatUnits, type Chain } from 'viem';
+import { createPublicClient, http, erc20Abi, formatUnits, type Chain, type PublicClient } from 'viem';
 import { base, baseSepolia, polygon, polygonAmoy } from 'viem/chains';
 import { usdcForNetwork, type UsdcAsset } from './asset-registry.js';
 
@@ -9,14 +9,29 @@ const CHAINS: Record<number, Chain> = {
   [polygonAmoy.id]: polygonAmoy,
 };
 
+// One client per chain across the process — a fresh transport per read is
+// wasted setup once balance checks run more than once per payment.
+const clients = new Map<number, PublicClient>();
+
+function clientFor(chainId: number): PublicClient {
+  let client = clients.get(chainId);
+  if (!client) {
+    client = createPublicClient({ chain: CHAINS[chainId], transport: http() });
+    clients.set(chainId, client);
+  }
+  return client;
+}
+
 /** Reads the raw USDC balance (base units) of `owner`. Injectable for tests. */
 export type BalanceReader = (asset: UsdcAsset, owner: `0x${string}`) => Promise<bigint>;
 
-const readOnChain: BalanceReader = (asset, owner) => {
-  const chain = CHAINS[asset.chainId];
-  const client = createPublicClient({ chain, transport: http() });
-  return client.readContract({ address: asset.address, abi: erc20Abi, functionName: 'balanceOf', args: [owner] });
-};
+const readOnChain: BalanceReader = (asset, owner) =>
+  clientFor(asset.chainId).readContract({
+    address: asset.address,
+    abi: erc20Abi,
+    functionName: 'balanceOf',
+    args: [owner],
+  });
 
 export interface UsdcBalance {
   network: string;

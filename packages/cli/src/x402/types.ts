@@ -11,7 +11,8 @@ export interface X402PaymentRequirement {
   amount: string;
   asset: `0x${string}`;
   payTo: `0x${string}`;
-  maxTimeoutSeconds: number;
+  /** Absent on some servers; treated as 0 (the settlement-window floor applies). */
+  maxTimeoutSeconds?: number;
   /** Scheme-specific extension (for exact-evm, the EIP-712 domain name/version). */
   extra?: Record<string, unknown>;
 }

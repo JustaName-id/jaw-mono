@@ -1,3 +1,4 @@
+import { USDC_BY_NETWORK } from './asset-registry.js';
 import type { X402PaymentRequirement } from './types.js';
 
 /**
@@ -30,12 +31,16 @@ export interface X402Policy {
 
 /**
  * Conservative caps applied when the user has not configured `x402` limits, so a
- * fresh setup is never unbounded. USDC has 6 decimals: 1_000_000 = 1 USDC.
- * Override per field via `jaw config set x402.*`.
+ * fresh setup is never unbounded: capped amounts, and only the registry's USDC
+ * deployments on their known networks (any other asset a server asks for is
+ * refused). USDC has 6 decimals: 1_000_000 = 1 USDC. Override per field via
+ * `jaw config set x402.*`.
  */
 export const DEFAULT_X402_POLICY: X402Policy = {
   maxAmountPerPayment: '1000000', // 1 USDC per payment
   maxTotalPerSession: '10000000', // 10 USDC per process
+  allowedAssets: Object.values(USDC_BY_NETWORK).map((asset) => asset.address),
+  allowedNetworks: Object.keys(USDC_BY_NETWORK),
 };
 
 /** Merge the configured policy over the safe defaults (config wins per field). */

@@ -53,8 +53,9 @@ payerAddress.
 
 LIMITS
 Every payment is bounded by a policy plus the per-call maxAmount. If nothing is
-configured, conservative defaults apply: 1 USDC per payment and 10 USDC per
-session. Configure limits from a terminal with jaw config set x402.<field>
+configured, conservative defaults apply: 1 USDC per payment, 10 USDC per
+session, and only the known USDC deployments on supported networks. Configure
+limits from a terminal with jaw config set x402.<field>
 (maxAmountPerPayment, maxTotalPerSession, allowedAssets, allowedNetworks,
 allowedHosts, allowedPayTo). These cannot be changed through the tools, only by a
 human at the CLI. A payment over a cap, or to a disallowed asset/network/host/

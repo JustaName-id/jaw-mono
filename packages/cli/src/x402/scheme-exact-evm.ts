@@ -57,6 +57,14 @@ export async function buildExactPayment(
 ): Promise<X402PaymentPayload> {
   const asset = usdcForNetwork(requirement.network);
   if (!asset) throw new Error(`Unsupported x402 network: ${requirement.network}`);
+  // `requirement.asset` is server-controlled; signing with it as the
+  // verifyingContract would authorize a transfer on an arbitrary ERC-3009
+  // token. The registry is the source of truth for USDC on each network.
+  if (requirement.asset.toLowerCase() !== asset.address.toLowerCase()) {
+    throw new Error(
+      `x402 asset mismatch on ${requirement.network}: server asked for ${requirement.asset}, known USDC is ${asset.address}`
+    );
+  }
 
   // Prefer the server-advertised EIP-712 domain name/version (extra), else the
   // registry's known values for this USDC deployment.

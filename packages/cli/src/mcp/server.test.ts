@@ -402,6 +402,44 @@ describe('jaw_pay_and_fetch', () => {
     }
   });
 
+  it('maxTotalPerSession survives a process restart (spend re-seeded from the ledger)', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore(PK, '0xSmartAccount');
+    saveConfig({ x402: { maxTotalPerSession: '1500' } });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}')) // call 1: challenge
+      .mockResolvedValueOnce(mkRes(200, { 'PAYMENT-RESPONSE': RECEIPT }, JSON.stringify({ ok: true }))) // call 1: paid (1000)
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}')); // call 2: challenge (refused)
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const first = JSON.parse(
+        toolText(
+          await (
+            await connectClient()
+          ).callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/a' } })
+        )
+      );
+      expect(first.paid).toBe(true);
+
+      // A fresh server instance simulates an MCP process restart. The counter
+      // must come back from the audit ledger, not reset to zero — otherwise an
+      // agent could relaunch its way past the session cap.
+      const second = JSON.parse(
+        toolText(
+          await (
+            await connectClient()
+          ).callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/b' } })
+        )
+      );
+      expect(second.paid).toBe(false);
+      expect(second.refusedReason).toMatch(/maxTotalPerSession/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('reports the payer address (the EOA to fund) in jaw_session_status', async () => {
     const { saveKeystore } = await import('../lib/keystore.js');
     const { saveSessionConfig } = await import('../lib/session-config.js');
