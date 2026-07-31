@@ -26,7 +26,11 @@ export function DialogShell({ children, halo = true, className, contentClassName
       data-jaw-shell
       // `bg-border` paints the 1.5px ring in the theme border color; on dark the
       // halo overlays it.
-      className={cn('bg-border relative mx-auto w-fit overflow-hidden rounded-[18px] p-[1.5px]', className)}
+      // max-w-full: without it the fit-content frame keeps the card's 400px
+      // preferred width on narrower viewports (375–390px phones), overflowing
+      // the container — which defeats mx-auto centering and pins the card to
+      // the left edge, spilling off the right side of the bottom sheet.
+      className={cn('bg-border relative mx-auto w-fit max-w-full overflow-hidden rounded-[18px] p-[1.5px]', className)}
     >
       {halo && <div aria-hidden className="jaw-halo-ring absolute inset-[-60%] z-0 hidden dark:block" />}
       <div

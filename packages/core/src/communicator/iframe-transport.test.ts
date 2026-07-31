@@ -443,7 +443,80 @@ describe('IframeTransport', () => {
             expect(getDialog()?.hasAttribute('open')).toBe(true);
             expect(getIframe()?.style.visibility).toBe('visible');
             expect(document.body.style.overflow).toBe('hidden');
-            expect(target.postMessage.mock.calls[1]).toEqual([message, urlOrigin]);
+            // Last message posted: the business message follows the handshake
+            // config and the DialogVisibility conceal/reveal pair.
+            expect(target.postMessage.mock.calls.at(-1)).toEqual([message, urlOrigin]);
+        });
+    });
+
+    describe('DialogVisibility (reveal signal for the keys enter animation)', () => {
+        const visibilityCalls = (target: { postMessage: ReturnType<typeof vi.fn> }) =>
+            target.postMessage.mock.calls
+                .map(([message]) => message as { event?: string; data?: { visible?: boolean } })
+                .filter((message) => message.event === 'DialogVisibility');
+
+        it('posts {visible:false} once the handshake completes hidden, so keys starts concealed', async () => {
+            // Without this the keys app (which must default to revealed for old
+            // SDKs that never send the event) could not animate the FIRST open.
+            const { readyPromise, target } = startHandshake(transport);
+            await readyPromise;
+
+            expect(visibilityCalls(target)).toEqual([{ event: 'DialogVisibility', data: { visible: false } }]);
+        });
+
+        it('posts {visible:true} before the business message when the dialog is shown', async () => {
+            const { target } = startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+
+            const calls = target.postMessage.mock.calls.map(
+                ([message]) => message as { event?: string; requestId?: string; data?: { visible?: boolean } }
+            );
+            const revealIndex = calls.findIndex(
+                (message) => message.event === 'DialogVisibility' && message.data?.visible === true
+            );
+            const businessIndex = calls.findIndex((message) => message.requestId === 'req-id-1-1-1' && !message.event);
+            expect(revealIndex).toBeGreaterThan(-1);
+            // The reveal must land first so the keys app can start its enter
+            // animation as soon as it processes the request.
+            expect(businessIndex).toBeGreaterThan(revealIndex);
+        });
+
+        it('posts {visible:false} when the dialog is dismissed, re-arming the next enter animation', async () => {
+            const { target } = startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+            const before = target.postMessage.mock.calls.length;
+
+            getDialog()?.dispatchEvent(new dom.window.Event('cancel', { cancelable: true }));
+
+            const after = target.postMessage.mock.calls.slice(before).map(([message]) => message as { event?: string });
+            expect(after).toContainEqual({ event: 'DialogVisibility', data: { visible: false } });
+        });
+
+        it('posts {visible:false} when keys closes the flow as completed', async () => {
+            const { target } = startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+            const before = target.postMessage.mock.calls.length;
+
+            dispatchMessageEvent({
+                data: { event: 'DialogClose', data: { reason: 'completed' } },
+                origin: urlOrigin,
+            });
+            await new Promise((resolve) => setTimeout(resolve, 0));
+
+            const after = target.postMessage.mock.calls.slice(before).map(([message]) => message as { event?: string });
+            expect(after).toContainEqual({ event: 'DialogVisibility', data: { visible: false } });
+        });
+
+        it('posts {visible:true} again on a re-show after dismissal', async () => {
+            const { target } = startHandshake(transport);
+            await transport.postMessage({ requestId: 'req-id-1-1-1', data: {} });
+            getDialog()?.dispatchEvent(new dom.window.Event('cancel', { cancelable: true }));
+
+            await transport.postMessage({ requestId: 'req-id-2-2-2', data: {} });
+
+            const visible = visibilityCalls(target).map((message) => message.data?.visible);
+            // handshake conceal, first show, dismissal conceal, second show
+            expect(visible).toEqual([false, true, false, true]);
         });
     });
 
@@ -501,7 +574,8 @@ describe('IframeTransport', () => {
             await transport.postMessage({ requestId: 'req-id-2-2-2', data: {} });
 
             expect(getDialog()?.hasAttribute('open')).toBe(true);
-            expect(target.postMessage.mock.calls.length).toBe(3); // config + req-1 + req-2
+            // config + req-1 + req-2 (ignoring DialogVisibility show/hide mirrors)
+            expect(target.postMessage.mock.calls.filter(([msg]) => !(msg as { event?: string }).event).length).toBe(3);
         });
     });
 

@@ -198,6 +198,9 @@ export class IframeTransport implements IframeTransportContract {
 
         this.visible = true;
         this.applyRevealGating();
+        // Before the business message (postMessage() calls show() first), so
+        // the keys app starts its enter animation as it processes the request.
+        this.postDialogVisibility(true);
         this.iframe?.focus();
     }
 
@@ -216,6 +219,8 @@ export class IframeTransport implements IframeTransportContract {
         }
         this.previouslyFocused = null;
         this.visible = false;
+        // Re-arm the keys app's enter animation for the next show.
+        this.postDialogVisibility(false);
     }
 
     /**
@@ -467,6 +472,11 @@ export class IframeTransport implements IframeTransportContract {
             .then(() => {
                 this.ready = true;
                 this.applyRevealGating();
+                // Sync the keys app with the current visibility. Usually false
+                // (prewarm/hidden handshake): keys defaults to revealed for old
+                // SDKs that never send this event, so concealing here is what
+                // lets it animate the FIRST reveal too.
+                this.postDialogVisibility(this.visible);
                 return this.getTargetWindow();
             });
 
@@ -508,6 +518,21 @@ export class IframeTransport implements IframeTransportContract {
             window.removeEventListener('message', listener);
         });
         this.listeners.clear();
+    }
+
+    /**
+     * Mirror a dialog show/hide to the keys app (DialogVisibility). The reveal
+     * itself is a host-side visibility flip the embedded document cannot
+     * observe — this event is what lets it animate its entrance (mobile
+     * bottom sheet). Best-effort and presentational only.
+     */
+    private postDialogVisibility(visible: boolean): void {
+        if (!this.ready) return;
+        try {
+            this.getTargetWindow().postMessage({ event: 'DialogVisibility', data: { visible } }, this.url.origin);
+        } catch {
+            /* window gone; the next handshake re-syncs visibility */
+        }
     }
 
     /** Reveal the iframe only when both visible and handshaken. */

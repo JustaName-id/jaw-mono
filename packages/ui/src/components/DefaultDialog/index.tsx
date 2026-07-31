@@ -24,12 +24,13 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
   innerStyle = {},
   contentStyle = {},
 }) => {
-  // In the embedded drawer presentation ('top-sheet') the dialog must render
-  // as a full-width, content-sized top sheet. The per-dialog contentStyle
-  // sizing (fixed desktop widths, mobile 100% height) is inline style, so it
-  // would beat DialogContent's sheet classes — override it here, after the
-  // spread, keeping the decision in one place instead of in every dialog.
-  const topSheet = useContext(DialogAnchorContext) === 'top-sheet' && !fullScreen;
+  // In the embedded drawer presentation ('bottom-sheet') the dialog must
+  // render as a full-width, content-sized bottom sheet. The per-dialog
+  // contentStyle sizing (fixed desktop widths, mobile 100% height) is inline
+  // style, so it would beat DialogContent's sheet classes — override it here,
+  // after the spread, keeping the decision in one place instead of in every
+  // dialog.
+  const bottomSheet = useContext(DialogAnchorContext) === 'bottom-sheet' && !fullScreen;
   return (
     <Dialog modal={true} open={open} onOpenChange={onOpenChange}>
       {trigger && <DialogTrigger asChild>{trigger}</DialogTrigger>}
@@ -54,7 +55,7 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
           borderRadius: fullScreen ? '0' : undefined,
           boxSizing: 'content-box',
           ...contentStyle,
-          ...(topSheet
+          ...(bottomSheet
             ? {
                 width: '100%',
                 minWidth: 0,
@@ -63,6 +64,8 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
                 minHeight: 0,
                 maxHeight: '85vh',
                 borderRadius: undefined,
+                // Clear the iOS home bar (the sheet sits on the bottom edge).
+                paddingBottom: 'env(safe-area-inset-bottom)',
               }
             : {}),
         }}

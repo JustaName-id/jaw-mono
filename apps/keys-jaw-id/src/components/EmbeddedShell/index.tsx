@@ -37,6 +37,12 @@ export interface EmbeddedShellProps {
 export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   const embedded = communicator.getContext() === 'embedded';
   const [presentation, setPresentation] = useState<EmbeddedPresentation>('floating');
+  // Whether the host currently shows the iframe. The SDK mirrors its
+  // host-side visibility flips as DialogVisibility messages; the drawer card
+  // sits offscreen (translate-y-full) while concealed and slides up on
+  // reveal. Defaults to true so older SDKs that never send the event still
+  // show the UI — statically, without the slide.
+  const [revealed, setRevealed] = useState(true);
   // Context detection needs `window` (opener/parent), so the server always
   // renders the plain children. Gate the shell to post-mount so the first
   // client render matches the SSR output (avoids a hydration mismatch);
@@ -59,6 +65,14 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     return () => query.removeEventListener('change', onChange);
   }, [embedded]);
 
+  useEffect(() => {
+    if (!embedded) return;
+    return communicator.onMessage((message) => {
+      if (message.event !== 'DialogVisibility') return;
+      setRevealed(Boolean((message.data as { visible?: boolean } | undefined)?.visible));
+    });
+  }, [embedded, communicator]);
+
   // Passkey creation failed because this browser/extension cannot
   // create credentials inside a cross-origin iframe — continue in a popup.
   useEffect(() => {
@@ -77,13 +91,17 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   // session/crypto state, which a remount would reset and break the connect).
   const active = embedded && mounted;
 
-  // Anchored to the TOP of the viewport (like Porto's dialog) rather than
-  // centered/bottom, so it appears near where the user's attention is.
   const card =
     presentation === 'drawer'
-      ? // Mobile: full-width sheet at the top.
-        `fixed inset-x-0 top-0 max-h-[85vh] rounded-b-2xl`
-      : // Desktop: floating card near the top, centered horizontally.
+      ? // Mobile: full-width bottom sheet, sliding up when the SDK reveals the
+        // iframe (translate driven by `revealed`, see DialogVisibility above).
+        // Safe-area padding keeps content clear of the iOS home bar.
+        `fixed inset-x-0 bottom-0 max-h-[85vh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-out motion-reduce:transition-none ${
+          revealed ? 'translate-y-0' : 'translate-y-full'
+        }`
+      : // Desktop: floating card near the top (like Porto's dialog), centered
+        // horizontally, so it appears near where the user's attention is. No
+        // slide here — it matches the host's plain visibility flip.
         `fixed left-1/2 top-6 w-[450px] max-w-[calc(100vw-2rem)] max-h-[85vh] -translate-x-1/2 rounded-2xl`;
 
   // Click on the empty area (the overlay itself, not the card) dismisses the
@@ -100,11 +118,11 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     // escaping this card and Radix-centering at 50% by default. Anchor them via
     // context so they line up with the card's inline screens; the same context
     // makes their overlay transparent, matching this shell's scrim-free
-    // backdrop. 'top' matches the floating card; 'top-sheet' matches the
-    // drawer card (full-width, top-pinned, content-sized) and suppresses the
-    // dialogs' own mobile full-screen sizing, which is meant for
-    // popup/standalone contexts.
-    <DialogAnchorContext.Provider value={active ? (presentation === 'floating' ? 'top' : 'top-sheet') : 'center'}>
+    // backdrop. 'top' matches the floating card; 'bottom-sheet' matches the
+    // drawer card (full-width, bottom-pinned, content-sized, sliding up on
+    // open) and suppresses the dialogs' own mobile full-screen sizing, which
+    // is meant for popup/standalone contexts.
+    <DialogAnchorContext.Provider value={active ? (presentation === 'floating' ? 'top' : 'bottom-sheet') : 'center'}>
       <div
         className={
           // Transparent (no scrim): the dApp shows through around the card.
