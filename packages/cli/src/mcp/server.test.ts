@@ -440,6 +440,45 @@ describe('jaw_pay_and_fetch', () => {
     }
   });
 
+  it('counts a failed settlement toward maxTotalPerSession (the transfer may have been broadcast)', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore(PK, '0xSmartAccount');
+    saveConfig({ x402: { maxTotalPerSession: '1500' } });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}')) // call 1: challenge
+      .mockResolvedValueOnce(mkRes(500, {}, '{}')) // call 1: settlement fails AFTER the signed proof went out
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}')); // call 2: challenge (refused)
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const first = JSON.parse(
+        toolText(
+          await (
+            await connectClient()
+          ).callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/a' } })
+        )
+      );
+      expect(first.paid).toBe(false);
+      expect(first.attemptedPayment.amount).toBe('1000');
+
+      // The signed authorization went out, so those 1000 units may have moved
+      // on-chain regardless of the 500. A fresh instance (restart) must count
+      // the 'failed' ledger entry: 1000 attempted + 1000 next > 1500 cap.
+      const second = JSON.parse(
+        toolText(
+          await (
+            await connectClient()
+          ).callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/b' } })
+        )
+      );
+      expect(second.paid).toBe(false);
+      expect(second.refusedReason).toMatch(/maxTotalPerSession/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('reports the payer address (the EOA to fund) in jaw_session_status', async () => {
     const { saveKeystore } = await import('../lib/keystore.js');
     const { saveSessionConfig } = await import('../lib/session-config.js');

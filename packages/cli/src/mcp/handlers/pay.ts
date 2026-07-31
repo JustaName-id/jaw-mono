@@ -33,11 +33,11 @@ function safeBigInt(value: string | undefined): bigint | undefined {
 }
 
 /**
- * Sum this payer's settled payments from the audit ledger, scoped to the
- * current session (entries since its `createdAt`; the payer's full history when
- * no session config exists). `maxTotalPerSession` must survive a process
- * restart — an in-memory counter alone would reset to zero and let an agent
- * relaunch its way past the cap.
+ * Sum this payer's settled and attempted payments from the audit ledger,
+ * scoped to the current session (entries since its `createdAt`; the payer's
+ * full history when no session config exists). `maxTotalPerSession` must
+ * survive a process restart — an in-memory counter alone would reset to zero
+ * and let an agent relaunch its way past the cap.
  */
 function seedSessionSpent(payerAddress: string): bigint {
   let since: string | undefined;
@@ -50,7 +50,11 @@ function seedSessionSpent(payerAddress: string): bigint {
   }
   const payer = payerAddress.toLowerCase();
   return readX402Log().reduce((total, entry) => {
-    if (entry.status !== 'paid' || !entry.amount || entry.payer?.toLowerCase() !== payer) return total;
+    // 'failed' counts too: the authorization was signed and sent, so in pull
+    // mode the facilitator may have broadcast the transfer anyway. Counting it
+    // can only under-spend the cap, never breach it.
+    if ((entry.status !== 'paid' && entry.status !== 'failed') || !entry.amount) return total;
+    if (entry.payer?.toLowerCase() !== payer) return total;
     if (since && entry.at < since) return total;
     try {
       return total + BigInt(entry.amount);
@@ -125,9 +129,13 @@ export function registerPayTool(server: McpServer): void {
           network: params.network,
         });
 
-        if (result.paid && result.payment) {
+        // A failed settlement counts too: the signed authorization went out,
+        // so the transfer may have been broadcast regardless of what the
+        // server answered. Mirrors the 'failed' accounting in seedSessionSpent.
+        const spentDetails = result.paid ? result.payment : result.attemptedPayment;
+        if (spentDetails) {
           try {
-            sessionSpent += BigInt(result.payment.amount);
+            sessionSpent += BigInt(spentDetails.amount);
           } catch {
             /* non-numeric amount can't move the accumulator; ignore */
           }
