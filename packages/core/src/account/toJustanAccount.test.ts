@@ -393,6 +393,55 @@ describe('toJustanAccount unit tests', () => {
             });
         });
 
+        describe('EIP-7702 authorization property', () => {
+            // viem auto-attaches a stub-signed authorization to any userOp it
+            // prepares when the account exposes `authorization` — that is what
+            // keeps estimation-only flows (paymaster approval sizing) from
+            // simulating a codeless sender on the first 7702 op.
+            it('exposes the authority/delegate pair in EIP-7702 mode', async () => {
+                const mockEOA = {
+                    type: 'local' as const,
+                    address: MOCK_ADDRESS,
+                } as any;
+
+                const { readContract } = await import('viem/actions');
+                const { toSmartAccount } = await import('viem/account-abstraction');
+
+                vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
+                vi.mocked(toSmartAccount).mockReturnValue({} as any);
+
+                await toJustanAccount({
+                    client: MOCK_PUBLIC_CLIENT,
+                    owners: [],
+                    eip7702Account: mockEOA,
+                    factoryAddress: MOCK_FACTORY_ADDRESS,
+                });
+
+                expect(toSmartAccount).toHaveBeenCalledWith(
+                    expect.objectContaining({
+                        authorization: { account: mockEOA, address: MOCK_DELEGATION_CONTRACT },
+                    })
+                );
+            });
+
+            it('does not expose authorization in counterfactual mode', async () => {
+                const { readContract } = await import('viem/actions');
+                const { toSmartAccount } = await import('viem/account-abstraction');
+
+                vi.mocked(readContract).mockResolvedValue(MOCK_ADDRESS);
+                vi.mocked(toSmartAccount).mockReturnValue({} as any);
+
+                await toJustanAccount({
+                    client: MOCK_PUBLIC_CLIENT,
+                    owners: [MOCK_ADDRESS],
+                    factoryAddress: MOCK_FACTORY_ADDRESS,
+                });
+
+                const implementation = vi.mocked(toSmartAccount).mock.calls.at(-1)?.[0] as Record<string, unknown>;
+                expect('authorization' in implementation).toBe(false);
+            });
+        });
+
         describe('Owner processing', () => {
             it('should process string owner to padded bytes', async () => {
                 const mockStringOwner = MOCK_ADDRESS;
