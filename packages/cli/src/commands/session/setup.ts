@@ -227,6 +227,14 @@ export default class SessionSetup extends BaseCommand {
         this.log(`  Chain:            ${chainId}`);
         this.log(`  Expires:          ${new Date(expiryTimestamp * 1000).toISOString()} (${expiryDays} days)`);
         this.log('\nUse --session flag to execute RPC calls in auto mode.');
+        if (mode === 'eip7702') {
+          this.logToStderr(
+            '\nNote: after the first userOp lands, the session EOA is delegated (has code) and ' +
+              'x402 pull payments (raw EIP-3009 signatures) stop validating — USDC then routes ' +
+              'them through EIP-1271/ERC-7739. Until the payer signs the wrapped format, keep ' +
+              'x402 payments on a counterfactual session.'
+          );
+        }
       }
     } catch (error) {
       if (oldPermissionRevoked) {
