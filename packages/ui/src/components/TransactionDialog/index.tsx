@@ -274,11 +274,16 @@ export const TransactionDialog = ({
     if (isPayingWithErc20 && selectedFeeToken) {
       return (
         <div className="flex flex-col items-start gap-0.5">
-          <p className="text-foreground font-mono text-[11px] font-medium">
+          <p className="font-mono leading-tight">
             {selectedFeeToken.gasCostFormatted ? (
-              `$${selectedFeeToken.gasCostFormatted}`
+              <>
+                <span className="text-foreground text-[14px] font-semibold">${selectedFeeToken.gasCostFormatted}</span>
+                <span className="text-muted-foreground ml-1 text-[11px] font-normal">
+                  ≈ {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                </span>
+              </>
             ) : (
-              <span className="text-muted-foreground">Estimating...</span>
+              <span className="text-muted-foreground text-[11px]">Estimating...</span>
             )}
           </p>
           {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
@@ -291,27 +296,21 @@ export const TransactionDialog = ({
       );
     }
     if (gasFee && gasFee !== 'sponsored') {
+      const g = Number(gasFee);
+      const nativeAmt = g > 0 && g < 0.0001 ? `< 0.0001 ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
       return (
-        <div className="flex flex-col items-start gap-0.5">
-          <p
-            className={`text-foreground font-mono text-[11px] ${nativeTokenPrice > 0 ? 'font-medium' : 'font-semibold'}`}
-          >
-            {nativeTokenPrice > 0
-              ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}`
-              : (() => {
-                  const g = Number(gasFee);
-                  return g > 0 && g < 0.0001 ? `< 0.0001 ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
-                })()}
-          </p>
-          {nativeTokenPrice > 0 && (
-            <p className="text-muted-foreground font-mono text-[10px]">
-              {(() => {
-                const g = Number(gasFee);
-                return g > 0 && g < 0.0001 ? `< 0.0001 ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
-              })()}
-            </p>
+        <p className="font-mono leading-tight">
+          {nativeTokenPrice > 0 ? (
+            <>
+              <span className="text-foreground text-[14px] font-semibold">
+                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
+              </span>
+              <span className="text-muted-foreground ml-1 text-[11px] font-normal">≈ {nativeAmt}</span>
+            </>
+          ) : (
+            <span className="text-foreground text-[14px] font-semibold">{nativeAmt}</span>
           )}
-        </div>
+        </p>
       );
     }
     return <p className="text-muted-foreground font-mono text-[11px]">Unable to estimate</p>;
@@ -645,18 +644,20 @@ export const TransactionDialog = ({
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
-                    <span className="text-muted-foreground font-mono text-[10px]">on</span>
+                  </div>
+                  <div className="mt-1.5">{feeValue}</div>
+                </div>
+                {/* Right column: chain on top, fee-token chip below. */}
+                <div className="flex flex-none flex-col items-end gap-1.5">
+                  <div className="text-muted-foreground flex items-center gap-1 font-mono text-[10px]">
                     {/* Round chain badge — clipped to a circle so the logo never stretches. */}
                     <span className="border-border bg-secondary flex size-4 flex-none items-center justify-center overflow-hidden rounded-full border [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0">
                       {chainIcon}
                     </span>
-                    <span className="text-muted-foreground truncate font-mono text-[10px]">
-                      {networkName || 'Ethereum'}
-                    </span>
+                    <span className="truncate">{networkName || 'Ethereum'}</span>
                   </div>
-                  <div className="mt-1.5">{feeValue}</div>
+                  {feeSelector}
                 </div>
-                {feeSelector}
               </div>
             </div>
 

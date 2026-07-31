@@ -284,31 +284,18 @@ export const FeeTokenSelector = ({
       <PopoverContent className="w-64 p-0" align="end" sideOffset={4}>
         {/* Header */}
         <div className="flex items-center justify-between border-b px-3 py-2.5">
-          <h3 className="text-sm font-semibold">Select a token</h3>
+          <h3 className="text-sm font-semibold">Pay fees with</h3>
           <button onClick={() => setOpen(false)} className="hover:bg-muted rounded-full p-0.5 transition-colors">
             <X className="size-4" />
           </button>
         </div>
 
-        {/* Token List */}
+        {/* Token List — native first, then ERC-20s (no section headers). */}
         <div className="max-h-64 overflow-y-auto p-1.5">
-          {/* Native Token Section */}
-          {nativeToken && (
-            <div className="mb-1">
-              <p className="text-muted-foreground px-2 py-1 text-[10px] font-medium">Pay with {nativeToken.symbol}</p>
-              <TokenRow token={nativeToken} />
-            </div>
-          )}
-
-          {/* ERC-20 Tokens Section */}
-          {erc20Tokens.length > 0 && (
-            <div>
-              <p className="text-muted-foreground px-2 py-1 text-[10px] font-medium">Pay with other tokens</p>
-              {erc20Tokens.map((token) => (
-                <TokenRow key={token.address} token={token} showGasCost={true} />
-              ))}
-            </div>
-          )}
+          {nativeToken && <TokenRow token={nativeToken} />}
+          {erc20Tokens.map((token) => (
+            <TokenRow key={token.address} token={token} showGasCost={true} />
+          ))}
         </div>
       </PopoverContent>
     </Popover>
