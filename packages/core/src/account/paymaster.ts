@@ -1,6 +1,24 @@
-import { Client, Hex } from 'viem';
+import { Client, Hex, numberToHex, pad } from 'viem';
 import { getGasPrice } from 'viem/actions';
 import { PaymasterClient, entryPoint08Address } from 'viem/account-abstraction';
+import type { SignedAuthorization } from 'viem';
+
+/**
+ * Serialize a signed EIP-7702 authorization into the bundler wire format
+ * (`eip7702Auth`), mirroring viem's own userOperationRequest formatter. Without
+ * it, estimating the FIRST userOp of a 7702 account simulates against a
+ * codeless sender and mis-estimates or reverts.
+ */
+function formatEip7702Auth(authorization: SignedAuthorization<number>): Record<string, Hex> {
+    return {
+        address: authorization.address,
+        chainId: numberToHex(authorization.chainId),
+        nonce: numberToHex(authorization.nonce),
+        r: authorization.r ? numberToHex(BigInt(authorization.r), { size: 32 }) : pad('0x', { size: 32 }),
+        s: authorization.s ? numberToHex(BigInt(authorization.s), { size: 32 }) : pad('0x', { size: 32 }),
+        yParity: authorization.yParity ? numberToHex(authorization.yParity, { size: 1 }) : pad('0x', { size: 32 }),
+    };
+}
 
 /**
  * Calls eth_estimateUserOperationGas to get gas estimates for a user operation.
@@ -25,6 +43,7 @@ async function estimateUserOperationGas(
         signature?: Hex;
         factory?: Hex;
         factoryData?: Hex;
+        authorization?: SignedAuthorization<number>;
     },
     entryPointAddress: Hex = entryPoint08Address
 ): Promise<{
@@ -40,7 +59,7 @@ async function estimateUserOperationGas(
 
     // Build the user operation object for the RPC call
     // All fields must be present for valid JSON-RPC request
-    const userOpForRpc: Record<string, string> = {
+    const userOpForRpc: Record<string, string | Record<string, Hex>> = {
         sender: userOperation.sender,
         nonce: `0x${(userOperation.nonce || 0n).toString(16)}`,
         callData: userOperation.callData,
@@ -73,6 +92,12 @@ async function estimateUserOperationGas(
     }
     if (userOperation.factoryData) {
         userOpForRpc.factoryData = userOperation.factoryData;
+    }
+
+    // Add the EIP-7702 authorization if present (first userOp of a 7702
+    // account, before the delegation is live on-chain)
+    if (userOperation.authorization) {
+        userOpForRpc.eip7702Auth = formatEip7702Auth(userOperation.authorization);
     }
 
     // Call eth_estimateUserOperationGas using the paymaster client transport (Pimlico)
@@ -164,6 +189,10 @@ export function createPaymasterFunctions(
                             paymasterData: stubData.paymasterData,
                             factory: userOperation.factory,
                             factoryData: userOperation.factoryData,
+                            // Present on the first userOp of a 7702 account.
+                            // Dropping it would simulate a codeless sender.
+                            authorization: (userOperation as { authorization?: SignedAuthorization<number> })
+                                .authorization,
                         },
                         userOperation.entryPointAddress
                     );
