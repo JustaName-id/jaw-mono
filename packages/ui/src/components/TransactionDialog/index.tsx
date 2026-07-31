@@ -3,24 +3,36 @@
 import { Button } from '../ui/button';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
-import { DefaultDialog } from '../DefaultDialog';
+import { ShellDialog } from '../ShellDialog';
+import { ProcessingScreen } from '../ProcessingScreen';
 import { FeeTokenSelector } from '../FeeTokenSelector';
 import { CopiedIcon, CopyIcon } from '../../icons';
-import { useState, useEffect } from 'react';
-import { formatEther } from 'viem';
-import { Info } from 'lucide-react';
+import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { formatEther, ethAddress } from 'viem';
+import { Info, Globe, ArrowDown } from 'lucide-react';
 import { TransactionDialogProps } from './types';
-import { useDialogMobileFullScreen, useChainIconURI, useFeeTokenPrice } from '../../hooks';
+import { useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
 import { IdentityAvatar } from '../IdentityAvatar';
+import { AccountAvatar } from '../AccountAvatar';
 import { TokenIcon } from '../TokenIcon';
 import { DecodedCalldata } from './DecodedCalldata';
 import { AssetPreview } from './AssetPreview';
 
+/** One label/value micro-row card, matching the revamped signing dialogs. */
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div className="border-border rounded-[10.5px] border p-3">
+      <p className="text-muted-foreground mb-1 font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+        {label}
+      </p>
+      {children}
+    </div>
+  );
+}
+
 export const TransactionDialog = ({
-  // open,
-  // onOpenChange,
   transactions,
   walletAddress,
   gasFee,
@@ -37,22 +49,17 @@ export const TransactionDialog = ({
   transactionStatus,
   networkName,
   apiKey,
-  // Fee token props
   feeTokens,
   feeTokensLoading,
   selectedFeeToken,
   onFeeTokenSelect,
   showFeeTokenSelector,
   isPayingWithErc20,
-  // RPC configuration
   mainnetRpcUrl,
   nativeCurrencySymbol,
 }: TransactionDialogProps) => {
-  const mobileFullScreen = useDialogMobileFullScreen();
   const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
-  const [isAddressCopied, setIsAddressCopied] = useState<{
-    [key: string]: boolean;
-  }>({});
+  const [isAddressCopied, setIsAddressCopied] = useState<{ [key: string]: boolean }>({});
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
   const [resolvedAvatars, setResolvedAvatars] = useState<Record<string, string>>({});
 
@@ -60,22 +67,32 @@ export const TransactionDialog = ({
   const isSingleTransaction = totalTransactions === 1;
   const currentTransaction = transactions[0];
 
-  // Get chain icon using the hook - fetch from capabilities chainMetadata
   const chainIcon = useChainIconURI(currentTransaction?.chainId || 1, apiKey, 24);
 
-  // Get native token symbol from feeTokens, falling back to chain's native currency
   const nativeToken = feeTokens?.find((t) => t.isNative);
   const nativeSymbol = nativeToken?.symbol || nativeCurrencySymbol || 'ETH';
-
-  // Fetch native token price dynamically based on the chain's native token symbol
   const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
-  // Check if there are any selectable payment options
-  // If feeTokens is not loaded yet (null/undefined/empty), assume there are selectable options
+  // If feeTokens isn't loaded yet (null/undefined/empty), assume there are selectable options.
   const hasSelectablePaymentOption =
     !feeTokens || feeTokens.length === 0 ? true : feeTokens.some((t) => t.isSelectable);
 
-  // Resolve wallet + transaction 'to' addresses to ENS names in one batched request
+  // Inside a Radix modal, native wheel scrolling of a nested container can get eaten —
+  // drive scrollTop manually (mirrors the signing dialogs).
+  const scrollRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (el.scrollHeight <= el.clientHeight) return;
+      el.scrollTop += e.deltaY;
+      e.preventDefault();
+    };
+    el.addEventListener('wheel', onWheel, { passive: false });
+    return () => el.removeEventListener('wheel', onWheel);
+  }, [isProcessing, transactions]);
+
+  // Resolve wallet + transaction 'to' addresses to ENS names in one batched request.
   useEffect(() => {
     const inputs: { address: string; chainId: number }[] = [];
     if (walletAddress && currentTransaction?.chainId) {
@@ -116,7 +133,6 @@ export const TransactionDialog = ({
   }, [walletAddress, transactions, currentTransaction?.chainId]);
 
   // Resolve ERC-7730 `metadata.contractName` for every unique `to` in the batch.
-  // Kept inline (single usage site) — mirrors the ENS reverse-resolve effect above.
   const [contractNames, setContractNames] = useState<Record<string, string>>({});
   const txSignature = transactions
     .filter((t) => !!t.to)
@@ -136,7 +152,6 @@ export const TransactionDialog = ({
         return;
       }
 
-      // Collect unique (address, descriptor path) pairs, then fetch in parallel.
       const lookups = new Map<string, string>();
       for (const t of transactions) {
         if (!t.to) continue;
@@ -181,169 +196,245 @@ export const TransactionDialog = ({
     return getDisplayAddress(undefined, address);
   };
 
-  // Get display addresses - use resolved name or formatted address
   const displayWalletAddress = getDisplayAddress(resolvedAddresses[walletAddress], walletAddress);
   const displayToAddress = displayContractAddress(currentTransaction?.to);
 
-  // Helper function to format value for display
   const formatTransactionValue = (value?: string) => {
     if (!value || value === '0' || value === '0x0') return null;
-
     try {
-      // Handle hex strings (0x...)
-      if (value.startsWith('0x')) {
-        const bigIntValue = BigInt(value);
-        return formatEther(bigIntValue);
-      }
-
-      // If value looks like wei (long number, no decimals), format it from wei to ETH
-      if (/^\d+$/.test(value) && value.length > 10) {
-        return formatEther(BigInt(value));
-      }
-
-      // If it's already a decimal string (like "0.001"), return as is
-      if (/^\d+\.?\d*$/.test(value) && value.length <= 20) {
-        return value;
-      }
-
-      // Try to parse as BigInt and format
-      const bigIntValue = BigInt(value);
-      return formatEther(bigIntValue);
+      if (value.startsWith('0x')) return formatEther(BigInt(value));
+      if (/^\d+$/.test(value) && value.length > 10) return formatEther(BigInt(value));
+      if (/^\d+\.?\d*$/.test(value) && value.length <= 20) return value;
+      return formatEther(BigInt(value));
     } catch (error) {
-      // If parsing fails, return null to hide the value
       console.warn('Failed to format transaction value:', value, error);
       return null;
     }
   };
 
-  // Determine if confirmation is allowed:
-  // - Not processing
-  // - Gas estimation not loading
-  // - No gas estimation error (unless sponsored)
-  // - Must have at least one selectable payment option
+  // Confirmation gating (unchanged): not processing, gas not loading, a selectable
+  // payment option exists, and an ERC-20 fee has a settled ceiling.
   const hasInsufficientFunds = !hasSelectablePaymentOption || (gasEstimationError && !sponsored && !isPayingWithErc20);
-  // Paying with ERC-20 requires a settled estimate for the selected token — the
-  // approval amount comes from it; without one the transaction must not start.
   const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
   const canConfirm = !isProcessing && !gasFeeLoading && !hasInsufficientFunds && !erc20EstimateMissing;
 
-  return (
-    <DefaultDialog
-      // open={open}
-      // onOpenChange={!isProcessing ? onOpenChange : undefined}
-      open={true}
-      onOpenChange={
-        isProcessing
-          ? undefined
-          : () => {
-              // Empty handler to prevent dialog close
-            }
-      }
-      header={
-        <div className="flex flex-col gap-2.5 p-3.5">
-          <p className="text-muted-foreground text-xs font-bold leading-[100%]">
-            {new Date().toLocaleDateString('en-US', {
-              weekday: 'long',
-              day: 'numeric',
-              month: 'long',
-            })}{' '}
-            at{' '}
-            {new Date().toLocaleTimeString('en-US', {
-              hour: '2-digit',
-              minute: '2-digit',
-              second: '2-digit',
-              timeZoneName: 'short',
-            })}
+  const singleValue = isSingleTransaction ? formatTransactionValue(currentTransaction?.value) : null;
+  // A pure native transfer (value, no calldata) reads as a "Send"; everything else is a generic review.
+  const isNativeSend =
+    isSingleTransaction && !!singleValue && (!currentTransaction?.data || currentTransaction.data === '0x');
+  const title = isNativeSend ? "You're Sending" : 'Review Transaction';
+
+  const hasError = transactionStatus.includes('Error');
+
+  // Fee-token chip — one instance, shared by the fee row.
+  const feeSelector =
+    showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect ? (
+      <FeeTokenSelector
+        tokens={feeTokens}
+        chainId={currentTransaction?.chainId}
+        selectedToken={selectedFeeToken ?? null}
+        onSelect={onFeeTokenSelect}
+        isLoading={feeTokensLoading ?? false}
+        disabled={isProcessing}
+        nativeTokenPrice={nativeTokenPrice}
+        estimatedGasEth={gasFee || '0'}
+      />
+    ) : null;
+
+  // The fee VALUE block — every state preserved from the pre-revamp dialog.
+  const feeValue = (() => {
+    if (gasFeeLoading && !isPayingWithErc20) {
+      return <p className="text-muted-foreground font-mono text-[11px]">Estimating...</p>;
+    }
+    if (gasEstimationError && !sponsored) {
+      return <p className="text-destructive font-mono text-[11px] font-medium">{gasEstimationError}</p>;
+    }
+    if (sponsored) {
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <div className="flex items-center gap-2">
+            {gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
+              <span className="text-muted-foreground font-mono text-[11px] line-through">
+                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
+              </span>
+            )}
+            <span className="text-success bg-success/10 rounded px-2 py-0.5 text-[10px] font-semibold">Sponsored</span>
+          </div>
+          <p className="text-muted-foreground font-mono text-[10px]">
+            {gasFee && gasFee !== 'sponsored'
+              ? (() => {
+                  const g = Number(gasFee);
+                  return g > 0 && g < 0.0001 ? `< 0.0001 ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
+                })()
+              : 'Gas fees covered'}
           </p>
-          <p className="text-foreground text-[30px] font-normal leading-[100%]">{'Review Transaction'}</p>
-          {totalTransactions > 1 && currentTransaction?.description && (
-            <p className="text-muted-foreground text-sm">
-              {currentTransaction.action}: {currentTransaction.description}
+        </div>
+      );
+    }
+    if (isPayingWithErc20 && selectedFeeToken) {
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <p className="text-foreground font-mono text-[11px] font-medium">
+            {selectedFeeToken.gasCostFormatted ? (
+              `$${selectedFeeToken.gasCostFormatted}`
+            ) : (
+              <span className="text-muted-foreground">Estimating...</span>
+            )}
+          </p>
+          {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
+            <p className="text-muted-foreground font-mono text-[10px]">
+              Up to {selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted}{' '}
+              {selectedFeeToken.symbol}
             </p>
           )}
         </div>
-      }
-      contentStyle={
-        mobileFullScreen
-          ? {
-              width: '100%',
-              height: '100%',
-              maxWidth: 'none',
-              maxHeight: 'none',
-              overflowY: 'auto',
-            }
-          : {
-              width: '500px',
-              minWidth: '500px',
-              maxHeight: !isSingleTransaction ? '85vh' : undefined,
-            }
-      }
+      );
+    }
+    if (gasFee && gasFee !== 'sponsored') {
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <p
+            className={`text-foreground font-mono text-[11px] ${nativeTokenPrice > 0 ? 'font-medium' : 'font-semibold'}`}
+          >
+            {nativeTokenPrice > 0
+              ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}`
+              : (() => {
+                  const g = Number(gasFee);
+                  return g > 0 && g < 0.0001 ? `< 0.0001 ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
+                })()}
+          </p>
+          {nativeTokenPrice > 0 && (
+            <p className="text-muted-foreground font-mono text-[10px]">
+              {(() => {
+                const g = Number(gasFee);
+                return g > 0 && g < 0.0001 ? `< 0.0001 ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
+              })()}
+            </p>
+          )}
+        </div>
+      );
+    }
+    return <p className="text-muted-foreground font-mono text-[11px]">Unable to estimate</p>;
+  })();
+
+  return (
+    <ShellDialog
+      open={true}
+      onOpenChange={(o) => {
+        if (!o) onCancel();
+      }}
+      dismissable={!isProcessing}
+      contentClassName="min-h-[510px]"
     >
-      <div
-        className={`flex flex-col justify-between gap-6 max-md:h-full ${!isSingleTransaction ? 'h-full overflow-hidden' : ''}`}
-      >
-        {isSingleTransaction ? (
-          // Single Transaction Layout
-          <>
-            <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-              {/* From - To */}
-              <div className="border-border flex flex-col gap-3 rounded-[6px] border p-3.5">
-                <div className="text-foreground flex min-w-0 flex-col gap-0.5">
-                  <p className="text-xs font-bold leading-[133%]">From</p>
-                  <div className="flex min-w-0 flex-row items-center gap-1">
-                    <IdentityAvatar src={resolvedAvatars[walletAddress]} />
-                    <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
-                  </div>
+      {isProcessing ? (
+        <ProcessingScreen
+          seedAddress={walletAddress}
+          avatarUrl={resolvedAvatars[walletAddress]}
+          appAvatar={chainIcon ?? <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />}
+          title="Submitting transaction"
+          subtitle={`Signing with your passkey · ${networkName || 'the network'}`}
+        />
+      ) : (
+        <div className="flex min-h-0 flex-1 flex-col">
+          {/* Pinned header — action title only (no timestamp, no app header, no X). */}
+          <div className="flex-none px-6 pt-7">
+            <h2 className="text-foreground text-[26px] font-bold tracking-[-0.03em]">{title}</h2>
+            {totalTransactions > 1 && currentTransaction?.description && (
+              <p className="text-muted-foreground mt-0.5 text-[12px]">
+                {currentTransaction.action}: {currentTransaction.description}
+              </p>
+            )}
+          </div>
+
+          {/* Scrollable body */}
+          <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
+            {/* Native send → one prominent hero amount (replaces the asset-preview row + value card). */}
+            {isNativeSend && (
+              <div className="flex items-center gap-3 pb-0.5 pt-1">
+                <TokenIcon
+                  chainId={currentTransaction.chainId}
+                  address={ethAddress}
+                  symbol={nativeSymbol}
+                  className="size-11 flex-none"
+                  fallback={<IdentityAvatar />}
+                />
+                <div className="flex min-w-0 items-baseline gap-2">
+                  <span className="text-foreground text-[26px] font-bold tracking-[-0.02em]">
+                    {singleValue} {nativeSymbol}
+                  </span>
+                  {nativeTokenPrice > 0 && (
+                    <span className="text-muted-foreground text-[15px] font-normal">
+                      ≈ ${(Number(singleValue) * nativeTokenPrice).toFixed(2)}
+                    </span>
+                  )}
                 </div>
-                <div className="bg-border h-[1px] w-full flex-shrink-0 rounded-full" />
-                <div className="text-foreground flex min-w-0 flex-col gap-0.5">
-                  <p className="text-xs font-bold leading-[133%]">To</p>
-                  <div className="flex min-w-0 flex-row items-center gap-1">
-                    {currentTransaction?.to && !resolvedAvatars[currentTransaction.to] ? (
-                      // Recipient with no ENS avatar: known token contracts get their logo, everything else the wallet glyph.
-                      <TokenIcon
-                        chainId={currentTransaction.chainId}
-                        address={currentTransaction.to}
-                        className="size-5"
-                        fallback={<IdentityAvatar />}
+              </div>
+            )}
+
+            {/* From / To */}
+            <div className="border-border flex flex-col gap-2.5 rounded-[10.5px] border p-3">
+              <div className="flex min-w-0 flex-col gap-1">
+                <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+                  From
+                </p>
+                <div className="flex min-w-0 items-center gap-2">
+                  <AccountAvatar
+                    seed={walletAddress}
+                    avatarUrl={resolvedAvatars[walletAddress]}
+                    size={32}
+                    className="size-8 flex-none rounded-[9px]"
+                  />
+                  <p className="text-foreground min-w-0 break-all font-mono text-[14px] font-medium">
+                    {displayWalletAddress}
+                  </p>
+                </div>
+              </div>
+              {isSingleTransaction && currentTransaction?.to && (
+                <>
+                  <div className="flex items-center py-0.5">
+                    <div className="bg-border h-px flex-1" />
+                    <ArrowDown className="text-muted-foreground mx-1.5 size-3 flex-none" strokeWidth={2} />
+                    <div className="bg-border h-px flex-1" />
+                  </div>
+                  <div className="flex min-w-0 flex-col gap-1">
+                    <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+                      To
+                    </p>
+                    <div className="flex min-w-0 items-center gap-2">
+                      <AccountAvatar
+                        seed={currentTransaction.to}
+                        avatarUrl={resolvedAvatars[currentTransaction.to]}
+                        size={32}
+                        className="size-8 flex-none rounded-[9px]"
                       />
-                    ) : (
-                      <IdentityAvatar
-                        src={currentTransaction?.to ? resolvedAvatars[currentTransaction.to] : undefined}
-                      />
-                    )}
-                    <p className="break-all text-base font-normal leading-[150%]">{displayToAddress}</p>
-                    {currentTransaction?.to &&
-                      (isAddressCopied['single-to'] ? (
-                        <CopiedIcon width={14} height={14} className="flex-shrink-0" />
+                      <p className="text-foreground min-w-0 break-all font-mono text-[14px] font-medium">
+                        {displayToAddress}
+                      </p>
+                      {isAddressCopied['single-to'] ? (
+                        <CopiedIcon width={13} height={13} className="flex-none" />
                       ) : (
                         <CopyIcon
-                          width={14}
-                          height={14}
+                          width={13}
+                          height={13}
                           onClick={() => {
                             if (typeof window !== 'undefined' && navigator?.clipboard) {
                               navigator.clipboard.writeText(currentTransaction.to).catch(() => undefined);
-                              setIsAddressCopied((prev) => ({
-                                ...prev,
-                                'single-to': true,
-                              }));
-                              setTimeout(
-                                () =>
-                                  setIsAddressCopied((prev) => ({
-                                    ...prev,
-                                    'single-to': false,
-                                  })),
-                                3000
-                              );
+                              setIsAddressCopied((prev) => ({ ...prev, 'single-to': true }));
+                              setTimeout(() => setIsAddressCopied((prev) => ({ ...prev, 'single-to': false })), 3000);
                             }
                           }}
-                          className="flex-shrink-0 cursor-pointer"
+                          className="flex-none cursor-pointer"
                         />
-                      ))}
+                      )}
+                    </div>
                   </div>
-                </div>
-              </div>
+                </>
+              )}
+            </div>
 
+            {/* Asset changes — for a native send the hero already shows it, so only surface
+                the preview when it carries a revert warning. */}
+            {(!isNativeSend || assetPreviewWillRevert) && (
               <AssetPreview
                 assetsOut={assetsOut ?? []}
                 assetsIn={assetsIn ?? []}
@@ -352,433 +443,201 @@ export const TransactionDialog = ({
                 nativeSymbol={nativeSymbol}
                 chainId={currentTransaction?.chainId}
               />
+            )}
 
-              {/* Value */}
-              {formatTransactionValue(currentTransaction?.value) && (
-                <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
-                  <div className="text-foreground flex flex-col gap-0.5">
-                    <p className="text-xs font-bold leading-[133%]">Value</p>
-                    <p className="text-base font-normal leading-[150%]">
-                      {formatTransactionValue(currentTransaction?.value)} {nativeSymbol}
-                    </p>
-                  </div>
-                </div>
-              )}
+            {/* Value (single, non-native — a native send shows it in the hero) */}
+            {isSingleTransaction && !isNativeSend && singleValue && (
+              <Row label="Value">
+                <p className="text-foreground font-mono text-[13px] font-semibold">
+                  {singleValue} {nativeSymbol}
+                  {nativeTokenPrice > 0 && (
+                    <span className="text-muted-foreground ml-1.5 text-[11px] font-normal">
+                      ≈ ${(Number(singleValue) * nativeTokenPrice).toFixed(2)}
+                    </span>
+                  )}
+                </p>
+              </Row>
+            )}
 
-              {/* Network - Fees */}
-              <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
-                <div className="text-foreground flex flex-1 flex-col gap-0.5">
-                  <p className="text-xs font-bold leading-[133%]">Network</p>
-                  <div className="flex flex-row items-center gap-1">
-                    {chainIcon}
-                    <p className="truncate text-ellipsis text-base font-normal leading-[150%]">
-                      {networkName || 'Ethereum'}
-                    </p>
-                  </div>
+            {/* Data (single tx) */}
+            {isSingleTransaction && currentTransaction?.data && currentTransaction.data !== '0x' && (
+              <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-3">
+                <div className="flex items-center justify-between">
+                  <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+                    Data
+                  </p>
+                  {isDataCopied[0] ? (
+                    <CopiedIcon width={14} height={14} />
+                  ) : (
+                    <CopyIcon
+                      width={14}
+                      height={14}
+                      onClick={() => {
+                        if (typeof window !== 'undefined' && navigator?.clipboard) {
+                          navigator.clipboard.writeText(currentTransaction?.data ?? '').catch(() => undefined);
+                          setIsDataCopied({ ...isDataCopied, 0: true });
+                          setTimeout(() => setIsDataCopied((prev) => ({ ...prev, 0: false })), 3000);
+                        }
+                      }}
+                      className="cursor-pointer"
+                    />
+                  )}
                 </div>
-                <div className="bg-border h-full min-h-[50px] w-[1px] rounded-full" />
-                <div className="text-foreground flex flex-1 flex-col gap-0.5">
-                  <div className="flex items-center gap-1">
-                    <p className="text-xs font-bold leading-[133%]">Network Fees</p>
-                    <TooltipProvider delayDuration={0}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="text-muted-foreground size-3 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[200px] text-xs">
-                          <p>
-                            Gas fees paid to network validators to process your transaction. You can pay with{' '}
-                            {nativeSymbol} or supported tokens.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <div className="flex w-full flex-row items-center justify-between gap-1">
-                    {gasFeeLoading && !isPayingWithErc20 ? (
-                      <p className="text-muted-foreground text-base font-normal">Estimating...</p>
-                    ) : gasEstimationError && !sponsored ? (
-                      <div className="flex flex-col">
-                        <p className="text-destructive text-sm font-medium">{gasEstimationError}</p>
-                      </div>
-                    ) : sponsored ? (
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          {gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
-                            <div className="text-muted-foreground flex flex-col line-through">
-                              <p className="text-base font-normal">${(nativeTokenPrice * Number(gasFee)).toFixed(4)}</p>
-                            </div>
-                          )}
-                          <span className="text-success bg-success/10 rounded px-2 py-0.5 text-xs font-semibold">
-                            Sponsored
-                          </span>
-                        </div>
-                        <p className="text-muted-foreground text-xs font-normal">
-                          {gasFee && gasFee !== 'sponsored'
-                            ? (() => {
-                                const gasValue = Number(gasFee);
-                                if (gasValue > 0 && gasValue < 0.0001) {
-                                  return `< 0.0001 ${nativeSymbol}`;
-                                }
-                                return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                              })()
-                            : 'Gas fees covered'}
-                        </p>
-                      </div>
-                    ) : isPayingWithErc20 && selectedFeeToken ? (
-                      <div className="flex w-full flex-col gap-0.5">
-                        <div className="flex w-full items-center justify-between">
-                          <p className="text-foreground text-base font-normal">
-                            {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
-                            {selectedFeeToken.gasCostFormatted ? (
-                              // For stablecoins like USDC/USDT, the value is approximately USD
-                              `$${selectedFeeToken.gasCostFormatted}`
+                <DecodedCalldata
+                  to={currentTransaction.to}
+                  data={currentTransaction.data}
+                  chainId={currentTransaction.chainId}
+                  apiKey={apiKey}
+                  resolvedAddresses={resolvedAddresses}
+                  resolvedAvatars={resolvedAvatars}
+                  mainnetRpcUrl={mainnetRpcUrl}
+                />
+              </div>
+            )}
+
+            {/* Batch — numbered steps (all open, collapsible) */}
+            {!isSingleTransaction && (
+              <Accordion
+                type="multiple"
+                className="space-y-2.5"
+                defaultValue={transactions.map((_, index) => `transaction-${index}`)}
+              >
+                {transactions.map((transaction, index) => (
+                  <AccordionItem
+                    key={index}
+                    value={`transaction-${index}`}
+                    className="border-border overflow-hidden rounded-[10.5px] border"
+                  >
+                    <AccordionTrigger className="px-3 py-2.5 hover:no-underline">
+                      <span className="flex items-center gap-2">
+                        <span className="bg-secondary text-foreground flex size-5 flex-none items-center justify-center rounded-full text-[10px] font-semibold">
+                          {index + 1}
+                        </span>
+                        <span className="text-foreground text-[13px] font-medium">Call {index + 1}</span>
+                      </span>
+                    </AccordionTrigger>
+                    <AccordionContent className="px-3 pb-3">
+                      <div className="flex flex-col gap-2.5">
+                        {/* Interacting with (to) */}
+                        <div className="border-border flex flex-col gap-1 rounded-[10.5px] border p-2.5">
+                          <div className="flex items-center justify-between">
+                            <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+                              Interacting with
+                            </p>
+                            {isAddressCopied[`to-${index}`] ? (
+                              <CopiedIcon width={13} height={13} />
                             ) : (
-                              <span className="text-muted-foreground">Estimating...</span>
-                            )}
-                          </p>
-                          {/* Inline Fee Token Selector */}
-                          {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
-                            <FeeTokenSelector
-                              tokens={feeTokens}
-                              chainId={currentTransaction?.chainId}
-                              selectedToken={selectedFeeToken}
-                              onSelect={onFeeTokenSelect}
-                              isLoading={feeTokensLoading ?? false}
-                              disabled={isProcessing}
-                              nativeTokenPrice={nativeTokenPrice}
-                              estimatedGasEth={gasFee || '0'}
-                            />
-                          )}
-                        </div>
-                        {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
-                          <p className="text-muted-foreground text-xs font-normal">
-                            Up to {selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted}{' '}
-                            {selectedFeeToken.symbol}
-                          </p>
-                        )}
-                      </div>
-                    ) : gasFee && gasFee !== 'sponsored' ? (
-                      <div className="flex w-full flex-col gap-0.5">
-                        <div className="flex w-full items-center justify-between">
-                          <p
-                            className={`text-foreground text-base ${nativeTokenPrice > 0 ? 'font-normal' : 'font-bold'}`}
-                          >
-                            {nativeTokenPrice > 0
-                              ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}`
-                              : (() => {
-                                  const gasValue = Number(gasFee);
-                                  if (gasValue > 0 && gasValue < 0.0001) {
-                                    return `< 0.0001 ${nativeSymbol}`;
+                              <CopyIcon
+                                width={13}
+                                height={13}
+                                onClick={() => {
+                                  if (typeof window !== 'undefined' && navigator?.clipboard) {
+                                    navigator.clipboard.writeText(transaction.to).catch(() => undefined);
+                                    setIsAddressCopied((prev) => ({ ...prev, [`to-${index}`]: true }));
+                                    setTimeout(
+                                      () => setIsAddressCopied((prev) => ({ ...prev, [`to-${index}`]: false })),
+                                      3000
+                                    );
                                   }
-                                  return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                                })()}
-                          </p>
-                          {/* Inline Fee Token Selector */}
-                          {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
-                            <FeeTokenSelector
-                              tokens={feeTokens}
-                              chainId={currentTransaction?.chainId}
-                              selectedToken={selectedFeeToken ?? null}
-                              onSelect={onFeeTokenSelect}
-                              isLoading={feeTokensLoading ?? false}
-                              disabled={isProcessing}
-                              nativeTokenPrice={nativeTokenPrice}
-                              estimatedGasEth={gasFee}
+                                }}
+                                className="cursor-pointer"
+                              />
+                            )}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <AccountAvatar
+                              seed={transaction.to}
+                              avatarUrl={transaction.to ? resolvedAvatars[transaction.to] : undefined}
+                              size={28}
+                              className="size-7 flex-none rounded-[8px]"
                             />
-                          )}
+                            <p className="text-foreground min-w-0 break-all font-mono text-[14px] font-medium">
+                              {displayContractAddress(transaction.to)}
+                            </p>
+                          </div>
                         </div>
-                        {nativeTokenPrice > 0 && (
-                          <p className="text-muted-foreground text-xs font-normal">
-                            {(() => {
-                              const gasValue = Number(gasFee);
-                              if (gasValue > 0 && gasValue < 0.0001) {
-                                return `< 0.0001 ${nativeSymbol}`;
-                              }
-                              return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                            })()}
-                          </p>
+
+                        {/* Value */}
+                        {formatTransactionValue(transaction.value) && (
+                          <Row label="Value">
+                            <p className="text-foreground font-mono text-[12px] font-semibold">
+                              {formatTransactionValue(transaction.value)} {nativeSymbol}
+                              {nativeTokenPrice > 0 && (
+                                <span className="text-muted-foreground ml-1.5 text-[11px] font-normal">
+                                  ≈ ${(Number(formatTransactionValue(transaction.value)) * nativeTokenPrice).toFixed(2)}
+                                </span>
+                              )}
+                            </p>
+                          </Row>
                         )}
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground text-base font-normal">Unable to estimate</p>
-                    )}
-                  </div>
-                </div>
-              </div>
 
-              {/* Show Data section if data is provided */}
-              {currentTransaction?.data && currentTransaction.data !== '0x' && (
-                <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
-                  <div className="flex w-full flex-row items-center justify-between">
-                    <p className="text-foreground text-xs font-bold leading-[133%]">Data</p>
-                    {isDataCopied[0] ? (
-                      <CopiedIcon width={16} height={16} />
-                    ) : (
-                      <CopyIcon
-                        width={16}
-                        height={16}
-                        onClick={() => {
-                          if (typeof window !== 'undefined' && navigator?.clipboard) {
-                            navigator.clipboard.writeText(currentTransaction?.data ?? '').catch(() => undefined);
-                            setIsDataCopied({ ...isDataCopied, 0: true });
-                            setTimeout(
-                              () =>
-                                setIsDataCopied((prev) => ({
-                                  ...prev,
-                                  0: false,
-                                })),
-                              3000
-                            );
-                          }
-                        }}
-                        className="cursor-pointer"
-                      />
-                    )}
-                  </div>
-                  <DecodedCalldata
-                    to={currentTransaction.to}
-                    data={currentTransaction.data!}
-                    chainId={currentTransaction.chainId}
-                    apiKey={apiKey}
-                    resolvedAddresses={resolvedAddresses}
-                    resolvedAvatars={resolvedAvatars}
-                    mainnetRpcUrl={mainnetRpcUrl}
-                  />
-                </div>
-              )}
-
-              {/* Transaction Status */}
-              {transactionStatus && (
-                <div
-                  className={`rounded-lg p-3 text-sm ${
-                    transactionStatus.includes('Error')
-                      ? 'bg-destructive/10 text-destructive'
-                      : transactionStatus.includes('successfully')
-                        ? 'bg-success/10 text-success'
-                        : 'bg-info/10 text-info'
-                  }`}
-                >
-                  {transactionStatus}
-                </div>
-              )}
-            </div>
-
-            {/* Action Buttons */}
-            <div className="flex flex-shrink-0 gap-3 p-3.5 max-md:mt-auto">
-              <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
-                Cancel
-              </Button>
-              <Button onClick={onConfirm} disabled={!canConfirm} className="flex-1">
-                {hasInsufficientFunds ? 'Insufficient Funds' : isProcessing ? 'Processing...' : 'Transact'}
-              </Button>
-            </div>
-          </>
-        ) : (
-          // Multiple Transactions Layout with Accordion
-          <>
-            <div className="flex max-h-[60vh] min-h-0 flex-1 flex-col gap-3 overflow-y-auto">
-              {/* From Address */}
-              <div className="border-border flex-shrink-0 rounded-[6px] border p-3.5">
-                <p className="text-foreground mb-1 text-xs font-bold leading-[133%]">From</p>
-                <div className="flex flex-row items-center gap-1">
-                  <IdentityAvatar src={resolvedAvatars[walletAddress]} />
-                  <p className="break-all text-base font-normal leading-[150%]">{displayWalletAddress}</p>
-                </div>
-              </div>
-
-              <AssetPreview
-                assetsOut={assetsOut ?? []}
-                assetsIn={assetsIn ?? []}
-                error={assetPreviewError ?? false}
-                willRevert={assetPreviewWillRevert ?? false}
-                nativeSymbol={nativeSymbol}
-                chainId={currentTransaction?.chainId}
-              />
-
-              {/* Accordion for Transactions */}
-              <div className="min-h-0 flex-1 overflow-y-auto">
-                <Accordion
-                  type="multiple"
-                  className="w-full space-y-3"
-                  defaultValue={transactions.map((_, index) => `transaction-${index}`)}
-                >
-                  {transactions.map((transaction, index) => (
-                    <AccordionItem
-                      key={index}
-                      value={`transaction-${index}`}
-                      className="border-border overflow-hidden rounded-[6px] border"
-                    >
-                      <AccordionTrigger className="px-3.5 py-2.5 hover:no-underline">
-                        <span className="text-base font-medium">Call {index + 1}</span>
-                      </AccordionTrigger>
-                      <AccordionContent className="px-3.5 pb-3.5">
-                        <div className="flex flex-col gap-3">
-                          {/* Interacting with (To) */}
-                          <div className="border-border flex flex-col gap-1 rounded-[6px] border p-2">
+                        {/* Data */}
+                        {transaction.data && transaction.data !== '0x' && (
+                          <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-2.5">
                             <div className="flex items-center justify-between">
-                              <p className="text-foreground text-xs font-bold leading-[133%]">Interacting with (to)</p>
-                              {isAddressCopied[`to-${index}`] ? (
+                              <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+                                Data
+                              </p>
+                              {isDataCopied[index] ? (
                                 <CopiedIcon width={14} height={14} />
                               ) : (
                                 <CopyIcon
                                   width={14}
                                   height={14}
-                                  onClick={() => {
+                                  onClick={(e) => {
+                                    e.stopPropagation();
                                     if (typeof window !== 'undefined' && navigator?.clipboard) {
-                                      navigator.clipboard.writeText(transaction.to).catch(() => undefined);
-                                      setIsAddressCopied((prev) => ({
-                                        ...prev,
-                                        [`to-${index}`]: true,
-                                      }));
-                                      setTimeout(
-                                        () =>
-                                          setIsAddressCopied((prev) => ({
-                                            ...prev,
-                                            [`to-${index}`]: false,
-                                          })),
-                                        3000
-                                      );
+                                      navigator.clipboard.writeText(transaction.data ?? '').catch(() => undefined);
+                                      setIsDataCopied({ ...isDataCopied, [index]: true });
+                                      setTimeout(() => setIsDataCopied((prev) => ({ ...prev, [index]: false })), 3000);
                                     }
                                   }}
                                   className="cursor-pointer"
                                 />
                               )}
                             </div>
-                            <div className="flex flex-row items-center gap-1">
-                              {transaction.to && !resolvedAvatars[transaction.to] ? (
-                                <TokenIcon
-                                  chainId={transaction.chainId}
-                                  address={transaction.to}
-                                  className="size-5"
-                                  fallback={<IdentityAvatar />}
-                                />
-                              ) : (
-                                <IdentityAvatar src={transaction.to ? resolvedAvatars[transaction.to] : undefined} />
-                              )}
-                              <p className="text-sm font-normal leading-[150%]">
-                                {displayContractAddress(transaction.to)}
-                              </p>
-                            </div>
+                            <DecodedCalldata
+                              to={transaction.to}
+                              data={transaction.data}
+                              chainId={transaction.chainId}
+                              apiKey={apiKey}
+                              resolvedAddresses={resolvedAddresses}
+                              resolvedAvatars={resolvedAvatars}
+                              mainnetRpcUrl={mainnetRpcUrl}
+                            />
                           </div>
+                        )}
+                      </div>
+                    </AccordionContent>
+                  </AccordionItem>
+                ))}
+              </Accordion>
+            )}
 
-                          {/* Value */}
-                          {formatTransactionValue(transaction.value) && (
-                            <div className="border-border flex items-center gap-2 rounded-[6px] border p-2">
-                              <div className="bg-primary/10 flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full">
-                                <svg width="20" height="20" viewBox="0 0 20 20" fill="none">
-                                  <path d="M10 2L3 10L10 14L17 10L10 2Z" fill="currentColor" className="text-primary" />
-                                </svg>
-                              </div>
-                              <div className="flex-1">
-                                <p className="text-muted-foreground text-xs font-bold leading-[133%]">Value</p>
-                                <div className="flex items-baseline gap-2">
-                                  <p className="text-base font-normal">
-                                    {formatTransactionValue(transaction.value)} {nativeSymbol}
-                                  </p>
-                                  {nativeTokenPrice > 0 && (
-                                    <p className="text-muted-foreground text-sm">
-                                      $
-                                      {(Number(formatTransactionValue(transaction.value)) * nativeTokenPrice).toFixed(
-                                        2
-                                      )}
-                                    </p>
-                                  )}
-                                </div>
-                              </div>
-                            </div>
-                          )}
-
-                          {/* Data */}
-                          {transaction.data && transaction.data !== '0x' && (
-                            <div className="border-border flex flex-col gap-1 rounded-[6px] border p-2">
-                              <div className="mb-2 flex items-center justify-between">
-                                <p className="text-muted-foreground text-xs font-bold leading-[133%]">Data</p>
-                                {isDataCopied[index] ? (
-                                  <CopiedIcon width={16} height={16} />
-                                ) : (
-                                  <CopyIcon
-                                    width={16}
-                                    height={16}
-                                    onClick={(e) => {
-                                      e.stopPropagation();
-                                      if (typeof window !== 'undefined' && navigator?.clipboard) {
-                                        navigator.clipboard.writeText(transaction.data ?? '').catch(() => undefined);
-                                        setIsDataCopied({
-                                          ...isDataCopied,
-                                          [index]: true,
-                                        });
-                                        setTimeout(
-                                          () =>
-                                            setIsDataCopied((prev) => ({
-                                              ...prev,
-                                              [index]: false,
-                                            })),
-                                          3000
-                                        );
-                                      }
-                                    }}
-                                    className="cursor-pointer"
-                                  />
-                                )}
-                              </div>
-                              <DecodedCalldata
-                                to={transaction.to}
-                                data={transaction.data!}
-                                chainId={transaction.chainId}
-                                apiKey={apiKey}
-                                resolvedAddresses={resolvedAddresses}
-                                resolvedAvatars={resolvedAvatars}
-                                mainnetRpcUrl={mainnetRpcUrl}
-                              />
-                            </div>
-                          )}
-                        </div>
-                      </AccordionContent>
-                    </AccordionItem>
-                  ))}
-                </Accordion>
+            {/* Error banner (processing/success now live in the ProcessingScreen state above). */}
+            {hasError && (
+              <div className="bg-destructive/10 rounded-[10.5px] p-3">
+                <p className="text-destructive text-[12px]">{transactionStatus}</p>
               </div>
+            )}
+          </div>
 
-              {/* Transaction Status */}
-              {transactionStatus && (
-                <div
-                  className={`rounded-lg p-3 text-sm ${
-                    transactionStatus.includes('Error')
-                      ? 'bg-destructive/10 text-destructive'
-                      : transactionStatus.includes('successfully')
-                        ? 'bg-success/10 text-success'
-                        : 'bg-info/10 text-info'
-                  }`}
-                >
-                  {transactionStatus}
-                </div>
-              )}
-            </div>
-
-            {/* Fixed Bottom Section */}
-            <div className="flex-shrink-0 space-y-3 border-t pt-3">
-              {/* Network and Fees */}
-              <div className="border-border flex flex-row items-center justify-between gap-2.5 rounded-[6px] border p-3.5">
-                <div className="text-foreground flex flex-1 flex-col gap-0.5">
-                  <p className="text-xs font-bold leading-[133%]">Network</p>
-                  <div className="flex flex-row items-center gap-1">
-                    {chainIcon}
-                    <p className="truncate text-ellipsis text-base font-normal leading-[150%]">
-                      {networkName || 'Ethereum'}
+          {/* Pinned fee row + actions */}
+          <div className="border-border flex-none space-y-3 border-t px-6 py-3.5">
+            {/* Network fee */}
+            <div className="border-border rounded-[10.5px] border p-3">
+              <div className="flex items-start justify-between gap-2">
+                <div className="min-w-0">
+                  <div className="flex items-center gap-1.5">
+                    <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
+                      Network fee
                     </p>
-                  </div>
-                </div>
-                <div className="bg-border h-full min-h-[50px] w-[1px] rounded-full" />
-                <div className="text-foreground flex flex-1 flex-col gap-0.5">
-                  <div className="flex items-center gap-1">
-                    <p className="text-xs font-bold leading-[133%]">Network Fees</p>
                     <TooltipProvider delayDuration={0}>
                       <Tooltip>
                         <TooltipTrigger asChild>
                           <Info className="text-muted-foreground size-3 cursor-help" />
                         </TooltipTrigger>
-                        <TooltipContent side="top" className="max-w-[200px] text-xs">
+                        <TooltipContent side="top">
                           <p>
                             Gas fees paid to network validators to process your transaction. You can pay with{' '}
                             {nativeSymbol} or supported tokens.
@@ -786,138 +645,43 @@ export const TransactionDialog = ({
                         </TooltipContent>
                       </Tooltip>
                     </TooltipProvider>
+                    <span className="text-muted-foreground font-mono text-[10px]">on</span>
+                    {/* Round chain badge — clipped to a circle so the logo never stretches. */}
+                    <span className="border-border bg-secondary flex size-4 flex-none items-center justify-center overflow-hidden rounded-full border [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0">
+                      {chainIcon}
+                    </span>
+                    <span className="text-muted-foreground truncate font-mono text-[10px]">
+                      {networkName || 'Ethereum'}
+                    </span>
                   </div>
-                  <div className="flex w-full flex-row items-center justify-between gap-1">
-                    {gasFeeLoading && !isPayingWithErc20 ? (
-                      <p className="text-muted-foreground text-base font-normal">Estimating...</p>
-                    ) : gasEstimationError && !sponsored ? (
-                      <div className="flex flex-col">
-                        <p className="text-destructive text-sm font-medium">{gasEstimationError}</p>
-                      </div>
-                    ) : sponsored ? (
-                      <div className="flex flex-col">
-                        <div className="flex items-center gap-2">
-                          {gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
-                            <div className="text-muted-foreground flex flex-col line-through">
-                              <p className="text-base font-normal">${(nativeTokenPrice * Number(gasFee)).toFixed(4)}</p>
-                            </div>
-                          )}
-                          <span className="text-success bg-success/10 rounded px-2 py-0.5 text-xs font-semibold">
-                            Sponsored
-                          </span>
-                        </div>
-                        <p className="text-muted-foreground text-xs font-normal">
-                          {gasFee && gasFee !== 'sponsored'
-                            ? (() => {
-                                const gasValue = Number(gasFee);
-                                if (gasValue > 0 && gasValue < 0.0001) {
-                                  return `< 0.0001 ${nativeSymbol}`;
-                                }
-                                return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                              })()
-                            : 'Gas fees covered'}
-                        </p>
-                      </div>
-                    ) : isPayingWithErc20 && selectedFeeToken ? (
-                      <div className="flex w-full flex-col gap-0.5">
-                        <div className="flex w-full items-center justify-between">
-                          <p className="text-foreground text-base font-normal">
-                            {/* Show estimated cost from paymaster quote - don't fallback to ETH calculation */}
-                            {selectedFeeToken.gasCostFormatted ? (
-                              // For stablecoins like USDC/USDT, the value is approximately USD
-                              `$${selectedFeeToken.gasCostFormatted}`
-                            ) : (
-                              <span className="text-muted-foreground">Estimating...</span>
-                            )}
-                          </p>
-                          {/* Inline Fee Token Selector */}
-                          {showFeeTokenSelector && feeTokens && onFeeTokenSelect && (
-                            <FeeTokenSelector
-                              tokens={feeTokens}
-                              chainId={currentTransaction?.chainId}
-                              selectedToken={selectedFeeToken}
-                              onSelect={onFeeTokenSelect}
-                              isLoading={feeTokensLoading ?? false}
-                              disabled={isProcessing}
-                              nativeTokenPrice={nativeTokenPrice}
-                              estimatedGasEth={gasFee || '0'}
-                            />
-                          )}
-                        </div>
-                        {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
-                          <p className="text-muted-foreground text-xs font-normal">
-                            Up to {selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted}{' '}
-                            {selectedFeeToken.symbol}
-                          </p>
-                        )}
-                      </div>
-                    ) : gasFee && gasFee !== 'sponsored' ? (
-                      <div className="flex w-full flex-col gap-0.5">
-                        <div className="flex w-full items-center justify-between">
-                          <p
-                            className={`text-foreground text-base ${nativeTokenPrice > 0 ? 'font-normal' : 'font-bold'}`}
-                          >
-                            {nativeTokenPrice > 0
-                              ? `$${(nativeTokenPrice * Number(gasFee)).toFixed(4)}`
-                              : (() => {
-                                  const gasValue = Number(gasFee);
-                                  if (gasValue > 0 && gasValue < 0.0001) {
-                                    return `< 0.0001 ${nativeSymbol}`;
-                                  }
-                                  return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                                })()}
-                          </p>
-                          {/* Inline Fee Token Selector */}
-                          {showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect && (
-                            <FeeTokenSelector
-                              tokens={feeTokens}
-                              chainId={currentTransaction?.chainId}
-                              selectedToken={selectedFeeToken ?? null}
-                              onSelect={onFeeTokenSelect}
-                              isLoading={feeTokensLoading ?? false}
-                              disabled={isProcessing}
-                              nativeTokenPrice={nativeTokenPrice}
-                              estimatedGasEth={gasFee}
-                            />
-                          )}
-                        </div>
-                        {nativeTokenPrice > 0 && (
-                          <p className="text-muted-foreground text-xs font-normal">
-                            {(() => {
-                              const gasValue = Number(gasFee);
-                              if (gasValue > 0 && gasValue < 0.0001) {
-                                return `< 0.0001 ${nativeSymbol}`;
-                              }
-                              return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                            })()}
-                          </p>
-                        )}
-                      </div>
-                    ) : (
-                      <p className="text-muted-foreground text-base font-normal">Unable to estimate</p>
-                    )}
-                  </div>
+                  <div className="mt-1.5">{feeValue}</div>
                 </div>
-              </div>
-
-              {/* Action Buttons */}
-              <div className="flex flex-shrink-0 gap-3 px-3.5">
-                <Button variant="outline" onClick={onCancel} disabled={isProcessing} className="flex-1">
-                  Cancel
-                </Button>
-                <Button onClick={onConfirm} disabled={!canConfirm} className="flex-1">
-                  {gasEstimationError && !sponsored
-                    ? 'Insufficient Funds'
-                    : isProcessing
-                      ? 'Processing...'
-                      : 'Transact'}
-                </Button>
+                {feeSelector}
               </div>
             </div>
-          </>
-        )}
-      </div>
-    </DefaultDialog>
+
+            {/* Actions */}
+            <div className="flex gap-2">
+              <Button
+                variant="secondary"
+                onClick={onCancel}
+                disabled={isProcessing}
+                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={onConfirm}
+                disabled={!canConfirm}
+                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+              >
+                {hasInsufficientFunds ? 'Insufficient Funds' : isProcessing ? 'Processing...' : 'Confirm'}
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </ShellDialog>
   );
 };
 
