@@ -50,6 +50,15 @@ describe('session-config', () => {
     expect(loaded.createdAt).toBeDefined();
   });
 
+  it('round-trips the derivation mode, and leaves it undefined for older configs', () => {
+    saveSessionConfig({ ...SAMPLE_CONFIG, mode: 'eip7702' });
+    expect(loadSessionConfig().mode).toBe('eip7702');
+    // A config written before the field existed must read as counterfactual
+    // (the consumers treat any non-'eip7702' value as the default).
+    saveSessionConfig(SAMPLE_CONFIG);
+    expect(loadSessionConfig().mode).toBeUndefined();
+  });
+
   it('loadSessionConfig throws if file does not exist', () => {
     expect(() => loadSessionConfig()).toThrow(/No session configured/);
   });

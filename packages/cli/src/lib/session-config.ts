@@ -2,6 +2,16 @@ import * as fs from 'node:fs';
 import { PATHS } from './paths.js';
 import { ensureDir } from './config.js';
 
+/**
+ * How the session account address is derived. 'counterfactual' (the default,
+ * and what configs written before this field existed mean): a CREATE2
+ * prediction from the account factory, a separate address from the session
+ * key EOA. 'eip7702': the session key EOA itself, upgraded in place via an
+ * EIP-7702 delegation attached to its first userOp — session account and
+ * x402 payer collapse into one address.
+ */
+export type SessionMode = 'counterfactual' | 'eip7702';
+
 export interface SessionConfig {
   ownerAddress: string;
   sessionAddress: string;
@@ -9,6 +19,7 @@ export interface SessionConfig {
   chainId: number;
   expiry: number;
   createdAt: string;
+  mode?: SessionMode;
 }
 
 export function saveSessionConfig(input: Omit<SessionConfig, 'createdAt'>): void {

@@ -10,6 +10,7 @@ const FUTURE_EXPIRY = Math.floor(Date.now() / 1000) + 86400;
 const PAST_EXPIRY = Math.floor(Date.now() / 1000) - 86400;
 
 let mockExpiry = FUTURE_EXPIRY;
+let mockMode: 'counterfactual' | 'eip7702' | undefined;
 
 vi.mock('./session-config.js', () => ({
   loadSessionConfig: vi.fn(() => ({
@@ -19,6 +20,7 @@ vi.mock('./session-config.js', () => ({
     chainId: 84532,
     expiry: mockExpiry,
     createdAt: new Date().toISOString(),
+    ...(mockMode ? { mode: mockMode } : {}),
   })),
 }));
 
@@ -37,24 +39,28 @@ const mockSendCalls = vi.fn().mockResolvedValue({ id: '0xBatchId', chainId: 8453
 const mockSignMessage = vi.fn().mockResolvedValue('0xSig');
 const mockSignTypedData = vi.fn().mockResolvedValue('0xTypedSig');
 const mockGetCallStatus = vi.fn().mockReturnValue({ status: 200 });
+let mockAccountAddress = '0xSession';
 
 vi.mock('@jaw.id/core', () => ({
   Account: {
-    fromLocalAccount: vi.fn().mockResolvedValue({
-      address: '0xSession',
+    fromLocalAccount: vi.fn().mockImplementation(async () => ({
+      address: mockAccountAddress,
       sendCalls: mockSendCalls,
       signMessage: mockSignMessage,
       signTypedData: mockSignTypedData,
       getCallStatus: mockGetCallStatus,
-    }),
+    })),
   },
 }));
 
 const { SessionBridge } = await import('./session-bridge.js');
+const { Account } = await import('@jaw.id/core');
 
 describe('SessionBridge', () => {
   beforeEach(() => {
     mockExpiry = FUTURE_EXPIRY;
+    mockMode = undefined;
+    mockAccountAddress = '0xSession';
     vi.clearAllMocks();
   });
 
@@ -134,5 +140,26 @@ describe('SessionBridge', () => {
   it('close is a no-op', () => {
     const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
     expect(() => bridge.close()).not.toThrow();
+  });
+
+  it('derives counterfactually when the session config has no mode (older setups)', async () => {
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+    await bridge.request('eth_accounts');
+    expect(Account.fromLocalAccount).toHaveBeenCalledWith(expect.anything(), expect.anything(), { eip7702: false });
+  });
+
+  it('re-derives with eip7702 when the session was created in eip7702 mode', async () => {
+    mockMode = 'eip7702';
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+    await bridge.request('eth_accounts');
+    expect(Account.fromLocalAccount).toHaveBeenCalledWith(expect.anything(), expect.anything(), { eip7702: true });
+  });
+
+  it('throws when the derived account does not match the stored session address', async () => {
+    // A hand-edited keystore or a config copied from another machine would
+    // otherwise sign from an account the permission was never granted to.
+    mockAccountAddress = '0xSomebodyElse';
+    const bridge = new SessionBridge({ apiKey: 'test', chainId: 84532 });
+    await expect(bridge.request('wallet_sendCalls', [{ calls: [] }])).rejects.toThrow(/out of sync/);
   });
 });

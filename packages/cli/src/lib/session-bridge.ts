@@ -61,6 +61,10 @@ export class SessionBridge {
     privateKeyHex = null;
 
     const { Account } = await import('@jaw.id/core');
+    // Sessions created with `--eip7702` must re-derive the same way: without
+    // the option the account would be the counterfactual sibling — a different
+    // address than the permission's spender — and no delegation would ever be
+    // attached to its userOps.
     const account = await Account.fromLocalAccount(
       {
         chainId: this.options.chainId,
@@ -68,8 +72,20 @@ export class SessionBridge {
         paymasterUrl: this.options.paymasterUrl,
         paymasterContext: this.options.paymasterContext,
       },
-      localAccount
+      localAccount,
+      { eip7702: config.mode === 'eip7702' }
     );
+
+    // The stored sessionAddress is the on-chain permission's spender. If the
+    // key or mode drifted since setup (hand-edited keystore, config from
+    // another machine), signing would come from an account the permission was
+    // never granted to — fail clearly instead of sending doomed userOps.
+    if (account.address.toLowerCase() !== config.sessionAddress.toLowerCase()) {
+      throw new Error(
+        `Session key derives ${account.address}, but the stored session address is ${config.sessionAddress}. ` +
+          'The keystore and session config are out of sync. Run `jaw session setup` to recreate the session.'
+      );
+    }
 
     this.session = { account: account as InitializedSession['account'], config };
     return this.session;

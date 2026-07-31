@@ -47,6 +47,9 @@ export default class SessionStatus extends BaseCommand {
       const remaining = Math.floor((config.expiry - now) / 86400);
       this.log('Session active.\n');
       this.log(`  Session address:  ${config.sessionAddress}`);
+      if (config.mode === 'eip7702') {
+        this.log('                    (EIP-7702: same address as the session key EOA / x402 payer)');
+      }
       this.log(`  Owner address:    ${config.ownerAddress}`);
       this.log(`  Permission ID:    ${config.permissionId}`);
       this.log(`  Chain:            ${config.chainId}`);

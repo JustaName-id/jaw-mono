@@ -26,6 +26,13 @@ export default class SessionSetup extends BaseCommand {
     expiry: Flags.integer({
       description: 'Permission expiry in days. Overrides config.sessionExpiry.',
     }),
+    eip7702: Flags.boolean({
+      description:
+        'Experimental: derive the session account via EIP-7702 delegation, so the session address ' +
+        'IS the session key EOA (one address instead of a separate counterfactual smart account). ' +
+        'The delegation is attached to the first userOp. Requires bundler EIP-7702 support.',
+      default: false,
+    }),
   };
 
   async run(): Promise<void> {
@@ -142,6 +149,10 @@ export default class SessionSetup extends BaseCommand {
 
       const { Account } = await import('@jaw.id/core');
       const pm = config.paymasters?.[chainId];
+      // eip7702 keeps the session address equal to the session key EOA (the
+      // delegation rides the first userOp); otherwise the address is the
+      // factory's counterfactual prediction for [sessionEOA, PermissionManager].
+      const mode = flags.eip7702 ? ('eip7702' as const) : ('counterfactual' as const);
       const account = await Account.fromLocalAccount(
         {
           chainId,
@@ -149,7 +160,8 @@ export default class SessionSetup extends BaseCommand {
           paymasterUrl: pm?.url,
           paymasterContext: pm?.context,
         },
-        localAccount
+        localAccount,
+        { eip7702: flags.eip7702 }
       );
       const sessionAddress = account.address;
 
@@ -190,6 +202,7 @@ export default class SessionSetup extends BaseCommand {
         permissionId: grantResponse.permissionId,
         chainId,
         expiry: expiryTimestamp,
+        mode,
       });
 
       // 9. Output
@@ -198,6 +211,7 @@ export default class SessionSetup extends BaseCommand {
         sessionAddress,
         permissionId: grantResponse.permissionId,
         expiry: expiryTimestamp,
+        mode,
       };
 
       if (flags.quiet) {
@@ -205,6 +219,9 @@ export default class SessionSetup extends BaseCommand {
       } else {
         this.log('\nSession created successfully.\n');
         this.log(`  Session address:  ${sessionAddress}`);
+        if (mode === 'eip7702') {
+          this.log('                    (EIP-7702: same address as the session key EOA / x402 payer)');
+        }
         this.log(`  Owner address:    ${grantResponse.account}`);
         this.log(`  Permission ID:    ${grantResponse.permissionId}`);
         this.log(`  Chain:            ${chainId}`);

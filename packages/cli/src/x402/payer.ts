@@ -53,10 +53,12 @@ export class Eip3009EoaPayer implements Payer {
 }
 
 /**
- * The address pull-mode payments are made from — the session key's own EOA,
- * which is DISTINCT from the session smart-account address (`sessionAddress`).
- * This is the address that must hold USDC for `jaw_pay_and_fetch` to pay; expose
- * it so a user/agent knows where to send funds. Derives the public address only
+ * The address pull-mode payments are made from — the session key's own EOA.
+ * In the counterfactual session mode this is DISTINCT from the session
+ * smart-account address (`sessionAddress`); in eip7702 mode they are the same
+ * address (the EOA is the session account, upgraded in place). Either way this
+ * is the address that must hold USDC for `jaw_pay_and_fetch` to pay; expose it
+ * so a user/agent knows where to send funds. Derives the public address only
  * (no signing, no key exposure). Throws if no session key exists.
  */
 export function sessionPayerAddress(): `0x${string}` {

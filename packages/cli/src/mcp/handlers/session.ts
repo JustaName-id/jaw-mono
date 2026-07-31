@@ -25,8 +25,9 @@ export function registerSessionTools(server: McpServer): void {
         }
         const config = loadSessionConfig();
         // The EOA that jaw_pay_and_fetch pays USDC from — distinct from
-        // sessionAddress (the smart account). This is the address to fund.
-        // Non-fatal: a malformed key must not break the whole status report.
+        // sessionAddress (the smart account) in counterfactual mode, the same
+        // address in eip7702 mode. This is the address to fund. Non-fatal: a
+        // malformed key must not break the whole status report.
         let payerAddress: string | undefined;
         try {
           payerAddress = sessionPayerAddress();
