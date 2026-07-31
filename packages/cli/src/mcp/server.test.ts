@@ -479,6 +479,72 @@ describe('jaw_pay_and_fetch', () => {
     }
   });
 
+  it('counts a failed settlement in the in-process accumulator (no restart)', async () => {
+    // Same server instance for both calls: this pins the in-memory
+    // accumulation of attemptedPayment amounts, independently of the ledger
+    // seed (which only runs on a fresh instance).
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore(PK, '0xSmartAccount');
+    saveConfig({ x402: { maxTotalPerSession: '1500' } });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}')) // call 1: challenge
+      .mockResolvedValueOnce(mkRes(500, {}, '{}')) // call 1: settlement fails after signing
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}')); // call 2: challenge (refused)
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      const first = JSON.parse(
+        toolText(await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/a' } }))
+      );
+      expect(first.paid).toBe(false);
+      expect(first.attemptedPayment.amount).toBe('1000');
+
+      const second = JSON.parse(
+        toolText(await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/b' } }))
+      );
+      expect(second.paid).toBe(false);
+      expect(second.refusedReason).toMatch(/maxTotalPerSession/);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it('does not seed sessionSpent from refused ledger entries (nothing was signed)', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    const { appendX402Log } = await import('../x402/ledger.js');
+    saveKeystore(PK, '0xSmartAccount');
+    saveConfig({ x402: { maxTotalPerSession: '1500' } });
+
+    // A refused attempt never produced a signed authorization, so its amount
+    // must not eat into the cap. If it did, this 1000-unit payment would break
+    // the 1500 cap (1000 refused + 1000 = 2000) and be refused.
+    appendX402Log({
+      at: new Date().toISOString(),
+      url: 'https://api.example.com/earlier',
+      payer: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8',
+      status: 'refused',
+      amount: '1000',
+      reason: 'amount exceeds maxAmountPerPayment',
+    });
+
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}'))
+      .mockResolvedValueOnce(mkRes(200, { 'PAYMENT-RESPONSE': RECEIPT }, JSON.stringify({ ok: true })));
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      const result = JSON.parse(
+        toolText(await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/a' } }))
+      );
+      expect(result.paid).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('reports the payer address (the EOA to fund) in jaw_session_status', async () => {
     const { saveKeystore } = await import('../lib/keystore.js');
     const { saveSessionConfig } = await import('../lib/session-config.js');
@@ -495,6 +561,25 @@ describe('jaw_pay_and_fetch', () => {
     // Distinct from sessionAddress (the smart account) — this is where USDC goes.
     expect(parsed.payerAddress.toLowerCase()).toBe('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
     expect(parsed.sessionAddress).toBe('0xSmartAccount');
+    // Pre-7702 config: no mode field, so none is reported.
+    expect(parsed.mode).toBeUndefined();
+  });
+
+  it('reports the derivation mode in jaw_session_status for an eip7702 session', async () => {
+    const { saveKeystore } = await import('../lib/keystore.js');
+    const { saveSessionConfig } = await import('../lib/session-config.js');
+    saveKeystore(PK, '0xSessionEoa');
+    saveSessionConfig({
+      ownerAddress: '0xOwner',
+      sessionAddress: '0xSessionEoa',
+      permissionId: '0xPerm',
+      chainId: 84532,
+      expiry: Math.floor(Date.now() / 1000) + 86400,
+      mode: 'eip7702',
+    });
+    const client = await connectClient();
+    const parsed = JSON.parse(toolText(await client.callTool({ name: 'jaw_session_status', arguments: {} })));
+    expect(parsed.mode).toBe('eip7702');
   });
 
   it('records a paid call in the x402 ledger, readable via jaw_x402_log', async () => {
