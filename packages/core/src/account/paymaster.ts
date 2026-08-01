@@ -16,6 +16,9 @@ function formatEip7702Auth(authorization: SignedAuthorization<number>): Record<s
         nonce: numberToHex(authorization.nonce),
         r: authorization.r ? numberToHex(BigInt(authorization.r), { size: 32 }) : pad('0x', { size: 32 }),
         s: authorization.s ? numberToHex(BigInt(authorization.s), { size: 32 }) : pad('0x', { size: 32 }),
+        // The 32-byte zero for a falsy yParity looks odd but mirrors viem's own
+        // formatter byte-for-byte — the estimation payload must match what the
+        // send path produces, quirks included.
         yParity: authorization.yParity ? numberToHex(authorization.yParity, { size: 1 }) : pad('0x', { size: 32 }),
     };
 }

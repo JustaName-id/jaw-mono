@@ -45,7 +45,9 @@ TOOLS
 
 FUNDING
 The payer is the session-key EOA shown as payerAddress in jaw_session_status.
-It is NOT the smart-account (session) address. Send USDC to payerAddress on the
+In the default (counterfactual) session mode it is NOT the smart-account
+(session) address; in eip7702 mode they are the same address. Either way,
+send USDC to payerAddress on the
 network you will pay on (e.g. Base, or Base Sepolia for testing). Payments are
 gasless for the payer (the facilitator pays the gas), so it only needs USDC, no
 native token. If a payment fails with an insufficient-balance reason, top up
