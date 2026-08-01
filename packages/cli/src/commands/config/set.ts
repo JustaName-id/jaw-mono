@@ -65,15 +65,15 @@ export default class ConfigSet extends BaseCommand {
       if (!isValidKey(key)) {
         this.error(`Invalid config key: ${key}`);
       }
-      const parsed = key === 'defaultChain' || key === 'sessionExpiry' ? parseInt(value, 10) : value;
-
-      if ((key === 'defaultChain' || key === 'sessionExpiry') && isNaN(parsed as number)) {
-        this.error(`Invalid number for ${key}: ${value}`);
+      // setConfigValue coerces + validates numeric keys (defaultChain,
+      // sessionExpiry) in one place, shared with the MCP tool path.
+      try {
+        setConfigValue(key, value);
+      } catch (err) {
+        this.error(err instanceof Error ? err.message : String(err));
       }
 
-      setConfigValue(key, parsed as string | number);
-
-      const displayValue = key === 'apiKey' && typeof value === 'string' ? `${value.slice(0, 8)}...` : parsed;
+      const displayValue = key === 'apiKey' && typeof value === 'string' ? `${value.slice(0, 8)}...` : value;
 
       results.push({ key, value: displayValue });
     }

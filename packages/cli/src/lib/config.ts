@@ -104,7 +104,21 @@ export function setConfigValue(key: SettableConfigKey, value: string | number): 
   if (key === 'relayUrl' && typeof value === 'string' && !isValidRelayUrl(value)) {
     throw new Error(`Untrusted relayUrl: ${value}. Must be wss://*.jaw.id or ws://localhost.`);
   }
+  // Numeric keys: coerce + validate here so EVERY caller is safe. The MCP tool
+  // passes raw strings (its schema types value as a string), so without this a
+  // `sessionExpiry: "abc"` would land as a string and turn `expiry * 86400`
+  // into NaN, and a `defaultChain` string would ride into an RPC URL verbatim.
+  let toStore: string | number = value;
+  if (key === 'defaultChain' || key === 'sessionExpiry') {
+    // Strict: reject anything parseInt would silently truncate ('1.5' -> 1,
+    // '0x10' -> 0, '10abc' -> 10). Only a bare positive decimal integer passes.
+    const n = typeof value === 'number' ? value : /^\d+$/.test(value.trim()) ? parseInt(value.trim(), 10) : NaN;
+    if (!Number.isInteger(n) || n <= 0) {
+      throw new Error(`${key} must be a positive integer, got: ${JSON.stringify(value)}`);
+    }
+    toStore = n;
+  }
   const config = loadConfig();
-  const updated = { ...config, [key]: value };
+  const updated = { ...config, [key]: toStore };
   saveConfig(updated);
 }

@@ -59,6 +59,23 @@ describe('config', () => {
     setConfigValue('apiKey', 'new-key');
     expect(loadConfig().apiKey).toBe('new-key');
   });
+
+  it('coerces numeric keys passed as strings (the MCP tool path)', () => {
+    // The MCP jaw_config_set tool types value as a string; a numeric key must
+    // land as a number, not a string that would break `expiry * 86400`.
+    setConfigValue('defaultChain', '8453');
+    setConfigValue('sessionExpiry', '14');
+    const config = loadConfig();
+    expect(config.defaultChain).toBe(8453);
+    expect(config.sessionExpiry).toBe(14);
+  });
+
+  it('rejects non-integer / non-positive values for numeric keys', () => {
+    expect(() => setConfigValue('sessionExpiry', 'abc')).toThrow(/positive integer/);
+    expect(() => setConfigValue('defaultChain', '0x10')).toThrow(/positive integer/);
+    expect(() => setConfigValue('defaultChain', '-1')).toThrow(/positive integer/);
+    expect(() => setConfigValue('sessionExpiry', '1.5')).toThrow(/positive integer/);
+  });
 });
 
 describe('redactConfig', () => {

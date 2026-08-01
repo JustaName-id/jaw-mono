@@ -20,6 +20,8 @@ export const rpcMethodSchema = {
     ),
   chainId: z
     .number()
+    .int()
+    .positive()
     .optional()
     .describe('Target chain ID (overrides default). E.g., 1 for Ethereum, 8453 for Base, 84532 for Base Sepolia'),
   session: z
@@ -38,8 +40,23 @@ export const configSetSchema = {
   value: z.string().describe('Config value'),
 };
 
+const httpUrl = z
+  .string()
+  .url()
+  .refine(
+    (u) => {
+      try {
+        const p = new URL(u).protocol;
+        return p === 'http:' || p === 'https:';
+      } catch {
+        return false;
+      }
+    },
+    { message: 'url must be http(s) — other schemes (file:, data:, javascript:, ftp:) are not fetched' }
+  );
+
 export const payAndFetchSchema = {
-  url: z.string().url().describe('Resource URL to fetch. If it answers HTTP 402 (x402), pay and retry.'),
+  url: httpUrl.describe('Resource URL to fetch (http/https only). If it answers HTTP 402 (x402), pay and retry.'),
   method: z.string().optional().describe('HTTP method (default GET).'),
   headers: z.record(z.string()).optional().describe('Extra request headers.'),
   body: z.string().optional().describe('Request body (for POST/PUT/etc.).'),
