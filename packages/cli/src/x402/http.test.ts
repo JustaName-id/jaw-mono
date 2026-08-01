@@ -41,10 +41,13 @@ interface MockResInit {
   status: number;
   headers?: Record<string, string>;
   body?: string;
+  /** Final URL after redirects (Response.url); defaults to the request URL. */
+  url?: string;
 }
-const mockRes = ({ status, headers = {}, body = '' }: MockResInit): Response =>
+const mockRes = ({ status, headers = {}, body = '', url = '' }: MockResInit): Response =>
   ({
     status,
+    url,
     headers: { get: (k: string) => headers[k] ?? null },
     text: async () => body,
   }) as unknown as Response;
@@ -100,6 +103,61 @@ describe('payAndFetch', () => {
     expect(result.paid).toBe(false);
     expect(result.status).toBe(200);
     expect(result.body).toEqual({ free: true });
+  });
+
+  it('refuses when an https URL was redirected down to http before the 402 (gate on final URL)', async () => {
+    // fetch follows https->http redirects by default; the 402 challenge here
+    // arrived over cleartext even though the caller passed an https URL.
+    fetchMock.mockResolvedValueOnce(
+      mockRes({
+        status: 402,
+        headers: { 'PAYMENT-REQUIRED': challengeHeader },
+        body: '{}',
+        url: 'http://attacker.example.com/fake-challenge',
+      })
+    );
+
+    const result = await payAndFetch('https://trusted.example.com/api', payer);
+
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toMatch(/non-HTTPS/);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // never signed
+  });
+
+  it('sends the signed proof to the resolved secure resource with redirects disabled', async () => {
+    fetchMock
+      .mockResolvedValueOnce(
+        mockRes({
+          status: 402,
+          headers: { 'PAYMENT-REQUIRED': challengeHeader },
+          body: '{}',
+          url: 'https://cdn.example.com/paid', // resolved after a same-protocol redirect
+        })
+      )
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch('https://api.example.com/paid/resource', payer);
+
+    expect(result.paid).toBe(true);
+    const retryUrl = fetchMock.mock.calls[1][0] as string;
+    const retryInit = fetchMock.mock.calls[1][1] as { redirect?: string };
+    expect(retryUrl).toBe('https://cdn.example.com/paid'); // the resolved resource, not the original
+    expect(retryInit.redirect).toBe('manual'); // signature never follows a redirect
+  });
+
+  it('treats a redirect on the paid retry as a settlement failure (never follows the signed proof)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(mockRes({ status: 302, headers: { location: 'http://attacker.example.com' }, body: '' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.paid).toBe(false);
+    expect(result.status).toBe(302);
+    expect(result.refusedReason).toMatch(/redirect/);
+    expect(result.attemptedPayment).toBeTruthy(); // signed, so surfaced for reconciliation
   });
 
   it('allows signing over http for loopback (local dev/test servers)', async () => {

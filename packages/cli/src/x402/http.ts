@@ -240,10 +240,15 @@ export async function payAndFetch(
     return { status: first.status, body: await readBody(first), paid: false, payer: payer.address };
   }
 
-  // A 402 means we are about to sign a payment. Refuse over cleartext http (a
-  // MITM could rewrite the challenge's payTo) before touching the key — the
-  // free-resource path above already returned, so plain http fetches still work.
-  if (!isPaymentUrlSecure(url)) {
+  // A 402 means we are about to sign a payment. Gate on the FINAL url (after
+  // any redirects), not the original: fetch follows https->http downgrades by
+  // default, so a trusted https endpoint that redirects to http would smuggle a
+  // cleartext challenge past a check on the original url. `resource` is also
+  // what the policy host allowlist must judge, and where the signed proof is
+  // sent (never the original, which could redirect again). Free (non-402)
+  // fetches returned above, so plain http still works as a generic fetch.
+  const resource = first.url || url;
+  if (!isPaymentUrlSecure(resource)) {
     return {
       status: 402,
       body: await readBody(first),
@@ -266,7 +271,7 @@ export async function payAndFetch(
   }
 
   // 3. Choose an option under the constraints + policy, or refuse clearly.
-  const ctx: PolicyContext = { host: hostOf(url), spentThisSession: opts.spentThisSession };
+  const ctx: PolicyContext = { host: hostOf(resource), spentThisSession: opts.spentThisSession };
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {
     return { status: 402, body: await readBody(first), paid: false, payer: payer.address, refusedReason: reason };
@@ -307,14 +312,32 @@ export async function payAndFetch(
   };
   const proof = encodePaymentPayload(payload);
 
-  // 5. Retry with the proof. A fresh nonce means the server's replay
-  //    protection is fine with the re-request.
+  // 5. Retry with the proof, against the resolved secure `resource` and with
+  //    redirects DISABLED: the PAYMENT-SIGNATURE header must never be followed
+  //    onto another origin (undici keeps custom headers across cross-origin
+  //    redirects), which would hand the signed proof to an attacker. A fresh
+  //    nonce means the server's replay protection is fine with the re-request.
   const retryHeaders: Record<string, string> = {
     ...baseHeaders,
     [X402_HEADERS.signature]: proof,
     'Idempotency-Key': idempotencyKey(),
   };
-  const paid = await fetch(url, { method, headers: retryHeaders, body: opts.body });
+  const paid = await fetch(resource, { method, headers: retryHeaders, body: opts.body, redirect: 'manual' });
+
+  // A settled x402 response carries the resource directly (never a redirect).
+  // A 3xx here means the endpoint tried to bounce the signed proof elsewhere —
+  // treat it as a settlement failure, never follow it.
+  if (paid.status >= 300 && paid.status < 400) {
+    return {
+      status: paid.status,
+      body: await readBody(paid),
+      paid: false,
+      payer: payer.address,
+      attemptedPayment: details,
+      topUp,
+      refusedReason: `settlement endpoint attempted a redirect (${paid.status}); not following it with the signed proof`,
+    };
+  }
 
   const receipt = b64json<X402SettleResponse>(paid.headers.get(X402_HEADERS.response));
   const body = await readBody(paid);
