@@ -1,4 +1,5 @@
 import { USDC_BY_NETWORK } from './asset-registry.js';
+import { parseBigInt } from './amount.js';
 import type { X402PaymentRequirement } from './types.js';
 
 /**
@@ -102,10 +103,8 @@ export function checkPolicy(
     return { ok: false, reason: `host not allowed: ${ctx.host ?? '(unknown)'}` };
   }
 
-  let amount: bigint;
-  try {
-    amount = BigInt(requirement.amount);
-  } catch {
+  const amount = parseBigInt(requirement.amount);
+  if (amount === null) {
     return { ok: false, reason: `invalid amount: ${requirement.amount}` };
   }
   if (amount < 0n) {
@@ -113,10 +112,8 @@ export function checkPolicy(
   }
 
   if (policy.maxAmountPerPayment !== undefined) {
-    let cap: bigint;
-    try {
-      cap = BigInt(policy.maxAmountPerPayment);
-    } catch {
+    const cap = parseBigInt(policy.maxAmountPerPayment);
+    if (cap === null) {
       return { ok: false, reason: `invalid maxAmountPerPayment in config: ${policy.maxAmountPerPayment}` };
     }
     if (amount > cap) {
@@ -128,10 +125,8 @@ export function checkPolicy(
   }
 
   if (policy.maxTotalPerSession !== undefined) {
-    let cap: bigint;
-    try {
-      cap = BigInt(policy.maxTotalPerSession);
-    } catch {
+    const cap = parseBigInt(policy.maxTotalPerSession);
+    if (cap === null) {
       return { ok: false, reason: `invalid maxTotalPerSession in config: ${policy.maxTotalPerSession}` };
     }
     const spent = ctx.spentThisSession ?? 0n;

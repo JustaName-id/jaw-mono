@@ -1,5 +1,7 @@
 import { randomBytes } from 'node:crypto';
 import { z } from 'zod';
+import { errorMessage } from '../lib/errors.js';
+import { parseBigInt } from './amount.js';
 import { encodePaymentPayload } from './scheme-exact-evm.js';
 import { checkPolicy, type PolicyContext, type X402Policy } from './policy.js';
 import type { Payer } from './payer.js';
@@ -233,18 +235,14 @@ function selectRequirement(accepts: unknown[], opts: PayAndFetchOptions, ctx: Po
       continue;
     }
 
-    let amount: bigint;
-    try {
-      amount = BigInt(req.amount);
-    } catch {
+    const amount = parseBigInt(req.amount);
+    if (amount === null) {
       reason = `invalid amount: ${req.amount}`;
       continue;
     }
     if (opts.maxAmount !== undefined) {
-      let cap: bigint;
-      try {
-        cap = BigInt(opts.maxAmount);
-      } catch {
+      const cap = parseBigInt(opts.maxAmount);
+      if (cap === null) {
         reason = `invalid maxAmount: ${opts.maxAmount}`;
         continue;
       }
@@ -366,7 +364,7 @@ export async function payAndFetch(
       body: await readBody(first),
       paid: false,
       payer: payer.address,
-      refusedReason: `payment signing failed: ${err instanceof Error ? err.message : String(err)}`,
+      refusedReason: `payment signing failed: ${errorMessage(err)}`,
       topUp,
     };
   }

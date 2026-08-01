@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { PATHS } from '../lib/paths.js';
 import { ensureDir } from '../lib/config.js';
+import { errorMessage } from '../lib/errors.js';
 
 /**
  * One line of the append-only x402 payment ledger (`~/.jaw/x402-log.jsonl`).
@@ -46,7 +47,7 @@ export function appendX402Log(entry: X402LogEntry): void {
     ensureDir(PATHS.root);
     fs.appendFileSync(PATHS.x402Log, '\n' + JSON.stringify(entry), { encoding: 'utf-8', mode: 0o600 });
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err);
     process.stderr.write(`[jaw] warning: failed to write x402 ledger (${msg}); spend audit/cap may undercount\n`);
   }
 }

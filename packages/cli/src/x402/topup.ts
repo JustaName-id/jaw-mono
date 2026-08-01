@@ -1,6 +1,8 @@
-import { encodeFunctionData } from 'viem';
+import { encodeFunctionData, erc20Abi } from 'viem';
 import { usdcForNetwork } from './asset-registry.js';
 import { usdcBalance, type BalanceReader } from './balance.js';
+import { parseBigInt } from './amount.js';
+import { errorMessage } from '../lib/errors.js';
 import type { X402PaymentRequirement } from './types.js';
 
 /**
@@ -64,19 +66,6 @@ export interface TopUpOutcome {
   reason?: string;
 }
 
-const ERC20_TRANSFER_ABI = [
-  {
-    type: 'function',
-    name: 'transfer',
-    stateMutability: 'nonpayable',
-    inputs: [
-      { name: 'to', type: 'address' },
-      { name: 'value', type: 'uint256' },
-    ],
-    outputs: [{ name: '', type: 'bool' }],
-  },
-] as const;
-
 interface CallStatus {
   status?: number | string;
 }
@@ -122,10 +111,8 @@ export async function ensurePayerFunds(
     };
   }
 
-  let price: bigint;
-  try {
-    price = BigInt(requirement.amount);
-  } catch {
+  const price = parseBigInt(requirement.amount);
+  if (price === null) {
     return { ok: false, reason: `non-numeric payment amount: ${requirement.amount}` };
   }
 
@@ -149,7 +136,7 @@ export async function ensurePayerFunds(
   }
 
   const data = encodeFunctionData({
-    abi: ERC20_TRANSFER_ABI,
+    abi: erc20Abi,
     functionName: 'transfer',
     args: [payerAddress, amount],
   });
@@ -169,7 +156,7 @@ export async function ensurePayerFunds(
     // The two common causes read very differently to a user, so hint at both:
     // the granted permission must both allow a USDC transfer to the payer
     // (calls whitelist) and have budget left (spend allowance).
-    const msg = err instanceof Error ? err.message : String(err);
+    const msg = errorMessage(err);
     return {
       ok: false,
       reason:
@@ -197,7 +184,7 @@ export async function ensurePayerFunds(
         sleep(remaining).then(() => Promise.reject(new Error(`status check timed out after ${timeoutMs}ms`))),
       ])) as CallStatus;
     } catch (err) {
-      const msg = err instanceof Error ? err.message : String(err);
+      const msg = errorMessage(err);
       return { ok: false, reason: `top-up status check failed: ${msg}`, amount: amount.toString(), batchId };
     }
 

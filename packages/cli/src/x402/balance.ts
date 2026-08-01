@@ -1,6 +1,6 @@
 import { createPublicClient, http, erc20Abi, formatUnits, type Chain, type PublicClient } from 'viem';
 import { base, baseSepolia, polygon, polygonAmoy } from 'viem/chains';
-import { usdcForNetwork, type UsdcAsset } from './asset-registry.js';
+import { usdcForNetwork, USDC_BY_NETWORK, type UsdcAsset } from './asset-registry.js';
 
 const CHAINS: Record<number, Chain> = {
   [base.id]: base,
@@ -9,15 +9,29 @@ const CHAINS: Record<number, Chain> = {
   [polygonAmoy.id]: polygonAmoy,
 };
 
+// The viem chains here and USDC_BY_NETWORK in asset-registry are two lists that
+// must cover the same chain ids. Assert it at load so adding a USDC entry
+// without its viem chain fails loudly here instead of silently building a
+// client with `chain: undefined` (wrong gas/explorer defaults) at read time.
+for (const chainId of Object.values(USDC_BY_NETWORK).map((a) => a.chainId)) {
+  if (!CHAINS[chainId]) {
+    throw new Error(
+      `x402 balance: USDC registry has chain ${chainId} but no viem chain is mapped for it in balance.ts`
+    );
+  }
+}
+
 // One client per chain across the process — a fresh transport per read is
 // wasted setup once balance checks run more than once per payment.
 const clients = new Map<number, PublicClient>();
 
 /** Shared per-chain public client for the x402 modules (reads only). */
 export function publicClientFor(chainId: number): PublicClient {
+  const chain = CHAINS[chainId];
+  if (!chain) throw new Error(`x402: no viem chain configured for chainId ${chainId}`);
   let client = clients.get(chainId);
   if (!client) {
-    client = createPublicClient({ chain: CHAINS[chainId], transport: http() });
+    client = createPublicClient({ chain, transport: http() });
     clients.set(chainId, client);
   }
   return client;
