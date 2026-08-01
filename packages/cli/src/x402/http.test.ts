@@ -81,6 +81,27 @@ describe('payAndFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // no retry
   });
 
+  it('aborts a hung request after the timeout instead of hanging forever', async () => {
+    // A server that never responds must not wedge the call (which would, via
+    // the payment mutex, wedge every subsequent payment). fetchWithTimeout
+    // aborts after its deadline; the mock rejects when the signal fires.
+    vi.useFakeTimers();
+    try {
+      fetchMock.mockImplementation(
+        (_url: string, init: { signal?: AbortSignal }) =>
+          new Promise((_resolve, reject) => {
+            init.signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          })
+      );
+      const promise = payAndFetch(URL_UNDER_TEST, payer);
+      const assertion = expect(promise).rejects.toThrow(/abort/i);
+      await vi.advanceTimersByTimeAsync(30_000);
+      await assertion;
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('refuses to sign a payment over a cleartext http URL (MITM could rewrite payTo)', async () => {
     fetchMock.mockResolvedValueOnce(
       mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })

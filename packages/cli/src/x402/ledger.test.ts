@@ -67,4 +67,20 @@ describe('x402 ledger', () => {
     const mode = fs.statSync(PATHS.x402Log).mode & 0o777;
     expect(mode).toBe(0o600);
   });
+
+  it('a torn line does not swallow the next entry (newline-prefixed appends)', () => {
+    // Simulate a crash mid-append: an incomplete record with no surrounding
+    // newlines. The next append must land on its own line, so only the torn
+    // record is lost — not the good one after it.
+    fs.mkdirSync(TEST_ROOT, { recursive: true });
+    fs.writeFileSync(PATHS.x402Log, `${JSON.stringify(entry({ url: 'https://good1' }))}\n{"at":"partial`);
+
+    appendX402Log(entry({ url: 'https://good2' }));
+
+    const log = readX402Log();
+    const urls = log.map((e) => e.url);
+    expect(urls).toContain('https://good1');
+    expect(urls).toContain('https://good2'); // survived despite the torn line before it
+    expect(urls).not.toContain(undefined);
+  });
 });

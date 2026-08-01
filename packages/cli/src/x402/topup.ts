@@ -188,10 +188,17 @@ export async function ensurePayerFunds(
   for (;;) {
     let status: CallStatus;
     try {
-      status = (await executor.request('wallet_getCallsStatus', batchId)) as CallStatus;
+      // Race the status read against the remaining deadline: a hung bundler
+      // socket would otherwise never let the loop reach the deadline check
+      // below, wedging the payment (and, through the mutex, all payments).
+      const remaining = Math.max(deadline - now(), 0);
+      status = (await Promise.race([
+        executor.request('wallet_getCallsStatus', batchId),
+        sleep(remaining).then(() => Promise.reject(new Error(`status check timed out after ${timeoutMs}ms`))),
+      ])) as CallStatus;
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      return { ok: false, reason: `top-up status check failed: ${msg}`, batchId };
+      return { ok: false, reason: `top-up status check failed: ${msg}`, amount: amount.toString(), batchId };
     }
 
     const final = isFinalStatus(status);

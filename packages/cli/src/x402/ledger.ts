@@ -29,13 +29,25 @@ export interface X402LogEntry {
   reason?: string;
 }
 
-/** Append one entry. Never throws — logging must not break a payment. */
+/**
+ * Append one entry. Never throws — logging must not break a payment.
+ *
+ * The newline is a PREFIX, not a suffix: a torn write (crash/ENOSPC mid-append)
+ * then leaves an incomplete line that the NEXT append starts on a fresh line
+ * instead of concatenating onto, so one bad write loses at most its own record,
+ * never the following one too.
+ *
+ * A write failure is surfaced to stderr (not thrown): the caller's payment
+ * still succeeds, but the operator needs to know the audit trail — and the
+ * restart-time spend-cap seed that reads it — just lost an entry.
+ */
 export function appendX402Log(entry: X402LogEntry): void {
   try {
     ensureDir(PATHS.root);
-    fs.appendFileSync(PATHS.x402Log, JSON.stringify(entry) + '\n', { encoding: 'utf-8', mode: 0o600 });
-  } catch {
-    /* ignore — an unwritable ledger must not fail the payment */
+    fs.appendFileSync(PATHS.x402Log, '\n' + JSON.stringify(entry), { encoding: 'utf-8', mode: 0o600 });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    process.stderr.write(`[jaw] warning: failed to write x402 ledger (${msg}); spend audit/cap may undercount\n`);
   }
 }
 

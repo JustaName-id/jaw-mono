@@ -122,6 +122,23 @@ async function readBody(res: Response): Promise<unknown> {
   }
 }
 
+// Node's fetch has NO default timeout. A server that accepts the connection and
+// never responds would otherwise hang the call forever — and because payments
+// run inside a serialization mutex (see registerPayTool), one hung request
+// would wedge EVERY subsequent payment. Bound every request so the mutex always
+// makes progress.
+const FETCH_TIMEOUT_MS = 30_000;
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  try {
+    return await fetch(url, { ...init, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 function hostOf(url: string): string | undefined {
   try {
     return new URL(url).host;
@@ -269,7 +286,7 @@ export async function payAndFetch(
   const baseHeaders: Record<string, string> = { Accept: 'application/json', ...(opts.headers ?? {}) };
 
   // 1. First attempt. Anything but 402 passes through unchanged.
-  const first = await fetch(url, { method, headers: baseHeaders, body: opts.body });
+  const first = await fetchWithTimeout(url, { method, headers: baseHeaders, body: opts.body });
   if (first.status !== 402) {
     return { status: first.status, body: await readBody(first), paid: false, payer: payer.address };
   }
@@ -372,7 +389,12 @@ export async function payAndFetch(
     [X402_HEADERS.signature]: proof,
     'Idempotency-Key': idempotencyKey(),
   };
-  const paid = await fetch(resource, { method, headers: retryHeaders, body: opts.body, redirect: 'manual' });
+  const paid = await fetchWithTimeout(resource, {
+    method,
+    headers: retryHeaders,
+    body: opts.body,
+    redirect: 'manual',
+  });
 
   // A settled x402 response carries the resource directly (never a redirect).
   // A 3xx here means the endpoint tried to bounce the signed proof elsewhere —

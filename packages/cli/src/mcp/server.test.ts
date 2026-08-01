@@ -445,6 +445,37 @@ describe('jaw_pay_and_fetch', () => {
     }
   });
 
+  it('a failed payment call does not wedge the payment queue for the next call', async () => {
+    // The serialization mutex must isolate failures: a rejecting/erroring call
+    // must still let the chain advance, or one bad request would deadlock all
+    // subsequent payments.
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore(PK, '0xSmartAccount');
+
+    const fetchMock = vi
+      .fn()
+      .mockRejectedValueOnce(new Error('connection reset')) // call 1: fetch throws
+      .mockResolvedValueOnce(mkRes(200, {}, JSON.stringify({ free: true }))); // call 2: free passthrough
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      const first = await client.callTool({
+        name: 'jaw_pay_and_fetch',
+        arguments: { url: 'https://api.example.com/a' },
+      });
+      expect(toolText(first)).toMatch(/connection reset|error/i);
+
+      // The queue must have advanced; this must not hang.
+      const second = JSON.parse(
+        toolText(await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/b' } }))
+      );
+      expect(second.status).toBe(200);
+      expect(second.body).toEqual({ free: true });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('maxTotalPerSession survives a process restart (spend re-seeded from the ledger)', async () => {
     const { saveKeystore } = await import('../lib/keystore.js');
     saveKeystore(PK, '0xSmartAccount');
