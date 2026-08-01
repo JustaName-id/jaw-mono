@@ -98,6 +98,24 @@ function hostOf(url: string): string | undefined {
   }
 }
 
+/**
+ * Whether a URL is safe to SIGN a payment for. A payment over cleartext http
+ * lets a network attacker rewrite the 402 challenge's payTo and walk off with
+ * the signed authorization, so only TLS is trusted — except loopback, where
+ * there is no wire to tamper with (local dev/test servers). Free (non-402)
+ * fetches are unaffected; this gate is only consulted before signing.
+ */
+function isPaymentUrlSecure(url: string): boolean {
+  try {
+    const { protocol, hostname } = new URL(url);
+    if (protocol === 'https:') return true;
+    if (protocol === 'http:') return hostname === 'localhost' || hostname === '127.0.0.1' || hostname === '[::1]';
+    return false;
+  } catch {
+    return false;
+  }
+}
+
 function idempotencyKey(): string {
   return `jaw-${randomBytes(6).toString('hex')}`;
 }
@@ -220,6 +238,19 @@ export async function payAndFetch(
   const first = await fetch(url, { method, headers: baseHeaders, body: opts.body });
   if (first.status !== 402) {
     return { status: first.status, body: await readBody(first), paid: false, payer: payer.address };
+  }
+
+  // A 402 means we are about to sign a payment. Refuse over cleartext http (a
+  // MITM could rewrite the challenge's payTo) before touching the key — the
+  // free-resource path above already returned, so plain http fetches still work.
+  if (!isPaymentUrlSecure(url)) {
+    return {
+      status: 402,
+      body: await readBody(first),
+      paid: false,
+      payer: payer.address,
+      refusedReason: 'refusing to sign a payment over a non-HTTPS URL (use https, or localhost for testing)',
+    };
   }
 
   // 2. The v2 challenge lives in the PAYMENT-REQUIRED header (body is opaque).

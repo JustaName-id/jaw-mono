@@ -61,7 +61,10 @@ limits from a terminal with jaw config set x402.<field>
 (maxAmountPerPayment, maxTotalPerSession, allowedAssets, allowedNetworks,
 allowedHosts, allowedPayTo). These cannot be changed through the tools, only by a
 human at the CLI. A payment over a cap, or to a disallowed asset/network/host/
-recipient, is refused rather than paid.
+recipient, is refused rather than paid. Payments are only signed for https URLs
+(or localhost); a 402 over cleartext http is refused. Setting allowedPayTo to
+the recipients you expect is strongly recommended: it pins where funds can go
+even if a server or the network tampers with the challenge.
 
 FLOW
 fetch url -> 402? -> within caps? -> sign USDC with the session key -> facilitator

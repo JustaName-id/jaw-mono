@@ -78,6 +78,42 @@ describe('payAndFetch', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1); // no retry
   });
 
+  it('refuses to sign a payment over a cleartext http URL (MITM could rewrite payTo)', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
+    );
+
+    const result = await payAndFetch('http://api.example.com/paid/resource', payer);
+
+    expect(result.paid).toBe(false);
+    expect(result.status).toBe(402);
+    expect(result.refusedReason).toMatch(/non-HTTPS/);
+    expect(fetchMock).toHaveBeenCalledTimes(1); // never signed, never retried
+  });
+
+  it('still passes a free (non-402) http resource straight through', async () => {
+    // The HTTPS gate is only for signing — a plain http fetch must still work.
+    fetchMock.mockResolvedValueOnce(mockRes({ status: 200, body: JSON.stringify({ free: true }) }));
+
+    const result = await payAndFetch('http://api.example.com/free', payer);
+
+    expect(result.paid).toBe(false);
+    expect(result.status).toBe(200);
+    expect(result.body).toEqual({ free: true });
+  });
+
+  it('allows signing over http for loopback (local dev/test servers)', async () => {
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch('http://localhost:8080/paid', payer);
+
+    expect(result.paid).toBe(true);
+  });
+
   it('pays a 402 and returns the resource + receipt', async () => {
     fetchMock
       .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
