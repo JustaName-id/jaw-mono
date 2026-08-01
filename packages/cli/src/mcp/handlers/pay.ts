@@ -71,6 +71,24 @@ export function registerPayTool(server: McpServer): void {
   // memory across calls.
   let sessionSpent: bigint | null = null;
 
+  // Serialize the read-check-pay-write of sessionSpent. The MCP SDK dispatches
+  // tool calls concurrently, and payAndFetch awaits network I/O between reading
+  // the cap and writing the new total — so a burst of concurrent calls would
+  // otherwise each read the same pre-payment total, all pass the cumulative
+  // cap, and all pay, blowing past maxTotalPerSession by the concurrency
+  // factor. A promise-chain mutex makes each payment observe the previous one's
+  // spend. Payments are inherently sequential for cap safety; this is the
+  // correct trade, not a bottleneck worth optimizing around.
+  let paymentQueue: Promise<unknown> = Promise.resolve();
+  const serialize = <T>(fn: () => Promise<T>): Promise<T> => {
+    const run = paymentQueue.then(fn, fn);
+    paymentQueue = run.then(
+      () => undefined,
+      () => undefined
+    );
+    return run;
+  };
+
   server.registerTool(
     'jaw_pay_and_fetch',
     {
@@ -89,85 +107,86 @@ export function registerPayTool(server: McpServer): void {
       inputSchema: payAndFetchSchema,
     },
     // @ts-expect-error — MCP SDK deep type inference with z.record in the schema
-    async (params: PayAndFetchParams) => {
-      try {
-        const config = loadConfig();
-        // Throws a clear "run jaw session setup" error when no session exists.
-        const payer = Eip3009EoaPayer.fromSessionKey();
-        const policy = resolveX402Policy(config.x402);
-        if (sessionSpent === null) sessionSpent = seedSessionSpent(payer.address);
+    async (params: PayAndFetchParams) =>
+      serialize(async () => {
+        try {
+          const config = loadConfig();
+          // Throws a clear "run jaw session setup" error when no session exists.
+          const payer = Eip3009EoaPayer.fromSessionKey();
+          const policy = resolveX402Policy(config.x402);
+          if (sessionSpent === null) sessionSpent = seedSessionSpent(payer.address);
 
-        // Flow 2b: when a session (and its on-chain permission) exists, refill
-        // the payer EOA through the permission whenever it can't cover a price.
-        // Funds stay in the user's account until the moment a payment needs
-        // them; JustaPermissionManager caps every refill on-chain.
-        let ensureFunds;
-        if (sessionConfigExists() && config.apiKey) {
-          const session = loadSessionConfig();
-          const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
-          // Defensive: a hand-edited, non-numeric amount must degrade to "no
-          // float / no bound", never throw and take down every payment.
-          const floatTarget = safeBigInt(config.x402?.topUpFloat);
-          const maxTopUp = safeBigInt(config.x402?.maxTotalPerSession);
-          ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
-            ensurePayerFunds(requirement, payerAddress, bridge, {
-              floatTarget,
-              maxTopUp,
-              sessionChainId: session.chainId,
-            });
-        }
-
-        const result = await payAndFetch(params.url, payer, {
-          method: params.method,
-          headers: params.headers,
-          body: params.body,
-          policy,
-          ensureFunds,
-          spentThisSession: sessionSpent,
-          maxAmount: params.maxAmount,
-          asset: params.asset,
-          network: params.network,
-        });
-
-        // A failed settlement counts too: the signed authorization went out,
-        // so the transfer may have been broadcast regardless of what the
-        // server answered. Mirrors the 'failed' accounting in seedSessionSpent.
-        const spentDetails = result.paid ? result.payment : result.attemptedPayment;
-        if (spentDetails) {
-          try {
-            sessionSpent += BigInt(spentDetails.amount);
-          } catch {
-            /* non-numeric amount can't move the accumulator; ignore */
+          // Flow 2b: when a session (and its on-chain permission) exists, refill
+          // the payer EOA through the permission whenever it can't cover a price.
+          // Funds stay in the user's account until the moment a payment needs
+          // them; JustaPermissionManager caps every refill on-chain.
+          let ensureFunds;
+          if (sessionConfigExists() && config.apiKey) {
+            const session = loadSessionConfig();
+            const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
+            // Defensive: a hand-edited, non-numeric amount must degrade to "no
+            // float / no bound", never throw and take down every payment.
+            const floatTarget = safeBigInt(config.x402?.topUpFloat);
+            const maxTopUp = safeBigInt(config.x402?.maxTotalPerSession);
+            ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
+              ensurePayerFunds(requirement, payerAddress, bridge, {
+                floatTarget,
+                maxTopUp,
+                sessionChainId: session.chainId,
+              });
           }
-        }
 
-        // Record payment attempts (not free passthroughs) to the audit ledger.
-        const settled = result.payment ?? result.attemptedPayment;
-        const isPaymentEvent =
-          result.paid || !!result.attemptedPayment || (result.status === 402 && !!result.refusedReason);
-        if (isPaymentEvent) {
-          appendX402Log({
-            at: new Date().toISOString(),
-            url: params.url,
-            payer: result.payer,
-            status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
-            amount: settled?.amount,
-            asset: settled?.asset,
-            network: settled?.network,
-            payTo: settled?.payTo,
-            nonce: settled?.nonce,
-            txHash: result.payment?.txHash,
-            topUpAmount: result.topUp?.amount,
-            topUpBatchId: result.topUp?.batchId,
-            reason: result.refusedReason,
+          const result = await payAndFetch(params.url, payer, {
+            method: params.method,
+            headers: params.headers,
+            body: params.body,
+            policy,
+            ensureFunds,
+            spentThisSession: sessionSpent,
+            maxAmount: params.maxAmount,
+            asset: params.asset,
+            network: params.network,
           });
-        }
 
-        return mcpResult(result);
-      } catch (err) {
-        return mcpError(err);
-      }
-    }
+          // A failed settlement counts too: the signed authorization went out,
+          // so the transfer may have been broadcast regardless of what the
+          // server answered. Mirrors the 'failed' accounting in seedSessionSpent.
+          const spentDetails = result.paid ? result.payment : result.attemptedPayment;
+          if (spentDetails) {
+            try {
+              sessionSpent += BigInt(spentDetails.amount);
+            } catch {
+              /* non-numeric amount can't move the accumulator; ignore */
+            }
+          }
+
+          // Record payment attempts (not free passthroughs) to the audit ledger.
+          const settled = result.payment ?? result.attemptedPayment;
+          const isPaymentEvent =
+            result.paid || !!result.attemptedPayment || (result.status === 402 && !!result.refusedReason);
+          if (isPaymentEvent) {
+            appendX402Log({
+              at: new Date().toISOString(),
+              url: params.url,
+              payer: result.payer,
+              status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
+              amount: settled?.amount,
+              asset: settled?.asset,
+              network: settled?.network,
+              payTo: settled?.payTo,
+              nonce: settled?.nonce,
+              txHash: result.payment?.txHash,
+              topUpAmount: result.topUp?.amount,
+              topUpBatchId: result.topUp?.batchId,
+              reason: result.refusedReason,
+            });
+          }
+
+          return mcpResult(result);
+        } catch (err) {
+          return mcpError(err);
+        }
+      })
   );
 
   server.registerTool(

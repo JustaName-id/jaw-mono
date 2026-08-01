@@ -207,6 +207,53 @@ describe('payAndFetch', () => {
     expect(result.topUp).toEqual({ amount: '750000', batchId: '0xbatch1' });
   });
 
+  it('surfaces a signing failure after a top-up as a structured refusal carrying the top-up trace', async () => {
+    // A throw from payer.pay() AFTER ensureFunds already moved funds must not
+    // escape bare: the moved funds need to reach the audit ledger via topUp.
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
+    );
+    const throwingPayer: Payer = {
+      address: payer.address,
+      pay: async () => {
+        throw new Error('eip712Domain read reverted');
+      },
+    };
+
+    const result = await payAndFetch(URL_UNDER_TEST, throwingPayer, {
+      ensureFunds: async () => ({ ok: true, amount: '500000', batchId: '0xbatch9' }),
+    });
+
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toMatch(/payment signing failed/);
+    expect(result.topUp).toEqual({ amount: '500000', batchId: '0xbatch9' });
+    expect(fetchMock).toHaveBeenCalledTimes(1); // never retried
+  });
+
+  it('caps an oversized response body instead of buffering it all (server DoS guard)', async () => {
+    // A streamed body larger than the 2 MiB cap must be truncated to an error
+    // sentinel rather than OOMing the process.
+    const huge = new Uint8Array(1024 * 1024); // 1 MiB chunks
+    let emitted = 0;
+    const streamRes = {
+      status: 200,
+      url: URL_UNDER_TEST,
+      headers: { get: () => null },
+      body: new ReadableStream<Uint8Array>({
+        pull(controller) {
+          if (emitted >= 4) return controller.close(); // 4 MiB total > 2 MiB cap
+          emitted++;
+          controller.enqueue(huge);
+        },
+      }),
+    } as unknown as Response;
+    fetchMock.mockResolvedValueOnce(streamRes);
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.body).toEqual({ error: expect.stringMatching(/exceeded/) });
+  });
+
   it('refuses with the funding reason when the hook cannot cover the price, without signing anything', async () => {
     fetchMock.mockResolvedValueOnce(
       mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
@@ -283,7 +330,8 @@ describe('payAndFetch', () => {
     // No maxTimeoutSeconds and an unknown future field: the server verifies
     // `accepted` against what it advertised, so validation must not inject
     // defaults into it nor strip fields it does not know.
-    const { maxTimeoutSeconds: _omitted, ...rest } = REQUIREMENT;
+    const rest = { ...REQUIREMENT } as Partial<X402PaymentRequirement>;
+    delete rest.maxTimeoutSeconds;
     const wireEntry = { ...rest, futureField: 'kept' };
     const challenge = b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts: [wireEntry] });
     fetchMock
@@ -296,6 +344,23 @@ describe('payAndFetch', () => {
     const retryInit = fetchMock.mock.calls[1][1] as { headers: Record<string, string> };
     const proof = JSON.parse(Buffer.from(retryInit.headers['PAYMENT-SIGNATURE'], 'base64').toString());
     expect(proof.accepted).toEqual(wireEntry);
+  });
+
+  it('refuses a non-integer maxTimeoutSeconds (would crash BigInt in the signer)', async () => {
+    // A float/Infinity here reaches BigInt(validBefore) and throws obscurely;
+    // the schema must reject it at the boundary instead.
+    const malformed = b64({
+      x402Version: 2,
+      resource: { url: URL_UNDER_TEST },
+      accepts: [{ ...REQUIREMENT, maxTimeoutSeconds: 1.5 }],
+    });
+    fetchMock.mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': malformed }, body: '{}' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toMatch(/malformed payment option/);
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it('still pays a valid option when a malformed sibling entry sits beside it', async () => {

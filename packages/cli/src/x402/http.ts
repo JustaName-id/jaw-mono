@@ -80,9 +80,41 @@ const b64json = <T>(header: string | null): T | null => {
   }
 };
 
+// Cap the response body a server can make us buffer. The body is untrusted and
+// only ever carries a small JSON envelope; without a cap a malicious server
+// could stream gigabytes and OOM the agent process.
+const MAX_BODY_BYTES = 2 * 1024 * 1024;
+
 async function readBody(res: Response): Promise<unknown> {
-  const text = await res.text();
-  if (text.length === 0) return {};
+  const reader = res.body?.getReader();
+  if (!reader) {
+    // No stream (e.g. a mocked response): fall back to text() but still guard.
+    const text = await res.text();
+    if (text.length === 0) return {};
+    try {
+      return JSON.parse(text);
+    } catch {
+      return text;
+    }
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        await reader.cancel();
+        return { error: `response body exceeded ${MAX_BODY_BYTES} bytes` };
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  if (total === 0) return {};
+  const text = Buffer.concat(chunks).toString('utf-8');
   try {
     return JSON.parse(text);
   } catch {
@@ -140,7 +172,9 @@ const requirementSchema = z
     amount: z.string().regex(/^\d+$/, 'amount must be a base-10 integer string'),
     asset: hexAddress,
     payTo: hexAddress,
-    maxTimeoutSeconds: z.number().nonnegative().optional(),
+    // int + finite: a server sending Infinity/NaN/float here would otherwise
+    // reach BigInt(validBefore) in the signer and throw an obscure error.
+    maxTimeoutSeconds: z.number().int().nonnegative().finite().optional(),
     extra: z.record(z.unknown()).optional(),
   })
   .passthrough();
@@ -302,7 +336,23 @@ export async function payAndFetch(
 
   // 4. Build + sign the payment. Keep the payload so the nonce is recoverable
   //    even if settlement later fails (money may still have moved in pull mode).
-  const payload = await payer.pay(requirement);
+  //    A throw here (e.g. an eip712Domain read revert on a delegated payer)
+  //    after a top-up already moved funds must NOT escape as a bare exception:
+  //    surface it as a structured refusal carrying the topUp trace so the
+  //    caller records the moved funds in the audit ledger.
+  let payload;
+  try {
+    payload = await payer.pay(requirement);
+  } catch (err) {
+    return {
+      status: 402,
+      body: await readBody(first),
+      paid: false,
+      payer: payer.address,
+      refusedReason: `payment signing failed: ${err instanceof Error ? err.message : String(err)}`,
+      topUp,
+    };
+  }
   const details = {
     amount: requirement.amount,
     asset: requirement.asset,

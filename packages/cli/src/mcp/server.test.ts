@@ -409,6 +409,42 @@ describe('jaw_pay_and_fetch', () => {
     }
   });
 
+  it('enforces maxTotalPerSession under CONCURRENT calls (no TOCTOU overspend)', async () => {
+    // The MCP server dispatches tool calls concurrently. Without serializing
+    // the read-check-pay-write of the spend accumulator, a burst would all read
+    // spent=0, all pass the cap, and all pay. Cap 2500 / 1000 per payment => at
+    // most 2 may settle regardless of how many fire at once.
+    const { saveKeystore } = await import('../lib/keystore.js');
+    saveKeystore(PK, '0xSmartAccount');
+    saveConfig({ x402: { maxTotalPerSession: '2500' } });
+
+    // Stateless mock: a request carrying the proof settles, otherwise 402.
+    const fetchMock = vi.fn(async (_url: string, init?: { headers?: Record<string, string> }) => {
+      if (init?.headers?.['PAYMENT-SIGNATURE']) {
+        return mkRes(200, { 'PAYMENT-RESPONSE': RECEIPT }, JSON.stringify({ ok: true }));
+      }
+      return mkRes(402, { 'PAYMENT-REQUIRED': CHALLENGE }, '{}');
+    });
+    vi.stubGlobal('fetch', fetchMock);
+    try {
+      const client = await connectClient();
+      const results = await Promise.all(
+        Array.from({ length: 6 }, (_, i) =>
+          client
+            .callTool({ name: 'jaw_pay_and_fetch', arguments: { url: `https://api.example.com/${i}` } })
+            .then((r) => JSON.parse(toolText(r)))
+        )
+      );
+
+      const paid = results.filter((r) => r.paid);
+      const refused = results.filter((r) => !r.paid && /maxTotalPerSession/.test(r.refusedReason ?? ''));
+      expect(paid.length).toBe(2); // 2 * 1000 <= 2500 < 3 * 1000
+      expect(refused.length).toBe(4);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it('maxTotalPerSession survives a process restart (spend re-seeded from the ledger)', async () => {
     const { saveKeystore } = await import('../lib/keystore.js');
     saveKeystore(PK, '0xSmartAccount');
