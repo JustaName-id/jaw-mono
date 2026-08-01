@@ -151,7 +151,10 @@ export async function toJustanAccount(parameters: ToJustanAccountParameters): Pr
         // prepareUserOperation themselves (e.g. the ERC-20 paymaster approval
         // sizing) simulate a codeless sender and fail. The send path passes
         // its own signed authorization explicitly, which takes precedence.
-        ...(isEip7702 && eip7702Account && delegationContract
+        // Gated on signAuthorization: viem may call it on this account, so a
+        // LocalAccount without it (remote signer) keeps the old behavior
+        // instead of throwing mid-estimation.
+        ...(isEip7702 && eip7702Account && delegationContract && eip7702Account.signAuthorization
             ? { authorization: { account: eip7702Account as PrivateKeyAccount, address: delegationContract } }
             : {}),
         async decodeCalls(data) {

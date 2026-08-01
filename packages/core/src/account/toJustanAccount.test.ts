@@ -402,6 +402,7 @@ describe('toJustanAccount unit tests', () => {
                 const mockEOA = {
                     type: 'local' as const,
                     address: MOCK_ADDRESS,
+                    signAuthorization: vi.fn(),
                 } as any;
 
                 const { readContract } = await import('viem/actions');
@@ -422,6 +423,31 @@ describe('toJustanAccount unit tests', () => {
                         authorization: { account: mockEOA, address: MOCK_DELEGATION_CONTRACT },
                     })
                 );
+            });
+
+            it('omits authorization when the account cannot sign authorizations (remote signer)', async () => {
+                // viem may call signAuthorization on the exposed account; a
+                // LocalAccount without it must fall back to the old behavior.
+                const mockEOA = {
+                    type: 'local' as const,
+                    address: MOCK_ADDRESS,
+                } as any;
+
+                const { readContract } = await import('viem/actions');
+                const { toSmartAccount } = await import('viem/account-abstraction');
+
+                vi.mocked(readContract).mockResolvedValue(MOCK_DELEGATION_CONTRACT);
+                vi.mocked(toSmartAccount).mockReturnValue({} as any);
+
+                await toJustanAccount({
+                    client: MOCK_PUBLIC_CLIENT,
+                    owners: [],
+                    eip7702Account: mockEOA,
+                    factoryAddress: MOCK_FACTORY_ADDRESS,
+                });
+
+                const implementation = vi.mocked(toSmartAccount).mock.calls.at(-1)?.[0] as Record<string, unknown>;
+                expect('authorization' in implementation).toBe(false);
             });
 
             it('does not expose authorization in counterfactual mode', async () => {

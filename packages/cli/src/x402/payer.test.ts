@@ -126,6 +126,19 @@ describe('Eip3009EoaPayer delegation awareness', () => {
     expect(readContractMock).toHaveBeenCalledTimes(1);
   });
 
+  it('reads the account domain per chain (a chain B payment never reuses chain A domain)', async () => {
+    // The envelope embeds the account domain's chainId; reusing chain A's
+    // domain on chain B would produce signatures the verifier rejects.
+    getCodeMock.mockResolvedValue('0xef0100bb4f7d5418cd8dadb61bb95561179e517572cbcd');
+    readContractMock.mockResolvedValue(ACCOUNT_DOMAIN_TUPLE);
+    const payer = Eip3009EoaPayer.fromSessionKey();
+
+    await payer.pay(requirement); // eip155:84532
+    await payer.pay({ ...requirement, network: 'eip155:137', asset: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359' });
+
+    expect(readContractMock).toHaveBeenCalledTimes(2);
+  });
+
   it('falls back to the raw signature when the code check is unreachable', async () => {
     getCodeMock.mockRejectedValue(new Error('rpc down'));
     const payer = Eip3009EoaPayer.fromSessionKey();

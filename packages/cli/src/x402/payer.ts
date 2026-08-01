@@ -51,8 +51,12 @@ export class Eip3009EoaPayer implements Payer {
   readonly address: `0x${string}`;
   private readonly signTypedData: ExactSigner;
   private readonly signHash: (hash: `0x${string}`) => Promise<`0x${string}`>;
-  /** eip712Domain() of the delegate, cached after the first wrapped payment. */
-  private accountDomain: AccountEip712Domain | null = null;
+  /**
+   * eip712Domain() of the delegate, cached per chain after the first wrapped
+   * payment there. Keyed by chainId: the domain embeds block.chainid, so a
+   * domain read on one chain must never sign an envelope for another.
+   */
+  private readonly accountDomainByChain = new Map<number, AccountEip712Domain>();
 
   private constructor(
     address: `0x${string}`,
@@ -107,16 +111,18 @@ export class Eip3009EoaPayer implements Payer {
     };
   }
 
-  /** Read (once) the delegate's EIP-712 domain straight from the account. */
+  /** Read (once per chain) the delegate's EIP-712 domain from the account. */
   private async readAccountDomain(chainId: number): Promise<AccountEip712Domain> {
-    if (this.accountDomain) return this.accountDomain;
+    const cached = this.accountDomainByChain.get(chainId);
+    if (cached) return cached;
     const [, name, version, domainChainId, verifyingContract, salt] = await publicClientFor(chainId).readContract({
       address: this.address,
       abi: EIP712_DOMAIN_ABI,
       functionName: 'eip712Domain',
     });
-    this.accountDomain = { name, version, chainId: domainChainId, verifyingContract, salt };
-    return this.accountDomain;
+    const domain: AccountEip712Domain = { name, version, chainId: domainChainId, verifyingContract, salt };
+    this.accountDomainByChain.set(chainId, domain);
+    return domain;
   }
 }
 
