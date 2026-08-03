@@ -6,7 +6,7 @@ import { useIsMobile } from './useIsMobile';
 /**
  * Whether a dialog should adopt its mobile full-screen sizing. True only in
  * popup/standalone contexts (anchor 'center'): the embedded presentations size
- * dialogs to match the host card instead — 'top-sheet' (drawer) overrides
+ * dialogs to match the host card instead — 'bottom-sheet' (drawer) overrides
  * sizing in DefaultDialog, and 'top' (floating card) keeps the dialog's
  * desktop card width. The gate matters because the embedded drawer breakpoint
  * (460px) is narrower than useIsMobile's (768px): without it, embedded

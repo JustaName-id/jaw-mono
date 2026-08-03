@@ -9,11 +9,22 @@ import { DefaultDialog, DialogAnchorContext, useDialogMobileFullScreen } from '@
 import { EmbeddedShell } from './index';
 import type { PopupCommunicator, CommunicatorContext } from '../../lib/popup-communicator';
 
-function mockCommunicator(context: CommunicatorContext): PopupCommunicator {
+type EmittingCommunicator = PopupCommunicator & {
+  /** Test hook: deliver an SDK message to onMessage subscribers. */
+  emit: (message: { event?: string; data?: unknown }) => void;
+};
+
+function mockCommunicator(context: CommunicatorContext): EmittingCommunicator {
+  const subscribers = new Set<(message: { event?: string; data?: unknown }) => void>();
   return {
     getContext: () => context,
     requestSwitchToPopup: () => undefined,
-  } as unknown as PopupCommunicator;
+    onMessage: (callback: (message: { event?: string; data?: unknown }) => void) => {
+      subscribers.add(callback);
+      return () => subscribers.delete(callback);
+    },
+    emit: (message: { event?: string; data?: unknown }) => subscribers.forEach((callback) => callback(message)),
+  } as unknown as EmittingCommunicator;
 }
 
 const child = <main data-testid="child">app content</main>;
@@ -53,8 +64,8 @@ describe('EmbeddedShell', () => {
 
 // The portaled Radix dialogs must match the shell's card in BOTH presentations:
 // floating (desktop) anchors them at the top ('top'), and the drawer (narrow
-// viewports) renders them as a full-width, content-sized top sheet
-// ('top-sheet') instead of the mobile full-screen style they use in
+// viewports) renders them as a full-width, content-sized bottom sheet
+// ('bottom-sheet') instead of the mobile full-screen style they use in
 // popup/standalone contexts. jsdom mounts here so the post-mount effect pass
 // (context detection + presentation media query) actually runs.
 describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => {
@@ -84,10 +95,11 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
     return <span data-testid="anchor-probe">anchor:{anchor}</span>;
   };
 
-  const mount = (node: React.ReactNode) => {
+  const mount = (node: React.ReactNode, communicator: EmittingCommunicator = mockCommunicator('embedded')) => {
     act(() => {
-      root.render(<EmbeddedShell communicator={mockCommunicator('embedded')}>{node}</EmbeddedShell>);
+      root.render(<EmbeddedShell communicator={communicator}>{node}</EmbeddedShell>);
     });
+    return communicator;
   };
 
   beforeEach(() => {
@@ -111,13 +123,13 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
     expect(container.innerHTML).toContain('anchor:top<');
   });
 
-  it('provides the top-sheet anchor in drawer presentation', () => {
+  it('provides the bottom-sheet anchor in drawer presentation', () => {
     stubViewport(400);
     mount(<AnchorProbe />);
-    expect(container.innerHTML).toContain('anchor:top-sheet');
+    expect(container.innerHTML).toContain('anchor:bottom-sheet');
   });
 
-  it('drawer: a portaled dialog renders as a content-sized top sheet, overriding mobile full-screen sizing', () => {
+  it('drawer: a portaled dialog renders as a content-sized bottom sheet, overriding mobile full-screen sizing', () => {
     stubViewport(400);
     // contentStyle mirrors what the signing dialogs pass on mobile — the exact
     // inline sizing the sheet presentation must neutralize.
@@ -132,10 +144,19 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
     // height:100%/maxHeight:none the dialog asked for.
     expect(content.style.height).toBe('auto');
     expect(content.style.maxHeight).toBe('85vh');
-    // Full-width sheet pinned to the top edge, like the shell's drawer card.
+    // Full-width sheet pinned to the bottom edge, like the shell's drawer card.
     expect(content.style.width).toBe('100%');
-    expect(content.className).toContain('top-0');
-    expect(content.className).toContain('rounded-b-2xl');
+    expect(content.className).toContain('bottom-0');
+    expect(content.className).toContain('rounded-t-2xl');
+    expect(content.className).not.toContain('rounded-b-2xl');
+    // Slides up when it opens (Radix mounts it while the iframe is already
+    // visible), sliding back down on close.
+    expect(content.className).toContain('slide-in-from-bottom');
+    expect(content.className).toContain('slide-out-to-bottom');
+    // The sheet also gets inline `paddingBottom: env(safe-area-inset-bottom)`
+    // (home-bar clearance), but jsdom's CSS parser drops env() values so it
+    // cannot be asserted here; the shell card's equivalent is covered via its
+    // pb-[env(safe-area-inset-bottom)] class below.
   });
 
   it('floating: a portaled dialog keeps its own sizing and anchors at the top offset', () => {
@@ -149,6 +170,60 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
     expect(content).not.toBeNull();
     expect(content.style.width).toBe('450px');
     expect(content.className).toContain('top-6');
+  });
+
+  // The SDK mirrors its host-side show/hide flips as DialogVisibility
+  // messages. The drawer card starts offscreen (translate-y-full) once
+  // concealed and slides up (transition-transform → translate-y-0) on reveal,
+  // so opening the wallet on mobile animates like a bottom sheet.
+  describe('drawer reveal animation (DialogVisibility)', () => {
+    const card = () => container.querySelector('[role="document"]') as HTMLElement;
+
+    it('anchors the drawer card to the bottom edge with safe-area padding', () => {
+      stubViewport(400);
+      mount(child);
+      expect(card().className).toContain('bottom-0');
+      expect(card().className).toContain('rounded-t-2xl');
+      expect(card().className).not.toContain('top-0');
+      // iOS home-bar clearance
+      expect(card().className).toContain('pb-[env(safe-area-inset-bottom)]');
+    });
+
+    it('defaults to revealed (old SDKs never send DialogVisibility)', () => {
+      stubViewport(400);
+      mount(child);
+      expect(card().className).toContain('translate-y-0');
+      expect(card().className).not.toContain('translate-y-full');
+    });
+
+    it('conceals on {visible:false} and slides back in on {visible:true}', () => {
+      stubViewport(400);
+      const communicator = mount(child);
+
+      act(() => communicator.emit({ event: 'DialogVisibility', data: { visible: false } }));
+      expect(card().className).toContain('translate-y-full');
+
+      act(() => communicator.emit({ event: 'DialogVisibility', data: { visible: true } }));
+      expect(card().className).toContain('translate-y-0');
+      expect(card().className).not.toContain('translate-y-full');
+      // The slide is a transform transition (disabled under reduced motion).
+      expect(card().className).toContain('transition-transform');
+      expect(card().className).toContain('motion-reduce:transition-none');
+    });
+
+    it('ignores unrelated SDK messages', () => {
+      stubViewport(400);
+      const communicator = mount(child);
+      act(() => communicator.emit({ event: 'SetTheme', data: { theme: { mode: 'dark' } } }));
+      expect(card().className).toContain('translate-y-0');
+    });
+
+    it('floating presentation keeps its snap reveal (no offscreen transform)', () => {
+      stubViewport(1024);
+      const communicator = mount(child);
+      act(() => communicator.emit({ event: 'DialogVisibility', data: { visible: false } }));
+      expect(card().className).not.toContain('translate-y-full');
+    });
   });
 
   // The shell's drawer breakpoint (460px) is narrower than the dialogs'
