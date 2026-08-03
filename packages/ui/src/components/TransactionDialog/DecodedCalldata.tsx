@@ -2,7 +2,9 @@ import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Hex } from 'viem';
 import { useDecodedCalldata, type DecodeResult } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
+import { TriangleAlert } from 'lucide-react';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
+import { isUnlimitedAmount } from '../../utils/displayFormat';
 import { computeCalldataDigest } from '../../utils/erc8213';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { TokenIcon } from '../TokenIcon';
@@ -10,6 +12,21 @@ import { DigestRow } from '../VerificationDigest';
 import { ClearSignedView } from './ClearSignedView';
 
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
+
+/**
+ * True only for the ERC-20 `approve(address,uint256)` shape — function name, arity and both
+ * param types all checked. Deliberately narrow: "Unlimited" is a claim about an *allowance*,
+ * so it must never leak onto some other function that merely happens to take a big uint256
+ * (a deadline, a nonce, a raw amount). Anything else keeps rendering the plain integer.
+ */
+export function isErc20Approve(decoded: DecodeResult['decoded']): boolean {
+  return (
+    decoded?.functionName === 'approve' &&
+    decoded.params.length === 2 &&
+    decoded.params[0]?.type === 'address' &&
+    decoded.params[1]?.type === 'uint256'
+  );
+}
 
 /**
  * ERC-8213 Calldata Digest, collapsed behind a disclosure like the raw calldata
@@ -242,6 +259,8 @@ export const DecodedCalldataView = ({
     );
   }
 
+  const approveShape = isErc20Approve(decoded);
+
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
@@ -256,6 +275,8 @@ export const DecodedCalldataView = ({
           {decoded.params.map((param, i) => {
             const resolvedName = param.rawValue ? allResolved[param.rawValue.toLowerCase()] : undefined;
             const resolvedAvatar = param.rawValue ? allAvatars[param.rawValue.toLowerCase()] : undefined;
+            // Only the amount arg of a true ERC-20 approve, and only at a max-uint sentinel.
+            const unlimitedApproval = approveShape && i === 1 && isUnlimitedAmount(param.value);
             return (
               <div key={i} className="flex flex-col gap-0.5">
                 <div className="flex items-baseline gap-1.5">
@@ -264,9 +285,18 @@ export const DecodedCalldataView = ({
                 </div>
                 <div className="flex flex-row items-center gap-1">
                   {resolvedAvatar && <IdentityAvatar src={resolvedAvatar} fallback={null} />}
-                  <p className="text-foreground break-all font-mono text-xs leading-[150%]">
-                    {resolvedName ? `${resolvedName} (${formatAddress(param.rawValue!)})` : param.value}
-                  </p>
+                  {unlimitedApproval ? (
+                    // Same treatment as the signing dialogs: an unbounded allowance is the one
+                    // thing the user must not miss, so it reads as a word, tinted, with a ⚠.
+                    <p className="flex items-center gap-1.5 font-mono text-xs font-semibold leading-[150%] text-amber-500">
+                      <TriangleAlert className="size-3.5 flex-none" strokeWidth={2} />
+                      Unlimited
+                    </p>
+                  ) : (
+                    <p className="text-foreground break-all font-mono text-xs leading-[150%]">
+                      {resolvedName ? `${resolvedName} (${formatAddress(param.rawValue!)})` : param.value}
+                    </p>
+                  )}
                   {param.rawValue && param.rawValue.toLowerCase() !== ZERO_ADDRESS && !resolvedAvatar && (
                     // Address params with no ENS avatar: known token contracts get their logo after the address.
                     // The zero address is excluded — tokenIconUrl maps it to the native icon, wrong for calldata params.
