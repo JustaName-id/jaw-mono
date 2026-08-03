@@ -1015,6 +1015,35 @@ console.log('Assets:', assets);`;
     },
   },
 
+  // ===== Onramp =====
+  {
+    id: 'wallet_onramp',
+    name: 'wallet_onramp',
+    method: 'wallet_onramp',
+    category: 'asset',
+    description: 'Buy crypto with Apple/Google Pay (guest checkout) into the connected account',
+    requiresConnection: false,
+    parameters: [
+      {
+        name: 'fiatAmount',
+        type: 'number',
+        label: 'Amount (USD)',
+        description: 'Fiat amount to spend (2–500). Optional — the user can edit it in the wallet.',
+        required: false,
+        defaultValue: '2',
+      },
+    ],
+    getCodeSnippet: (params) => {
+      const presets = params.fiatAmount ? `{ fiatAmount: '${params.fiatAmount}' }` : '{}';
+      return `const order = await provider.request({
+  method: 'wallet_onramp',
+  params: [${presets}],
+});
+console.log('Onramp order:', order);`;
+    },
+    buildParams: (params) => [params.fiatAmount ? { fiatAmount: params.fiatAmount } : {}],
+  },
+
   // ===== Utility Tools =====
   {
     id: 'encode_function_data',

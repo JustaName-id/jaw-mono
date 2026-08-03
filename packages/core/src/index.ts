@@ -3,6 +3,7 @@ export {
     JAW_BASE_URL,
     JAW_RPC_URL,
     JAW_PAYMASTER_URL,
+    JAW_ONRAMP_URL,
     JAW_WALLET_ICON,
     JAW_WALLET_NAME,
     JAW_WALLET_ID,
@@ -120,6 +121,9 @@ export * from './messages/index.js';
 
 /** Utils exports **/
 export * from './utils/index.js';
+
+/** Onramp domain types **/
+export * from './onramp/types.js';
 
 /** Store exports **/
 export { type Chain, type FeeToken, type FeeTokenCapability } from './store/index.js';

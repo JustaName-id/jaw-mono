@@ -63,7 +63,15 @@ describe('all other headers stay identical across routes (regression bar)', () =
     expect(headers.get('Strict-Transport-Security')).toBe('max-age=63072000; includeSubDomains; preload');
     expect(headers.get('X-Content-Type-Options')).toBe('nosniff');
     expect(headers.get('Referrer-Policy')).toBe('strict-origin-when-cross-origin');
-    expect(headers.get('Permissions-Policy')).toBe('camera=(), microphone=(), geolocation=()');
+    expect(headers.get('Permissions-Policy')).toBe(
+      'camera=(), microphone=(), geolocation=(), payment=(self "https://pay.coinbase.com")'
+    );
+  });
+
+  it('allows the Coinbase onramp pay iframe (frame-src + payment delegation)', () => {
+    const headers = headersFor('/');
+    expect(cspFor('/')).toContain("frame-src 'self' https://pay.coinbase.com");
+    expect(headers.get('Permissions-Policy')).toContain('payment=(self "https://pay.coinbase.com")');
   });
 
   it('keeps every other CSP directive identical on the embeddable route', () => {

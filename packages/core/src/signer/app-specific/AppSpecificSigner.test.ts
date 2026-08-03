@@ -4,6 +4,7 @@ import { store } from '../../store/index.js';
 import type { AppMetadata, ProviderEventCallback, RequestArguments } from '../../provider/interface.js';
 import type { UIHandler, UIResponse } from '../../ui/interface.js';
 import { UIError } from '../../ui/interface.js';
+import { standardErrorCodes } from '../../errors/index.js';
 import { correlationIds } from '../../store/correlation-ids/store.js';
 import { getCallStatus, getCallStatusEIP5792 } from '../../rpc/wallet_sendCalls.js';
 import { fetchRPCRequest } from '../../utils/index.js';
@@ -253,6 +254,14 @@ describe('AppSpecificSigner', () => {
             // Assert
             expect(result).toEqual(['0x1234567890123456789012345678901234567890']);
             expect(mockCallback).toHaveBeenCalledWith('connect', { chainId: '0x1' });
+        });
+
+        it('should reject wallet_onramp with unsupportedMethod (no recursion)', async () => {
+            // Onramp is CrossPlatform-only; AppSpecific must reject it rather than
+            // fall through to the base handler, which would route it back and recurse.
+            await expect(signer.request({ method: 'wallet_onramp', params: [{}] })).rejects.toMatchObject({
+                code: standardErrorCodes.provider.unsupportedMethod,
+            });
         });
 
         it('should return chain id for eth_chainId request', async () => {
