@@ -90,6 +90,13 @@ export function BatchStep({
           <span className="text-foreground truncate text-[13px] font-medium">
             {callLabel(decode, transaction.action ?? stepFallbackLabel(index, hasData, value))}
           </span>
+          {/* Native value in the header, so a collapsed step still shows what it moves.
+              Token amounts live in the calldata, so they only appear once expanded. */}
+          {value && (
+            <span className="text-muted-foreground flex-none font-mono text-[11px]">
+              {value} {nativeSymbol}
+            </span>
+          )}
         </span>
       </AccordionTrigger>
       <AccordionContent className="px-3 pb-3">
