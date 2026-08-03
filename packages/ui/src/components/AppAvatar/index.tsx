@@ -1,6 +1,7 @@
 'use client';
 
 import { Globe } from 'lucide-react';
+import { IdentityAvatar } from '../IdentityAvatar';
 import { isSafeImageUrl } from '../../utils/safeUrl';
 import { sanitizeDisplayName } from '../../utils/sanitize';
 
@@ -10,18 +11,26 @@ export function safeAppName(appName?: string | null): string {
 }
 
 /**
- * The requesting dApp's logo, falling back to a neutral globe. Untrusted URLs are filtered by
- * `isSafeImageUrl`, so every dialog gets the same policy rather than its own copy of it.
+ * The requesting dApp's logo, falling back to a neutral globe when it's absent, fails
+ * `isSafeImageUrl`, or fails to load. One home for that policy so every dialog applies it
+ * identically — and, via `IdentityAvatar`, so the dApp-controlled URL can't leak the wallet
+ * page URL (which carries the api-key) as a referrer.
  */
-export function AppAvatar({ appName, appLogoUrl }: { appName?: string; appLogoUrl?: string | null }) {
-  if (!isSafeImageUrl(appLogoUrl)) {
-    return <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />;
-  }
+export function AppAvatar({
+  appName,
+  appLogoUrl,
+  className = 'h-full w-full rounded-full',
+}: {
+  appName?: string;
+  appLogoUrl?: string | null;
+  className?: string;
+}) {
   return (
-    <img
-      src={appLogoUrl ?? undefined}
+    <IdentityAvatar
+      src={isSafeImageUrl(appLogoUrl) ? (appLogoUrl ?? undefined) : undefined}
       alt={`${safeAppName(appName)} logo`}
-      className="h-full w-full rounded-full object-cover"
+      className={className}
+      fallback={<Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />}
     />
   );
 }

@@ -8,10 +8,8 @@ import { ProcessingScreen } from '../ProcessingScreen';
 import { Button } from '../ui/button';
 import { SignatureDialogProps } from './types';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
-import { sanitizeDisplayName } from '../../utils/sanitize';
-import { isSafeImageUrl } from '../../utils/safeUrl';
+import { AppAvatar } from '../AppAvatar';
 import { formatAddress } from '../../utils/formatAddress';
-import { Globe } from 'lucide-react';
 
 export const SignatureDialog = ({
   open,
@@ -38,17 +36,8 @@ export const SignatureDialog = ({
   // ENS name when resolved, otherwise the truncated address (address-first).
   const displayName = resolvedName || formatAddress(signerAddress);
   const hasError = signatureStatus.includes('Error');
-  const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
 
-  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
-    <img
-      src={appLogoUrl ?? undefined}
-      alt={`${safeAppName} logo`}
-      className="h-full w-full rounded-full object-cover"
-    />
-  ) : (
-    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
-  );
+  const appAvatar = <AppAvatar appName={appName} appLogoUrl={appLogoUrl} />;
 
   return (
     // Taller floor than the default shell so the message box has room and the

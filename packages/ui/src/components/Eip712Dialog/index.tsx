@@ -13,11 +13,9 @@ import { useClearSigningTypedData } from '../../hooks';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
 import { Eip712VerificationDigests } from '../VerificationDigest';
-import { sanitizeDisplayName } from '../../utils/sanitize';
-import { isSafeImageUrl } from '../../utils/safeUrl';
+import { AppAvatar } from '../AppAvatar';
 import { formatAddress } from '../../utils/formatAddress';
 import { useEffect, useMemo, useRef } from 'react';
-import { Globe } from 'lucide-react';
 
 // EIP-712 TypedData structure
 interface TypedData {
@@ -90,7 +88,6 @@ export const Eip712Dialog = ({
   }, [open, isProcessing, isSuccess, clearSigned]);
 
   const hasError = signatureStatus.includes('Error');
-  const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
 
   // Domain the signature is bound to (which contract accepts it, on which chain).
   const domainName = typedData?.domain?.name as string | undefined;
@@ -106,15 +103,7 @@ export const Eip712Dialog = ({
     return undefined;
   }, [typedData]);
 
-  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
-    <img
-      src={appLogoUrl ?? undefined}
-      alt={`${safeAppName} logo`}
-      className="h-full w-full rounded-full object-cover"
-    />
-  ) : (
-    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
-  );
+  const appAvatar = <AppAvatar appName={appName} appLogoUrl={appLogoUrl} />;
 
   const rawTree = typedData ? <Eip712Tree typedData={typedData} /> : null;
 

@@ -283,9 +283,10 @@ export const TransactionDialog = ({
   );
   const title = isNativeSend ? "You're Sending" : (callTitle(singleCallDecode) ?? 'Review Transaction');
 
-  // Calldata and batch steps start folded only when the You-send/You-get summary can stand in
-  // for them; otherwise the review screen would open with nothing on it.
-  const detailsOpen = !!assetPreviewError || ((assetsOut?.length ?? 0) === 0 && (assetsIn?.length ?? 0) === 0);
+  // A single call's calldata unfolds only when there's no You-send/You-get summary to stand in
+  // for it; otherwise that review screen would open with nothing on it. Batch steps always
+  // start collapsed — their headers name the action, so the user opens the one they care about.
+  const calldataOpen = !!assetPreviewError || ((assetsOut?.length ?? 0) === 0 && (assetsIn?.length ?? 0) === 0);
 
   const hasError = transactionStatus.includes('Error');
 
@@ -513,7 +514,7 @@ export const TransactionDialog = ({
 
             {/* Calldata (single tx) */}
             {isSingleTransaction && currentTransaction?.data && currentTransaction.data !== '0x' && (
-              <Accordion type="single" collapsible defaultValue={detailsOpen ? 'calldata' : undefined}>
+              <Accordion type="single" collapsible defaultValue={calldataOpen ? 'calldata' : undefined}>
                 <SingleCallData
                   to={currentTransaction.to}
                   data={currentTransaction.data}
@@ -529,11 +530,7 @@ export const TransactionDialog = ({
 
             {/* Batch steps */}
             {!isSingleTransaction && (
-              <Accordion
-                type="multiple"
-                className="space-y-2.5"
-                defaultValue={detailsOpen ? transactions.map((_, index) => `transaction-${index}`) : []}
-              >
+              <Accordion type="multiple" className="space-y-2.5">
                 {transactions.map((transaction, index) => (
                   <BatchStep
                     key={index}

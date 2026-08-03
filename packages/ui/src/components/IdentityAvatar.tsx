@@ -9,6 +9,8 @@ interface IdentityAvatarProps {
   fallback?: ReactNode;
   /** Size/shape classes; defaults to the 20px circle used by transaction rows. */
   className?: string;
+  /** Accessible name. Empty (decorative) by default, as identity avatars sit beside their label. */
+  alt?: string;
 }
 
 const defaultFallback = <WalletIcon className="h-3 w-3 flex-shrink-0" stroke="currentColor" />;
@@ -18,13 +20,14 @@ export const IdentityAvatar = ({
   src,
   fallback = defaultFallback,
   className = 'size-5 rounded-full',
+  alt = '',
 }: IdentityAvatarProps) => {
   const [erroredSrc, setErroredSrc] = useState<string>();
   if (!src || erroredSrc === src) return <>{fallback}</>;
   return (
     <img
       src={src}
-      alt=""
+      alt={alt}
       // Avatar URLs are attacker-controlled (ENS records) — no-referrer avoids leaking the wallet page URL (incl. api-key) to third-party hosts.
       referrerPolicy="no-referrer"
       onError={() => setErroredSrc(src)}

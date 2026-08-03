@@ -1,8 +1,7 @@
 import { JSX } from 'react';
-import { Globe } from 'lucide-react';
 
 import { sanitizeDisplayName } from '../../utils/sanitize';
-import { isSafeImageUrl } from '../../utils/safeUrl';
+import { AppAvatar } from '../AppAvatar';
 
 export interface DialogAppHeaderProps {
   /** dApp name (externally-controlled metadata — sanitized before display). */
@@ -32,15 +31,7 @@ export function formatOrigin(origin: string): string {
 export function DialogAppHeader({ appName, appLogoUrl, origin, chainName, chainIcon }: DialogAppHeaderProps) {
   const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
 
-  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
-    <img
-      src={appLogoUrl ?? undefined}
-      alt={`${safeAppName} logo`}
-      className="h-full w-full rounded-full object-cover"
-    />
-  ) : (
-    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
-  );
+  const appAvatar = <AppAvatar appName={appName} appLogoUrl={appLogoUrl} />;
 
   return (
     <div className="flex items-center gap-3">
