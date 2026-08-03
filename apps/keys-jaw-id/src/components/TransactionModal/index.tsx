@@ -63,6 +63,8 @@ export interface TransactionModalProps {
   chain?: Chain; // Chain info with RPC and paymaster URLs
   apiKey?: string;
   origin?: string; // Origin for per-origin auth session
+  appName?: string;
+  appLogoUrl?: string;
   onSuccess?: (result: TransactionResult) => void;
   onError?: (error: Error, errorCode?: number) => void;
 }
@@ -74,6 +76,8 @@ export const TransactionModal = ({
   chain,
   apiKey,
   origin,
+  appName,
+  appLogoUrl,
   onSuccess,
   onError,
 }: TransactionModalProps) => {
@@ -484,6 +488,8 @@ export const TransactionModal = ({
       assetPreviewError={assetPreviewError}
       assetPreviewWillRevert={assetPreviewWillRevert}
       assetPreviewRevertCause={assetPreviewRevertCause}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}

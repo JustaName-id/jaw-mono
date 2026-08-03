@@ -724,6 +724,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
           origin={currentOrigin || undefined}
+          appName={pendingRequest.metadata?.appName}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
           onSuccess={async (result: TransactionResult) => {
             setState('processing');
             try {
