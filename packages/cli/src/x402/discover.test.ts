@@ -3,11 +3,13 @@ import { discoverServices } from './discover.js';
 
 const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 
+// No `body` stream on the mock, so readCappedJson falls back to text().
 const mockJson = (body: unknown, ok = true, status = 200): Response =>
   ({
     ok,
     status,
-    json: async () => body,
+    body: null,
+    text: async () => JSON.stringify(body),
   }) as unknown as Response;
 
 let fetchMock: ReturnType<typeof vi.fn>;
@@ -181,6 +183,17 @@ describe('discoverServices — defensive mapping of untrusted data', () => {
 });
 
 describe('discoverServices — merchant mode', () => {
+  it('Given both query and payTo, When called, Then payTo wins (merchant endpoint, query ignored)', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson({ resources: [] }));
+
+    await discoverServices({ query: 'ens', payTo: '0xabc' });
+
+    const url = calledUrl();
+    expect(url.pathname).toContain('/discovery/merchant');
+    expect(url.searchParams.get('payTo')).toBe('0xabc');
+    expect(url.searchParams.get('query')).toBeNull();
+  });
+
   it('Given a payTo, When called, Then it hits the merchant endpoint and reports merchant mode', async () => {
     fetchMock.mockResolvedValueOnce(
       mockJson({
@@ -207,9 +220,37 @@ describe('discoverServices — merchant mode', () => {
   });
 });
 
-describe('discoverServices — errors', () => {
+describe('discoverServices — errors and hostile shapes', () => {
   it('Given a non-OK response, When called, Then it throws with the status', async () => {
     fetchMock.mockResolvedValueOnce(mockJson({}, false, 503));
     await expect(discoverServices({ query: 'x' })).rejects.toThrow('HTTP 503');
+  });
+
+  it('Given a non-array resources field, When called, Then it degrades to an empty result instead of throwing', async () => {
+    fetchMock.mockResolvedValueOnce(mockJson({ resources: 'not-an-array' }));
+    const result = await discoverServices({ query: 'x' });
+    expect(result.count).toBe(0);
+    expect(result.services).toEqual([]);
+  });
+
+  it('Given a response body over the size cap, When streamed, Then it aborts with a size-cap error', async () => {
+    // A stream that keeps yielding 512 KiB chunks; the reader must cancel and
+    // throw once the running total passes the 1 MiB cap (on the 3rd chunk).
+    const cancel = vi.fn(async () => undefined);
+    const chunk = new Uint8Array(512 * 1024);
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      body: {
+        getReader: () => ({
+          read: async () => ({ done: false, value: chunk }),
+          cancel,
+          releaseLock: () => undefined,
+        }),
+      },
+    } as unknown as Response);
+
+    await expect(discoverServices({ query: 'x' })).rejects.toThrow('size cap');
+    expect(cancel).toHaveBeenCalled();
   });
 });

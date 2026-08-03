@@ -1,16 +1,7 @@
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { discoverSchema } from '../tools.js';
 import { mcpError, mcpDiscoverResult } from '../helpers.js';
-import { discoverServices } from '../../x402/discover.js';
-
-interface DiscoverParams {
-  query?: string;
-  network?: string;
-  maxUsdPrice?: string;
-  curatedOnly?: boolean;
-  limit?: number;
-  payTo?: string;
-}
+import { discoverServices, type DiscoverParams } from '../../x402/discover.js';
 
 export function registerDiscoverTool(server: McpServer): void {
   server.registerTool(

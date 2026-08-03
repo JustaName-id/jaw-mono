@@ -19,6 +19,11 @@ const USDC_DECIMALS = 6;
 // The discovery API is a well-behaved HTTPS service, but Node's fetch has no
 // default timeout, so bound it like every other network call in this package.
 const DISCOVER_TIMEOUT_MS = 15_000;
+// Cap the response we buffer. A discovery payload is tiny (at most 20 small
+// entries), but the bytes are still untrusted: without a cap a misbehaving or
+// compromised endpoint could stream gigabytes and OOM the agent. Mirrors the
+// MAX_BODY_BYTES guard in http.ts.
+const MAX_BODY_BYTES = 1 * 1024 * 1024;
 
 export interface DiscoverParams {
   /** Free-text/keyword search over the catalog. Required unless `payTo` is set. */
@@ -104,8 +109,13 @@ function toPrice(entry: Record<string, unknown>): ServicePrice | null {
   if (amount === null || !/^\d+$/.test(amount) || network === null || asset === null) return null;
 
   const usdc = usdcForNetwork(network);
-  const approxUsd =
-    usdc && usdc.address.toLowerCase() === asset.toLowerCase() ? Number(BigInt(amount)) / 10 ** USDC_DECIMALS : null;
+  let approxUsd: number | null = null;
+  if (usdc && usdc.address.toLowerCase() === asset.toLowerCase()) {
+    // amount passed /^\d+$/, so BigInt can't throw; guard the Number() cast so a
+    // pathologically huge amount degrades to null instead of Infinity.
+    const n = Number(BigInt(amount)) / 10 ** USDC_DECIMALS;
+    approxUsd = Number.isFinite(n) ? n : null;
+  }
 
   return {
     amount,
@@ -152,6 +162,34 @@ function mapService(raw: unknown, preferNetwork: string): DiscoveredService {
   };
 }
 
+// Buffer the response with a hard size cap, then parse. Prefers the byte stream
+// (bounded as it arrives) and falls back to text() when there is no stream.
+async function readCappedJson(res: Response): Promise<Record<string, unknown>> {
+  const reader = res.body?.getReader();
+  if (!reader) {
+    const text = await res.text();
+    if (text.length > MAX_BODY_BYTES) throw new Error('x402 Bazaar response exceeded the size cap');
+    return asRecord(JSON.parse(text));
+  }
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      total += value.byteLength;
+      if (total > MAX_BODY_BYTES) {
+        await reader.cancel();
+        throw new Error('x402 Bazaar response exceeded the size cap');
+      }
+      chunks.push(value);
+    }
+  } finally {
+    reader.releaseLock?.();
+  }
+  return asRecord(JSON.parse(Buffer.concat(chunks).toString('utf-8')));
+}
+
 async function bazaarGet(path: string, search: URLSearchParams): Promise<Record<string, unknown>> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), DISCOVER_TIMEOUT_MS);
@@ -163,7 +201,7 @@ async function bazaarGet(path: string, search: URLSearchParams): Promise<Record<
     if (!res.ok) {
       throw new Error(`x402 Bazaar discovery returned HTTP ${res.status}`);
     }
-    return asRecord(await res.json());
+    return await readCappedJson(res);
   } finally {
     clearTimeout(timer);
   }

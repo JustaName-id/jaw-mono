@@ -90,7 +90,10 @@ export const discoverSchema = {
   payTo: z
     .string()
     .optional()
-    .describe('Instead of searching, list every service registered by this seller address (0x…).'),
+    .describe(
+      'Instead of searching, list every service registered by this seller address (0x…). ' +
+        'Takes precedence over `query` if both are given.'
+    ),
 };
 
 export const x402LogSchema = {
