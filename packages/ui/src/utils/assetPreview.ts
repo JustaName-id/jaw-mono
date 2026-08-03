@@ -13,6 +13,7 @@ import { simulateBlocks, simulateCalls } from 'viem/actions';
 import { JAW_RPC_URL, type TransactionCall } from '@jaw.id/core';
 import { deriveTransferDeltas, type SimulatedLog } from './transferDeltas';
 import { subscriptDecimal } from './displayFormat';
+import { classifyRevert, type RevertCause } from './transactionFailure';
 
 export interface RawAssetChange {
   token: { address: string; decimals?: number; symbol?: string };
@@ -107,6 +108,8 @@ export interface AssetSimulationResult {
   deltas: AssetDelta[];
   /** True when any call in the batch reverted during simulation — the batch would fail on-chain. */
   willRevert: boolean;
+  /** Set only when `willRevert` — why it reverted, as far as the revert reason reveals. */
+  revertCause?: RevertCause;
 }
 
 const erc20MetadataAbi = [
@@ -155,7 +158,8 @@ export async function simulateAssetChanges({
     calls: normalizedCalls,
     traceTransfers: true,
   });
-  if (results.some((r) => r.status !== 'success')) return { deltas: [], willRevert: true };
+  const failed = results.find((r) => r.status !== 'success');
+  if (failed) return { deltas: [], willRevert: true, revertCause: classifyRevert(failed.error) };
 
   const logs = results.flatMap((r) => (r.logs ?? []) as SimulatedLog[]);
 
@@ -197,7 +201,8 @@ export async function simulateAssetChanges({
   });
   // Chain state can move between the two simulations; if the batch reverts in this run,
   // the balance diffs are meaningless and the run-1 deltas would be stale.
-  if (batchBlock.calls.some((c) => c.status !== 'success')) return { deltas: [], willRevert: true };
+  const failedCall = batchBlock.calls.find((c) => c.status !== 'success');
+  if (failedCall) return { deltas: [], willRevert: true, revertCause: classifyRevert(failedCall.error) };
 
   const probeData = (block: typeof preBlock | undefined, i: number): `0x${string}` | null => {
     const call = block?.calls[i];

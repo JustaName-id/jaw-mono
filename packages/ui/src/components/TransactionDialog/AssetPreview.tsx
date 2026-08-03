@@ -1,19 +1,18 @@
 import { useEffect, useState } from 'react';
 import { ethAddress } from 'viem';
-import { ArrowDownLeft, ArrowUpRight, Info } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
 import { AssetDelta, formatAssetAmount } from '../../utils/assetPreview';
 import { fetchTokenPrice } from '../../utils/tokenPrice';
 import { formatAddress } from '../../utils/formatAddress';
-import { CopiedIcon, CopyIcon } from '../../icons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { TokenIcon } from '../TokenIcon';
+import { CopyButton } from '../CopyButton';
 import { SubText } from '../SubText';
 
 interface AssetPreviewProps {
   assetsOut: AssetDelta[];
   assetsIn: AssetDelta[];
   error: boolean;
-  willRevert: boolean;
   nativeSymbol: string;
   /** Enables token icon lookups; rows fall back to the generic icon when absent. */
   chainId?: number;
@@ -36,15 +35,11 @@ function AssetRow({
   nativeSymbol,
   chainId,
   price,
-  copied,
-  onCopy,
 }: {
   delta: AssetDelta;
   nativeSymbol: string;
   chainId?: number;
   price?: number;
-  copied: boolean;
-  onCopy: () => void;
 }) {
   const out = delta.direction === 'out';
   const sign = out ? '−' : '+';
@@ -74,11 +69,7 @@ function AssetRow({
         {!delta.isNative && (
           <span className="text-muted-foreground flex min-w-0 flex-row items-center gap-1 font-mono text-[10px]">
             <span className="truncate">{formatAddress(delta.address)}</span>
-            {copied ? (
-              <CopiedIcon width={10} height={10} className="flex-shrink-0" />
-            ) : (
-              <CopyIcon width={10} height={10} className="flex-shrink-0 cursor-pointer" onClick={onCopy} />
-            )}
+            <CopyButton value={delta.address} size={10} />
           </span>
         )}
       </div>
@@ -113,16 +104,12 @@ function DeltaColumn({
   nativeSymbol,
   chainId,
   prices,
-  copiedAddress,
-  onCopy,
 }: {
   direction: 'out' | 'in';
   deltas: AssetDelta[];
   nativeSymbol: string;
   chainId?: number;
   prices: Record<string, number>;
-  copiedAddress?: string;
-  onCopy: (address: string) => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const out = direction === 'out';
@@ -155,8 +142,6 @@ function DeltaColumn({
             nativeSymbol={nativeSymbol}
             chainId={chainId}
             price={prices[symbolFor(d, nativeSymbol)]}
-            copied={copiedAddress === d.address}
-            onCopy={() => onCopy(d.address)}
           />
         ))}
       </div>
@@ -164,9 +149,8 @@ function DeltaColumn({
   );
 }
 
-export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSymbol, chainId }: AssetPreviewProps) => {
+export const AssetPreview = ({ assetsOut, assetsIn, error, nativeSymbol, chainId }: AssetPreviewProps) => {
   const [prices, setPrices] = useState<Record<string, number>>({});
-  const [copiedAddress, setCopiedAddress] = useState<string>();
 
   useEffect(() => {
     const symbols = [...new Set([...assetsOut, ...assetsIn].map((d) => symbolFor(d, nativeSymbol)).filter(Boolean))];
@@ -180,37 +164,9 @@ export const AssetPreview = ({ assetsOut, assetsIn, error, willRevert, nativeSym
     };
   }, [assetsOut, assetsIn, nativeSymbol]);
 
-  const copy = (address: string) => {
-    if (typeof window === 'undefined' || !navigator?.clipboard) return;
-    navigator.clipboard.writeText(address).catch(() => undefined);
-    setCopiedAddress(address);
-    setTimeout(() => setCopiedAddress(undefined), 3000);
-  };
-
-  if (willRevert) {
-    return (
-      <div className="flex items-center gap-1 px-3.5">
-        <p className="text-xs leading-[133%] text-red-500">Transaction is likely to fail</p>
-        <TooltipProvider delayDuration={0}>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <Info className="size-3 cursor-help text-red-500" />
-            </TooltipTrigger>
-            <TooltipContent side="top" className="max-w-[240px] text-xs">
-              <p>
-                Simulation shows this transaction reverting on-chain. You can still submit it, but it will probably fail
-                and consume gas.
-              </p>
-            </TooltipContent>
-          </Tooltip>
-        </TooltipProvider>
-      </div>
-    );
-  }
-
   if (error || (assetsOut.length === 0 && assetsIn.length === 0)) return null;
 
-  const columnProps = { nativeSymbol, chainId, prices, copiedAddress, onCopy: copy };
+  const columnProps = { nativeSymbol, chainId, prices };
 
   // Both directions sit side by side (the swap/supply shape); a one-sided change takes
   // the full width rather than leaving a gap.

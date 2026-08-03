@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Hex } from 'viem';
-import { useDecodedCalldata, type DecodeResult } from '../../hooks/useDecodedCalldata';
+import type { DecodeResult } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
 import { TriangleAlert } from 'lucide-react';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
@@ -14,10 +14,8 @@ import { ClearSignedView } from './ClearSignedView';
 const ZERO_ADDRESS = '0x0000000000000000000000000000000000000000';
 
 /**
- * True only for the ERC-20 `approve(address,uint256)` shape — function name, arity and both
- * param types all checked. Deliberately narrow: "Unlimited" is a claim about an *allowance*,
- * so it must never leak onto some other function that merely happens to take a big uint256
- * (a deadline, a nonce, a raw amount). Anything else keeps rendering the plain integer.
+ * True only for the exact ERC-20 `approve(address,uint256)` shape. "Unlimited" is a claim about
+ * an allowance, so it must never leak onto another function taking a large uint256.
  */
 export function isErc20Approve(decoded: DecodeResult['decoded']): boolean {
   return (
@@ -65,21 +63,14 @@ function mergeLowercased(
   return out;
 }
 
-/**
- * Human label for a call: the ERC-7730 intent when the contract is clear-signable,
- * else the decoded function name, else the caller's fallback ("Call 3", "Data").
- */
+/** ERC-7730 intent, else the decoded function name, else the caller's fallback. */
 export function callLabel(decode: DecodeResult, fallback: string): string {
   if (decode.clearSigned?.intent) return decode.clearSigned.intent;
   if (decode.decoded?.functionName) return `${decode.decoded.functionName}()`;
   return fallback;
 }
 
-/**
- * The same action as a dialog headline: the ERC-7730 intent verbatim ("Supply"), else the
- * function name un-camel-cased and capitalised ("approve" → "Approve", "swapExactTokens"
- * → "Swap Exact Tokens"). Null when nothing decoded, so the caller keeps its own title.
- */
+/** The same action as a headline: intent verbatim, else the function name un-camel-cased ("Swap Exact Tokens"). */
 export function callTitle(decode: DecodeResult): string | null {
   if (decode.clearSigned?.intent) return decode.clearSigned.intent;
   const fn = decode.decoded?.functionName;
@@ -87,7 +78,7 @@ export function callTitle(decode: DecodeResult): string | null {
   return fn.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
 }
 
-interface DecodedCalldataProps {
+export interface DecodedCalldataProps {
   to: string;
   data: string;
   chainId: number;
@@ -96,18 +87,6 @@ interface DecodedCalldataProps {
   resolvedAvatars?: Record<string, string>;
   mainnetRpcUrl?: string;
 }
-
-/**
- * Decodes and renders in one step. Callers that also need the decode for their own
- * chrome (an accordion header naming the call) run `useDecodedCalldata` themselves
- * and render `DecodedCalldataView` instead, so the decode happens once.
- */
-export const DecodedCalldata = (props: DecodedCalldataProps) => {
-  // One hook handles both pipelines: ERC-7730 clear-signing (preferred view) and
-  // whatsabi raw decode (fallback / "Show raw details" disclosure).
-  const decode = useDecodedCalldata(props.to, props.data, props.chainId, props.apiKey);
-  return <DecodedCalldataView {...props} decode={decode} />;
-};
 
 export const DecodedCalldataView = ({
   data,
@@ -275,7 +254,6 @@ export const DecodedCalldataView = ({
           {decoded.params.map((param, i) => {
             const resolvedName = param.rawValue ? allResolved[param.rawValue.toLowerCase()] : undefined;
             const resolvedAvatar = param.rawValue ? allAvatars[param.rawValue.toLowerCase()] : undefined;
-            // Only the amount arg of a true ERC-20 approve, and only at a max-uint sentinel.
             const unlimitedApproval = approveShape && i === 1 && isUnlimitedAmount(param.value);
             return (
               <div key={i} className="flex flex-col gap-0.5">
@@ -286,8 +264,6 @@ export const DecodedCalldataView = ({
                 <div className="flex flex-row items-center gap-1">
                   {resolvedAvatar && <IdentityAvatar src={resolvedAvatar} fallback={null} />}
                   {unlimitedApproval ? (
-                    // Same treatment as the signing dialogs: an unbounded allowance is the one
-                    // thing the user must not miss, so it reads as a word, tinted, with a ⚠.
                     <p className="flex items-center gap-1.5 font-mono text-xs font-semibold leading-[150%] text-amber-500">
                       <TriangleAlert className="size-3.5 flex-none" strokeWidth={2} />
                       Unlimited

@@ -3,6 +3,7 @@ import type { Address, Hex } from 'viem';
 import type { Account, TokenEstimate, TransactionCall } from '@jaw.id/core';
 import { estimateErc20PaymasterCosts, JAW_PAYMASTER_URL } from '@jaw.id/core';
 import type { FeeTokenOption } from '../components/FeeTokenSelector';
+import { classifyRevert, INSUFFICIENT_FUNDS_ERROR } from '../utils/transactionFailure';
 
 // ============================================================================
 // Types
@@ -441,17 +442,21 @@ export function useGasEstimation({
     } else {
       // No selectable payment options (neither ETH nor ERC-20 have sufficient balance)
       setGasFee('');
-      setGasEstimationError('Insufficient funds');
+      setGasEstimationError(INSUFFICIENT_FUNDS_ERROR);
     }
   }, []);
 
   /**
-   * Handle estimation error (not insufficient funds)
+   * A bundler error usually carries the execution revert reason, so a balance shortfall is
+   * detectable here too and reported with the same string.
+   *
+   * Not routed through `handleEthInsufficientFunds`: that switches the fee token, the wrong
+   * remedy when gas is affordable and only the transfer isn't.
    */
   const handleEstimationError = useCallback((error: unknown) => {
     console.error('[useGasEstimation] Error:', error);
     setGasFee('');
-    setGasEstimationError('Failed to estimate gas');
+    setGasEstimationError(classifyRevert(error) === 'balance' ? INSUFFICIENT_FUNDS_ERROR : 'Failed to estimate gas');
   }, []);
 
   // -------------------------------------------------------------------------

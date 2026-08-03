@@ -6,47 +6,28 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/
 import { ShellDialog } from '../ShellDialog';
 import { ProcessingScreen } from '../ProcessingScreen';
 import { FeeTokenSelector } from '../FeeTokenSelector';
-import { useState, useEffect, useRef, type ReactNode } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { formatEther, ethAddress } from 'viem';
-import { Info, Globe, ArrowDown } from 'lucide-react';
+import { Info, ArrowDown } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
-import {
-  reverseResolveWithAvatars,
-  getDisplayAddress,
-  getChainLabel,
-  isSafeImageUrl,
-  sanitizeDisplayName,
-} from '../../utils';
+import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
 import { subscriptDecimal } from '../../utils/displayFormat';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { AccountAvatar } from '../AccountAvatar';
+import { AppAvatar } from '../AppAvatar';
+import { CopyButton } from '../CopyButton';
 import { TokenIcon } from '../TokenIcon';
 import { SubText } from '../SubText';
 import { AssetPreview } from './AssetPreview';
 import { callTitle } from './DecodedCalldata';
-import { BatchStep, CopyButton, SingleCallData } from './CallSections';
+import { resolveBlockReason } from '../../utils/transactionFailure';
+import { BatchStep, SingleCallData } from './CallSections';
+import { Eyebrow, Row, ValueAmount } from './primitives';
 
-/** One label/value micro-row card, matching the revamped signing dialogs. */
-function Row({ label, children }: { label: string; children: ReactNode }) {
-  return (
-    <div className="border-border rounded-[10.5px] border p-3">
-      <p className="text-muted-foreground mb-1 font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-        {label}
-      </p>
-      {children}
-    </div>
-  );
-}
-
-/**
- * A From/To party: avatar on the left, label stacked above the value beside it. Keeping the
- * label inside the row (per the design) costs one line instead of two, so From→To fits in
- * roughly the height the label alone used to take. The value truncates rather than wrapping;
- * the copy button carries the full address.
- */
+/** A From/To party: avatar, label, and the truncated address with a copy button for the full value. */
 function PartyRow({
   label,
   value,
@@ -62,12 +43,31 @@ function PartyRow({
     <div className="flex min-w-0 items-center gap-3">
       <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="size-7 flex-none rounded-[8px]" />
       <div className="min-w-0 flex-1">
-        <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">{label}</p>
+        <Eyebrow>{label}</Eyebrow>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
           <p className="text-foreground truncate font-mono text-[12px] font-medium">{value}</p>
           <CopyButton value={address} size={13} />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** A one-line red message with the detail behind an info tooltip. */
+function InlineWarning({ text, detail }: { text: string; detail: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <p className="text-destructive font-mono text-[11px] font-medium">{text}</p>
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Info className="text-destructive size-3 flex-none cursor-help" />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[240px] text-xs">
+            <p>{detail}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }
@@ -83,6 +83,7 @@ export const TransactionDialog = ({
   assetsIn,
   assetPreviewError,
   assetPreviewWillRevert,
+  assetPreviewRevertCause,
   onConfirm,
   onCancel,
   isProcessing,
@@ -252,19 +253,27 @@ export const TransactionDialog = ({
     }
   };
 
-  // Confirmation gating (unchanged): not processing, gas not loading, a selectable
-  // payment option exists, and an ERC-20 fee has a settled ceiling.
-  const hasInsufficientFunds = !hasSelectablePaymentOption || (gasEstimationError && !sponsored && !isPayingWithErc20);
+  const blockReason = resolveBlockReason({
+    hasSelectablePaymentOption,
+    gasEstimationError,
+    sponsored,
+    isPayingWithErc20: !!isPayingWithErc20,
+    revertCause: assetPreviewRevertCause,
+  });
+
+  // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
   const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
-  const canConfirm = !isProcessing && !gasFeeLoading && !hasInsufficientFunds && !erc20EstimateMissing;
+  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20EstimateMissing;
+
+  // Reverts, but gas estimated fine, so it stays submittable: warn rather than block.
+  const softRevertWarning = !blockReason && !!assetPreviewWillRevert;
 
   const singleValue = isSingleTransaction ? formatTransactionValue(currentTransaction?.value) : null;
   // A pure native transfer (value, no calldata) reads as a "Send"; everything else is a generic review.
   const isNativeSend =
     isSingleTransaction && !!singleValue && (!currentTransaction?.data || currentTransaction.data === '0x');
 
-  // One decode for the whole single-call path: it names the headline AND the calldata card,
-  // so a lone decoded call reads "Approve" rather than the generic "Review Transaction".
+  // One decode names both the headline and the calldata card.
   const isSingleCall = isSingleTransaction && !isNativeSend && !!currentTransaction?.data;
   const singleCallDecode = useDecodedCalldata(
     isSingleCall ? currentTransaction?.to : undefined,
@@ -274,30 +283,15 @@ export const TransactionDialog = ({
   );
   const title = isNativeSend ? "You're Sending" : (callTitle(singleCallDecode) ?? 'Review Transaction');
 
-  // The You-send/You-get summary stands in for the raw detail, so calldata and batch steps
-  // start folded when it's there — and stay open when it isn't, rather than leaving the
-  // review screen with nothing on it.
-  const hasAssetSummary = !assetPreviewError && ((assetsOut?.length ?? 0) > 0 || (assetsIn?.length ?? 0) > 0);
-  const detailsOpen = !hasAssetSummary;
+  // Calldata and batch steps start folded only when the You-send/You-get summary can stand in
+  // for them; otherwise the review screen would open with nothing on it.
+  const detailsOpen = !!assetPreviewError || ((assetsOut?.length ?? 0) === 0 && (assetsIn?.length ?? 0) === 0);
 
   const hasError = transactionStatus.includes('Error');
 
-  // Processing-screen flow target: the requesting dApp's logo, falling back to a neutral
-  // globe. Never the chain badge — that belongs to the network fee row.
-  const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
-  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
-    <img
-      src={appLogoUrl ?? undefined}
-      alt={`${safeAppName} logo`}
-      className="h-full w-full rounded-full object-cover"
-    />
-  ) : (
-    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
-  );
-
-  // Fee-token chip — one instance, shared by the fee row.
+  // Suppressed while blocked: nothing can be priced, so the choice would change nothing.
   const feeSelector =
-    showFeeTokenSelector && !sponsored && feeTokens && onFeeTokenSelect ? (
+    showFeeTokenSelector && !sponsored && !blockReason && feeTokens && onFeeTokenSelect ? (
       <FeeTokenSelector
         tokens={feeTokens}
         chainId={currentTransaction?.chainId}
@@ -310,13 +304,27 @@ export const TransactionDialog = ({
       />
     ) : null;
 
-  // The fee VALUE block — every state preserved from the pre-revamp dialog.
+  const blockedCopy =
+    blockReason === 'funds'
+      ? {
+          text: 'Insufficient funds',
+          detail:
+            assetPreviewRevertCause === 'balance'
+              ? "This account doesn't hold enough of the asset this transaction spends."
+              : `This account can't cover the network fee in ${nativeSymbol} or any supported token.`,
+        }
+      : {
+          text: 'Transaction will fail',
+          detail: 'Simulating this transaction reverted, so the fee can’t be estimated and it can’t be submitted.',
+        };
+
   const feeValue = (() => {
     if (gasFeeLoading && !isPayingWithErc20) {
       return <p className="text-muted-foreground font-mono text-[11px]">Estimating...</p>;
     }
-    if (gasEstimationError && !sponsored) {
-      return <p className="text-destructive font-mono text-[11px] font-medium">{gasEstimationError}</p>;
+    // Blocked: one short red string in the slot the fee would occupy, detail in the tooltip.
+    if (blockReason) {
+      return <InlineWarning {...blockedCopy} />;
     }
     if (sponsored) {
       return (
@@ -405,12 +413,12 @@ export const TransactionDialog = ({
         <ProcessingScreen
           seedAddress={walletAddress}
           avatarUrl={resolvedAvatars[walletAddress]}
-          appAvatar={appAvatar}
+          appAvatar={<AppAvatar appName={appName} appLogoUrl={appLogoUrl} />}
           title="Submitting transaction"
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* Pinned header — action title only (no timestamp, no app header, no X). */}
+          {/* Pinned header */}
           <div className="flex-none px-6 pt-7">
             <h2 className="text-foreground text-[26px] font-bold tracking-[-0.03em]">{title}</h2>
             {totalTransactions > 1 && currentTransaction?.description && (
@@ -422,7 +430,7 @@ export const TransactionDialog = ({
 
           {/* Scrollable body */}
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
-            {/* Native send → one prominent hero amount (replaces the asset-preview row + value card). */}
+            {/* Native send → one prominent hero amount */}
             {isNativeSend && (
               <div className="flex items-center gap-3 pb-0.5 pt-1">
                 <TokenIcon
@@ -445,7 +453,7 @@ export const TransactionDialog = ({
               </div>
             )}
 
-            {/* From / To — label sits beside the avatar (design), not on its own line */}
+            {/* From / To */}
             <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-3">
               <PartyRow
                 label="From"
@@ -470,34 +478,40 @@ export const TransactionDialog = ({
               )}
             </div>
 
-            {/* Asset changes — for a native send the hero already shows it, so only surface
-                the preview when it carries a revert warning. */}
-            {(!isNativeSend || assetPreviewWillRevert) && (
+            {/* Reverts but gas estimated fine, so it stays submittable. */}
+            {softRevertWarning && (
+              <div className="px-0.5">
+                <InlineWarning
+                  text="Transaction is likely to fail"
+                  detail="Simulation shows this transaction reverting on-chain. You can still submit it, but it will probably fail and consume gas."
+                />
+              </div>
+            )}
+
+            {/* Asset changes — a native send shows the same information in its hero. */}
+            {!isNativeSend && (
               <AssetPreview
                 assetsOut={assetsOut ?? []}
                 assetsIn={assetsIn ?? []}
                 error={assetPreviewError ?? false}
-                willRevert={assetPreviewWillRevert ?? false}
                 nativeSymbol={nativeSymbol}
                 chainId={currentTransaction?.chainId}
               />
             )}
 
-            {/* Value (single, non-native — a native send shows it in the hero) */}
+            {/* Value (single, non-native) */}
             {isSingleTransaction && !isNativeSend && singleValue && (
               <Row label="Value">
-                <p className="text-foreground font-mono text-[13px] font-semibold">
-                  {singleValue} {nativeSymbol}
-                  {nativeTokenPrice > 0 && (
-                    <span className="text-muted-foreground ml-1.5 text-[11px] font-normal">
-                      ≈ ${(Number(singleValue) * nativeTokenPrice).toFixed(2)}
-                    </span>
-                  )}
-                </p>
+                <ValueAmount
+                  amount={singleValue}
+                  symbol={nativeSymbol}
+                  price={nativeTokenPrice}
+                  className="text-foreground font-mono text-[13px] font-semibold"
+                />
               </Row>
             )}
 
-            {/* Calldata (single tx) — folded behind the decoded call name */}
+            {/* Calldata (single tx) */}
             {isSingleTransaction && currentTransaction?.data && currentTransaction.data !== '0x' && (
               <Accordion type="single" collapsible defaultValue={detailsOpen ? 'calldata' : undefined}>
                 <SingleCallData
@@ -513,7 +527,7 @@ export const TransactionDialog = ({
               </Accordion>
             )}
 
-            {/* Batch — numbered steps named by their decoded action */}
+            {/* Batch steps */}
             {!isSingleTransaction && (
               <Accordion
                 type="multiple"
@@ -538,7 +552,7 @@ export const TransactionDialog = ({
               </Accordion>
             )}
 
-            {/* Error banner (processing/success now live in the ProcessingScreen state above). */}
+            {/* Error banner */}
             {hasError && (
               <div className="bg-destructive/10 rounded-[10.5px] p-3">
                 <p className="text-destructive text-[12px]">{transactionStatus}</p>
@@ -553,9 +567,7 @@ export const TransactionDialog = ({
               <div className="flex items-start justify-between gap-2">
                 <div className="min-w-0">
                   <div className="flex items-center gap-1.5">
-                    <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-                      Network fee
-                    </p>
+                    <Eyebrow>Network fee</Eyebrow>
                     <TooltipProvider delayDuration={0}>
                       <Tooltip>
                         <TooltipTrigger asChild>
@@ -601,7 +613,7 @@ export const TransactionDialog = ({
                 disabled={!canConfirm}
                 className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
               >
-                {hasInsufficientFunds ? 'Insufficient Funds' : isProcessing ? 'Processing...' : 'Confirm'}
+                {blockReason === 'funds' ? 'Insufficient Funds' : isProcessing ? 'Processing...' : 'Confirm'}
               </Button>
             </div>
           </div>

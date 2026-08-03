@@ -1,42 +1,13 @@
 'use client';
 
-import { useState, type ReactNode } from 'react';
 import { Code } from 'lucide-react';
 import { AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
-import { CopiedIcon, CopyIcon } from '../../icons';
 import { AccountAvatar } from '../AccountAvatar';
+import { CopyButton } from '../CopyButton';
+import { Eyebrow, Row, ValueAmount } from './primitives';
 import { useDecodedCalldata, type DecodeResult } from '../../hooks/useDecodedCalldata';
 import { DecodedCalldataView, callLabel } from './DecodedCalldata';
 import type { TransactionData } from './types';
-
-/** Eyebrow label shared by every micro-card in the dialog. */
-function Eyebrow({ children }: { children: ReactNode }) {
-  return (
-    <span className="text-muted-foreground block font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-      {children}
-    </span>
-  );
-}
-
-/** Copy-to-clipboard icon button with the dialog's 3s "copied" confirmation. */
-export function CopyButton({ value, size = 14 }: { value: string; size?: number }) {
-  const [copied, setCopied] = useState(false);
-  if (copied) return <CopiedIcon width={size} height={size} className="flex-none" />;
-  return (
-    <CopyIcon
-      width={size}
-      height={size}
-      className="flex-none cursor-pointer"
-      onClick={(e) => {
-        e.stopPropagation();
-        if (typeof window === 'undefined' || !navigator?.clipboard) return;
-        navigator.clipboard.writeText(value).catch(() => undefined);
-        setCopied(true);
-        setTimeout(() => setCopied(false), 3000);
-      }}
-    />
-  );
-}
 
 interface DecodeContext {
   chainId: number;
@@ -46,12 +17,7 @@ interface DecodeContext {
   mainnetRpcUrl?: string;
 }
 
-/**
- * The single-transaction calldata card: an accordion whose header names the call
- * ("Approve", "supply()") so the detail can stay folded when the asset-change summary
- * already tells the story. The decode comes from the parent, which also uses it for the
- * dialog headline.
- */
+/** The single-transaction calldata card, folded behind the decoded call name. */
 export function SingleCallData({
   to,
   data,
@@ -85,10 +51,7 @@ export function SingleCallData({
   );
 }
 
-/**
- * One numbered step of a batch. The header carries the decoded action name rather than a
- * bare index, so a collapsed batch still reads as "Approve / Swap" at a glance.
- */
+/** One numbered batch step, headed by its decoded action name. */
 export function BatchStep({
   transaction,
   index,
@@ -123,7 +86,6 @@ export function BatchStep({
       </AccordionTrigger>
       <AccordionContent className="px-3 pb-3">
         <div className="flex flex-col gap-2.5">
-          {/* Interacting with (to) */}
           <div className="border-border flex flex-col gap-1 rounded-[10.5px] border p-2.5">
             <div className="flex items-center justify-between">
               <Eyebrow>Interacting with</Eyebrow>
@@ -142,22 +104,17 @@ export function BatchStep({
             </div>
           </div>
 
-          {/* Value */}
           {value && (
-            <div className="border-border rounded-[10.5px] border p-3">
-              <Eyebrow>Value</Eyebrow>
-              <p className="text-foreground mt-1 font-mono text-[12px] font-semibold">
-                {value} {nativeSymbol}
-                {nativeTokenPrice > 0 && (
-                  <span className="text-muted-foreground ml-1.5 text-[11px] font-normal">
-                    ≈ ${(Number(value) * nativeTokenPrice).toFixed(2)}
-                  </span>
-                )}
-              </p>
-            </div>
+            <Row label="Value">
+              <ValueAmount
+                amount={value}
+                symbol={nativeSymbol}
+                price={nativeTokenPrice}
+                className="text-foreground font-mono text-[12px] font-semibold"
+              />
+            </Row>
           )}
 
-          {/* Data */}
           {hasData && (
             <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-2.5">
               <div className="flex items-center justify-between">
@@ -169,10 +126,7 @@ export function BatchStep({
                 data={transaction.data as string}
                 chainId={transaction.chainId}
                 decode={decode}
-                apiKey={ctx.apiKey}
-                resolvedAddresses={ctx.resolvedAddresses}
-                resolvedAvatars={ctx.resolvedAvatars}
-                mainnetRpcUrl={ctx.mainnetRpcUrl}
+                {...ctx}
               />
             </div>
           )}
