@@ -1,7 +1,7 @@
 'use client';
 
 import { Button } from '../ui/button';
-import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
+import { Accordion } from '../ui/accordion';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { ShellDialog } from '../ShellDialog';
 import { ProcessingScreen } from '../ProcessingScreen';
@@ -19,8 +19,8 @@ import { IdentityAvatar } from '../IdentityAvatar';
 import { AccountAvatar } from '../AccountAvatar';
 import { TokenIcon } from '../TokenIcon';
 import { SubText } from '../SubText';
-import { DecodedCalldata } from './DecodedCalldata';
 import { AssetPreview } from './AssetPreview';
+import { BatchStep, SingleCallData } from './CallSections';
 
 /** One label/value micro-row card, matching the revamped signing dialogs. */
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -60,7 +60,6 @@ export const TransactionDialog = ({
   mainnetRpcUrl,
   nativeCurrencySymbol,
 }: TransactionDialogProps) => {
-  const [isDataCopied, setIsDataCopied] = useState<{ [key: number]: boolean }>({});
   const [isAddressCopied, setIsAddressCopied] = useState<{ [key: string]: boolean }>({});
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
   const [resolvedAvatars, setResolvedAvatars] = useState<Record<string, string>>({});
@@ -225,6 +224,12 @@ export const TransactionDialog = ({
   const isNativeSend =
     isSingleTransaction && !!singleValue && (!currentTransaction?.data || currentTransaction.data === '0x');
   const title = isNativeSend ? "You're Sending" : 'Review Transaction';
+
+  // The You-send/You-get summary stands in for the raw detail, so calldata and batch steps
+  // start folded when it's there — and stay open when it isn't, rather than leaving the
+  // review screen with nothing on it.
+  const hasAssetSummary = !assetPreviewError && ((assetsOut?.length ?? 0) > 0 || (assetsIn?.length ?? 0) > 0);
+  const detailsOpen = !hasAssetSummary;
 
   const hasError = transactionStatus.includes('Error');
 
@@ -483,31 +488,10 @@ export const TransactionDialog = ({
               </Row>
             )}
 
-            {/* Data (single tx) */}
+            {/* Calldata (single tx) — folded behind the decoded call name */}
             {isSingleTransaction && currentTransaction?.data && currentTransaction.data !== '0x' && (
-              <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-3">
-                <div className="flex items-center justify-between">
-                  <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-                    Data
-                  </p>
-                  {isDataCopied[0] ? (
-                    <CopiedIcon width={14} height={14} />
-                  ) : (
-                    <CopyIcon
-                      width={14}
-                      height={14}
-                      onClick={() => {
-                        if (typeof window !== 'undefined' && navigator?.clipboard) {
-                          navigator.clipboard.writeText(currentTransaction?.data ?? '').catch(() => undefined);
-                          setIsDataCopied({ ...isDataCopied, 0: true });
-                          setTimeout(() => setIsDataCopied((prev) => ({ ...prev, 0: false })), 3000);
-                        }
-                      }}
-                      className="cursor-pointer"
-                    />
-                  )}
-                </div>
-                <DecodedCalldata
+              <Accordion type="single" collapsible defaultValue={detailsOpen ? 'calldata' : undefined}>
+                <SingleCallData
                   to={currentTransaction.to}
                   data={currentTransaction.data}
                   chainId={currentTransaction.chainId}
@@ -516,124 +500,30 @@ export const TransactionDialog = ({
                   resolvedAvatars={resolvedAvatars}
                   mainnetRpcUrl={mainnetRpcUrl}
                 />
-              </div>
+              </Accordion>
             )}
 
-            {/* Batch — numbered steps (all open, collapsible) */}
+            {/* Batch — numbered steps named by their decoded action */}
             {!isSingleTransaction && (
               <Accordion
                 type="multiple"
                 className="space-y-2.5"
-                defaultValue={transactions.map((_, index) => `transaction-${index}`)}
+                defaultValue={detailsOpen ? transactions.map((_, index) => `transaction-${index}`) : []}
               >
                 {transactions.map((transaction, index) => (
-                  <AccordionItem
+                  <BatchStep
                     key={index}
-                    value={`transaction-${index}`}
-                    className="border-border overflow-hidden rounded-[10.5px] border"
-                  >
-                    <AccordionTrigger className="px-3 py-2.5 hover:no-underline">
-                      <span className="flex items-center gap-2">
-                        <span className="bg-secondary text-foreground flex size-5 flex-none items-center justify-center rounded-full text-[10px] font-semibold">
-                          {index + 1}
-                        </span>
-                        <span className="text-foreground text-[13px] font-medium">Call {index + 1}</span>
-                      </span>
-                    </AccordionTrigger>
-                    <AccordionContent className="px-3 pb-3">
-                      <div className="flex flex-col gap-2.5">
-                        {/* Interacting with (to) */}
-                        <div className="border-border flex flex-col gap-1 rounded-[10.5px] border p-2.5">
-                          <div className="flex items-center justify-between">
-                            <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-                              Interacting with
-                            </p>
-                            {isAddressCopied[`to-${index}`] ? (
-                              <CopiedIcon width={13} height={13} />
-                            ) : (
-                              <CopyIcon
-                                width={13}
-                                height={13}
-                                onClick={() => {
-                                  if (typeof window !== 'undefined' && navigator?.clipboard) {
-                                    navigator.clipboard.writeText(transaction.to).catch(() => undefined);
-                                    setIsAddressCopied((prev) => ({ ...prev, [`to-${index}`]: true }));
-                                    setTimeout(
-                                      () => setIsAddressCopied((prev) => ({ ...prev, [`to-${index}`]: false })),
-                                      3000
-                                    );
-                                  }
-                                }}
-                                className="cursor-pointer"
-                              />
-                            )}
-                          </div>
-                          <div className="flex items-center gap-2">
-                            <AccountAvatar
-                              seed={transaction.to}
-                              avatarUrl={transaction.to ? resolvedAvatars[transaction.to] : undefined}
-                              size={28}
-                              className="size-7 flex-none rounded-[8px]"
-                            />
-                            <p className="text-foreground min-w-0 break-all font-mono text-[14px] font-medium">
-                              {displayContractAddress(transaction.to)}
-                            </p>
-                          </div>
-                        </div>
-
-                        {/* Value */}
-                        {formatTransactionValue(transaction.value) && (
-                          <Row label="Value">
-                            <p className="text-foreground font-mono text-[12px] font-semibold">
-                              {formatTransactionValue(transaction.value)} {nativeSymbol}
-                              {nativeTokenPrice > 0 && (
-                                <span className="text-muted-foreground ml-1.5 text-[11px] font-normal">
-                                  ≈ ${(Number(formatTransactionValue(transaction.value)) * nativeTokenPrice).toFixed(2)}
-                                </span>
-                              )}
-                            </p>
-                          </Row>
-                        )}
-
-                        {/* Data */}
-                        {transaction.data && transaction.data !== '0x' && (
-                          <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-2.5">
-                            <div className="flex items-center justify-between">
-                              <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-                                Data
-                              </p>
-                              {isDataCopied[index] ? (
-                                <CopiedIcon width={14} height={14} />
-                              ) : (
-                                <CopyIcon
-                                  width={14}
-                                  height={14}
-                                  onClick={(e) => {
-                                    e.stopPropagation();
-                                    if (typeof window !== 'undefined' && navigator?.clipboard) {
-                                      navigator.clipboard.writeText(transaction.data ?? '').catch(() => undefined);
-                                      setIsDataCopied({ ...isDataCopied, [index]: true });
-                                      setTimeout(() => setIsDataCopied((prev) => ({ ...prev, [index]: false })), 3000);
-                                    }
-                                  }}
-                                  className="cursor-pointer"
-                                />
-                              )}
-                            </div>
-                            <DecodedCalldata
-                              to={transaction.to}
-                              data={transaction.data}
-                              chainId={transaction.chainId}
-                              apiKey={apiKey}
-                              resolvedAddresses={resolvedAddresses}
-                              resolvedAvatars={resolvedAvatars}
-                              mainnetRpcUrl={mainnetRpcUrl}
-                            />
-                          </div>
-                        )}
-                      </div>
-                    </AccordionContent>
-                  </AccordionItem>
+                    transaction={transaction}
+                    index={index}
+                    nativeSymbol={nativeSymbol}
+                    nativeTokenPrice={nativeTokenPrice}
+                    formatValue={formatTransactionValue}
+                    displayContractAddress={displayContractAddress}
+                    apiKey={apiKey}
+                    resolvedAddresses={resolvedAddresses}
+                    resolvedAvatars={resolvedAvatars}
+                    mainnetRpcUrl={mainnetRpcUrl}
+                  />
                 ))}
               </Accordion>
             )}

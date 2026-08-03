@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import type { Hex } from 'viem';
-import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
+import { useDecodedCalldata, type DecodeResult } from '../../hooks/useDecodedCalldata';
 import { Spinner } from '../ui/spinner';
 import { reverseResolveWithAvatars, formatAddress, getChainLabel } from '../../utils';
 import { computeCalldataDigest } from '../../utils/erc8213';
@@ -48,6 +48,16 @@ function mergeLowercased(
   return out;
 }
 
+/**
+ * Human label for a call: the ERC-7730 intent when the contract is clear-signable,
+ * else the decoded function name, else the caller's fallback ("Call 3", "Data").
+ */
+export function callLabel(decode: DecodeResult, fallback: string): string {
+  if (decode.clearSigned?.intent) return decode.clearSigned.intent;
+  if (decode.decoded?.functionName) return `${decode.decoded.functionName}()`;
+  return fallback;
+}
+
 interface DecodedCalldataProps {
   to: string;
   data: string;
@@ -58,18 +68,27 @@ interface DecodedCalldataProps {
   mainnetRpcUrl?: string;
 }
 
-export const DecodedCalldata = ({
-  to,
+/**
+ * Decodes and renders in one step. Callers that also need the decode for their own
+ * chrome (an accordion header naming the call) run `useDecodedCalldata` themselves
+ * and render `DecodedCalldataView` instead, so the decode happens once.
+ */
+export const DecodedCalldata = (props: DecodedCalldataProps) => {
+  // One hook handles both pipelines: ERC-7730 clear-signing (preferred view) and
+  // whatsabi raw decode (fallback / "Show raw details" disclosure).
+  const decode = useDecodedCalldata(props.to, props.data, props.chainId, props.apiKey);
+  return <DecodedCalldataView {...props} decode={decode} />;
+};
+
+export const DecodedCalldataView = ({
   data,
   chainId,
-  apiKey,
   resolvedAddresses,
   resolvedAvatars,
   mainnetRpcUrl,
-}: DecodedCalldataProps) => {
-  // One hook handles both pipelines: ERC-7730 clear-signing (preferred view) and
-  // whatsabi raw decode (fallback / "Show raw details" disclosure).
-  const { clearSigned, decoded, isLoading } = useDecodedCalldata(to, data, chainId, apiKey);
+  decode,
+}: DecodedCalldataProps & { decode: DecodeResult }) => {
+  const { clearSigned, decoded, isLoading } = decode;
   const [localResolved, setLocalResolved] = useState<Record<string, string>>({});
   const [localAvatars, setLocalAvatars] = useState<Record<string, string>>({});
   const attemptedRef = useRef<Set<string>>(new Set());
