@@ -188,19 +188,18 @@ export const DecodedCalldataView = ({
                   </span>
                   <span className="text-muted-foreground font-mono text-xs">{decoded.signature}</span>
                 </div>
-                {decoded.params.length > 0 && (
-                  <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
-                    {decoded.params.map((param, i) => (
-                      <div key={i} className="flex flex-col gap-0.5">
-                        <div className="flex items-baseline gap-1.5">
-                          <span className="text-muted-foreground text-xs font-semibold">{param.name}</span>
-                          <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
-                        </div>
-                        <p className="text-foreground break-all font-mono text-xs leading-[150%]">{param.value}</p>
+                <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
+                  {decoded.params.length === 0 && <p className="text-muted-foreground text-xs">No parameters</p>}
+                  {decoded.params.map((param, i) => (
+                    <div key={i} className="flex flex-col gap-0.5">
+                      <div className="flex items-baseline gap-1.5">
+                        <span className="text-muted-foreground text-xs font-semibold">{param.name}</span>
+                        <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                      <p className="text-foreground break-all font-mono text-xs leading-[150%]">{param.value}</p>
+                    </div>
+                  ))}
+                </div>
               </>
             ) : null}
             <div className="bg-secondary max-h-[20vh] overflow-y-auto rounded-[6px] p-2">
@@ -249,41 +248,41 @@ export const DecodedCalldataView = ({
         <span className="text-muted-foreground font-mono text-xs">{decoded.signature}</span>
       </div>
 
-      {decoded.params.length > 0 && (
-        <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
-          {decoded.params.map((param, i) => {
-            const resolvedName = param.rawValue ? allResolved[param.rawValue.toLowerCase()] : undefined;
-            const resolvedAvatar = param.rawValue ? allAvatars[param.rawValue.toLowerCase()] : undefined;
-            const unlimitedApproval = approveShape && i === 1 && isUnlimitedAmount(param.value);
-            return (
-              <div key={i} className="flex flex-col gap-0.5">
-                <div className="flex items-baseline gap-1.5">
-                  <span className="text-muted-foreground text-xs font-semibold">{param.name}</span>
-                  <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
-                </div>
-                <div className="flex flex-row items-center gap-1">
-                  {resolvedAvatar && <IdentityAvatar src={resolvedAvatar} fallback={null} />}
-                  {unlimitedApproval ? (
-                    <p className="flex items-center gap-1.5 font-mono text-xs font-semibold leading-[150%] text-amber-500">
-                      <TriangleAlert className="size-3.5 flex-none" strokeWidth={2} />
-                      Unlimited
-                    </p>
-                  ) : (
-                    <p className="text-foreground break-all font-mono text-xs leading-[150%]">
-                      {resolvedName ? `${resolvedName} (${formatAddress(param.rawValue!)})` : param.value}
-                    </p>
-                  )}
-                  {param.rawValue && param.rawValue.toLowerCase() !== ZERO_ADDRESS && !resolvedAvatar && (
-                    // Address params with no ENS avatar: known token contracts get their logo after the address.
-                    // The zero address is excluded — tokenIconUrl maps it to the native icon, wrong for calldata params.
-                    <TokenIcon chainId={chainId} address={param.rawValue} className="ml-0.5 size-4" />
-                  )}
-                </div>
+      {/* Always boxed, even with no params — a zero-arg call would otherwise render as loose text. */}
+      <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
+        {decoded.params.length === 0 && <p className="text-muted-foreground text-xs">No parameters</p>}
+        {decoded.params.map((param, i) => {
+          const resolvedName = param.rawValue ? allResolved[param.rawValue.toLowerCase()] : undefined;
+          const resolvedAvatar = param.rawValue ? allAvatars[param.rawValue.toLowerCase()] : undefined;
+          const unlimitedApproval = approveShape && i === 1 && isUnlimitedAmount(param.value);
+          return (
+            <div key={i} className="flex flex-col gap-0.5">
+              <div className="flex items-baseline gap-1.5">
+                <span className="text-muted-foreground text-xs font-semibold">{param.name}</span>
+                <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
               </div>
-            );
-          })}
-        </div>
-      )}
+              <div className="flex flex-row items-center gap-1">
+                {resolvedAvatar && <IdentityAvatar src={resolvedAvatar} fallback={null} />}
+                {unlimitedApproval ? (
+                  <p className="flex items-center gap-1.5 font-mono text-xs font-semibold leading-[150%] text-amber-500">
+                    <TriangleAlert className="size-3.5 flex-none" strokeWidth={2} />
+                    Unlimited
+                  </p>
+                ) : (
+                  <p className="text-foreground break-all font-mono text-xs leading-[150%]">
+                    {resolvedName ? `${resolvedName} (${formatAddress(param.rawValue!)})` : param.value}
+                  </p>
+                )}
+                {param.rawValue && param.rawValue.toLowerCase() !== ZERO_ADDRESS && !resolvedAvatar && (
+                  // Address params with no ENS avatar: known token contracts get their logo after the address.
+                  // The zero address is excluded — tokenIconUrl maps it to the native icon, wrong for calldata params.
+                  <TokenIcon chainId={chainId} address={param.rawValue} className="ml-0.5 size-4" />
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
 
       <details className="text-xs">
         <summary className="text-muted-foreground hover:text-foreground cursor-pointer">Raw calldata</summary>
