@@ -5,7 +5,7 @@ import { Code } from 'lucide-react';
 import { AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { CopiedIcon, CopyIcon } from '../../icons';
 import { AccountAvatar } from '../AccountAvatar';
-import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
+import { useDecodedCalldata, type DecodeResult } from '../../hooks/useDecodedCalldata';
 import { DecodedCalldataView, callLabel } from './DecodedCalldata';
 import type { TransactionData } from './types';
 
@@ -49,11 +49,15 @@ interface DecodeContext {
 /**
  * The single-transaction calldata card: an accordion whose header names the call
  * ("Approve", "supply()") so the detail can stay folded when the asset-change summary
- * already tells the story.
+ * already tells the story. The decode comes from the parent, which also uses it for the
+ * dialog headline.
  */
-export function SingleCallData({ to, data, ...ctx }: DecodeContext & { to: string; data: string }) {
-  const decode = useDecodedCalldata(to, data, ctx.chainId, ctx.apiKey);
-
+export function SingleCallData({
+  to,
+  data,
+  decode,
+  ...ctx
+}: DecodeContext & { to: string; data: string; decode: DecodeResult }) {
   return (
     <AccordionItem value="calldata" className="border-border overflow-hidden rounded-[10.5px] border">
       <AccordionTrigger className="items-center px-3 py-2.5 hover:no-underline">
@@ -132,7 +136,7 @@ export function BatchStep({
                 size={28}
                 className="size-7 flex-none rounded-[8px]"
               />
-              <p className="text-foreground min-w-0 break-all font-mono text-[14px] font-medium">
+              <p className="text-foreground min-w-0 break-all font-mono text-[12px] font-medium">
                 {displayContractAddress(transaction.to)}
               </p>
             </div>

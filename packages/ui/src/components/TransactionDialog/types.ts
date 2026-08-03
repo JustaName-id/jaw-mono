@@ -46,6 +46,10 @@ export interface TransactionDialogProps {
   networkName: string;
   apiKey?: string;
 
+  /** Requesting dApp, shown as the flow target on the processing screen. */
+  appName?: string;
+  appLogoUrl?: string | null;
+
   // Fee token selection (for ERC-20 paymaster)
   feeTokens?: FeeTokenOption[];
   feeTokensLoading?: boolean;

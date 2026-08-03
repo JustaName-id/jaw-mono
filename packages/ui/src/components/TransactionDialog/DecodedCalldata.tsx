@@ -58,6 +58,18 @@ export function callLabel(decode: DecodeResult, fallback: string): string {
   return fallback;
 }
 
+/**
+ * The same action as a dialog headline: the ERC-7730 intent verbatim ("Supply"), else the
+ * function name un-camel-cased and capitalised ("approve" → "Approve", "swapExactTokens"
+ * → "Swap Exact Tokens"). Null when nothing decoded, so the caller keeps its own title.
+ */
+export function callTitle(decode: DecodeResult): string | null {
+  if (decode.clearSigned?.intent) return decode.clearSigned.intent;
+  const fn = decode.decoded?.functionName;
+  if (!fn) return null;
+  return fn.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/^./, (c) => c.toUpperCase());
+}
+
 interface DecodedCalldataProps {
   to: string;
   data: string;

@@ -504,6 +504,8 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
@@ -516,6 +518,8 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
@@ -1270,6 +1274,8 @@ function TransactionDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: TransactionUIRequest;
   onApprove: (data: any) => void;
@@ -1277,6 +1283,8 @@ function TransactionDialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1603,6 +1611,8 @@ function TransactionDialogWrapper({
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
       nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
     />
   );
 }
@@ -1615,6 +1625,8 @@ function SendTransactionDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: SendTransactionUIRequest;
   onApprove: (data: any) => void;
@@ -1622,6 +1634,8 @@ function SendTransactionDialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1942,6 +1956,8 @@ function SendTransactionDialogWrapper({
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
       nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
     />
   );
 }

@@ -12,14 +12,22 @@ import { formatEther, ethAddress } from 'viem';
 import { Info, Globe, ArrowDown } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useChainIconURI, useFeeTokenPrice } from '../../hooks';
+import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
-import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
+import {
+  reverseResolveWithAvatars,
+  getDisplayAddress,
+  getChainLabel,
+  isSafeImageUrl,
+  sanitizeDisplayName,
+} from '../../utils';
 import { subscriptDecimal } from '../../utils/displayFormat';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { AccountAvatar } from '../AccountAvatar';
 import { TokenIcon } from '../TokenIcon';
 import { SubText } from '../SubText';
 import { AssetPreview } from './AssetPreview';
+import { callTitle } from './DecodedCalldata';
 import { BatchStep, SingleCallData } from './CallSections';
 
 /** One label/value micro-row card, matching the revamped signing dialogs. */
@@ -51,6 +59,8 @@ export const TransactionDialog = ({
   transactionStatus,
   networkName,
   apiKey,
+  appName,
+  appLogoUrl,
   feeTokens,
   feeTokensLoading,
   selectedFeeToken,
@@ -223,7 +233,17 @@ export const TransactionDialog = ({
   // A pure native transfer (value, no calldata) reads as a "Send"; everything else is a generic review.
   const isNativeSend =
     isSingleTransaction && !!singleValue && (!currentTransaction?.data || currentTransaction.data === '0x');
-  const title = isNativeSend ? "You're Sending" : 'Review Transaction';
+
+  // One decode for the whole single-call path: it names the headline AND the calldata card,
+  // so a lone decoded call reads "Approve" rather than the generic "Review Transaction".
+  const isSingleCall = isSingleTransaction && !isNativeSend && !!currentTransaction?.data;
+  const singleCallDecode = useDecodedCalldata(
+    isSingleCall ? currentTransaction?.to : undefined,
+    isSingleCall ? currentTransaction?.data : undefined,
+    currentTransaction?.chainId ?? 1,
+    apiKey
+  );
+  const title = isNativeSend ? "You're Sending" : (callTitle(singleCallDecode) ?? 'Review Transaction');
 
   // The You-send/You-get summary stands in for the raw detail, so calldata and batch steps
   // start folded when it's there — and stay open when it isn't, rather than leaving the
@@ -232,6 +252,19 @@ export const TransactionDialog = ({
   const detailsOpen = !hasAssetSummary;
 
   const hasError = transactionStatus.includes('Error');
+
+  // Processing-screen flow target: the requesting dApp's logo, falling back to a neutral
+  // globe. Never the chain badge — that belongs to the network fee row.
+  const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
+  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
+    <img
+      src={appLogoUrl ?? undefined}
+      alt={`${safeAppName} logo`}
+      className="h-full w-full rounded-full object-cover"
+    />
+  ) : (
+    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
+  );
 
   // Fee-token chip — one instance, shared by the fee row.
   const feeSelector =
@@ -343,9 +376,8 @@ export const TransactionDialog = ({
         <ProcessingScreen
           seedAddress={walletAddress}
           avatarUrl={resolvedAvatars[walletAddress]}
-          appAvatar={chainIcon ?? <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />}
+          appAvatar={appAvatar}
           title="Submitting transaction"
-          subtitle={`Signing with your passkey · ${networkName || 'the network'}`}
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
@@ -397,7 +429,7 @@ export const TransactionDialog = ({
                     size={32}
                     className="size-8 flex-none rounded-[9px]"
                   />
-                  <p className="text-foreground min-w-0 break-all font-mono text-[14px] font-medium">
+                  <p className="text-foreground min-w-0 break-all font-mono text-[12px] font-medium">
                     {displayWalletAddress}
                   </p>
                   {isAddressCopied['single-from'] ? (
@@ -436,7 +468,7 @@ export const TransactionDialog = ({
                         size={32}
                         className="size-8 flex-none rounded-[9px]"
                       />
-                      <p className="text-foreground min-w-0 break-all font-mono text-[14px] font-medium">
+                      <p className="text-foreground min-w-0 break-all font-mono text-[12px] font-medium">
                         {displayToAddress}
                       </p>
                       {isAddressCopied['single-to'] ? (
@@ -494,6 +526,7 @@ export const TransactionDialog = ({
                 <SingleCallData
                   to={currentTransaction.to}
                   data={currentTransaction.data}
+                  decode={singleCallDecode}
                   chainId={currentTransaction.chainId}
                   apiKey={apiKey}
                   resolvedAddresses={resolvedAddresses}
