@@ -1,4 +1,6 @@
 import type { ReactNode } from 'react';
+import { AccountAvatar } from '../AccountAvatar';
+import { CopyButton } from '../CopyButton';
 
 /** The dialog's small uppercase field label. */
 export function Eyebrow({ children }: { children: ReactNode }) {
@@ -40,5 +42,34 @@ export function ValueAmount({
         </span>
       )}
     </p>
+  );
+}
+
+/**
+ * One party in the transaction — From, To, or the contract being called. Avatar on the left,
+ * label above the value beside it, with a copy button carrying the full address.
+ */
+export function PartyRow({
+  label,
+  value,
+  address,
+  avatarUrl,
+}: {
+  label: string;
+  value: string;
+  address: string;
+  avatarUrl?: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="size-7 flex-none rounded-[8px]" />
+      <div className="min-w-0 flex-1">
+        <Eyebrow>{label}</Eyebrow>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+          <p className="text-foreground truncate font-mono text-[12px] font-medium">{value}</p>
+          <CopyButton value={address} size={13} />
+        </div>
+      </div>
+    </div>
   );
 }

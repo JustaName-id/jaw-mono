@@ -16,42 +16,14 @@ import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
 import { subscriptDecimal } from '../../utils/displayFormat';
 import { IdentityAvatar } from '../IdentityAvatar';
-import { AccountAvatar } from '../AccountAvatar';
 import { AppAvatar } from '../AppAvatar';
-import { CopyButton } from '../CopyButton';
 import { TokenIcon } from '../TokenIcon';
 import { SubText } from '../SubText';
 import { AssetPreview } from './AssetPreview';
 import { callTitle } from './DecodedCalldata';
 import { resolveBlockReason } from '../../utils/transactionFailure';
 import { BatchStep, SingleCallData } from './CallSections';
-import { Eyebrow, Row, ValueAmount } from './primitives';
-
-/** A From/To party: avatar, label, and the truncated address with a copy button for the full value. */
-function PartyRow({
-  label,
-  value,
-  address,
-  avatarUrl,
-}: {
-  label: string;
-  value: string;
-  address: string;
-  avatarUrl?: string;
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-3">
-      <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="size-7 flex-none rounded-[8px]" />
-      <div className="min-w-0 flex-1">
-        <Eyebrow>{label}</Eyebrow>
-        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-          <p className="text-foreground truncate font-mono text-[12px] font-medium">{value}</p>
-          <CopyButton value={address} size={13} />
-        </div>
-      </div>
-    </div>
-  );
-}
+import { Eyebrow, PartyRow, Row, ValueAmount } from './primitives';
 
 /** A one-line red message with the detail behind an info tooltip. */
 function InlineWarning({ text, detail }: { text: string; detail: string }) {

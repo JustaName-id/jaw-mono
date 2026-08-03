@@ -2,9 +2,8 @@
 
 import { Code } from 'lucide-react';
 import { AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
-import { AccountAvatar } from '../AccountAvatar';
 import { CopyButton } from '../CopyButton';
-import { Eyebrow, Row, ValueAmount } from './primitives';
+import { Eyebrow, PartyRow, Row, ValueAmount } from './primitives';
 import { useDecodedCalldata, type DecodeResult } from '../../hooks/useDecodedCalldata';
 import { DecodedCalldataView, callLabel } from './DecodedCalldata';
 import type { TransactionData } from './types';
@@ -86,22 +85,13 @@ export function BatchStep({
       </AccordionTrigger>
       <AccordionContent className="px-3 pb-3">
         <div className="flex flex-col gap-2.5">
-          <div className="border-border flex flex-col gap-1 rounded-[10.5px] border p-2.5">
-            <div className="flex items-center justify-between">
-              <Eyebrow>Interacting with</Eyebrow>
-              <CopyButton value={transaction.to} size={13} />
-            </div>
-            <div className="flex items-center gap-2">
-              <AccountAvatar
-                seed={transaction.to}
-                avatarUrl={transaction.to ? ctx.resolvedAvatars?.[transaction.to] : undefined}
-                size={28}
-                className="size-7 flex-none rounded-[8px]"
-              />
-              <p className="text-foreground min-w-0 break-all font-mono text-[12px] font-medium">
-                {displayContractAddress(transaction.to)}
-              </p>
-            </div>
+          <div className="border-border rounded-[10.5px] border p-2.5">
+            <PartyRow
+              label="Interacting with"
+              value={displayContractAddress(transaction.to)}
+              address={transaction.to}
+              avatarUrl={transaction.to ? ctx.resolvedAvatars?.[transaction.to] : undefined}
+            />
           </div>
 
           {value && (
