@@ -6,7 +6,6 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/
 import { ShellDialog } from '../ShellDialog';
 import { ProcessingScreen } from '../ProcessingScreen';
 import { FeeTokenSelector } from '../FeeTokenSelector';
-import { CopiedIcon, CopyIcon } from '../../icons';
 import { useState, useEffect, useRef, type ReactNode } from 'react';
 import { formatEther, ethAddress } from 'viem';
 import { Info, Globe, ArrowDown } from 'lucide-react';
@@ -28,7 +27,7 @@ import { TokenIcon } from '../TokenIcon';
 import { SubText } from '../SubText';
 import { AssetPreview } from './AssetPreview';
 import { callTitle } from './DecodedCalldata';
-import { BatchStep, SingleCallData } from './CallSections';
+import { BatchStep, CopyButton, SingleCallData } from './CallSections';
 
 /** One label/value micro-row card, matching the revamped signing dialogs. */
 function Row({ label, children }: { label: string; children: ReactNode }) {
@@ -38,6 +37,37 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
         {label}
       </p>
       {children}
+    </div>
+  );
+}
+
+/**
+ * A From/To party: avatar on the left, label stacked above the value beside it. Keeping the
+ * label inside the row (per the design) costs one line instead of two, so From→To fits in
+ * roughly the height the label alone used to take. The value truncates rather than wrapping;
+ * the copy button carries the full address.
+ */
+function PartyRow({
+  label,
+  value,
+  address,
+  avatarUrl,
+}: {
+  label: string;
+  value: string;
+  address: string;
+  avatarUrl?: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-3">
+      <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="size-7 flex-none rounded-[8px]" />
+      <div className="min-w-0 flex-1">
+        <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">{label}</p>
+        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
+          <p className="text-foreground truncate font-mono text-[12px] font-medium">{value}</p>
+          <CopyButton value={address} size={13} />
+        </div>
+      </div>
     </div>
   );
 }
@@ -70,7 +100,6 @@ export const TransactionDialog = ({
   mainnetRpcUrl,
   nativeCurrencySymbol,
 }: TransactionDialogProps) => {
-  const [isAddressCopied, setIsAddressCopied] = useState<{ [key: string]: boolean }>({});
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
   const [resolvedAvatars, setResolvedAvatars] = useState<Record<string, string>>({});
 
@@ -416,79 +445,27 @@ export const TransactionDialog = ({
               </div>
             )}
 
-            {/* From / To */}
-            <div className="border-border flex flex-col gap-2.5 rounded-[10.5px] border p-3">
-              <div className="flex min-w-0 flex-col gap-1">
-                <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-                  From
-                </p>
-                <div className="flex min-w-0 items-center gap-2">
-                  <AccountAvatar
-                    seed={walletAddress}
-                    avatarUrl={resolvedAvatars[walletAddress]}
-                    size={32}
-                    className="size-8 flex-none rounded-[9px]"
-                  />
-                  <p className="text-foreground min-w-0 break-all font-mono text-[12px] font-medium">
-                    {displayWalletAddress}
-                  </p>
-                  {isAddressCopied['single-from'] ? (
-                    <CopiedIcon width={13} height={13} className="flex-none" />
-                  ) : (
-                    <CopyIcon
-                      width={13}
-                      height={13}
-                      onClick={() => {
-                        if (typeof window !== 'undefined' && navigator?.clipboard) {
-                          navigator.clipboard.writeText(walletAddress).catch(() => undefined);
-                          setIsAddressCopied((prev) => ({ ...prev, 'single-from': true }));
-                          setTimeout(() => setIsAddressCopied((prev) => ({ ...prev, 'single-from': false })), 3000);
-                        }
-                      }}
-                      className="flex-none cursor-pointer"
-                    />
-                  )}
-                </div>
-              </div>
+            {/* From / To — label sits beside the avatar (design), not on its own line */}
+            <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-3">
+              <PartyRow
+                label="From"
+                value={displayWalletAddress}
+                address={walletAddress}
+                avatarUrl={resolvedAvatars[walletAddress]}
+              />
               {isSingleTransaction && currentTransaction?.to && (
                 <>
-                  <div className="flex items-center py-0.5">
+                  <div className="flex items-center">
                     <div className="bg-border h-px flex-1" />
                     <ArrowDown className="text-muted-foreground mx-1.5 size-3 flex-none" strokeWidth={2} />
                     <div className="bg-border h-px flex-1" />
                   </div>
-                  <div className="flex min-w-0 flex-col gap-1">
-                    <p className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-                      To
-                    </p>
-                    <div className="flex min-w-0 items-center gap-2">
-                      <AccountAvatar
-                        seed={currentTransaction.to}
-                        avatarUrl={resolvedAvatars[currentTransaction.to]}
-                        size={32}
-                        className="size-8 flex-none rounded-[9px]"
-                      />
-                      <p className="text-foreground min-w-0 break-all font-mono text-[12px] font-medium">
-                        {displayToAddress}
-                      </p>
-                      {isAddressCopied['single-to'] ? (
-                        <CopiedIcon width={13} height={13} className="flex-none" />
-                      ) : (
-                        <CopyIcon
-                          width={13}
-                          height={13}
-                          onClick={() => {
-                            if (typeof window !== 'undefined' && navigator?.clipboard) {
-                              navigator.clipboard.writeText(currentTransaction.to).catch(() => undefined);
-                              setIsAddressCopied((prev) => ({ ...prev, 'single-to': true }));
-                              setTimeout(() => setIsAddressCopied((prev) => ({ ...prev, 'single-to': false })), 3000);
-                            }
-                          }}
-                          className="flex-none cursor-pointer"
-                        />
-                      )}
-                    </div>
-                  </div>
+                  <PartyRow
+                    label="To"
+                    value={displayToAddress}
+                    address={currentTransaction.to}
+                    avatarUrl={resolvedAvatars[currentTransaction.to]}
+                  />
                 </>
               )}
             </div>

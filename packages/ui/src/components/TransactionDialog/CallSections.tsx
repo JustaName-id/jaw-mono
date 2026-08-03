@@ -19,7 +19,7 @@ function Eyebrow({ children }: { children: ReactNode }) {
 }
 
 /** Copy-to-clipboard icon button with the dialog's 3s "copied" confirmation. */
-function CopyButton({ value, size = 14 }: { value: string; size?: number }) {
+export function CopyButton({ value, size = 14 }: { value: string; size?: number }) {
   const [copied, setCopied] = useState(false);
   if (copied) return <CopiedIcon width={size} height={size} className="flex-none" />;
   return (
