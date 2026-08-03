@@ -1,6 +1,31 @@
 import { describe, expect, it } from 'vitest';
 import { maxUint160, maxUint256 } from 'viem';
-import { dateTone, formatUnixDate, groupNumber, isUnixTimestamp, isUnlimitedAmount, maxUintFor } from './displayFormat';
+import {
+  dateTone,
+  formatUnixDate,
+  groupNumber,
+  isUnixTimestamp,
+  isUnlimitedAmount,
+  maxUintFor,
+  subscriptDecimal,
+} from './displayFormat';
+
+describe('subscriptDecimal', () => {
+  it('renders leading-zero-count subscript notation for tiny values', () => {
+    expect(subscriptDecimal(0.000002732)).toBe('0.0₅2732'); // 5 leading zeros
+    expect(subscriptDecimal(0.00003456)).toBe('0.0₄3456');
+    expect(subscriptDecimal(0.00005)).toBe('0.0₄5');
+    expect(subscriptDecimal(9e-8)).toBe('0.0₇9');
+  });
+  it('caps significant digits via `sig`', () => {
+    expect(subscriptDecimal(0.000012345678, 3)).toBe('0.0₄123');
+  });
+  it('returns "0" for non-positive / non-finite input', () => {
+    expect(subscriptDecimal(0)).toBe('0');
+    expect(subscriptDecimal(-1)).toBe('0');
+    expect(subscriptDecimal(NaN)).toBe('0');
+  });
+});
 
 describe('groupNumber', () => {
   it('thousands-separates integers and preserves fractions/sign', () => {

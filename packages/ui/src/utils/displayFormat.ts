@@ -21,6 +21,30 @@ export function groupNumber(s: string): string {
   return (neg ? '-' : '') + (fracPart ? `${grouped}.${fracPart}` : grouped);
 }
 
+/**
+ * Subscript zero-count notation for a tiny positive decimal, à la DexScreener:
+ * `0.000002732` → `"0.0₅2732"` (the subscript = how many zeros follow the decimal
+ * before the first significant digit). Use in place of a flat "<0.0001".
+ *
+ * There is no Intl / `toLocaleString` option for this — it's a crypto display
+ * convention — so we derive it from `toExponential`, which returns an exactly-rounded
+ * mantissa + base-10 exponent (`"2.732e-6"`). That gives the zero count (`-exp - 1`)
+ * and the significant digits directly, with no fixed-width padding or `log10` float
+ * error. `sig` caps the significant digits. Pair with `<SubText>` to render the count
+ * as a real `<sub>`. Returns "0" for non-positive / non-finite / non-fractional input.
+ */
+const SUB_DIGITS = '₀₁₂₃₄₅₆₇₈₉';
+export function subscriptDecimal(value: number, sig = 4): string {
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  const [mantissa, expPart] = value.toExponential(Math.max(0, sig - 1)).split('e');
+  const exp = Number(expPart);
+  if (exp >= 0) return '0'; // not a sub-1 fraction; caller only formats tiny values
+  const zeros = -exp - 1; // leading zeros between the decimal point and the first digit
+  const digits = mantissa.replace('.', '').replace(/0+$/, '') || '0';
+  const sub = String(zeros).replace(/\d/g, (d) => SUB_DIGITS[Number(d)]);
+  return `0.0${sub}${digits}`;
+}
+
 /** Largest value a `uint<bits>` can hold — used to spot "unlimited"/"no expiry" sentinels. */
 export function maxUintFor(type: string): bigint | null {
   const m = /^uint(\d*)$/.exec(type);

@@ -12,6 +12,8 @@ import { CopiedIcon, CopyIcon } from '../../icons';
 import { useState, useEffect, useRef } from 'react';
 import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
+import { subscriptDecimal } from '../../utils/displayFormat';
+import { SubText } from '../SubText';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { TokenIcon } from '../TokenIcon';
 
@@ -494,15 +496,17 @@ export const PermissionDialog = ({
                       </span>
                     </div>
                     <p className="text-muted-foreground text-xs font-normal">
-                      {sponsored && gasFee && gasFee !== 'sponsored'
-                        ? (() => {
-                            const gasValue = Number(gasFee);
-                            if (gasValue > 0 && gasValue < 0.0001) {
-                              return `< 0.0001 ${nativeSymbol}`;
-                            }
-                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                          })()
-                        : 'Gas fees covered'}
+                      <SubText>
+                        {sponsored && gasFee && gasFee !== 'sponsored'
+                          ? (() => {
+                              const gasValue = Number(gasFee);
+                              if (gasValue > 0 && gasValue < 0.0001) {
+                                return `${subscriptDecimal(gasValue)} ${nativeSymbol}`;
+                              }
+                              return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                            })()
+                          : 'Gas fees covered'}
+                      </SubText>
                     </p>
                   </div>
                 ) : isPayingWithErc20 && selectedFeeToken ? (
@@ -561,13 +565,15 @@ export const PermissionDialog = ({
                       )}
                     </div>
                     <p className="text-muted-foreground text-xs font-normal">
-                      {(() => {
-                        const gasValue = Number(gasFee);
-                        if (gasValue > 0 && gasValue < 0.0001) {
-                          return `< 0.0001 ${nativeSymbol}`;
-                        }
-                        return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                      })()}
+                      <SubText>
+                        {(() => {
+                          const gasValue = Number(gasFee);
+                          if (gasValue > 0 && gasValue < 0.0001) {
+                            return `${subscriptDecimal(gasValue)} ${nativeSymbol}`;
+                          }
+                          return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                        })()}
+                      </SubText>
                     </p>
                   </div>
                 ) : (

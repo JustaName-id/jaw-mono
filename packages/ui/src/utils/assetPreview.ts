@@ -12,6 +12,7 @@ import {
 import { simulateBlocks, simulateCalls } from 'viem/actions';
 import { JAW_RPC_URL, type TransactionCall } from '@jaw.id/core';
 import { deriveTransferDeltas, type SimulatedLog } from './transferDeltas';
+import { subscriptDecimal } from './displayFormat';
 
 export interface RawAssetChange {
   token: { address: string; decimals?: number; symbol?: string };
@@ -72,7 +73,7 @@ const amountFormatter = new Intl.NumberFormat('en-US', { useGrouping: false, max
 /** Format a formatUnits string for display: at most 4 decimals, sub-0.0001 dust floored to "<0.0001". */
 export function formatAssetAmount(amountFormatted: string): string {
   const n = Number(amountFormatted);
-  if (n > 0 && n < 0.0001) return '<0.0001';
+  if (n > 0 && n < 0.0001) return subscriptDecimal(n);
   return amountFormatter.format(n);
 }
 

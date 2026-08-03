@@ -7,6 +7,7 @@ import { formatAddress } from '../../utils/formatAddress';
 import { CopiedIcon, CopyIcon } from '../../icons';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { TokenIcon } from '../TokenIcon';
+import { SubText } from '../SubText';
 
 interface AssetPreviewProps {
   assetsOut: AssetDelta[];
@@ -69,7 +70,7 @@ function AssetRow({
   const amount = (
     <span className={`break-all text-right text-base font-medium leading-[150%] ${colorClass}`}>
       {sign}
-      {rounded}
+      <SubText>{rounded}</SubText>
     </span>
   );
 

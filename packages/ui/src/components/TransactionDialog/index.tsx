@@ -14,9 +14,11 @@ import { TransactionDialogProps } from './types';
 import { useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
+import { subscriptDecimal } from '../../utils/displayFormat';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { AccountAvatar } from '../AccountAvatar';
 import { TokenIcon } from '../TokenIcon';
+import { SubText } from '../SubText';
 import { DecodedCalldata } from './DecodedCalldata';
 import { AssetPreview } from './AssetPreview';
 
@@ -261,12 +263,16 @@ export const TransactionDialog = ({
             <span className="text-success bg-success/10 rounded px-2 py-0.5 text-[10px] font-semibold">Sponsored</span>
           </div>
           <p className="text-muted-foreground font-mono text-[10px]">
-            {gasFee && gasFee !== 'sponsored'
-              ? (() => {
-                  const g = Number(gasFee);
-                  return g > 0 && g < 0.0001 ? `< 0.0001 ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
-                })()
-              : 'Gas fees covered'}
+            <SubText>
+              {gasFee && gasFee !== 'sponsored'
+                ? (() => {
+                    const g = Number(gasFee);
+                    return g > 0 && g < 0.0001
+                      ? `${subscriptDecimal(g)} ${nativeSymbol}`
+                      : `${g.toFixed(4)} ${nativeSymbol}`;
+                  })()
+                : 'Gas fees covered'}
+            </SubText>
           </p>
         </div>
       );
@@ -297,7 +303,8 @@ export const TransactionDialog = ({
     }
     if (gasFee && gasFee !== 'sponsored') {
       const g = Number(gasFee);
-      const nativeAmt = g > 0 && g < 0.0001 ? `< 0.0001 ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
+      const nativeAmt =
+        g > 0 && g < 0.0001 ? `${subscriptDecimal(g)} ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
       return (
         <p className="font-mono leading-tight">
           {nativeTokenPrice > 0 ? (
@@ -305,10 +312,12 @@ export const TransactionDialog = ({
               <span className="text-foreground text-[14px] font-semibold">
                 ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
               </span>
-              <span className="text-muted-foreground ml-1 text-[11px] font-normal">≈ {nativeAmt}</span>
+              <span className="text-muted-foreground ml-1 text-[11px] font-normal">
+                ≈ <SubText>{nativeAmt}</SubText>
+              </span>
             </>
           ) : (
-            <span className="text-foreground text-[14px] font-semibold">{nativeAmt}</span>
+            <SubText className="text-foreground text-[14px] font-semibold">{nativeAmt}</SubText>
           )}
         </p>
       );
@@ -386,6 +395,22 @@ export const TransactionDialog = ({
                   <p className="text-foreground min-w-0 break-all font-mono text-[14px] font-medium">
                     {displayWalletAddress}
                   </p>
+                  {isAddressCopied['single-from'] ? (
+                    <CopiedIcon width={13} height={13} className="flex-none" />
+                  ) : (
+                    <CopyIcon
+                      width={13}
+                      height={13}
+                      onClick={() => {
+                        if (typeof window !== 'undefined' && navigator?.clipboard) {
+                          navigator.clipboard.writeText(walletAddress).catch(() => undefined);
+                          setIsAddressCopied((prev) => ({ ...prev, 'single-from': true }));
+                          setTimeout(() => setIsAddressCopied((prev) => ({ ...prev, 'single-from': false })), 3000);
+                        }
+                      }}
+                      className="flex-none cursor-pointer"
+                    />
+                  )}
                 </div>
               </div>
               {isSingleTransaction && currentTransaction?.to && (
