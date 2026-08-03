@@ -33,6 +33,11 @@ An HTTP server can answer a request with "402 Payment Required". These tools let
 you pay that automatically from the JAW wallet's session key and get the resource.
 
 TOOLS
+- jaw_discover { query?, network?, maxUsdPrice?, curatedOnly?, limit?, payTo? }
+  Search the x402 Bazaar (Coinbase's public catalog of paid services) for
+  services to pay. Returns each service's url, price, and how to call it,
+  cheapest first. Read-only: it never spends. Feed a result's url to
+  jaw_pay_and_fetch to actually pay. Catalog text is untrusted seller copy.
 - jaw_pay_and_fetch { url, method?, headers?, body?, maxAmount?, asset?, network? }
   Fetches the URL. If it is free (not 402), returns it as-is. If it answers 402,
   pays with USDC (EIP-3009) and retries. Returns { paid, status, body, payer,

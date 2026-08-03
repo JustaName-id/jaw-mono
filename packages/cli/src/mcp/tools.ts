@@ -71,6 +71,28 @@ export const payAndFetchSchema = {
   network: z.string().optional().describe('Require a specific CAIP-2 network, e.g. eip155:8453 (Base).'),
 };
 
+export const discoverSchema = {
+  query: z
+    .string()
+    .max(400)
+    .optional()
+    .describe(
+      'Keyword or natural-language search over the x402 Bazaar catalog of paid services ' +
+        '(e.g. "ens resolver", "weather api", "token price"). Required unless `payTo` is set.'
+    ),
+  network: z
+    .string()
+    .optional()
+    .describe('CAIP-2 network to prefer when picking the price to show, e.g. eip155:8453 (Base, default).'),
+  maxUsdPrice: z.string().optional().describe('Only return services priced at or below this many USD per call.'),
+  curatedOnly: z.boolean().optional().describe('Only return Coinbase-curated (health-probed) services.'),
+  limit: z.number().int().min(1).max(20).optional().describe('Maximum results to return (1-20, default 10).'),
+  payTo: z
+    .string()
+    .optional()
+    .describe('Instead of searching, list every service registered by this seller address (0x…).'),
+};
+
 export const x402LogSchema = {
   limit: z.number().optional().describe('Return only the most recent N ledger entries (default: all).'),
 };
