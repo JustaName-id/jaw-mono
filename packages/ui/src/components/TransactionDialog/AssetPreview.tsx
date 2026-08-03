@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { ethAddress } from 'viem';
-import { ArrowDownLeft, ArrowUpRight } from 'lucide-react';
+import { ArrowDownLeft, ArrowUpRight, ChevronDown } from 'lucide-react';
 import { AssetDelta, formatAssetAmount } from '../../utils/assetPreview';
 import { fetchTokenPrice } from '../../utils/tokenPrice';
 import { formatAddress } from '../../utils/formatAddress';
@@ -57,7 +57,9 @@ function AssetRow({
   );
 
   return (
-    <div className="flex flex-row items-center gap-1.5">
+    // A fixed row height keeps the two columns' rows on the same baseline: an ERC-20 row carries
+    // an address sub-line and a native row doesn't, so without it they drift apart when expanded.
+    <div className="flex min-h-[34px] flex-row items-center gap-1.5">
       <TokenIcon
         chainId={chainId}
         address={delta.isNative ? ethAddress : delta.address}
@@ -128,9 +130,10 @@ function DeltaColumn({
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="text-muted-foreground hover:text-foreground ml-auto flex-none font-mono text-[10px] font-medium"
+            className="text-muted-foreground hover:text-foreground ml-auto flex flex-none items-center gap-0.5 font-mono text-[10px] font-medium"
           >
             {expanded ? 'Show less' : `+${overflow}`}
+            <ChevronDown className={`size-3 transition-transform ${expanded ? 'rotate-180' : ''}`} strokeWidth={2.2} />
           </button>
         )}
       </div>

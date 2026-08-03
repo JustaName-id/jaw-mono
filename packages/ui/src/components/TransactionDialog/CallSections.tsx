@@ -8,6 +8,15 @@ import { useDecodedCalldata, type DecodeResult } from '../../hooks/useDecodedCal
 import { DecodedCalldataView, callLabel } from './DecodedCalldata';
 import type { TransactionData } from './types';
 
+/**
+ * Label for a step we couldn't decode. Only a value-bearing call with no calldata is a plain
+ * native transfer — the absence of calldata alone doesn't make one, so an empty call stays
+ * "Call N" rather than claiming to move funds.
+ */
+export function stepFallbackLabel(index: number, hasData: boolean, value: string | null): string {
+  return !hasData && value ? 'Transfer' : `Call ${index + 1}`;
+}
+
 interface DecodeContext {
   chainId: number;
   apiKey?: string;
@@ -79,7 +88,7 @@ export function BatchStep({
             {index + 1}
           </span>
           <span className="text-foreground truncate text-[13px] font-medium">
-            {callLabel(decode, transaction.action ?? `Call ${index + 1}`)}
+            {callLabel(decode, transaction.action ?? stepFallbackLabel(index, hasData, value))}
           </span>
         </span>
       </AccordionTrigger>
