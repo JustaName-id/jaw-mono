@@ -9,6 +9,7 @@ import { fetchRPCRequest, checkErrorForInvalidRequestArgs, buildHandleJawRpcUrl 
 import { createSigner, loadSignerType, storeSignerType } from '../signer/index.js';
 import { waitForReceiptInBackground } from '../rpc/index.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
+import { clearCapabilitiesCache } from '../rpc/capabilities.js';
 import { isSafari } from '../utils/user-agent.js';
 import type { AppMetadata, ConstructorOptions, RequestArguments } from './interface.js';
 import type { Signer } from '../signer/index.js';
@@ -107,6 +108,11 @@ describe('JAWProvider', () => {
     let mockConstructorOptions: ConstructorOptions;
 
     beforeEach(() => {
+        // handleGetCapabilitiesRequest memoizes responses for a TTL, and that
+        // cache is module-level — without this, one test's capabilities result
+        // is served to the next and the underlying fetch is never exercised.
+        clearCapabilitiesCache();
+
         // Setup metadata
         mockMetadata = {
             appName: 'Test App',

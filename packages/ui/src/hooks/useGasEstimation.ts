@@ -151,6 +151,21 @@ export function useGasEstimation({
   // Track estimation version to handle race conditions
   const estimationVersionRef = useRef<number>(0);
 
+  /**
+   * The most recent ETH estimate, tagged with the inputs it was computed from.
+   *
+   * Estimation runs at least twice per dialog: once on mount with no fee tokens
+   * loaded, then again when balances arrive and `erc20TokenAddresses` changes.
+   * Only the ERC-20 branch depends on those tokens — the ETH branch's inputs are
+   * identical across both runs — so without this the second run repeats a full
+   * `eth_estimateUserOperationGas` plus a gas-price fetch, and the Confirm button
+   * stays disabled for the duration of a result we already have.
+   *
+   * Rejections are evicted rather than reused: a transient RPC failure must not
+   * become permanent for the lifetime of the dialog.
+   */
+  const ethEstimateRef = useRef<{ key: string; promise: Promise<string> } | null>(null);
+
   // Use refs for values that shouldn't trigger re-estimation
   const feeTokensRef = useRef(feeTokens);
   feeTokensRef.current = feeTokens;
@@ -245,28 +260,59 @@ export function useGasEstimation({
         data: call.data as Hex | undefined,
       }));
 
-      // Resolve the correct smart account for estimation (handles address override)
-      const resolvedSmartAccount = await account.getSmartAccountFor(address);
+      // Reuse the ETH estimate across runs that differ only in fee tokens.
+      const ethKey = [
+        account.address,
+        chainId,
+        permissionId ?? '',
+        address ?? '',
+        JSON.stringify(callsWithBigIntValue.map((c) => [c.to, c.value?.toString(), c.data])),
+      ].join('|');
+
+      let ethEstimate: Promise<string>;
+      const cachedEthEstimate = ethEstimateRef.current;
+      if (cachedEthEstimate && cachedEthEstimate.key === ethKey) {
+        ethEstimate = cachedEthEstimate.promise;
+      } else {
+        ethEstimate = account.calculateGasCost(
+          effectiveCalls,
+          permissionId || address ? { permissionId, address } : undefined
+        );
+        // Evict on failure so the next run retries instead of replaying the error.
+        // AllSettled below is what actually handles the rejection; this handler
+        // exists only for the eviction (and keeps it from going unhandled).
+        ethEstimate.catch(() => {
+          if (ethEstimateRef.current?.promise === ethEstimate) {
+            ethEstimateRef.current = null;
+          }
+        });
+        ethEstimateRef.current = { key: ethKey, promise: ethEstimate };
+      }
 
       // Run ETH and ERC-20 estimation in parallel
       const [ethResult, erc20Result] = await Promise.allSettled([
         // ETH gas estimation
-        account.calculateGasCost(effectiveCalls, permissionId || address ? { permissionId, address } : undefined),
+        ethEstimate,
         // ERC-20 gas estimation (only for tokens with balance > 0)
-        // Tokens with 0 balance will be marked as not selectable below
+        // Tokens with 0 balance will be marked as not selectable below.
+        // The smart account is resolved inside this branch, not ahead of both:
+        // an address override makes that resolution an RPC round trip, and the
+        // ETH estimate has no reason to wait behind it.
         erc20TokensWithBalance.length > 0
-          ? estimateErc20PaymasterCosts(
-              resolvedSmartAccount,
-              callsWithBigIntValue,
-              account.getChain(),
-              paymasterUrl,
-              erc20TokensWithBalance.map((t) => ({
-                address: t.address as Address,
-                symbol: t.symbol,
-                decimals: t.decimals,
-                balance: t.balance,
-              })),
-              permissionId ? { permissionId, apiKey } : undefined
+          ? account.getSmartAccountFor(address).then((resolvedSmartAccount) =>
+              estimateErc20PaymasterCosts(
+                resolvedSmartAccount,
+                callsWithBigIntValue,
+                account.getChain(),
+                paymasterUrl,
+                erc20TokensWithBalance.map((t) => ({
+                  address: t.address as Address,
+                  symbol: t.symbol,
+                  decimals: t.decimals,
+                  balance: t.balance,
+                })),
+                permissionId ? { permissionId, apiKey } : undefined
+              )
             )
           : Promise.resolve([]),
       ]);
@@ -463,6 +509,16 @@ export function useGasEstimation({
     estimateGas();
   }, [estimateGas]);
 
+  /**
+   * Force a fresh estimate, discarding the cached ETH result. Callers ask for a
+   * refetch precisely when they suspect the previous answer is stale, so serving
+   * it from cache would defeat the call.
+   */
+  const refetch = useCallback(() => {
+    ethEstimateRef.current = null;
+    estimateGas();
+  }, [estimateGas]);
+
   // -------------------------------------------------------------------------
   // Return
   // -------------------------------------------------------------------------
@@ -476,6 +532,6 @@ export function useGasEstimation({
     selectedFeeToken,
     setSelectedFeeToken,
     isPayingWithErc20,
-    refetch: estimateGas,
+    refetch,
   };
 }

@@ -13,6 +13,34 @@ export interface ChainMetadataCapability {
     icon?: string;
 }
 
+type CapabilitiesResult = Record<`0x${string}`, Record<string, unknown>>;
+
+/**
+ * How long a capabilities response stays fresh.
+ *
+ * Capabilities describe wallet/chain support (which chains, which fee tokens) —
+ * operator configuration that changes on deploys, not per request. The
+ * transaction dialog fetches them to build its fee-token list before the
+ * Confirm button can unlock, so re-fetching on every transaction put a network
+ * round trip in front of the user each time. A minute keeps a config change
+ * visible well within a session while collapsing a burst of transactions onto
+ * one request.
+ */
+const CAPABILITIES_TTL_MS = 60_000;
+
+type CapabilitiesCacheEntry = { expiresAt: number; promise: Promise<CapabilitiesResult> };
+
+/** Cached by everything that changes the response: api key, filter, testnet scope. */
+const capabilitiesCache = new Map<string, CapabilitiesCacheEntry>();
+
+/**
+ * Drops every cached capabilities response.
+ * Exported for tests and for callers that must bypass the TTL.
+ */
+export function clearCapabilitiesCache(): void {
+    capabilitiesCache.clear();
+}
+
 /**
  * Handle wallet_getCapabilities request (EIP-5792)
  *
@@ -23,6 +51,9 @@ export interface ChainMetadataCapability {
  * - If showTestnets is true: fetches capabilities for all chains
  * - If showTestnets is false: fetches capabilities only for mainnet chains
  *
+ * Responses are memoized for {@link CAPABILITIES_TTL_MS}; concurrent callers
+ * share one in-flight request.
+ *
  * @param request - The wallet_getCapabilities request
  * @param apiKey - API key for authentication
  * @param showTestnets - Whether to include testnet chains (default: false)
@@ -32,7 +63,7 @@ export async function handleGetCapabilitiesRequest(
     request: RequestArguments,
     apiKey: string,
     showTestnets = false
-): Promise<Record<`0x${string}`, Record<string, unknown>>> {
+): Promise<CapabilitiesResult> {
     const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, apiKey);
 
     // EIP-5792 format: params[0] is account address, params[1] is optional array of chain IDs to filter by
@@ -54,6 +85,22 @@ export async function handleGetCapabilitiesRequest(
         // If showTestnets is true, don't modify params - let proxy return all chains
     }
 
-    const result = await fetchRPCRequest(requestArgs, rpcUrl);
-    return result as Record<`0x${string}`, Record<string, unknown>>;
+    const cacheKey = `${apiKey}|${showTestnets}|${JSON.stringify(requestArgs.params ?? null)}`;
+    const now = Date.now();
+    const cached = capabilitiesCache.get(cacheKey);
+    if (cached && cached.expiresAt > now) {
+        return cached.promise;
+    }
+
+    const promise = fetchRPCRequest(requestArgs, rpcUrl).then((result) => result as CapabilitiesResult);
+    // Evict on failure so the next caller retries rather than replaying the
+    // error for the rest of the TTL.
+    promise.catch(() => {
+        if (capabilitiesCache.get(cacheKey)?.promise === promise) {
+            capabilitiesCache.delete(cacheKey);
+        }
+    });
+    capabilitiesCache.set(cacheKey, { expiresAt: now + CAPABILITIES_TTL_MS, promise });
+
+    return promise;
 }

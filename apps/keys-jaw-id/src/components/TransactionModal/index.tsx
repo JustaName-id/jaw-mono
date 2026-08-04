@@ -4,7 +4,7 @@ import {
   TransactionDialog,
   TransactionData,
   FeeTokenOption,
-  fetchTokenBalance,
+  fetchTokenBalances,
   isNativeToken,
   useGasEstimation,
   useAssetPreview,
@@ -290,44 +290,53 @@ export const TransactionModal = ({
         // Get RPC URL for balance fetching
         const rpcUrl = chain.rpcUrl || `https://eth.llamarpc.com`;
 
-        // Fetch balances in parallel
-        const tokensWithBalances = await Promise.all(
-          feeTokenCap.tokens.map(async (token) => {
-            try {
-              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl);
-              const balanceFormatted = formatUnits(balance, token.decimals);
-              const isNative = isNativeToken(token.address);
-              // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
-              // For ERC-20 tokens: require at least 0.5 units
-              const isSelectable = isNative ? balance > 0n : parseFloat(balanceFormatted) >= 0.5;
-
-              return {
-                uid: token.uid,
-                symbol: token.symbol,
-                address: token.address,
-                decimals: token.decimals,
-                balance,
-                balanceFormatted,
-                isNative,
-                isSelectable,
-                logoURI: token.logoURI,
-              } as FeeTokenOption;
-            } catch (error) {
-              console.warn(`Failed to fetch balance for ${token.symbol}:`, error);
-              return {
-                uid: token.uid,
-                symbol: token.symbol,
-                address: token.address,
-                decimals: token.decimals,
-                balance: 0n,
-                balanceFormatted: '0',
-                isNative: isNativeToken(token.address),
-                isSelectable: false,
-                logoURI: token.logoURI,
-              } as FeeTokenOption;
-            }
-          })
+        // One batched read for the whole list rather than a request per token —
+        // this sits between the dialog opening and Confirm becoming clickable.
+        // A token whose balance is unreadable comes back as null and is treated
+        // exactly as the previous per-token catch did: zero, not selectable.
+        const balances = await fetchTokenBalances(
+          feeTokenCap.tokens.map((token) => token.address),
+          balanceAddress,
+          rpcUrl,
+          chain.id
         );
+
+        const tokensWithBalances = feeTokenCap.tokens.map((token, index) => {
+          const balance = balances[index];
+          const isNative = isNativeToken(token.address);
+
+          if (balance === null) {
+            console.warn(`Failed to fetch balance for ${token.symbol}`);
+            return {
+              uid: token.uid,
+              symbol: token.symbol,
+              address: token.address,
+              decimals: token.decimals,
+              balance: 0n,
+              balanceFormatted: '0',
+              isNative,
+              isSelectable: false,
+              logoURI: token.logoURI,
+            } as FeeTokenOption;
+          }
+
+          const balanceFormatted = formatUnits(balance, token.decimals);
+          // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
+          // For ERC-20 tokens: require at least 0.5 units
+          const isSelectable = isNative ? balance > 0n : parseFloat(balanceFormatted) >= 0.5;
+
+          return {
+            uid: token.uid,
+            symbol: token.symbol,
+            address: token.address,
+            decimals: token.decimals,
+            balance,
+            balanceFormatted,
+            isNative,
+            isSelectable,
+            logoURI: token.logoURI,
+          } as FeeTokenOption;
+        });
 
         if (isMounted) {
           setFeeTokens(tokensWithBalances);

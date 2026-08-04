@@ -10,6 +10,7 @@ import {
     estimateUserOpGas,
     estimateUserOpGasWithPermission,
     calculateGas,
+    getChainGasPrice,
     getBundlerClient,
     createSmartAccountEip7702,
     type BundledTransactionResult,
@@ -1020,8 +1021,12 @@ export class Account {
         calls: TransactionCall[],
         options?: { permissionId?: Hex; address?: Address }
     ): Promise<string> {
-        const gas = await this.estimateGas(calls, options);
-        return await calculateGas(this._chain, gas);
+        // The gas price does not depend on the estimate, so fetch both at once.
+        // Chaining them added a round trip between the transaction dialog
+        // opening and its Confirm button unlocking, which is exactly the window
+        // the user experiences as the dialog "thinking".
+        const [gas, gasPrice] = await Promise.all([this.estimateGas(calls, options), getChainGasPrice(this._chain)]);
+        return await calculateGas(this._chain, gas, undefined, gasPrice);
     }
 
     // ============================================

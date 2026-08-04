@@ -133,6 +133,47 @@ export function getSupportedChains(showTestnets = false) {
 }
 
 /**
+ * Bundler clients keyed by everything that shapes them (see bundlerCacheKey).
+ *
+ * A single transaction flow calls getBundlerClient many times over — gas
+ * estimation, the ERC-20 quote, the allowance read, the send — and each call
+ * used to build a brand-new pair of viem clients. viem's per-client caches
+ * (notably eth_chainId, keyed by client uid) start cold on every one of those,
+ * so identical configurations kept re-paying for the same round trips. Handing
+ * back the same instance keeps those caches warm across the flow.
+ *
+ * Entries are pure configuration — no session or account state — so reuse is
+ * safe across connects and disconnects.
+ */
+const bundlerClientCache = new Map<string, BundlerClient<Transport, ViemChain>>();
+
+/**
+ * Cache key for a bundler client, or null when the configuration can't be
+ * described by one (a non-serializable paymaster context) — those callers get
+ * a fresh client rather than a wrong cache hit.
+ */
+function bundlerCacheKey(
+    chain: Chain,
+    effectivePaymasterUrl?: string,
+    effectivePaymasterContext?: Record<string, unknown>
+): string | null {
+    // The context only reaches the client through createPaymasterFunctions, so
+    // it is part of the identity only when a paymaster is actually configured.
+    if (!effectivePaymasterUrl) {
+        return `${chain.id}|${chain.rpcUrl ?? ''}|`;
+    }
+    let contextKey = '';
+    if (effectivePaymasterContext) {
+        try {
+            contextKey = JSON.stringify(effectivePaymasterContext);
+        } catch {
+            return null;
+        }
+    }
+    return `${chain.id}|${chain.rpcUrl ?? ''}|${effectivePaymasterUrl}|${contextKey}`;
+}
+
+/**
  * Gets or creates a bundler client for a chain using lazy loading.
  * Clients are cached in the store and created only when first accessed.
  *
@@ -149,6 +190,16 @@ export const getBundlerClient = (
     paymasterUrlOverride?: string,
     paymasterContextOverride?: Record<string, unknown>
 ): BundlerClient<Transport, ViemChain> => {
+    // Priority: overrides (from capabilities) > chain config (from SDK config)
+    const effectivePaymasterUrl = paymasterUrlOverride || chain.paymaster?.url;
+    const effectivePaymasterContext = paymasterContextOverride || chain.paymaster?.context;
+
+    const cacheKey = bundlerCacheKey(chain, effectivePaymasterUrl, effectivePaymasterContext);
+    if (cacheKey !== null) {
+        const cached = bundlerClientCache.get(cacheKey);
+        if (cached) return cached;
+    }
+
     const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chain.id);
 
     const publicClient = createPublicClient({
@@ -156,29 +207,39 @@ export const getBundlerClient = (
         transport: http(chain.rpcUrl),
     });
 
-    // Priority: overrides (from capabilities) > chain config (from SDK config)
-    const effectivePaymasterUrl = paymasterUrlOverride || chain.paymaster?.url;
-    const effectivePaymasterContext = paymasterContextOverride || chain.paymaster?.context;
-
     // If no paymaster URL, return bundler client without paymaster
-    if (!effectivePaymasterUrl) {
-        return createBundlerClient({
-            client: publicClient,
-            transport: http(chain.rpcUrl),
-        });
+    const bundlerClient = !effectivePaymasterUrl
+        ? createBundlerClient({
+              client: publicClient,
+              transport: http(chain.rpcUrl),
+          })
+        : createBundlerClient({
+              client: publicClient,
+              // Use shared paymaster functions that handle gas price fetching and v0.8 gas limits
+              paymaster: createPaymasterFunctions(
+                  publicClient,
+                  createPaymasterClient({ transport: http(effectivePaymasterUrl) }),
+                  chain.id,
+                  effectivePaymasterContext
+              ),
+              transport: http(chain.rpcUrl),
+          });
+
+    if (cacheKey !== null) {
+        bundlerClientCache.set(cacheKey, bundlerClient);
     }
 
-    const paymasterClient = createPaymasterClient({
-        transport: http(effectivePaymasterUrl),
-    });
-
-    // Use shared paymaster functions that handle gas price fetching and v0.8 gas limits
-    return createBundlerClient({
-        client: publicClient,
-        paymaster: createPaymasterFunctions(publicClient, paymasterClient, chain.id, effectivePaymasterContext),
-        transport: http(chain.rpcUrl),
-    });
+    return bundlerClient;
 };
+
+/**
+ * Drops every cached bundler client. Exported for tests, which assert on how
+ * many clients a flow builds and must not inherit state from earlier cases.
+ * @internal
+ */
+export function clearBundlerClientCache(): void {
+    bundlerClientCache.clear();
+}
 
 type PreparedCalls = {
     calls: Array<{ to: Address; value: bigint; data: Hex }>;
@@ -561,44 +622,66 @@ export async function createSmartAccount(
         publicKey: ownerBytes,
     });
 
-    // Create the smart account with the correct owner index
+    // Create the smart account with the correct owner index. Passing the address
+    // we just derived matters: without it toJustanAccount re-reads
+    // factory.getAddress with the exact same arguments, spending a second round
+    // trip to recompute a value we are already holding.
     return await toJustanAccount({
         client: bundlerClient,
         owners: [account, PERMISSIONS_MANAGER_ADDRESS],
         ownerIndex,
+        address: smartAccountAddress,
     });
 }
 
 export async function findOwnerIndex({ address, client, publicKey }: FindOwnerIndexParams): Promise<number> {
-    const code = await getCode(client, {
-        address,
-    });
+    // The code check and the owner count are independent reads, so issue them
+    // together instead of gating the second on the first. This sits on the
+    // critical path: nothing about the transaction dialog — not the gas
+    // estimate, not the Confirm button — can start until the smart account
+    // object exists, and every round trip spent here is one the user waits out.
+    // On an undeployed account the ownerCount read reverts; that result is
+    // discarded below, where the empty code already settles the answer.
+    const [codeResult, ownerCountResult] = await Promise.allSettled([
+        getCode(client, { address }),
+        readContract(client, { address, abi, functionName: 'ownerCount' }),
+    ]);
+
+    // A failed code read propagates, as it did when this was awaited directly:
+    // it means the RPC is unusable, not that the owner is at index 0.
+    if (codeResult.status === 'rejected') {
+        throw codeResult.reason;
+    }
 
     // If no code deployed, return 0
-    if (!code) {
+    if (!codeResult.value) {
         return 0;
     }
 
     try {
-        const ownerCount = await readContract(client, {
-            address,
-            abi,
-            functionName: 'ownerCount',
-        });
+        if (ownerCountResult.status === 'rejected') {
+            throw ownerCountResult.reason;
+        }
+        const ownerCount = Number(ownerCountResult.value);
+        const formatted = formatPublicKey(publicKey).toLowerCase();
 
-        // Iterate from lowest index up and return early when found
-        for (let i = 0; i < Number(ownerCount); i++) {
-            const owner = await readContract(client, {
-                address,
-                abi,
-                functionName: 'ownerAtIndex',
-                args: [BigInt(i)],
-            });
+        // Read every slot in one batch rather than walking indices serially —
+        // the walk cost a full round trip per owner before the account existed.
+        const owners = await Promise.all(
+            Array.from({ length: ownerCount }, (_, i) =>
+                readContract(client, {
+                    address,
+                    abi,
+                    functionName: 'ownerAtIndex',
+                    args: [BigInt(i)],
+                })
+            )
+        );
 
-            const formatted = formatPublicKey(publicKey);
-            if (owner.toLowerCase() === formatted.toLowerCase()) {
-                return i;
-            }
+        // Lowest matching index wins, matching the original in-order walk.
+        const index = owners.findIndex((owner) => owner.toLowerCase() === formatted);
+        if (index !== -1) {
+            return index;
         }
     } catch (error) {
         // If reading contract fails, return 0
@@ -644,24 +727,32 @@ export async function createSmartAccountForAddress(
         functionName: 'ownerCount',
     });
 
-    const formatted = formatPublicKey(ownerBytes);
+    const formatted = formatPublicKey(ownerBytes).toLowerCase();
 
-    for (let i = 0; i < Number(ownerCount); i++) {
-        const owner = await readContract(bundlerClient, {
-            address: targetAddress,
-            abi,
-            functionName: 'ownerAtIndex',
-            args: [BigInt(i)],
-        });
-
-        if ((owner as string).toLowerCase() === formatted.toLowerCase()) {
-            return await toJustanAccount({
-                client: bundlerClient,
-                owners: [account, PERMISSIONS_MANAGER_ADDRESS],
-                ownerIndex: i,
+    // Batched for the same reason as findOwnerIndex: this runs while the user is
+    // waiting on the transaction dialog, and a serial walk charged them a round
+    // trip per owner.
+    const owners = await Promise.all(
+        Array.from({ length: Number(ownerCount) }, (_, i) =>
+            readContract(bundlerClient, {
                 address: targetAddress,
-            });
-        }
+                abi,
+                functionName: 'ownerAtIndex',
+                args: [BigInt(i)],
+            })
+        )
+    );
+
+    // Lowest matching index wins, matching the original in-order walk.
+    const ownerIndex = owners.findIndex((owner) => (owner as string).toLowerCase() === formatted);
+
+    if (ownerIndex !== -1) {
+        return await toJustanAccount({
+            client: bundlerClient,
+            owners: [account, PERMISSIONS_MANAGER_ADDRESS],
+            ownerIndex,
+            address: targetAddress,
+        });
     }
 
     throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
@@ -678,9 +769,30 @@ export async function createSmartAccountEip7702(
     });
 }
 
-export async function calculateGas(chain: Chain, gas: bigint, paymasterUrlOverride?: string): Promise<string> {
-    const bundlerClient = getBundlerClient(chain, paymasterUrlOverride);
-    const gasPrice = await getGasPrice(bundlerClient);
-    const result = formatUnits(gas * gasPrice, 18);
+/**
+ * Current gas price for a chain.
+ *
+ * Split out of calculateGas so callers that also need a gas estimate can fetch
+ * the two concurrently — the price does not depend on the estimate, and
+ * chaining them put an avoidable round trip in front of the fee display.
+ */
+export async function getChainGasPrice(chain: Chain, paymasterUrlOverride?: string): Promise<bigint> {
+    return await getGasPrice(getBundlerClient(chain, paymasterUrlOverride));
+}
+
+/**
+ * Converts a gas amount to its cost in the chain's native currency.
+ *
+ * @param gasPrice - Pre-fetched price per gas. Omit to fetch it here; pass one
+ *                   when it was already fetched alongside the gas estimate.
+ */
+export async function calculateGas(
+    chain: Chain,
+    gas: bigint,
+    paymasterUrlOverride?: string,
+    gasPrice?: bigint
+): Promise<string> {
+    const effectiveGasPrice = gasPrice ?? (await getChainGasPrice(chain, paymasterUrlOverride));
+    const result = formatUnits(gas * effectiveGasPrice, 18);
     return result;
 }
