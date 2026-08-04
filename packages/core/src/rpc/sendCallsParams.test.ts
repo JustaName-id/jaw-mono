@@ -155,6 +155,30 @@ describe('normalizeSendCallsParams', () => {
         expectInvalidParams(() => normalizeSendCallsParams([{ ...v1Params, chainId: 'arbitrum-sepolia' }]));
     });
 
+    // A bare '0x' satisfies a hex charset check but `BigInt('0x')` throws, so
+    // letting it through would crash the signing dialog after it opened —
+    // exactly the failure this validation exists to turn into a -32602.
+    it('rejects a bare 0x value — hex charset, but not a quantity', () => {
+        const message = expectInvalidParams(() =>
+            normalizeSendCallsParams([
+                { ...v1Params, calls: [{ to: '0x0987654321098765432109876543210987654321', value: '0x' }] },
+            ])
+        );
+        expect(message).toContain('calls[0].value');
+    });
+
+    it('rejects a bare 0x chainId', () => {
+        expectInvalidParams(() => normalizeSendCallsParams([{ ...v1Params, chainId: '0x' }]));
+    });
+
+    it("keeps accepting '0x' as call data — empty calldata is a plain value transfer", () => {
+        const result = normalizeSendCallsParams([
+            { ...v1Params, calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0x' }] },
+        ]);
+
+        expect(result.calls[0].data).toBe('0x');
+    });
+
     describe('capabilities (EIP-5792 5700)', () => {
         function expectUnsupportedCapability(fn: () => unknown) {
             try {

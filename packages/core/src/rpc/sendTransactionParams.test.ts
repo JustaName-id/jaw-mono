@@ -92,4 +92,22 @@ describe('normalizeSendTransactionParams', () => {
         );
         expect(expectInvalidParams(() => normalizeSendTransactionParams([{ ...tx, gas: -1 }]))).toContain('gas');
     });
+
+    // '0x' passes a hex charset check but `BigInt('0x')` throws. Every quantity
+    // field has to refuse it here, or the throw surfaces untyped inside an
+    // already-open dialog instead of as -32602.
+    it('rejects a bare 0x in every quantity field', () => {
+        for (const field of ['value', 'gas', 'gasPrice', 'maxFeePerGas', 'maxPriorityFeePerGas', 'nonce']) {
+            const message = expectInvalidParams(() => normalizeSendTransactionParams([{ ...tx, [field]: '0x' }]));
+            expect(message).toContain(field);
+        }
+    });
+
+    it('rejects a bare 0x chainId', () => {
+        expectInvalidParams(() => normalizeSendTransactionParams([{ ...tx, chainId: '0x' }]));
+    });
+
+    it("keeps accepting '0x' as data — empty calldata is legitimate", () => {
+        expect(normalizeSendTransactionParams([{ to: tx.to, data: '0x' }]).data).toBe('0x');
+    });
 });

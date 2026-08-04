@@ -11,9 +11,24 @@ export function isRecord(value: unknown): value is Record<string, unknown> {
     return typeof value === 'object' && value !== null && !Array.isArray(value);
 }
 
-/** Hex quantity/bytes as sent over JSON-RPC. */
+/**
+ * Hex bytes as sent over JSON-RPC. The charset is `*`, not `+`: a bare '0x' is
+ * legitimate empty calldata, so it has to pass here.
+ */
 export function isHexString(value: unknown): value is `0x${string}` {
     return typeof value === 'string' && /^0x[0-9a-fA-F]*$/.test(value);
+}
+
+/**
+ * Hex quantity as sent over JSON-RPC — at least one digit, unlike hex bytes.
+ *
+ * A bare '0x' has to be refused separately because it satisfies `isHexString`
+ * while `BigInt('0x')` throws: without this, '0x' would pass validation and then
+ * raise an untyped SyntaxError deep inside an already-open signing dialog,
+ * instead of surfacing to the dapp as -32602.
+ */
+function isHexQuantity(value: unknown): value is `0x${string}` {
+    return typeof value === 'string' && /^0x[0-9a-fA-F]+$/.test(value);
 }
 
 /** Asserts `params` is a `[{ ... }]` tuple and returns the envelope. */
@@ -50,7 +65,7 @@ export function optionalHexAddress(value: unknown, method: string, field: string
  */
 export function optionalHexQuantity(value: unknown, method: string, field: string): `0x${string}` | undefined {
     if (value === undefined || value === null) return undefined;
-    if (isHexString(value)) return value;
+    if (isHexQuantity(value)) return value;
 
     // Decimal wei string, e.g. '1000000000000000' — `BigInt` reads it as
     // decimal, so preserve that reading rather than guessing hex.
@@ -85,7 +100,7 @@ export function optionalChainId(chainId: unknown, method: string): `0x${string}`
         }
         return numberToHex(chainId);
     }
-    if (isHexString(chainId)) return chainId;
+    if (isHexQuantity(chainId)) return chainId;
     throw standardErrors.rpc.invalidParams(
         `${method}: chainId must be a hex string (e.g. '0x66eee') or a number, got ${JSON.stringify(chainId)}`
     );

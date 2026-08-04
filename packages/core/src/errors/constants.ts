@@ -21,15 +21,19 @@ interface ErrorCodes {
         readonly unsupportedChain: 4902;
     };
     /**
-     * EIP-5792 error codes. viem maps each to a typed error, so a dapp can tell
-     * these apart from a generic rejection.
+     * EIP-5792 error codes we throw. viem maps each to a typed error, so a dapp
+     * can tell these apart from a generic rejection.
+     *
+     * Not the complete EIP-5792 set: 5720 (duplicate id) and 5740 (bundle too
+     * large) are absent because nothing raises them — a caller-supplied batch id
+     * is not honored, so there is no id to collide, and no batch size is
+     * refused. `errorValues` still carries their messages so an inbound error
+     * from elsewhere serializes with its code intact.
      */
     readonly eip5792: {
         readonly unsupportedNonOptionalCapability: 5700;
         readonly unsupportedChainId: 5710;
-        readonly duplicateId: 5720;
         readonly unknownBundleId: 5730;
-        readonly bundleTooLarge: 5740;
     };
 }
 
@@ -58,9 +62,7 @@ export const standardErrorCodes: ErrorCodes = {
     eip5792: {
         unsupportedNonOptionalCapability: 5700,
         unsupportedChainId: 5710,
-        duplicateId: 5720,
         unknownBundleId: 5730,
-        bundleTooLarge: 5740,
     },
 };
 
