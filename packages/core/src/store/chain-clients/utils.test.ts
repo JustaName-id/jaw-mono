@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest';
-import { sepolia, optimismSepolia } from 'viem/chains';
+import { sepolia, optimismSepolia, arbitrumSepolia } from 'viem/chains';
 
 import { ChainClients } from './store.js';
 import { createClients, getClient, getBundlerClient } from './utils.js';
@@ -155,6 +155,49 @@ describe('chain-clients/utils', () => {
         expect(client?.chain?.name).toBe(testChain.nativeCurrency.name);
         expect(client?.chain?.nativeCurrency.symbol).toBe(testChain.nativeCurrency.symbol);
         expect(client?.chain?.nativeCurrency.decimals).toBe(testChain.nativeCurrency.decimal);
+    });
+
+    // The receipt wait in waitForReceiptInBackground polls at the bundler client's
+    // pollingInterval, which viem derives from chain.blockTime. Without blockTime it
+    // assumes a 12s L1 and clamps to 4s — up to 4s of dead time after inclusion on a
+    // 250ms-block chain. Both the public and bundler client must pick it up.
+    it('should derive a sub-second polling interval for fast chains', () => {
+        createClients([
+            {
+                id: arbitrumSepolia.id,
+                rpcUrl: arbitrumSepolia.rpcUrls.default.http[0],
+                nativeCurrency: {
+                    name: arbitrumSepolia.nativeCurrency.name,
+                    symbol: arbitrumSepolia.nativeCurrency.symbol,
+                    decimal: arbitrumSepolia.nativeCurrency.decimals,
+                },
+            },
+        ]);
+
+        // viem: min(max(floor(blockTime / 2), 500), 4000) — 250ms blocks -> 500ms
+        expect(arbitrumSepolia.blockTime).toBe(250);
+        expect(getClient(arbitrumSepolia.id)?.pollingInterval).toBe(500);
+        expect(getBundlerClient(arbitrumSepolia.id)?.pollingInterval).toBe(500);
+    });
+
+    it('should leave the polling interval at viem default for chains with no known blockTime', () => {
+        // sepolia carries no blockTime in viem, so behaviour is unchanged there.
+        expect(sepolia.blockTime).toBeUndefined();
+
+        createClients([
+            {
+                id: sepolia.id,
+                rpcUrl: sepolia.rpcUrls.default.http[0],
+                nativeCurrency: {
+                    name: sepolia.nativeCurrency.name,
+                    symbol: sepolia.nativeCurrency.symbol,
+                    decimal: sepolia.nativeCurrency.decimals,
+                },
+            },
+        ]);
+
+        expect(getClient(sepolia.id)?.pollingInterval).toBe(4000);
+        expect(getBundlerClient(sepolia.id)?.pollingInterval).toBe(4000);
     });
 
     it('should accumulate clients when called multiple times with different chains', () => {
