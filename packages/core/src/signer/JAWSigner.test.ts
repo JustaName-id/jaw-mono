@@ -96,6 +96,19 @@ describe('JAWSigner eth_accounts (silent reconnect)', () => {
 describe('JAWSigner signature analytics reporting', () => {
     const API_KEY = 'test-api-key';
     const SIGNER_ADDRESS = '0x2222222222222222222222222222222222222222' as Address;
+    const SIGNABLE_TYPED_DATA = JSON.stringify({
+        domain: { name: 'Test', version: '1', chainId: 1 },
+        primaryType: 'Msg',
+        types: {
+            EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+            ],
+            Msg: [{ name: 'content', type: 'string' }],
+        },
+        message: { content: 'hi' },
+    });
 
     /** Signer whose signing outcome is scripted per test. */
     class SigningTestSigner extends TestSigner {
@@ -152,7 +165,9 @@ describe('JAWSigner signature analytics reporting', () => {
         // When an eth_signTypedData_v4 request resolves successfully
         await signer.request({
             method: 'eth_signTypedData_v4',
-            params: [SIGNER_ADDRESS, '{"types":{}}'],
+            // Must be genuinely signable: dispatchSigningRequest refuses typed data that
+            // can't be hashed, so `{"types":{}}` no longer reaches the signing path.
+            params: [SIGNER_ADDRESS, SIGNABLE_TYPED_DATA],
         });
 
         // Then the signature is reported with the signer address from params

@@ -4,6 +4,7 @@ import { Signer } from './interface.js';
 
 import {
     assertParamsChainId,
+    assertSignableTypedData,
     getCachedWalletConnectResponse,
     injectRequestCapabilities,
     isSessionExpired,
@@ -90,6 +91,9 @@ export abstract class JAWSigner implements Signer {
      * never affects the signing flow.
      */
     private async dispatchSigningRequest(request: RequestArguments): Promise<unknown> {
+        // Both signers funnel through here, so an unsignable payload is refused once —
+        // before any dialog opens or popup is spawned.
+        assertSignableTypedData(request);
         const result = await this.handleSigningRequest(request);
         try {
             this.reportSignature(request);

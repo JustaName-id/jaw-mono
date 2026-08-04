@@ -49,10 +49,20 @@ export const Eip712Dialog = ({
   const signerAddress = accountAddress ?? '';
   const { name: resolvedName, avatar: signerAvatar } = useReverseIdentity(accountAddress, chainId, mainnetRpcUrl);
   const displayName = resolvedName || formatAddress(signerAddress);
-  // Parse typed data
+  // Core refuses unsignable payloads before this dialog opens; this guard is for hosts
+  // driving @jaw.id/ui directly. Shape-check rather than trusting the cast — a payload
+  // that parses as JSON but lacks `types[primaryType]` used to throw inside the tree,
+  // and a render throw here leaves the caller's promise unsettled.
   const typedData = useMemo(() => {
     try {
-      return JSON.parse(typedDataJson) as TypedData;
+      const parsed = JSON.parse(typedDataJson) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      const { types, primaryType } = parsed as Partial<TypedData>;
+      if (!types || typeof types !== 'object') return null;
+      if (typeof primaryType !== 'string' || !Array.isArray((types as Record<string, unknown>)[primaryType])) {
+        return null;
+      }
+      return parsed as TypedData;
     } catch (error) {
       console.error('Failed to parse typed data:', error);
       return null;
@@ -195,7 +205,9 @@ export const Eip712Dialog = ({
               </Button>
               <Button
                 onClick={onSign}
-                disabled={!canSign}
+                // The screen owns this invariant: never offer to sign what it couldn't
+                // render, whatever `canSign` a host passes.
+                disabled={!canSign || !typedData}
                 className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
               >
                 Sign

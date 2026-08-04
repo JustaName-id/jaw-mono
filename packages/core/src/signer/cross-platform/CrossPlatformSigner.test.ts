@@ -1724,7 +1724,24 @@ describe('CrossPlatformSigner', () => {
             // Arrange
             const request: RequestArguments = {
                 method: 'eth_signTypedData_v4',
-                params: ['0x1234567890123456789012345678901234567890', '{"types":{}}'],
+                // Must be genuinely signable: dispatchSigningRequest refuses typed data
+                // that can't be hashed, so `{"types":{}}` no longer reaches this path.
+                params: [
+                    '0x1234567890123456789012345678901234567890',
+                    JSON.stringify({
+                        domain: { name: 'Test', version: '1', chainId: 1 },
+                        primaryType: 'Msg',
+                        types: {
+                            EIP712Domain: [
+                                { name: 'name', type: 'string' },
+                                { name: 'version', type: 'string' },
+                                { name: 'chainId', type: 'uint256' },
+                            ],
+                            Msg: [{ name: 'content', type: 'string' }],
+                        },
+                        message: { content: 'hi' },
+                    }),
+                ],
             };
 
             const mockResponse: RPCResponseMessage = {

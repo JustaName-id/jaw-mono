@@ -284,8 +284,11 @@ const Caret = ({ open }: { open: boolean }) => (
  */
 export function Eip712Tree({ typedData }: { typedData: TypedData }) {
   const rootNodes = useMemo(() => {
-    const fields = typedData.types[typedData.primaryType] ?? [];
-    return fields.map((f) => buildNode(typedData.types, f.type, typedData.message?.[f.name], f.name, f.name, 0));
+    // Optional-chained, not indexed: an absent `types` threw here before the caller's
+    // shape check existed, and a throw mid-render strands the signing request.
+    const types = typedData?.types ?? {};
+    const fields = types[typedData?.primaryType] ?? [];
+    return fields.map((f) => buildNode(types, f.type, typedData.message?.[f.name], f.name, f.name, 0));
   }, [typedData]);
 
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());

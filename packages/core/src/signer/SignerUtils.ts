@@ -2,7 +2,7 @@ import { standardErrors } from '../errors/index.js';
 import { store } from '../store/index.js';
 import { RequestArguments } from '../provider/index.js';
 
-import { isAddress, isHex, hexToString, type Address } from 'viem';
+import { hashTypedData, isAddress, isHex, hexToString, type Address } from 'viem';
 
 import { WalletConnectResponse } from '../rpc/index.js';
 
@@ -80,6 +80,96 @@ export function assertParamsChainId(params: unknown): asserts params is [
     }
     if (typeof params[0].chainId !== 'string' && typeof params[0].chainId !== 'number') {
         throw standardErrors.rpc.invalidParams();
+    }
+}
+
+/**
+ * The EIP-712 payload a signing request carries, or null when it carries none.
+ *
+ * Two methods reach the same typed-data dialog: `eth_signTypedData_v4`, and ERC-7871
+ * `wallet_sign` with request type `0x01` (`0x45` is personal_sign). Validating only the
+ * former would leave the second path unguarded.
+ */
+function typedDataCarrier(request: RequestArguments): { raw: unknown } | null {
+    if (request.method === 'eth_signTypedData_v4') {
+        return { raw: (request.params as unknown[] | undefined)?.[1] };
+    }
+    if (request.method === 'wallet_sign') {
+        const inner = (request.params as [{ request?: { type?: string; data?: unknown } }] | undefined)?.[0]?.request;
+        if (inner?.type === '0x01') return { raw: inner.data };
+    }
+    return null;
+}
+
+/**
+ * Rejects a typed-data signing request whose payload cannot produce a signature.
+ *
+ * The EIP-712 digest is `keccak(0x1901 ‖ hashStruct(domain) ‖ hashStruct(message))`, and
+ * `hashStruct` needs `types[primaryType]` — so a payload missing it has nothing to sign.
+ * Opening a signing dialog for one asks the user to approve a request that cannot
+ * succeed, and a malformed payload crashed the EIP-712 dialog mid-render, leaving the
+ * caller's promise unsettled.
+ *
+ * Gated on `hashTypedData` rather than viem's `validateTypedData`: "hashable" is exactly
+ * "signable", whereas `validateTypedData` also type-checks message values and would
+ * reject payloads that sign fine today.
+ */
+export function assertSignableTypedData(request: RequestArguments): void {
+    const carrier = typedDataCarrier(request);
+    if (!carrier) return;
+
+    const raw = carrier.raw;
+    if (raw === undefined || raw === null) {
+        throw standardErrors.rpc.invalidParams('typed data is required');
+    }
+
+    // The method's spec says JSON string, but object payloads are common enough in the
+    // wild to be worth validating rather than rejecting on shape alone.
+    let typedData: unknown = raw;
+    if (typeof raw === 'string') {
+        try {
+            typedData = JSON.parse(raw);
+        } catch {
+            throw standardErrors.rpc.invalidParams('typed data is not valid JSON');
+        }
+    }
+
+    if (typeof typedData !== 'object' || typedData === null || Array.isArray(typedData)) {
+        throw standardErrors.rpc.invalidParams('typed data must be an object');
+    }
+
+    const { types, primaryType } = typedData as { types?: unknown; primaryType?: unknown };
+
+    if (types === undefined) {
+        throw standardErrors.rpc.invalidParams('typed data is missing "types"');
+    }
+    if (typeof types !== 'object' || types === null || Array.isArray(types)) {
+        throw standardErrors.rpc.invalidParams('"types" must be an object of EIP-712 type definitions');
+    }
+    if (typeof primaryType !== 'string' || primaryType.length === 0) {
+        throw standardErrors.rpc.invalidParams('"primaryType" must be a non-empty string');
+    }
+
+    // The common authoring mistake: naming a type that was never defined. `data` carries
+    // what the payload did define, so the caller can see the gap without guessing.
+    const defined = Object.keys(types as Record<string, unknown>);
+    if (!Array.isArray((types as Record<string, unknown>)[primaryType])) {
+        throw standardErrors.rpc.invalidParams({
+            message: `"primaryType" "${primaryType}" is not defined in "types"`,
+            data: { primaryType, definedTypes: defined },
+        });
+    }
+
+    // Whatever the checks above can't name — an unresolvable field type, a value that
+    // doesn't fit its declared type. Keep our own message and put the underlying reason in
+    // `data`, so a dependency's wording never becomes our API surface.
+    try {
+        hashTypedData(typedData as Parameters<typeof hashTypedData>[0]);
+    } catch (error) {
+        throw standardErrors.rpc.invalidParams({
+            message: 'typed data could not be hashed for signing',
+            data: { reason: error instanceof Error ? error.message.split('\n')[0] : 'unknown error' },
+        });
     }
 }
 

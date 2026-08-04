@@ -124,6 +124,38 @@ function ThemeWatcher({ theme, container }: { theme: JawTheme; container: HTMLEl
 }
 
 /**
+ * Rejects the pending request when a dialog throws while rendering.
+ *
+ * Without this, a render throw leaves nothing mounted, `resolve`/`reject` never called,
+ * and the container still in the top layer — so the caller waits forever and the host
+ * page stays inert. React unmounts the tree on an uncaught error but cannot settle a
+ * promise it knows nothing about. Renders nothing: a half-drawn signing screen is worse
+ * than none.
+ */
+// Exported for tests only — deliberately absent from src/index.ts.
+export class DialogErrorBoundary extends React.Component<
+  { onError: (error: Error) => void; children: React.ReactNode },
+  { failed: boolean }
+> {
+  override state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ReactUIHandler] Dialog render failed:', error, info.componentStack);
+    // Deferred out of the commit phase: onError tears the dialog down, and unmounting a
+    // root while React is still rendering warns and postpones the unmount anyway.
+    queueMicrotask(() => this.props.onError(error));
+  }
+
+  override render() {
+    return this.state.failed ? null : this.props.children;
+  }
+}
+
+/**
  * Options for ReactUIHandler constructor.
  */
 export interface ReactUIHandlerOptions {
@@ -309,7 +341,11 @@ export class ReactUIHandler implements UIHandler {
               theme: effectiveTheme,
               container,
             }),
-            dialog
+            React.createElement(DialogErrorBoundary, {
+              onError: (error: Error) =>
+                handleReject(new Error(`The wallet could not display this request: ${error.message}`)),
+              children: dialog,
+            })
           )
         );
       } catch (error) {
@@ -1262,7 +1298,7 @@ function Eip712DialogWrapper({
       isProcessing={isProcessing}
       isSuccess={isSuccess}
       signatureStatus={signatureStatus}
-      canSign={true}
+      canSign={!isProcessing && !!request.data.typedData}
     />
   );
 }
