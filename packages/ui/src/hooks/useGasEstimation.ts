@@ -67,11 +67,20 @@ export interface UseGasEstimationResult {
 /** Fallback gas estimate in ETH for L2 chains when ETH estimation fails */
 const FALLBACK_GAS_ESTIMATE_ETH = '0.00005';
 
-/** Error messages that indicate insufficient funds */
-const INSUFFICIENT_FUNDS_ERRORS = [
+/**
+ * Bundler markers for "the account can't cover the gas prefund" — the one failure a
+ * fee-token switch actually fixes.
+ *
+ * Deliberately not a bare `'insufficient'`. These are substring matches, and that word
+ * also appears in the transaction's OWN reverts (`INSUFFICIENT_OUTPUT_AMOUNT`,
+ * `insufficient allowance`, `InsufficientCollateral`), which no fee token can fix.
+ * Matching those here would re-route the fee and clear the error instead of reporting
+ * the revert.
+ */
+const PREFUND_ERRORS = [
   'AA21',
   "didn't pay prefund",
-  'insufficient',
+  'insufficient funds for gas', // geth/bundler wording for a genuine prefund shortfall
   'AA50', // PostOp reverted (e.g., paymaster insufficient balance)
   'paymasterValidationGasLimit is required', // ERC-20 paymaster can't validate with 0 balance
 ];
@@ -81,11 +90,17 @@ const INSUFFICIENT_FUNDS_ERRORS = [
 // ============================================================================
 
 /**
- * Check if an error indicates insufficient funds
+ * Whether the account couldn't cover the gas prefund — i.e. switching fee token may help.
+ *
+ * Specificity is the whole mechanism: every marker names gas payment or paymaster
+ * validation, so a call-level revert can't match one and gets reported instead of
+ * silently re-routed. Note `classifyRevert` cannot be used to pre-filter here — geth's
+ * prefund message begins with "insufficient funds", which it (correctly, for its own
+ * purpose) reads as a balance shortfall.
  */
-function isInsufficientFundsError(error: unknown): boolean {
+function isPrefundError(error: unknown): boolean {
   if (!(error instanceof Error)) return false;
-  return INSUFFICIENT_FUNDS_ERRORS.some((msg) => error.message.toLowerCase().includes(msg.toLowerCase()));
+  return PREFUND_ERRORS.some((msg) => error.message.toLowerCase().includes(msg.toLowerCase()));
 }
 
 /**
@@ -316,7 +331,7 @@ export function useGasEstimation({
         onFeeTokensUpdateRef.current?.(updatedFeeTokens);
       } else if (erc20Result.status === 'rejected') {
         // Check if this is an insufficient balance error (expected case, not a real error)
-        const isInsufficientBalance = isInsufficientFundsError(erc20Result.reason);
+        const isInsufficientBalance = isPrefundError(erc20Result.reason);
 
         if (isInsufficientBalance) {
           // This is an expected case - user doesn't have enough ERC-20 tokens
@@ -379,7 +394,7 @@ export function useGasEstimation({
 
       // Process ETH result
       const ethSuccess = ethResult.status === 'fulfilled';
-      const ethInsufficientFunds = ethResult.status === 'rejected' && isInsufficientFundsError(ethResult.reason);
+      const ethInsufficientFunds = ethResult.status === 'rejected' && isPrefundError(ethResult.reason);
 
       if (ethSuccess) {
         handleEthSuccess(ethResult.value, updatedFeeTokens);

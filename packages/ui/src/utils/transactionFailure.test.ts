@@ -158,3 +158,28 @@ describe('resolveBlockReason gating matrix', () => {
     }
   });
 });
+
+// The prefund predicate in useGasEstimation is a substring match, so a bare 'insufficient'
+// there also claimed the transaction's OWN reverts and answered them with a fee-token
+// switch (clearing the error and showing a hardcoded fee). classifyRevert is what
+// distinguishes the two, so these pin the strings on each side of that line.
+describe('prefund shortfall vs the call reverting on its own terms', () => {
+  it.each([
+    'execution reverted: INSUFFICIENT_OUTPUT_AMOUNT',
+    'execution reverted: INSUFFICIENT_LIQUIDITY',
+    'ERC20: insufficient allowance',
+    'InsufficientCollateral()',
+  ])('a call-level revert containing "insufficient" is not a prefund shortfall: %s', (message) => {
+    // These must NOT read as 'balance' either — they are neither a prefund problem nor an
+    // asset shortfall the wallet can describe, so they fall through to a generic failure.
+    expect(classifyRevert(new Error(message))).toBe('other');
+  });
+
+  it.each([
+    'execution reverted: ERC20InsufficientBalance(0x..., 0, 100)',
+    'execution reverted: insufficient balance',
+    'transfer amount exceeds balance',
+  ])('a genuine asset shortfall is classified as balance: %s', (message) => {
+    expect(classifyRevert(new Error(message))).toBe('balance');
+  });
+});
