@@ -18,6 +18,14 @@ export {
 } from './wallet_sendCalls.js';
 
 export {
+    normalizeSendCallsParams,
+    SUPPORTED_SEND_CALLS_VERSIONS,
+    type SendCallsVersion,
+    type NormalizedCall,
+    type NormalizedSendCallsParams,
+} from './sendCallsParams.js';
+
+export {
     handleGetCallsHistoryRequest,
     type WalletGetCallsHistoryParams,
     type WalletGetCallsHistoryResponse,

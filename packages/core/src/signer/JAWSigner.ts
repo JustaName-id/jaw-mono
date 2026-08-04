@@ -9,6 +9,7 @@ import {
     isSessionExpired,
 } from './SignerUtils.js';
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
+import { normalizeSendCallsParams } from '../rpc/sendCallsParams.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 import { handleGetCallsHistoryRequest } from '../rpc/wallet_getCallsHistory.js';
@@ -90,6 +91,14 @@ export abstract class JAWSigner implements Signer {
      * never affects the signing flow.
      */
     private async dispatchSigningRequest(request: RequestArguments): Promise<unknown> {
+        // Validate the EIP-5792 envelope here, before any signer opens a popup
+        // or a dialog: a dapp on an envelope version we don't implement gets a
+        // -32602 it can act on instead of a dead UI. Both envelope versions
+        // (v1.0 and viem's default v2.0.0) pass.
+        if (request.method === 'wallet_sendCalls') {
+            normalizeSendCallsParams(request.params);
+        }
+
         const result = await this.handleSigningRequest(request);
         try {
             this.reportSignature(request);

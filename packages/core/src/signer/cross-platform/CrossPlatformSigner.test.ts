@@ -49,7 +49,7 @@ vi.mock('../signerStorage.js', () => ({
 vi.mock('../../rpc/wallet_sendCalls.js', () => ({
     getCallStatus: vi.fn(),
     getCallStatusEIP5792: vi.fn(),
-    waitForReceiptInBackground: vi.fn(),
+    waitForReceiptInBackground: vi.fn().mockResolvedValue(undefined),
     storeCallStatus: vi.fn(),
 }));
 
@@ -1293,7 +1293,7 @@ describe('CrossPlatformSigner', () => {
 
             const request: RequestArguments = {
                 method: 'wallet_sendCalls',
-                params: [{ calls: [] }],
+                params: [{ calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0x' }] }],
             };
 
             // Act
@@ -1303,6 +1303,89 @@ describe('CrossPlatformSigner', () => {
             expect(result).toBe('0xbatchId');
             // Encrypted envelope → method-less ready, matching send-time routing.
             expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith();
+        });
+
+        it('should forward a viem v2.0.0 wallet_sendCalls envelope to the popup', async () => {
+            // Arrange - viem's sendCalls() default envelope: version '2.0.0',
+            // hex chainId, atomicRequired, capabilities.
+            const unauthenticatedSigner = new CrossPlatformSigner({
+                metadata: mockMetadata,
+                communicator: mockCommunicator,
+                callback: mockCallback,
+            });
+
+            const mockResponse: RPCResponseMessage = {
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: 'peer-public-key-hex',
+                content: { encrypted: mockEncryptedData },
+                timestamp: new Date(),
+            };
+
+            mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
+            (decryptContent as Mock).mockResolvedValue({
+                result: { value: { id: '0xbatchId', chainId: 1 } },
+            } as RPCResponse);
+
+            // The v2.0.0 envelope carries a hex chainId, which the signer resolves
+            // against the configured chains before routing to the popup.
+            vi.spyOn(store, 'getState').mockReturnValue({
+                account: { accounts: [], chain: undefined, capabilities: undefined },
+                chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
+                config: { metadata: mockMetadata, version: '1.0.0' },
+                keys: {},
+                callStatuses: {},
+            });
+
+            const request: RequestArguments = {
+                method: 'wallet_sendCalls',
+                params: [
+                    {
+                        atomicRequired: false,
+                        calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0xdeadbeef' }],
+                        capabilities: undefined,
+                        chainId: '0x1',
+                        from: '0x1234567890123456789012345678901234567890',
+                        id: undefined,
+                        version: '2.0.0',
+                    },
+                ],
+            };
+
+            // Act
+            const result = await unauthenticatedSigner.request(request);
+
+            // Assert
+            expect(result).toEqual({ id: '0xbatchId', chainId: 1 });
+            expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+        });
+
+        it('should reject an unsupported wallet_sendCalls version with -32602 before opening a popup', async () => {
+            // Arrange
+            const unauthenticatedSigner = new CrossPlatformSigner({
+                metadata: mockMetadata,
+                communicator: mockCommunicator,
+                callback: mockCallback,
+            });
+
+            const request: RequestArguments = {
+                method: 'wallet_sendCalls',
+                params: [
+                    {
+                        version: '3.0.0',
+                        calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0x' }],
+                        chainId: '0x1',
+                    },
+                ],
+            };
+
+            // Act & Assert
+            await expect(unauthenticatedSigner.request(request)).rejects.toMatchObject({
+                code: -32602,
+                message: expect.stringContaining('unsupported version'),
+            });
+            expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
         });
 
         it('should allow wallet_sign when unauthenticated', async () => {

@@ -30,15 +30,41 @@ await jaw.provider.request({
 
 ### Parameters
 
-| Name            | Type          | Required | Description                                   |
-| --------------- | ------------- | -------- | --------------------------------------------- |
-| `from`          | `0x${string}` | No       | Account address to execute from               |
-| `calls`         | `array`       | Yes      | Array of call objects                         |
-| `calls[].to`    | `0x${string}` | Yes      | Recipient address                             |
-| `calls[].value` | `0x${string}` | No       | Value in wei (hex), default "0x0"             |
-| `calls[].data`  | `0x${string}` | No       | Call data (hex), default "0x"                 |
-| `chainId`       | `0x${string}` | No       | Target chain ID (defaults to connected chain) |
-| `capabilities`  | `object`      | No       | Additional capabilities (see below)           |
+| Name             | Type               | Required | Description                                               |
+| ---------------- | ------------------ | -------- | --------------------------------------------------------- |
+| `version`        | `'1.0' \| '2.0.0'` | No       | EIP-5792 envelope version, defaults to `'1.0'`            |
+| `from`           | `0x${string}`      | No       | Account address to execute from                           |
+| `calls`          | `array`            | Yes      | Array of call objects (must be non-empty)                 |
+| `calls[].to`     | `0x${string}`      | Yes      | Recipient address                                         |
+| `calls[].value`  | `0x${string}`      | No       | Value in wei (hex), default "0x0"                         |
+| `calls[].data`   | `0x${string}`      | No       | Call data (hex), default "0x"                             |
+| `chainId`        | `0x${string}`      | No       | Target chain ID (defaults to connected chain)             |
+| `atomicRequired` | `boolean`          | No       | Always satisfied — an ERC-4337 batch is one UserOperation |
+| `id`             | `string`           | No       | Caller-supplied batch id (v2.0.0)                         |
+| `capabilities`   | `object`           | No       | Additional capabilities (see below)                       |
+
+### Envelope versions
+
+Both EIP-5792 request envelopes are accepted and behave identically:
+
+- **`2.0.0`** — what viem's `sendCalls()` (and therefore wagmi) sends by default: hex `chainId`, `atomicRequired`, `capabilities`.
+- **`1.0`** — the original envelope. Also assumed when `version` is omitted.
+
+Any other `version` is rejected with `-32602` and a message naming the supported
+versions, so a dapp can tell a capability gap apart from a rejected batch. Stock
+viem/wagmi therefore works with no configuration:
+
+```typescript
+import { useSendCalls } from 'wagmi';
+
+// viem sends { version: '2.0.0', chainId: '0x66eee', atomicRequired: false, ... }
+sendCalls({
+  calls: [
+    { to: '0xTokenA...', data: '0x...' },
+    { to: '0xRouter...', data: '0x...' },
+  ],
+});
+```
 
 ### Capabilities
 

@@ -24,6 +24,7 @@ import {
     WalletRevokePermissionsRequest,
     getPermissionFromRelay,
     RequestCapabilities,
+    normalizeSendCallsParams,
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
 import { standardErrors } from '../../errors/index.js';
@@ -258,15 +259,10 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_sendCalls': {
-                // EIP-5792 wallet_sendCalls params - chainId must be hex string
-                type WalletSendCallsParams = Omit<TransactionUIRequest['data'], 'chainId'> & {
-                    /** Target chain ID in hex format. Defaults to the connected chain. */
-                    chainId?: `0x${string}`;
-                    /** Optional capabilities including paymaster service */
-                    capabilities?: RequestCapabilities;
-                };
-                const params = request.params as [WalletSendCallsParams];
-                const callsData = params[0];
+                // Accepts either EIP-5792 envelope version: v1.0 and viem's
+                // default v2.0.0 normalize to the same shape (hex chainId,
+                // explicit atomicRequired) before the dialog sees them.
+                const callsData = normalizeSendCallsParams(request.params);
 
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(callsData.chainId);
@@ -280,7 +276,6 @@ export class AppSpecificSigner extends JAWSigner {
                         ...callsData,
                         from: callsData.from ?? this.accounts[0],
                         chainId: resolvedChain.id,
-                        capabilities: callsData.capabilities,
                     },
                 };
 

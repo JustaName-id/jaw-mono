@@ -202,7 +202,10 @@ describe('JAWSigner signature analytics reporting', () => {
         const signer = makeSigningSigner();
 
         // When a wallet_sendCalls request resolves successfully
-        await signer.request({ method: 'wallet_sendCalls', params: [{ calls: [] }] });
+        await signer.request({
+            method: 'wallet_sendCalls',
+            params: [{ calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0x' }] }],
+        });
 
         // Then no signature is reported
         expect(logSignature).not.toHaveBeenCalled();
