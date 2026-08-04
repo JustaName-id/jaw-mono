@@ -217,7 +217,8 @@ function WagmiPageContent({
           case 'useSendTransaction':
             result = await sendTransactionAsync({
               to: params.to as Address,
-              value: parseEther(params.value as string),
+              // Absent for a data-only call, and parseEther(undefined) throws.
+              value: params.value === undefined ? undefined : parseEther(params.value as string),
               data: params.data as `0x${string}` | undefined,
             });
             break;

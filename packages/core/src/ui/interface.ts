@@ -92,8 +92,6 @@ export interface TransactionUIRequest extends BaseUIRequest {
             data?: string;
         }>;
         chainId: number;
-        /** Caller-supplied batch id (EIP-5792 v2.0.0). */
-        id?: string;
         atomicRequired?: boolean;
         /** Optional capabilities including paymaster service for sponsored transactions */
         capabilities?: RequestCapabilities;

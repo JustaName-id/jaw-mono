@@ -43,8 +43,6 @@ export interface NormalizedSendCallsParams {
     calls: NormalizedCall[];
     atomicRequired: boolean;
     capabilities?: RequestCapabilities;
-    /** Caller-supplied batch id (EIP-5792 v2.0.0). */
-    id?: string;
 }
 
 /**
@@ -131,11 +129,6 @@ export function normalizeSendCallsParams(params: unknown): NormalizedSendCallsPa
         assertCapabilitiesSupported(capabilities);
     }
 
-    const id = envelope.id;
-    if (id !== undefined && typeof id !== 'string') {
-        throw standardErrors.rpc.invalidParams(`${METHOD}: id must be a string`);
-    }
-
     const chainId = optionalChainId(envelope.chainId, METHOD);
 
     return {
@@ -147,6 +140,5 @@ export function normalizeSendCallsParams(params: unknown): NormalizedSendCallsPa
         // always satisfied — `atomicRequired: true` never needs to be refused.
         atomicRequired: atomicRequired ?? false,
         ...(capabilities ? { capabilities: capabilities as RequestCapabilities } : {}),
-        ...(id !== undefined && { id }),
     };
 }

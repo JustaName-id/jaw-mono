@@ -82,12 +82,20 @@ describe('normalizeSendCallsParams', () => {
         expect(normalizeSendCallsParams([{ ...v1Params, chainId: undefined }]).chainId).toBeUndefined();
     });
 
-    it('preserves capabilities and the batch id', () => {
+    it('preserves capabilities', () => {
         const capabilities = { paymasterService: { url: 'https://paymaster.test' } };
-        const result = normalizeSendCallsParams([{ ...viemV2Params, capabilities, id: '0xabc' }]);
+        const result = normalizeSendCallsParams([{ ...viemV2Params, capabilities }]);
 
         expect(result.capabilities).toEqual(capabilities);
-        expect(result.id).toBe('0xabc');
+    });
+
+    // A caller-supplied `id` is not honored: the batch is registered under the
+    // batchId the wallet generates, so accepting one would hand the dapp an id
+    // that wallet_getCallsStatus rejects with 5730. It's dropped, not echoed.
+    it('drops a caller-supplied batch id rather than echoing one it will not honor', () => {
+        const result = normalizeSendCallsParams([{ ...viemV2Params, id: '0xabc' }]);
+
+        expect(result).not.toHaveProperty('id');
     });
 
     it('rejects an unsupported version with -32602 naming the supported versions', () => {
@@ -117,6 +125,21 @@ describe('normalizeSendCallsParams', () => {
             normalizeSendCallsParams([{ ...v1Params, calls: [{ data: '0xdeadbeef' }] }])
         );
         expect(message).toContain('calls[0].to');
+    });
+
+    it('rejects a target that is hex but not 20 bytes — it would fail inside an open dialog', () => {
+        for (const to of ['0x', '0xabc', `0x${'ab'.repeat(21)}`]) {
+            const message = expectInvalidParams(() => normalizeSendCallsParams([{ ...v1Params, calls: [{ to }] }]));
+            expect(message).toContain('calls[0].to');
+        }
+    });
+
+    it('accepts a lowercase or non-checksummed target — only the checksum is not required', () => {
+        const lower = '0x0987654321098765432109876543210987654321';
+        const mixed = '0xAbCdeF0123456789012345678901234567890123';
+
+        expect(normalizeSendCallsParams([{ ...v1Params, calls: [{ to: lower }] }]).calls[0].to).toBe(lower);
+        expect(normalizeSendCallsParams([{ ...v1Params, calls: [{ to: mixed }] }]).calls[0].to).toBe(mixed);
     });
 
     it('keeps accepting decimal wei values, which the signing UIs always BigInt()-ed', () => {

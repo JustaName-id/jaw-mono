@@ -70,6 +70,13 @@ describe('normalizeSendTransactionParams', () => {
         expectInvalidParams(() => normalizeSendTransactionParams(undefined));
     });
 
+    it('rejects `to`/`from` that are hex but not 20 bytes', () => {
+        for (const to of ['0x', '0xabc', `0x${'ab'.repeat(21)}`]) {
+            expect(expectInvalidParams(() => normalizeSendTransactionParams([{ ...tx, to }]))).toContain('to');
+        }
+        expect(expectInvalidParams(() => normalizeSendTransactionParams([{ ...tx, from: '0xabc' }]))).toContain('from');
+    });
+
     it('keeps accepting decimal wei values (previously converted downstream by BigInt())', () => {
         const result = normalizeSendTransactionParams([{ to: tx.to, value: '1000000000000000' }]);
         expect(result.value).toBe('0x38d7ea4c68000');

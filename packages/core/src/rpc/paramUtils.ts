@@ -1,4 +1,4 @@
-import { numberToHex } from 'viem';
+import { isAddress, numberToHex } from 'viem';
 import { standardErrors } from '../errors/index.js';
 
 /**
@@ -24,11 +24,17 @@ export function requireParamsObject(params: unknown, method: string): Record<str
     return params[0];
 }
 
+/**
+ * Requires a 20-byte address. `strict: false` checks length and charset
+ * (`/^0x[a-fA-F0-9]{40}$/`) without demanding a valid checksum, so a lowercase
+ * or non-checksummed address still passes — but a truncated one ('0x', '0xabc')
+ * is refused here rather than failing later inside an already-open dialog.
+ */
 export function requireHexAddress(value: unknown, method: string, field: string): `0x${string}` {
-    if (!isHexString(value)) {
-        throw standardErrors.rpc.invalidParams(`${method}: ${field} must be a hex address`);
+    if (typeof value !== 'string' || !isAddress(value, { strict: false })) {
+        throw standardErrors.rpc.invalidParams(`${method}: ${field} must be a 20-byte hex address`);
     }
-    return value;
+    return value as `0x${string}`;
 }
 
 export function optionalHexAddress(value: unknown, method: string, field: string): `0x${string}` | undefined {
