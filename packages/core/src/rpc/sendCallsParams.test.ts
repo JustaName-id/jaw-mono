@@ -122,4 +122,37 @@ describe('normalizeSendCallsParams', () => {
     it('rejects a non-hex chainId with -32602', () => {
         expectInvalidParams(() => normalizeSendCallsParams([{ ...v1Params, chainId: 'arbitrum-sepolia' }]));
     });
+
+    describe('capabilities (EIP-5792 5700)', () => {
+        function expectUnsupportedCapability(fn: () => unknown) {
+            try {
+                fn();
+            } catch (error) {
+                const { code, message } = error as { code: number; message: string };
+                expect(code).toBe(standardErrorCodes.eip5792.unsupportedNonOptionalCapability);
+                return message;
+            }
+            throw new Error('expected normalizeSendCallsParams to throw');
+        }
+
+        it('accepts the capabilities we implement', () => {
+            const capabilities = {
+                paymasterService: { url: 'https://paymaster.test' },
+                permissions: { id: '0xabc' },
+            };
+            expect(normalizeSendCallsParams([{ ...viemV2Params, capabilities }]).capabilities).toEqual(capabilities);
+        });
+
+        it('rejects an unimplemented non-optional capability with 5700', () => {
+            const message = expectUnsupportedCapability(() =>
+                normalizeSendCallsParams([{ ...viemV2Params, capabilities: { flashLoan: { amount: '0x1' } } }])
+            );
+            expect(message).toContain('flashLoan');
+        });
+
+        it('ignores an unimplemented capability the dapp marked optional', () => {
+            const capabilities = { dataSuffix: { value: '0xabcd', optional: true } };
+            expect(normalizeSendCallsParams([{ ...viemV2Params, capabilities }]).capabilities).toEqual(capabilities);
+        });
+    });
 });

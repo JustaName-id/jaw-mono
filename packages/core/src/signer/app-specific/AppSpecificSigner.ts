@@ -23,8 +23,8 @@ import {
     WalletGrantPermissionsRequest,
     WalletRevokePermissionsRequest,
     getPermissionFromRelay,
-    RequestCapabilities,
     normalizeSendCallsParams,
+    normalizeSendTransactionParams,
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
 import { standardErrors } from '../../errors/index.js';
@@ -297,15 +297,7 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'eth_sendTransaction': {
-                type EthSendTransactionParams = Omit<SendTransactionUIRequest['data'], 'chainId' | 'from'> & {
-                    from?: Address;
-                    /** Target chain ID in hex format. Defaults to the connected chain. */
-                    chainId?: `0x${string}`;
-                    /** Optional capabilities including paymaster service */
-                    capabilities?: RequestCapabilities;
-                };
-                const params = request.params as [EthSendTransactionParams];
-                const txData = params[0];
+                const txData = normalizeSendTransactionParams(request.params);
 
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(txData.chainId);

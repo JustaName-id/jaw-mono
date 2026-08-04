@@ -1,7 +1,17 @@
-import { numberToHex } from 'viem';
 import type { Address } from '../provider/interface.js';
 import { standardErrors } from '../errors/index.js';
 import type { RequestCapabilities } from './permissions.js';
+import {
+    isRecord,
+    optionalChainId,
+    optionalHexAddress,
+    optionalHexData,
+    optionalHexQuantity,
+    requireHexAddress,
+    requireParamsObject,
+} from './paramUtils.js';
+
+const METHOD = 'wallet_sendCalls';
 
 /**
  * EIP-5792 request envelope versions accepted by wallet_sendCalls.
@@ -37,63 +47,46 @@ export interface NormalizedSendCallsParams {
     id?: string;
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-    return typeof value === 'object' && value !== null && !Array.isArray(value);
-}
+/**
+ * Capabilities wallet_sendCalls implements. A capability outside this set that
+ * the dapp did not mark `optional` is refused with EIP-5792 5700 — silently
+ * dropping it would execute a batch whose terms differ from what was asked for.
+ */
+const SUPPORTED_SEND_CALLS_CAPABILITIES = ['paymasterService', 'permissions'];
 
-/** Hex quantity/bytes as sent over JSON-RPC. */
-function isHexString(value: unknown): value is `0x${string}` {
-    return typeof value === 'string' && /^0x[0-9a-fA-F]*$/.test(value);
-}
+function assertCapabilitiesSupported(capabilities: Record<string, unknown>): void {
+    const unsupported = Object.entries(capabilities)
+        .filter(([name, capability]) => {
+            if (SUPPORTED_SEND_CALLS_CAPABILITIES.includes(name)) return false;
+            // Absent `optional` means required (EIP-5792), so an unknown
+            // capability is only ignorable when it opts out explicitly.
+            return !(isRecord(capability) && capability.optional === true);
+        })
+        .map(([name]) => name);
 
-function normalizeChainId(chainId: unknown): `0x${string}` | undefined {
-    if (chainId === undefined || chainId === null) return undefined;
-    if (typeof chainId === 'number') {
-        if (!Number.isSafeInteger(chainId) || chainId <= 0) {
-            throw standardErrors.rpc.invalidParams(`wallet_sendCalls: invalid chainId ${chainId}`);
-        }
-        return numberToHex(chainId);
+    if (unsupported.length > 0) {
+        throw standardErrors.provider.unsupportedNonOptionalCapability(
+            `wallet_sendCalls: unsupported non-optional capabilities: ${unsupported.join(', ')}. Supported: ${SUPPORTED_SEND_CALLS_CAPABILITIES.join(', ')}`
+        );
     }
-    if (isHexString(chainId)) return chainId;
-    throw standardErrors.rpc.invalidParams(
-        `wallet_sendCalls: chainId must be a hex string (e.g. '0x66eee') or a number, got ${JSON.stringify(chainId)}`
-    );
 }
 
 function normalizeCall(call: unknown, index: number): NormalizedCall {
     if (!isRecord(call)) {
-        throw standardErrors.rpc.invalidParams(`wallet_sendCalls: calls[${index}] must be an object`);
+        throw standardErrors.rpc.invalidParams(`${METHOD}: calls[${index}] must be an object`);
     }
-
-    const { to, data, value } = call;
 
     // EIP-5792 leaves `to` optional (contract creation), but an ERC-4337
     // `execute` always needs a target — so reject it here with a reason instead
     // of failing deeper in the userOp build.
-    if (!isHexString(to)) {
-        throw standardErrors.rpc.invalidParams(`wallet_sendCalls: calls[${index}].to must be a hex address`);
-    }
-    if (data !== undefined && !isHexString(data)) {
-        throw standardErrors.rpc.invalidParams(`wallet_sendCalls: calls[${index}].data must be hex-encoded`);
-    }
-
-    // viem sends value as a hex quantity; tolerate a number/bigint from
-    // hand-rolled callers and hex-encode it so downstream sees one shape.
-    let normalizedValue: string | undefined;
-    if (value !== undefined && value !== null) {
-        if (isHexString(value)) normalizedValue = value;
-        else if (typeof value === 'number' || typeof value === 'bigint') normalizedValue = numberToHex(value);
-        else {
-            throw standardErrors.rpc.invalidParams(
-                `wallet_sendCalls: calls[${index}].value must be a hex quantity, got ${JSON.stringify(value)}`
-            );
-        }
-    }
+    const to = requireHexAddress(call.to, METHOD, `calls[${index}].to`);
+    const data = optionalHexData(call.data, METHOD, `calls[${index}].data`);
+    const value = optionalHexQuantity(call.value, METHOD, `calls[${index}].value`);
 
     return {
         to,
         ...(data !== undefined && { data }),
-        ...(normalizedValue !== undefined && { value: normalizedValue }),
+        ...(value !== undefined && { value }),
     };
 }
 
@@ -107,51 +100,47 @@ function normalizeCall(call: unknown, index: number): NormalizedCall {
  * apart from a rejected batch.
  */
 export function normalizeSendCallsParams(params: unknown): NormalizedSendCallsParams {
-    if (!Array.isArray(params) || params.length === 0 || !isRecord(params[0])) {
-        throw standardErrors.rpc.invalidParams('wallet_sendCalls: expected a single object parameter');
-    }
-
-    const envelope = params[0];
+    const envelope = requireParamsObject(params, METHOD);
 
     // An absent version means a pre-2.0.0 dapp: EIP-5792 v1.0 shipped before
     // the field was mandatory, so default rather than reject.
     const version = envelope.version ?? '1.0';
     if (!SUPPORTED_SEND_CALLS_VERSIONS.includes(version as SendCallsVersion)) {
         throw standardErrors.rpc.invalidParams(
-            `wallet_sendCalls: unsupported version ${JSON.stringify(version)}. Supported versions: ${SUPPORTED_SEND_CALLS_VERSIONS.join(', ')}`
+            `${METHOD}: unsupported version ${JSON.stringify(version)}. Supported versions: ${SUPPORTED_SEND_CALLS_VERSIONS.join(', ')}`
         );
     }
 
     const { calls } = envelope;
     if (!Array.isArray(calls) || calls.length === 0) {
-        throw standardErrors.rpc.invalidParams('wallet_sendCalls: calls must be a non-empty array');
+        throw standardErrors.rpc.invalidParams(`${METHOD}: calls must be a non-empty array`);
     }
 
-    const from = envelope.from;
-    if (from !== undefined && !isHexString(from)) {
-        throw standardErrors.rpc.invalidParams('wallet_sendCalls: from must be a hex address');
-    }
+    const from = optionalHexAddress(envelope.from, METHOD, 'from');
 
     const atomicRequired = envelope.atomicRequired;
     if (atomicRequired !== undefined && typeof atomicRequired !== 'boolean') {
-        throw standardErrors.rpc.invalidParams('wallet_sendCalls: atomicRequired must be a boolean');
+        throw standardErrors.rpc.invalidParams(`${METHOD}: atomicRequired must be a boolean`);
     }
 
     const capabilities = envelope.capabilities;
     if (capabilities !== undefined && capabilities !== null && !isRecord(capabilities)) {
-        throw standardErrors.rpc.invalidParams('wallet_sendCalls: capabilities must be an object');
+        throw standardErrors.rpc.invalidParams(`${METHOD}: capabilities must be an object`);
+    }
+    if (isRecord(capabilities)) {
+        assertCapabilitiesSupported(capabilities);
     }
 
     const id = envelope.id;
     if (id !== undefined && typeof id !== 'string') {
-        throw standardErrors.rpc.invalidParams('wallet_sendCalls: id must be a string');
+        throw standardErrors.rpc.invalidParams(`${METHOD}: id must be a string`);
     }
 
-    const chainId = normalizeChainId(envelope.chainId);
+    const chainId = optionalChainId(envelope.chainId, METHOD);
 
     return {
         version: version as SendCallsVersion,
-        ...(from !== undefined && { from: from as Address }),
+        ...(from !== undefined && { from }),
         ...(chainId !== undefined && { chainId }),
         calls: calls.map(normalizeCall),
         // ERC-4337 executes a batch in a single UserOperation, so atomicity is

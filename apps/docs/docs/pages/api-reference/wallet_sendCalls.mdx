@@ -103,11 +103,17 @@ Returns a batch call identifier.
 
 ## Errors
 
-| Code   | Description                      |
-| ------ | -------------------------------- |
-| 4001   | User rejected the request        |
-| 4100   | Unauthorized (not authenticated) |
-| -32602 | Invalid params                   |
+| Code   | Description                                                                 |
+| ------ | --------------------------------------------------------------------------- |
+| 4001   | User rejected the request                                                   |
+| 4100   | Unauthorized (not authenticated)                                            |
+| 5700   | A requested capability isn't implemented and wasn't marked `optional`       |
+| 5710   | The chain isn't configured (testnets need `preference.showTestnets`)        |
+| -32602 | Invalid params — unsupported `version`, empty `calls`, or a malformed field |
+
+Validation happens in the SDK before any wallet UI opens, so these errors reach
+the dapp immediately rather than after a dialog. viem maps 5700/5710 to typed
+errors (`UnsupportedNonOptionalCapabilityError`, `UnsupportedChainIdError`).
 
 ## Example
 

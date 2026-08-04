@@ -25,6 +25,8 @@ export {
     type NormalizedSendCallsParams,
 } from './sendCallsParams.js';
 
+export { normalizeSendTransactionParams, type NormalizedSendTransactionParams } from './sendTransactionParams.js';
+
 export {
     handleGetCallsHistoryRequest,
     type WalletGetCallsHistoryParams,

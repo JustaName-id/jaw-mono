@@ -67,6 +67,25 @@ export const standardErrors = {
             return getEthProviderError(standardErrorCodes.provider.unsupportedChain, arg);
         },
 
+        /**
+         * EIP-5792 5710. Preferred over 4200 for an unknown chain: 4200 renders
+         * in viem as "the provider does not support the requested method",
+         * which reads as a missing method rather than a missing chain.
+         */
+        unsupportedChainId: <T>(arg?: EthErrorsArg<T>) => {
+            return getEthProviderError(standardErrorCodes.eip5792.unsupportedChainId, arg);
+        },
+
+        /** EIP-5792 5700: a requested capability we don't implement wasn't marked optional. */
+        unsupportedNonOptionalCapability: <T>(arg?: EthErrorsArg<T>) => {
+            return getEthProviderError(standardErrorCodes.eip5792.unsupportedNonOptionalCapability, arg);
+        },
+
+        /** EIP-5792 5730: the wallet doesn't recognize the requested bundle id. */
+        unknownBundleId: <T>(arg?: EthErrorsArg<T>) => {
+            return getEthProviderError(standardErrorCodes.eip5792.unknownBundleId, arg);
+        },
+
         custom: <T>(opts: CustomErrorArg<T>) => {
             if (!opts || typeof opts !== 'object' || Array.isArray(opts)) {
                 throw new Error('Ethereum Provider custom errors must provide single object argument.');
@@ -148,11 +167,12 @@ class EthereumRpcError<T> extends Error {
 class EthereumProviderError<T> extends EthereumRpcError<T> {
     /**
      * Create an Ethereum Provider JSON-RPC error.
-     * `code` must be an integer in the 1000 <= 4999 range.
+     * `code` must be an integer in the 1000 <= 5999 range (EIP-1193 plus the
+     * EIP-5792 provider errors).
      */
     constructor(code: number, message: string, data?: T) {
         if (!isValidEthProviderCode(code)) {
-            throw new Error('"code" must be an integer such that: 1000 <= code <= 4999');
+            throw new Error('"code" must be an integer such that: 1000 <= code <= 5999');
         }
 
         super(code, message, data);
@@ -183,7 +203,10 @@ export type InsufficientBalanceErrorData = {
 class ActionableInsufficientBalanceError extends EthereumRpcError<InsufficientBalanceErrorData> {}
 
 function isValidEthProviderCode(code: number): boolean {
-    return Number.isInteger(code) && code >= 1000 && code <= 4999;
+    // 1000-4999 is EIP-1193's range; 5000-5999 covers EIP-5792's provider
+    // errors (5700 unsupported non-optional capability, 5710 unsupported chain
+    // id, 5720 duplicate id, 5730 unknown bundle id, 5740 bundle too large).
+    return Number.isInteger(code) && code >= 1000 && code <= 5999;
 }
 
 export function isActionableHttpRequestError(errorObject: unknown): errorObject is ActionableInsufficientBalanceError {

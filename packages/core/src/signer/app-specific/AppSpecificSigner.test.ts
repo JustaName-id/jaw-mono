@@ -410,6 +410,21 @@ describe('AppSpecificSigner', () => {
             );
         });
 
+        it('should reject an eth_sendTransaction without `to` with -32602 and no dialog', async () => {
+            // Arrange
+            const request: RequestArguments = {
+                method: 'eth_sendTransaction',
+                params: [{ from: '0x1234567890123456789012345678901234567890', data: '0xdeadbeef' }],
+            };
+
+            // Act & Assert
+            await expect(signer.request(request)).rejects.toMatchObject({
+                code: -32602,
+                message: expect.stringContaining('to'),
+            });
+            expect(mockUIHandler.request).not.toHaveBeenCalled();
+        });
+
         it('should reject an unsupported wallet_sendCalls version with -32602 and no dialog', async () => {
             // Arrange
             const request: RequestArguments = {
