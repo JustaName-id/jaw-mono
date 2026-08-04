@@ -28,6 +28,12 @@ export {
 export { normalizeSendTransactionParams, type NormalizedSendTransactionParams } from './sendTransactionParams.js';
 
 export {
+    normalizeSignTypedDataParams,
+    normalizeSignTypedDataRequest,
+    type NormalizedSignTypedDataParams,
+} from './signTypedDataParams.js';
+
+export {
     handleGetCallsHistoryRequest,
     type WalletGetCallsHistoryParams,
     type WalletGetCallsHistoryResponse,

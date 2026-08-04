@@ -208,8 +208,8 @@ export abstract class JAWSigner implements Signer {
                 const chains = store.getState().chains ?? [];
                 const chain = chains.find((c) => c.id === chainId);
                 if (!chain) {
-                    throw standardErrors.provider.unsupportedMethod(
-                        `wallet_switchEthereumChain is not supported for chainID ${chainId}`
+                    throw standardErrors.provider.unsupportedChain(
+                        `Chain ${chainId} is not configured. If this is a testnet, set preference.showTestnets to true.`
                     );
                 }
 
@@ -468,9 +468,12 @@ export abstract class JAWSigner implements Signer {
         const localResult = this.updateChain(chainId);
         if (localResult) return null;
 
-        // Chain not found in store - it's not supported
-        throw standardErrors.provider.unsupportedMethod(
-            `wallet_switchEthereumChain is not supported for target chainID ${chainId}`
+        // Chain not found in store - it's not one we're configured for. 4902
+        // (EIP-3326 "unrecognized chain ID") is what wallet libraries look for
+        // to decide whether to offer wallet_addEthereumChain; 4200 told them
+        // the method itself was missing.
+        throw standardErrors.provider.unsupportedChain(
+            `Chain ${chainId} is not configured. If this is a testnet, set preference.showTestnets to true.`
         );
     }
 

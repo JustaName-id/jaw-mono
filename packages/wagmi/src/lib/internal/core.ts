@@ -83,7 +83,15 @@ export async function connect<config extends Config>(
     config.setState((x) => ({ ...x, status: 'connecting' }));
     connector.emitter.emit('message', { type: 'connecting' });
 
-    const result = await connector.connect({ chainId, capabilities } as never);
+    // `withCapabilities` is wagmi's flag for the result shape; ask for the
+    // richer one whenever we requested wallet capabilities, so the caller still
+    // gets each account's capabilities (a SIWE signature, for instance) back.
+    const wantsCapabilities = Boolean(capabilities && Object.keys(capabilities).length > 0);
+    const result = await connector.connect({
+      chainId,
+      capabilities,
+      withCapabilities: wantsCapabilities,
+    } as never);
 
     connector.emitter.off('connect', config._internal.events.connect);
     connector.emitter.on('change', config._internal.events.change);

@@ -1715,9 +1715,12 @@ describe('CrossPlatformSigner', () => {
                 await signer.request(switchRequest);
                 expect.fail('Should have thrown an error');
             } catch (error: any) {
-                expect(error.code).toBe(4200);
-                expect(error.message).toContain('wallet_switchEthereumChain');
+                // 4902 (EIP-3326 unrecognized chain ID), not 4200 — wallet
+                // libraries read 4902 to decide whether to offer
+                // wallet_addEthereumChain.
+                expect(error.code).toBe(4902);
                 expect(error.message).toContain('42');
+                expect(error.message).toContain('not configured');
             }
             expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
         });
@@ -1860,7 +1863,15 @@ describe('CrossPlatformSigner', () => {
             // Arrange
             const request: RequestArguments = {
                 method: 'eth_signTypedData_v4',
-                params: ['0x1234567890123456789012345678901234567890', '{"types":{}}'],
+                params: [
+                    '0x1234567890123456789012345678901234567890',
+                    JSON.stringify({
+                        domain: { name: 'Test', version: '1' },
+                        types: { Msg: [{ name: 'contents', type: 'string' }] },
+                        primaryType: 'Msg',
+                        message: { contents: 'hello' },
+                    }),
+                ],
             };
 
             const mockResponse: RPCResponseMessage = {

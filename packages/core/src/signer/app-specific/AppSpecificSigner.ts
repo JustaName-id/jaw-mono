@@ -25,6 +25,7 @@ import {
     getPermissionFromRelay,
     normalizeSendCallsParams,
     normalizeSendTransactionParams,
+    normalizeSignTypedDataParams,
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
 import { standardErrors } from '../../errors/index.js';
@@ -198,8 +199,8 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'eth_signTypedData_v4': {
-                const params = request.params as [Address, string];
-                const [address, typedData] = params;
+                // Accepts the payload as an EIP-712 object or its JSON string.
+                const { address, typedData } = normalizeSignTypedDataParams(request.params);
 
                 const uiRequest: TypedDataUIRequest = {
                     id: crypto.randomUUID(),
