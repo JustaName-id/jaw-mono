@@ -4,7 +4,7 @@ import { JAWSigner } from '../JAWSigner.js';
 import { decodePersonalSignRequest } from '../SignerUtils.js';
 
 import { Communicator } from '../../communicator/index.js';
-import { getPermissionFromRelay, normalizeSignTypedDataRequest } from '../../rpc/index.js';
+import { getPermissionFromRelay } from '../../rpc/index.js';
 import { standardErrors } from '../../errors/index.js';
 import {
     RPCRequestMessage,
@@ -113,14 +113,13 @@ export class CrossPlatformSigner extends JAWSigner {
     protected override async handleSigningRequest(request: RequestArguments): Promise<unknown> {
         let resolvedChain: SDKChain | undefined;
 
-        // The transforms below return a new request object, so read the
+        // The transform below returns a new request object, so read the
         // correlation id (keyed on object identity) from the original.
         const correlationId = this.getCorrelationId(request);
 
         // Decode hex-encoded messages for personal_sign before sending to popup
-        // (wagmi and other libraries hex-encode messages before sending), and
-        // serialize typed data so the popup sees one shape.
-        const processedRequest = normalizeSignTypedDataRequest(decodePersonalSignRequest(request));
+        // (wagmi and other libraries hex-encode messages before sending)
+        const processedRequest = decodePersonalSignRequest(request);
 
         // wallet_revokePermissions needs chainId from relay (not in request params)
         // because the permission may have been granted on a different chain

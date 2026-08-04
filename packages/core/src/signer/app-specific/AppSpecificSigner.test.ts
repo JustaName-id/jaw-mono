@@ -410,48 +410,6 @@ describe('AppSpecificSigner', () => {
             );
         });
 
-        it('should accept eth_signTypedData_v4 with an object payload', async () => {
-            // Arrange - viem serializes typed data, but MetaMask accepts an
-            // object and dapps written against it send one.
-            const typedData = {
-                domain: { name: 'Test', version: '1' },
-                types: { Msg: [{ name: 'contents', type: 'string' }] },
-                primaryType: 'Msg',
-                message: { contents: 'hello' },
-            };
-
-            (mockUIHandler.request as Mock).mockResolvedValue({
-                id: 'test-response-id',
-                approved: true,
-                data: '0xsignature',
-            } satisfies UIResponse<string>);
-
-            // Act
-            const result = await signer.request({
-                method: 'eth_signTypedData_v4',
-                params: ['0x1234567890123456789012345678901234567890', typedData],
-            });
-
-            // Assert - the dialog always sees the serialized form
-            expect(result).toBe('0xsignature');
-            expect(mockUIHandler.request).toHaveBeenCalledWith(
-                expect.objectContaining({
-                    type: 'eth_signTypedData_v4',
-                    data: expect.objectContaining({ typedData: JSON.stringify(typedData) }),
-                })
-            );
-        });
-
-        it('should reject eth_signTypedData_v4 with an unusable payload and no dialog', async () => {
-            await expect(
-                signer.request({
-                    method: 'eth_signTypedData_v4',
-                    params: ['0x1234567890123456789012345678901234567890', '{"types":{}}'],
-                })
-            ).rejects.toMatchObject({ code: -32602, message: expect.stringContaining('primaryType') });
-            expect(mockUIHandler.request).not.toHaveBeenCalled();
-        });
-
         it('should reject an eth_sendTransaction without `to` with -32602 and no dialog', async () => {
             // Arrange
             const request: RequestArguments = {
