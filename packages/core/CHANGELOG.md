@@ -1,3 +1,13 @@
+## 1.1.3 (2026-08-04)
+
+### 🩹 Fixes
+
+- **core:** pass proper chain block time to client config ([#257](https://github.com/JustaName-id/jaw-mono/pull/257))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.1.2 (2026-07-30)
 
 ### 🩹 Fixes
