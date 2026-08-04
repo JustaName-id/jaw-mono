@@ -14,11 +14,17 @@ export interface DialogAppHeaderProps {
   chainIcon?: JSX.Element;
 }
 
-/** dApp origin → bare hostname for display. */
+/**
+ * dApp origin → bare hostname for display.
+ *
+ * The `www.` strip is anchored: unanchored, it rewrites the first match anywhere in
+ * the host, so `bawww.nk.com` would render as `bank.com` on the one line the user
+ * relies on to identify who is asking them to sign.
+ */
 export function formatOrigin(origin: string): string {
   try {
     const url = new URL(origin.startsWith('http') ? origin : `https://${origin}`);
-    return url.hostname.replace('www.', '');
+    return url.hostname.replace(/^www\./, '');
   } catch {
     return origin;
   }

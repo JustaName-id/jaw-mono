@@ -199,6 +199,8 @@ export interface ReactUIHandlerOptions {
 export class ReactUIHandler implements UIHandler {
   private config: UIHandlerConfig = {} as UIHandlerConfig;
   private localTheme?: JawTheme;
+  /** Teardown of the request that resolved but is still holding its success tick. */
+  private pendingTeardown: (() => void) | null = null;
 
   constructor(options?: ReactUIHandlerOptions) {
     this.localTheme = options?.theme;
@@ -228,6 +230,12 @@ export class ReactUIHandler implements UIHandler {
   }
 
   async request<T = unknown>(request: UIRequest): Promise<UIResponse<T>> {
+    // The previous request may have resolved and left its teardown on a timer so its
+    // success tick could finish showing. Flush it now: left to fire on its own it
+    // would land mid-flow and strip the body pointer-events lock and focus scope that
+    // Radix sets up for THIS dialog, and briefly stack two modals in the top layer.
+    this.pendingTeardown?.();
+
     return new Promise((resolve, reject) => {
       try {
         const container = document.createElement('dialog');
@@ -292,7 +300,20 @@ export class ReactUIHandler implements UIHandler {
 
         const root = createRoot(container);
 
+        let torndown = false;
+        let holdTimer: ReturnType<typeof setTimeout> | null = null;
+
         const cleanup = () => {
+          // Idempotent: a held teardown can be raced by ESC/outside-click during the
+          // tick, by the next request flushing it, and by its own timer.
+          if (torndown) return;
+          torndown = true;
+          if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+          if (this.pendingTeardown === cleanup) this.pendingTeardown = null;
+
           try {
             document.body.style.removeProperty('pointer-events');
 
@@ -311,9 +332,12 @@ export class ReactUIHandler implements UIHandler {
 
         const handleApprove = (data: T, holdMs = 0) => {
           if (holdMs > 0) {
-            // Signing dialogs: resolve the dApp first, then defer teardown so the tick shows.
+            // Signing dialogs: resolve the dApp first, then defer teardown so the tick
+            // shows. Registered on the handler so the next request can flush it instead
+            // of letting it fire underneath a newer dialog.
             resolve({ id: request.id, approved: true, data });
-            setTimeout(cleanup, holdMs);
+            this.pendingTeardown = cleanup;
+            holdTimer = setTimeout(cleanup, holdMs);
           } else {
             cleanup();
             resolve({ id: request.id, approved: true, data });

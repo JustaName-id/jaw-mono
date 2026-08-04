@@ -57,10 +57,11 @@ type PopupState =
 const CLOSE_DELAY_MS = 300;
 
 // After a signature is delivered, hold the "Signed ✓" confirmation on screen this
-// long before flipping to the terminal 'success' state (which hides the modal) and
-// closing. This delays ONLY the window close — the signature is already posted to
-// the dApp via `await onApprove(...)` before the hold — so the dApp never waits on
-// the animation.
+// long before the dialog closes. This delays ONLY the close — the signature is
+// already posted to the dApp via `await onApprove(...)` before the hold — so the
+// dApp never waits on the animation. The hold rides on the cancelable close timer
+// rather than an awaited sleep, so a new request arriving mid-tick simply cancels
+// it (see finishDeliveredFlow).
 const SIGNED_TICK_MS = 850;
 
 export default function KeysJawIdApp() {
@@ -133,6 +134,11 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
   // Holds the pending success→close timer so a new flow can cancel a previous
   // flow's auto-close (the embedded iframe stays mounted across flows).
   const closeTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // True once this flow's response has been delivered — the flow is finished even
+  // though its modal lingers to show the delivered tick. `state` cannot express
+  // this: 'success' is the terminal marker AND what unmounts the modal, so setting
+  // it would cut the tick short. Cleared when the next request takes over.
+  const flowDoneRef = useRef(false);
 
   /**
    * Schedule the dialog close after a flow completes. Cancelable: starting a new
@@ -149,6 +155,21 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     },
     [communicator]
   );
+
+  /**
+   * Close out a flow whose response has already been delivered, holding the tick on
+   * screen first.
+   *
+   * Marks the flow done SYNCHRONOUSLY and lets the (cancelable) close timer carry the
+   * delay. Nothing is awaited, so there is no continuation that could outlive the flow
+   * and write over a newer request's screen — and if a new request does arrive during
+   * the hold, the listener cancels this timer and resets, which is exactly right.
+   */
+  const finishDeliveredFlow = useCallback(() => {
+    setSignDelivered(true);
+    flowDoneRef.current = true;
+    scheduleClose(SIGNED_TICK_MS + CLOSE_DELAY_MS);
+  }, [scheduleClose]);
 
   // Latest auth refetch for the (once-registered) handoff listener below —
   // same stale-closure guard as stateRef.
@@ -328,13 +349,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           clearTimeout(closeTimerRef.current);
           closeTimerRef.current = null;
         }
-        // Terminal-only reset is sufficient: the SDK serializes requests (it
-        // awaits each response), and keys sets the terminal state synchronously
-        // right after sending the response — before the SDK can round-trip and
-        // dispatch the next request. So by the time a new request arrives, the
-        // prior flow is always already terminal. (A non-terminal in-progress
-        // flow, e.g. a cold connect's passkey screen, must NOT be reset.)
-        if (stateRef.current === 'success' || stateRef.current === 'error') {
+        // Reset only a FINISHED flow — an in-progress one (e.g. a cold connect's
+        // passkey screen) must survive. Finished means either a terminal `state`, or
+        // `flowDoneRef` for a flow that delivered its response and is only still on
+        // screen to show the tick. The SDK does not serialize requests, so a new one
+        // can genuinely arrive mid-tick; that is the case flowDoneRef covers.
+        if (stateRef.current === 'success' || stateRef.current === 'error' || flowDoneRef.current) {
+          flowDoneRef.current = false;
           setError(null);
           setPendingRequest(null);
           setState('processing');
@@ -825,11 +846,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               try {
                 await pendingRequest.onApprove(signature);
                 debugLog('✅ SIWE signature sent successfully');
-                // Delivery confirmed — show the tick, hold, then close.
-                setSignDelivered(true);
-                await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
-                setState('success');
-                scheduleClose(CLOSE_DELAY_MS);
+                // Delivery confirmed — show the tick, then close.
+                finishDeliveredFlow();
               } catch (err) {
                 console.error('❌ Failed to send SIWE signature:', err);
                 setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -870,11 +888,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             try {
               await pendingRequest.onApprove(signature);
               debugLog('✅ Signature sent successfully');
-              // Delivery confirmed — show the tick, hold, then close.
-              setSignDelivered(true);
-              await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
-              setState('success');
-              scheduleClose(CLOSE_DELAY_MS);
+              // Delivery confirmed — show the tick, then close.
+              finishDeliveredFlow();
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -947,11 +962,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
             try {
               await pendingRequest.onApprove(signature);
               debugLog('✅ Typed data signature sent successfully');
-              // Delivery confirmed — show the tick, hold, then close.
-              setSignDelivered(true);
-              await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
-              setState('success');
-              scheduleClose(CLOSE_DELAY_MS);
+              // Delivery confirmed — show the tick, then close.
+              finishDeliveredFlow();
             } catch (err) {
               console.error('❌ Failed to send signature:', err);
               setError(err instanceof Error ? err.message : 'Failed to send signature');
@@ -1447,9 +1459,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 // next embedded action skips the second passkey ceremony.
                 await handOffSessionToEmbedded(pendingRequest.origin);
                 // Response already delivered — hold the "Signed in" tick, then close.
-                await new Promise((resolve) => setTimeout(resolve, SIGNED_TICK_MS));
-                setState('success');
-                scheduleClose(CLOSE_DELAY_MS);
+                finishDeliveredFlow();
               } catch (err) {
                 console.error('❌ Failed to approve connection with SIWE:', err);
                 setError(err instanceof Error ? err.message : 'Failed to approve connection');
