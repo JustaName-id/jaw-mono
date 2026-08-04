@@ -71,14 +71,29 @@ const toIsoString = (d: Date | undefined): string | undefined =>
   d instanceof Date && !Number.isNaN(d.getTime()) ? d.toISOString() : undefined;
 
 /**
- * Parses a SIWE message into its fields, or null if it isn't a valid SIWE message.
+ * The five required EIP-4361 fields, anchored per line. Fresh per call — a `/g` regex
+ * carries `lastIndex`. Counted rather than first-matched: viem's own suffix match is
+ * unanchored, so a block embedded in the statement would shadow the real one.
+ */
+const requiredFieldBlock = () => /^URI: .+\nVersion: .+\nChain ID: .+\nNonce: .+\nIssued At: .+$/gm;
+
+/**
+ * Statement region — between the address line and the field block. viem captures a
+ * single line only, but multi-line statements are common and this is the text the user
+ * is agreeing to.
+ */
+function statementBefore(decoded: string, fieldBlockIndex: number): string {
+  // Line 0 is the "<domain> wants you to sign in..." header, line 1 the address.
+  return decoded.slice(0, fieldBlockIndex).split('\n').slice(2).join('\n').trim();
+}
+
+/**
+ * Parses a SIWE message, or null when it can't be read unambiguously.
  *
- * Delegates the field extraction to viem's `parseSiweMessage`, whose grammar is
- * strictly anchored to the EIP-4361 structure: the free-text `statement` is a
- * SINGLE line (`.*`) captured between the address and the field block, and the
- * fields are matched as one ordered, contiguous run. That makes it impossible for
- * a dApp to spoof what the user sees by embedding `URI:` / `Chain ID:` lines in
- * the statement — a mistake a whole-message "first match wins" regex is prone to.
+ * Fails closed: every required field must come from the message (a defaulted `chainId`
+ * rendered Base sign-ins as "Chain ID: 1 · Ethereum"), and two field blocks are refused
+ * rather than resolved in the dApp's favour. Callers show the raw message and assert
+ * nothing about it, including skipping the cross-domain check.
  */
 export function parseSiweMessage(message: string): SiweMessageFields | null {
   if (!isSiweMessage(message)) {
@@ -87,19 +102,30 @@ export function parseSiweMessage(message: string): SiweMessageFields | null {
 
   try {
     const decoded = message.startsWith('0x') ? hexToUtf8(message) : message;
+
+    // Zero blocks is malformed; two means one hides in the statement and nothing says
+    // which is authoritative.
+    const blocks = [...decoded.matchAll(requiredFieldBlock())];
+    if (blocks.length !== 1) return null;
+
     const parsed = viemParseSiweMessage(decoded);
-    // Domain + address anchor the message head; without them it isn't a usable SIWE.
-    if (!parsed.domain || !parsed.address) return null;
+    if (!parsed.domain || !parsed.address || !parsed.uri || !parsed.version || !parsed.nonce) return null;
+
+    const { chainId } = parsed;
+    if (typeof chainId !== 'number' || !Number.isFinite(chainId) || chainId <= 0) return null;
+
+    const issuedAt = toIsoString(parsed.issuedAt);
+    if (!issuedAt) return null;
 
     return {
       domain: parsed.domain,
       address: parsed.address,
-      statement: parsed.statement || undefined,
-      uri: parsed.uri ?? '',
-      version: parsed.version ?? '',
-      chainId: parsed.chainId ?? 1,
-      nonce: parsed.nonce ?? '',
-      issuedAt: toIsoString(parsed.issuedAt) ?? '',
+      statement: parsed.statement || statementBefore(decoded, blocks[0].index ?? 0) || undefined,
+      uri: parsed.uri,
+      version: parsed.version,
+      chainId,
+      nonce: parsed.nonce,
+      issuedAt,
       expirationTime: toIsoString(parsed.expirationTime),
       notBefore: toIsoString(parsed.notBefore),
       requestId: parsed.requestId,

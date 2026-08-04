@@ -804,7 +804,7 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
       // Render SiweModal for SIWE messages, SignatureModal for regular messages
       if (isSiwe) {
-        // Origin/phishing check only when the message parses (unparseable runs no checks).
+        // Parse-gated by design; see parseSiweMessage for the tradeoff.
         const parsedSiwe = parseSiweMessage(messageToSign);
         const siweWarning = parsedSiwe
           ? getSiweOriginWarning(pendingRequest.origin, { domain: parsedSiwe.domain, uri: parsedSiwe.uri })

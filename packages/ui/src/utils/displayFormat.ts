@@ -46,19 +46,10 @@ export function subscriptDecimal(value: number, sig = 4): string {
 }
 
 /**
- * Format a transaction's `value` field as a decimal native-currency amount.
- *
- * `value` is always a wei quantity (EIP-1474 / EIP-5792) — hex from spec-abiding
- * callers, sometimes a plain decimal integer. `BigInt` parses both, so the unit is
- * never in question and must never be inferred: guessing it from the string's length
- * is what once rendered a 1-gwei transfer as "1000000000 ETH". The identical string
- * is passed to `BigInt` when the call is built, so display and signed intent now
- * derive the amount the same way.
- *
- * Returns null for anything there is no honest amount to show: absent, zero, and
- * negative values (a negative `value` is not a valid quantity, and rendering
- * "-0.000000000000000001 ETH" would be noise), as well as unparseable input — which
- * cannot execute either, since building the call throws on the same string.
+ * Format a transaction `value` — always wei, hex or decimal per EIP-1474/5792 — as a
+ * decimal native amount. Never infer the unit: the same string is passed to `BigInt`
+ * when the call is built, so display and signed intent must parse it identically.
+ * Null when there's nothing honest to show (absent, zero, negative, unparseable).
  */
 export function formatNativeValue(value?: string): string | null {
   if (!value) return null;

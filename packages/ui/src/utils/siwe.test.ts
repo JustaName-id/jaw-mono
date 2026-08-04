@@ -94,6 +94,85 @@ describe('parseSiweMessage', () => {
   });
 });
 
+describe('parseSiweMessage — fails closed instead of inventing fields', () => {
+  // Detection is lax where viem's grammar is strict, so passing the former while
+  // failing the latter used to yield defaults: a Base sign-in read "Chain ID: 1".
+  const noSpaceAfterColon = siwe({ chainId: '8453' }).replace('URI: ', 'URI:');
+
+  it('refuses a malformed field block rather than defaulting chainId to 1', () => {
+    expect(isSiweMessage(noSpaceAfterColon)).toBe(true); // still detected as SIWE
+    expect(parseSiweMessage(noSpaceAfterColon)).toBeNull();
+  });
+
+  it.each([
+    ['URI', 'URI: https://app.example\n'],
+    ['Version', 'Version: 1\n'],
+    ['Chain ID', 'Chain ID: 1\n'],
+    ['Nonce', 'Nonce: abc12345\n'],
+  ])('refuses when the required %s line is absent', (_label, line) => {
+    expect(parseSiweMessage(siwe({}).replace(line, ''))).toBeNull();
+  });
+
+  it('refuses a non-positive chain id', () => {
+    expect(parseSiweMessage(siwe({ chainId: '0' }))).toBeNull();
+  });
+
+  // viem's unanchored suffix match took the FIRST hit, so an embedded block shadowed
+  // the real one — displaying evil.example / 999 for a message signing 8453.
+  it('refuses a message carrying two field blocks rather than picking one', () => {
+    const spoofed = siwe({
+      statement:
+        'Please sign in.\nURI: https://evil.example\nVersion: 1\nChain ID: 999\nNonce: aaaaaaaa\nIssued At: 2020-01-01T00:00:00.000Z',
+      uri: 'https://app.example',
+      chainId: '8453',
+    });
+    expect(isSiweMessage(spoofed)).toBe(true);
+    expect(parseSiweMessage(spoofed)).toBeNull();
+  });
+});
+
+describe('parseSiweMessage — multi-line statement', () => {
+  // viem captures a single line, so a two-line statement was dropped entirely and the
+  // dialog rendered no box — the text being agreed to vanished with no warning.
+  it('recovers a multi-line statement in full', () => {
+    const p = parseSiweMessage(siwe({ statement: 'Line one of the terms.\nLine two of the terms.' }))!;
+    expect(p).not.toBeNull();
+    expect(p.statement).toBe('Line one of the terms.\nLine two of the terms.');
+  });
+
+  it('keeps the real fields alongside a recovered statement', () => {
+    const p = parseSiweMessage(siwe({ statement: 'First line.\nSecond line.', chainId: '8453' }))!;
+    expect(p.chainId).toBe(8453);
+    expect(p.uri).toBe('https://app.example');
+    expect(p.nonce).toBe('abc12345');
+  });
+
+  it('leaves statement undefined when there is none', () => {
+    expect(parseSiweMessage(siwe({}))!.statement).toBeUndefined();
+  });
+});
+
+describe('a refused message asserts nothing — including its domain', () => {
+  // Deliberate, and pinned so changing it is a conscious act: no domain means callers
+  // run no cross-domain check, so malforming the block suppresses the phishing warning.
+  const broken = siwe({ domain: 'evil.example' }).replace('URI: ', 'URI:');
+
+  it('is refused despite a readable head', () => {
+    expect(isSiweMessage(broken)).toBe(true);
+    expect(parseSiweMessage(broken)).toBeNull();
+  });
+
+  it('yields no domain for the caller to run an origin check against', () => {
+    expect(parseSiweMessage(broken)?.domain).toBeUndefined();
+  });
+
+  it('still warns on a well-formed message from a foreign domain', () => {
+    const p = parseSiweMessage(siwe({ domain: 'evil.example' }))!;
+    expect(p.domain).toBe('evil.example');
+    expect(getSiweOriginWarning('https://app.example', { domain: p.domain, uri: p.uri })).toContain('evil.example');
+  });
+});
+
 describe('getSiweOriginWarning', () => {
   it('warns when the SIWE domain differs from the request origin', () => {
     const warning = getSiweOriginWarning('https://app.example', { domain: 'bank.com', uri: 'https://bank.com' });

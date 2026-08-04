@@ -2574,7 +2574,8 @@ function SiweDialogWrapper({
     return match ? match[1] : 'dApp';
   }, [decodedMessage]);
 
-  // Origin/phishing check — only when the message parses (unparseable runs no checks).
+  // Gated on a successful parse by design — an unreadable message gets the raw text and
+  // no claims. Tradeoff: malforming the field block suppresses this warning.
   const warningMessage = useMemo(() => {
     const parsed = parseSiweMessage(decodedMessage);
     return parsed ? getSiweOriginWarning(origin, { domain: parsed.domain, uri: parsed.uri }) : undefined;

@@ -265,7 +265,9 @@ export const SiweDialog = ({
                 attacker-supplied text is unmistakably content, never chrome. */}
             {parsed?.statement && (
               <div className="border-border bg-foreground/[0.03] rounded-[10.5px] border p-3">
-                <p className="text-foreground break-words text-[11px] leading-[1.5]">{parsed.statement}</p>
+                <p className="text-foreground whitespace-pre-wrap break-words text-[11px] leading-[1.5]">
+                  {parsed.statement}
+                </p>
               </div>
             )}
 
