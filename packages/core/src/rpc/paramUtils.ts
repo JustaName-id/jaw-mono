@@ -37,18 +37,28 @@ export function optionalHexAddress(value: unknown, method: string, field: string
 }
 
 /**
- * Normalizes a hex quantity. viem sends these as hex; a number/bigint from a
- * hand-rolled caller is hex-encoded so downstream sees one shape.
+ * Normalizes a quantity to hex. viem sends hex, but the signing UIs have always
+ * fed these through `BigInt(value)`, which also accepts a decimal string or a
+ * number — so keep accepting everything that used to reach a wallet, and
+ * hex-encode it here instead of leaving the conversion downstream.
  */
 export function optionalHexQuantity(value: unknown, method: string, field: string): `0x${string}` | undefined {
     if (value === undefined || value === null) return undefined;
     if (isHexString(value)) return value;
+
+    // Decimal wei string, e.g. '1000000000000000' — `BigInt` reads it as
+    // decimal, so preserve that reading rather than guessing hex.
+    if (typeof value === 'string' && /^\d+$/.test(value)) {
+        return numberToHex(BigInt(value));
+    }
+
     if (typeof value === 'number' || typeof value === 'bigint') {
         if (typeof value === 'number' && (!Number.isSafeInteger(value) || value < 0)) {
             throw standardErrors.rpc.invalidParams(`${method}: ${field} must be a non-negative integer`);
         }
         return numberToHex(value);
     }
+
     throw standardErrors.rpc.invalidParams(`${method}: ${field} must be a hex quantity, got ${JSON.stringify(value)}`);
 }
 

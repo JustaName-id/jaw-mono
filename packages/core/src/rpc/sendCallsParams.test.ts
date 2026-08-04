@@ -119,6 +119,15 @@ describe('normalizeSendCallsParams', () => {
         expect(message).toContain('calls[0].to');
     });
 
+    it('keeps accepting decimal wei values, which the signing UIs always BigInt()-ed', () => {
+        const result = normalizeSendCallsParams([
+            { ...v1Params, calls: [{ to: '0x0987654321098765432109876543210987654321', value: '1000000000000000' }] },
+        ]);
+
+        expect(result.calls[0].value).toBe('0x38d7ea4c68000');
+        expect(BigInt(result.calls[0].value!)).toBe(1000000000000000n);
+    });
+
     it('rejects a non-hex chainId with -32602', () => {
         expectInvalidParams(() => normalizeSendCallsParams([{ ...v1Params, chainId: 'arbitrum-sepolia' }]));
     });

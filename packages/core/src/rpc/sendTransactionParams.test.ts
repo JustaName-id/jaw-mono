@@ -70,6 +70,11 @@ describe('normalizeSendTransactionParams', () => {
         expectInvalidParams(() => normalizeSendTransactionParams(undefined));
     });
 
+    it('keeps accepting decimal wei values (previously converted downstream by BigInt())', () => {
+        const result = normalizeSendTransactionParams([{ to: tx.to, value: '1000000000000000' }]);
+        expect(result.value).toBe('0x38d7ea4c68000');
+    });
+
     it('rejects non-hex fields with -32602 naming the field', () => {
         expect(expectInvalidParams(() => normalizeSendTransactionParams([{ ...tx, data: 'not-hex' }]))).toContain(
             'data'
