@@ -7,14 +7,14 @@ import { ShellDialog } from '../ShellDialog';
 import { ProcessingScreen } from '../ProcessingScreen';
 import { FeeTokenSelector } from '../FeeTokenSelector';
 import { useState, useEffect, useRef } from 'react';
-import { formatEther, ethAddress } from 'viem';
+import { ethAddress } from 'viem';
 import { Info, ArrowDown } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
 import { caip10, getDefaultDescriptorSource } from '../../utils/clearSigning';
 import { reverseResolveWithAvatars, getDisplayAddress, getChainLabel } from '../../utils';
-import { subscriptDecimal } from '../../utils/displayFormat';
+import { formatNativeValue, subscriptDecimal } from '../../utils/displayFormat';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { AppAvatar } from '../AppAvatar';
 import { TokenIcon } from '../TokenIcon';
@@ -212,19 +212,6 @@ export const TransactionDialog = ({
   const displayWalletAddress = getDisplayAddress(resolvedAddresses[walletAddress], walletAddress);
   const displayToAddress = displayContractAddress(currentTransaction?.to);
 
-  const formatTransactionValue = (value?: string) => {
-    if (!value || value === '0' || value === '0x0') return null;
-    try {
-      if (value.startsWith('0x')) return formatEther(BigInt(value));
-      if (/^\d+$/.test(value) && value.length > 10) return formatEther(BigInt(value));
-      if (/^\d+\.?\d*$/.test(value) && value.length <= 20) return value;
-      return formatEther(BigInt(value));
-    } catch (error) {
-      console.warn('Failed to format transaction value:', value, error);
-      return null;
-    }
-  };
-
   const blockReason = resolveBlockReason({
     hasSelectablePaymentOption,
     gasEstimationError,
@@ -240,7 +227,7 @@ export const TransactionDialog = ({
   // Reverts, but gas estimated fine, so it stays submittable: warn rather than block.
   const softRevertWarning = !blockReason && !!assetPreviewWillRevert;
 
-  const singleValue = isSingleTransaction ? formatTransactionValue(currentTransaction?.value) : null;
+  const singleValue = isSingleTransaction ? formatNativeValue(currentTransaction?.value) : null;
   // A pure native transfer (value, no calldata) reads as a "Send"; everything else is a generic review.
   const isNativeSend =
     isSingleTransaction && !!singleValue && (!currentTransaction?.data || currentTransaction.data === '0x');
@@ -510,7 +497,6 @@ export const TransactionDialog = ({
                     index={index}
                     nativeSymbol={nativeSymbol}
                     nativeTokenPrice={nativeTokenPrice}
-                    formatValue={formatTransactionValue}
                     displayContractAddress={displayContractAddress}
                     apiKey={apiKey}
                     resolvedAddresses={resolvedAddresses}

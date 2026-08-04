@@ -5,6 +5,7 @@ import { AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordi
 import { CopyButton } from '../CopyButton';
 import { Eyebrow, PartyRow, Row, ValueAmount } from './primitives';
 import { useDecodedCalldata, type DecodeResult } from '../../hooks/useDecodedCalldata';
+import { formatNativeValue } from '../../utils/displayFormat';
 import { DecodedCalldataView, callLabel } from './DecodedCalldata';
 import type { TransactionData } from './types';
 
@@ -65,7 +66,6 @@ export function BatchStep({
   index,
   nativeSymbol,
   nativeTokenPrice,
-  formatValue,
   displayContractAddress,
   ...ctx
 }: Omit<DecodeContext, 'chainId'> & {
@@ -73,11 +73,10 @@ export function BatchStep({
   index: number;
   nativeSymbol: string;
   nativeTokenPrice: number;
-  formatValue: (value?: string) => string | null;
   displayContractAddress: (address: string | undefined) => string;
 }) {
   const decode = useDecodedCalldata(transaction.to, transaction.data, transaction.chainId, ctx.apiKey);
-  const value = formatValue(transaction.value);
+  const value = formatNativeValue(transaction.value);
   const hasData = !!transaction.data && transaction.data !== '0x';
 
   return (

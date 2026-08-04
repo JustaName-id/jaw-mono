@@ -6,7 +6,7 @@
 // identically. Core-free (viem only).
 // ============================================================================
 
-import { maxUint160, maxUint256 } from 'viem';
+import { formatEther, maxUint160, maxUint256 } from 'viem';
 
 // Plausible unix-timestamp window (2000-01-01 .. 2100-01-01) for date detection.
 export const TS_MIN = 946684800n;
@@ -43,6 +43,31 @@ export function subscriptDecimal(value: number, sig = 4): string {
   const digits = mantissa.replace('.', '').replace(/0+$/, '') || '0';
   const sub = String(zeros).replace(/\d/g, (d) => SUB_DIGITS[Number(d)]);
   return `0.0${sub}${digits}`;
+}
+
+/**
+ * Format a transaction's `value` field as a decimal native-currency amount.
+ *
+ * `value` is always a wei quantity (EIP-1474 / EIP-5792) — hex from spec-abiding
+ * callers, sometimes a plain decimal integer. `BigInt` parses both, so the unit is
+ * never in question and must never be inferred: guessing it from the string's length
+ * is what once rendered a 1-gwei transfer as "1000000000 ETH". The identical string
+ * is passed to `BigInt` when the call is built, so display and signed intent now
+ * derive the amount the same way.
+ *
+ * Returns null for anything there is no honest amount to show: absent, zero, and
+ * negative values (a negative `value` is not a valid quantity, and rendering
+ * "-0.000000000000000001 ETH" would be noise), as well as unparseable input — which
+ * cannot execute either, since building the call throws on the same string.
+ */
+export function formatNativeValue(value?: string): string | null {
+  if (!value) return null;
+  try {
+    const wei = BigInt(value);
+    return wei <= 0n ? null : formatEther(wei);
+  } catch {
+    return null;
+  }
 }
 
 /** Largest value a `uint<bits>` can hold — used to spot "unlimited"/"no expiry" sentinels. */

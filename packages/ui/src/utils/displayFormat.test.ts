@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
-import { maxUint160, maxUint256 } from 'viem';
+import { formatEther, maxUint160, maxUint256 } from 'viem';
 import {
   dateTone,
+  formatNativeValue,
   formatUnixDate,
   groupNumber,
   isUnixTimestamp,
@@ -73,6 +74,55 @@ describe('formatUnixDate', () => {
     expect(s).toContain('24');
     expect(s).toContain('Jul');
     expect(s).toContain('2025');
+  });
+});
+
+describe('formatNativeValue', () => {
+  // The regression this exists for: a length-based wei-vs-ether guess rendered
+  // short decimal wei strings verbatim, so 1 gwei displayed as "1000000000 ETH"
+  // — 10^18x the amount actually signed. Every row below is a decimal wei string
+  // that the old heuristic passed through untouched.
+  it('reads short decimal strings as wei, not ether', () => {
+    expect(formatNativeValue('1000000000')).toBe('0.000000001');
+    expect(formatNativeValue('5000')).toBe('0.000000000000005');
+    expect(formatNativeValue('1')).toBe('0.000000000000000001');
+    expect(formatNativeValue('999999999')).toBe('0.000000000999999999');
+  });
+
+  it('reads long decimal strings as wei', () => {
+    expect(formatNativeValue('1000000000000000000')).toBe('1');
+    expect(formatNativeValue('10000000000')).toBe('0.00000001');
+    expect(formatNativeValue('1100000000000000000')).toBe('1.1');
+  });
+
+  it('reads hex quantities as wei', () => {
+    expect(formatNativeValue('0xde0b6b3a7640000')).toBe('1'); // 1 ETH
+    expect(formatNativeValue('0x3b9aca00')).toBe('0.000000001'); // 1 gwei
+  });
+
+  it('agrees with the value fed to BigInt when the call is built', () => {
+    // Display and signed intent must derive from the same parse.
+    for (const raw of ['1', '5000', '1000000000', '1000000000000000000', '0xde0b6b3a7640000']) {
+      expect(formatNativeValue(raw)).toBe(formatEther(BigInt(raw)));
+    }
+  });
+
+  it('returns null for absent or zero values so the row can be omitted', () => {
+    expect(formatNativeValue(undefined)).toBeNull();
+    expect(formatNativeValue('')).toBeNull();
+    expect(formatNativeValue('0')).toBeNull();
+    expect(formatNativeValue('0x0')).toBeNull();
+    expect(formatNativeValue('0x00')).toBeNull(); // missed by the old === '0x0' check
+    expect(formatNativeValue('0000')).toBeNull(); // missed by the old === '0' check
+  });
+
+  it('returns null rather than a wrong number for unparseable input', () => {
+    // "1.0" is not a valid wei quantity; building the call throws on it too.
+    expect(formatNativeValue('1.0')).toBeNull();
+    expect(formatNativeValue('0.5')).toBeNull();
+    expect(formatNativeValue('abc')).toBeNull();
+    expect(formatNativeValue('0xzz')).toBeNull();
+    expect(formatNativeValue('-1')).toBeNull();
   });
 });
 
