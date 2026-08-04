@@ -90,10 +90,6 @@ Returns detailed status information about the batch execution.
 | 5730   | The wallet doesn't recognize the batch id |
 | -32602 | Invalid params — no batch id supplied     |
 
-Statuses are persisted per browser, so a batch id issued on another device — or
-after site data is cleared — returns 5730 (viem's `UnknownBundleIdError`) rather
-than a pending status.
-
 ## Example
 
 ### Poll for Completion

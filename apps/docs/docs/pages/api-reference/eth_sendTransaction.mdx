@@ -69,10 +69,6 @@ Returns the transaction hash after the transaction is submitted.
 | 5710   | The chain isn't configured (testnets need `preference.showTestnets`) |
 | -32602 | Invalid params — missing `to`, or a field that isn't a hex quantity  |
 
-`to` is required: a smart account executes through `execute`, so contract
-creation via `eth_sendTransaction` isn't supported. Params are validated in the
-SDK before any wallet UI opens.
-
 ## Example Usage
 
 ### Send Native Token (ETH)
