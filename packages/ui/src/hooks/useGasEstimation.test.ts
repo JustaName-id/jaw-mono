@@ -205,6 +205,28 @@ describe('useGasEstimation fee-token selection', () => {
     expect(hook.selectedFeeToken).toBeNull();
   });
 
+  it('a token picked while estimation is in flight survives its completion', async () => {
+    erc20Mock.mockResolvedValue([usdcEstimate]);
+    let resolveEth!: (v: string) => void;
+    const account = makeAccount(() => new Promise<string>((r) => (resolveEth = r)));
+    root = createRoot(document.createElement('div'));
+    await act(async () => {
+      root!.render(createElement(Probe, { account, initialTokens: [nativeEth(10n ** 18n), token({})] }));
+    });
+
+    // ETH estimation still pending — the user picks USDC now.
+    const usdc = tokensNow.find((t) => !t.isNative)!;
+    act(() => hook.setSelectedFeeToken(usdc));
+    expect(hook.selectedFeeToken?.symbol).toBe('USDC');
+
+    await act(async () => resolveEth('0.0002'));
+    await settle();
+
+    // Completion must not resurrect the stale "nothing selected" auto-pick of native.
+    expect(hook.selectedFeeToken?.symbol).toBe('USDC');
+    expect(hook.isPayingWithErc20).toBe(true);
+  });
+
   it("re-estimation failure keeps the user's own ERC-20 choice", async () => {
     erc20Mock.mockResolvedValue([usdcEstimate, usdtEstimate]);
     await mount(

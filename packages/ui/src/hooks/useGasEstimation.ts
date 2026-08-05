@@ -427,21 +427,15 @@ export function useGasEstimation({
   /**
    * Handle successful ETH gas estimation
    */
-  const handleEthSuccess = useCallback(
-    (gasPrice: string, updatedFeeTokens: FeeTokenOption[]) => {
-      setGasFee(gasPrice);
-      setGasEstimationError('');
+  const handleEthSuccess = useCallback((gasPrice: string, updatedFeeTokens: FeeTokenOption[]) => {
+    setGasFee(gasPrice);
+    setGasEstimationError('');
 
-      // Auto-select native token if not already selected
-      if (!selectedFeeToken) {
-        const nativeToken = updatedFeeTokens.find((t) => t.isNative && t.isSelectable);
-        if (nativeToken) {
-          setSelectedFeeToken(nativeToken);
-        }
-      }
-    },
-    [selectedFeeToken]
-  );
+    // Auto-select native only when nothing is selected — decided inside the updater, because
+    // `estimateGas` holds the callback from when the estimation started: a closure read would
+    // see the stale null and overwrite a token the user picked while it was in flight.
+    setSelectedFeeToken((prev) => prev ?? updatedFeeTokens.find((t) => t.isNative && t.isSelectable) ?? prev);
+  }, []);
 
   /**
    * Handle ETH insufficient funds - try to fallback to ERC-20
