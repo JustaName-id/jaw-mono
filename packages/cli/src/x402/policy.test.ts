@@ -3,6 +3,7 @@ import {
   checkPolicy,
   resolveX402Policy,
   policyFromGrant,
+  extractGrantedSpend,
   DEFAULT_X402_POLICY,
   isX402PolicyKey,
   X402_SCALAR_KEYS,
@@ -123,12 +124,50 @@ describe('resolveX402Policy — grant layer', () => {
     expect(policy.maxAmountPerPayment).toBe(DEFAULT_X402_POLICY.maxAmountPerPayment); // default still applies
   });
 
-  it('lets an explicit config value win over the grant (tighten only)', () => {
+  it('lets an explicit config value win over the grant', () => {
     const policy = resolveX402Policy({ maxTotalPerSession: '1000000' }, policyFromGrant(grant));
     expect(policy.maxTotalPerSession).toBe('1000000'); // config beats the grant seed
     expect(policy.allowedNetworks).toEqual(['eip155:8453']); // grant seed still applies where config is silent
   });
 });
+
+describe('extractGrantedSpend', () => {
+  const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+
+  it('pulls the USDC spend for the session chain, hex allowance to base units', () => {
+    const spends = [{ token: USDC_BASE.toLowerCase(), allowance: '0x4c4b40' }]; // 5_000_000
+    expect(extractGrantedSpend(spends, 8453)).toEqual({
+      token: USDC_BASE, // canonical registry form, not the lowercased input
+      allowance: '5000000',
+      network: 'eip155:8453',
+    });
+  });
+
+  it('returns undefined when there is no spends array', () => {
+    expect(extractGrantedSpend(undefined, 8453)).toBeUndefined();
+  });
+
+  it('returns undefined when no spend matches the registry USDC', () => {
+    const spends = [{ token: '0x000000000000000000000000000000000000dEaD', allowance: '0x1' }];
+    expect(extractGrantedSpend(spends, 8453)).toBeUndefined();
+  });
+
+  it('returns undefined for a chain with no registry USDC', () => {
+    const spends = [{ token: USDC_BASE, allowance: '0x1' }];
+    expect(extractGrantedSpend(spends, 1)).toBeUndefined();
+  });
+
+  it('returns undefined for a malformed hex allowance rather than a bad cap', () => {
+    const spends = [{ token: USDC_BASE, allowance: 'not-hex' }];
+    expect(extractGrantedSpend(spends, 8453)).toBeUndefined();
+  });
+
+  it('keeps a zero allowance (base units 0), which blocks all payments', () => {
+    const spends = [{ token: USDC_BASE, allowance: '0x0' }];
+    expect(extractGrantedSpend(spends, 8453)?.allowance).toBe('0');
+  });
+});
+
 describe('topUpFloat as a settable policy key', () => {
   it('Given topUpFloat, When validated as a config key, Then it is accepted as a scalar', () => {
     expect(isX402PolicyKey('topUpFloat')).toBe(true);

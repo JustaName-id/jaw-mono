@@ -122,7 +122,10 @@ export function registerPayTool(server: McpServer): void {
             // Defensive: a hand-edited, non-numeric amount must degrade to "no
             // float / no bound", never throw and take down every payment.
             const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
-            const maxTopUp = parseNonNegativeBigInt(config.x402?.maxTotalPerSession);
+            // Bound the top-up by the RESOLVED session cap, so the grant-seeded
+            // value (or the default) clamps a float pre-fund too, not just the
+            // raw config value.
+            const maxTopUp = parseNonNegativeBigInt(policy.maxTotalPerSession);
             ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
               ensurePayerFunds(requirement, payerAddress, bridge, {
                 floatTarget,

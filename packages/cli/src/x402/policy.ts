@@ -1,6 +1,7 @@
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import { parseBigInt } from './amount.js';
 import type { X402PaymentRequirement } from './types.js';
+import type { GrantedSpend } from '../lib/session-config.js';
 
 /**
  * Tool-level x402 limits (from `~/.jaw/config.json`'s `x402` block). An agent
@@ -45,6 +46,32 @@ export const DEFAULT_X402_POLICY: X402Policy = {
 };
 
 /**
+ * Pull the USDC spend limit out of a granted permission's `spends` so the policy
+ * can be seeded from it. Matches the granted entry against the registry USDC for
+ * the session chain (case-insensitive); the allowance is a hex string on the wire,
+ * returned as base-units decimal. Returns undefined when the permission grants no
+ * registry-USDC spend (nothing to seed, defaults hold). Stores the registry's
+ * canonical address, not the permission's literal token string: they match
+ * case-insensitively and the allowlist this seeds compares addresses that way too.
+ */
+export function extractGrantedSpend(
+  spends: ReadonlyArray<{ token: string; allowance: string }> | undefined,
+  chainId: number
+): GrantedSpend | undefined {
+  const usdc = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === chainId);
+  if (!usdc) return undefined;
+  const spend = spends?.find((s) => s.token.toLowerCase() === usdc.address.toLowerCase());
+  if (!spend) return undefined;
+  let allowance: string;
+  try {
+    allowance = BigInt(spend.allowance).toString();
+  } catch {
+    return undefined; // malformed allowance: fall back to defaults rather than a bad cap
+  }
+  return { token: usdc.address, allowance, network: usdc.wireNetwork };
+}
+
+/**
  * Turn the USDC spend limit the user granted on-chain into policy fields, so the
  * local caps agree with the grant by construction rather than being configured
  * separately. The on-chain allowance is per-period and is the hard ceiling; we
@@ -52,7 +79,7 @@ export const DEFAULT_X402_POLICY: X402Policy = {
  * worth, which keeps the inner guardrail from ever exceeding what a period of the
  * grant permits. The granted token and network become the allowlists.
  */
-export function policyFromGrant(grant?: { token: string; allowance: string; network: string }): X402Policy {
+export function policyFromGrant(grant?: GrantedSpend): X402Policy {
   if (!grant) return {};
   return {
     maxTotalPerSession: grant.allowance,
@@ -64,9 +91,9 @@ export function policyFromGrant(grant?: { token: string; allowance: string; netw
 /**
  * Layer the policy: safe defaults < the on-chain grant < the user's config. The
  * grant seeds the caps/allowlists from what was actually approved; an explicit
- * `jaw config set x402.*` still wins per field, so a user can tighten further but
- * never loosen past the grant (and the on-chain permission is the hard ceiling
- * regardless).
+ * `jaw config set x402.*` still wins per field. Config can override the grant in
+ * either direction here — the on-chain permission is the real ceiling regardless,
+ * so a looser local value just defers to it.
  */
 export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402Policy): X402Policy {
   return { ...DEFAULT_X402_POLICY, ...(grantPolicy ?? {}), ...(configPolicy ?? {}) };
