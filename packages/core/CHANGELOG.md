@@ -1,3 +1,13 @@
+## 1.1.4 (2026-08-05)
+
+### 🩹 Fixes
+
+- **core:** accept EIP-5792 v2.0.0 wallet_sendCalls envelopes explicitly ([#260](https://github.com/JustaName-id/jaw-mono/pull/260))
+
+### ❤️ Thank You
+
+- Ghadi @Ghadi8
+
 ## 1.1.3 (2026-08-04)
 
 ### 🩹 Fixes
