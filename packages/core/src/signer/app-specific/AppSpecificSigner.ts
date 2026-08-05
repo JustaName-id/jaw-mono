@@ -1,5 +1,5 @@
 import { Address } from 'viem';
-import { JAWSigner } from '../JAWSigner.js';
+import { JAWSigner, type NormalizedSigningParams } from '../JAWSigner.js';
 import { decodePersonalSignMessage } from '../SignerUtils.js';
 import {
     UIHandler,
@@ -23,7 +23,8 @@ import {
     WalletGrantPermissionsRequest,
     WalletRevokePermissionsRequest,
     getPermissionFromRelay,
-    RequestCapabilities,
+    normalizeSendCallsParams,
+    normalizeSendTransactionParams,
 } from '../../rpc/index.js';
 import { store, SDKChain } from '../../store/index.js';
 import { standardErrors } from '../../errors/index.js';
@@ -163,7 +164,10 @@ export class AppSpecificSigner extends JAWSigner {
         return response.data;
     }
 
-    protected async handleSigningRequest(request: RequestArguments): Promise<unknown> {
+    protected async handleSigningRequest(
+        request: RequestArguments,
+        normalized?: NormalizedSigningParams
+    ): Promise<unknown> {
         const correlationId = this.getCorrelationId(request);
 
         switch (request.method) {
@@ -258,15 +262,13 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_sendCalls': {
-                // EIP-5792 wallet_sendCalls params - chainId must be hex string
-                type WalletSendCallsParams = Omit<TransactionUIRequest['data'], 'chainId'> & {
-                    /** Target chain ID in hex format. Defaults to the connected chain. */
-                    chainId?: `0x${string}`;
-                    /** Optional capabilities including paymaster service */
-                    capabilities?: RequestCapabilities;
-                };
-                const params = request.params as [WalletSendCallsParams];
-                const callsData = params[0];
+                // Normalized in dispatchSigningRequest, so either EIP-5792
+                // envelope version — v1.0 and viem's default v2.0.0 — reaches the
+                // dialog in one shape (hex chainId, explicit atomicRequired).
+                const callsData =
+                    normalized?.method === 'wallet_sendCalls'
+                        ? normalized.params
+                        : normalizeSendCallsParams(request.params);
 
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(callsData.chainId);
@@ -280,7 +282,6 @@ export class AppSpecificSigner extends JAWSigner {
                         ...callsData,
                         from: callsData.from ?? this.accounts[0],
                         chainId: resolvedChain.id,
-                        capabilities: callsData.capabilities,
                     },
                 };
 
@@ -302,15 +303,10 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'eth_sendTransaction': {
-                type EthSendTransactionParams = Omit<SendTransactionUIRequest['data'], 'chainId' | 'from'> & {
-                    from?: Address;
-                    /** Target chain ID in hex format. Defaults to the connected chain. */
-                    chainId?: `0x${string}`;
-                    /** Optional capabilities including paymaster service */
-                    capabilities?: RequestCapabilities;
-                };
-                const params = request.params as [EthSendTransactionParams];
-                const txData = params[0];
+                const txData =
+                    normalized?.method === 'eth_sendTransaction'
+                        ? normalized.params
+                        : normalizeSendTransactionParams(request.params);
 
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(txData.chainId);

@@ -1,5 +1,6 @@
 import { Address } from '../provider/interface.js';
 import { RequestCapabilities } from '../rpc/permissions.js';
+import type { SendCallsVersion } from '../rpc/sendCallsParams.js';
 import type { JawTheme } from './theme.js';
 
 // Re-export PermissionsCapability from permissions module for backwards compatibility
@@ -78,7 +79,12 @@ export interface TypedDataUIRequest extends BaseUIRequest {
 export interface TransactionUIRequest extends BaseUIRequest {
     type: 'wallet_sendCalls';
     data: {
-        version: '1.0';
+        /**
+         * EIP-5792 envelope version the dapp sent. Both are accepted and
+         * handled identically: '2.0.0' is viem's (and so wagmi's) default,
+         * '1.0' is the original envelope.
+         */
+        version: SendCallsVersion;
         from: Address;
         calls: Array<{
             to: string;
