@@ -10,9 +10,8 @@
 // human-readable description); the digests are an extra verification surface.
 // ============================================================================
 
-import { useState } from 'react';
 import { computeEip712Digests } from '../../utils/erc8213';
-import { CopyIcon, CopiedIcon } from '../../icons';
+import { CopyButton } from '../CopyButton';
 
 /** A single labeled, monospace, 0x-prefixed hash value with copy-to-clipboard. */
 export const DigestRow = ({
@@ -24,29 +23,11 @@ export const DigestRow = ({
   value: string;
   prominent?: boolean;
 }) => {
-  const [copied, setCopied] = useState(false);
-
-  const onCopy = () => {
-    if (typeof window !== 'undefined' && navigator?.clipboard) {
-      navigator.clipboard
-        .writeText(value)
-        .then(() => {
-          setCopied(true);
-          setTimeout(() => setCopied(false), 1500);
-        })
-        .catch(() => undefined);
-    }
-  };
-
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-row items-center justify-between gap-2">
         <p className={`text-foreground text-xs leading-[133%] ${prominent ? 'font-bold' : 'font-semibold'}`}>{label}</p>
-        {copied ? (
-          <CopiedIcon className="h-4 w-4 flex-shrink-0" />
-        ) : (
-          <CopyIcon className="h-4 w-4 flex-shrink-0 cursor-pointer" onClick={onCopy} />
-        )}
+        <CopyButton value={value} size={16} resetAfterMs={1500} label={`Copy ${label}`} />
       </div>
       <div className="bg-secondary rounded-[6px] p-2">
         <p className="text-foreground break-all font-mono text-xs leading-[150%]">{value}</p>

@@ -1,9 +1,9 @@
 'use client';
 
-import { ReactNode, useState } from 'react';
+import { ReactNode } from 'react';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { useChainIconURI } from '../../hooks';
-import { CopyIcon, CopiedIcon } from '../../icons';
+import { CopyButton } from '../CopyButton';
 import { formatAddress } from '../../utils/formatAddress';
 import { sanitizeDisplayName } from '../../utils/sanitize';
 
@@ -27,7 +27,6 @@ export function Eip712DomainCard({
   chainId?: number;
   apiKey?: string;
 }) {
-  const [copied, setCopied] = useState(false);
   const safeName = sanitizeDisplayName(domainName ?? '');
   // Hook must run unconditionally; 16px matches the row (avoids the 24px default's min-width).
   const chainIcon = useChainIconURI(chainId ?? 0, apiKey, 16);
@@ -36,17 +35,6 @@ export function Eip712DomainCard({
   const networkLabel = chainId ? (knownChain ? `${knownChain.name} · ${chainId}` : `Chain ${chainId}`) : undefined;
 
   if (!verifyingContract && !networkLabel && !safeName) return null;
-
-  const onCopy = () => {
-    if (!verifyingContract || typeof navigator === 'undefined' || !navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(verifyingContract)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => undefined);
-  };
 
   return (
     <div className="border-border rounded-[10.5px] border p-3">
@@ -60,11 +48,7 @@ export function Eip712DomainCard({
           <Row label="Verifying contract">
             <div className="flex min-w-0 items-center justify-end gap-1.5">
               <span className="text-foreground truncate font-mono text-[11px]">{formatAddress(verifyingContract)}</span>
-              {copied ? (
-                <CopiedIcon className="size-3.5 flex-none" />
-              ) : (
-                <CopyIcon className="size-3.5 flex-none cursor-pointer" onClick={onCopy} />
-              )}
+              <CopyButton value={verifyingContract} size={14} resetAfterMs={1500} label="Copy address" />
             </div>
           </Row>
         )}

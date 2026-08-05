@@ -69,7 +69,7 @@ export function PartyRow({
         <Eyebrow>{label}</Eyebrow>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
           <p className="text-foreground truncate font-mono text-[12px] font-medium">{value}</p>
-          <CopyButton value={address} size={13} />
+          <CopyButton value={address} size={13} label="Copy address" />
         </div>
       </div>
     </div>

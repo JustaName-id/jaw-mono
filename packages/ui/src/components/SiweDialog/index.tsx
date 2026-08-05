@@ -16,7 +16,7 @@ import { dateTone } from '../../utils/displayFormat';
 import { parseSiweMessage } from '../../utils/siwe';
 import { formatAddress } from '../../utils/formatAddress';
 import { AppAvatar } from '../AppAvatar';
-import { CopyIcon, CopiedIcon } from '../../icons';
+import { CopyButton } from '../CopyButton';
 import { TriangleAlert } from 'lucide-react';
 
 /**
@@ -36,17 +36,6 @@ function Field({
   warning?: string;
   warningTone?: 'danger' | 'warning';
 }) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = () => {
-    if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(copyValue)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => undefined);
-  };
   const warnText = warningTone === 'warning' ? 'text-amber-600 dark:text-amber-500' : 'text-destructive';
   const warnIcon = warningTone === 'warning' ? 'text-amber-500' : 'text-destructive';
   return (
@@ -72,12 +61,9 @@ function Field({
         >
           {value}
         </span>
-        {copyValue &&
-          (copied ? (
-            <CopiedIcon className="size-3 flex-none" />
-          ) : (
-            <CopyIcon className="size-3 flex-none cursor-pointer" onClick={onCopy} />
-          ))}
+        {copyValue && (
+          <CopyButton value={copyValue} size={12} resetAfterMs={1500} label={`Copy ${label.toLowerCase()}`} />
+        )}
       </span>
     </div>
   );

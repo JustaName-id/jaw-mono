@@ -51,7 +51,7 @@ export function SingleCallData({
       <AccordionContent className="px-3 pb-3">
         <div className="flex flex-col gap-2">
           <div className="flex items-center justify-end">
-            <CopyButton value={data} />
+            <CopyButton value={data} label="Copy calldata" />
           </div>
           <DecodedCalldataView to={to} data={data} decode={decode} {...ctx} />
         </div>
@@ -124,7 +124,7 @@ export function BatchStep({
             <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-2.5">
               <div className="flex items-center justify-between">
                 <Eyebrow>Data</Eyebrow>
-                <CopyButton value={transaction.data ?? ''} />
+                <CopyButton value={transaction.data ?? ''} label="Copy calldata" />
               </div>
               <DecodedCalldataView
                 to={transaction.to}

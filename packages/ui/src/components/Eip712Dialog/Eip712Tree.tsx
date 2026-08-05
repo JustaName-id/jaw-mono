@@ -3,7 +3,7 @@
 import { useMemo, useState } from 'react';
 import { TriangleAlert } from 'lucide-react';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
-import { CopyIcon, CopiedIcon } from '../../icons';
+import { CopyButton } from '../CopyButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
 import {
   dateTone,
@@ -218,17 +218,6 @@ function LeafValue({
   tone?: DateTone;
   note?: string;
 }) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = () => {
-    if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(copyValue)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => undefined);
-  };
   const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
   const showIcon = tone === 'expired' || tone === 'far';
   return (
@@ -250,12 +239,7 @@ function LeafValue({
           <TriangleAlert className={`size-3 flex-none ${toneClass}`} strokeWidth={2} />
         ))}
       <span className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${toneClass}`}>{display}</span>
-      {copyValue &&
-        (copied ? (
-          <CopiedIcon className="size-3 flex-none" />
-        ) : (
-          <CopyIcon className="size-3 flex-none cursor-pointer" onClick={onCopy} />
-        ))}
+      {copyValue && <CopyButton value={copyValue} size={12} resetAfterMs={1500} label="Copy value" />}
     </span>
   );
 }

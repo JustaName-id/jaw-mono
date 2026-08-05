@@ -71,7 +71,7 @@ function AssetRow({
         {!delta.isNative && (
           <span className="text-muted-foreground flex min-w-0 flex-row items-center gap-1 font-mono text-[10px]">
             <span className="truncate">{formatAddress(delta.address)}</span>
-            <CopyButton value={delta.address} size={10} />
+            <CopyButton value={delta.address} size={10} label="Copy token address" />
           </span>
         )}
       </div>
