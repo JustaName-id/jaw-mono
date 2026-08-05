@@ -15,6 +15,7 @@ import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
 import { Eip712VerificationDigests } from '../VerificationDigest';
 import { AppAvatar } from '../AppAvatar';
 import { formatAddress } from '../../utils/formatAddress';
+import { normalizeChainId } from '../../utils/clearSigning';
 import { useEffect, useMemo, useRef } from 'react';
 
 // EIP-712 TypedData structure
@@ -79,7 +80,14 @@ export const Eip712Dialog = ({
     }
   }, [mainnetRpcUrl]);
 
-  const { display: clearSigned } = useClearSigningTypedData(typedDataJson, chainId ?? 1, apiKey);
+  // clearSignedChainId is the chain the rows were resolved on (the typed data's
+  // domain chain, falling back to the connected chain) — the view must render
+  // token icons and chain labels against it, not against `chainId`.
+  const { display: clearSigned, chainId: clearSignedChainId } = useClearSigningTypedData(
+    typedDataJson,
+    chainId ?? 1,
+    apiKey
+  );
 
   // Inside a Radix modal, native wheel/trackpad scrolling of a nested overflow
   // container can get eaten. Drive scrollTop manually so the content region always
@@ -102,16 +110,7 @@ export const Eip712Dialog = ({
   // Domain the signature is bound to (which contract accepts it, on which chain).
   const domainName = typedData?.domain?.name as string | undefined;
   const verifyingContract = typedData?.domain?.verifyingContract as string | undefined;
-  const domainChainId = useMemo(() => {
-    const raw = typedData?.domain?.chainId;
-    if (typeof raw === 'number') return raw;
-    if (typeof raw === 'bigint') return Number(raw);
-    if (typeof raw === 'string' && raw.length > 0) {
-      const n = raw.startsWith('0x') ? Number.parseInt(raw, 16) : Number(raw);
-      return Number.isFinite(n) ? n : undefined;
-    }
-    return undefined;
-  }, [typedData]);
+  const domainChainId = normalizeChainId(typedData?.domain?.chainId);
 
   const appAvatar = <AppAvatar appName={appName} appLogoUrl={appLogoUrl} />;
 
@@ -160,7 +159,7 @@ export const Eip712Dialog = ({
               </div>
             ) : clearSigned && clearSigned.rows.length > 0 ? (
               <>
-                <ClearSignedView display={clearSigned} chainId={chainId ?? 1} mainnetRpcUrl={mainnetRpcUrl} />
+                <ClearSignedView display={clearSigned} chainId={clearSignedChainId} mainnetRpcUrl={mainnetRpcUrl} />
                 <details className="text-xs">
                   <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
                     Show raw details

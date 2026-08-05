@@ -16,7 +16,7 @@ vi.mock('../../hooks/useReverseIdentity', () => ({
   useReverseIdentity: () => ({ name: undefined, avatar: undefined }),
 }));
 vi.mock('../../hooks/useClearSigningTypedData', () => ({
-  useClearSigningTypedData: () => ({ display: null }),
+  useClearSigningTypedData: () => ({ display: null, isLoading: false, chainId: 1 }),
 }));
 
 import { Eip712Dialog } from './index';
