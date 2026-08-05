@@ -124,10 +124,20 @@ describe('resolveX402Policy — grant layer', () => {
     expect(policy.maxAmountPerPayment).toBe(DEFAULT_X402_POLICY.maxAmountPerPayment); // default still applies
   });
 
-  it('lets an explicit config value win over the grant', () => {
-    const policy = resolveX402Policy({ maxTotalPerSession: '1000000' }, policyFromGrant(grant));
-    expect(policy.maxTotalPerSession).toBe('1000000'); // config beats the grant seed
+  it('lets config tighten the session cap below the grant', () => {
+    const policy = resolveX402Policy({ maxTotalPerSession: '1000000' }, policyFromGrant(grant)); // 1 < 5 USDC
+    expect(policy.maxTotalPerSession).toBe('1000000'); // config tightens
     expect(policy.allowedNetworks).toEqual(['eip155:8453']); // grant seed still applies where config is silent
+  });
+
+  it('clamps a config cap that tries to loosen past the grant', () => {
+    const policy = resolveX402Policy({ maxTotalPerSession: '50000000' }, policyFromGrant(grant)); // 50 > 5 USDC
+    expect(policy.maxTotalPerSession).toBe('5000000'); // clamped back to the grant
+  });
+
+  it('leaves config untouched when there is no grant to clamp against', () => {
+    const policy = resolveX402Policy({ maxTotalPerSession: '50000000' });
+    expect(policy.maxTotalPerSession).toBe('50000000');
   });
 });
 
@@ -165,6 +175,11 @@ describe('extractGrantedSpend', () => {
   it('keeps a zero allowance (base units 0), which blocks all payments', () => {
     const spends = [{ token: USDC_BASE, allowance: '0x0' }];
     expect(extractGrantedSpend(spends, 8453)?.allowance).toBe('0');
+  });
+
+  it('returns undefined for a negative allowance rather than seeding a negative cap', () => {
+    const spends = [{ token: USDC_BASE, allowance: '-0x100' }];
+    expect(extractGrantedSpend(spends, 8453)).toBeUndefined();
   });
 });
 

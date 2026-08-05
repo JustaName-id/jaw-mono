@@ -64,7 +64,11 @@ export function extractGrantedSpend(
   if (!spend) return undefined;
   let allowance: string;
   try {
-    allowance = BigInt(spend.allowance).toString();
+    const parsed = BigInt(spend.allowance);
+    // A negative allowance (BigInt('-0x100') parses fine) would seed a negative
+    // cap and make checkPolicy reject or misbehave — treat it as no grant.
+    if (parsed < 0n) return undefined;
+    allowance = parsed.toString();
   } catch {
     return undefined; // malformed allowance: fall back to defaults rather than a bad cap
   }
@@ -91,12 +95,22 @@ export function policyFromGrant(grant?: GrantedSpend): X402Policy {
 /**
  * Layer the policy: safe defaults < the on-chain grant < the user's config. The
  * grant seeds the caps/allowlists from what was actually approved; an explicit
- * `jaw config set x402.*` still wins per field. Config can override the grant in
- * either direction here — the on-chain permission is the real ceiling regardless,
- * so a looser local value just defers to it.
+ * `jaw config set x402.*` wins per field so a user can TIGHTEN further. The one
+ * exception is the session cap: config can lower it below the grant but not raise
+ * it above, so the local guard never lets the agent attempt to spend more than
+ * was granted (the on-chain permission would reject it anyway, but the local
+ * policy is what stops the attempt before a signature is produced).
  */
 export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402Policy): X402Policy {
-  return { ...DEFAULT_X402_POLICY, ...(grantPolicy ?? {}), ...(configPolicy ?? {}) };
+  const merged: X402Policy = { ...DEFAULT_X402_POLICY, ...(grantPolicy ?? {}), ...(configPolicy ?? {}) };
+  // Clamp the session cap to the grant: config may tighten it, never loosen past
+  // what the grant permits.
+  const grantCap = parseBigInt(grantPolicy?.maxTotalPerSession);
+  const mergedCap = parseBigInt(merged.maxTotalPerSession);
+  if (grantCap !== null && mergedCap !== null && mergedCap > grantCap) {
+    merged.maxTotalPerSession = grantCap.toString();
+  }
+  return merged;
 }
 
 /** Policy keys settable from the CLI, split by value shape. */
