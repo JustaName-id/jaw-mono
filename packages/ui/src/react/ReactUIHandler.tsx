@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   UIHandler,
@@ -302,6 +302,18 @@ export class ReactUIHandler implements UIHandler {
 
         let torndown = false;
         let holdTimer: ReturnType<typeof setTimeout> | null = null;
+        // The host promise must settle exactly once, and with the TRUE outcome.
+        // `settled` makes first-wins explicit; `submissionInFlight` marks the window
+        // where a signed transaction is racing the UI, so a render crash must not
+        // report "rejected" for a submission that may still land on chain.
+        let settled = false;
+        let submissionInFlight = false;
+
+        const settle = (response: UIResponse<T>) => {
+          if (settled) return;
+          settled = true;
+          resolve(response);
+        };
 
         const cleanup = () => {
           // Idempotent: a held teardown can be raced by ESC/outside-click during the
@@ -335,27 +347,28 @@ export class ReactUIHandler implements UIHandler {
             // Signing dialogs: resolve the dApp first, then defer teardown so the tick
             // shows. Registered on the handler so the next request can flush it instead
             // of letting it fire underneath a newer dialog.
-            resolve({ id: request.id, approved: true, data });
+            settle({ id: request.id, approved: true, data });
             this.pendingTeardown = cleanup;
             holdTimer = setTimeout(cleanup, holdMs);
           } else {
             cleanup();
-            resolve({ id: request.id, approved: true, data });
+            settle({ id: request.id, approved: true, data });
           }
         };
 
         const handleReject = (error?: Error) => {
           cleanup();
-          const response = {
+          settle({
             id: request.id,
             approved: false,
             error: (error as UIError) || UIError.userRejected(),
-          };
-          resolve(response);
+          });
         };
 
         // Render appropriate dialog based on request type
-        const dialog = this.renderDialog(request, handleApprove, handleReject);
+        const dialog = this.renderDialog(request, handleApprove, handleReject, (inFlight: boolean) => {
+          submissionInFlight = inFlight;
+        });
         const effectiveTheme = this.effectiveTheme;
         root.render(
           React.createElement(
@@ -366,8 +379,18 @@ export class ReactUIHandler implements UIHandler {
               container,
             }),
             React.createElement(DialogErrorBoundary, {
-              onError: (error: Error) =>
-                handleReject(new Error(`The wallet could not display this request: ${error.message}`)),
+              onError: (error: Error) => {
+                if (submissionInFlight) {
+                  // The UI crashed while a signed submission is racing it. Tear down the
+                  // broken dialog but do NOT settle: the in-flight sendCalls closure is
+                  // still alive and its own onApprove/onReject delivers the true outcome
+                  // (rejecting here could report "rejected" for a tx that lands on chain).
+                  console.error('[ReactUIHandler] Dialog crashed mid-submission:', error);
+                  cleanup();
+                  return;
+                }
+                handleReject(new Error(`The wallet could not display this request: ${error.message}`));
+              },
               children: dialog,
             })
           )
@@ -405,7 +428,8 @@ export class ReactUIHandler implements UIHandler {
   private renderDialog(
     request: UIRequest,
     onApprove: (data: any) => void,
-    onReject: (error?: Error) => void
+    onReject: (error?: Error) => void,
+    onSubmissionInFlight?: (inFlight: boolean) => void
   ): React.ReactElement {
     switch (request.type) {
       case 'wallet_connect':
@@ -561,6 +585,7 @@ export class ReactUIHandler implements UIHandler {
             request={request as TransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
@@ -575,6 +600,7 @@ export class ReactUIHandler implements UIHandler {
             request={request as SendTransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
@@ -1331,6 +1357,7 @@ function TransactionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
@@ -1340,6 +1367,8 @@ function TransactionDialogWrapper({
   request: TransactionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  /** Marks the window where a signed submission is racing the UI (see request()). */
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
@@ -1348,6 +1377,10 @@ function TransactionDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Synchronous re-entry guard: isProcessing disables the button only after a
+  // re-render, which is too soft a gate for a call that moves funds (permission
+  // and EIP-7702 paths sign without a passkey prompt).
+  const submittingRef = useRef(false);
   const [account, setAccount] = useState<Account | null>(null);
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -1584,7 +1617,10 @@ function TransactionDialogWrapper({
   // Note: Gas estimation is now handled by useGasEstimation hook
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsProcessing(true);
+    onSubmissionInFlight?.(true);
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1624,11 +1660,18 @@ function TransactionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed submission proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };
@@ -1679,6 +1722,7 @@ function SendTransactionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
@@ -1688,6 +1732,8 @@ function SendTransactionDialogWrapper({
   request: SendTransactionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  /** Marks the window where a signed submission is racing the UI (see request()). */
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
@@ -1696,6 +1742,10 @@ function SendTransactionDialogWrapper({
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Synchronous re-entry guard: isProcessing disables the button only after a
+  // re-render, which is too soft a gate for a call that moves funds (permission
+  // and EIP-7702 paths sign without a passkey prompt).
+  const submittingRef = useRef(false);
   const [account, setAccount] = useState<Account | null>(null);
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -1932,7 +1982,10 @@ function SendTransactionDialogWrapper({
   // Note: Gas estimation is now handled by useGasEstimation hook
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsProcessing(true);
+    onSubmissionInFlight?.(true);
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1966,11 +2019,18 @@ function SendTransactionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed submission proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };

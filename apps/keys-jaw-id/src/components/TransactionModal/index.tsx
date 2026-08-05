@@ -10,7 +10,7 @@ import {
   useAssetPreview,
 } from '@jaw.id/ui';
 import { debugLog } from '../../lib/debug-log';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Address, Hash, Hex, formatUnits } from 'viem';
 import { getChainNameFromId } from '../../lib/chain-handlers';
 import { useSessionAccount } from '../../hooks';
@@ -93,6 +93,9 @@ export const TransactionModal = ({
   });
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  // Synchronous re-entry guard: isProcessing disables the button only after a
+  // re-render, which is too soft a gate for a call that moves funds.
+  const submittingRef = useRef(false);
 
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -354,6 +357,8 @@ export const TransactionModal = ({
   // Note: Gas estimation is handled by useGasEstimation hook
 
   const handleConfirm = useCallback(async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     try {
       setIsProcessing(true);
 
@@ -431,6 +436,7 @@ export const TransactionModal = ({
         errorCode = standardErrorCodes.rpc.internal;
       }
       onError?.(errorObj, errorCode);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   }, [
@@ -445,6 +451,9 @@ export const TransactionModal = ({
   ]);
 
   const handleCancel = useCallback(() => {
+    // isProcessing commits a render late; a same-tick cancel must not report
+    // "rejected" while the signed submission proceeds and lands on chain.
+    if (submittingRef.current) return;
     if (!isProcessing) {
       debugLog('❌ User cancelled transaction request');
       // User rejected request (EIP-1193 code 4001)
