@@ -144,7 +144,15 @@ export function useDecodedCalldata(
     const rpcUrl = apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`;
 
     // Both pipelines run in parallel so the "Show raw details" disclosure is instant when opened.
-    Promise.all([clearSignedDecode(to, data, chainId, apiKey), rawDecode(to, data, rpcUrl)])
+    // Only the clear-signed side can reject (applyFormat rethrows unexpected formatter errors);
+    // swallow it here so a bad descriptor never discards a successful raw decode.
+    Promise.all([
+      clearSignedDecode(to, data, chainId, apiKey).catch((err) => {
+        console.debug('[useDecodedCalldata] clear-signed decode failed:', err);
+        return null;
+      }),
+      rawDecode(to, data, rpcUrl),
+    ])
       .then(([clearSigned, decoded]) => {
         if (!cancelled) setResult({ clearSigned, decoded, isLoading: false });
       })

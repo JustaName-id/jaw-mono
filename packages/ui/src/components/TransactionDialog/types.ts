@@ -42,9 +42,6 @@ export interface TransactionDialogProps {
   onCancel: () => void;
   isProcessing: boolean;
 
-  // Status
-  transactionStatus: string;
-
   // Display utilities
   networkName: string;
   apiKey?: string;

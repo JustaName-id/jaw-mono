@@ -115,10 +115,12 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
     const addresses = display.rows
       .filter((r) => r.kind === 'address' && r.rawValue)
       .map((r) => (r.rawValue as string).toLowerCase());
-    const unique = [...new Set(addresses)].filter((a) => !attemptedRef.current.has(a));
+    // Keyed by chain: the @chainlabel suffix baked into a resolved name is chain-specific,
+    // so a chainId change must re-resolve rather than reuse the stale label.
+    const unique = [...new Set(addresses)].filter((a) => !attemptedRef.current.has(`${chainId}:${a}`));
     if (unique.length === 0) return;
 
-    unique.forEach((a) => attemptedRef.current.add(a));
+    unique.forEach((a) => attemptedRef.current.add(`${chainId}:${a}`));
 
     let cancelled = false;
     reverseResolveWithAvatars(

@@ -1349,7 +1349,6 @@ function TransactionDialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
-  const [transactionStatus, setTransactionStatus] = useState<string>('');
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
@@ -1586,7 +1585,6 @@ function TransactionDialogWrapper({
 
   const handleConfirm = async () => {
     setIsProcessing(true);
-    setTransactionStatus('Processing transaction...');
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1602,7 +1600,6 @@ function TransactionDialogWrapper({
         computedPaymasterContext
       );
 
-      setTransactionStatus('Transaction successful!');
       onApprove({
         id: result.id,
         chainId: result.chainId,
@@ -1611,7 +1608,6 @@ function TransactionDialogWrapper({
       console.error('Transaction failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
-      setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -1661,7 +1657,6 @@ function TransactionDialogWrapper({
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus={transactionStatus}
       networkName={networkName}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       apiKey={apiKey}
@@ -1702,7 +1697,6 @@ function SendTransactionDialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [account, setAccount] = useState<Account | null>(null);
-  const [transactionStatus, setTransactionStatus] = useState<string>('');
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
@@ -1939,7 +1933,6 @@ function SendTransactionDialogWrapper({
 
   const handleConfirm = async () => {
     setIsProcessing(true);
-    setTransactionStatus('Processing transaction...');
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1952,13 +1945,11 @@ function SendTransactionDialogWrapper({
         request.data.from
       );
 
-      setTransactionStatus('Transaction successful!');
       onApprove(txHash);
     } catch (error) {
       console.error('Transaction failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
-      setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -2008,7 +1999,6 @@ function SendTransactionDialogWrapper({
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus={transactionStatus}
       networkName={networkName}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       apiKey={apiKey}

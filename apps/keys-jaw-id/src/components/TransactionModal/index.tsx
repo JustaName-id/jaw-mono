@@ -92,7 +92,6 @@ export const TransactionModal = ({
     apiKey,
   });
 
-  const [transactionStatus, setTransactionStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
 
   // Fee token state for ERC-20 paymaster
@@ -152,7 +151,6 @@ export const TransactionModal = ({
   }, [normalizedTransactions, chain]);
 
   const resetModalState = useCallback(() => {
-    setTransactionStatus('');
     setIsProcessing(false);
   }, []);
 
@@ -358,7 +356,6 @@ export const TransactionModal = ({
   const handleConfirm = useCallback(async () => {
     try {
       setIsProcessing(true);
-      setTransactionStatus('Preparing transaction...');
 
       if (!account) {
         throw new Error('Account not initialized. Please try again.');
@@ -367,8 +364,6 @@ export const TransactionModal = ({
       if (!chain) {
         throw new Error('Chain information is required.');
       }
-
-      setTransactionStatus('Sending transaction...');
 
       // Convert normalized transactions to TransactionCall format
       const transactionCalls: TransactionCall[] = normalizedTransactions.map((tx) => ({
@@ -411,14 +406,11 @@ export const TransactionModal = ({
         };
       }
 
-      setTransactionStatus('Transaction confirmed!');
-
       // Call onSuccess immediately - parent will handle closing
       onSuccess?.(result);
     } catch (error) {
       console.error('Error in transaction:', error);
       const errorMessage = error instanceof Error ? error.message : String(error);
-      setTransactionStatus(`Error: ${errorMessage}`);
       const errorObj = error instanceof Error ? error : new Error(errorMessage);
       // Determine error code based on error type
       let errorCode: number;
@@ -457,7 +449,6 @@ export const TransactionModal = ({
       debugLog('❌ User cancelled transaction request');
       // User rejected request (EIP-1193 code 4001)
       onError?.(new Error('User rejected the request'), standardErrorCodes.provider.userRejectedRequest);
-      setTransactionStatus('');
       // Reset fee token state
       setFeeTokens([]);
       setSelectedFeeToken(null);
@@ -471,11 +462,11 @@ export const TransactionModal = ({
 
   return (
     <TransactionDialog
-      // open={open}
-      // onOpenChange={handleCancel}
+      // Mounting is controlled by the page (keyed per request), so the dialog is
+      // always open while this component exists; dismissal routes through cancel.
       open={true}
-      onOpenChange={() => {
-        debugLog('onOpenChange');
+      onOpenChange={(o) => {
+        if (!o) handleCancel();
       }}
       transactions={normalizedTransactions}
       walletAddress={transactionRequest?.from ?? walletAddress ?? ''}
@@ -493,7 +484,6 @@ export const TransactionModal = ({
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus={transactionStatus}
       networkName={networkName ?? 'Ethereum'}
       apiKey={effectiveApiKey}
       mainnetRpcUrl={mainnetRpcUrl}

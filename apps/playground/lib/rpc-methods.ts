@@ -1,4 +1,5 @@
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
+import { parseEther } from 'viem';
 
 export type ParameterType = 'address' | 'hex' | 'number' | 'string' | 'json' | 'select' | 'toggle';
 
@@ -73,8 +74,15 @@ export function parseValueToWei(value?: string): bigint {
   const trimmed = value?.trim();
   if (!trimmed) return 0n;
   if (/^0x[0-9a-f]*$/i.test(trimmed)) return trimmed === '0x' ? 0n : BigInt(trimmed);
-  const parsed = parseFloat(trimmed);
-  return Number.isFinite(parsed) && parsed > 0 ? BigInt(Math.floor(parsed * 1e18)) : 0n;
+  try {
+    // Exact for full 18-decimal inputs, where float math rounds past ~15 digits.
+    const wei = parseEther(trimmed);
+    return wei > 0n ? wei : 0n;
+  } catch {
+    // parseEther rejects forms parseFloat accepts (e.g. "1e18") — keep them working.
+    const parsed = parseFloat(trimmed);
+    return Number.isFinite(parsed) && parsed > 0 ? BigInt(Math.floor(parsed * 1e18)) : 0n;
+  }
 }
 
 export const CHAIN_OPTIONS = [

@@ -1,6 +1,8 @@
 import type { ReactNode } from 'react';
 import { AccountAvatar } from '../AccountAvatar';
 import { CopyButton } from '../CopyButton';
+import { SubText } from '../SubText';
+import { subscriptDecimal } from '../../utils/displayFormat';
 
 /** The dialog's small uppercase field label. */
 export function Eyebrow({ children }: { children: ReactNode }) {
@@ -33,13 +35,13 @@ export function ValueAmount({
   price: number;
   className: string;
 }) {
+  const num = Number(amount);
+  const shown = num > 0 && num < 0.0001 ? subscriptDecimal(num) : amount;
   return (
     <p className={className}>
-      {amount} {symbol}
+      <SubText>{`${shown} ${symbol}`}</SubText>
       {price > 0 && (
-        <span className="text-muted-foreground ml-1.5 text-[11px] font-normal">
-          ≈ ${(Number(amount) * price).toFixed(2)}
-        </span>
+        <span className="text-muted-foreground ml-1.5 text-[11px] font-normal">≈ ${(num * price).toFixed(2)}</span>
       )}
     </p>
   );

@@ -45,6 +45,8 @@ function InlineWarning({ text, detail }: { text: string; detail: string }) {
 }
 
 export const TransactionDialog = ({
+  open,
+  onOpenChange,
   transactions,
   walletAddress,
   gasFee,
@@ -59,7 +61,6 @@ export const TransactionDialog = ({
   onConfirm,
   onCancel,
   isProcessing,
-  transactionStatus,
   networkName,
   apiKey,
   appName,
@@ -228,6 +229,9 @@ export const TransactionDialog = ({
   const softRevertWarning = !blockReason && !!assetPreviewWillRevert;
 
   const singleValue = isSingleTransaction ? formatNativeValue(currentTransaction?.value) : null;
+  // Dust renders in subscript notation like the fee rows; math keeps using the raw string.
+  const singleValueNum = singleValue ? Number(singleValue) : 0;
+  const heroAmount = singleValueNum > 0 && singleValueNum < 0.0001 ? subscriptDecimal(singleValueNum) : singleValue;
   // A pure native transfer (value, no calldata) reads as a "Send"; everything else is a generic review.
   const isNativeSend =
     isSingleTransaction && !!singleValue && (!currentTransaction?.data || currentTransaction.data === '0x');
@@ -246,8 +250,6 @@ export const TransactionDialog = ({
   // for it; otherwise that review screen would open with nothing on it. Batch steps always
   // start collapsed — their headers name the action, so the user opens the one they care about.
   const calldataOpen = !!assetPreviewError || ((assetsOut?.length ?? 0) === 0 && (assetsIn?.length ?? 0) === 0);
-
-  const hasError = transactionStatus.includes('Error');
 
   // While blocked the selector stays as long as some token is selectable — switching to it clears
   // the block. Suppressed only when nothing can pay, where the choice would change nothing.
@@ -366,14 +368,7 @@ export const TransactionDialog = ({
   })();
 
   return (
-    <ShellDialog
-      open={true}
-      onOpenChange={(o) => {
-        if (!o) onCancel();
-      }}
-      dismissable={!isProcessing}
-      contentClassName="min-h-[510px]"
-    >
+    <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
       {isProcessing ? (
         <ProcessingScreen
           seedAddress={walletAddress}
@@ -407,7 +402,7 @@ export const TransactionDialog = ({
                 />
                 <div className="flex min-w-0 items-baseline gap-2">
                   <span className="text-foreground text-[26px] font-bold tracking-[-0.02em]">
-                    {singleValue} {nativeSymbol}
+                    <SubText>{`${heroAmount} ${nativeSymbol}`}</SubText>
                   </span>
                   {nativeTokenPrice > 0 && (
                     <span className="text-muted-foreground text-[15px] font-normal">
@@ -510,13 +505,6 @@ export const TransactionDialog = ({
                   />
                 ))}
               </Accordion>
-            )}
-
-            {/* Error banner */}
-            {hasError && (
-              <div className="bg-destructive/10 rounded-[10.5px] p-3">
-                <p className="text-destructive text-[12px]">{transactionStatus}</p>
-              </div>
             )}
           </div>
 
