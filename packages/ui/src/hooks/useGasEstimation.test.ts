@@ -103,7 +103,7 @@ async function mount(account: Account, initialTokens: FeeTokenOption[]) {
 
 async function settle() {
   for (let i = 0; i < 20 && hook.gasFeeLoading; i++) {
-    await act(async () => {});
+    await act(() => Promise.resolve());
   }
   expect(hook.gasFeeLoading).toBe(false);
 }
