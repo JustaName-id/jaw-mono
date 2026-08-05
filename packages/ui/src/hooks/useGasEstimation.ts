@@ -401,7 +401,7 @@ export function useGasEstimation({
       } else if (ethInsufficientFunds) {
         handleEthInsufficientFunds(updatedFeeTokens);
       } else {
-        handleEstimationError(ethResult.status === 'rejected' ? ethResult.reason : null);
+        handleEstimationError(ethResult.status === 'rejected' ? ethResult.reason : null, updatedFeeTokens);
       }
     } catch (error) {
       // Check if this estimation is still current
@@ -450,8 +450,14 @@ export function useGasEstimation({
     const selectableErc20 = updatedFeeTokens.find((t) => !t.isNative && t.isSelectable);
 
     if (selectableErc20) {
-      // Auto-select first selectable ERC-20 token
-      setSelectedFeeToken(selectableErc20);
+      // Auto-select an ERC-20, keeping the user's own choice when it can still pay.
+      setSelectedFeeToken((prev) => {
+        const prevUpdated =
+          prev && !prev.isNative
+            ? updatedFeeTokens.find((t) => t.address.toLowerCase() === prev.address.toLowerCase())
+            : undefined;
+        return prevUpdated?.isSelectable ? prevUpdated : selectableErc20;
+      });
       setGasFee(FALLBACK_GAS_ESTIMATE_ETH);
       setGasEstimationError('');
     } else {
@@ -463,15 +469,42 @@ export function useGasEstimation({
 
   /**
    * A bundler error usually carries the execution revert reason, so a balance shortfall is
-   * detectable here too and reported with the same string.
+   * detectable here too and reported with the same string — never re-routed to a fee token,
+   * the wrong remedy when gas is affordable and only the transfer isn't.
    *
-   * Not routed through `handleEthInsufficientFunds`: that switches the fee token, the wrong
-   * remedy when gas is affordable and only the transfer isn't.
+   * Any other failure falls back to an ERC-20 that carries a priced ceiling: the ceiling only
+   * exists when the paymaster userOp — same calls, same bundler — estimated successfully, so
+   * the failure was specific to paying in ETH and the switch provably fixes it. A call revert
+   * fails both estimations alike (tokens end up unselectable), so it can't be masked here; the
+   * asset preview warns about reverts independently. `isSelectable` alone isn't proof — before
+   * estimates land it's a balance heuristic from the fee-token producer, and a token without a
+   * ceiling can't be confirmed anyway. `updatedFeeTokens` is empty on the outer-catch path,
+   * where nothing has been proven.
    */
-  const handleEstimationError = useCallback((error: unknown) => {
+  const handleEstimationError = useCallback((error: unknown, updatedFeeTokens: FeeTokenOption[] = []) => {
     console.error('[useGasEstimation] Error:', error);
+    if (classifyRevert(error) === 'balance') {
+      setGasFee('');
+      setGasEstimationError(INSUFFICIENT_FUNDS_ERROR);
+      return;
+    }
+    const provenErc20 = (t: FeeTokenOption) => !t.isNative && t.isSelectable && !!t.gasCostMaxFormatted;
+    const selectableErc20 = updatedFeeTokens.find(provenErc20);
+    if (selectableErc20) {
+      // Keep the user's own choice when it is itself proven; otherwise take the first that is.
+      setSelectedFeeToken((prev) => {
+        const prevUpdated =
+          prev && !prev.isNative
+            ? updatedFeeTokens.find((t) => t.address.toLowerCase() === prev.address.toLowerCase())
+            : undefined;
+        return prevUpdated && provenErc20(prevUpdated) ? prevUpdated : selectableErc20;
+      });
+      setGasFee(FALLBACK_GAS_ESTIMATE_ETH);
+      setGasEstimationError('');
+      return;
+    }
     setGasFee('');
-    setGasEstimationError(classifyRevert(error) === 'balance' ? INSUFFICIENT_FUNDS_ERROR : 'Failed to estimate gas');
+    setGasEstimationError('Failed to estimate gas');
   }, []);
 
   // -------------------------------------------------------------------------

@@ -249,9 +249,14 @@ export const TransactionDialog = ({
 
   const hasError = transactionStatus.includes('Error');
 
-  // Suppressed while blocked: nothing can be priced, so the choice would change nothing.
+  // While blocked the selector stays as long as some token is selectable — switching to it clears
+  // the block. Suppressed only when nothing can pay, where the choice would change nothing.
   const feeSelector =
-    showFeeTokenSelector && !sponsored && !blockReason && feeTokens && onFeeTokenSelect ? (
+    showFeeTokenSelector &&
+    !sponsored &&
+    !(blockReason && !hasSelectablePaymentOption) &&
+    feeTokens &&
+    onFeeTokenSelect ? (
       <FeeTokenSelector
         tokens={feeTokens}
         chainId={currentTransaction?.chainId}

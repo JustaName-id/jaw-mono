@@ -740,7 +740,13 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       }
 
       return (
+        // Keyed by request: the embedded iframe stays mounted across flows, so an
+        // unkeyed modal is the SAME React instance for the next request and keeps
+        // internal state (isProcessing, status) from the previous flow — which
+        // opened request #2 directly on the processing screen. The key forces a
+        // fresh mount per request, like the popup's fresh page used to guarantee.
         <TransactionModal
+          key={pendingRequest.requestId}
           transactionRequest={txData}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey}
@@ -831,7 +837,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           ? getSiweOriginWarning(pendingRequest.origin, { domain: parsedSiwe.domain, uri: parsedSiwe.uri })
           : undefined;
         return (
+          // Keyed by request — see TransactionModal above.
           <SiweModal
+            key={pendingRequest.requestId}
             origin={pendingRequest.origin}
             message={messageToSign}
             address={address}
@@ -872,7 +880,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       }
 
       return (
+        // Keyed by request — see TransactionModal above.
         <SignatureModal
+          key={pendingRequest.requestId}
           origin={pendingRequest.origin}
           // open={true}
           // onOpenChange={() => { }}
@@ -948,7 +958,11 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       }
 
       return (
+        // Keyed by request — see TransactionModal above. Eip712Modal's isProcessing
+        // never resets on the success path, so instance reuse showed the next
+        // request a permanent "Signing..." screen.
         <Eip712Modal
+          key={pendingRequest.requestId}
           origin={pendingRequest.origin}
           typedDataJson={typedDataJson}
           address={address}
@@ -1000,7 +1014,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       };
 
       return (
+        // Keyed by request — see TransactionModal above.
         <PermissionModal
+          key={pendingRequest.requestId}
           permissionRequest={permissionRequestData}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey || ''}
@@ -1048,7 +1064,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       };
 
       return (
+        // Keyed by request — see TransactionModal above.
         <PermissionModal
+          key={pendingRequest.requestId}
           permissionRequest={permissionRequestData}
           chain={pendingRequest.chain as chain}
           apiKey={apiKey || ''}
@@ -1086,7 +1104,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
     // Show unsupported method modal
     if (!!pendingRequest && pendingRequest?.type === SDKRequestType.UNSUPPORTED_METHOD) {
       return (
+        // Keyed by request — see TransactionModal above.
         <UnsupportedMethodModal
+          key={pendingRequest.requestId}
           origin={pendingRequest.origin}
           method={pendingRequest.method}
           appName={pendingRequest.metadata?.appName}
@@ -1414,7 +1434,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         });
 
         return (
+          // Keyed by request — see TransactionModal above.
           <SiweModal
+            key={pendingRequest.requestId}
             origin={pendingRequest.origin}
             message={siweMessage}
             address={walletAddress}
@@ -1485,7 +1507,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
       // No SIWE capability - show regular ConnectModal
       return (
+        // Keyed by request — see TransactionModal above.
         <ConnectModal
+          key={pendingRequest.requestId}
           origin={pendingRequest.origin}
           appName={pendingRequest.metadata?.appName || 'dApp'}
           appLogoUrl={pendingRequest.metadata?.appLogoUrl}
