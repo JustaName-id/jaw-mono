@@ -103,10 +103,13 @@ export function registerPayTool(server: McpServer): void {
           const config = loadConfig();
           // Throws a clear "run jaw session setup" error when no session exists.
           const payer = Eip3009EoaPayer.fromSessionKey();
+          // Read the session config once and reuse it below: it only changes
+          // between `jaw session setup` runs, not between payments, so a single
+          // read per call feeds both the grant policy and the top-up path.
+          const session = sessionConfigExists() ? loadSessionConfig() : null;
           // Seed the policy from the on-chain grant captured at setup (caps +
           // allowlists agree with what the user approved); config still wins.
-          const grantPolicy = policyFromGrant(sessionConfigExists() ? loadSessionConfig().grantedSpend : undefined);
-          const policy = resolveX402Policy(config.x402, grantPolicy);
+          const policy = resolveX402Policy(config.x402, policyFromGrant(session?.grantedSpend));
           if (sessionSpent === null) sessionSpent = seedSessionSpent(payer.address);
 
           // Flow 2b: when a session (and its on-chain permission) exists, refill
@@ -114,8 +117,7 @@ export function registerPayTool(server: McpServer): void {
           // Funds stay in the user's account until the moment a payment needs
           // them; JustaPermissionManager caps every refill on-chain.
           let ensureFunds;
-          if (sessionConfigExists() && config.apiKey) {
-            const session = loadSessionConfig();
+          if (session && config.apiKey) {
             const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
             // Defensive: a hand-edited, non-numeric amount must degrade to "no
             // float / no bound", never throw and take down every payment.

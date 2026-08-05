@@ -260,6 +260,10 @@ export default class SessionSetup extends BaseCommand {
     } catch {
       return undefined; // malformed allowance: fall back to defaults rather than a bad cap
     }
+    // Store the registry's canonical USDC address, not the permission's literal
+    // token string. They match case-insensitively here, and the policy allowlist
+    // this seeds compares addresses case-insensitively too, so the canonical form
+    // is the right one to persist.
     return { token: usdc.address, allowance, network: usdc.wireNetwork };
   }
 
