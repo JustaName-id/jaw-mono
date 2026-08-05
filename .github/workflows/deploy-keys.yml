@@ -2,7 +2,8 @@ name: Deploy Keys
 
 # Manual runs exist so a Vercel env var change can be shipped without a code
 # change: `vercel pull` re-fetches the project's env on every run, and the
-# NEXT_PUBLIC_* values are inlined by `vercel build`.
+# NEXT_PUBLIC_* values are inlined by `vercel build`. They only ever redeploy
+# main — see the ref guard below.
 on:
   workflow_dispatch:
   workflow_call:
@@ -18,6 +19,16 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
+      # The dispatch ref picker offers any branch or tag holding this file, and
+      # every step below deploys straight to production. Fail loudly rather than
+      # skipping the job, which would report the run as green. Unscoped because
+      # the workflow_call path only ever fires from a push to main.
+      - name: Refuse non-main refs
+        if: github.ref_name != 'main'
+        run: |
+          echo "::error::Deploy Keys only runs against main (got ${{ github.ref_name }})"
+          exit 1
+
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
