@@ -13,6 +13,7 @@ export * from './components/AccountAvatar';
 export * from './components/AccountHeaderRow';
 export * from './components/OrSeparator';
 export * from './components/OnboardingDialog';
+export * from './components/OnboardingSkeleton';
 export * from './components/TransactionDialog';
 export * from './components/SignatureDialog';
 export * from './components/SiweDialog';
