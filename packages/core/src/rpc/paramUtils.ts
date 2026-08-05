@@ -73,8 +73,18 @@ export function optionalHexQuantity(value: unknown, method: string, field: strin
         return numberToHex(BigInt(value));
     }
 
-    if (typeof value === 'number' || typeof value === 'bigint') {
-        if (typeof value === 'number' && (!Number.isSafeInteger(value) || value < 0)) {
+    // Both branches guard the sign: `numberToHex` rejects a negative with viem's
+    // own IntegerOutOfRangeError, which carries no RPC code and would reach the
+    // dapp untyped instead of as -32602.
+    if (typeof value === 'bigint') {
+        if (value < 0n) {
+            throw standardErrors.rpc.invalidParams(`${method}: ${field} must be a non-negative integer`);
+        }
+        return numberToHex(value);
+    }
+
+    if (typeof value === 'number') {
+        if (!Number.isSafeInteger(value) || value < 0) {
             throw standardErrors.rpc.invalidParams(`${method}: ${field} must be a non-negative integer`);
         }
         return numberToHex(value);

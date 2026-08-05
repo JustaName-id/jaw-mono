@@ -1,6 +1,6 @@
 import { UUID } from 'crypto';
 
-import { JAWSigner } from '../JAWSigner.js';
+import { JAWSigner, type NormalizedSigningParams } from '../JAWSigner.js';
 import { decodePersonalSignRequest } from '../SignerUtils.js';
 
 import { Communicator } from '../../communicator/index.js';
@@ -110,16 +110,27 @@ export class CrossPlatformSigner extends JAWSigner {
         return this.sendRequestToPopup(modifiedRequest, undefined, false, this.getCorrelationId(request));
     }
 
-    protected override async handleSigningRequest(request: RequestArguments): Promise<unknown> {
+    protected override async handleSigningRequest(
+        request: RequestArguments,
+        normalized?: NormalizedSigningParams
+    ): Promise<unknown> {
         let resolvedChain: SDKChain | undefined;
 
-        // The transform below returns a new request object, so read the
+        // The transforms below return a new request object, so read the
         // correlation id (keyed on object identity) from the original.
         const correlationId = this.getCorrelationId(request);
 
         // Decode hex-encoded messages for personal_sign before sending to popup
         // (wagmi and other libraries hex-encode messages before sending)
-        const processedRequest = decodePersonalSignRequest(request);
+        let processedRequest = decodePersonalSignRequest(request);
+
+        // Forward the validated envelope, not the dapp's raw one: a chainId sent
+        // as a number is hex by now, so the chain resolved below is the one the
+        // dapp asked for instead of whichever chain we happen to be on. Keys
+        // then reads the same quantities validation approved.
+        if (normalized) {
+            processedRequest = { ...processedRequest, params: [normalized.params] };
+        }
 
         // wallet_revokePermissions needs chainId from relay (not in request params)
         // because the permission may have been granted on a different chain

@@ -82,6 +82,24 @@ describe('normalizeSendTransactionParams', () => {
         expect(result.value).toBe('0x38d7ea4c68000');
     });
 
+    it('rejects negative quantities as -32602, whether number or bigint', () => {
+        // Left to `numberToHex`, a negative raises viem's IntegerOutOfRangeError,
+        // which carries no RPC code and reaches the dapp untyped.
+        for (const value of [-1, -1n]) {
+            expect(expectInvalidParams(() => normalizeSendTransactionParams([{ to: tx.to, value }]))).toContain(
+                'non-negative'
+            );
+        }
+        expect(expectInvalidParams(() => normalizeSendTransactionParams([{ to: tx.to, gas: -21000n }]))).toContain(
+            'gas'
+        );
+    });
+
+    it('accepts a bigint quantity, matching the number path', () => {
+        const result = normalizeSendTransactionParams([{ to: tx.to, value: 69420n }]);
+        expect(result.value).toBe('0x10f2c');
+    });
+
     it('rejects non-hex fields with -32602 naming the field', () => {
         expect(expectInvalidParams(() => normalizeSendTransactionParams([{ ...tx, data: 'not-hex' }]))).toContain(
             'data'

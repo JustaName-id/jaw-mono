@@ -9,8 +9,8 @@ import {
     isSessionExpired,
 } from './SignerUtils.js';
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
-import { normalizeSendCallsParams } from '../rpc/sendCallsParams.js';
-import { normalizeSendTransactionParams } from '../rpc/sendTransactionParams.js';
+import { normalizeSendCallsParams, type NormalizedSendCallsParams } from '../rpc/sendCallsParams.js';
+import { normalizeSendTransactionParams, type NormalizedSendTransactionParams } from '../rpc/sendTransactionParams.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 import { handleGetCallsHistoryRequest } from '../rpc/wallet_getCallsHistory.js';
@@ -35,6 +35,19 @@ type ConstructorOptions = {
     metadata: AppMetadata;
     callback: ProviderEventCallback | null;
 };
+
+/**
+ * Params already validated and normalized by `dispatchSigningRequest`, tagged
+ * with the method they came from so a signer narrows without casting.
+ *
+ * Handed down instead of left behind: the raw request can carry a `chainId` as a
+ * number, which the popup path reads only when it is a string — validating and
+ * then dropping the hex form let a dapp's chain choice be silently ignored.
+ * Absent for signing-routed methods with nothing to normalize.
+ */
+export type NormalizedSigningParams =
+    | { method: 'wallet_sendCalls'; params: NormalizedSendCallsParams }
+    | { method: 'eth_sendTransaction'; params: NormalizedSendTransactionParams };
 
 /**
  * Abstract base class for all JAW signers.
@@ -80,8 +93,15 @@ export abstract class JAWSigner implements Signer {
 
     /**
      * Handles signing requests (personal_sign, eth_signTypedData_v4, wallet_sendCalls, etc.)
+     *
+     * @param normalized - Validated params for the methods that have them
+     * (wallet_sendCalls, eth_sendTransaction). Use these rather than
+     * re-reading `request.params`, which is still the dapp's raw envelope.
      */
-    protected abstract handleSigningRequest(request: RequestArguments): Promise<unknown>;
+    protected abstract handleSigningRequest(
+        request: RequestArguments,
+        normalized?: NormalizedSigningParams
+    ): Promise<unknown>;
 
     /**
      * Dispatches a signing-routed request. When it succeeds and the method
@@ -96,13 +116,17 @@ export abstract class JAWSigner implements Signer {
         // dialog: a malformed request gets a standards-compliant error it can
         // act on instead of a dead UI. For wallet_sendCalls both envelope
         // versions (v1.0 and viem's default v2.0.0) pass.
+        let normalized: NormalizedSigningParams | undefined;
         if (request.method === 'wallet_sendCalls') {
-            normalizeSendCallsParams(request.params);
+            normalized = { method: 'wallet_sendCalls', params: normalizeSendCallsParams(request.params) };
         } else if (request.method === 'eth_sendTransaction') {
-            normalizeSendTransactionParams(request.params);
+            normalized = { method: 'eth_sendTransaction', params: normalizeSendTransactionParams(request.params) };
         }
 
-        const result = await this.handleSigningRequest(request);
+        // Pass the normalized params down rather than validating and discarding
+        // them: the signer needs the hex-normalized chainId to resolve the chain
+        // the dapp actually asked for.
+        const result = await this.handleSigningRequest(request, normalized);
         try {
             this.reportSignature(request);
         } catch {

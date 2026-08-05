@@ -1,5 +1,5 @@
 import { Address } from 'viem';
-import { JAWSigner } from '../JAWSigner.js';
+import { JAWSigner, type NormalizedSigningParams } from '../JAWSigner.js';
 import { decodePersonalSignMessage } from '../SignerUtils.js';
 import {
     UIHandler,
@@ -164,7 +164,10 @@ export class AppSpecificSigner extends JAWSigner {
         return response.data;
     }
 
-    protected async handleSigningRequest(request: RequestArguments): Promise<unknown> {
+    protected async handleSigningRequest(
+        request: RequestArguments,
+        normalized?: NormalizedSigningParams
+    ): Promise<unknown> {
         const correlationId = this.getCorrelationId(request);
 
         switch (request.method) {
@@ -259,10 +262,13 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'wallet_sendCalls': {
-                // Accepts either EIP-5792 envelope version: v1.0 and viem's
-                // default v2.0.0 normalize to the same shape (hex chainId,
-                // explicit atomicRequired) before the dialog sees them.
-                const callsData = normalizeSendCallsParams(request.params);
+                // Normalized in dispatchSigningRequest, so either EIP-5792
+                // envelope version — v1.0 and viem's default v2.0.0 — reaches the
+                // dialog in one shape (hex chainId, explicit atomicRequired).
+                const callsData =
+                    normalized?.method === 'wallet_sendCalls'
+                        ? normalized.params
+                        : normalizeSendCallsParams(request.params);
 
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(callsData.chainId);
@@ -297,7 +303,10 @@ export class AppSpecificSigner extends JAWSigner {
             }
 
             case 'eth_sendTransaction': {
-                const txData = normalizeSendTransactionParams(request.params);
+                const txData =
+                    normalized?.method === 'eth_sendTransaction'
+                        ? normalized.params
+                        : normalizeSendTransactionParams(request.params);
 
                 // Resolve chain: param chainId -> current chain -> defaultChainId
                 const resolvedChain = this.resolveChain(txData.chainId);
