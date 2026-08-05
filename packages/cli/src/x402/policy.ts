@@ -44,9 +44,32 @@ export const DEFAULT_X402_POLICY: X402Policy = {
   allowedNetworks: Object.keys(USDC_BY_NETWORK),
 };
 
-/** Merge the configured policy over the safe defaults (config wins per field). */
-export function resolveX402Policy(configPolicy?: X402Policy): X402Policy {
-  return { ...DEFAULT_X402_POLICY, ...(configPolicy ?? {}) };
+/**
+ * Turn the USDC spend limit the user granted on-chain into policy fields, so the
+ * local caps agree with the grant by construction rather than being configured
+ * separately. The on-chain allowance is per-period and is the hard ceiling; we
+ * seed the local `maxTotalPerSession` (a per-process soft cap) from one period's
+ * worth, which keeps the inner guardrail from ever exceeding what a period of the
+ * grant permits. The granted token and network become the allowlists.
+ */
+export function policyFromGrant(grant?: { token: string; allowance: string; network: string }): X402Policy {
+  if (!grant) return {};
+  return {
+    maxTotalPerSession: grant.allowance,
+    allowedAssets: [grant.token],
+    allowedNetworks: [grant.network],
+  };
+}
+
+/**
+ * Layer the policy: safe defaults < the on-chain grant < the user's config. The
+ * grant seeds the caps/allowlists from what was actually approved; an explicit
+ * `jaw config set x402.*` still wins per field, so a user can tighten further but
+ * never loosen past the grant (and the on-chain permission is the hard ceiling
+ * regardless).
+ */
+export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402Policy): X402Policy {
+  return { ...DEFAULT_X402_POLICY, ...(grantPolicy ?? {}), ...(configPolicy ?? {}) };
 }
 
 /** Policy keys settable from the CLI, split by value shape. */

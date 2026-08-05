@@ -12,6 +12,19 @@ import { ensureDir } from './config.js';
  */
 export type SessionMode = 'counterfactual' | 'eip7702';
 
+/**
+ * The USDC spend limit captured from the on-chain permission at setup, so the
+ * local x402 policy can be seeded from what the user actually granted instead of
+ * being configured separately and drifting from it. `allowance` is one period's
+ * worth in base units (decimal string); `network` is the session chain's CAIP-2
+ * id. Absent when the granted permission carries no registry-USDC spend.
+ */
+export interface GrantedSpend {
+  token: string;
+  allowance: string;
+  network: string;
+}
+
 export interface SessionConfig {
   ownerAddress: string;
   sessionAddress: string;
@@ -20,6 +33,7 @@ export interface SessionConfig {
   expiry: number;
   createdAt: string;
   mode?: SessionMode;
+  grantedSpend?: GrantedSpend;
 }
 
 export function saveSessionConfig(input: Omit<SessionConfig, 'createdAt'>): void {

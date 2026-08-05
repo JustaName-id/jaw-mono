@@ -1,5 +1,12 @@
 import { describe, it, expect } from 'vitest';
-import { checkPolicy, resolveX402Policy, DEFAULT_X402_POLICY, isX402PolicyKey, X402_SCALAR_KEYS } from './policy.js';
+import {
+  checkPolicy,
+  resolveX402Policy,
+  policyFromGrant,
+  DEFAULT_X402_POLICY,
+  isX402PolicyKey,
+  X402_SCALAR_KEYS,
+} from './policy.js';
 import type { X402PaymentRequirement } from './types.js';
 
 const base: X402PaymentRequirement = {
@@ -87,6 +94,39 @@ describe('resolveX402Policy', () => {
     expect(checkPolicy(base, policy).ok).toBe(true);
     expect(checkPolicy({ ...base, asset: '0x0000000000000000000000000000000000000bad' }, policy).ok).toBe(false);
     expect(checkPolicy({ ...base, network: 'eip155:1' }, policy).ok).toBe(false);
+  });
+});
+
+describe('policyFromGrant', () => {
+  const grant = { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', allowance: '5000000', network: 'eip155:8453' };
+
+  it('returns an empty policy when there is no grant', () => {
+    expect(policyFromGrant(undefined)).toEqual({});
+  });
+
+  it('seeds the session cap and allowlists from the granted spend', () => {
+    expect(policyFromGrant(grant)).toEqual({
+      maxTotalPerSession: '5000000',
+      allowedAssets: ['0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913'],
+      allowedNetworks: ['eip155:8453'],
+    });
+  });
+});
+
+describe('resolveX402Policy — grant layer', () => {
+  const grant = { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', allowance: '5000000', network: 'eip155:8453' };
+
+  it('seeds the session cap and allowlists from the grant, keeping the default per-payment cap', () => {
+    const policy = resolveX402Policy(undefined, policyFromGrant(grant));
+    expect(policy.maxTotalPerSession).toBe('5000000'); // from the grant, not the 10 USDC default
+    expect(policy.allowedNetworks).toEqual(['eip155:8453']); // narrowed to the granted chain
+    expect(policy.maxAmountPerPayment).toBe(DEFAULT_X402_POLICY.maxAmountPerPayment); // default still applies
+  });
+
+  it('lets an explicit config value win over the grant (tighten only)', () => {
+    const policy = resolveX402Policy({ maxTotalPerSession: '1000000' }, policyFromGrant(grant));
+    expect(policy.maxTotalPerSession).toBe('1000000'); // config beats the grant seed
+    expect(policy.allowedNetworks).toEqual(['eip155:8453']); // grant seed still applies where config is silent
   });
 });
 describe('topUpFloat as a settable policy key', () => {

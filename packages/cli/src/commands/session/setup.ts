@@ -4,9 +4,10 @@ import { BaseCommand } from '../../base-command.js';
 import { loadConfig } from '../../lib/config.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
 import { generateSessionKey, saveKeystore, keystoreExists, loadSessionKey } from '../../lib/keystore.js';
-import { saveSessionConfig, loadSessionConfig } from '../../lib/session-config.js';
+import { saveSessionConfig, loadSessionConfig, type GrantedSpend } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
+import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
 
 export default class SessionSetup extends BaseCommand {
   static override description =
@@ -203,6 +204,7 @@ export default class SessionSetup extends BaseCommand {
         chainId,
         expiry: expiryTimestamp,
         mode,
+        grantedSpend: this.extractGrantedSpend(permissions, chainId),
       });
 
       // 9. Output
@@ -238,6 +240,27 @@ export default class SessionSetup extends BaseCommand {
       }
       throw error;
     }
+  }
+
+  /**
+   * Pull the USDC spend limit out of the granted permission so the x402 policy
+   * can be seeded from it. Matches the granted `spends` entry against the
+   * registry USDC for the session chain (case-insensitive); the allowance is a
+   * hex string on the wire, stored as base-units decimal. Returns undefined when
+   * the permission grants no registry-USDC spend (nothing to seed, defaults hold).
+   */
+  private extractGrantedSpend(permissions: PermissionsConfig, chainId: number): GrantedSpend | undefined {
+    const usdc = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === chainId);
+    if (!usdc) return undefined;
+    const spend = permissions.spends?.find((s) => s.token.toLowerCase() === usdc.address.toLowerCase());
+    if (!spend) return undefined;
+    let allowance: string;
+    try {
+      allowance = BigInt(spend.allowance).toString();
+    } catch {
+      return undefined; // malformed allowance: fall back to defaults rather than a bad cap
+    }
+    return { token: usdc.address, allowance, network: usdc.wireNetwork };
   }
 
   private resolvePermissions(

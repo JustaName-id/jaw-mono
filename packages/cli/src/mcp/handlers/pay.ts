@@ -7,7 +7,7 @@ import { Eip3009EoaPayer, sessionPayerAddress } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
 import { appendX402Log, readX402Log } from '../../x402/ledger.js';
 import { usdcBalance } from '../../x402/balance.js';
-import { resolveX402Policy } from '../../x402/policy.js';
+import { resolveX402Policy, policyFromGrant } from '../../x402/policy.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import { sessionConfigExists, loadSessionConfig } from '../../lib/session-config.js';
@@ -103,7 +103,10 @@ export function registerPayTool(server: McpServer): void {
           const config = loadConfig();
           // Throws a clear "run jaw session setup" error when no session exists.
           const payer = Eip3009EoaPayer.fromSessionKey();
-          const policy = resolveX402Policy(config.x402);
+          // Seed the policy from the on-chain grant captured at setup (caps +
+          // allowlists agree with what the user approved); config still wins.
+          const grantPolicy = policyFromGrant(sessionConfigExists() ? loadSessionConfig().grantedSpend : undefined);
+          const policy = resolveX402Policy(config.x402, grantPolicy);
           if (sessionSpent === null) sessionSpent = seedSessionSpent(payer.address);
 
           // Flow 2b: when a session (and its on-chain permission) exists, refill
