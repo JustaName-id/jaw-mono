@@ -1,6 +1,6 @@
 'use client';
 
-import { Eye, CircleDollarSign, ShieldCheck, Globe } from 'lucide-react';
+import { Eye, CircleDollarSign, ShieldCheck } from 'lucide-react';
 import { ShellDialog } from '../ShellDialog';
 import { DialogAppHeader } from '../DialogAppHeader';
 import { AccountHeaderRow } from '../AccountHeaderRow';
@@ -9,7 +9,7 @@ import { Button } from '../ui/button';
 import { ConnectDialogProps } from './types';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { sanitizeDisplayName } from '../../utils/sanitize';
-import { isSafeImageUrl } from '../../utils/safeUrl';
+import { AppAvatar } from '../AppAvatar';
 import { formatAddress } from '../../utils/formatAddress';
 
 const CAPABILITY_ROWS = [
@@ -44,15 +44,7 @@ export const ConnectDialog = ({
   // appName is externally-controlled (dApp metadata); sanitize before display.
   const safeAppName = sanitizeDisplayName(appName) || 'dApp';
 
-  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
-    <img
-      src={appLogoUrl ?? undefined}
-      alt={`${safeAppName} logo`}
-      className="h-full w-full rounded-full object-cover"
-    />
-  ) : (
-    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
-  );
+  const appAvatar = <AppAvatar appName={appName} appLogoUrl={appLogoUrl} />;
 
   return (
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing}>

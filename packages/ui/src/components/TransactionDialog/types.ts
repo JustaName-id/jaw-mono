@@ -1,5 +1,6 @@
 import { FeeTokenOption } from '../FeeTokenSelector';
 import { AssetDelta } from '../../utils/assetPreview';
+import { RevertCause } from '../../utils/transactionFailure';
 
 export interface TransactionData {
   to: string;
@@ -33,18 +34,21 @@ export interface TransactionDialogProps {
   assetsIn?: AssetDelta[];
   assetPreviewError?: boolean;
   assetPreviewWillRevert?: boolean;
+  /** Why the simulation reverted, when known — lets a balance shortfall read as insufficient funds. */
+  assetPreviewRevertCause?: RevertCause;
 
   // Actions
   onConfirm: () => Promise<void>;
   onCancel: () => void;
   isProcessing: boolean;
 
-  // Status
-  transactionStatus: string;
-
   // Display utilities
   networkName: string;
   apiKey?: string;
+
+  /** Requesting dApp, shown as the flow target on the processing screen. */
+  appName?: string;
+  appLogoUrl?: string | null;
 
   // Fee token selection (for ERC-20 paymaster)
   feeTokens?: FeeTokenOption[];

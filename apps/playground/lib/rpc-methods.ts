@@ -1,4 +1,5 @@
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
+import { parseEther } from 'viem';
 
 export type ParameterType = 'address' | 'hex' | 'number' | 'string' | 'json' | 'select' | 'toggle';
 
@@ -65,6 +66,25 @@ export const CATEGORY_LABELS: Record<MethodCategory, string> = {
 };
 
 // Generate chain options dynamically from SUPPORTED_CHAINS
+/**
+ * The Value field takes decimal native currency ("0.5"), but a hex-wei value copied from a
+ * wallet_sendCalls payload would `parseFloat` to 0 and silently send nothing — accept both.
+ */
+export function parseValueToWei(value?: string): bigint {
+  const trimmed = value?.trim();
+  if (!trimmed) return 0n;
+  if (/^0x[0-9a-f]*$/i.test(trimmed)) return trimmed === '0x' ? 0n : BigInt(trimmed);
+  try {
+    // Exact for full 18-decimal inputs, where float math rounds past ~15 digits.
+    const wei = parseEther(trimmed);
+    return wei > 0n ? wei : 0n;
+  } catch {
+    // parseEther rejects forms parseFloat accepts (e.g. "1e18") — keep them working.
+    const parsed = parseFloat(trimmed);
+    return Number.isFinite(parsed) && parsed > 0 ? BigInt(Math.floor(parsed * 1e18)) : 0n;
+  }
+}
+
 export const CHAIN_OPTIONS = [
   { label: 'Default (current chain)', value: 'default' },
   ...SUPPORTED_CHAINS.map((chain) => ({
@@ -198,7 +218,7 @@ console.log('Chain ID:', chainId);`,
         name: 'value',
         type: 'string',
         label: 'Value',
-        description: "Amount in the chain's native currency",
+        description: "Amount in the chain's native currency (e.g. 0.5), or 0x-prefixed wei",
         required: false,
         defaultValue: '0',
       },
@@ -212,11 +232,9 @@ console.log('Chain ID:', chainId);`,
       },
     ],
     getCodeSnippet: (params) => {
-      const value = params.value ? `parseEther('${params.value}')` : '0n';
+      const value = params.value ? `${parseValueToWei(params.value)}n` : '0n';
       const chainIdLine = params.chainId && params.chainId !== 'default' ? `\n    chainId: '${params.chainId}',` : '';
-      return `import { parseEther } from 'viem';
-
-const txHash = await jaw.provider.request({
+      return `const txHash = await jaw.provider.request({
   method: 'eth_sendTransaction',
   params: [{
     from: account,
@@ -229,7 +247,7 @@ const txHash = await jaw.provider.request({
 console.log('Transaction hash:', txHash);`;
     },
     buildParams: (params, context) => {
-      const valueWei = params.value ? BigInt(Math.floor(parseFloat(params.value) * 1e18)) : 0n;
+      const valueWei = parseValueToWei(params.value);
       const result: { from?: string; to: string; value: string; data: string; chainId?: string } = {
         from: context.address,
         to: params.to,

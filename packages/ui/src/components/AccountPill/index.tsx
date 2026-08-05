@@ -1,8 +1,7 @@
 'use client';
 
-import { useState } from 'react';
 import { AccountAvatar } from '../AccountAvatar';
-import { CopyIcon, CopiedIcon } from '../../icons';
+import { CopyButton } from '../CopyButton';
 import { cn } from '../../lib/utils';
 
 export interface AccountPillProps {
@@ -23,18 +22,6 @@ export interface AccountPillProps {
  * Theme-adaptive via semantic tokens.
  */
 export function AccountPill({ seedAddress, label, avatarUrl, copyValue, className }: AccountPillProps) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = () => {
-    if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(copyValue)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => undefined);
-  };
-
   return (
     <span
       className={cn(
@@ -51,12 +38,15 @@ export function AccountPill({ seedAddress, label, avatarUrl, copyValue, classNam
       >
         {label}
       </span>
-      {copyValue &&
-        (copied ? (
-          <CopiedIcon className="text-muted-foreground size-3 flex-none" />
-        ) : (
-          <CopyIcon className="text-muted-foreground size-3 flex-none cursor-pointer" onClick={onCopy} />
-        ))}
+      {copyValue && (
+        <CopyButton
+          value={copyValue}
+          size={12}
+          resetAfterMs={1500}
+          label="Copy address"
+          className="text-muted-foreground"
+        />
+      )}
     </span>
   );
 }

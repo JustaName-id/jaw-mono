@@ -13,11 +13,10 @@ import { useClearSigningTypedData } from '../../hooks';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { ClearSignedView } from '../TransactionDialog/ClearSignedView';
 import { Eip712VerificationDigests } from '../VerificationDigest';
-import { sanitizeDisplayName } from '../../utils/sanitize';
-import { isSafeImageUrl } from '../../utils/safeUrl';
+import { AppAvatar } from '../AppAvatar';
 import { formatAddress } from '../../utils/formatAddress';
+import { normalizeChainId } from '../../utils/clearSigning';
 import { useEffect, useMemo, useRef } from 'react';
-import { Globe } from 'lucide-react';
 
 // EIP-712 TypedData structure
 interface TypedData {
@@ -51,10 +50,20 @@ export const Eip712Dialog = ({
   const signerAddress = accountAddress ?? '';
   const { name: resolvedName, avatar: signerAvatar } = useReverseIdentity(accountAddress, chainId, mainnetRpcUrl);
   const displayName = resolvedName || formatAddress(signerAddress);
-  // Parse typed data
+  // Core refuses unsignable payloads before this dialog opens; this guard is for hosts
+  // driving @jaw.id/ui directly. Shape-check rather than trusting the cast — a payload
+  // that parses as JSON but lacks `types[primaryType]` used to throw inside the tree,
+  // and a render throw here leaves the caller's promise unsettled.
   const typedData = useMemo(() => {
     try {
-      return JSON.parse(typedDataJson) as TypedData;
+      const parsed = JSON.parse(typedDataJson) as unknown;
+      if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) return null;
+      const { types, primaryType } = parsed as Partial<TypedData>;
+      if (!types || typeof types !== 'object') return null;
+      if (typeof primaryType !== 'string' || !Array.isArray((types as Record<string, unknown>)[primaryType])) {
+        return null;
+      }
+      return parsed as TypedData;
     } catch (error) {
       console.error('Failed to parse typed data:', error);
       return null;
@@ -71,7 +80,14 @@ export const Eip712Dialog = ({
     }
   }, [mainnetRpcUrl]);
 
-  const { display: clearSigned } = useClearSigningTypedData(typedDataJson, chainId ?? 1, apiKey);
+  // clearSignedChainId is the chain the rows were resolved on (the typed data's
+  // domain chain, falling back to the connected chain) — the view must render
+  // token icons and chain labels against it, not against `chainId`.
+  const { display: clearSigned, chainId: clearSignedChainId } = useClearSigningTypedData(
+    typedDataJson,
+    chainId ?? 1,
+    apiKey
+  );
 
   // Inside a Radix modal, native wheel/trackpad scrolling of a nested overflow
   // container can get eaten. Drive scrollTop manually so the content region always
@@ -90,31 +106,13 @@ export const Eip712Dialog = ({
   }, [open, isProcessing, isSuccess, clearSigned]);
 
   const hasError = signatureStatus.includes('Error');
-  const safeAppName = sanitizeDisplayName(appName ?? '') || 'dApp';
 
   // Domain the signature is bound to (which contract accepts it, on which chain).
   const domainName = typedData?.domain?.name as string | undefined;
   const verifyingContract = typedData?.domain?.verifyingContract as string | undefined;
-  const domainChainId = useMemo(() => {
-    const raw = typedData?.domain?.chainId;
-    if (typeof raw === 'number') return raw;
-    if (typeof raw === 'bigint') return Number(raw);
-    if (typeof raw === 'string' && raw.length > 0) {
-      const n = raw.startsWith('0x') ? Number.parseInt(raw, 16) : Number(raw);
-      return Number.isFinite(n) ? n : undefined;
-    }
-    return undefined;
-  }, [typedData]);
+  const domainChainId = normalizeChainId(typedData?.domain?.chainId);
 
-  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
-    <img
-      src={appLogoUrl ?? undefined}
-      alt={`${safeAppName} logo`}
-      className="h-full w-full rounded-full object-cover"
-    />
-  ) : (
-    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
-  );
+  const appAvatar = <AppAvatar appName={appName} appLogoUrl={appLogoUrl} />;
 
   const rawTree = typedData ? <Eip712Tree typedData={typedData} /> : null;
 
@@ -161,7 +159,7 @@ export const Eip712Dialog = ({
               </div>
             ) : clearSigned && clearSigned.rows.length > 0 ? (
               <>
-                <ClearSignedView display={clearSigned} chainId={chainId ?? 1} mainnetRpcUrl={mainnetRpcUrl} />
+                <ClearSignedView display={clearSigned} chainId={clearSignedChainId} mainnetRpcUrl={mainnetRpcUrl} />
                 <details className="text-xs">
                   <summary className="text-muted-foreground hover:text-foreground cursor-pointer">
                     Show raw details
@@ -206,7 +204,9 @@ export const Eip712Dialog = ({
               </Button>
               <Button
                 onClick={onSign}
-                disabled={!canSign}
+                // The screen owns this invariant: never offer to sign what it couldn't
+                // render, whatever `canSign` a host passes.
+                disabled={!canSign || !typedData}
                 className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
               >
                 Sign

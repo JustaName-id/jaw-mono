@@ -8,10 +8,12 @@ import { DefaultDialog } from '../DefaultDialog';
 import { FeeTokenSelector } from '../FeeTokenSelector';
 import { PermissionDialogProps } from './types';
 import { useDialogMobileFullScreen, useChainIconURI, useFeeTokenPrice } from '../../hooks';
-import { CopiedIcon, CopyIcon } from '../../icons';
+import { CopyButton } from '../CopyButton';
 import { useState, useEffect, useRef } from 'react';
 import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
+import { subscriptDecimal } from '../../utils/displayFormat';
+import { SubText } from '../SubText';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { TokenIcon } from '../TokenIcon';
 
@@ -63,7 +65,6 @@ export const PermissionDialog = ({
   // Fetch native token price dynamically based on the chain's native token symbol
   const nativeTokenPrice = useFeeTokenPrice(nativeSymbol);
 
-  const [isPermissionIdCopied, setIsPermissionIdCopied] = useState(false);
   const [resolvedAddresses, setResolvedAddresses] = useState<Record<string, string>>({});
   const [resolvedAvatars, setResolvedAvatars] = useState<Record<string, string>>({});
   const [isResolvingAddresses, setIsResolvingAddresses] = useState(true); // Start true to prevent early clicks
@@ -174,15 +175,6 @@ export const PermissionDialog = ({
     return `${address.slice(0, 5)}...${address.slice(-4)}`;
   };
 
-  // Copy to clipboard helper
-  const copyToClipboard = (text: string, setCopied: (value: boolean) => void) => {
-    if (typeof window !== 'undefined' && navigator?.clipboard) {
-      navigator.clipboard.writeText(text).catch(() => undefined);
-      setCopied(true);
-      setTimeout(() => setCopied(false), 3000);
-    }
-  };
-
   const hasGasPaymentOption = !gasEstimationError || sponsored;
   // Paying with ERC-20 requires a settled estimate for the selected token — the
   // approval amount comes from it; without one the transaction must not start.
@@ -251,16 +243,7 @@ export const PermissionDialog = ({
             <div className="border-border flex flex-col gap-2.5 rounded-[6px] border p-3.5">
               <div className="flex flex-row items-center justify-between">
                 <p className="text-foreground text-xs font-bold leading-[133%]">Permission ID</p>
-                {isPermissionIdCopied ? (
-                  <CopiedIcon width={16} height={16} />
-                ) : (
-                  <CopyIcon
-                    width={16}
-                    height={16}
-                    onClick={() => copyToClipboard(permissionId, setIsPermissionIdCopied)}
-                    className="cursor-pointer"
-                  />
-                )}
+                <CopyButton value={permissionId} size={16} label="Copy permission ID" />
               </div>
               <p className="text-foreground break-all text-base font-normal leading-[150%]">{permissionId}</p>
             </div>
@@ -494,15 +477,17 @@ export const PermissionDialog = ({
                       </span>
                     </div>
                     <p className="text-muted-foreground text-xs font-normal">
-                      {sponsored && gasFee && gasFee !== 'sponsored'
-                        ? (() => {
-                            const gasValue = Number(gasFee);
-                            if (gasValue > 0 && gasValue < 0.0001) {
-                              return `< 0.0001 ${nativeSymbol}`;
-                            }
-                            return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                          })()
-                        : 'Gas fees covered'}
+                      <SubText>
+                        {sponsored && gasFee && gasFee !== 'sponsored'
+                          ? (() => {
+                              const gasValue = Number(gasFee);
+                              if (gasValue > 0 && gasValue < 0.0001) {
+                                return `${subscriptDecimal(gasValue)} ${nativeSymbol}`;
+                              }
+                              return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                            })()
+                          : 'Gas fees covered'}
+                      </SubText>
                     </p>
                   </div>
                 ) : isPayingWithErc20 && selectedFeeToken ? (
@@ -561,13 +546,15 @@ export const PermissionDialog = ({
                       )}
                     </div>
                     <p className="text-muted-foreground text-xs font-normal">
-                      {(() => {
-                        const gasValue = Number(gasFee);
-                        if (gasValue > 0 && gasValue < 0.0001) {
-                          return `< 0.0001 ${nativeSymbol}`;
-                        }
-                        return `${gasValue.toFixed(4)} ${nativeSymbol}`;
-                      })()}
+                      <SubText>
+                        {(() => {
+                          const gasValue = Number(gasFee);
+                          if (gasValue > 0 && gasValue < 0.0001) {
+                            return `${subscriptDecimal(gasValue)} ${nativeSymbol}`;
+                          }
+                          return `${gasValue.toFixed(4)} ${nativeSymbol}`;
+                        })()}
+                      </SubText>
                     </p>
                   </div>
                 ) : (

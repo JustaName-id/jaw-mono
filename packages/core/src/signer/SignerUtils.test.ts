@@ -1,5 +1,10 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import { getCachedWalletConnectResponse, DEFAULT_AUTH_TTL, normalizeAuthTTL } from './SignerUtils.js';
+import {
+    getCachedWalletConnectResponse,
+    DEFAULT_AUTH_TTL,
+    normalizeAuthTTL,
+    assertSignableTypedData,
+} from './SignerUtils.js';
 import { store, sdkstore } from '../store/index.js';
 import { SDK_VERSION } from '../sdk-info.js';
 
@@ -345,5 +350,157 @@ describe('SignerUtils', () => {
                 expect(result?.accounts[1].capabilities).toBeUndefined();
             });
         });
+    });
+});
+
+describe('assertSignableTypedData', () => {
+    const req = (typedData: unknown) => ({
+        method: 'eth_signTypedData_v4',
+        params: ['0x70997970C51812dc3A010C7d01b50e0d17dc79C8', typedData],
+    });
+
+    const VALID = JSON.stringify({
+        domain: { name: 'Example', version: '1', chainId: 1 },
+        primaryType: 'Permit',
+        types: {
+            EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+            ],
+            Permit: [
+                { name: 'owner', type: 'address' },
+                { name: 'value', type: 'uint256' },
+            ],
+        },
+        message: { owner: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', value: '1' },
+    });
+
+    it('accepts a signable payload', () => {
+        expect(() => assertSignableTypedData(req(VALID))).not.toThrow();
+    });
+
+    it('accepts an object payload as well as a JSON string', () => {
+        expect(() => assertSignableTypedData(req(JSON.parse(VALID)))).not.toThrow();
+    });
+
+    it('ignores requests for other methods', () => {
+        expect(() => assertSignableTypedData({ method: 'personal_sign', params: ['0xdead', 'nope'] })).not.toThrow();
+    });
+
+    // No signature can be produced for any of these, so the request is refused before a
+    // dialog opens. Messages are asserted verbatim-ish: they are the wallet's own API
+    // surface, not a passthrough of whatever wording viem happens to use this version.
+    it.each([
+        ['types missing entirely', '{"primaryType":"Permit","message":{}}', /is missing "types"/],
+        [
+            'primaryType absent from types',
+            '{"primaryType":"Permit","types":{"Other":[]},"message":{}}',
+            /"primaryType" "Permit" is not defined in "types"/,
+        ],
+        ['types is not an object', '{"primaryType":"Permit","types":"nope","message":{}}', /"types" must be an object/],
+        ['payload is null literal', 'null', /typed data must be an object/],
+        ['payload is an array', '[]', /typed data must be an object/],
+        ['payload is a bare number', '42', /typed data must be an object/],
+        ['primaryType is not a string', '{"types":{},"primaryType":7}', /"primaryType" must be a non-empty string/],
+        ['primaryType is empty', '{"types":{},"primaryType":""}', /"primaryType" must be a non-empty string/],
+    ])('rejects %s', (_label, payload, expected) => {
+        expect(() => assertSignableTypedData(req(payload))).toThrow(expected);
+    });
+
+    it('rejects a non-JSON string', () => {
+        expect(() => assertSignableTypedData(req('not json at all'))).toThrow(/not valid JSON/i);
+    });
+
+    it('names the declared types so the author can see what is missing', () => {
+        try {
+            assertSignableTypedData(req('{"primaryType":"Permit","types":{"Other":[],"Extra":[]},"message":{}}'));
+            throw new Error('expected a throw');
+        } catch (error) {
+            const e = error as { message: string; data?: { primaryType?: string; definedTypes?: string[] } };
+            expect(e.data?.primaryType).toBe('Permit');
+            expect(e.data?.definedTypes).toEqual(['Other', 'Extra']);
+        }
+    });
+
+    it('keeps a dependency error out of the message and puts it in data', () => {
+        // Structurally fine — `Msg` is declared — but a field references an undeclared
+        // struct, which only hashing catches. The message stays ours; viem's wording
+        // ("Type \"Foo\" is not a valid encoding type") goes to `data.reason`.
+        const payload = JSON.stringify({
+            domain: {},
+            primaryType: 'Msg',
+            types: { EIP712Domain: [], Msg: [{ name: 'a', type: 'Foo' }] },
+            message: { a: {} },
+        });
+        try {
+            assertSignableTypedData(req(payload));
+            throw new Error('expected a throw');
+        } catch (error) {
+            const e = error as { message: string; data?: { reason?: string } };
+            expect(e.message).toBe('typed data could not be hashed for signing');
+            expect(typeof e.data?.reason).toBe('string');
+        }
+    });
+
+    it('rejects a missing second parameter', () => {
+        expect(() => assertSignableTypedData({ method: 'eth_signTypedData_v4', params: ['0xdead'] })).toThrow(
+            /typed data is required/i
+        );
+    });
+
+    it('reports the JSON-RPC invalid-params code', () => {
+        try {
+            assertSignableTypedData(req('null'));
+            throw new Error('expected a throw');
+        } catch (error) {
+            expect((error as { code?: number }).code).toBe(-32602);
+        }
+    });
+});
+
+// ERC-7871 wallet_sign type 0x01 is routed to the very same EIP-712 dialog
+// (ReactUIHandler reshapes it into an eth_signTypedData_v4 request), so guarding only
+// eth_signTypedData_v4 would leave this path unvalidated.
+describe('assertSignableTypedData — wallet_sign (ERC-7871)', () => {
+    const walletSign = (type: string, data: unknown) => ({
+        method: 'wallet_sign',
+        params: [{ address: '0x70997970C51812dc3A010C7d01b50e0d17dc79C8', request: { type, data } }],
+    });
+
+    const SIGNABLE = {
+        domain: { name: 'Test', version: '1', chainId: 1 },
+        primaryType: 'Msg',
+        types: {
+            EIP712Domain: [
+                { name: 'name', type: 'string' },
+                { name: 'version', type: 'string' },
+                { name: 'chainId', type: 'uint256' },
+            ],
+            Msg: [{ name: 'content', type: 'string' }],
+        },
+        message: { content: 'hi' },
+    };
+
+    it('accepts a signable 0x01 payload (object form)', () => {
+        expect(() => assertSignableTypedData(walletSign('0x01', SIGNABLE))).not.toThrow();
+    });
+
+    it('rejects an unsignable 0x01 payload', () => {
+        expect(() =>
+            assertSignableTypedData(walletSign('0x01', { primaryType: 'Permit', types: { Other: [] } }))
+        ).toThrow(/"primaryType" "Permit" is not defined in "types"/);
+    });
+
+    it('rejects a 0x01 payload with no typed data at all', () => {
+        expect(() => assertSignableTypedData(walletSign('0x01', undefined))).toThrow(/typed data is required/);
+    });
+
+    it('ignores 0x45 (personal_sign), which carries a message not typed data', () => {
+        expect(() => assertSignableTypedData(walletSign('0x45', { message: 'hello' }))).not.toThrow();
+    });
+
+    it('ignores a wallet_sign with no request object', () => {
+        expect(() => assertSignableTypedData({ method: 'wallet_sign', params: [{}] })).not.toThrow();
     });
 });

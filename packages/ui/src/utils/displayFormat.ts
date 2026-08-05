@@ -6,7 +6,7 @@
 // identically. Core-free (viem only).
 // ============================================================================
 
-import { maxUint160, maxUint256 } from 'viem';
+import { formatEther, maxUint160, maxUint256 } from 'viem';
 
 // Plausible unix-timestamp window (2000-01-01 .. 2100-01-01) for date detection.
 export const TS_MIN = 946684800n;
@@ -19,6 +19,46 @@ export function groupNumber(s: string): string {
   const [intPart, fracPart] = body.split('.');
   const grouped = intPart.replace(/\B(?=(\d{3})+(?!\d))/g, ',');
   return (neg ? '-' : '') + (fracPart ? `${grouped}.${fracPart}` : grouped);
+}
+
+/**
+ * Subscript zero-count notation for a tiny positive decimal, à la DexScreener:
+ * `0.000002732` → `"0.0₅2732"` (the subscript = how many zeros follow the decimal
+ * before the first significant digit). Use in place of a flat "<0.0001".
+ *
+ * There is no Intl / `toLocaleString` option for this — it's a crypto display
+ * convention — so we derive it from `toExponential`, which returns an exactly-rounded
+ * mantissa + base-10 exponent (`"2.732e-6"`). That gives the zero count (`-exp - 1`)
+ * and the significant digits directly, with no fixed-width padding or `log10` float
+ * error. `sig` caps the significant digits. Pair with `<SubText>` to render the count
+ * as a real `<sub>`. Returns "0" for non-positive / non-finite / non-fractional input.
+ */
+const SUB_DIGITS = '₀₁₂₃₄₅₆₇₈₉';
+export function subscriptDecimal(value: number, sig = 4): string {
+  if (!Number.isFinite(value) || value <= 0) return '0';
+  const [mantissa, expPart] = value.toExponential(Math.max(0, sig - 1)).split('e');
+  const exp = Number(expPart);
+  if (exp >= 0) return '0'; // not a sub-1 fraction; caller only formats tiny values
+  const zeros = -exp - 1; // leading zeros between the decimal point and the first digit
+  const digits = mantissa.replace('.', '').replace(/0+$/, '') || '0';
+  const sub = String(zeros).replace(/\d/g, (d) => SUB_DIGITS[Number(d)]);
+  return `0.0${sub}${digits}`;
+}
+
+/**
+ * Format a transaction `value` — always wei, hex or decimal per EIP-1474/5792 — as a
+ * decimal native amount. Never infer the unit: the same string is passed to `BigInt`
+ * when the call is built, so display and signed intent must parse it identically.
+ * Null when there's nothing honest to show (absent, zero, negative, unparseable).
+ */
+export function formatNativeValue(value?: string): string | null {
+  if (!value) return null;
+  try {
+    const wei = BigInt(value);
+    return wei <= 0n ? null : formatEther(wei);
+  } catch {
+    return null;
+  }
 }
 
 /** Largest value a `uint<bits>` can hold — used to spot "unlimited"/"no expiry" sentinels. */

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   applyFormat,
   createTokenResolver,
@@ -20,6 +20,7 @@ interface TypedData {
 interface UseClearSigningTypedDataResult {
   display: ClearSigningDisplay | null;
   isLoading: boolean;
+  chainId: number;
 }
 
 /**
@@ -35,17 +36,19 @@ export function useClearSigningTypedData(
   const [display, setDisplay] = useState<ClearSigningDisplay | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (!typedDataJson) {
-      setDisplay(null);
-      setIsLoading(false);
-      return;
-    }
-
-    let parsed: TypedData;
+  const parsed = useMemo(() => {
+    if (!typedDataJson) return null;
     try {
-      parsed = JSON.parse(typedDataJson) as TypedData;
+      return JSON.parse(typedDataJson) as TypedData;
     } catch {
+      return null;
+    }
+  }, [typedDataJson]);
+
+  const effectiveChainId = normalizeChainId(parsed?.domain?.chainId) ?? chainId;
+
+  useEffect(() => {
+    if (!parsed) {
       setDisplay(null);
       setIsLoading(false);
       return;
@@ -58,11 +61,6 @@ export function useClearSigningTypedData(
       setIsLoading(false);
       return;
     }
-
-    // A typed-data signature is bound to the chain in its own `domain`, not to whatever
-    // chain the wallet happens to be connected to. Resolve the descriptor (and read token
-    // metadata) against the domain's chainId; fall back to the connected chain when absent.
-    const effectiveChainId = normalizeChainId(parsed.domain?.chainId) ?? chainId;
 
     let cancelled = false;
     setIsLoading(true);
@@ -115,7 +113,7 @@ export function useClearSigningTypedData(
     return () => {
       cancelled = true;
     };
-  }, [typedDataJson, chainId, apiKey]);
+  }, [parsed, effectiveChainId, apiKey]);
 
-  return { display, isLoading };
+  return { display, isLoading, chainId: effectiveChainId };
 }

@@ -6,28 +6,8 @@ import { dateTone, formatUnixDate, groupNumber, isUnlimitedAmount } from '../../
 import { TriangleAlert } from 'lucide-react';
 import { IdentityAvatar } from '../IdentityAvatar';
 import { TokenIcon } from '../TokenIcon';
-import { CopyIcon, CopiedIcon } from '../../icons';
+import { CopyButton } from '../CopyButton';
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip';
-
-/** Small copy-to-clipboard button that copies the full address. */
-function CopyAddress({ value }: { value: string }) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = () => {
-    if (typeof navigator === 'undefined' || !navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(value)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => undefined);
-  };
-  return copied ? (
-    <CopiedIcon className="size-3 flex-none" />
-  ) : (
-    <CopyIcon className="text-muted-foreground size-3 flex-none cursor-pointer" onClick={onCopy} />
-  );
-}
 
 interface ClearSignedViewProps {
   display: ClearSigningDisplay;
@@ -100,7 +80,7 @@ function AddressValue({
       <span className="text-foreground truncate font-mono text-[11px]">
         {resolvedName ? resolvedName : formatAddress(addr)}
       </span>
-      <CopyAddress value={addr} />
+      <CopyButton value={addr} size={12} resetAfterMs={1500} label="Copy address" className="text-muted-foreground" />
     </div>
   );
 }
@@ -115,10 +95,12 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
     const addresses = display.rows
       .filter((r) => r.kind === 'address' && r.rawValue)
       .map((r) => (r.rawValue as string).toLowerCase());
-    const unique = [...new Set(addresses)].filter((a) => !attemptedRef.current.has(a));
+    // Keyed by chain: the @chainlabel suffix baked into a resolved name is chain-specific,
+    // so a chainId change must re-resolve rather than reuse the stale label.
+    const unique = [...new Set(addresses)].filter((a) => !attemptedRef.current.has(`${chainId}:${a}`));
     if (unique.length === 0) return;
 
-    unique.forEach((a) => attemptedRef.current.add(a));
+    unique.forEach((a) => attemptedRef.current.add(`${chainId}:${a}`));
 
     let cancelled = false;
     reverseResolveWithAvatars(

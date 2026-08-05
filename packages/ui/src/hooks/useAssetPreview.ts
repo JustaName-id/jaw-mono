@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Address } from 'viem';
 import type { TransactionCall } from '@jaw.id/core';
 import { simulateAssetChanges, type AssetDelta } from '../utils/assetPreview';
+import type { RevertCause } from '../utils/transactionFailure';
 
 export interface UseAssetPreviewConfig {
   account?: Address;
@@ -17,6 +18,8 @@ export interface UseAssetPreviewResult {
   error: boolean;
   /** True when the simulation ran and a call in the batch reverted — the batch would fail on-chain. */
   willRevert: boolean;
+  /** Set only when `willRevert` — why it reverted, so a balance shortfall can read as "insufficient funds". */
+  revertCause?: RevertCause;
 }
 
 /**
@@ -34,6 +37,7 @@ export function useAssetPreview({
   const [assetsIn, setAssetsIn] = useState<AssetDelta[]>([]);
   const [error, setError] = useState<boolean>(false);
   const [willRevert, setWillRevert] = useState<boolean>(false);
+  const [revertCause, setRevertCause] = useState<RevertCause | undefined>(undefined);
 
   // Collision-safe content key so the effect re-runs only when the batch actually changes.
   const callsKey = JSON.stringify(calls.map((c) => [c.to, c.value?.toString(), c.data]));
@@ -44,17 +48,20 @@ export function useAssetPreview({
       setAssetsIn([]);
       setError(false);
       setWillRevert(false);
+      setRevertCause(undefined);
       return;
     }
 
     let cancelled = false;
     setError(false);
     setWillRevert(false);
+    setRevertCause(undefined);
 
     simulateAssetChanges({ chainId, apiKey, account, calls })
-      .then(({ deltas, willRevert }) => {
+      .then(({ deltas, willRevert, revertCause }) => {
         if (cancelled) return;
         setWillRevert(willRevert);
+        setRevertCause(revertCause);
         setAssetsOut(deltas.filter((d) => d.direction === 'out'));
         setAssetsIn(deltas.filter((d) => d.direction === 'in'));
       })
@@ -64,6 +71,7 @@ export function useAssetPreview({
         setAssetsOut([]);
         setAssetsIn([]);
         setWillRevert(false);
+        setRevertCause(undefined);
       });
 
     return () => {
@@ -71,5 +79,5 @@ export function useAssetPreview({
     };
   }, [enabled, account, chainId, apiKey, callsKey]);
 
-  return { assetsOut, assetsIn, error, willRevert };
+  return { assetsOut, assetsIn, error, willRevert, revertCause };
 }

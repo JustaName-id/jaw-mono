@@ -15,10 +15,9 @@ import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { dateTone } from '../../utils/displayFormat';
 import { parseSiweMessage } from '../../utils/siwe';
 import { formatAddress } from '../../utils/formatAddress';
-import { sanitizeDisplayName } from '../../utils/sanitize';
-import { isSafeImageUrl } from '../../utils/safeUrl';
-import { CopyIcon, CopiedIcon } from '../../icons';
-import { Globe, TriangleAlert } from 'lucide-react';
+import { AppAvatar } from '../AppAvatar';
+import { CopyButton } from '../CopyButton';
+import { TriangleAlert } from 'lucide-react';
 
 /**
  * One label/value row. Pass `copyValue` for a copy button; pass `warning` to flag the row
@@ -37,17 +36,6 @@ function Field({
   warning?: string;
   warningTone?: 'danger' | 'warning';
 }) {
-  const [copied, setCopied] = useState(false);
-  const onCopy = () => {
-    if (!copyValue || typeof navigator === 'undefined' || !navigator.clipboard) return;
-    navigator.clipboard
-      .writeText(copyValue)
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1500);
-      })
-      .catch(() => undefined);
-  };
   const warnText = warningTone === 'warning' ? 'text-amber-600 dark:text-amber-500' : 'text-destructive';
   const warnIcon = warningTone === 'warning' ? 'text-amber-500' : 'text-destructive';
   return (
@@ -73,12 +61,9 @@ function Field({
         >
           {value}
         </span>
-        {copyValue &&
-          (copied ? (
-            <CopiedIcon className="size-3 flex-none" />
-          ) : (
-            <CopyIcon className="size-3 flex-none cursor-pointer" onClick={onCopy} />
-          ))}
+        {copyValue && (
+          <CopyButton value={copyValue} size={12} resetAfterMs={1500} label={`Copy ${label.toLowerCase()}`} />
+        )}
       </span>
     </div>
   );
@@ -117,7 +102,6 @@ export const SiweDialog = ({
   );
   const displayName = resolvedName || formatAddress(signerAddress);
   const { name: messageAccountName } = useReverseIdentity(parsed?.address || undefined, parsed?.chainId, mainnetRpcUrl);
-  const safeAppName = sanitizeDisplayName(appName) || 'dApp';
   const hasError = siweStatus.includes('Error');
 
   // The message names an account; the signature is produced by the connected
@@ -163,11 +147,7 @@ export const SiweDialog = ({
     // Re-attach on isSuccess too (success view changes scroll height), like Eip712.
   }, [open, isProcessing, isSuccess, parsed]);
 
-  const appAvatar = isSafeImageUrl(appLogoUrl) ? (
-    <img src={appLogoUrl} alt={`${safeAppName} logo`} className="h-full w-full rounded-full object-cover" />
-  ) : (
-    <Globe className="text-muted-foreground m-auto h-1/2 w-1/2" strokeWidth={1.5} />
-  );
+  const appAvatar = <AppAvatar appName={appName} appLogoUrl={appLogoUrl} />;
 
   // Parsed SIWE fields → the row-wise box (only rows with a value).
   const fields: Array<{
@@ -271,7 +251,9 @@ export const SiweDialog = ({
                 attacker-supplied text is unmistakably content, never chrome. */}
             {parsed?.statement && (
               <div className="border-border bg-foreground/[0.03] rounded-[10.5px] border p-3">
-                <p className="text-foreground break-words text-[11px] leading-[1.5]">{parsed.statement}</p>
+                <p className="text-foreground whitespace-pre-wrap break-words text-[11px] leading-[1.5]">
+                  {parsed.statement}
+                </p>
               </div>
             )}
 
