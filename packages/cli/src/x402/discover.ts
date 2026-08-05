@@ -14,8 +14,6 @@ const BAZAAR_BASE = 'https://api.cdp.coinbase.com/platform/v2/x402/discovery';
 const MAX_LIMIT = 20;
 const DEFAULT_LIMIT = 10;
 const DEFAULT_NETWORK = 'eip155:8453';
-// USDC is 6-decimals on every deployment in our registry.
-const USDC_DECIMALS = 6;
 // The discovery API is a well-behaved HTTPS service, but Node's fetch has no
 // default timeout, so bound it like every other network call in this package.
 const DISCOVER_TIMEOUT_MS = 15_000;
@@ -113,7 +111,7 @@ function toPrice(entry: Record<string, unknown>): ServicePrice | null {
   if (usdc && usdc.address.toLowerCase() === asset.toLowerCase()) {
     // amount passed /^\d+$/, so BigInt can't throw; guard the Number() cast so a
     // pathologically huge amount degrades to null instead of Infinity.
-    const n = Number(BigInt(amount)) / 10 ** USDC_DECIMALS;
+    const n = Number(BigInt(amount)) / 10 ** usdc.decimals;
     approxUsd = Number.isFinite(n) ? n : null;
   }
 

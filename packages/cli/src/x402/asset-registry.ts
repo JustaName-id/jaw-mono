@@ -10,6 +10,15 @@ export interface UsdcAsset {
   usdcName: string;
   /** EIP-712 domain `version`. */
   usdcVersion: string;
+  /**
+   * Token decimals. Every USDC deployment here is 6, but carrying it on the
+   * registry entry (rather than a literal `6` at the format site) keeps the
+   * source of truth in one place and is ready for a non-6-decimal asset when
+   * the registry grows past USDC. Reading it off-chain from the contract is
+   * deliberately avoided: the registry is a controlled allowlist, so an extra
+   * RPC round-trip and trusting a token's self-reported decimals buy nothing.
+   */
+  decimals: number;
 }
 
 export const USDC_BY_NETWORK: Record<string, UsdcAsset> = {
@@ -19,6 +28,7 @@ export const USDC_BY_NETWORK: Record<string, UsdcAsset> = {
     wireNetwork: 'eip155:8453',
     usdcName: 'USD Coin',
     usdcVersion: '2',
+    decimals: 6,
   },
   'eip155:84532': {
     address: '0x036CbD53842c5426634e7929541eC2318f3dCF7e',
@@ -26,6 +36,7 @@ export const USDC_BY_NETWORK: Record<string, UsdcAsset> = {
     wireNetwork: 'eip155:84532',
     usdcName: 'USDC',
     usdcVersion: '2',
+    decimals: 6,
   },
   'eip155:137': {
     address: '0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359',
@@ -33,6 +44,7 @@ export const USDC_BY_NETWORK: Record<string, UsdcAsset> = {
     wireNetwork: 'eip155:137',
     usdcName: 'USD Coin',
     usdcVersion: '2',
+    decimals: 6,
   },
   'eip155:80002': {
     address: '0x41E94Eb019C0762f9Bfcf9Fb1E58725BfB0e7582',
@@ -40,6 +52,7 @@ export const USDC_BY_NETWORK: Record<string, UsdcAsset> = {
     wireNetwork: 'eip155:80002',
     usdcName: 'USDC',
     usdcVersion: '2',
+    decimals: 6,
   },
 };
 
