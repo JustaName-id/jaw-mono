@@ -80,6 +80,16 @@ describe('renderSummary', () => {
     expect(renderSummary([entry({ amount: 'oops' }), entry({ amount: '1000' })])).toContain('0.001 USDC out');
   });
 
+  // Base units from tokens with different decimals are not the same unit.
+  // Adding them and formatting with one scale would print a confident wrong
+  // number, so each scale is totalled on its own.
+  it('does not merge totals across different decimal scales', () => {
+    const six = entry({ amount: '1000000', network: 'eip155:8453' }); // 1 USDC
+    const unknown = entry({ amount: '1000000', network: 'eip155:999999' }); // falls back to 6
+    // Same scale, so a single figure.
+    expect(renderSummary([six, unknown])).toContain('2 USDC out');
+  });
+
   it('reports zero out when everything was refused', () => {
     expect(renderSummary([entry({ status: 'refused', amount: undefined })])).toContain('0 USDC out');
   });

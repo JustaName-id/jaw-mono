@@ -97,3 +97,26 @@ describe('diagnose', () => {
     expect(problems[0]).toMatch(/session expired/i);
   });
 });
+
+// `ready` in the JSON output is derived from this list, so an empty result has
+// to mean the same thing the human output means when it prints no warnings.
+describe('diagnose as a readiness verdict', () => {
+  const healthy = {
+    expired: false,
+    ownerAddress: '0xOwner',
+    ownerBalance: '12.5',
+    payerBalance: '0',
+    hasAsset: true,
+    spent: 3_000_000n,
+    sessionCap: 10_000_000n,
+  };
+
+  it('is empty exactly when the setup is usable', () => {
+    expect(diagnose(healthy)).toHaveLength(0);
+  });
+
+  it('is non-empty for a setup that pays but bypasses the permission', () => {
+    // The case that used to report ready:true while warning in the same breath.
+    expect(diagnose({ ...healthy, ownerBalance: '0', payerBalance: '16.98' }).length).toBeGreaterThan(0);
+  });
+});

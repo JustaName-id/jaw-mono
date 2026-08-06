@@ -44,21 +44,33 @@ export function renderSummary(entries: X402LogEntry[]): string {
   const counts = { paid: 0, failed: 0, refused: 0 };
   // Only settled and attempted payments count as money out; a refusal never
   // signed anything. Same rule the spend caps use.
-  let spent = 0n;
+  //
+  // Totalled per decimals scale rather than as one number. Base units from
+  // tokens with different decimals are not the same unit, so adding them and
+  // formatting the result with whichever entry happened to come last would
+  // print a confident, wrong figure. Every USDC in the registry is 6 decimals
+  // today, so this is a single group in practice and the guard costs nothing.
+  const spentByScale = new Map<number, bigint>();
   for (const entry of entries) {
     counts[entry.status] += 1;
     if ((entry.status === 'paid' || entry.status === 'failed') && entry.amount) {
       try {
-        spent += BigInt(entry.amount);
+        const decimals = decimalsOf(entry);
+        spentByScale.set(decimals, (spentByScale.get(decimals) ?? 0n) + BigInt(entry.amount));
       } catch {
         /* a hand-edited amount must not break the summary */
       }
     }
   }
 
-  const decimals = entries.map(decimalsOf).at(-1) ?? 6;
   const parts = [`${counts.paid} paid`];
   if (counts.failed > 0) parts.push(`${counts.failed} failed`);
   if (counts.refused > 0) parts.push(`${counts.refused} refused`);
-  return `  ${parts.join(', ')}, ${formatUsdc(spent.toString(), decimals)} out`;
+
+  const totals =
+    spentByScale.size === 0
+      ? formatUsdc('0', 6)
+      : [...spentByScale.entries()].map(([decimals, spent]) => formatUsdc(spent.toString(), decimals)).join(' + ');
+
+  return `  ${parts.join(', ')}, ${totals} out`;
 }

@@ -119,6 +119,9 @@ export default class X402Pay extends BaseCommand {
 
     if (format === 'json') {
       this.outputResult({ ...result, dryRun: !flags.pay }, format);
+      // Same exit code as the human path. `--output json` is the scripting mode,
+      // and it was the one reporting success on a refused payment.
+      if (result.refusedReason) this.exit(1);
       return;
     }
 

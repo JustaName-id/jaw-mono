@@ -72,10 +72,24 @@ export default class X402Status extends BaseCommand {
     const sessionCap = parseBigInt(policy.maxTotalPerSession);
     const decimals = asset?.decimals ?? 6;
 
+    // One verdict for both renderers. `ready` used to be its own expression and
+    // drifted from the warnings: a setup whose owner was empty printed a loud
+    // "the cap is not applying" and still reported ready:true to a script.
+    const problems = diagnose({
+      expired,
+      ownerAddress: session.ownerAddress,
+      ownerBalance,
+      payerBalance,
+      hasAsset: asset !== undefined,
+      spent,
+      sessionCap,
+    });
+
     if (format === 'json') {
       this.outputResult(
         {
-          ready: !expired && ownerBalance !== null,
+          ready: problems.length === 0,
+          problems,
           chainId: session.chainId,
           owner: { address: session.ownerAddress, usdc: ownerBalance },
           payer: { address: payer, usdc: payerBalance },
@@ -110,17 +124,7 @@ export default class X402Status extends BaseCommand {
       `  expires ${new Date(session.expiry * 1000).toISOString()}${expired ? '' : ` (${formatRemaining(session.expiry - now)})`}`
     );
 
-    // Lead with whatever is actually blocking a payment, most likely first.
-    const problems = diagnose({
-      expired,
-      ownerAddress: session.ownerAddress,
-      ownerBalance,
-      payerBalance,
-      hasAsset: asset !== undefined,
-      spent,
-      sessionCap,
-    });
-
+    // Most likely blocker first.
     if (problems.length > 0) {
       this.log('');
       for (const problem of problems) this.log(`  ! ${problem}`);
