@@ -266,15 +266,6 @@ export const PermissionDialog = ({
               />
             )}
 
-            {calls.length > 0 && (
-              <AllowedCalls
-                calls={calls}
-                resolvedAddresses={resolvedAddresses}
-                resolvedAvatars={resolvedAvatars}
-                truncateAddress={truncateAddress}
-              />
-            )}
-
             <p className="text-muted-foreground px-0.5 text-[11px] leading-[140%]">
               {isGrant
                 ? 'Limits are enforced onchain. Revoke anytime, one tap.'
