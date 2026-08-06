@@ -2,6 +2,51 @@ import { loadSessionKey } from './keystore.js';
 import { loadSessionConfig, type SessionConfig } from './session-config.js';
 import { loadConfig } from './config.js';
 
+// JAW's ERC-20 paymaster, mirrored from core's JAW_PAYMASTER_URL. Kept as a
+// local literal rather than an import because `@jaw.id/core` is lazy-loaded in
+// the CLI (a static import would pull it into startup); keep in sync if core's
+// URL moves. The core SDK recognises this exact base URL and adds the USDC
+// approval the paymaster needs, so the path must match byte for byte.
+const JAW_ERC20_PAYMASTER_URL = 'https://api.justaname.id/proxy/v1/rpc/erc20-paymaster';
+
+/**
+ * The paymaster to sponsor an auto-mode userOp, in precedence order: an explicit
+ * url, then `config.paymasters` for the chain, then JAW's own.
+ *
+ * Falling through to JAW's is what makes the default path need no configuration.
+ * Without it a fresh setup could not top up at all: the account has to prefund
+ * the EntryPoint for the worst-case gas, which fails on an account holding only
+ * USDC, and the error names none of this. Asking the user for a paymaster url
+ * put the ERC-7677 app-developer role on someone who is just using the wallet,
+ * and it asked them to sign up with the provider we already proxy and pay for.
+ *
+ * The ERC-20 paymaster takes its fee in USDC, so the account never needs a
+ * native token, which is the point: gas comes out of the same balance the
+ * payments do. `config.paymasters` still wins, so anyone bringing their own
+ * keeps it.
+ */
+function resolvePaymaster(
+  options: SessionBridgeOptions
+): Pick<SessionBridgeOptions, 'paymasterUrl' | 'paymasterContext'> {
+  if (options.paymasterUrl) {
+    return { paymasterUrl: options.paymasterUrl, paymasterContext: options.paymasterContext };
+  }
+
+  const configured = loadConfig().paymasters?.[options.chainId];
+  if (configured) {
+    return { paymasterUrl: configured.url, paymasterContext: configured.context };
+  }
+
+  // No api key means nothing to authenticate the proxy with, so there is no
+  // sponsorship to offer; leaving it unset keeps the old unsponsored behaviour.
+  if (!options.apiKey) return {};
+
+  const url = new URL(JAW_ERC20_PAYMASTER_URL);
+  url.searchParams.set('chainId', String(options.chainId));
+  url.searchParams.set('api-key', options.apiKey);
+  return { paymasterUrl: url.toString() };
+}
+
 export interface SessionBridgeOptions {
   apiKey: string;
   chainId: number;
@@ -26,16 +71,7 @@ export class SessionBridge {
   private session: InitializedSession | null = null;
 
   constructor(options: SessionBridgeOptions) {
-    this.options = { ...options };
-
-    if (!this.options.paymasterUrl) {
-      const config = loadConfig();
-      const pm = config.paymasters?.[this.options.chainId];
-      if (pm) {
-        this.options.paymasterUrl = pm.url;
-        this.options.paymasterContext = pm.context;
-      }
-    }
+    this.options = { ...options, ...resolvePaymaster(options) };
   }
 
   private async getSession(): Promise<InitializedSession> {
