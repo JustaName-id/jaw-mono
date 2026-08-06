@@ -29,7 +29,7 @@ class TestSigner extends JAWSigner {
     protected async handleWalletConnectUnauthenticated(): Promise<unknown> {
         return null;
     }
-    protected async handleSigningRequest(): Promise<unknown> {
+    protected async handleSigningRequest(_request: RequestArguments): Promise<unknown> {
         return null;
     }
 }
