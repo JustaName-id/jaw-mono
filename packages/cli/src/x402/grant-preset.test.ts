@@ -71,6 +71,17 @@ describe('buildX402Permissions', () => {
     expect(() => buildX402Permissions(1)).toThrow(/No USDC configured for chain 1.*supported on/s);
   });
 
+  // SpendLimit.allowance is uint160 on chain; past that the grant dies in ABI
+  // encoding with an opaque range error instead of naming the number typed.
+  it('refuses a limit larger than a uint160 allowance can hold', () => {
+    expect(() => buildX402Permissions(8453, `${'9'.repeat(45)}/day`)).toThrow(/larger than a spend allowance can hold/);
+  });
+
+  it('accepts a limit just inside the uint160 bound', () => {
+    const max = (2n ** 160n - 1n) / 10n ** 6n;
+    expect(() => buildX402Permissions(8453, `${max}/day`)).not.toThrow();
+  });
+
   it('refuses a limit that rounds to zero rather than granting an unusable permission', () => {
     // Below one base unit at 6 decimals.
     expect(() => buildX402Permissions(8453, '0.0000001/day')).toThrow(/resolves to zero/);

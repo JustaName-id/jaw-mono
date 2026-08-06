@@ -16,6 +16,9 @@ import type { PermissionsConfig } from '../lib/types.js';
 
 const TRANSFER_SIGNATURE = 'transfer(address,uint256)';
 
+/** SpendLimit.allowance is uint160 in JustaPermissionManager. */
+const MAX_ALLOWANCE = 2n ** 160n - 1n;
+
 /** Spend periods accepted on a limit, matching the units the grant validator takes. */
 export const LIMIT_PERIODS = ['minute', 'hour', 'day', 'week', 'month', 'year', 'forever'] as const;
 export type LimitPeriod = (typeof LIMIT_PERIODS)[number];
@@ -82,6 +85,12 @@ export function buildX402Permissions(chainId: number, limit: string = DEFAULT_X4
   }
   if (allowance <= 0n) {
     throw new Error(`Limit "${limit}" resolves to zero, which would refuse every payment.`);
+  }
+  // SpendLimit.allowance is a uint160 on chain. Past that the grant fails deep
+  // in ABI encoding with an opaque range error, so refuse here where the number
+  // the user typed is still in hand.
+  if (allowance > MAX_ALLOWANCE) {
+    throw new Error(`Limit "${limit}" is larger than a spend allowance can hold (max ${MAX_ALLOWANCE}).`);
   }
 
   return {

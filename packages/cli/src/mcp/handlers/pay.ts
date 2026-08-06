@@ -5,12 +5,12 @@ import { parseBigInt, parseNonNegativeBigInt } from '../../x402/amount.js';
 import { loadConfig } from '../../lib/config.js';
 import { Eip3009EoaPayer, sessionPayerAddress } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
-import { appendX402Log, readX402Log } from '../../x402/ledger.js';
+import { appendX402Log, readX402Log, sumSpentSince } from '../../x402/ledger.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { resolveX402Policy } from '../../x402/policy.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
-import { sessionConfigExists, loadSessionConfig } from '../../lib/session-config.js';
+import { tryLoadSessionConfig } from '../../lib/session-config.js';
 import type { X402PaymentRequirement } from '../../x402/types.js';
 
 interface PayAndFetchParams {
@@ -23,39 +23,10 @@ interface PayAndFetchParams {
   network?: string;
 }
 
-/**
- * Sum this payer's settled and attempted payments from the audit ledger,
- * scoped to the current session (entries since its `createdAt`; the payer's
- * full history when no session config exists). `maxTotalPerSession` must
- * survive a process restart — an in-memory counter alone would reset to zero
- * and let an agent relaunch its way past the cap.
- */
-function seedSessionSpent(payerAddress: string): bigint {
-  let since: string | undefined;
-  if (sessionConfigExists()) {
-    try {
-      since = loadSessionConfig().createdAt;
-    } catch {
-      /* unreadable session config: fall through and count the full history */
-    }
-  }
-  const payer = payerAddress.toLowerCase();
-  return readX402Log().reduce((total, entry) => {
-    // 'failed' counts too: the authorization was signed and sent, so in pull
-    // mode the facilitator may have broadcast the transfer anyway. Counting it
-    // can only under-spend the cap, never breach it.
-    if ((entry.status !== 'paid' && entry.status !== 'failed') || !entry.amount) return total;
-    if (entry.payer?.toLowerCase() !== payer) return total;
-    if (since && entry.at < since) return total;
-    const amount = parseBigInt(entry.amount);
-    return amount !== null ? total + amount : total;
-  }, 0n);
-}
-
 export function registerPayTool(server: McpServer): void {
   // Cumulative spend for the session, enforced against the policy's
   // maxTotalPerSession so an agent cannot chain many small payments past the
-  // cap. Seeded lazily from the ledger (see seedSessionSpent), then kept in
+  // cap. Seeded lazily from the ledger (see sumSpentSince), then kept in
   // memory across calls.
   let sessionSpent: bigint | null = null;
 
@@ -104,15 +75,19 @@ export function registerPayTool(server: McpServer): void {
           // Throws a clear "run jaw session setup" error when no session exists.
           const payer = Eip3009EoaPayer.fromSessionKey();
           const policy = resolveX402Policy(config.x402);
-          if (sessionSpent === null) sessionSpent = seedSessionSpent(payer.address);
+          // Read once and reuse: it only changes between `jaw session setup`
+          // runs, and both the spend window and the top-up path need it.
+          const session = tryLoadSessionConfig();
+          // Scoped to the session so a new grant starts a fresh budget; the
+          // payer's whole history when there is no session to scope by.
+          if (sessionSpent === null) sessionSpent = sumSpentSince(payer.address, session?.createdAt);
 
           // Flow 2b: when a session (and its on-chain permission) exists, refill
           // the payer EOA through the permission whenever it can't cover a price.
           // Funds stay in the user's account until the moment a payment needs
           // them; JustaPermissionManager caps every refill on-chain.
           let ensureFunds;
-          if (sessionConfigExists() && config.apiKey) {
-            const session = loadSessionConfig();
+          if (session && config.apiKey) {
             const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
             // Defensive: a hand-edited, non-numeric amount must degrade to "no
             // float / no bound", never throw and take down every payment.
@@ -140,7 +115,7 @@ export function registerPayTool(server: McpServer): void {
 
           // A failed settlement counts too: the signed authorization went out,
           // so the transfer may have been broadcast regardless of what the
-          // server answered. Mirrors the 'failed' accounting in seedSessionSpent.
+          // server answered. Mirrors the 'failed' accounting in sumSpentSince.
           const spentDetails = result.paid ? result.payment : result.attemptedPayment;
           if (spentDetails) {
             const amount = parseBigInt(spentDetails.amount);

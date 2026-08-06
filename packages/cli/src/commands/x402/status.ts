@@ -4,7 +4,7 @@ import { loadConfig } from '../../lib/config.js';
 import { tryLoadSessionConfig } from '../../lib/session-config.js';
 import { sessionPayerAddress } from '../../x402/payer.js';
 import { usdcBalance } from '../../x402/balance.js';
-import { readX402Log } from '../../x402/ledger.js';
+import { sumSpentSince } from '../../x402/ledger.js';
 import { resolveX402Policy } from '../../x402/policy.js';
 import { parseBigInt } from '../../x402/amount.js';
 import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
@@ -67,13 +67,7 @@ export default class X402Status extends BaseCommand {
     );
     const [ownerBalance, payerBalance] = balances;
 
-    const spent = readX402Log().reduce((total, entry) => {
-      if ((entry.status !== 'paid' && entry.status !== 'failed') || !entry.amount) return total;
-      if (entry.payer?.toLowerCase() !== payer.toLowerCase()) return total;
-      if (entry.at < session.createdAt) return total;
-      const amount = parseBigInt(entry.amount);
-      return amount !== null ? total + amount : total;
-    }, 0n);
+    const spent = sumSpentSince(payer, session.createdAt);
 
     const sessionCap = parseBigInt(policy.maxTotalPerSession);
     const decimals = asset?.decimals ?? 6;

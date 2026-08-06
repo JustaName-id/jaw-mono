@@ -5,11 +5,11 @@ import { tryLoadSessionConfig } from '../../lib/session-config.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import { Eip3009EoaPayer } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
-import { appendX402Log, readX402Log } from '../../x402/ledger.js';
+import { appendX402Log, sumSpentSince } from '../../x402/ledger.js';
 import { resolveX402Policy } from '../../x402/policy.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
-import { parseBigInt, parseNonNegativeBigInt } from '../../x402/amount.js';
-import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
+import { parseNonNegativeBigInt } from '../../x402/amount.js';
+import { usdcForNetwork, USDC_BY_NETWORK } from '../../x402/asset-registry.js';
 import { formatUsdc } from '../../x402/status-report.js';
 import type { OutputFormat } from '../../lib/types.js';
 import type { X402PaymentRequirement } from '../../x402/types.js';
@@ -62,7 +62,7 @@ export default class X402Pay extends BaseCommand {
     const session = tryLoadSessionConfig();
     const policy = resolveX402Policy(config.x402);
 
-    const spent = session ? sumSpent(payer.address, session.createdAt) : 0n;
+    const spent = sumSpentSince(payer.address, session?.createdAt);
 
     // Only wired for a real payment: a dry run returns before the funding hook,
     // so building a bridge for it would open a connection nothing uses.
@@ -122,14 +122,20 @@ export default class X402Pay extends BaseCommand {
       return;
     }
 
-    const decimals = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === session?.chainId)?.decimals ?? 6;
+    // Scale by the decimals of the network each amount is denominated in, not
+    // one shared guess: a session can sit on one chain while the challenge
+    // prices on another, and reading the wrong token's decimals would print a
+    // wrong number with full confidence. A top-up always moves on the session's
+    // chain (ensurePayerFunds refuses otherwise), a price never has to.
+    const priceDecimals = (network?: string) => (network ? usdcForNetwork(network)?.decimals : undefined) ?? 6;
+    const topUpDecimals = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === session?.chainId)?.decimals ?? 6;
 
     if (result.refusedReason) {
       this.log(`Refused.\n\n  ${result.refusedReason}`);
       if (result.topUp?.batchId) {
         // Money moved before the refusal. Never let that scroll past silently.
         this.log(
-          `\n  A top-up of ${formatUsdc(result.topUp.amount, decimals)} was sent first (${result.topUp.batchId}).`
+          `\n  A top-up of ${formatUsdc(result.topUp.amount, topUpDecimals)} was sent first (${result.topUp.batchId}).`
         );
       }
       this.exit(1);
@@ -137,7 +143,9 @@ export default class X402Pay extends BaseCommand {
 
     if (result.wouldPay) {
       this.log('Would pay.\n');
-      this.log(`  price    ${formatUsdc(result.wouldPay.amount, decimals)} on ${result.wouldPay.network}`);
+      this.log(
+        `  price    ${formatUsdc(result.wouldPay.amount, priceDecimals(result.wouldPay.network))} on ${result.wouldPay.network}`
+      );
       this.log(`  payTo    ${result.wouldPay.payTo}`);
       this.log(`  from     ${payer.address}`);
       this.log('\nNothing was signed or spent. Re-run with --pay to go through with it.');
@@ -151,10 +159,12 @@ export default class X402Pay extends BaseCommand {
     }
 
     this.log('Paid.\n');
-    this.log(`  amount   ${formatUsdc(result.payment?.amount, decimals)} on ${result.payment?.network}`);
+    this.log(
+      `  amount   ${formatUsdc(result.payment?.amount, priceDecimals(result.payment?.network))} on ${result.payment?.network}`
+    );
     this.log(`  payTo    ${result.payment?.payTo}`);
     if (result.topUp) {
-      this.log(`  top-up   ${formatUsdc(result.topUp.amount, decimals)} pulled from the owner account`);
+      this.log(`  top-up   ${formatUsdc(result.topUp.amount, topUpDecimals)} pulled from the owner account`);
     }
     if (result.payment?.txHash) {
       this.log(`  tx       ${result.payment.txHash}`);
@@ -168,16 +178,4 @@ export default class X402Pay extends BaseCommand {
     this.log('');
     this.log(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
   }
-}
-
-/** Session-scoped spend from the ledger, same accounting the MCP tool uses. */
-function sumSpent(payerAddress: string, since: string): bigint {
-  const payer = payerAddress.toLowerCase();
-  return readX402Log().reduce((total, entry) => {
-    if ((entry.status !== 'paid' && entry.status !== 'failed') || !entry.amount) return total;
-    if (entry.payer?.toLowerCase() !== payer) return total;
-    if (entry.at < since) return total;
-    const amount = parseBigInt(entry.amount);
-    return amount !== null ? total + amount : total;
-  }, 0n);
 }
