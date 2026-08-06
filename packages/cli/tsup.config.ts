@@ -13,6 +13,7 @@ export default defineConfig({
     'lib/paths': 'src/lib/paths.ts',
     'lib/types': 'src/lib/types.ts',
     'lib/validation': 'src/lib/validation.ts',
+    'lib/terminal': 'src/lib/terminal.ts',
     // session lib
     'lib/keystore': 'src/lib/keystore.ts',
     'lib/session-config': 'src/lib/session-config.ts',

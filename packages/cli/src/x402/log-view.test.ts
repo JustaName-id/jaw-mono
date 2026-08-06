@@ -55,6 +55,37 @@ describe('renderEntry', () => {
   });
 });
 
+// A refusal reason is stored server text. Without disarming it, an endpoint
+// that got refused once repaints this line on every later `x402 log`.
+describe('renderEntry against a poisoned ledger', () => {
+  const ESC = String.fromCharCode(0x1b);
+  const CR = String.fromCharCode(0x0d);
+
+  it('renders a reason carrying escape sequences inert', () => {
+    const line = renderEntry(
+      entry({
+        status: 'refused',
+        amount: undefined,
+        reason: `network not allowed${ESC}[2K${CR}${ESC}[32m  Paid. 5 USDC${ESC}[0m`,
+      })
+    );
+    expect(line).not.toContain(ESC);
+    expect(line).not.toContain(CR);
+    expect(line).toContain('network not allowed');
+  });
+
+  it('disarms a url that never parsed as one', () => {
+    const line = renderEntry(entry({ url: `not-a-url${ESC}[2K` }));
+    expect(line).not.toContain(ESC);
+  });
+
+  it('bounds a very long reason instead of flooding the terminal', () => {
+    const line = renderEntry(entry({ status: 'refused', amount: undefined, reason: 'z'.repeat(5000) }));
+    expect(line).toContain('more characters');
+    expect(line.length).toBeLessThan(1000);
+  });
+});
+
 describe('renderSummary', () => {
   // Same rule the spend caps use: a refusal never signed anything.
   it('counts paid and failed as money out, never refused', () => {

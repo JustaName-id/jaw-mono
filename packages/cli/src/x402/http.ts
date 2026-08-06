@@ -200,7 +200,11 @@ const hexAddress = z
 const requirementSchema = z
   .object({
     scheme: z.string(),
-    network: z.string().min(1),
+    // CAIP-2 (`namespace:reference`). Left as a free string, an unknown
+    // network flowed verbatim into the refusal reason, the ledger, and every
+    // later `x402 log`. Constrained at the boundary so it cannot carry a
+    // payload at all, which is cheaper than trusting each sink to disarm it.
+    network: z.string().regex(/^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$/, 'must be a CAIP-2 network id'),
     amount: z.string().regex(/^\d+$/, 'amount must be a base-10 integer string'),
     asset: hexAddress,
     payTo: hexAddress,

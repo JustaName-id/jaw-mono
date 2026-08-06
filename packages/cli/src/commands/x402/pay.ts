@@ -11,6 +11,7 @@ import { ensurePayerFunds } from '../../x402/topup.js';
 import { parseNonNegativeBigInt } from '../../x402/amount.js';
 import { usdcForNetwork, USDC_BY_NETWORK } from '../../x402/asset-registry.js';
 import { formatUsdc } from '../../x402/status-report.js';
+import { sanitizeForTerminal } from '../../lib/terminal.js';
 import type { OutputFormat } from '../../lib/types.js';
 import type { X402PaymentRequirement } from '../../x402/types.js';
 
@@ -134,7 +135,9 @@ export default class X402Pay extends BaseCommand {
     const topUpDecimals = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === session?.chainId)?.decimals ?? 6;
 
     if (result.refusedReason) {
-      this.log(`Refused.\n\n  ${result.refusedReason}`);
+      // The reason can carry server text (an unknown network echoed back,
+      // an on-chain revert string), so it is never printed raw.
+      this.log(`Refused.\n\n  ${sanitizeForTerminal(result.refusedReason)}`);
       if (result.topUp?.batchId) {
         // Money moved before the refusal. Never let that scroll past silently.
         this.log(
@@ -147,7 +150,7 @@ export default class X402Pay extends BaseCommand {
     if (result.wouldPay) {
       this.log('Would pay.\n');
       this.log(
-        `  price    ${formatUsdc(result.wouldPay.amount, priceDecimals(result.wouldPay.network))} on ${result.wouldPay.network}`
+        `  price    ${formatUsdc(result.wouldPay.amount, priceDecimals(result.wouldPay.network))} on ${sanitizeForTerminal(result.wouldPay.network, 64)}`
       );
       this.log(`  payTo    ${result.wouldPay.payTo}`);
       this.log(`  from     ${payer.address}`);
@@ -163,7 +166,7 @@ export default class X402Pay extends BaseCommand {
 
     this.log('Paid.\n');
     this.log(
-      `  amount   ${formatUsdc(result.payment?.amount, priceDecimals(result.payment?.network))} on ${result.payment?.network}`
+      `  amount   ${formatUsdc(result.payment?.amount, priceDecimals(result.payment?.network))} on ${sanitizeForTerminal(result.payment?.network, 64)}`
     );
     this.log(`  payTo    ${result.payment?.payTo}`);
     if (result.topUp) {
@@ -179,6 +182,7 @@ export default class X402Pay extends BaseCommand {
   private logBody(body: unknown): void {
     if (body === undefined || body === null || body === '') return;
     this.log('');
-    this.log(typeof body === 'string' ? body : JSON.stringify(body, null, 2));
+    // The body is whatever the endpoint chose to send back.
+    this.log(sanitizeForTerminal(typeof body === 'string' ? body : JSON.stringify(body, null, 2)));
   }
 }

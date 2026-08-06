@@ -554,3 +554,34 @@ describe('payAndFetch — dry run', () => {
     expect(result.paid).toBe(false);
   });
 });
+
+describe('payAndFetch — untrusted challenge fields', () => {
+  const ESC = String.fromCharCode(0x1b);
+
+  // `network` reached the refusal reason, the ledger, and every later
+  // `x402 log`. Constrained at the boundary it cannot carry a payload at all.
+  it('refuses a network that is not a CAIP-2 id', async () => {
+    const hostile = b64({
+      x402Version: 2,
+      resource: { url: URL_UNDER_TEST },
+      accepts: [{ ...REQUIREMENT, network: `eip155:1${ESC}[2K${ESC}[32mPaid.` }],
+    });
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': hostile }, url: URL_UNDER_TEST })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
+
+    expect(result.wouldPay).toBeUndefined();
+    expect(result.refusedReason).toContain('CAIP-2');
+    expect(result.refusedReason).not.toContain(ESC);
+  });
+
+  it('still accepts a well-formed network id', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, url: URL_UNDER_TEST })
+    );
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
+    expect(result.wouldPay?.network).toBe(REQUIREMENT.network);
+  });
+});
