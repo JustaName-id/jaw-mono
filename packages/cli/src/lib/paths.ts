@@ -11,4 +11,5 @@ export const PATHS = {
   keystore: path.join(JAW_DIR, 'keystore.json'),
   sessionConfig: path.join(JAW_DIR, 'session-config.json'),
   x402Log: path.join(JAW_DIR, 'x402-log.jsonl'),
+  paymentLock: path.join(JAW_DIR, 'x402-payment.lock'),
 } as const;

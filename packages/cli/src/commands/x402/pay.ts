@@ -12,6 +12,7 @@ import { parseNonNegativeBigInt } from '../../x402/amount.js';
 import { usdcForNetwork, USDC_BY_NETWORK } from '../../x402/asset-registry.js';
 import { formatUsdc } from '../../x402/status-report.js';
 import { sanitizeLine, sanitizeBlock } from '../../lib/terminal.js';
+import { withPaymentLock } from '../../lib/payment-lock.js';
 import type { OutputFormat } from '../../lib/types.js';
 import type { X402PaymentRequirement } from '../../x402/types.js';
 
@@ -67,7 +68,9 @@ export default class X402Pay extends BaseCommand {
 
     // Only wired for a real payment: a dry run returns before the funding hook,
     // so building a bridge for it would open a connection nothing uses.
-    let ensureFunds;
+    let ensureFunds:
+      | ((requirement: X402PaymentRequirement, payerAddress: `0x${string}`) => ReturnType<typeof ensurePayerFunds>)
+      | undefined;
     if (flags.pay && (!session || !config.apiKey)) {
       // Without a session there is no permission to pull through, so the payer
       // spends whatever it already holds. Worth saying: the failure otherwise
@@ -91,15 +94,28 @@ export default class X402Pay extends BaseCommand {
         });
     }
 
-    const result = await payAndFetch(args.url, payer, {
-      method: flags.method,
-      body: flags.body,
-      policy,
-      ensureFunds,
-      spentThisSession: spent,
-      maxAmount: flags['max-amount'],
-      dryRun: !flags.pay,
-    });
+    const run = () =>
+      payAndFetch(args.url, payer, {
+        method: flags.method,
+        body: flags.body,
+        policy,
+        ensureFunds,
+        // Re-read under the lock: another process may have paid between the
+        // read above and our turn, and a stale total waves through a payment
+        // the cap should have stopped.
+        spentThisSession: flags.pay ? sumSpentSince(payer.address, session?.createdAt) : spent,
+        maxAmount: flags['max-amount'],
+        dryRun: !flags.pay,
+      });
+
+    // Only a real payment takes the lock. A dry run spends nothing and writes
+    // nothing, so making it queue behind an agent mid-payment would be friction
+    // for no safety.
+    const result = flags.pay
+      ? await withPaymentLock(run, {
+          onWait: (pid) => this.warn(`Waiting for another payment to finish (pid ${pid})...`),
+        })
+      : await run();
 
     // Only a real run touches the ledger. Recording dry runs would corrupt the
     // spend totals that both this command and the agent read back.

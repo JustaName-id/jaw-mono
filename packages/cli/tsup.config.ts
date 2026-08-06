@@ -14,6 +14,7 @@ export default defineConfig({
     'lib/types': 'src/lib/types.ts',
     'lib/validation': 'src/lib/validation.ts',
     'lib/terminal': 'src/lib/terminal.ts',
+    'lib/payment-lock': 'src/lib/payment-lock.ts',
     // session lib
     'lib/keystore': 'src/lib/keystore.ts',
     'lib/session-config': 'src/lib/session-config.ts',
