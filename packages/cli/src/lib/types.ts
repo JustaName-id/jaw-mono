@@ -6,7 +6,12 @@ export type PaymasterConfig = {
 };
 
 export interface PermissionsConfig {
-  calls?: Array<{ target: string; selector?: string }>;
+  /**
+   * `functionSignature` is the readable form the docs use and what the SDK
+   * prefers, computing the selector from it when no explicit `selector` is
+   * given. Both were already accepted on the wire; only the type omitted it.
+   */
+  calls?: Array<{ target: string; selector?: string; functionSignature?: string }>;
   spends?: Array<{
     token: string;
     allowance: string;

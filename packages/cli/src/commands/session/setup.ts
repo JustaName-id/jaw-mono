@@ -13,12 +13,15 @@ import {
 import { saveSessionConfig, tryLoadSessionConfig } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
+import { buildX402Permissions, describeX402Grant, DEFAULT_X402_LIMIT } from '../../x402/grant-preset.js';
 
 export default class SessionSetup extends BaseCommand {
   static override description =
     'Generate a session key and grant scoped on-chain permissions (one-time browser approval).';
 
   static override examples = [
+    '<%= config.bin %> session setup --chain 8453 --x402',
+    '<%= config.bin %> session setup --chain 8453 --x402 --limit 25/day --expiry 14',
     '<%= config.bin %> session setup --chain 84532',
     '<%= config.bin %> session setup --permissions \'{"calls":[...]}\' --expiry 14',
     '<%= config.bin %> session setup --permissions ./permissions.json',
@@ -28,6 +31,20 @@ export default class SessionSetup extends BaseCommand {
     ...BaseCommand.baseFlags,
     permissions: Flags.string({
       description: 'Permission scope (inline JSON or file path). Overrides config.permissions.',
+      exclusive: ['x402'],
+    }),
+    x402: Flags.boolean({
+      description:
+        'Grant exactly what x402 payments need on this chain: a USDC transfer capped per period. ' +
+        'Builds the permission from the asset registry so the USDC address and function signature ' +
+        'do not have to be written by hand. Tune the cap with --limit.',
+      default: false,
+      exclusive: ['permissions'],
+    }),
+    limit: Flags.string({
+      description: `Spend cap for --x402, as <amount>/<period> (default ${DEFAULT_X402_LIMIT}). Examples: 25/day, 2.5/week, 100/month.`,
+      // No `dependsOn: ['x402']`: a boolean flag with a default always reads as
+      // provided, so oclif would never fire it. Checked in run() instead.
     }),
     expiry: Flags.integer({
       description: 'Permission expiry in days. Overrides config.sessionExpiry.',
@@ -47,6 +64,10 @@ export default class SessionSetup extends BaseCommand {
     const format = flags.output as OutputFormat;
     const apiKey = this.resolveApiKey(flags);
     const chainId = this.resolveChainId(flags);
+
+    if (flags.limit && !flags.x402) {
+      this.error('--limit only applies to --x402. Re-run with --x402, or set the cap inside --permissions.');
+    }
 
     // 1. Check existing session
     let reuseKey: string | null = null;
@@ -170,7 +191,11 @@ export default class SessionSetup extends BaseCommand {
     // knows their local session-config now references a revoked permission.
     try {
       // 2. Resolve permissions
-      const permissions = this.resolvePermissions(flags.permissions, config.permissions);
+      const permissions = this.resolvePermissions(flags.permissions, config.permissions, {
+        x402: flags.x402,
+        limit: flags.limit,
+        chainId,
+      });
 
       // 3. Resolve expiry
       const expiryDays = flags.expiry ?? config.sessionExpiry ?? 7;
@@ -262,6 +287,17 @@ export default class SessionSetup extends BaseCommand {
         this.log(`  Permission ID:    ${grantResponse.permissionId}`);
         this.log(`  Chain:            ${chainId}`);
         this.log(`  Expires:          ${new Date(expiryTimestamp * 1000).toISOString()} (${expiryDays} days)`);
+        if (flags.x402) {
+          this.log(`  Granted:          ${describeX402Grant(flags.limit)}`);
+          // Which of the two addresses to fund is the easiest thing to get
+          // wrong, and getting it wrong looks like it worked: the payer holds
+          // the money, so the permission is never exercised and the cap never
+          // applies. Say it here, where both addresses are on screen.
+          this.log(
+            `\nFund the OWNER account (${grantResponse.account}) with USDC, not the session address.\n` +
+              'Payments pull from it through the permission, only when one is needed.'
+          );
+        }
         this.log('\nUse --session flag to execute RPC calls in auto mode.');
       }
     } catch (error) {
@@ -278,11 +314,21 @@ export default class SessionSetup extends BaseCommand {
 
   private resolvePermissions(
     flagValue: string | undefined,
-    configValue: PermissionsConfig | undefined
+    configValue: PermissionsConfig | undefined,
+    preset: { x402: boolean; limit?: string; chainId: number }
   ): PermissionsConfig {
     let raw: unknown;
 
-    if (flagValue) {
+    // --x402 derives the scope instead of asking for it. Checked first: it is
+    // mutually exclusive with --permissions at the flag level, and it should
+    // win over a config block the user is deliberately bypassing.
+    if (preset.x402) {
+      try {
+        raw = buildX402Permissions(preset.chainId, preset.limit);
+      } catch (err) {
+        this.error(err instanceof Error ? err.message : String(err));
+      }
+    } else if (flagValue) {
       if (flagValue.trimStart().startsWith('{')) {
         try {
           raw = JSON.parse(flagValue);
@@ -300,7 +346,10 @@ export default class SessionSetup extends BaseCommand {
     } else if (configValue) {
       raw = configValue;
     } else {
-      this.error('Permissions required. Set via --permissions flag or add "permissions" to ~/.jaw/config.json');
+      this.error(
+        'Permissions required. For x402 payments run `jaw session setup --x402` and the scope is ' +
+          'built for you. Otherwise pass --permissions or add "permissions" to ~/.jaw/config.json.'
+      );
     }
 
     return parsePermissionsConfig(raw);
