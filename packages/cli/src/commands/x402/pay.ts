@@ -68,6 +68,17 @@ export default class X402Pay extends BaseCommand {
     // Only wired for a real payment: a dry run returns before the funding hook,
     // so building a bridge for it would open a connection nothing uses.
     let ensureFunds;
+    if (flags.pay && (!session || !config.apiKey)) {
+      // Without a session there is no permission to pull through, so the payer
+      // spends whatever it already holds. Worth saying: the failure otherwise
+      // arrives later as a bare insufficient-balance error with no hint that a
+      // top-up was never on the table.
+      this.warn(
+        session
+          ? 'No apiKey configured, so a short payer cannot be topped up. Paying from its own balance.'
+          : 'No session, so a short payer cannot be topped up through a permission. Paying from its own balance.'
+      );
+    }
     if (flags.pay && session && config.apiKey) {
       const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
       const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
