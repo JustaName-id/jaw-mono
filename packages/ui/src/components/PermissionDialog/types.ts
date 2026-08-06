@@ -35,6 +35,8 @@ export interface PermissionDialogProps {
   // Arrays of permissions
   spends?: SpendPermission[];
   calls?: CallPermission[];
+  /** Symbol/decimals for token addresses appearing in spends or call targets. */
+  tokenMeta?: Record<string, { symbol: string; decimals?: number }>;
 
   // Period and expiry
   expiryDate: string; // Formatted expiry date

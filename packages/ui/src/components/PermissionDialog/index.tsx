@@ -31,6 +31,7 @@ export const PermissionDialog = ({
   appLogoUrl,
   spends = [],
   calls = [],
+  tokenMeta,
   expiryDate,
   grantedDate,
   networkName,
@@ -263,6 +264,8 @@ export const PermissionDialog = ({
                 resolvedAddresses={resolvedAddresses}
                 resolvedAvatars={resolvedAvatars}
                 truncateAddress={truncateAddress}
+                tokenMeta={tokenMeta}
+                chainId={chainId}
               />
             )}
 
@@ -326,3 +329,4 @@ export const PermissionDialog = ({
 };
 
 export * from './types';
+export { isWildcard } from './Sections';

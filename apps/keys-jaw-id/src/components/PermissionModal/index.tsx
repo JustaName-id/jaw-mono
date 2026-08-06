@@ -1,6 +1,13 @@
 'use client';
 
-import { PermissionDialog, useGasEstimation, type FeeTokenOption, fetchTokenBalance, isNativeToken } from '@jaw.id/ui';
+import {
+  PermissionDialog,
+  useGasEstimation,
+  type FeeTokenOption,
+  fetchTokenBalance,
+  isNativeToken,
+  isWildcard,
+} from '@jaw.id/ui';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from 'viem';
 import { getChainNameFromId } from '../../lib/chain-handlers';
@@ -364,7 +371,11 @@ export const PermissionModal = ({
   const formattedSpends = useMemo(() => {
     return spendsData.map((spend: any) => {
       const tokenAddress = spend.token;
-      const tokenInfo = tokenInfoMap[tokenAddress] || { decimals: 18, symbol: 'ETH' };
+      // No symbol until it resolves — a placeholder here would label every token "ETH".
+      const tokenInfo = tokenInfoMap[tokenAddress] || {
+        decimals: 18,
+        symbol: isNativeToken(tokenAddress) ? (viemChain?.nativeCurrency?.symbol ?? 'ETH') : '',
+      };
 
       let amount, limit, duration;
 
@@ -578,9 +589,9 @@ export const PermissionModal = ({
     };
   }, [chain, extractedApiKey, viemChain, walletAddress, permissionDetails?.address, effectivePaymasterUrl]);
 
-  // Fetch token info for all unique tokens in spends
+  // Token info for spend tokens and for any call target that turns out to be a token.
   useEffect(() => {
-    if (!chain || spendsData.length === 0) {
+    if (!chain || (spendsData.length === 0 && callsData.length === 0)) {
       setIsLoadingTokenInfo(false);
       return;
     }
@@ -592,7 +603,14 @@ export const PermissionModal = ({
       const newTokenInfoMap: TokenInfoMap = {};
 
       // Get unique token addresses
-      const uniqueTokens = Array.from(new Set(spendsData.map((spend: any) => spend.token as string))) as string[];
+      // A call target that is a token should read as "USDC", not as a raw address. A non-token
+      // contract simply fails the reads and falls back to its address.
+      const uniqueTokens = Array.from(
+        new Set([
+          ...spendsData.map((spend: any) => spend.token as string),
+          ...callsData.map((call: any) => call.target as string).filter((t: string) => t && !isWildcard(t)),
+        ])
+      ) as string[];
 
       for (const tokenAddress of uniqueTokens) {
         // Skip if already fetched
@@ -601,9 +619,12 @@ export const PermissionModal = ({
           continue;
         }
 
-        // If native token, use ETH defaults
+        // Native token: the chain's own currency, not a hardcoded ETH.
         if (isNativeToken(tokenAddress)) {
-          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+          newTokenInfoMap[tokenAddress] = {
+            decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+            symbol: viemChain?.nativeCurrency?.symbol ?? 'ETH',
+          };
           continue;
         }
 
@@ -775,6 +796,7 @@ export const PermissionModal = ({
       appLogoUrl={appLogoUrl}
       grantedDate={grantedDate}
       spends={formattedSpends}
+      tokenMeta={tokenInfoMap}
       calls={formattedCalls}
       expiryDate={expiryDate}
       networkName={networkName}

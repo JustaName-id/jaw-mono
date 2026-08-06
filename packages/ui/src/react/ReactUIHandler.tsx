@@ -46,6 +46,7 @@ import { SiweDialog } from '../components/SiweDialog';
 import { Eip712Dialog } from '../components/Eip712Dialog';
 import { TransactionDialog } from '../components/TransactionDialog';
 import { PermissionDialog } from '../components/PermissionDialog';
+import { isWildcard } from '../components/PermissionDialog/Sections';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
@@ -2246,7 +2247,7 @@ function PermissionDialogWrapper({
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
-    if (spendsData.length === 0) {
+    if (spendsData.length === 0 && callsData.length === 0) {
       setIsLoadingTokenInfo(false);
       return;
     }
@@ -2258,7 +2259,14 @@ function PermissionDialogWrapper({
       const newTokenInfoMap: TokenInfoMap = {};
 
       // Get unique token addresses
-      const uniqueTokens = Array.from(new Set(spendsData.map((spend) => spend.token))) as string[];
+      // Call targets are looked up too: a target that is a token should read as "USDC", not as a
+      // raw address. A non-token contract simply fails the reads and falls back to its address.
+      const uniqueTokens = Array.from(
+        new Set([
+          ...spendsData.map((spend) => spend.token),
+          ...callsData.map((call) => call.target).filter((t) => t && !isWildcard(t)),
+        ])
+      ) as string[];
 
       for (const tokenAddress of uniqueTokens) {
         // Skip if already fetched
@@ -2312,10 +2320,8 @@ function PermissionDialogWrapper({
         } catch (error) {
           console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
           // Fallback to showing truncated token address
-          newTokenInfoMap[tokenAddress] = {
-            decimals: 18,
-            symbol: tokenAddress.slice(0, 6) + '...' + tokenAddress.slice(-4),
-          };
+          // Not an ERC-20 (or unreachable) — leave it unnamed so the UI shows the address.
+          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: '' };
         }
       }
 
@@ -2467,10 +2473,7 @@ function PermissionDialogWrapper({
                 decimals: viemChain?.nativeCurrency?.decimals ?? 18,
                 symbol: nativeSymbol,
               }
-            : {
-                decimals: 18,
-                symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4),
-              });
+            : { decimals: 18, symbol: '' });
 
         const allowance = BigInt(spend.allowance);
         const amount = formatUnits(allowance, tokenInfo.decimals);
@@ -2568,6 +2571,7 @@ function PermissionDialogWrapper({
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={spends}
       calls={calls}
+      tokenMeta={tokenInfoMap}
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
@@ -2857,11 +2861,16 @@ function RevokePermissionDialogWrapper({
         const permData = await getPermissionFromRelay(request.data.permissionId as `0x${string}`, apiKey);
         setFetchedPermissionData(permData);
 
-        // Fetch token info for spends
-        if (permData.spends && permData.spends.length > 0) {
+        // Token info for spend tokens and for any call target that turns out to be a token.
+        const lookupAddresses = Array.from(
+          new Set([
+            ...(permData.spends ?? []).map((spend) => spend.token),
+            ...(permData.calls ?? []).map((call) => call.target).filter((t) => t && !isWildcard(t)),
+          ])
+        );
+        if (lookupAddresses.length > 0) {
           const newTokenInfoMap: TokenInfoMap = {};
-          for (const spend of permData.spends) {
-            const tokenAddress = spend.token;
+          for (const tokenAddress of lookupAddresses) {
             if (isNativeToken(tokenAddress)) {
               newTokenInfoMap[tokenAddress] = {
                 decimals: viemChain?.nativeCurrency?.decimals ?? 18,
@@ -3040,9 +3049,11 @@ function RevokePermissionDialogWrapper({
 
     return fetchedPermissionData.spends.map((spend: any) => {
       const tokenAddress = spend.token;
+      // Only a native token may borrow the chain symbol; anything else stays unnamed until
+      // its own symbol resolves, or every token would render as the native currency.
       const tokenInfo = tokenInfoMap[tokenAddress] || {
         decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-        symbol: nativeSymbol,
+        symbol: isNativeToken(tokenAddress) ? nativeSymbol : '',
       };
       const allowance = BigInt(spend.allowance);
       const amount = formatUnits(allowance, tokenInfo.decimals);
@@ -3136,6 +3147,7 @@ function RevokePermissionDialogWrapper({
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={formattedSpends}
       calls={formattedCalls}
+      tokenMeta={tokenInfoMap}
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}

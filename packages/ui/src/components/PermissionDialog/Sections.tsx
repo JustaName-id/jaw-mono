@@ -9,6 +9,7 @@ import { Skeleton } from '../ui/skeleton';
 import { CopyButton } from '../CopyButton';
 import { Eyebrow } from '../primitives';
 import { isNativeToken } from '../../utils/tokenBalance';
+import { getDisplayAddress } from '../../utils';
 import type { CallPermission, SpendPermission } from './types';
 
 /**
@@ -66,22 +67,32 @@ function SpendRow({
   nativeSymbol: string;
   isLoading?: boolean;
 }) {
-  const symbol = isNativeToken(spend.tokenAddress) ? nativeSymbol : spend.token;
+  const isNative = isNativeToken(spend.tokenAddress);
+  const symbol = isNative ? nativeSymbol : spend.token;
   const rate = spendRate(spend.duration);
 
   return (
     <div className="border-border flex items-center gap-2 border-t px-3 py-2 first:border-t-0">
-      <TokenIcon
-        chainId={chainId}
-        address={spend.tokenAddress}
-        symbol={symbol}
-        className="size-[19.5px] flex-none rounded-full"
-      />
-      <span className="text-foreground min-w-0 flex-1 truncate text-[12px] font-semibold">
-        {symbol || spend.tokenAddress}
+      <span className="relative inline-flex size-[19.5px] flex-none items-center justify-center">
+        <TokenIcon
+          chainId={chainId}
+          address={spend.tokenAddress}
+          symbol={symbol}
+          className="size-[19.5px] flex-none rounded-full"
+        />
       </span>
       {isLoading ? (
-        <Skeleton className="bg-muted h-4 w-20 rounded" />
+        <Skeleton className="bg-muted h-3.5 w-16 flex-1 rounded" />
+      ) : (
+        <span className="flex min-w-0 flex-1 items-center gap-1.5">
+          <span className="text-foreground truncate text-[12px] font-semibold">
+            {symbol || getDisplayAddress(undefined, spend.tokenAddress)}
+          </span>
+          {!isNative && <CopyButton value={spend.tokenAddress} size={11} label="Copy token address" />}
+        </span>
+      )}
+      {isLoading ? (
+        <Skeleton className="bg-muted h-4 w-20 flex-none rounded" />
       ) : (
         <span className="flex flex-none items-baseline gap-[3px]">
           <span className="text-foreground text-[13px] font-semibold tracking-[-0.02em]">{spend.amount}</span>
@@ -145,11 +156,16 @@ function ContractGroup({
   resolvedName,
   avatarUrl,
   truncatedAddress,
+  tokenSymbol,
+  chainId,
 }: {
   group: CallGroup;
   resolvedName?: string;
   avatarUrl?: string;
   truncatedAddress: string;
+  /** Set when the target is a known token — it then reads like the spend rows. */
+  tokenSymbol?: string;
+  chainId?: number;
 }) {
   const anyTarget = isWildcard(group.target);
   const anyFunction = group.calls.some((c) => isWildcard(c.selector));
@@ -161,21 +177,38 @@ function ContractGroup({
     <AccordionItem value={group.target} className="border-border border-t first:border-t-0">
       <AccordionTrigger className="items-center px-3 py-2 hover:no-underline">
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="relative inline-flex flex-none">
-            <AccountAvatar
-              seed={group.target}
-              avatarUrl={avatarUrl}
-              size={20}
-              className="size-[19.5px] flex-none rounded-[6px]"
-            />
+          <span className="relative inline-flex size-[19.5px] flex-none items-center justify-center">
+            {tokenSymbol ? (
+              <TokenIcon
+                chainId={chainId}
+                address={group.target}
+                symbol={tokenSymbol}
+                className="size-[19.5px] flex-none rounded-full"
+                fallback={
+                  <AccountAvatar
+                    seed={group.target}
+                    avatarUrl={avatarUrl}
+                    size={20}
+                    className="size-[19.5px] flex-none rounded-[6px]"
+                  />
+                }
+              />
+            ) : (
+              <AccountAvatar
+                seed={group.target}
+                avatarUrl={avatarUrl}
+                size={20}
+                className="size-[19.5px] flex-none rounded-[6px]"
+              />
+            )}
             {(anyTarget || anyFunction) && <WarnBadge />}
           </span>
           <span className="flex min-w-0 flex-1 flex-col items-start">
             {anyTarget ? (
               <span className="truncate text-[11px] font-semibold text-amber-500">Any contract</span>
-            ) : resolvedName ? (
+            ) : tokenSymbol || resolvedName ? (
               <>
-                <span className="text-foreground truncate text-[11px] font-medium">{resolvedName}</span>
+                <span className="text-foreground truncate text-[11px] font-medium">{tokenSymbol ?? resolvedName}</span>
                 <span className="text-muted-foreground mt-0.5 font-mono text-[9px]">{truncatedAddress}</span>
               </>
             ) : (
@@ -197,20 +230,23 @@ function ContractGroup({
               <CopyButton value={group.target} size={11} label="Copy contract address" />
             </div>
           )}
-          <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
+          <ul className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
             {group.calls.map((call, i) =>
               isWildcard(call.selector) ? (
-                <span key={i} className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-500">
+                <li key={i} className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-500">
                   <TriangleAlert className="size-3 flex-none" strokeWidth={2.4} />
                   Any function
-                </span>
+                </li>
               ) : (
-                <p key={i} className="text-foreground break-all font-mono text-[11px] leading-[150%]">
-                  {call.functionSignature || call.selector}
-                </p>
+                <li key={i} className="text-foreground flex gap-1.5 font-mono text-[11px] leading-[150%]">
+                  <span aria-hidden className="text-muted-foreground flex-none">
+                    •
+                  </span>
+                  <span className="min-w-0 break-all">{call.functionSignature || call.selector}</span>
+                </li>
               )
             )}
-          </div>
+          </ul>
         </div>
       </AccordionContent>
     </AccordionItem>
@@ -226,11 +262,15 @@ export function AllowedCalls({
   resolvedAddresses,
   resolvedAvatars,
   truncateAddress,
+  tokenMeta,
+  chainId,
 }: {
   calls: CallPermission[];
   resolvedAddresses: Record<string, string>;
   resolvedAvatars: Record<string, string>;
   truncateAddress: (address: string) => string;
+  tokenMeta?: Record<string, { symbol: string }>;
+  chainId?: number;
 }) {
   const groups = groupCallsByTarget(calls);
 
@@ -252,6 +292,8 @@ export function AllowedCalls({
                 resolvedName={resolvedAddresses[group.target]}
                 avatarUrl={resolvedAvatars[group.target]}
                 truncatedAddress={truncateAddress(group.target)}
+                tokenSymbol={tokenMeta?.[group.target]?.symbol}
+                chainId={chainId}
               />
             ))}
           </Accordion>
