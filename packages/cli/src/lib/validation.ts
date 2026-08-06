@@ -2,7 +2,11 @@ import type { PermissionsConfig } from './types.js';
 
 const ADDRESS_RE = /^0x[0-9a-fA-F]{40}$/;
 const SELECTOR_RE = /^0x[0-9a-fA-F]{8}$/;
-const HEX_RE = /^0x[0-9a-fA-F]+$/;
+// The SDK hands `allowance` straight to BigInt(), which takes decimal and hex
+// alike, and the permissions doc shows the decimal form
+// (parseUnits('100', 6).toString()). Accepting only hex here made the CLI
+// stricter than the SDK it wraps, so the documented example failed validation.
+const ALLOWANCE_RE = /^(0x[0-9a-fA-F]+|[0-9]+)$/;
 const VALID_SPEND_UNITS = new Set(['minute', 'hour', 'day', 'week', 'month', 'year', 'forever']);
 
 export function parsePermissionsConfig(raw: unknown): PermissionsConfig {
@@ -53,8 +57,8 @@ export function parsePermissionsConfig(raw: unknown): PermissionsConfig {
         if (typeof s.token !== 'string' || !ADDRESS_RE.test(s.token)) {
           errors.push(`spends.${i}.token: Must be a valid 0x address (40 hex chars)`);
         }
-        if (typeof s.allowance !== 'string' || !HEX_RE.test(s.allowance)) {
-          errors.push(`spends.${i}.allowance: Must be a non-empty 0x hex value`);
+        if (typeof s.allowance !== 'string' || !ALLOWANCE_RE.test(s.allowance)) {
+          errors.push(`spends.${i}.allowance: Must be a decimal or 0x hex integer`);
         }
         if (typeof s.unit !== 'string' || !VALID_SPEND_UNITS.has(s.unit)) {
           errors.push(`spends.${i}.unit: Must be one of: ${[...VALID_SPEND_UNITS].join(', ')}`);
