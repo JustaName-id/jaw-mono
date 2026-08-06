@@ -77,6 +77,7 @@ export const PermissionDialog = ({
     }
     const targets = new Set<string>();
     if (spenderAddress) targets.add(spenderAddress);
+    if (accountAddress) targets.add(accountAddress);
     calls.forEach((call) => {
       if (call.target && !isWildcard(call.target)) targets.add(call.target);
     });
@@ -113,7 +114,7 @@ export const PermissionDialog = ({
     return () => {
       cancelled = true;
     };
-  }, [spenderAddress, calls, chainId, mainnetRpcUrl]);
+  }, [spenderAddress, accountAddress, calls, chainId, mainnetRpcUrl]);
 
   // Inside a Radix modal a nested container's wheel events get eaten — drive scrollTop manually.
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -143,6 +144,10 @@ export const PermissionDialog = ({
   // The permission manager stores call rules; a spend-only grant has nothing to store and is
   // rejected onchain. Say so up front rather than letting the grant fail after a signature.
   const missingCalls = isGrant && calls.length === 0;
+
+  // With no call rule the grant can't be built at all, so gas estimation fails for a reason that
+  // has nothing to do with funds. Suppress the fee-derived cause and let the banner speak.
+  const feeBlockReason = missingCalls ? null : blockReason;
 
   // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
   const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
@@ -184,6 +189,16 @@ export const PermissionDialog = ({
           </div>
 
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
+            {missingCalls && (
+              <div className="flex items-start gap-2 rounded-[10px] bg-amber-500/10 p-3">
+                <TriangleAlert className="mt-px size-3.5 flex-none text-amber-500" strokeWidth={2} />
+                <p className="text-[11px] leading-[140%] text-amber-500">
+                  This permission has no allowed calls. A grant needs at least one call rule, so spend limits alone
+                  can't be granted.
+                </p>
+              </div>
+            )}
+
             {/* Who the permission is for */}
             <div className="border-border rounded-[10.5px] border p-3">
               <PartyRow
@@ -218,6 +233,7 @@ export const PermissionDialog = ({
                               className="size-[15px] flex-none rounded-[4.5px]"
                             />
                             <span className="truncate">{displayAddress(accountAddress)}</span>
+                            <CopyButton value={accountAddress} size={11} label="Copy account address" />
                           </>
                         ),
                       },
@@ -250,14 +266,13 @@ export const PermissionDialog = ({
               />
             )}
 
-            {missingCalls && (
-              <div className="flex items-start gap-2 rounded-[10px] bg-amber-500/10 p-3">
-                <TriangleAlert className="mt-px size-3.5 flex-none text-amber-500" strokeWidth={2} />
-                <p className="text-[11px] leading-[140%] text-amber-500">
-                  This permission has no allowed calls. A grant needs at least one call rule, so spend limits alone
-                  can't be granted.
-                </p>
-              </div>
+            {calls.length > 0 && (
+              <AllowedCalls
+                calls={calls}
+                resolvedAddresses={resolvedAddresses}
+                resolvedAvatars={resolvedAvatars}
+                truncateAddress={truncateAddress}
+              />
             )}
 
             <p className="text-muted-foreground px-0.5 text-[11px] leading-[140%]">
@@ -275,7 +290,7 @@ export const PermissionDialog = ({
 
           <div className="border-border flex-none space-y-3 border-t px-6 py-3.5">
             <NetworkFeeRow
-              blockReason={blockReason}
+              blockReason={feeBlockReason}
               gasFee={gasFee}
               gasFeeLoading={gasFeeLoading}
               sponsored={sponsored}
@@ -309,7 +324,7 @@ export const PermissionDialog = ({
                 variant={isGrant ? 'default' : 'destructive'}
                 className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
               >
-                {blockReason === 'funds' ? 'Insufficient Funds' : isGrant ? 'Grant' : 'Revoke'}
+                {feeBlockReason === 'funds' ? 'Insufficient Funds' : isGrant ? 'Grant' : 'Revoke'}
               </Button>
             </div>
           </div>
