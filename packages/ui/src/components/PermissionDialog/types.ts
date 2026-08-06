@@ -26,7 +26,11 @@ export interface PermissionDialogProps {
   // Permission details
   permissionId?: string; // Only for revoke mode
   spenderAddress: string;
+  /** The granting account — shown as "From", and seeds the processing screen's avatar. */
+  accountAddress?: string;
   origin: string; // Requesting dApp origin
+  appName?: string;
+  appLogoUrl?: string | null;
 
   // Arrays of permissions
   spends?: SpendPermission[];
@@ -34,6 +38,8 @@ export interface PermissionDialogProps {
 
   // Period and expiry
   expiryDate: string; // Formatted expiry date
+  /** Formatted grant date (revoke only) — the stored permission's `start`. */
+  grantedDate?: string;
 
   // Network info
   networkName: string;
@@ -49,12 +55,6 @@ export interface PermissionDialogProps {
   isProcessing: boolean;
   status?: string;
   isLoadingTokenInfo?: boolean;
-
-  // Timestamp
-  timestamp?: Date;
-
-  // Custom warning message for grant mode
-  warningMessage?: string;
 
   // Gas estimation props
   gasFee?: string;

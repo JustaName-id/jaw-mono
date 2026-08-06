@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
-import { AccountAvatar } from '../AccountAvatar';
-import { CopyButton } from '../CopyButton';
-import { SubText } from '../SubText';
-import { subscriptDecimal } from '../../utils/displayFormat';
+import { Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { AccountAvatar } from './AccountAvatar';
+import { CopyButton } from './CopyButton';
+import { SubText } from './SubText';
+import { subscriptDecimal } from '../utils/displayFormat';
 
 /** The dialog's small uppercase field label. */
 export function Eyebrow({ children }: { children: ReactNode }) {
@@ -72,6 +74,25 @@ export function PartyRow({
           <CopyButton value={address} size={13} label="Copy address" />
         </div>
       </div>
+    </div>
+  );
+}
+
+/** A one-line red message with the detail behind an info tooltip. */
+export function InlineWarning({ text, detail }: { text: string; detail: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <p className="text-destructive font-mono text-[11px] font-medium">{text}</p>
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Info className="text-destructive size-3 flex-none cursor-help" />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[240px] text-xs">
+            <p>{detail}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }

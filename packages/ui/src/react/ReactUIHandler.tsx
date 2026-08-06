@@ -618,6 +618,8 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
@@ -630,6 +632,8 @@ export class ReactUIHandler implements UIHandler {
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
@@ -2101,6 +2105,8 @@ function PermissionDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: PermissionUIRequest;
   onApprove: (data: any) => void;
@@ -2108,6 +2114,8 @@ function PermissionDialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -2500,52 +2508,6 @@ function PermissionDialogWrapper({
     return formatExpiryDate(request.data.expiry);
   }, [request.data.expiry]);
 
-  // Generate warning message based on actual permissions
-  const warningMessage = useMemo(() => {
-    const parts: string[] = [];
-
-    // Describe spend permissions
-    if (spends.length > 0) {
-      const spendDescriptions = spends.map((spend) => {
-        // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
-        const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
-        // Handle "forever" specially - no "per" prefix needed
-        if (normalizedDuration === 'forever') {
-          return spend.limit;
-        }
-        return `${spend.limit} per ${normalizedDuration}`;
-      });
-      parts.push(`spend up to ${spendDescriptions.join(', ')}`);
-    }
-
-    // Describe call permissions
-    if (calls.length > 0) {
-      const callDescriptions = calls.map((call) => {
-        const fnName = call.functionSignature;
-        // Check for special selectors
-        if (fnName === 'Any Function') {
-          return 'call any function';
-        }
-        if (fnName === 'Empty Calldata') {
-          return 'send transactions with empty calldata';
-        }
-        // Extract just the function name from signature like "transfer(address,uint256)"
-        const simpleName = fnName.split('(')[0];
-        return `call ${simpleName}`;
-      });
-
-      // Deduplicate and join
-      const uniqueCalls = [...new Set(callDescriptions)];
-      parts.push(uniqueCalls.join(', '));
-    }
-
-    if (parts.length === 0) {
-      return `You are granting permissions to this dApp until ${expiryDate}. Only approve if you trust this dApp.`;
-    }
-
-    return `This will allow the dApp to ${parts.join(' and ')} on your behalf until ${expiryDate}. Only approve if you trust this dApp.`;
-  }, [spends, calls, expiryDate]);
-
   const handleConfirm = async () => {
     if (!account) {
       console.error('[PermissionDialogWrapper] Account not initialized');
@@ -2610,13 +2572,13 @@ function PermissionDialogWrapper({
       networkName={networkName}
       chainId={chainId}
       apiKey={apiKey}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingTokenInfo}
-      timestamp={new Date(request.timestamp)}
-      warningMessage={warningMessage}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
@@ -2761,6 +2723,8 @@ function RevokePermissionDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: RevokePermissionUIRequest;
   onApprove: (data: any) => void;
@@ -2768,6 +2732,8 @@ function RevokePermissionDialogWrapper({
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -3174,12 +3140,13 @@ function RevokePermissionDialogWrapper({
       networkName={networkName}
       chainId={chainId}
       apiKey={apiKey}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingPermissionDetails}
-      timestamp={new Date(request.timestamp)}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Gas estimation props
       gasFee={gasFee}

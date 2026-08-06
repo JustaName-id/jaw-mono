@@ -1,0 +1,214 @@
+'use client';
+
+import type { ReactNode } from 'react';
+import { Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
+import { FeeTokenSelector, type FeeTokenOption } from '../FeeTokenSelector';
+import { Eyebrow, InlineWarning } from '../primitives';
+import { SubText } from '../SubText';
+import { subscriptDecimal } from '../../utils/displayFormat';
+import type { BlockReason } from '../../utils/transactionFailure';
+
+/** Native amount with dust in subscript notation, e.g. "0.0₅2131 ETH". */
+function nativeAmount(gasFee: string, symbol: string): string {
+  const g = Number(gasFee);
+  return g > 0 && g < 0.0001 ? `${subscriptDecimal(g)} ${symbol}` : `${g.toFixed(4)} ${symbol}`;
+}
+
+export interface NetworkFeeRowProps {
+  /** Resolved by the caller (see `utils/transactionFailure`), so the button can gate on the same value. */
+  blockReason: BlockReason;
+  /**
+   * Replaces the funds-shortfall tooltip when the caller knows the shortfall is the asset being
+   * spent rather than the fee itself.
+   */
+  fundsShortfallDetail?: string;
+  /** Wording for the `will-fail` state; the transaction screen can explain the simulation. */
+  willFailDetail?: string;
+
+  gasFee?: string;
+  gasFeeLoading?: boolean;
+  sponsored?: boolean;
+  nativeSymbol: string;
+  nativeTokenPrice: number;
+
+  networkName?: string;
+  chainId?: number;
+  chainIcon?: ReactNode;
+
+  feeTokens?: FeeTokenOption[];
+  feeTokensLoading?: boolean;
+  selectedFeeToken?: FeeTokenOption | null;
+  onFeeTokenSelect?: (token: FeeTokenOption) => void;
+  showFeeTokenSelector?: boolean;
+  isPayingWithErc20?: boolean;
+  hasSelectablePaymentOption: boolean;
+  disabled?: boolean;
+}
+
+/**
+ * The pinned "Network fee" card: fee value on the left, chain badge and fee-token picker on the
+ * right. Shared by the transaction and permission dialogs so both report a blocked fee the same
+ * way — one short red string with the detail in a tooltip, never a second error elsewhere.
+ */
+export function NetworkFeeRow({
+  blockReason,
+  fundsShortfallDetail,
+  willFailDetail = 'Simulating this transaction reverted, so the fee can’t be estimated and it can’t be submitted.',
+  gasFee,
+  gasFeeLoading = false,
+  sponsored = false,
+  nativeSymbol,
+  nativeTokenPrice,
+  networkName,
+  chainId,
+  chainIcon,
+  feeTokens,
+  feeTokensLoading,
+  selectedFeeToken,
+  onFeeTokenSelect,
+  showFeeTokenSelector,
+  isPayingWithErc20,
+  hasSelectablePaymentOption,
+  disabled,
+}: NetworkFeeRowProps) {
+  // While blocked the picker stays as long as some token is selectable — switching to it clears
+  // the block. Suppressed only when nothing can pay, where the choice would change nothing.
+  const showSelector = showFeeTokenSelector && !sponsored && !(blockReason && !hasSelectablePaymentOption);
+
+  const feeValue = (() => {
+    if (gasFeeLoading && !isPayingWithErc20) {
+      return <p className="text-muted-foreground font-mono text-[11px]">Estimating...</p>;
+    }
+
+    // Blocked: one short red string in the slot the fee would occupy, detail in the tooltip.
+    if (blockReason === 'funds') {
+      return (
+        <InlineWarning
+          text="Insufficient funds"
+          detail={
+            fundsShortfallDetail ??
+            `This account can't cover the network fee in ${nativeSymbol} or any supported token.`
+          }
+        />
+      );
+    }
+    if (blockReason === 'will-fail') {
+      return <InlineWarning text="Transaction will fail" detail={willFailDetail} />;
+    }
+
+    if (sponsored) {
+      const covered = gasFee && gasFee !== 'sponsored';
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <div className="flex items-center gap-2">
+            {covered && nativeTokenPrice > 0 && (
+              <span className="text-muted-foreground font-mono text-[11px] line-through">
+                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
+              </span>
+            )}
+            <span className="text-success bg-success/10 rounded px-2 py-0.5 text-[10px] font-semibold">Sponsored</span>
+          </div>
+          <p className="text-muted-foreground font-mono text-[10px]">
+            <SubText>{covered ? nativeAmount(gasFee, nativeSymbol) : 'Gas fees covered'}</SubText>
+          </p>
+        </div>
+      );
+    }
+
+    if (isPayingWithErc20 && selectedFeeToken) {
+      const ceiling = selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted;
+      return (
+        <div className="flex flex-col items-start gap-0.5">
+          <p className="font-mono leading-tight">
+            {selectedFeeToken.gasCostFormatted ? (
+              <>
+                <span className="text-foreground text-[14px] font-semibold">${selectedFeeToken.gasCostFormatted}</span>
+                <span className="text-muted-foreground ml-1 text-[11px] font-normal">
+                  ≈ {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+                </span>
+              </>
+            ) : (
+              <span className="text-muted-foreground text-[11px]">Estimating...</span>
+            )}
+          </p>
+          {ceiling && (
+            <p className="text-muted-foreground font-mono text-[10px]">
+              Up to {ceiling} {selectedFeeToken.symbol}
+            </p>
+          )}
+        </div>
+      );
+    }
+
+    if (gasFee && gasFee !== 'sponsored') {
+      const amount = nativeAmount(gasFee, nativeSymbol);
+      return (
+        <p className="font-mono leading-tight">
+          {nativeTokenPrice > 0 ? (
+            <>
+              <span className="text-foreground text-[14px] font-semibold">
+                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
+              </span>
+              <span className="text-muted-foreground ml-1 text-[11px] font-normal">
+                ≈ <SubText>{amount}</SubText>
+              </span>
+            </>
+          ) : (
+            <SubText className="text-foreground text-[14px] font-semibold">{amount}</SubText>
+          )}
+        </p>
+      );
+    }
+
+    return <p className="text-muted-foreground font-mono text-[11px]">Unable to estimate</p>;
+  })();
+
+  return (
+    <div className="border-border rounded-[10.5px] border p-3">
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <div className="flex items-center gap-1.5">
+            <Eyebrow>Network fee</Eyebrow>
+            <TooltipProvider delayDuration={0}>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Info className="text-muted-foreground size-3 cursor-help" />
+                </TooltipTrigger>
+                <TooltipContent side="top">
+                  <p>
+                    Gas fees paid to network validators to process your transaction. You can pay with {nativeSymbol} or
+                    supported tokens.
+                  </p>
+                </TooltipContent>
+              </Tooltip>
+            </TooltipProvider>
+          </div>
+          <div className="mt-1.5">{feeValue}</div>
+        </div>
+
+        <div className="flex flex-none flex-col items-end gap-1.5">
+          <div className="text-muted-foreground flex items-center gap-1 font-mono text-[10px]">
+            {/* Round chain badge — clipped to a circle so the logo never stretches. */}
+            <span className="border-border bg-secondary flex size-4 flex-none items-center justify-center overflow-hidden rounded-full border [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0">
+              {chainIcon}
+            </span>
+            <span className="truncate">{networkName || 'Ethereum'}</span>
+          </div>
+          {showSelector && feeTokens && onFeeTokenSelect && (
+            <FeeTokenSelector
+              tokens={feeTokens}
+              chainId={chainId}
+              selectedToken={selectedFeeToken ?? null}
+              onSelect={onFeeTokenSelect}
+              isLoading={feeTokensLoading ?? false}
+              disabled={disabled}
+              nativeTokenPrice={nativeTokenPrice}
+              estimatedGasEth={gasFee || '0'}
+            />
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}

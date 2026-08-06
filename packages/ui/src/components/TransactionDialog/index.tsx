@@ -2,13 +2,11 @@
 
 import { Button } from '../ui/button';
 import { Accordion } from '../ui/accordion';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { ShellDialog } from '../ShellDialog';
 import { ProcessingScreen } from '../ProcessingScreen';
-import { FeeTokenSelector } from '../FeeTokenSelector';
 import { useState, useEffect, useRef } from 'react';
 import { ethAddress } from 'viem';
-import { Info, ArrowDown } from 'lucide-react';
+import { ArrowDown } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
@@ -23,26 +21,8 @@ import { AssetPreview } from './AssetPreview';
 import { callTitle } from './DecodedCalldata';
 import { resolveBlockReason } from '../../utils/transactionFailure';
 import { BatchStep, SingleCallData } from './CallSections';
-import { Eyebrow, PartyRow, Row, ValueAmount } from './primitives';
-
-/** A one-line red message with the detail behind an info tooltip. */
-function InlineWarning({ text, detail }: { text: string; detail: string }) {
-  return (
-    <div className="flex items-center gap-1">
-      <p className="text-destructive font-mono text-[11px] font-medium">{text}</p>
-      <TooltipProvider delayDuration={0}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Info className="text-destructive size-3 flex-none cursor-help" />
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[240px] text-xs">
-            <p>{detail}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
-  );
-}
+import { InlineWarning, PartyRow, Row, ValueAmount } from '../primitives';
+import { NetworkFeeRow } from '../NetworkFeeRow';
 
 export const TransactionDialog = ({
   open,
@@ -251,122 +231,6 @@ export const TransactionDialog = ({
   // start collapsed — their headers name the action, so the user opens the one they care about.
   const calldataOpen = !!assetPreviewError || ((assetsOut?.length ?? 0) === 0 && (assetsIn?.length ?? 0) === 0);
 
-  // While blocked the selector stays as long as some token is selectable — switching to it clears
-  // the block. Suppressed only when nothing can pay, where the choice would change nothing.
-  const feeSelector =
-    showFeeTokenSelector &&
-    !sponsored &&
-    !(blockReason && !hasSelectablePaymentOption) &&
-    feeTokens &&
-    onFeeTokenSelect ? (
-      <FeeTokenSelector
-        tokens={feeTokens}
-        chainId={currentTransaction?.chainId}
-        selectedToken={selectedFeeToken ?? null}
-        onSelect={onFeeTokenSelect}
-        isLoading={feeTokensLoading ?? false}
-        disabled={isProcessing}
-        nativeTokenPrice={nativeTokenPrice}
-        estimatedGasEth={gasFee || '0'}
-      />
-    ) : null;
-
-  const blockedCopy =
-    blockReason === 'funds'
-      ? {
-          text: 'Insufficient funds',
-          detail:
-            assetPreviewRevertCause === 'balance'
-              ? "This account doesn't hold enough of the asset this transaction spends."
-              : `This account can't cover the network fee in ${nativeSymbol} or any supported token.`,
-        }
-      : {
-          text: 'Transaction will fail',
-          detail: 'Simulating this transaction reverted, so the fee can’t be estimated and it can’t be submitted.',
-        };
-
-  const feeValue = (() => {
-    if (gasFeeLoading && !isPayingWithErc20) {
-      return <p className="text-muted-foreground font-mono text-[11px]">Estimating...</p>;
-    }
-    // Blocked: one short red string in the slot the fee would occupy, detail in the tooltip.
-    if (blockReason) {
-      return <InlineWarning {...blockedCopy} />;
-    }
-    if (sponsored) {
-      return (
-        <div className="flex flex-col items-start gap-0.5">
-          <div className="flex items-center gap-2">
-            {gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
-              <span className="text-muted-foreground font-mono text-[11px] line-through">
-                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
-              </span>
-            )}
-            <span className="text-success bg-success/10 rounded px-2 py-0.5 text-[10px] font-semibold">Sponsored</span>
-          </div>
-          <p className="text-muted-foreground font-mono text-[10px]">
-            <SubText>
-              {gasFee && gasFee !== 'sponsored'
-                ? (() => {
-                    const g = Number(gasFee);
-                    return g > 0 && g < 0.0001
-                      ? `${subscriptDecimal(g)} ${nativeSymbol}`
-                      : `${g.toFixed(4)} ${nativeSymbol}`;
-                  })()
-                : 'Gas fees covered'}
-            </SubText>
-          </p>
-        </div>
-      );
-    }
-    if (isPayingWithErc20 && selectedFeeToken) {
-      return (
-        <div className="flex flex-col items-start gap-0.5">
-          <p className="font-mono leading-tight">
-            {selectedFeeToken.gasCostFormatted ? (
-              <>
-                <span className="text-foreground text-[14px] font-semibold">${selectedFeeToken.gasCostFormatted}</span>
-                <span className="text-muted-foreground ml-1 text-[11px] font-normal">
-                  ≈ {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
-                </span>
-              </>
-            ) : (
-              <span className="text-muted-foreground text-[11px]">Estimating...</span>
-            )}
-          </p>
-          {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
-            <p className="text-muted-foreground font-mono text-[10px]">
-              Up to {selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted}{' '}
-              {selectedFeeToken.symbol}
-            </p>
-          )}
-        </div>
-      );
-    }
-    if (gasFee && gasFee !== 'sponsored') {
-      const g = Number(gasFee);
-      const nativeAmt =
-        g > 0 && g < 0.0001 ? `${subscriptDecimal(g)} ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
-      return (
-        <p className="font-mono leading-tight">
-          {nativeTokenPrice > 0 ? (
-            <>
-              <span className="text-foreground text-[14px] font-semibold">
-                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
-              </span>
-              <span className="text-muted-foreground ml-1 text-[11px] font-normal">
-                ≈ <SubText>{nativeAmt}</SubText>
-              </span>
-            </>
-          ) : (
-            <SubText className="text-foreground text-[14px] font-semibold">{nativeAmt}</SubText>
-          )}
-        </p>
-      );
-    }
-    return <p className="text-muted-foreground font-mono text-[11px]">Unable to estimate</p>;
-  })();
-
   return (
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
       {isProcessing ? (
@@ -510,41 +374,30 @@ export const TransactionDialog = ({
 
           {/* Pinned fee row + actions */}
           <div className="border-border flex-none space-y-3 border-t px-6 py-3.5">
-            {/* Network fee */}
-            <div className="border-border rounded-[10.5px] border p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <Eyebrow>Network fee</Eyebrow>
-                    <TooltipProvider delayDuration={0}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="text-muted-foreground size-3 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          <p>
-                            Gas fees paid to network validators to process your transaction. You can pay with{' '}
-                            {nativeSymbol} or supported tokens.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <div className="mt-1.5">{feeValue}</div>
-                </div>
-                {/* Right column: chain on top, fee-token chip below. */}
-                <div className="flex flex-none flex-col items-end gap-1.5">
-                  <div className="text-muted-foreground flex items-center gap-1 font-mono text-[10px]">
-                    {/* Round chain badge — clipped to a circle so the logo never stretches. */}
-                    <span className="border-border bg-secondary flex size-4 flex-none items-center justify-center overflow-hidden rounded-full border [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0">
-                      {chainIcon}
-                    </span>
-                    <span className="truncate">{networkName || 'Ethereum'}</span>
-                  </div>
-                  {feeSelector}
-                </div>
-              </div>
-            </div>
+            <NetworkFeeRow
+              blockReason={blockReason}
+              fundsShortfallDetail={
+                assetPreviewRevertCause === 'balance'
+                  ? "This account doesn't hold enough of the asset this transaction spends."
+                  : undefined
+              }
+              gasFee={gasFee}
+              gasFeeLoading={gasFeeLoading}
+              sponsored={sponsored}
+              nativeSymbol={nativeSymbol}
+              nativeTokenPrice={nativeTokenPrice}
+              networkName={networkName}
+              chainId={currentTransaction?.chainId}
+              chainIcon={chainIcon}
+              feeTokens={feeTokens}
+              feeTokensLoading={feeTokensLoading}
+              selectedFeeToken={selectedFeeToken}
+              onFeeTokenSelect={onFeeTokenSelect}
+              showFeeTokenSelector={showFeeTokenSelector}
+              isPayingWithErc20={isPayingWithErc20}
+              hasSelectablePaymentOption={hasSelectablePaymentOption}
+              disabled={isProcessing}
+            />
 
             {/* Actions */}
             <div className="flex gap-2">
