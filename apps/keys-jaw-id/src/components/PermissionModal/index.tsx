@@ -612,57 +612,55 @@ export const PermissionModal = ({
         ])
       ) as string[];
 
+      // One client for the whole set. `contracts.multicall3` + `batch: { multicall: true }` lets
+      // viem fold every decimals/symbol read into a single eth_call — which only works if the
+      // reads are issued together, hence the Promise.all below rather than a serial loop.
+      // Note this is multicall (one ordinary eth_call), not JSON-RPC request batching, which the
+      // RPC proxy rejects.
+      const publicClient = createPublicClient({
+        chain: {
+          id: chain.id,
+          name: networkName,
+          nativeCurrency: viemChain?.nativeCurrency ?? { name: 'Ether', symbol: 'ETH', decimals: 18 },
+          rpcUrls: {
+            default: { http: [chain.rpcUrl || ''] },
+            public: { http: [chain.rpcUrl || ''] },
+          },
+          contracts: viemChain?.contracts,
+        },
+        transport: http(chain.rpcUrl),
+        batch: { multicall: true },
+      });
+
+      const pending: string[] = [];
       for (const tokenAddress of uniqueTokens) {
-        // Skip if already fetched
         if (tokenInfoMap[tokenAddress]) {
           newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
-          continue;
-        }
-
-        // Native token: the chain's own currency, not a hardcoded ETH.
-        if (isNativeToken(tokenAddress)) {
+        } else if (isNativeToken(tokenAddress)) {
+          // Native token: the chain's own currency, not a hardcoded ETH.
           newTokenInfoMap[tokenAddress] = {
             decimals: viemChain?.nativeCurrency?.decimals ?? 18,
             symbol: viemChain?.nativeCurrency?.symbol ?? 'ETH',
           };
-          continue;
-        }
-
-        // Fetch ERC-20 token info
-        try {
-          const publicClient = createPublicClient({
-            chain: {
-              id: chain.id,
-              name: networkName,
-              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-              rpcUrls: {
-                default: { http: [chain.rpcUrl || ''] },
-                public: { http: [chain.rpcUrl || ''] },
-              },
-            },
-            transport: http(chain.rpcUrl),
-          });
-
-          const [decimals, symbol] = await Promise.all([
-            publicClient.readContract({
-              address: tokenAddress as Address,
-              abi: erc20Abi,
-              functionName: 'decimals',
-            }),
-            publicClient.readContract({
-              address: tokenAddress as Address,
-              abi: erc20Abi,
-              functionName: 'symbol',
-            }),
-          ]);
-
-          newTokenInfoMap[tokenAddress] = { decimals, symbol };
-        } catch (error) {
-          console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
-          // Fallback to showing the token address
-          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: tokenAddress };
+        } else {
+          pending.push(tokenAddress);
         }
       }
+
+      await Promise.all(
+        pending.map(async (tokenAddress) => {
+          try {
+            const [decimals, symbol] = await Promise.all([
+              publicClient.readContract({ address: tokenAddress as Address, abi: erc20Abi, functionName: 'decimals' }),
+              publicClient.readContract({ address: tokenAddress as Address, abi: erc20Abi, functionName: 'symbol' }),
+            ]);
+            newTokenInfoMap[tokenAddress] = { decimals, symbol };
+          } catch {
+            // Not an ERC-20 (or unreachable) — unnamed, so the UI shows the address.
+            newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: '' };
+          }
+        })
+      );
 
       if (isMounted) {
         setTokenInfoMap((prev) => ({ ...prev, ...newTokenInfoMap }));
