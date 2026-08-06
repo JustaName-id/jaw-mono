@@ -1,4 +1,5 @@
 import { parseBigInt } from './amount.js';
+import { sanitizeLine } from '../lib/terminal.js';
 
 /**
  * Presentation and diagnosis for `jaw x402 status`, kept apart from the command
@@ -9,7 +10,9 @@ import { parseBigInt } from './amount.js';
 export function formatUsdc(base: string | undefined, decimals: number): string {
   if (base === undefined) return 'unlimited';
   const value = parseBigInt(base);
-  if (value === null) return `${base} (invalid)`;
+  // Echoing the raw value put an unvalidated string on screen: amounts reach
+  // here from the ledger and from config, both files that can be edited.
+  if (value === null) return `${sanitizeLine(base, 32)} (invalid)`;
   const scale = 10n ** BigInt(decimals);
   const whole = value / scale;
   const frac = (value % scale).toString().padStart(decimals, '0').replace(/0+$/, '');

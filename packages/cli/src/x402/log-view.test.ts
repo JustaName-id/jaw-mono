@@ -86,6 +86,24 @@ describe('renderEntry against a poisoned ledger', () => {
   });
 });
 
+// The ledger is a file on disk. Nothing read back from it is trusted for having
+// been written by us, so a tampered row cannot paint one either.
+describe('renderEntry against a tampered ledger', () => {
+  const ESC = String.fromCharCode(0x1b);
+
+  it('disarms the timestamp', () => {
+    expect(renderEntry(entry({ at: `${ESC}[2K${ESC}[31mFAKE` }))).not.toContain(ESC);
+  });
+
+  it('disarms the status', () => {
+    expect(renderEntry(entry({ status: `paid${ESC}[31m` as never }))).not.toContain(ESC);
+  });
+
+  it('disarms an amount that is not a number', () => {
+    expect(renderEntry(entry({ amount: `1${ESC}[32m` }))).not.toContain(ESC);
+  });
+});
+
 describe('renderSummary', () => {
   // Same rule the spend caps use: a refusal never signed anything.
   it('counts paid and failed as money out, never refused', () => {
@@ -119,6 +137,18 @@ describe('renderSummary', () => {
     const unknown = entry({ amount: '1000000', network: 'eip155:999999' }); // falls back to 6
     // Same scale, so a single figure.
     expect(renderSummary([six, unknown])).toContain('2 USDC out');
+  });
+
+  // An unrecognised status landed on `counts` as a stray key and disappeared
+  // from the tally, so a malformed row silently shrank the reported total.
+  it('reports unreadable rows instead of dropping them', () => {
+    const summary = renderSummary([entry(), entry({ status: 'settled' as never })]);
+    expect(summary).toContain('1 unreadable');
+    expect(summary).toContain('1 paid');
+  });
+
+  it('says nothing about unreadable rows when there are none', () => {
+    expect(renderSummary([entry()])).not.toContain('unreadable');
   });
 
   it('reports zero out when everything was refused', () => {

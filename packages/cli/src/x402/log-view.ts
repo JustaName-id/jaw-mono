@@ -23,9 +23,11 @@ export function hostOf(url: string): string {
 }
 
 export function renderEntry(entry: X402LogEntry): string {
-  const when = entry.at.replace('T', ' ').slice(0, 19);
+  // Everything here is read back from a file, so nothing is trusted for being
+  // ours originally: a tampered ledger must not be able to paint a row either.
+  const when = sanitizeLine(String(entry.at).replace('T', ' ').slice(0, 19), 19);
   const amount = entry.amount ? formatUsdc(entry.amount, decimalsOf(entry)) : '';
-  const head = `  ${when}  ${entry.status.padEnd(7)}  ${amount.padStart(12)}  ${hostOf(entry.url)}`;
+  const head = `  ${when}  ${sanitizeLine(entry.status, 7).padEnd(7)}  ${amount.padStart(12)}  ${hostOf(entry.url)}`;
 
   const detail: string[] = [];
   // A top-up moved user funds through the permission. Always visible, even on an
@@ -55,8 +57,12 @@ export function renderSummary(entries: X402LogEntry[]): string {
   // print a confident, wrong figure. Every USDC in the registry is 6 decimals
   // today, so this is a single group in practice and the guard costs nothing.
   const spentByScale = new Map<number, bigint>();
+  let unknown = 0;
   for (const entry of entries) {
-    counts[entry.status] += 1;
+    // An unrecognised status used to land on `counts` as a stray key and vanish
+    // from the tally, so a malformed row silently shrank the reported total.
+    if (entry.status in counts) counts[entry.status] += 1;
+    else unknown += 1;
     if ((entry.status === 'paid' || entry.status === 'failed') && entry.amount) {
       try {
         const decimals = decimalsOf(entry);
@@ -70,6 +76,7 @@ export function renderSummary(entries: X402LogEntry[]): string {
   const parts = [`${counts.paid} paid`];
   if (counts.failed > 0) parts.push(`${counts.failed} failed`);
   if (counts.refused > 0) parts.push(`${counts.refused} refused`);
+  if (unknown > 0) parts.push(`${unknown} unreadable`);
 
   const totals =
     spentByScale.size === 0

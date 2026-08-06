@@ -16,6 +16,19 @@ describe('formatUsdc', () => {
   it('surfaces a malformed cap instead of rendering a wrong number', () => {
     expect(formatUsdc('not-a-number', 6)).toBe('not-a-number (invalid)');
   });
+
+  // Amounts reach here from the ledger and from config, both editable files,
+  // and the invalid branch used to echo whatever it was handed.
+  it('disarms a malformed cap rather than printing it back raw', () => {
+    const ESC = String.fromCharCode(0x1b);
+    const out = formatUsdc(`9${ESC}[2K${ESC}[32m FAKE`, 6);
+    expect(out).not.toContain(ESC);
+    expect(out).toContain('(invalid)');
+  });
+
+  it('bounds a very long malformed cap', () => {
+    expect(formatUsdc('9'.repeat(500), 6)).not.toContain('(invalid)');
+  });
 });
 
 describe('formatRemaining', () => {
