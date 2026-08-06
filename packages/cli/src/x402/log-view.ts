@@ -1,6 +1,6 @@
 import { formatUsdc } from './status-report.js';
 import { usdcForNetwork } from './asset-registry.js';
-import { sanitizeForTerminal } from '../lib/terminal.js';
+import { sanitizeLine } from '../lib/terminal.js';
 import type { X402LogEntry } from './ledger.js';
 
 /**
@@ -15,10 +15,10 @@ export function decimalsOf(entry: X402LogEntry): number {
 
 export function hostOf(url: string): string {
   try {
-    return sanitizeForTerminal(new URL(url).host, 80);
+    return sanitizeLine(new URL(url).host, 80);
   } catch {
     // Not a URL, so nothing has been parsed away: bound and disarm it.
-    return sanitizeForTerminal(url, 80);
+    return sanitizeLine(url, 80);
   }
 }
 
@@ -33,13 +33,13 @@ export function renderEntry(entry: X402LogEntry): string {
   if (entry.topUpAmount) {
     detail.push(`topped up ${formatUsdc(entry.topUpAmount, decimalsOf(entry))}`);
   }
-  if (entry.txHash) detail.push(sanitizeForTerminal(entry.txHash, 80));
+  if (entry.txHash) detail.push(sanitizeLine(entry.txHash, 80));
   // A failed settlement may still have been broadcast: the nonce is what makes
   // it reconcilable on chain, so surface it exactly where it is ambiguous.
-  if (entry.status === 'failed' && entry.nonce) detail.push(`nonce ${sanitizeForTerminal(entry.nonce, 80)}`);
+  if (entry.status === 'failed' && entry.nonce) detail.push(`nonce ${sanitizeLine(entry.nonce, 80)}`);
   // Stored server text: an endpoint that got refused once would
   // otherwise repaint this line on every later `x402 log`.
-  if (entry.reason) detail.push(sanitizeForTerminal(entry.reason, 200));
+  if (entry.reason) detail.push(sanitizeLine(entry.reason, 200));
 
   return detail.length > 0 ? `${head}\n${' '.repeat(24)}${detail.join('  ')}` : head;
 }
