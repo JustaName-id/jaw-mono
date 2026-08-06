@@ -84,25 +84,9 @@ export function assertParamsChainId(params: unknown): asserts params is [
 }
 
 /**
- * The EIP-712 payload a signing request carries, or null when it carries none.
- *
- * Two methods reach the same typed-data dialog: `eth_signTypedData_v4`, and ERC-7871
- * `wallet_sign` with request type `0x01` (`0x45` is personal_sign). Validating only the
- * former would leave the second path unguarded.
- */
-function typedDataCarrier(request: RequestArguments): { raw: unknown } | null {
-    if (request.method === 'eth_signTypedData_v4') {
-        return { raw: (request.params as unknown[] | undefined)?.[1] };
-    }
-    if (request.method === 'wallet_sign') {
-        const inner = (request.params as [{ request?: { type?: string; data?: unknown } }] | undefined)?.[0]?.request;
-        if (inner?.type === '0x01') return { raw: inner.data };
-    }
-    return null;
-}
-
-/**
- * Rejects a typed-data signing request whose payload cannot produce a signature.
+ * Rejects an EIP-712 payload that cannot produce a signature. The caller
+ * extracts the payload from its method-specific envelope; this only judges
+ * whether what was extracted is signable.
  *
  * The EIP-712 digest is `keccak(0x1901 ‖ hashStruct(domain) ‖ hashStruct(message))`, and
  * `hashStruct` needs `types[primaryType]` — so a payload missing it has nothing to sign.
@@ -113,12 +97,11 @@ function typedDataCarrier(request: RequestArguments): { raw: unknown } | null {
  * Gated on `hashTypedData` rather than viem's `validateTypedData`: "hashable" is exactly
  * "signable", whereas `validateTypedData` also type-checks message values and would
  * reject payloads that sign fine today.
+ *
+ * @param raw - The typed data as the dapp sent it: a JSON string per the spec,
+ * or the already-parsed object common in the wild.
  */
-export function assertSignableTypedData(request: RequestArguments): void {
-    const carrier = typedDataCarrier(request);
-    if (!carrier) return;
-
-    const raw = carrier.raw;
+export function assertSignableTypedData(raw: unknown): void {
     if (raw === undefined || raw === null) {
         throw standardErrors.rpc.invalidParams('typed data is required');
     }
