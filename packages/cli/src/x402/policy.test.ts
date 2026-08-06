@@ -130,14 +130,40 @@ describe('resolveX402Policy — grant layer', () => {
     expect(policy.allowedNetworks).toEqual(['eip155:8453']); // grant seed still applies where config is silent
   });
 
-  it('clamps a config cap that tries to loosen past the grant', () => {
-    const policy = resolveX402Policy({ maxTotalPerSession: '50000000' }, policyFromGrant(grant)); // 50 > 5 USDC
-    expect(policy.maxTotalPerSession).toBe('5000000'); // clamped back to the grant
-  });
-
-  it('leaves config untouched when there is no grant to clamp against', () => {
+  it('leaves config untouched when there is no grant', () => {
     const policy = resolveX402Policy({ maxTotalPerSession: '50000000' });
     expect(policy.maxTotalPerSession).toBe('50000000');
+  });
+
+  // The session cap used to be pinned to the grant. That clamp only existed
+  // because a per-period allowance was being written into a session-wide field,
+  // and it silently rewrote whatever the user configured. With the allowance on
+  // maxPerPeriod the two caps measure different things, so config owns this one.
+  it('no longer rewrites a config session cap above the granted per-period allowance', () => {
+    const periodGrant = { ...grant, unit: 'day' as const, multiplier: 1, periodAnchor: '2026-01-01T00:00:00.000Z' };
+    const policy = resolveX402Policy({ maxTotalPerSession: '50000000' }, policyFromGrant(periodGrant));
+    expect(policy.maxTotalPerSession).toBe('50000000'); // honoured, not clamped to 5000000
+    expect(policy.maxPerPeriod).toBe('5000000'); // the grant still constrains each period
+  });
+});
+
+describe('policyFromGrant — period-aware grants', () => {
+  const base = { token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913', allowance: '5000000', network: 'eip155:8453' };
+
+  it('puts a per-period allowance on maxPerPeriod, never on the session total', () => {
+    const policy = policyFromGrant({ ...base, unit: 'day', multiplier: 1, periodAnchor: '2026-01-01T00:00:00.000Z' });
+    expect(policy.maxPerPeriod).toBe('5000000');
+    expect(policy.period).toEqual({ unit: 'day', multiplier: 1, anchor: '2026-01-01T00:00:00.000Z' });
+    // Seeding this would cap a 7-day session at one day's allowance for its whole life.
+    expect(policy.maxTotalPerSession).toBeUndefined();
+  });
+
+  it('falls back to a session-wide cap when the grant records no period', () => {
+    // Session configs written before the period was persisted: the allowance was
+    // already being read as session-wide, so keep meaning that.
+    const policy = policyFromGrant(base);
+    expect(policy.maxTotalPerSession).toBe('5000000');
+    expect(policy.maxPerPeriod).toBeUndefined();
   });
 });
 
@@ -187,5 +213,94 @@ describe('topUpFloat as a settable policy key', () => {
   it('Given topUpFloat, When validated as a config key, Then it is accepted as a scalar', () => {
     expect(isX402PolicyKey('topUpFloat')).toBe(true);
     expect((X402_SCALAR_KEYS as readonly string[]).includes('topUpFloat')).toBe(true);
+  });
+});
+
+describe('per-period cap', () => {
+  const grant = {
+    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    allowance: '5000000', // 5 USDC
+    network: 'eip155:8453',
+    unit: 'day' as const,
+    multiplier: 1,
+    periodAnchor: '2026-01-01T00:00:00.000Z',
+  };
+  const policy = resolveX402Policy(undefined, policyFromGrant(grant));
+  const oneUsdc = { ...base, amount: '1000000' };
+
+  it('allows spending up to the period allowance', () => {
+    expect(checkPolicy(oneUsdc, policy, { spentThisPeriod: 4000000n })).toEqual({ ok: true });
+  });
+
+  it('refuses once the period allowance is used up', () => {
+    const result = checkPolicy(oneUsdc, policy, { spentThisPeriod: 5000000n });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('per day');
+  });
+
+  // The blocker this design resolves: a 5 USDC/day grant with a 7-day expiry
+  // permits 35 USDC on chain. Seeding the session-wide cap from one period's
+  // allowance stranded the session at 5 USDC for all 7 days, with the clamp
+  // silently undoing any config attempt to raise it.
+  it('does not strand a multi-period grant after the first period', () => {
+    // Day 3, having already spent 5 USDC on each of days 1 and 2.
+    const spentAcrossSession = 10000000n;
+    const result = checkPolicy(oneUsdc, policy, { spentThisSession: spentAcrossSession, spentThisPeriod: 0n });
+    expect(result).toEqual({ ok: true });
+  });
+
+  it('names the window and when it resets, so the refusal is diagnosable', () => {
+    const result = checkPolicy(oneUsdc, policy, {
+      spentThisPeriod: 5000000n,
+      periodEndsAt: new Date('2026-01-04T00:00:00.000Z'),
+    });
+    expect(result.reason).toContain('2026-01-04T00:00:00.000Z');
+  });
+
+  it('still enforces a session ceiling the user configured on top', () => {
+    const withCeiling = resolveX402Policy({ maxTotalPerSession: '8000000' }, policyFromGrant(grant));
+    const result = checkPolicy(oneUsdc, withCeiling, { spentThisSession: 8000000n, spentThisPeriod: 0n });
+    expect(result.ok).toBe(false);
+    expect(result.reason).toContain('maxTotalPerSession');
+  });
+
+  it('reports the granted period cap ahead of the session cap when both would refuse', () => {
+    const withCeiling = resolveX402Policy({ maxTotalPerSession: '8000000' }, policyFromGrant(grant));
+    const result = checkPolicy(oneUsdc, withCeiling, { spentThisSession: 8000000n, spentThisPeriod: 5000000n });
+    expect(result.reason).toContain('per day');
+  });
+});
+
+describe('extractGrantedSpend — period capture', () => {
+  const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
+  const anchor = new Date('2026-01-01T00:00:00.000Z');
+
+  it('carries the unit and multiplier so the allowance keeps its dimension', () => {
+    const grant = extractGrantedSpend(
+      [{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'day', multiplier: 1 }],
+      8453,
+      anchor
+    );
+    expect(grant).toMatchObject({ allowance: '5000000', unit: 'day', multiplier: 1 });
+    expect(grant?.periodAnchor).toBe('2026-01-01T00:00:00.000Z');
+  });
+
+  it('defaults a missing multiplier to 1', () => {
+    const grant = extractGrantedSpend([{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'week' }], 8453, anchor);
+    expect(grant?.multiplier).toBe(1);
+  });
+
+  // 'year' is in the CLI's accepted units but has no PeriodUnit on chain.
+  // Recording no period degrades to session-wide rather than inventing a window.
+  it('records no period for a unit with no on-chain counterpart', () => {
+    const grant = extractGrantedSpend([{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'year' }], 8453, anchor);
+    expect(grant?.allowance).toBe('5000000');
+    expect(grant?.unit).toBeUndefined();
+    expect(grant?.periodAnchor).toBeUndefined();
+  });
+
+  it('records no period when the grant omits the unit entirely', () => {
+    const grant = extractGrantedSpend([{ token: USDC_BASE, allowance: '0x4C4B40' }], 8453, anchor);
+    expect(grant?.unit).toBeUndefined();
   });
 });

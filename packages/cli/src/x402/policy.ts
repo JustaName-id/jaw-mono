@@ -1,7 +1,16 @@
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import { parseBigInt } from './amount.js';
+import { describePeriod, isPeriodUnit, type PeriodUnit } from './period.js';
 import type { X402PaymentRequirement } from './types.js';
 import type { GrantedSpend } from '../lib/session-config.js';
+
+/** The period a granted allowance resets over, carried into the policy. */
+export interface GrantedPeriod {
+  unit: PeriodUnit;
+  multiplier: number;
+  /** ISO timestamp the periods are anchored at. */
+  anchor: string;
+}
 
 /**
  * Tool-level x402 limits (from `~/.jaw/config.json`'s `x402` block). An agent
@@ -13,8 +22,22 @@ import type { GrantedSpend } from '../lib/session-config.js';
 export interface X402Policy {
   /** Max base units for a single payment. */
   maxAmountPerPayment?: string;
-  /** Max cumulative base units across the process/session. */
+  /**
+   * Max cumulative base units across the whole session. Not a per-process cap:
+   * the running total is rebuilt from the payment ledger since the session was
+   * created, so it survives restarts. User-configured only, never seeded from
+   * the grant (see `maxPerPeriod` for that).
+   */
   maxTotalPerSession?: string;
+  /**
+   * Max base units within one period of the on-chain grant, seeded from it and
+   * resetting every period exactly as the permission does. This is the field
+   * that mirrors the chain; `maxTotalPerSession` is the user's own ceiling on
+   * top. Set together with `period`.
+   */
+  maxPerPeriod?: string;
+  /** The window `maxPerPeriod` resets over. Absent when no grant seeded it. */
+  period?: GrantedPeriod;
   /** Allowed asset contract addresses (case-insensitive). Empty/undefined = any. */
   allowedAssets?: string[];
   /** Allowed CAIP-2 networks. Empty/undefined = any. */
@@ -55,8 +78,9 @@ export const DEFAULT_X402_POLICY: X402Policy = {
  * case-insensitively and the allowlist this seeds compares addresses that way too.
  */
 export function extractGrantedSpend(
-  spends: ReadonlyArray<{ token: string; allowance: string }> | undefined,
-  chainId: number
+  spends: ReadonlyArray<{ token: string; allowance: string; unit?: string; multiplier?: number }> | undefined,
+  chainId: number,
+  anchor: Date = new Date()
 ): GrantedSpend | undefined {
   const usdc = Object.values(USDC_BY_NETWORK).find((a) => a.chainId === chainId);
   if (!usdc) return undefined;
@@ -72,43 +96,75 @@ export function extractGrantedSpend(
   } catch {
     return undefined; // malformed allowance: fall back to defaults rather than a bad cap
   }
-  return { token: usdc.address, allowance, network: usdc.wireNetwork };
+  // Keep the period alongside the number. An allowance without its unit is
+  // dimensionless, and reading a per-period figure as a per-session one caps a
+  // multi-period grant at a single period's worth for its whole life.
+  // An unrecognised unit records no period rather than guessing, which falls
+  // back to session-wide handling instead of inventing a window.
+  const unit = isPeriodUnit(spend.unit) ? spend.unit : undefined;
+  return {
+    token: usdc.address,
+    allowance,
+    network: usdc.wireNetwork,
+    ...(unit ? { unit, multiplier: Math.max(1, Math.floor(spend.multiplier ?? 1)) } : {}),
+    ...(unit ? { periodAnchor: anchor.toISOString() } : {}),
+  };
 }
 
 /**
  * Turn the USDC spend limit the user granted on-chain into policy fields, so the
  * local caps agree with the grant by construction rather than being configured
- * separately. The on-chain allowance is per-period and is the hard ceiling; we
- * seed the local `maxTotalPerSession` (a per-process soft cap) from one period's
- * worth, which keeps the inner guardrail from ever exceeding what a period of the
- * grant permits. The granted token and network become the allowlists.
+ * separately. The granted token and network become the allowlists, and the
+ * allowance becomes `maxPerPeriod`: a cap that resets every period, matching what
+ * the permission actually enforces.
+ *
+ * It deliberately does not touch `maxTotalPerSession`. That field accumulates
+ * over the entire session, so seeding it with one period's allowance stranded
+ * multi-period grants: a 5-USDC/day grant with a 7-day expiry permits 35 on
+ * chain but capped the session at 5 forever. The two are different dimensions
+ * and are now kept apart.
  */
 export function policyFromGrant(grant?: GrantedSpend): X402Policy {
   if (!grant) return {};
   return {
-    maxTotalPerSession: grant.allowance,
     allowedAssets: [grant.token],
     allowedNetworks: [grant.network],
+    // Without a recorded period the allowance cannot be placed on a window, so
+    // it stays session-wide, which is what pre-period configs already meant.
+    ...(grant.unit && grant.periodAnchor
+      ? {
+          maxPerPeriod: grant.allowance,
+          period: { unit: grant.unit, multiplier: grant.multiplier ?? 1, anchor: grant.periodAnchor },
+        }
+      : { maxTotalPerSession: grant.allowance }),
   };
 }
 
 /**
  * Layer the policy: safe defaults < the on-chain grant < the user's config. The
- * grant seeds the caps/allowlists from what was actually approved; an explicit
- * `jaw config set x402.*` wins per field so a user can TIGHTEN further. The one
- * exception is the session cap: config can lower it below the grant but not raise
- * it above, so the local guard never lets the agent attempt to spend more than
- * was granted (the on-chain permission would reject it anyway, but the local
- * policy is what stops the attempt before a signature is produced).
+ * grant seeds the allowlists and the per-period cap from what was actually
+ * approved; an explicit `jaw config set x402.*` wins per field, so a user can
+ * tighten further.
+ *
+ * Nothing is clamped. An earlier revision pinned `maxTotalPerSession` to the
+ * grant, which was only needed because the grant's per-period allowance was
+ * being written into that session-wide field: config had to be prevented from
+ * raising a cap that was already wrong. Now that the grant lands on
+ * `maxPerPeriod` instead, the two caps measure different things and cannot
+ * contradict each other, so config is free to set its own session ceiling. The
+ * per-period cap keeps mirroring the chain regardless of what config says, and
+ * `maxPerPeriod` is not settable from the CLI.
  */
 export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402Policy): X402Policy {
   const merged: X402Policy = { ...DEFAULT_X402_POLICY, ...(grantPolicy ?? {}), ...(configPolicy ?? {}) };
-  // Clamp the session cap to the grant: config may tighten it, never loosen past
-  // what the grant permits.
-  const grantCap = parseBigInt(grantPolicy?.maxTotalPerSession);
-  const mergedCap = parseBigInt(merged.maxTotalPerSession);
-  if (grantCap !== null && mergedCap !== null && mergedCap > grantCap) {
-    merged.maxTotalPerSession = grantCap.toString();
+  // The default session cap is the guardrail for an unconfigured setup that has
+  // no grant to bound it. Once a grant supplies a per-period cap, that cap is
+  // what the user approved on chain, and leaving the 10-USDC default sitting on
+  // top of it would strand a longer grant well short of its own limit: a
+  // 5-per-day grant over 7 days permits 35, and the default would stop it at 10.
+  // A session cap the user set explicitly still applies on top.
+  if (grantPolicy?.maxPerPeriod !== undefined && configPolicy?.maxTotalPerSession === undefined) {
+    delete merged.maxTotalPerSession;
   }
   return merged;
 }
@@ -127,6 +183,14 @@ export interface PolicyContext {
   host?: string;
   /** Base units already spent this session (for `maxTotalPerSession`). */
   spentThisSession?: bigint;
+  /**
+   * Base units already spent inside the current grant period (for
+   * `maxPerPeriod`). Must be counted over the same window the policy's `period`
+   * describes, which resets as the grant does.
+   */
+  spentThisPeriod?: bigint;
+  /** When the current period ends, for a refusal message that says when it frees up. */
+  periodEndsAt?: Date;
 }
 
 export interface PolicyResult {
@@ -188,6 +252,27 @@ export function checkPolicy(
     }
   }
 
+  // Checked before the session cap: this is the one that mirrors the on-chain
+  // permission, so when both would refuse, the reason the chain would give is
+  // the more useful one to report.
+  if (policy.maxPerPeriod !== undefined) {
+    const cap = parseBigInt(policy.maxPerPeriod);
+    if (cap === null) {
+      return { ok: false, reason: `invalid maxPerPeriod from grant: ${policy.maxPerPeriod}` };
+    }
+    const spent = ctx.spentThisPeriod ?? 0n;
+    if (spent + amount > cap) {
+      const window = policy.period ? describePeriod(policy.period.unit, policy.period.multiplier) : 'period';
+      const resets = ctx.periodEndsAt ? `, resets ${ctx.periodEndsAt.toISOString()}` : '';
+      return {
+        ok: false,
+        reason:
+          `payment ${requirement.amount} would exceed the granted ${policy.maxPerPeriod} per ${window} ` +
+          `(already spent ${spent} this ${window}${resets})`,
+      };
+    }
+  }
+
   if (policy.maxTotalPerSession !== undefined) {
     const cap = parseBigInt(policy.maxTotalPerSession);
     if (cap === null) {
@@ -197,7 +282,10 @@ export function checkPolicy(
     if (spent + amount > cap) {
       return {
         ok: false,
-        reason: `payment ${requirement.amount} would exceed maxTotalPerSession ${policy.maxTotalPerSession} (already spent ${spent})`,
+        reason:
+          `payment ${requirement.amount} would exceed maxTotalPerSession ${policy.maxTotalPerSession} ` +
+          `(already spent ${spent} since the session was created; raise it with ` +
+          `\`jaw config set x402.maxTotalPerSession <base units>\`)`,
       };
     }
   }

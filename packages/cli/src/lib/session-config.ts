@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import { PATHS } from './paths.js';
 import { ensureDir } from './config.js';
+import type { PeriodUnit } from '../x402/period.js';
 
 /**
  * How the session account address is derived. 'counterfactual' (the default,
@@ -23,6 +24,26 @@ export interface GrantedSpend {
   token: string;
   allowance: string;
   network: string;
+  /**
+   * The period the allowance resets over, and how many of those units make one
+   * period. Without these the allowance is dimensionless, and a per-period
+   * number reads as a per-session one: a 5-USDC/day grant over a 7-day expiry
+   * would cap the whole session at 5 instead of allowing 5 each day.
+   *
+   * Optional because configs written before this existed have no period
+   * recorded. Consumers fall back to treating the allowance as session-wide,
+   * which is what those configs already meant.
+   */
+  unit?: PeriodUnit;
+  multiplier?: number;
+  /**
+   * ISO timestamp the periods are anchored at. The contract anchors at the
+   * permission's `start`, which the grant response does not return, so this is
+   * the local time the session was created. Anchoring early only makes a window
+   * close sooner than the chain's, which refuses ahead of the chain rather than
+   * behind it.
+   */
+  periodAnchor?: string;
 }
 
 export interface SessionConfig {

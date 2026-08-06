@@ -20,6 +20,10 @@ export interface PayAndFetchOptions {
   policy?: X402Policy;
   /** Base units already spent this session (for `maxTotalPerSession`). */
   spentThisSession?: bigint;
+  /** Base units already spent in the current grant period (for `maxPerPeriod`). */
+  spentThisPeriod?: bigint;
+  /** When the current grant period ends, so a refusal can say when it frees up. */
+  periodEndsAt?: Date;
   /** Hard ceiling for this single call, on top of the policy. */
   maxAmount?: string;
   /** Require a specific asset (contract address). */
@@ -320,7 +324,12 @@ export async function payAndFetch(
   }
 
   // 3. Choose an option under the constraints + policy, or refuse clearly.
-  const ctx: PolicyContext = { host: hostOf(resource), spentThisSession: opts.spentThisSession };
+  const ctx: PolicyContext = {
+    host: hostOf(resource),
+    spentThisSession: opts.spentThisSession,
+    spentThisPeriod: opts.spentThisPeriod,
+    periodEndsAt: opts.periodEndsAt,
+  };
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {
     return { status: 402, body: await readBody(first), paid: false, payer: payer.address, refusedReason: reason };
