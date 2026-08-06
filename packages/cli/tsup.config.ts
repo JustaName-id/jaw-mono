@@ -28,6 +28,8 @@ export default defineConfig({
     'commands/session/setup': 'src/commands/session/setup.ts',
     'commands/session/status': 'src/commands/session/status.ts',
     'commands/session/revoke': 'src/commands/session/revoke.ts',
+    'commands/x402/status': 'src/commands/x402/status.ts',
+    'x402/status-report': 'src/x402/status-report.ts',
     // mcp
     'mcp/server': 'src/mcp/server.ts',
     'mcp/tools': 'src/mcp/tools.ts',
