@@ -19,7 +19,9 @@ vi.mock('./paths.js', () => {
   };
 });
 
-const { saveSessionConfig, loadSessionConfig, deleteSessionConfig } = await import('./session-config.js');
+const { saveSessionConfig, loadSessionConfig, tryLoadSessionConfig, deleteSessionConfig } = await import(
+  './session-config.js'
+);
 const { PATHS } = await import('./paths.js');
 
 beforeEach(() => {
@@ -73,6 +75,22 @@ describe('session-config', () => {
   it('loadSessionConfig throws a helpful error on corrupted JSON', () => {
     fs.writeFileSync(PATHS.sessionConfig, '{ not valid json', { mode: 0o600 });
     expect(() => loadSessionConfig()).toThrow(/corrupted/);
+  });
+
+  it('tryLoadSessionConfig returns null instead of throwing when the file is missing', () => {
+    expect(fs.existsSync(PATHS.sessionConfig)).toBe(false);
+    expect(() => loadSessionConfig()).toThrow();
+    expect(tryLoadSessionConfig()).toBeNull();
+  });
+
+  it('tryLoadSessionConfig returns null on a corrupt file', () => {
+    fs.writeFileSync(PATHS.sessionConfig, '{ not valid json', { mode: 0o600 });
+    expect(tryLoadSessionConfig()).toBeNull();
+  });
+
+  it('tryLoadSessionConfig returns the config when it is readable', () => {
+    saveSessionConfig(SAMPLE_CONFIG);
+    expect(tryLoadSessionConfig()?.permissionId).toBe('0xPerm');
   });
 
   it('saveSessionConfig enforces 0o600 mode even when overwriting an existing file', () => {

@@ -3,8 +3,14 @@ import * as fs from 'node:fs';
 import { BaseCommand } from '../../base-command.js';
 import { loadConfig } from '../../lib/config.js';
 import { getBridge } from '../../lib/bridge-singleton.js';
-import { generateSessionKey, saveKeystore, keystoreExists, loadSessionKey } from '../../lib/keystore.js';
-import { saveSessionConfig, loadSessionConfig } from '../../lib/session-config.js';
+import {
+  generateSessionKey,
+  saveKeystore,
+  keystoreExists,
+  loadSessionKey,
+  tryLoadKeystoreAddress,
+} from '../../lib/keystore.js';
+import { saveSessionConfig, tryLoadSessionConfig } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
 
@@ -47,8 +53,13 @@ export default class SessionSetup extends BaseCommand {
     let oldPermissionRevoked = false;
 
     if (keystoreExists()) {
-      const existing = loadSessionConfig();
-      const isActive = existing.expiry > Date.now() / 1000;
+      // A keystore can outlive its session-config: setup interrupted between the
+      // grant and the config write, a manual delete, a half-restored backup.
+      // Throwing here made `session setup` fail with "No session configured. Run
+      // `jaw session setup` first", so the only way out was deleting the keystore
+      // by hand, which strands the key while its on-chain permission stays live.
+      const existing = tryLoadSessionConfig();
+      const isActive = existing !== null && existing.expiry > Date.now() / 1000;
 
       // The prompt path uses readline against process.stdin. With non-TTY stdin
       // (pipes, heredocs, CI), readline races against the awaited bridge call
@@ -57,7 +68,7 @@ export default class SessionSetup extends BaseCommand {
       // state has already mutated. Require --yes for non-interactive use.
       if (!flags.yes && !process.stdin.isTTY) {
         this.error(
-          'Existing session found, but stdin is not a terminal ' +
+          'Existing session key found, but stdin is not a terminal ' +
             '(piped, redirected, or running in CI). ' +
             'Re-run with --yes to overwrite the existing session non-interactively.'
         );
@@ -68,7 +79,23 @@ export default class SessionSetup extends BaseCommand {
         const rl = readline.createInterface({ input: process.stdin, output: process.stdout });
         const ask = (q: string) => new Promise<string>((resolve) => rl.question(q, resolve));
 
-        if (isActive) {
+        if (!existing) {
+          const orphanAddress = tryLoadKeystoreAddress();
+          this.log('Session key found, but no session config alongside it.\n');
+          if (orphanAddress) {
+            this.log(`  Key address:      ${orphanAddress}`);
+          }
+          this.log(
+            '\nIf that key still holds a live on-chain permission it cannot be revoked\n' +
+              'automatically, because the permission id lived in the missing config.\n' +
+              'Reusing the key keeps a single key in play instead of leaving two.\n'
+          );
+
+          const reuseAnswer = await ask('Reuse existing session key? (Y/n) ');
+          if (reuseAnswer.toLowerCase() !== 'n') {
+            reuseKey = loadSessionKey();
+          }
+        } else if (isActive) {
           const remaining = Math.floor((existing.expiry - Date.now() / 1000) / 86400);
           this.log('Active session found:\n');
           this.log(`  Session address:  ${existing.sessionAddress}`);
@@ -114,6 +141,15 @@ export default class SessionSetup extends BaseCommand {
         }
 
         rl.close();
+      } else if (!existing) {
+        // --yes mode, orphaned key: a new one is generated below, so say which
+        // key is being left behind rather than dropping it silently.
+        const orphanAddress = tryLoadKeystoreAddress();
+        this.logToStderr(
+          `Warning: session key${orphanAddress ? ` ${orphanAddress}` : ''} has no session config. ` +
+            `Generating a new key; any permission the old one still holds cannot be ` +
+            `revoked automatically because the permission id is unknown.`
+        );
       } else if (isActive) {
         // --yes mode: log warning but continue
         this.logToStderr(
