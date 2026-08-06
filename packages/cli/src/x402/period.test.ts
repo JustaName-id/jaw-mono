@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { currentPeriodWindow, describePeriod, isPeriodUnit, PERIOD_UNITS } from './period.js';
+import { currentPeriodWindow, describePeriod, isPeriodUnit, normalizePeriod, PERIOD_UNITS } from './period.js';
 
 const iso = (s: string) => Math.floor(Date.parse(s) / 1000);
 const at = (start: number) => new Date(start * 1000).toISOString();
@@ -94,12 +94,42 @@ describe('isPeriodUnit', () => {
     for (const unit of PERIOD_UNITS) expect(isPeriodUnit(unit)).toBe(true);
   });
 
-  // The contract enum is Minute|Hour|Day|Week|Month|Forever. 'year' has no
-  // on-chain counterpart, so it must not be treated as a window.
+  // The contract enum is Minute|Hour|Day|Week|Month|Forever. 'year' is accepted
+  // at the CLI and SDK edges but is not one of these, so it is not a unit here.
   it('rejects year and other non-units', () => {
     expect(isPeriodUnit('year')).toBe(false);
     expect(isPeriodUnit('decade')).toBe(false);
     expect(isPeriodUnit(undefined)).toBe(false);
+  });
+});
+
+describe('normalizePeriod', () => {
+  it('rewrites year to twelve months, matching permissionToContractFormat', () => {
+    expect(normalizePeriod('year')).toEqual({ unit: 'month', multiplier: 12 });
+    expect(normalizePeriod('year', 2)).toEqual({ unit: 'month', multiplier: 24 });
+  });
+
+  it('passes on-chain units through with a defaulted multiplier', () => {
+    expect(normalizePeriod('day')).toEqual({ unit: 'day', multiplier: 1 });
+    expect(normalizePeriod('week', 3)).toEqual({ unit: 'week', multiplier: 3 });
+  });
+
+  it('returns undefined for a unit with no on-chain meaning', () => {
+    expect(normalizePeriod('decade')).toBeUndefined();
+    expect(normalizePeriod(undefined)).toBeUndefined();
+  });
+
+  it('a yearly window really is twelve calendar months long', () => {
+    const anchor = Math.floor(Date.parse('2026-01-01T00:00:00Z') / 1000);
+    const p = normalizePeriod('year');
+    const w = currentPeriodWindow({
+      anchor,
+      unit: p.unit,
+      multiplier: p.multiplier,
+      now: anchor + 86400,
+      permissionEnd: Math.floor(Date.parse('2030-01-01T00:00:00Z') / 1000),
+    });
+    expect(new Date(w.end * 1000).toISOString()).toBe('2027-01-01T00:00:00.000Z');
   });
 });
 

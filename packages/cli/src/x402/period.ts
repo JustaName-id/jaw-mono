@@ -15,6 +15,26 @@ export function isPeriodUnit(value: unknown): value is PeriodUnit {
   return typeof value === 'string' && (PERIOD_UNITS as readonly string[]).includes(value);
 }
 
+/**
+ * Normalise a granted spend's unit and multiplier to what the contract stores.
+ *
+ * The CLI and the SDK both accept `year`, which has no `PeriodUnit` on chain:
+ * `permissionToContractFormat` rewrites it to `month` with the multiplier times
+ * twelve before encoding. This mirrors that, so a yearly grant lands on the same
+ * window locally as the one the permission actually enforces. Returns undefined
+ * for a unit with no on-chain meaning, which callers treat as "no period
+ * recorded" rather than guessing a window.
+ */
+export function normalizePeriod(
+  unit: string | undefined,
+  multiplier?: number
+): { unit: PeriodUnit; multiplier: number } | undefined {
+  const m = Math.max(1, Math.floor(multiplier ?? 1));
+  if (unit === 'year') return { unit: 'month', multiplier: m * 12 };
+  if (isPeriodUnit(unit)) return { unit, multiplier: m };
+  return undefined;
+}
+
 /** Seconds per fixed-duration unit. `month` is calendar-based, `forever` unbounded. */
 const FIXED_UNIT_SECONDS: Record<Exclude<PeriodUnit, 'month' | 'forever'>, number> = {
   minute: 60,

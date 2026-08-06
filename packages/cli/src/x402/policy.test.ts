@@ -290,10 +290,24 @@ describe('extractGrantedSpend — period capture', () => {
     expect(grant?.multiplier).toBe(1);
   });
 
-  // 'year' is in the CLI's accepted units but has no PeriodUnit on chain.
-  // Recording no period degrades to session-wide rather than inventing a window.
-  it('records no period for a unit with no on-chain counterpart', () => {
+  // The contract has no Year unit; the SDK rewrites 'year' to month x12 before
+  // encoding, so the local window has to be the same one the permission enforces.
+  it('normalises year to twelve months, as the SDK does before encoding', () => {
     const grant = extractGrantedSpend([{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'year' }], 8453, anchor);
+    expect(grant).toMatchObject({ unit: 'month', multiplier: 12 });
+  });
+
+  it('scales a multi-year multiplier the same way', () => {
+    const grant = extractGrantedSpend(
+      [{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'year', multiplier: 2 }],
+      8453,
+      anchor
+    );
+    expect(grant).toMatchObject({ unit: 'month', multiplier: 24 });
+  });
+
+  it('records no period for a unit with no meaning at all', () => {
+    const grant = extractGrantedSpend([{ token: USDC_BASE, allowance: '0x4C4B40', unit: 'decade' }], 8453, anchor);
     expect(grant?.allowance).toBe('5000000');
     expect(grant?.unit).toBeUndefined();
     expect(grant?.periodAnchor).toBeUndefined();

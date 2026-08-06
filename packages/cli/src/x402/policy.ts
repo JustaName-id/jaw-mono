@@ -1,6 +1,6 @@
 import { USDC_BY_NETWORK } from './asset-registry.js';
 import { parseBigInt } from './amount.js';
-import { describePeriod, isPeriodUnit, type PeriodUnit } from './period.js';
+import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
 import type { X402PaymentRequirement } from './types.js';
 import type { GrantedSpend } from '../lib/session-config.js';
 
@@ -99,15 +99,15 @@ export function extractGrantedSpend(
   // Keep the period alongside the number. An allowance without its unit is
   // dimensionless, and reading a per-period figure as a per-session one caps a
   // multi-period grant at a single period's worth for its whole life.
-  // An unrecognised unit records no period rather than guessing, which falls
-  // back to session-wide handling instead of inventing a window.
-  const unit = isPeriodUnit(spend.unit) ? spend.unit : undefined;
+  // Normalised the way the SDK normalises it before encoding, so `year` lands on
+  // the same month-based window the permission actually enforces. An unrecognised
+  // unit records no period rather than guessing, falling back to session-wide.
+  const period = normalizePeriod(spend.unit, spend.multiplier);
   return {
     token: usdc.address,
     allowance,
     network: usdc.wireNetwork,
-    ...(unit ? { unit, multiplier: Math.max(1, Math.floor(spend.multiplier ?? 1)) } : {}),
-    ...(unit ? { periodAnchor: anchor.toISOString() } : {}),
+    ...(period ? { unit: period.unit, multiplier: period.multiplier, periodAnchor: anchor.toISOString() } : {}),
   };
 }
 
