@@ -105,6 +105,23 @@ describe('withPaymentLock', () => {
     expect(JSON.parse(fs.readFileSync(PATHS.paymentLock, 'utf-8')).token).toBe('someone-else');
   });
 
+  // The point of holding it across the network call: whatever the caller does
+  // inside, including writing its result, happens before anyone else reads.
+  it('admits no one until the work has finished writing', async () => {
+    const events: string[] = [];
+    const slowPayer = withPaymentLock(async () => {
+      events.push('A: pays');
+      await new Promise((r) => setTimeout(r, 120));
+      events.push('A: records'); // stands in for appendX402Log
+    });
+    // Starts while A is mid-payment and has to wait out the recording too.
+    await new Promise((r) => setTimeout(r, 20));
+    const nextPayer = withPaymentLock(async () => events.push('B: reads'), { timeoutMs: 2000 });
+
+    await Promise.all([slowPayer, nextPayer]);
+    expect(events).toEqual(['A: pays', 'A: records', 'B: reads']);
+  });
+
   it('creates the lock file with owner-only permissions', async () => {
     await withPaymentLock(async () => {
       expect(fs.statSync(PATHS.paymentLock).mode & 0o777).toBe(0o600);

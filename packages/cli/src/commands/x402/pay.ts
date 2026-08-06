@@ -94,19 +94,54 @@ export default class X402Pay extends BaseCommand {
         });
     }
 
-    const run = () =>
-      payAndFetch(args.url, payer, {
+    // Read, pay and record as one unit. The recording has to be inside the lock
+    // with the rest: releasing before the append leaves a window where the next
+    // payer reads a total that does not yet include the payment just made, which
+    // is the race the lock exists to close.
+    const run = async () => {
+      const outcome = await payAndFetch(args.url, payer, {
         method: flags.method,
         body: flags.body,
         policy,
         ensureFunds,
-        // Re-read under the lock: another process may have paid between the
-        // read above and our turn, and a stale total waves through a payment
-        // the cap should have stopped.
+        // Re-read here, not before the lock: another process may have paid while
+        // we waited our turn, and a stale total waves through a payment the cap
+        // should have stopped.
         spentThisSession: flags.pay ? sumSpentSince(payer.address, session?.createdAt) : spent,
         maxAmount: flags['max-amount'],
         dryRun: !flags.pay,
       });
+
+      // Only a real run touches the ledger. Recording dry runs would corrupt the
+      // spend totals that both this command and the agent read back.
+      if (flags.pay) {
+        const settled = outcome.payment ?? outcome.attemptedPayment;
+        const isPaymentEvent =
+          outcome.paid || !!outcome.attemptedPayment || (outcome.status === 402 && !!outcome.refusedReason);
+        if (isPaymentEvent) {
+          // Field for field what the MCP handler writes: both read each other's
+          // entries back for the session spend total, so a divergence here would
+          // make the two disagree about what has been spent.
+          appendX402Log({
+            at: new Date().toISOString(),
+            url: args.url,
+            payer: outcome.payer,
+            status: outcome.paid ? 'paid' : outcome.attemptedPayment ? 'failed' : 'refused',
+            amount: settled?.amount,
+            asset: settled?.asset,
+            network: settled?.network,
+            payTo: settled?.payTo,
+            nonce: settled?.nonce,
+            txHash: outcome.payment?.txHash,
+            topUpAmount: outcome.topUp?.amount,
+            topUpBatchId: outcome.topUp?.batchId,
+            reason: outcome.refusedReason,
+          });
+        }
+      }
+
+      return outcome;
+    };
 
     // Only a real payment takes the lock. A dry run spends nothing and writes
     // nothing, so making it queue behind an agent mid-payment would be friction
@@ -116,34 +151,6 @@ export default class X402Pay extends BaseCommand {
           onWait: (pid) => this.warn(`Waiting for another payment to finish (pid ${pid})...`),
         })
       : await run();
-
-    // Only a real run touches the ledger. Recording dry runs would corrupt the
-    // spend totals that both this command and the agent read back.
-    if (flags.pay) {
-      const settled = result.payment ?? result.attemptedPayment;
-      const isPaymentEvent =
-        result.paid || !!result.attemptedPayment || (result.status === 402 && !!result.refusedReason);
-      if (isPaymentEvent) {
-        // Field for field what the MCP handler writes: both read each other's
-        // entries back for the session spend total, so a divergence here would
-        // make the two disagree about what has been spent.
-        appendX402Log({
-          at: new Date().toISOString(),
-          url: args.url,
-          payer: result.payer,
-          status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
-          amount: settled?.amount,
-          asset: settled?.asset,
-          network: settled?.network,
-          payTo: settled?.payTo,
-          nonce: settled?.nonce,
-          txHash: result.payment?.txHash,
-          topUpAmount: result.topUp?.amount,
-          topUpBatchId: result.topUp?.batchId,
-          reason: result.refusedReason,
-        });
-      }
-    }
 
     if (format === 'json') {
       this.outputResult({ ...result, dryRun: !flags.pay }, format);
