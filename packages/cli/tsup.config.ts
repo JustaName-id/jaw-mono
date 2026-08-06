@@ -29,6 +29,7 @@ export default defineConfig({
     'commands/session/status': 'src/commands/session/status.ts',
     'commands/session/revoke': 'src/commands/session/revoke.ts',
     'commands/x402/status': 'src/commands/x402/status.ts',
+    'commands/x402/pay': 'src/commands/x402/pay.ts',
     'x402/status-report': 'src/x402/status-report.ts',
     // mcp
     'mcp/server': 'src/mcp/server.ts',

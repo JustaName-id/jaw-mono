@@ -20,6 +20,12 @@ export interface PayAndFetchOptions {
   policy?: X402Policy;
   /** Base units already spent this session (for `maxTotalPerSession`). */
   spentThisSession?: bigint;
+  /**
+   * Stop after choosing a requirement: no funding, no signature, no money. The
+   * same request, challenge parse and policy evaluation a real payment runs, so
+   * a clean dry run means a real one would have been allowed too.
+   */
+  dryRun?: boolean;
   /** Hard ceiling for this single call, on top of the policy. */
   maxAmount?: string;
   /** Require a specific asset (contract address). */
@@ -71,6 +77,13 @@ export interface PayAndFetchResult {
   topUp?: { amount?: string; batchId?: string };
   /** Set when a `402` could not (or should not) be paid. */
   refusedReason?: string;
+  /**
+   * On a `dryRun`, the requirement that would have been paid. Absent when the
+   * resource was free or the policy refused (see `refusedReason`). Carries no
+   * nonce, deliberately: a nonce only exists once an authorization is signed,
+   * and a dry run never signs one.
+   */
+  wouldPay?: Omit<PaymentDetails, 'nonce'>;
 }
 
 const b64json = <T>(header: string | null): T | null => {
@@ -324,6 +337,24 @@ export async function payAndFetch(
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {
     return { status: 402, body: await readBody(first), paid: false, payer: payer.address, refusedReason: reason };
+  }
+
+  // 3.75 Dry run stops here, the last point before anything costs or commits.
+  //      Funding moves user money and signing produces a spendable
+  //      authorization, so both are past the line.
+  if (opts.dryRun) {
+    return {
+      status: 402,
+      body: await readBody(first),
+      paid: false,
+      payer: payer.address,
+      wouldPay: {
+        amount: requirement.amount,
+        asset: requirement.asset,
+        network: requirement.network,
+        payTo: requirement.payTo,
+      },
+    };
   }
 
   // 3.5 Funding hook (flow 2b): make sure the payer can actually cover the
