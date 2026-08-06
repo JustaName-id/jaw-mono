@@ -10,6 +10,8 @@ import {
     isSessionExpired,
 } from './SignerUtils.js';
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
+import { normalizeSendCallsParams, type NormalizedSendCallsParams } from '../rpc/sendCallsParams.js';
+import { normalizeSendTransactionParams, type NormalizedSendTransactionParams } from '../rpc/sendTransactionParams.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 import { handleGetCallsHistoryRequest } from '../rpc/wallet_getCallsHistory.js';
@@ -34,6 +36,19 @@ type ConstructorOptions = {
     metadata: AppMetadata;
     callback: ProviderEventCallback | null;
 };
+
+/**
+ * Params already validated and normalized by `dispatchSigningRequest`, tagged
+ * with the method they came from so a signer narrows without casting.
+ *
+ * Handed down instead of left behind: the raw request can carry a `chainId` as a
+ * number, which the popup path reads only when it is a string — validating and
+ * then dropping the hex form let a dapp's chain choice be silently ignored.
+ * Absent for signing-routed methods with nothing to normalize.
+ */
+export type NormalizedSigningParams =
+    | { method: 'wallet_sendCalls'; params: NormalizedSendCallsParams }
+    | { method: 'eth_sendTransaction'; params: NormalizedSendTransactionParams };
 
 /**
  * Abstract base class for all JAW signers.
@@ -79,8 +94,15 @@ export abstract class JAWSigner implements Signer {
 
     /**
      * Handles signing requests (personal_sign, eth_signTypedData_v4, wallet_sendCalls, etc.)
+     *
+     * @param normalized - Validated params for the methods that have them
+     * (wallet_sendCalls, eth_sendTransaction). Use these rather than
+     * re-reading `request.params`, which is still the dapp's raw envelope.
      */
-    protected abstract handleSigningRequest(request: RequestArguments): Promise<unknown>;
+    protected abstract handleSigningRequest(
+        request: RequestArguments,
+        normalized?: NormalizedSigningParams
+    ): Promise<unknown>;
 
     /**
      * Dispatches a signing-routed request. When it succeeds and the method
@@ -94,7 +116,22 @@ export abstract class JAWSigner implements Signer {
         // Both signers funnel through here, so an unsignable payload is refused once —
         // before any dialog opens or popup is spawned.
         assertSignableTypedData(request);
-        const result = await this.handleSigningRequest(request);
+
+        // Validate transaction params here, before any signer opens a popup or a
+        // dialog: a malformed request gets a standards-compliant error it can
+        // act on instead of a dead UI. For wallet_sendCalls both envelope
+        // versions (v1.0 and viem's default v2.0.0) pass.
+        let normalized: NormalizedSigningParams | undefined;
+        if (request.method === 'wallet_sendCalls') {
+            normalized = { method: 'wallet_sendCalls', params: normalizeSendCallsParams(request.params) };
+        } else if (request.method === 'eth_sendTransaction') {
+            normalized = { method: 'eth_sendTransaction', params: normalizeSendTransactionParams(request.params) };
+        }
+
+        // Pass the normalized params down rather than validating and discarding
+        // them: the signer needs the hex-normalized chainId to resolve the chain
+        // the dapp actually asked for.
+        const result = await this.handleSigningRequest(request, normalized);
         try {
             this.reportSignature(request);
         } catch {
@@ -200,8 +237,8 @@ export abstract class JAWSigner implements Signer {
                 const chains = store.getState().chains ?? [];
                 const chain = chains.find((c) => c.id === chainId);
                 if (!chain) {
-                    throw standardErrors.provider.unsupportedMethod(
-                        `wallet_switchEthereumChain is not supported for chainID ${chainId}`
+                    throw standardErrors.provider.unsupportedChain(
+                        `Chain ${chainId} is not configured. If this is a testnet, set preference.showTestnets to true.`
                     );
                 }
 
@@ -460,9 +497,12 @@ export abstract class JAWSigner implements Signer {
         const localResult = this.updateChain(chainId);
         if (localResult) return null;
 
-        // Chain not found in store - it's not supported
-        throw standardErrors.provider.unsupportedMethod(
-            `wallet_switchEthereumChain is not supported for target chainID ${chainId}`
+        // Chain not found in store - it's not one we're configured for. 4902
+        // (EIP-3326 "unrecognized chain ID") is what wallet libraries look for
+        // to decide whether to offer wallet_addEthereumChain; 4200 told them
+        // the method itself was missing.
+        throw standardErrors.provider.unsupportedChain(
+            `Chain ${chainId} is not configured. If this is a testnet, set preference.showTestnets to true.`
         );
     }
 
@@ -505,7 +545,14 @@ export abstract class JAWSigner implements Signer {
             const chainId = ensureIntNumber(chainIdHex);
             const chain = chains.find((c) => c.id === chainId);
             if (!chain) {
-                throw standardErrors.provider.unsupportedMethod(`Chain ${chainIdHex} (${chainId}) is not supported`);
+                // 5710, not 4200: the chain is unknown, not the method. viem
+                // renders 4200 as "the provider does not support the requested
+                // method", which sends dapps hunting for a missing method.
+                // Testnets are only in this list when preference.showTestnets
+                // is set, which is the usual reason a chain is missing here.
+                throw standardErrors.provider.unsupportedChainId(
+                    `Chain ${chainIdHex} (${chainId}) is not supported. If this is a testnet, set preference.showTestnets to true.`
+                );
             }
             return chain;
         }

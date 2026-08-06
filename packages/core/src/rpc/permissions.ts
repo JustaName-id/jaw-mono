@@ -476,7 +476,7 @@ export async function handleGetPermissionsRequest(
     apiKey: string,
     connectedAddress?: Address
 ): Promise<unknown> {
-    const params = request.params as Array<{ address?: Address }> | undefined;
+    const params = request.params as Array<{ address?: Address; chainId?: string }> | undefined;
 
     // Determine which address to use
     let modifiedRequest = request;
@@ -488,6 +488,8 @@ export async function handleGetPermissionsRequest(
                 params: [
                     {
                         address: connectedAddress,
+                        // Keep a caller-provided chain filter when injecting the address.
+                        ...(params?.[0]?.chainId ? { chainId: params[0].chainId } : {}),
                     },
                 ],
             };

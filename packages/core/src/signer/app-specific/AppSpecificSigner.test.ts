@@ -370,14 +370,95 @@ describe('AppSpecificSigner', () => {
             // Act
             const result = await signer.request(request);
 
-            // Assert
+            // Assert - normalization fills in atomicRequired; the rest is untouched
             expect(result).toEqual({ id: '0xbatchId', chainId: 1 });
             expect(mockUIHandler.request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     type: 'wallet_sendCalls',
-                    data: callsData,
+                    data: { ...callsData, atomicRequired: false },
                 })
             );
+        });
+
+        it('should handle a viem v2.0.0 wallet_sendCalls envelope', async () => {
+            // Arrange - exactly what viem's sendCalls() sends by default
+            const request: RequestArguments = {
+                method: 'wallet_sendCalls',
+                params: [
+                    {
+                        atomicRequired: false,
+                        calls: [
+                            { to: '0x0987654321098765432109876543210987654321', data: '0xdeadbeef', value: undefined },
+                        ],
+                        capabilities: undefined,
+                        chainId: '0x1',
+                        from: '0x1234567890123456789012345678901234567890',
+                        id: undefined,
+                        version: '2.0.0',
+                    },
+                ],
+            };
+
+            (mockUIHandler.request as Mock).mockResolvedValue({
+                id: 'test-response-id',
+                approved: true,
+                data: { id: '0xbatchId', chainId: 1 },
+            } satisfies UIResponse<{ id: string; chainId: number }>);
+
+            // Act
+            const result = await signer.request(request);
+
+            // Assert - accepted, and normalized onto the same pipeline as v1.0
+            expect(result).toEqual({ id: '0xbatchId', chainId: 1 });
+            expect(mockUIHandler.request).toHaveBeenCalledWith(
+                expect.objectContaining({
+                    type: 'wallet_sendCalls',
+                    data: {
+                        version: '2.0.0',
+                        from: '0x1234567890123456789012345678901234567890',
+                        chainId: 1,
+                        atomicRequired: false,
+                        calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0xdeadbeef' }],
+                    },
+                })
+            );
+        });
+
+        it('should reject an eth_sendTransaction without `to` with -32602 and no dialog', async () => {
+            // Arrange
+            const request: RequestArguments = {
+                method: 'eth_sendTransaction',
+                params: [{ from: '0x1234567890123456789012345678901234567890', data: '0xdeadbeef' }],
+            };
+
+            // Act & Assert
+            await expect(signer.request(request)).rejects.toMatchObject({
+                code: -32602,
+                message: expect.stringContaining('to'),
+            });
+            expect(mockUIHandler.request).not.toHaveBeenCalled();
+        });
+
+        it('should reject an unsupported wallet_sendCalls version with -32602 and no dialog', async () => {
+            // Arrange
+            const request: RequestArguments = {
+                method: 'wallet_sendCalls',
+                params: [
+                    {
+                        version: '3.0.0',
+                        from: '0x1234567890123456789012345678901234567890',
+                        chainId: '0x1',
+                        calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0x' }],
+                    },
+                ],
+            };
+
+            // Act & Assert
+            await expect(signer.request(request)).rejects.toMatchObject({
+                code: -32602,
+                message: expect.stringContaining('unsupported version'),
+            });
+            expect(mockUIHandler.request).not.toHaveBeenCalled();
         });
 
         it('should handle eth_sendTransaction request', async () => {

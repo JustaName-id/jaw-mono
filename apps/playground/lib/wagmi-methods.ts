@@ -340,10 +340,9 @@ switchChain({ chainId: ${params.chainId || _DEFAULT_CHAIN_ID_NUM} });`,
       {
         name: 'value',
         type: 'string',
-        label: 'Amount',
-        description: "Amount in the chain's native currency (e.g., 0.01)",
-        required: true,
-        defaultValue: '0.001',
+        label: 'Amount (optional)',
+        description: "Amount in the chain's native currency (e.g., 0.01). Leave empty to send none.",
+        required: false,
       },
       {
         name: 'data',
@@ -353,23 +352,25 @@ switchChain({ chainId: ${params.chainId || _DEFAULT_CHAIN_ID_NUM} });`,
         required: false,
       },
     ],
-    getCodeSnippet: (params) => `import { useSendTransaction } from 'wagmi';
-import { parseEther } from 'viem';
+    getCodeSnippet: (params) => {
+      const fields = [`  to: '${params.to || '0x...'}',`];
+      if (params.value) fields.push(`  value: parseEther('${params.value}'),`);
+      if (params.data) fields.push(`  data: '${params.data}',`);
+
+      return `import { useSendTransaction } from 'wagmi';${params.value ? `\nimport { parseEther } from 'viem';` : ''}
 
 const { sendTransaction } = useSendTransaction();
 
 sendTransaction({
-  to: '${params.to || '0x...'}',
-  value: parseEther('${params.value || '0.001'}'),${
-    params.data
-      ? `
-  data: '${params.data}',`
-      : ''
-  }
-});`,
+${fields.join('\n')}
+});`;
+    },
+    // `value` is only sent when one was entered. Defaulting it here attached
+    // 0.001 native currency to every transaction, including data-only contract
+    // calls that should carry none.
     buildParams: (params) => ({
       to: params.to,
-      value: params.value || '0.001',
+      ...(params.value ? { value: params.value } : {}),
       data: params.data || undefined,
     }),
   },
