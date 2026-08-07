@@ -86,6 +86,20 @@ export function loadSessionConfig(): SessionConfig {
   }
 }
 
+/**
+ * Like `loadSessionConfig`, but returns null instead of throwing when the file
+ * is missing or unreadable. For callers that can recover from a keystore whose
+ * session-config is gone (interrupted setup, manual deletion, partial restore)
+ * rather than callers that need an existing session to do their job.
+ */
+export function tryLoadSessionConfig(): SessionConfig | null {
+  try {
+    return loadSessionConfig();
+  } catch {
+    return null;
+  }
+}
+
 export function deleteSessionConfig(): void {
   if (fs.existsSync(PATHS.sessionConfig)) {
     fs.unlinkSync(PATHS.sessionConfig);

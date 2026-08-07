@@ -5,13 +5,14 @@ import { parseBigInt, parseNonNegativeBigInt } from '../../x402/amount.js';
 import { loadConfig } from '../../lib/config.js';
 import { Eip3009EoaPayer, sessionPayerAddress } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
-import { appendX402Log, readX402Log } from '../../x402/ledger.js';
+import { appendX402Log, readX402Log, sumSpentSince } from '../../x402/ledger.js';
+import { withPaymentLock } from '../../lib/payment-lock.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { resolveX402Policy, policyFromGrant } from '../../x402/policy.js';
 import { currentPeriodWindow, type PeriodWindow } from '../../x402/period.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
-import { sessionConfigExists, loadSessionConfig } from '../../lib/session-config.js';
+import { tryLoadSessionConfig } from '../../lib/session-config.js';
 import type { X402PaymentRequirement } from '../../x402/types.js';
 
 interface PayAndFetchParams {
@@ -24,42 +25,13 @@ interface PayAndFetchParams {
   network?: string;
 }
 
-/**
- * Sum this payer's settled and attempted payments from the audit ledger since an
- * ISO instant (the payer's full history when `since` is omitted). Both spend
- * windows read from here: the session total counts from the session's
- * `createdAt`, the period total from the start of the current grant period.
- * Reading from the ledger rather than an in-memory counter is what makes either
- * cap survive a process restart, which an agent could otherwise relaunch its way
- * past.
- */
-function sumSpentSince(payerAddress: string, since?: string): bigint {
-  const payer = payerAddress.toLowerCase();
-  return readX402Log().reduce((total, entry) => {
-    // 'failed' counts too: the authorization was signed and sent, so in pull
-    // mode the facilitator may have broadcast the transfer anyway. Counting it
-    // can only under-spend the cap, never breach it.
-    if ((entry.status !== 'paid' && entry.status !== 'failed') || !entry.amount) return total;
-    if (entry.payer?.toLowerCase() !== payer) return total;
-    if (since && entry.at < since) return total;
-    const amount = parseBigInt(entry.amount);
-    return amount !== null ? total + amount : total;
-  }, 0n);
-}
-
 export function registerPayTool(server: McpServer): void {
-  // Cumulative spend for the session, enforced against the policy's
-  // maxTotalPerSession so an agent cannot chain many small payments past the
-  // cap. Seeded lazily from the ledger (see sumSpentSince), then kept in
-  // memory across calls.
-  let sessionSpent: bigint | null = null;
-
-  // Spend inside the current grant period, enforced against maxPerPeriod. Keyed
-  // by the window it was counted over: a long-lived process crosses period
-  // boundaries, and at each crossing the total has to start again from the
-  // ledger rather than carry the previous window's spending forward.
-  let periodSpent: { windowStart: number; total: bigint } | null = null;
-
+  // Two layers, and both are needed. The in-memory queue below orders this
+  // process's own tool calls, which also keeps the file lock from ever being
+  // contended by us: a second concurrent call would otherwise sit waiting on a
+  // lock its own process holds. The file lock then covers everything the queue
+  // cannot see, namely other processes.
+  //
   // Serialize the read-check-pay-write of sessionSpent. The MCP SDK dispatches
   // tool calls concurrently, and payAndFetch awaits network I/O between reading
   // the cap and writing the new total — so a burst of concurrent calls would
@@ -99,123 +71,124 @@ export function registerPayTool(server: McpServer): void {
     },
     // @ts-expect-error — MCP SDK deep type inference with z.record in the schema
     async (params: PayAndFetchParams) =>
-      serialize(async () => {
-        try {
-          const config = loadConfig();
-          // Throws a clear "run jaw session setup" error when no session exists.
-          const payer = Eip3009EoaPayer.fromSessionKey();
-          // Read the session config once and reuse it below: it only changes
-          // between `jaw session setup` runs, not between payments, so a single
-          // read per call feeds both the grant policy and the top-up path.
-          const session = sessionConfigExists() ? loadSessionConfig() : null;
-          // Seed the policy from the on-chain grant captured at setup (caps +
-          // allowlists agree with what the user approved); config still wins.
-          const policy = resolveX402Policy(config.x402, policyFromGrant(session?.grantedSpend));
-          if (sessionSpent === null) sessionSpent = sumSpentSince(payer.address, session?.createdAt);
+      serialize(async () =>
+        withPaymentLock(async () => {
+          try {
+            const config = loadConfig();
+            // Throws a clear "run jaw session setup" error when no session exists.
+            const payer = Eip3009EoaPayer.fromSessionKey();
+            // Read once and reuse: it only changes between `jaw session setup`
+            // runs, and the policy, both spend windows and the top-up path need it.
+            const session = tryLoadSessionConfig();
+            // Seed the policy from the on-chain grant captured at setup (caps +
+            // allowlists agree with what the user approved); config still wins.
+            const policy = resolveX402Policy(config.x402, policyFromGrant(session?.grantedSpend));
+            // Scoped to the session so a new grant starts a fresh budget; the
+            // payer's whole history when there is no session to scope by.
+            // Read inside the lock, every time. Caching this across calls was
+            // safe while one process did all the paying; with the lock admitting
+            // other processes, a memoised total would miss what they spent and
+            // wave through a payment the cap should have stopped.
+            let sessionSpent = sumSpentSince(payer.address, session?.createdAt);
 
-          // Locate the grant period containing now, and count spend inside it.
-          // Recomputed per payment because the window moves on its own; the
-          // ledger is only re-read when it actually moves.
-          let periodWindow: PeriodWindow | null = null;
-          if (policy.period && policy.maxPerPeriod !== undefined && session) {
-            const anchorMs = Date.parse(policy.period.anchor);
-            if (!Number.isNaN(anchorMs)) {
-              periodWindow = currentPeriodWindow({
-                anchor: Math.floor(anchorMs / 1000),
-                unit: policy.period.unit,
-                multiplier: policy.period.multiplier,
-                now: Math.floor(Date.now() / 1000),
-                permissionEnd: session.expiry,
-              });
-              if (periodSpent === null || periodSpent.windowStart !== periodWindow.start) {
-                periodSpent = {
-                  windowStart: periodWindow.start,
-                  total: sumSpentSince(payer.address, new Date(periodWindow.start * 1000).toISOString()),
-                };
+            // Locate the grant period containing now, and count spend inside it.
+            // Recomputed per payment because the window moves on its own, and
+            // re-read from the ledger for the same reason sessionSpent is: a
+            // payment made by another process falls inside this window too.
+            let periodWindow: PeriodWindow | null = null;
+            let periodSpent = 0n;
+            if (policy.period && policy.maxPerPeriod !== undefined && session) {
+              const anchorMs = Date.parse(policy.period.anchor);
+              if (!Number.isNaN(anchorMs)) {
+                periodWindow = currentPeriodWindow({
+                  anchor: Math.floor(anchorMs / 1000),
+                  unit: policy.period.unit,
+                  multiplier: policy.period.multiplier,
+                  now: Math.floor(Date.now() / 1000),
+                  permissionEnd: session.expiry,
+                });
+                periodSpent = sumSpentSince(payer.address, new Date(periodWindow.start * 1000).toISOString());
               }
             }
-          }
 
-          // Flow 2b: when a session (and its on-chain permission) exists, refill
-          // the payer EOA through the permission whenever it can't cover a price.
-          // Funds stay in the user's account until the moment a payment needs
-          // them; JustaPermissionManager caps every refill on-chain.
-          let ensureFunds;
-          if (session && config.apiKey) {
-            const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
-            // Defensive: a hand-edited, non-numeric amount must degrade to "no
-            // float / no bound", never throw and take down every payment.
-            const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
-            // Bound the top-up by the tightest RESOLVED cap, so a float pre-fund
-            // is clamped too and not just the payment itself. The grant's
-            // per-period cap is preferred when present: it is the one that
-            // mirrors the permission, and a grant-seeded policy deliberately
-            // leaves the session cap unset unless the user configured one.
-            const maxTopUp =
-              parseNonNegativeBigInt(policy.maxPerPeriod) ?? parseNonNegativeBigInt(policy.maxTotalPerSession);
-            ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
-              ensurePayerFunds(requirement, payerAddress, bridge, {
-                floatTarget,
-                maxTopUp,
-                sessionChainId: session.chainId,
-              });
-          }
-
-          const result = await payAndFetch(params.url, payer, {
-            method: params.method,
-            headers: params.headers,
-            body: params.body,
-            policy,
-            ensureFunds,
-            spentThisSession: sessionSpent,
-            spentThisPeriod: periodWindow ? (periodSpent?.total ?? 0n) : undefined,
-            periodEndsAt: periodWindow ? new Date(periodWindow.end * 1000) : undefined,
-            maxAmount: params.maxAmount,
-            asset: params.asset,
-            network: params.network,
-          });
-
-          // A failed settlement counts too: the signed authorization went out,
-          // so the transfer may have been broadcast regardless of what the
-          // server answered. Mirrors the 'failed' accounting in sumSpentSince.
-          const spentDetails = result.paid ? result.payment : result.attemptedPayment;
-          if (spentDetails) {
-            const amount = parseBigInt(spentDetails.amount);
-            if (amount !== null) {
-              sessionSpent += amount;
-              if (periodSpent) periodSpent.total += amount;
+            // Flow 2b: when a session (and its on-chain permission) exists, refill
+            // the payer EOA through the permission whenever it can't cover a price.
+            // Funds stay in the user's account until the moment a payment needs
+            // them; JustaPermissionManager caps every refill on-chain.
+            let ensureFunds;
+            if (session && config.apiKey) {
+              const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
+              // Defensive: a hand-edited, non-numeric amount must degrade to "no
+              // float / no bound", never throw and take down every payment.
+              const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
+              // Bound the top-up by the tightest RESOLVED cap, so a float pre-fund
+              // is clamped too and not just the payment itself. The grant's
+              // per-period cap is preferred when present: it is the one that
+              // mirrors the permission, and a grant-seeded policy deliberately
+              // leaves the session cap unset unless the user configured one.
+              const maxTopUp =
+                parseNonNegativeBigInt(policy.maxPerPeriod) ?? parseNonNegativeBigInt(policy.maxTotalPerSession);
+              ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
+                ensurePayerFunds(requirement, payerAddress, bridge, {
+                  floatTarget,
+                  maxTopUp,
+                  sessionChainId: session.chainId,
+                });
             }
-          }
 
-          // Record payment attempts (not free passthroughs) to the audit ledger.
-          const settled = result.payment ?? result.attemptedPayment;
-          const isPaymentEvent =
-            result.paid || !!result.attemptedPayment || (result.status === 402 && !!result.refusedReason);
-          if (isPaymentEvent) {
-            appendX402Log({
-              at: new Date().toISOString(),
-              url: params.url,
-              payer: result.payer,
-              status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
-              amount: settled?.amount,
-              asset: settled?.asset,
-              network: settled?.network,
-              payTo: settled?.payTo,
-              nonce: settled?.nonce,
-              txHash: result.payment?.txHash,
-              topUpAmount: result.topUp?.amount,
-              topUpBatchId: result.topUp?.batchId,
-              reason: result.refusedReason,
+            const result = await payAndFetch(params.url, payer, {
+              method: params.method,
+              headers: params.headers,
+              body: params.body,
+              policy,
+              ensureFunds,
+              spentThisSession: sessionSpent,
+              spentThisPeriod: periodWindow ? periodSpent : undefined,
+              periodEndsAt: periodWindow ? new Date(periodWindow.end * 1000) : undefined,
+              maxAmount: params.maxAmount,
+              asset: params.asset,
+              network: params.network,
             });
-          }
 
-          // Untrusted server free-text (body, refusedReason) is fenced off
-          // from the trusted payment metadata to blunt prompt injection.
-          return mcpPaymentResult(result);
-        } catch (err) {
-          return mcpError(err);
-        }
-      })
+            // A failed settlement counts too: the signed authorization went out,
+            // so the transfer may have been broadcast regardless of what the
+            // server answered. Mirrors the 'failed' accounting in sumSpentSince.
+            const spentDetails = result.paid ? result.payment : result.attemptedPayment;
+            if (spentDetails) {
+              const amount = parseBigInt(spentDetails.amount);
+              if (amount !== null) sessionSpent += amount;
+            }
+
+            // Record payment attempts (not free passthroughs) to the audit ledger.
+            const settled = result.payment ?? result.attemptedPayment;
+            const isPaymentEvent =
+              result.paid || !!result.attemptedPayment || (result.status === 402 && !!result.refusedReason);
+            if (isPaymentEvent) {
+              appendX402Log({
+                at: new Date().toISOString(),
+                url: params.url,
+                payer: result.payer,
+                status: result.paid ? 'paid' : result.attemptedPayment ? 'failed' : 'refused',
+                amount: settled?.amount,
+                asset: settled?.asset,
+                network: settled?.network,
+                payTo: settled?.payTo,
+                nonce: settled?.nonce,
+                txHash: result.payment?.txHash,
+                topUpAmount: result.topUp?.amount,
+                topUpBatchId: result.topUp?.batchId,
+                reason: result.refusedReason,
+              });
+            }
+
+            // Untrusted server free-text (body, refusedReason) is fenced off
+            // from the trusted payment metadata to blunt prompt injection.
+            return mcpPaymentResult(result);
+          } catch (err) {
+            return mcpError(err);
+          }
+        })
+      )
   );
 
   server.registerTool(

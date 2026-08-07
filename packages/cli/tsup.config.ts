@@ -13,6 +13,8 @@ export default defineConfig({
     'lib/paths': 'src/lib/paths.ts',
     'lib/types': 'src/lib/types.ts',
     'lib/validation': 'src/lib/validation.ts',
+    'lib/terminal': 'src/lib/terminal.ts',
+    'lib/payment-lock': 'src/lib/payment-lock.ts',
     // session lib
     'lib/keystore': 'src/lib/keystore.ts',
     'lib/session-config': 'src/lib/session-config.ts',
@@ -28,6 +30,11 @@ export default defineConfig({
     'commands/session/setup': 'src/commands/session/setup.ts',
     'commands/session/status': 'src/commands/session/status.ts',
     'commands/session/revoke': 'src/commands/session/revoke.ts',
+    'commands/x402/status': 'src/commands/x402/status.ts',
+    'commands/x402/pay': 'src/commands/x402/pay.ts',
+    'commands/x402/log': 'src/commands/x402/log.ts',
+    'x402/status-report': 'src/x402/status-report.ts',
+    'x402/log-view': 'src/x402/log-view.ts',
     // mcp
     'mcp/server': 'src/mcp/server.ts',
     'mcp/tools': 'src/mcp/tools.ts',

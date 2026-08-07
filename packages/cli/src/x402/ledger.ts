@@ -76,3 +76,30 @@ export function readX402Log(limit?: number): X402LogEntry[] {
     .filter((e): e is X402LogEntry => e !== null);
   return limit && limit > 0 ? entries.slice(-limit) : entries;
 }
+
+/**
+ * Sum a payer's settled and attempted payments since an ISO instant (its whole
+ * history when `since` is omitted).
+ *
+ * The single definition of what counts against a spend cap. Reading it from the
+ * ledger rather than an in-memory counter is what makes a cap survive a process
+ * restart, which an agent could otherwise relaunch its way past. Every caller
+ * that enforces or reports a cap must go through here: three copies of this rule
+ * had already drifted apart from each other by hand.
+ */
+export function sumSpentSince(payerAddress: string, since?: string): bigint {
+  const payer = payerAddress.toLowerCase();
+  return readX402Log().reduce((total, entry) => {
+    // 'failed' counts too: the authorization was signed and sent, so in pull
+    // mode the facilitator may have broadcast the transfer anyway. Counting it
+    // can only under-spend the cap, never breach it.
+    if ((entry.status !== 'paid' && entry.status !== 'failed') || !entry.amount) return total;
+    if (entry.payer?.toLowerCase() !== payer) return total;
+    if (since && entry.at < since) return total;
+    try {
+      return total + BigInt(entry.amount);
+    } catch {
+      return total; // a hand-edited amount must not take the cap down
+    }
+  }, 0n);
+}

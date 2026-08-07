@@ -163,3 +163,76 @@ describe('SessionBridge', () => {
     await expect(bridge.request('wallet_sendCalls', [{ calls: [] }])).rejects.toThrow(/out of sync/);
   });
 });
+
+describe('SessionBridge paymaster resolution', () => {
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const paymasterOf = (b: SessionBridge) => (b as any).options as { paymasterUrl?: string; paymasterContext?: unknown };
+
+  beforeEach(async () => {
+    const { loadConfig } = await import('./config.js');
+    vi.mocked(loadConfig).mockReturnValue({});
+  });
+
+  // The default path: an api key is all the user gave, and it is enough. Without
+  // this the account has to prefund the EntryPoint itself, which fails on an
+  // account holding only USDC.
+  it("falls back to JAW's own paymaster, keyed by the api key already configured", () => {
+    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
+    const url = new URL(paymasterOf(bridge).paymasterUrl!);
+    expect(url.origin + url.pathname).toBe('https://api.justaname.id/proxy/v1/rpc/erc20-paymaster');
+    expect(url.searchParams.get('chainId')).toBe('84532');
+    expect(url.searchParams.get('api-key')).toBe('key-123');
+  });
+
+  it('carries the chain through, so each chain gets its own quote', () => {
+    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 8453 });
+    expect(new URL(paymasterOf(bridge).paymasterUrl!).searchParams.get('chainId')).toBe('8453');
+  });
+
+  // ERC-7677 is built around bringing your own paymaster service. That escape
+  // hatch has to keep working, so config outranks the default.
+  it('lets a configured paymaster win over the default', async () => {
+    const { loadConfig } = await import('./config.js');
+    vi.mocked(loadConfig).mockReturnValue({
+      paymasters: { 84532: { url: 'https://api.pimlico.io/v2/84532/rpc?apikey=x', context: { mode: 'SPONSORED' } } },
+    });
+    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
+    expect(paymasterOf(bridge).paymasterUrl).toBe('https://api.pimlico.io/v2/84532/rpc?apikey=x');
+    expect(paymasterOf(bridge).paymasterContext).toEqual({ mode: 'SPONSORED' });
+  });
+
+  it('lets an explicit url win over both', async () => {
+    const { loadConfig } = await import('./config.js');
+    vi.mocked(loadConfig).mockReturnValue({
+      paymasters: { 84532: { url: 'https://configured.example/rpc' } },
+    });
+    const bridge = new SessionBridge({
+      apiKey: 'key-123',
+      chainId: 84532,
+      paymasterUrl: 'https://explicit.example/rpc',
+    });
+    expect(paymasterOf(bridge).paymasterUrl).toBe('https://explicit.example/rpc');
+  });
+
+  it('only applies the configured paymaster to its own chain', async () => {
+    const { loadConfig } = await import('./config.js');
+    vi.mocked(loadConfig).mockReturnValue({ paymasters: { 8453: { url: 'https://mainnet-only.example/rpc' } } });
+    const bridge = new SessionBridge({ apiKey: 'key-123', chainId: 84532 });
+    expect(paymasterOf(bridge).paymasterUrl).toContain('api.justaname.id');
+  });
+
+  // Nothing to authenticate the proxy with, so there is no sponsorship to offer.
+  it('leaves the paymaster unset when there is no api key', () => {
+    const bridge = new SessionBridge({ apiKey: '', chainId: 84532 });
+    expect(paymasterOf(bridge).paymasterUrl).toBeUndefined();
+  });
+
+  // The core SDK matches this exact base url to add the USDC approval the
+  // paymaster needs, so an encoded or reordered path would silently skip it.
+  it('keeps the base url byte for byte, so core recognises it', () => {
+    const bridge = new SessionBridge({ apiKey: 'k', chainId: 84532 });
+    expect(paymasterOf(bridge).paymasterUrl!.split('?')[0]).toBe(
+      'https://api.justaname.id/proxy/v1/rpc/erc20-paymaster'
+    );
+  });
+});

@@ -20,6 +20,7 @@ vi.mock('../lib/paths.js', () => {
       keystore: p.join(root, 'keystore.json'),
       sessionConfig: p.join(root, 'session-config.json'),
       x402Log: p.join(root, 'x402-log.jsonl'),
+      paymentLock: p.join(root, 'x402-payment.lock'),
     },
   };
 });

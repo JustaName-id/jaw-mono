@@ -24,6 +24,12 @@ export interface PayAndFetchOptions {
   spentThisPeriod?: bigint;
   /** When the current grant period ends, so a refusal can say when it frees up. */
   periodEndsAt?: Date;
+  /**
+   * Stop after choosing a requirement: no funding, no signature, no money. The
+   * same request, challenge parse and policy evaluation a real payment runs, so
+   * a clean dry run means a real one would have been allowed too.
+   */
+  dryRun?: boolean;
   /** Hard ceiling for this single call, on top of the policy. */
   maxAmount?: string;
   /** Require a specific asset (contract address). */
@@ -75,6 +81,13 @@ export interface PayAndFetchResult {
   topUp?: { amount?: string; batchId?: string };
   /** Set when a `402` could not (or should not) be paid. */
   refusedReason?: string;
+  /**
+   * On a `dryRun`, the requirement that would have been paid. Absent when the
+   * resource was free or the policy refused (see `refusedReason`). Carries no
+   * nonce, deliberately: a nonce only exists once an authorization is signed,
+   * and a dry run never signs one.
+   */
+  wouldPay?: Omit<PaymentDetails, 'nonce'>;
 }
 
 const b64json = <T>(header: string | null): T | null => {
@@ -191,7 +204,11 @@ const hexAddress = z
 const requirementSchema = z
   .object({
     scheme: z.string(),
-    network: z.string().min(1),
+    // CAIP-2 (`namespace:reference`). Left as a free string, an unknown
+    // network flowed verbatim into the refusal reason, the ledger, and every
+    // later `x402 log`. Constrained at the boundary so it cannot carry a
+    // payload at all, which is cheaper than trusting each sink to disarm it.
+    network: z.string().regex(/^[-a-z0-9]{3,8}:[-_a-zA-Z0-9]{1,32}$/, 'must be a CAIP-2 network id'),
     amount: z.string().regex(/^\d+$/, 'amount must be a base-10 integer string'),
     asset: hexAddress,
     payTo: hexAddress,
@@ -333,6 +350,24 @@ export async function payAndFetch(
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {
     return { status: 402, body: await readBody(first), paid: false, payer: payer.address, refusedReason: reason };
+  }
+
+  // 3.75 Dry run stops here, the last point before anything costs or commits.
+  //      Funding moves user money and signing produces a spendable
+  //      authorization, so both are past the line.
+  if (opts.dryRun) {
+    return {
+      status: 402,
+      body: await readBody(first),
+      paid: false,
+      payer: payer.address,
+      wouldPay: {
+        amount: requirement.amount,
+        asset: requirement.asset,
+        network: requirement.network,
+        payTo: requirement.payTo,
+      },
+    };
   }
 
   // 3.5 Funding hook (flow 2b): make sure the payer can actually cover the

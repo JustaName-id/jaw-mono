@@ -501,3 +501,87 @@ describe('payAndFetch against a demo-server-shaped x402 endpoint', () => {
     expect(result.topUp).toEqual({ amount: '2000000', batchId: '0xtop' });
   });
 });
+
+describe('payAndFetch — dry run', () => {
+  it('reports what it would pay without signing or fetching twice', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, url: URL_UNDER_TEST })
+    );
+    const signing = vi.fn();
+
+    const result = await payAndFetch(URL_UNDER_TEST, { ...payer, pay: signing }, { dryRun: true });
+
+    expect(result.paid).toBe(false);
+    expect(result.wouldPay).toMatchObject({ amount: REQUIREMENT.amount, payTo: REQUIREMENT.payTo });
+    // The signature is the thing that can move money; it must never be produced.
+    expect(signing).not.toHaveBeenCalled();
+    // Only the challenge request: no retry with a proof.
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it('never runs the funding hook, which moves user funds', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, url: URL_UNDER_TEST })
+    );
+    const ensureFunds = vi.fn();
+
+    await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true, ensureFunds });
+
+    expect(ensureFunds).not.toHaveBeenCalled();
+  });
+
+  it('still refuses what the policy would refuse, before reporting a price', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, url: URL_UNDER_TEST })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      dryRun: true,
+      policy: { maxAmountPerPayment: '1' },
+    });
+
+    expect(result.wouldPay).toBeUndefined();
+    expect(result.refusedReason).toMatch(/maxAmountPerPayment/);
+  });
+
+  it('passes a free resource through as usual', async () => {
+    fetchMock.mockResolvedValueOnce(mockRes({ status: 200, body: 'free' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
+
+    expect(result.status).toBe(200);
+    expect(result.wouldPay).toBeUndefined();
+    expect(result.paid).toBe(false);
+  });
+});
+
+describe('payAndFetch — untrusted challenge fields', () => {
+  const ESC = String.fromCharCode(0x1b);
+
+  // `network` reached the refusal reason, the ledger, and every later
+  // `x402 log`. Constrained at the boundary it cannot carry a payload at all.
+  it('refuses a network that is not a CAIP-2 id', async () => {
+    const hostile = b64({
+      x402Version: 2,
+      resource: { url: URL_UNDER_TEST },
+      accepts: [{ ...REQUIREMENT, network: `eip155:1${ESC}[2K${ESC}[32mPaid.` }],
+    });
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': hostile }, url: URL_UNDER_TEST })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
+
+    expect(result.wouldPay).toBeUndefined();
+    expect(result.refusedReason).toContain('CAIP-2');
+    expect(result.refusedReason).not.toContain(ESC);
+  });
+
+  it('still accepts a well-formed network id', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, url: URL_UNDER_TEST })
+    );
+    const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
+    expect(result.wouldPay?.network).toBe(REQUIREMENT.network);
+  });
+});
