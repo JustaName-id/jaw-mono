@@ -55,6 +55,8 @@ export {
     handleGetCallsHistoryRequest,
     handleGetPermissionsRequest,
     handleGetCapabilitiesRequest,
+    clearCapabilitiesCache,
+    type CapabilitiesResult,
     type ChainMetadataCapability,
     // Permission selector constants
     ANY_TARGET,

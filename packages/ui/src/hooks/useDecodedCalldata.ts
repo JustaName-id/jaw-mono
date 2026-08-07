@@ -1,6 +1,5 @@
 import { useEffect, useState } from 'react';
 import { decodeFunctionData, type Abi, type Hex } from 'viem';
-import { whatsabi } from '@shazow/whatsabi';
 import { getPublicClient, jawRpcUrl } from '../utils/publicClient';
 import {
   applyFormat,
@@ -51,6 +50,11 @@ async function fetchAbi(address: string, rpcUrl: string, chainId: number): Promi
   if (existing) return existing;
 
   const promise = (async () => {
+    // Loaded on demand: whatsabi is ~300KB of the bundle and nothing needs it for the
+    // first paint — a native send never decodes at all, and a batch's calldata
+    // accordions start collapsed. Keeping it out of the entry chunk matters most for
+    // the popup transport, which cannot prewarm its bundle.
+    const { whatsabi } = await import('@shazow/whatsabi');
     const client = getPublicClient(chainId, rpcUrl);
     const result = await whatsabi.autoload(address, {
       provider: client,

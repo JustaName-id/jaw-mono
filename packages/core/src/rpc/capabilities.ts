@@ -13,6 +13,28 @@ export interface ChainMetadataCapability {
     icon?: string;
 }
 
+export type CapabilitiesResult = Record<`0x${string}`, Record<string, unknown>>;
+
+/**
+ * How long a capabilities response stays fresh.
+ *
+ * The payload — supported chains, their fee tokens and metadata — changes only when
+ * the proxy's configuration does, but every transaction/permission dialog fetches it
+ * on mount and nothing renders a fee row until it lands. A minute keeps repeated
+ * dialog opens free while still picking up a server-side change within one.
+ */
+const CAPABILITIES_TTL_MS = 60_000;
+
+const capabilitiesCache = new Map<string, { at: number; value: CapabilitiesResult }>();
+/** Requests in flight, so concurrent callers share one fetch instead of racing duplicates. */
+const capabilitiesInflight = new Map<string, Promise<CapabilitiesResult>>();
+
+/** Drop every cached capabilities response. Exposed for tests and for callers that need a forced refresh. */
+export function clearCapabilitiesCache(): void {
+    capabilitiesCache.clear();
+    capabilitiesInflight.clear();
+}
+
 /**
  * Handle wallet_getCapabilities request (EIP-5792)
  *
@@ -23,6 +45,11 @@ export interface ChainMetadataCapability {
  * - If showTestnets is true: fetches capabilities for all chains
  * - If showTestnets is false: fetches capabilities only for mainnet chains
  *
+ * Responses are memoized per (api key, effective params) for {@link CAPABILITIES_TTL_MS},
+ * and concurrent callers for the same key share a single request — the dialogs ask for
+ * this on mount from several places at once, and it gates the fee-token chain.
+ * Failures are never cached.
+ *
  * @param request - The wallet_getCapabilities request
  * @param apiKey - API key for authentication
  * @param showTestnets - Whether to include testnet chains (default: false)
@@ -32,7 +59,7 @@ export async function handleGetCapabilitiesRequest(
     request: RequestArguments,
     apiKey: string,
     showTestnets = false
-): Promise<Record<`0x${string}`, Record<string, unknown>>> {
+): Promise<CapabilitiesResult> {
     const rpcUrl = buildHandleJawRpcUrl(JAW_RPC_URL, apiKey);
 
     // EIP-5792 format: params[0] is account address, params[1] is optional array of chain IDs to filter by
@@ -54,6 +81,30 @@ export async function handleGetCapabilitiesRequest(
         // If showTestnets is true, don't modify params - let proxy return all chains
     }
 
-    const result = await fetchRPCRequest(requestArgs, rpcUrl);
-    return result as Record<`0x${string}`, Record<string, unknown>>;
+    // Key on the *effective* params, after the chain filter above is injected — two
+    // callers that differ only in `showTestnets` resolve to different requests.
+    const cacheKey = `${apiKey}|${JSON.stringify(requestArgs.params ?? [])}`;
+
+    const cached = capabilitiesCache.get(cacheKey);
+    if (cached && Date.now() - cached.at < CAPABILITIES_TTL_MS) {
+        return cached.value;
+    }
+
+    const inflight = capabilitiesInflight.get(cacheKey);
+    if (inflight) return inflight;
+
+    const pending = (async () => {
+        const result = (await fetchRPCRequest(requestArgs, rpcUrl)) as CapabilitiesResult;
+        // Only a fulfilled response is cached; a rejection propagates to every sharer
+        // and leaves the next caller free to retry.
+        capabilitiesCache.set(cacheKey, { at: Date.now(), value: result });
+        return result;
+    })();
+
+    capabilitiesInflight.set(cacheKey, pending);
+    try {
+        return await pending;
+    } finally {
+        capabilitiesInflight.delete(cacheKey);
+    }
 }

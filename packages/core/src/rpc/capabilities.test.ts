@@ -1,0 +1,108 @@
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+
+import { handleGetCapabilitiesRequest, clearCapabilitiesCache } from './capabilities.js';
+
+const CAPS = { '0x2105': { feeToken: { supported: true } } };
+
+function stubFetch(impl?: () => Promise<unknown>) {
+    const fn = vi.fn(async () => {
+        if (impl) await impl();
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: CAPS }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+        });
+    });
+    vi.stubGlobal('fetch', fn);
+    return fn;
+}
+
+const request = { method: 'wallet_getCapabilities', params: [] };
+
+beforeEach(() => {
+    clearCapabilitiesCache();
+    vi.useRealTimers();
+});
+
+afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.useRealTimers();
+});
+
+describe('handleGetCapabilitiesRequest caching', () => {
+    it('fetches once and serves the cached response afterwards', async () => {
+        const fetchSpy = stubFetch();
+
+        const first = await handleGetCapabilitiesRequest(request, 'key', true);
+        const second = await handleGetCapabilitiesRequest(request, 'key', true);
+
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(first).toEqual(CAPS);
+        expect(second).toEqual(CAPS);
+    });
+
+    // Every dialog asks for this on mount, and several can mount at once.
+    it('shares a single request between concurrent callers', async () => {
+        let release!: () => void;
+        const gate = new Promise<void>((r) => (release = r));
+        const fetchSpy = stubFetch(() => gate);
+
+        const all = Promise.all([
+            handleGetCapabilitiesRequest(request, 'key', true),
+            handleGetCapabilitiesRequest(request, 'key', true),
+            handleGetCapabilitiesRequest(request, 'key', true),
+        ]);
+        release();
+        const results = await all;
+
+        expect(fetchSpy).toHaveBeenCalledTimes(1);
+        expect(results).toEqual([CAPS, CAPS, CAPS]);
+    });
+
+    it('keys the cache separately per api key', async () => {
+        const fetchSpy = stubFetch();
+
+        await handleGetCapabilitiesRequest(request, 'key-a', true);
+        await handleGetCapabilitiesRequest(request, 'key-b', true);
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    // showTestnets=false injects a mainnet chain filter, so the effective request differs.
+    it('keys the cache separately per effective chain filter', async () => {
+        const fetchSpy = stubFetch();
+
+        await handleGetCapabilitiesRequest(request, 'key', true);
+        await handleGetCapabilitiesRequest(request, 'key', false);
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('does not cache failures, so the next caller retries', async () => {
+        let calls = 0;
+        const fetchSpy = vi.fn(async () => {
+            calls++;
+            if (calls === 1) throw new Error('network down');
+            return new Response(JSON.stringify({ jsonrpc: '2.0', id: 1, result: CAPS }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+            });
+        });
+        vi.stubGlobal('fetch', fetchSpy);
+
+        await expect(handleGetCapabilitiesRequest(request, 'key', true)).rejects.toThrow('network down');
+        await expect(handleGetCapabilitiesRequest(request, 'key', true)).resolves.toEqual(CAPS);
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    it('refetches once the entry goes stale', async () => {
+        const fetchSpy = stubFetch();
+
+        await handleGetCapabilitiesRequest(request, 'key', true);
+        // TTL is 60s; jump past it.
+        const realNow = Date.now;
+        vi.spyOn(Date, 'now').mockImplementation(() => realNow() + 61_000);
+        await handleGetCapabilitiesRequest(request, 'key', true);
+
+        expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+});
