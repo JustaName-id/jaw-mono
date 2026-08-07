@@ -1,8 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { decodeFunctionData, encodeFunctionResult, type Hex } from 'viem';
+import { decodeFunctionData, encodeFunctionResult, erc20Abi, toFunctionSelector, type Hex } from 'viem';
 
-import { getPublicClient, jawRpcUrl } from './publicClient';
+import { getJawPublicClient, getPublicClient, jawRpcUrl } from './publicClient';
 import { fetchTokenBalance } from './tokenBalance';
+import { createTokenResolver } from './clearSigning';
 
 // Base — carries a Multicall3 address in viem's chain definition.
 const CHAIN_WITH_MULTICALL = 8453;
@@ -49,6 +50,28 @@ const aggregate3Abi = [
 
 const word = (n: bigint): Hex => `0x${n.toString(16).padStart(64, '0')}`;
 
+const SELECTOR = {
+  decimals: toFunctionSelector('function decimals() view returns (uint8)'),
+  symbol: toFunctionSelector('function symbol() view returns (string)'),
+};
+
+/**
+ * Result for one inner call. `balanceOf` (and anything unrecognised) answers with
+ * its position in the batch so a caller can prove it got *its own* result back;
+ * `decimals`/`symbol` answer with properly encoded ERC-20 types so the token
+ * metadata pair decodes.
+ */
+function answer(callData: Hex | undefined, index: number): Hex {
+  const selector = callData?.slice(0, 10);
+  if (selector === SELECTOR.decimals) {
+    return encodeFunctionResult({ abi: erc20Abi, functionName: 'decimals', result: 6 }) as Hex;
+  }
+  if (selector === SELECTOR.symbol) {
+    return encodeFunctionResult({ abi: erc20Abi, functionName: 'symbol', result: 'TKN' }) as Hex;
+  }
+  return word(BigInt(index + 1));
+}
+
 const json = (id: number, result: Hex) =>
   new Response(JSON.stringify({ jsonrpc: '2.0', id, result }), {
     status: 200,
@@ -59,13 +82,22 @@ const json = (id: number, result: Hex) =>
  * Stub `fetch` with a node that answers `eth_call` — both plain and wrapped in a
  * Multicall3 `aggregate3`. Returns the list of request bodies actually sent, so
  * a test can assert how many round-trips a fan-out cost.
+ *
+ * `revertFor` marks target addresses whose call reverts, which inside an
+ * `aggregate3` comes back as `success: false` on that entry alone — the shape the
+ * `allowFailure` isolation claim rests on.
  */
-function stubRpc() {
+function stubRpc(options: { revertFor?: string[]; unavailable?: boolean } = {}) {
   const bodies: { method: string; to?: string; data?: Hex }[] = [];
+  const reverts = new Set((options.revertFor ?? []).map((a) => a.toLowerCase()));
 
   vi.stubGlobal(
     'fetch',
     vi.fn(async (_url: string, init: RequestInit) => {
+      if (options.unavailable) {
+        bodies.push({ method: 'unavailable' });
+        return new Response('service unavailable', { status: 503 });
+      }
       const body = JSON.parse(String(init.body)) as {
         id: number;
         method: string;
@@ -77,18 +109,29 @@ function stubRpc() {
 
       if (to?.toLowerCase() === MULTICALL3) {
         const { args } = decodeFunctionData({ abi: aggregate3Abi, data: data as Hex });
-        const calls = args[0] as readonly { target: string }[];
+        const calls = args[0] as readonly { target: string; callData: Hex }[];
         return json(
           body.id,
           encodeFunctionResult({
             abi: aggregate3Abi,
             functionName: 'aggregate3',
-            result: calls.map((_, i) => ({ success: true, returnData: word(BigInt(i + 1)) })),
+            result: calls.map((call, i) =>
+              reverts.has(call.target.toLowerCase())
+                ? { success: false, returnData: '0x' as Hex }
+                : { success: true, returnData: answer(call.callData, i) }
+            ),
           }) as Hex
         );
       }
 
-      return json(body.id, word(1n));
+      if (to && reverts.has(to.toLowerCase())) {
+        return new Response(JSON.stringify({ jsonrpc: '2.0', id: body.id, error: { code: 3, message: 'reverted' } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      return json(body.id, answer(data, 0));
     })
   );
 
@@ -115,6 +158,22 @@ describe('getPublicClient', () => {
     expect(jawRpcUrl(8453, 'abc')).toContain('chainId=8453&api-key=abc');
     expect(jawRpcUrl(8453)).toContain('chainId=8453');
     expect(jawRpcUrl(8453)).not.toContain('api-key');
+  });
+
+  // This is what lets a dialog's fee-token balance fan-out and clear-signing's
+  // token resolver share one aggregate3 — and, by the same token, fail together.
+  it('shares one instance with the explicit JAW RPC URL', () => {
+    const apiKey = 'key-shared';
+    expect(getJawPublicClient(CHAIN_WITH_MULTICALL, apiKey)).toBe(
+      getPublicClient(CHAIN_WITH_MULTICALL, jawRpcUrl(CHAIN_WITH_MULTICALL, apiKey))
+    );
+  });
+
+  // Attaching the chain definition costs viem's own UrlRequiredError guard: `http()`
+  // resolves `url || chain.rpcUrls.default.http[0]`, so an empty URL would silently
+  // route wallet traffic to the chain's public node instead of the proxy.
+  it('refuses an empty RPC URL rather than falling back to the chain public node', () => {
+    expect(() => getPublicClient(CHAIN_WITH_MULTICALL, '')).toThrow(/No RPC URL configured/);
   });
 });
 
@@ -154,5 +213,69 @@ describe('fetchTokenBalance batching', () => {
     await Promise.all(TOKENS.map((token) => fetchTokenBalance(token, HOLDER, rpcUrl)));
 
     expect(bodies).toHaveLength(TOKENS.length);
+  });
+
+  // The isolation half of `allowFailure`, which both doc comments rest on: a call
+  // that reverts costs only its own caller, not the rest of the batch.
+  it('rejects only the reverting caller, leaving the rest of the batch intact', async () => {
+    const bodies = stubRpc({ revertFor: [TOKENS[1]] });
+    const rpcUrl = 'https://rpc.test/partial-revert';
+
+    const settled = await Promise.allSettled(
+      TOKENS.map((token) => fetchTokenBalance(token, HOLDER, rpcUrl, CHAIN_WITH_MULTICALL))
+    );
+
+    expect(bodies).toHaveLength(1);
+    expect(settled.map((r) => r.status)).toEqual(['fulfilled', 'rejected', 'fulfilled']);
+    expect((settled[0] as PromiseFulfilledResult<bigint>).value).toBe(1n);
+    expect((settled[2] as PromiseFulfilledResult<bigint>).value).toBe(3n);
+  });
+});
+
+describe('createTokenResolver batching', () => {
+  // The biggest fan-out in the dialog: N tokens × (decimals + symbol).
+  it('folds decimals + symbol across several tokens into one Multicall3 request', async () => {
+    const bodies = stubRpc();
+    const resolve = createTokenResolver(CHAIN_WITH_MULTICALL, 'key-resolver');
+
+    const infos = await Promise.all(TOKENS.map((token) => resolve(token)));
+
+    // 3 tokens × 2 reads = 6 eth_calls, one round-trip.
+    expect(bodies).toHaveLength(1);
+    expect(bodies[0].to?.toLowerCase()).toBe(MULTICALL3);
+    expect(infos).toEqual(TOKENS.map((address) => ({ address, decimals: 6, symbol: 'TKN' })));
+  });
+
+  // tokenCache has no TTL, so a cached null lasts the session. One 503 on the shared
+  // aggregate3 must not blank every token in the batch for good.
+  it('does not negative-cache a transient RPC failure', async () => {
+    const chainId = 8453;
+    const token = '0x1111111111111111111111111111111111111111';
+
+    stubRpc({ unavailable: true });
+    expect(await createTokenResolver(chainId, 'key-transient')(token)).toBeNull();
+
+    vi.unstubAllGlobals();
+    stubRpc();
+    expect(await createTokenResolver(chainId, 'key-transient')(token)).toEqual({
+      address: token,
+      decimals: 6,
+      symbol: 'TKN',
+    });
+  });
+
+  // The other half: a call that actually fails on-chain is proof the address is not a
+  // token, so it stays cached and costs no further round-trips.
+  it('negative-caches a reverting token and does not re-query it', async () => {
+    const chainId = 8453;
+    const token = '0x2222222222222222222222222222222222222222';
+
+    stubRpc({ revertFor: [token] });
+    expect(await createTokenResolver(chainId, 'key-revert')(token)).toBeNull();
+
+    vi.unstubAllGlobals();
+    const bodies = stubRpc();
+    expect(await createTokenResolver(chainId, 'key-revert')(token)).toBeNull();
+    expect(bodies).toHaveLength(0);
   });
 });

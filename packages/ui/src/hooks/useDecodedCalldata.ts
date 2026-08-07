@@ -42,7 +42,9 @@ const abiCache = new Map<string, Abi>();
 const abiInflight = new Map<string, Promise<Abi>>();
 
 async function fetchAbi(address: string, rpcUrl: string, chainId: number): Promise<Abi> {
-  const key = address.toLowerCase();
+  // Keyed by chain: with `abiLoader: false` whatsabi derives the ABI from that chain's
+  // bytecode, so the same address on two chains is two different contracts.
+  const key = `${chainId}:${address.toLowerCase()}`;
   const cached = abiCache.get(key);
   if (cached) return cached;
 
@@ -50,10 +52,15 @@ async function fetchAbi(address: string, rpcUrl: string, chainId: number): Promi
   if (existing) return existing;
 
   const promise = (async () => {
-    // Loaded on demand: whatsabi is ~300KB of the bundle and nothing needs it for the
-    // first paint — a native send never decodes at all, and a batch's calldata
-    // accordions start collapsed. Keeping it out of the entry chunk matters most for
-    // the popup transport, which cannot prewarm its bundle.
+    // Loaded on demand, and nothing needs it for the first paint — a native send never
+    // decodes at all, and a batch's calldata accordions start collapsed. Measured on
+    // `nx build @jaw.id/ui`: it splits out as a 60.09 kB chunk (16.73 kB gzip) and the
+    // entry drops from 655.57 kB to 603.90 kB (192.69 → 178.31 kB gzip). Keeping it out
+    // of the entry chunk matters most for the popup transport, which cannot prewarm.
+    //
+    // `chainId` below is threaded through for the shared-client dedup, not for batching:
+    // whatsabi drives a ViemProvider that calls `transport.request` directly, bypassing
+    // viem's action layer and its multicall scheduler entirely.
     const { whatsabi } = await import('@shazow/whatsabi');
     const client = getPublicClient(chainId, rpcUrl);
     const result = await whatsabi.autoload(address, {

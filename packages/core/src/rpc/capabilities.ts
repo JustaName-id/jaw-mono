@@ -48,7 +48,7 @@ export function clearCapabilitiesCache(): void {
  * Responses are memoized per (api key, effective params) for {@link CAPABILITIES_TTL_MS},
  * and concurrent callers for the same key share a single request — the dialogs ask for
  * this on mount from several places at once, and it gates the fee-token chain.
- * Failures are never cached.
+ * Failures are never cached, and every caller gets its own copy of the response.
  *
  * @param request - The wallet_getCapabilities request
  * @param apiKey - API key for authentication
@@ -85,13 +85,17 @@ export async function handleGetCapabilitiesRequest(
     // callers that differ only in `showTestnets` resolve to different requests.
     const cacheKey = `${apiKey}|${JSON.stringify(requestArgs.params ?? [])}`;
 
+    // Every exit hands back a copy, never the cache entry itself. `JAWProvider` forwards
+    // this result straight to the dApp, and the internal UI call sites all key on the same
+    // `params: []` entry — so a single mutation by any one caller would otherwise be visible
+    // to every later one, including the fee-token selector.
     const cached = capabilitiesCache.get(cacheKey);
     if (cached && Date.now() - cached.at < CAPABILITIES_TTL_MS) {
-        return cached.value;
+        return structuredClone(cached.value);
     }
 
     const inflight = capabilitiesInflight.get(cacheKey);
-    if (inflight) return inflight;
+    if (inflight) return structuredClone(await inflight);
 
     const pending = (async () => {
         const result = (await fetchRPCRequest(requestArgs, rpcUrl)) as CapabilitiesResult;
@@ -103,7 +107,7 @@ export async function handleGetCapabilitiesRequest(
 
     capabilitiesInflight.set(cacheKey, pending);
     try {
-        return await pending;
+        return structuredClone(await pending);
     } finally {
         capabilitiesInflight.delete(cacheKey);
     }

@@ -26,6 +26,9 @@ beforeEach(() => {
 afterEach(() => {
     vi.unstubAllGlobals();
     vi.useRealTimers();
+    // `unstubAllGlobals` does not touch spies and this config sets no `restoreMocks`,
+    // so without this the Date.now spy below leaks into whatever test is added next.
+    vi.restoreAllMocks();
 });
 
 describe('handleGetCapabilitiesRequest caching', () => {
@@ -104,5 +107,35 @@ describe('handleGetCapabilitiesRequest caching', () => {
         await handleGetCapabilitiesRequest(request, 'key', true);
 
         expect(fetchSpy).toHaveBeenCalledTimes(2);
+    });
+
+    // JAWProvider forwards this result straight to the dApp, and the internal UI call
+    // sites share the `params: []` entry — a live cache entry would let any one of them
+    // corrupt the rest.
+    it('hands every caller its own copy, so a mutation cannot leak into the cache', async () => {
+        stubFetch();
+
+        const first = (await handleGetCapabilitiesRequest(request, 'key', true)) as Record<string, { evil?: boolean }>;
+        first['0x2105'].evil = true;
+
+        const second = await handleGetCapabilitiesRequest(request, 'key', true);
+
+        expect(second).toEqual(CAPS);
+    });
+
+    it('does not share one object between concurrent callers', async () => {
+        let release!: () => void;
+        const gate = new Promise<void>((r) => (release = r));
+        stubFetch(() => gate);
+
+        const all = Promise.all([
+            handleGetCapabilitiesRequest(request, 'key', true),
+            handleGetCapabilitiesRequest(request, 'key', true),
+        ]);
+        release();
+        const [a, b] = await all;
+
+        expect(a).not.toBe(b);
+        expect(a).toEqual(b);
     });
 });

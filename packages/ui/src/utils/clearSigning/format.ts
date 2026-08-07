@@ -20,7 +20,14 @@
 //   nftName / duration / enum / calldata → fall through to raw
 // ============================================================================
 
-import { formatUnits, isAddress, parseAbiItem } from 'viem';
+import {
+  BaseError,
+  ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
+  formatUnits,
+  isAddress,
+  parseAbiItem,
+} from 'viem';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { getJawPublicClient } from '../publicClient';
 import { resolvePath } from './path';
@@ -344,6 +351,30 @@ export async function applyFormat(
 
 const tokenCache = new Map<string, TokenInfo | null>();
 
+/**
+ * Whether a failed `decimals()`/`symbol()` read proves the address is not an ERC-20,
+ * as opposed to the RPC merely being unavailable.
+ *
+ * Only the former may be cached as `null`: `tokenCache` has no TTL, so caching a
+ * transient failure blanks that token for the rest of the session — and because reads
+ * now share one `aggregate3`, a single 503 would otherwise poison every token in the
+ * batch at once.
+ *
+ * Both shapes are covered. A `success: false` entry in an `aggregate3` result throws a
+ * `RawContractError`, but viem wraps it through `ExecutionRevertedError` (code 3) before
+ * `getContractError` sees it, so the batched chain is
+ * `ContractFunctionExecutionError -> ContractFunctionRevertedError -> ... -> RawContractError`;
+ * an unbatched read of an address with no code decodes empty data into
+ * `ContractFunctionZeroDataError`. Transport failures (`HttpRequestError`, `TimeoutError`)
+ * match neither.
+ */
+function isNotAToken(err: unknown): boolean {
+  return (
+    err instanceof BaseError &&
+    Boolean(err.walk((e) => e instanceof ContractFunctionRevertedError || e instanceof ContractFunctionZeroDataError))
+  );
+}
+
 const ERC20_DECIMALS_SYMBOL = [
   parseAbiItem('function decimals() view returns (uint8)'),
   parseAbiItem('function symbol() view returns (string)'),
@@ -377,8 +408,10 @@ export function createTokenResolver(chainId: number, apiKey?: string) {
       const info: TokenInfo = { address, decimals: Number(decimals), symbol: String(symbol) };
       tokenCache.set(key, info);
       return info;
-    } catch {
-      tokenCache.set(key, null);
+    } catch (err) {
+      // Negative-cache only a proven non-token; leave transient failures uncached so the
+      // next render retries once the RPC recovers.
+      if (isNotAToken(err)) tokenCache.set(key, null);
       return null;
     }
   };

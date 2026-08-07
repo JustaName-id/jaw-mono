@@ -151,13 +151,15 @@ export const getBundlerClient = (
 ): BundlerClient<Transport, ViemChain> => {
     const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chain.id);
 
+    // Deliberately no `batch: { multicall: true }` here, unlike the store's client in
+    // store/chain-clients/utils.ts. Nothing issues an eth_call through this one: the
+    // account implementation and findOwnerIndex both read through the bundler client
+    // below, and all this client is asked for is estimateFeesPerGas/getGasPrice. Setting
+    // it would only put a Multicall3 hop and a setTimeout(0) defer on the userOp path
+    // for no round-trip saved.
     const publicClient = createPublicClient({
         chain: viemChain,
         transport: http(chain.rpcUrl),
-        // Collapse same-tick eth_calls into one Multicall3 aggregate3. See the
-        // note in store/chain-clients/utils.ts for why this is preferred over
-        // transport-level HTTP batching.
-        batch: { multicall: true },
     });
 
     // Priority: overrides (from capabilities) > chain config (from SDK config)
@@ -199,10 +201,11 @@ async function prepareEip7702Calls(
     calls: Array<{ to: Address; value: bigint; data: Hex }>,
     chain: Chain
 ): Promise<PreparedCalls> {
+    // No multicall batching: the three reads below are strictly sequential (each one
+    // gates the next), so there is never more than one eth_call in flight to fold.
     const publicClient = createPublicClient({
         chain: SUPPORTED_CHAINS.find((c) => c.id === chain.id),
         transport: http(chain.rpcUrl),
-        batch: { multicall: true },
     });
 
     const implementationAddress = await readContract(publicClient, {
@@ -591,19 +594,27 @@ export async function findOwnerIndex({ address, client, publicKey }: FindOwnerIn
             functionName: 'ownerCount',
         });
 
-        // Iterate from lowest index up and return early when found
-        for (let i = 0; i < Number(ownerCount); i++) {
-            const owner = await readContract(client, {
-                address,
-                abi,
-                functionName: 'ownerAtIndex',
-                args: [BigInt(i)],
-            });
+        // Read every slot concurrently. Awaiting them one at a time costs a round-trip
+        // per owner on the signing hot path, where the whole set costs one. allSettled
+        // rather than all so a single reverting slot cannot hide a match behind it.
+        const owners = await Promise.allSettled(
+            Array.from({ length: Number(ownerCount) }, (_, i) =>
+                readContract(client, {
+                    address,
+                    abi,
+                    functionName: 'ownerAtIndex',
+                    args: [BigInt(i)],
+                })
+            )
+        );
 
-            const formatted = formatPublicKey(publicKey);
-            if (owner.toLowerCase() === formatted.toLowerCase()) {
-                return i;
-            }
+        // Lowest matching index wins, same as the sequential scan it replaces.
+        const formatted = formatPublicKey(publicKey).toLowerCase();
+        const index = owners.findIndex(
+            (owner) => owner.status === 'fulfilled' && owner.value.toLowerCase() === formatted
+        );
+        if (index !== -1) {
+            return index;
         }
     } catch (error) {
         // If reading contract fails, return 0
@@ -649,27 +660,35 @@ export async function createSmartAccountForAddress(
         functionName: 'ownerCount',
     });
 
-    const formatted = formatPublicKey(ownerBytes);
+    const formatted = formatPublicKey(ownerBytes).toLowerCase();
 
-    for (let i = 0; i < Number(ownerCount); i++) {
-        const owner = await readContract(bundlerClient, {
-            address: targetAddress,
-            abi,
-            functionName: 'ownerAtIndex',
-            args: [BigInt(i)],
-        });
-
-        if ((owner as string).toLowerCase() === formatted.toLowerCase()) {
-            return await toJustanAccount({
-                client: bundlerClient,
-                owners: [account, PERMISSIONS_MANAGER_ADDRESS],
-                ownerIndex: i,
+    // Concurrent for the same reason as findOwnerIndex: one round-trip for the whole
+    // owner set instead of one per slot, on the path that gates every signature.
+    const owners = await Promise.allSettled(
+        Array.from({ length: Number(ownerCount) }, (_, i) =>
+            readContract(bundlerClient, {
                 address: targetAddress,
-            });
-        }
+                abi,
+                functionName: 'ownerAtIndex',
+                args: [BigInt(i)],
+            })
+        )
+    );
+
+    const ownerIndex = owners.findIndex(
+        (owner) => owner.status === 'fulfilled' && (owner.value as string).toLowerCase() === formatted
+    );
+
+    if (ownerIndex === -1) {
+        throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
     }
 
-    throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
+    return await toJustanAccount({
+        client: bundlerClient,
+        owners: [account, PERMISSIONS_MANAGER_ADDRESS],
+        ownerIndex,
+        address: targetAddress,
+    });
 }
 
 export async function createSmartAccountEip7702(

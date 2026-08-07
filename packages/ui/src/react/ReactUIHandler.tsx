@@ -2239,7 +2239,11 @@ function PermissionDialogWrapper({
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
-    if (spendsData.length === 0) {
+    // Bail rather than passing an empty URL down: getPublicClient attaches the chain
+    // definition, so an empty URL would resolve to the chain's public RPC instead of
+    // the proxy. Nothing to read without a configured endpoint.
+    const rpcUrl = chain.rpcUrl;
+    if (spendsData.length === 0 || !rpcUrl) {
       setIsLoadingTokenInfo(false);
       return;
     }
@@ -2256,7 +2260,7 @@ function PermissionDialogWrapper({
       // Resolved in one pass rather than token-by-token: the shared client folds
       // every decimals/symbol read issued in this tick into a single Multicall3
       // request, so N tokens cost one round-trip instead of 2N sequential ones.
-      const publicClient = getPublicClient(chainId, chain.rpcUrl || '');
+      const publicClient = getPublicClient(chainId, rpcUrl);
 
       await Promise.all(
         uniqueTokens.map(async (tokenAddress) => {
@@ -2886,8 +2890,12 @@ function RevokePermissionDialogWrapper({
         if (permData.spends && permData.spends.length > 0) {
           const newTokenInfoMap: TokenInfoMap = {};
           // One pass over the spends so the shared client can fold every
-          // decimals/symbol read into a single Multicall3 request.
-          const publicClient = getPublicClient(chainId, chain.rpcUrl || '');
+          // decimals/symbol read into a single Multicall3 request. Left null when no
+          // endpoint is configured — getPublicClient attaches the chain definition, so
+          // an empty URL would resolve to the chain's public RPC rather than the proxy.
+          // Native spends still resolve below; ERC-20s take the same fallback a failed
+          // read would.
+          const publicClient = chain.rpcUrl ? getPublicClient(chainId, chain.rpcUrl) : null;
 
           await Promise.all(
             permData.spends.map(async (spend) => {
@@ -2900,6 +2908,7 @@ function RevokePermissionDialogWrapper({
                 return;
               }
               try {
+                if (!publicClient) throw new Error(`No RPC URL configured for chain ${chainId}`);
                 const [decimals, symbol] = await Promise.all([
                   publicClient.readContract({
                     address: tokenAddress as Address,
