@@ -26,7 +26,7 @@ import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/c
 import { RECONNECT_REQUIRED } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
-import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from '@jaw.id/ui';
+import { isSiweMessage, parseSiweMessage, getSiweOriginWarning, OnboardingSkeleton } from '@jaw.id/ui';
 import { applyDappTheme } from '../lib/apply-dapp-theme';
 import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
@@ -1125,17 +1125,19 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
       );
     }
 
-    // Show loading while initializing or checking passkeys
+    // Pre-first-screen window: the transport handshake has acked (which is what
+    // reveals the embedded dialog) but we don't yet know whether this resolves
+    // to "Continue as" or account creation — that needs the handshake account
+    // hint resolved against the backend registry, a real roundtrip on a wiped
+    // storage partition. Render the shape of the card that follows rather than
+    // a captioned spinner: a distinct "Connecting to dApp… / SDK v1.1"
+    // interstitial used to flash here whenever a request beat the SDK's
+    // prewarm, and it both read as a separate screen and leaked the version.
     if (state === 'initializing' || state === 'passkey-check') {
       return (
-        <div className="flex min-h-screen items-center justify-center">
-          <div className="text-center">
-            <div className="border-primary mx-auto mb-4 h-12 w-12 animate-spin rounded-full border-b-2"></div>
-            <p className="text-muted-foreground">
-              {state === 'initializing' && 'Connecting to dApp...'}
-              {state === 'passkey-check' && 'Checking for passkeys...'}
-            </p>
-            {config && <p className="text-muted-foreground mt-2 text-sm">SDK v{config.version}</p>}
+        <div className="flex min-h-screen items-center justify-center p-4">
+          <div className="w-full max-w-md">
+            <OnboardingSkeleton />
           </div>
         </div>
       );
