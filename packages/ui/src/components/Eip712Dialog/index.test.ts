@@ -16,6 +16,7 @@ vi.mock('@jaw.id/core', () => ({
   // Pulled in transitively by the hooks barrel, via the permission-execution wildcard sentinels.
   ANY_TARGET: '0x3232323232323232323232323232323232323232',
   ANY_FN_SEL: '0x32323232',
+  EMPTY_CALLDATA_FN_SEL: '0xe0e0e0e0',
 }));
 vi.mock('../../hooks/useReverseIdentity', () => ({
   useReverseIdentity: () => ({ name: undefined, avatar: undefined }),

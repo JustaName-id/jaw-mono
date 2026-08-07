@@ -11,7 +11,7 @@
 // a named reason instead of a failed estimation.
 // ============================================================================
 
-import { ANY_FN_SEL, ANY_TARGET } from '@jaw.id/core';
+import { ANY_FN_SEL, ANY_TARGET, EMPTY_CALLDATA_FN_SEL } from '@jaw.id/core';
 
 /**
  * The permission-manager sentinels standing for "unrestricted". One list so a target wildcard
@@ -96,13 +96,18 @@ const sameAddress = (a?: string, b?: string) => !!a && !!b && a.toLowerCase() ==
 
 /** True when the permission's allow-list covers this target/selector pair. */
 function isCallAllowed(permission: ExecutionPermission, call: { to?: string; data?: string }): boolean {
-  // The manager matches on the 4-byte selector; a bare value transfer carries none.
-  const selector = call.data?.slice(0, 10).toLowerCase() ?? '0x';
-  return permission.calls.some(
-    (allowed) =>
-      (isWildcard(allowed.target) || sameAddress(allowed.target, call.to)) &&
-      (isWildcard(allowed.selector) || allowed.selector.toLowerCase() === selector)
-  );
+  // The manager matches on the 4-byte selector; a bare value transfer carries none. Grants name
+  // that case with the EMPTY_CALLDATA_FN_SEL sentinel (the docs' "Only ETH transfers" preset).
+  const data = call.data ?? '0x';
+  const emptyCalldata = data === '0x' || data === '';
+  const selector = data.slice(0, 10).toLowerCase();
+  return permission.calls.some((allowed) => {
+    if (!isWildcard(allowed.target) && !sameAddress(allowed.target, call.to)) return false;
+    if (isWildcard(allowed.selector)) return true;
+    const allowedSelector = allowed.selector.toLowerCase();
+    if (emptyCalldata) return allowedSelector === EMPTY_CALLDATA_FN_SEL;
+    return allowedSelector === selector;
+  });
 }
 
 export interface PermissionExecutionInput {

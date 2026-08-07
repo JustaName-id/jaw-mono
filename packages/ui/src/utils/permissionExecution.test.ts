@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ANY_FN_SEL, ANY_TARGET } from '@jaw.id/core';
+import { ANY_FN_SEL, ANY_TARGET, EMPTY_CALLDATA_FN_SEL } from '@jaw.id/core';
 import { isWildcard, validatePermissionExecution, type ExecutionPermission } from './permissionExecution';
 
 const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
@@ -106,6 +106,24 @@ describe('validatePermissionExecution', () => {
 
   it('flags a bare value transfer when no selector is permitted', () => {
     expect(check(permission(), [{ to: USDC }])).toBe('call-not-allowed');
+  });
+
+  // The docs' "Only ETH transfers" preset: any target, empty calldata only.
+  it('allows a bare value transfer under the empty-calldata sentinel', () => {
+    const p = permission({ calls: [{ target: ANY_TARGET, selector: EMPTY_CALLDATA_FN_SEL }] });
+    expect(check(p, [{ to: GRANTER }])).toBeNull();
+    expect(check(p, [{ to: GRANTER, data: '0x' }])).toBeNull();
+    expect(check(p, [{ to: GRANTER, data: '' }])).toBeNull();
+  });
+
+  it('flags a call carrying calldata when only empty calldata is permitted', () => {
+    const p = permission({ calls: [{ target: ANY_TARGET, selector: EMPTY_CALLDATA_FN_SEL }] });
+    expect(check(p, [{ to: USDC, data: `${TRANSFER}00` }])).toBe('call-not-allowed');
+  });
+
+  it('does not let a real selector match an empty-calldata-only grant, or vice versa', () => {
+    const p = permission({ calls: [{ target: USDC, selector: TRANSFER }] });
+    expect(check(p, [{ to: USDC, data: '0x' }])).toBe('call-not-allowed');
   });
 
   it('allows any selector on a permitted contract under a selector wildcard', () => {
