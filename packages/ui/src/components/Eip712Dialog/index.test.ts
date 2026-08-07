@@ -11,7 +11,12 @@ import { act } from 'react';
 // Without this React logs "not configured to support act(...)" on every render.
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock('@jaw.id/core', () => ({ SUPPORTED_CHAINS: [] }));
+vi.mock('@jaw.id/core', () => ({
+  SUPPORTED_CHAINS: [],
+  // Pulled in transitively by the hooks barrel, via the permission-execution wildcard sentinels.
+  ANY_TARGET: '0x3232323232323232323232323232323232323232',
+  ANY_FN_SEL: '0x32323232',
+}));
 vi.mock('../../hooks/useReverseIdentity', () => ({
   useReverseIdentity: () => ({ name: undefined, avatar: undefined }),
 }));

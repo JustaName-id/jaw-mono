@@ -6,7 +6,7 @@ import { ShellDialog } from '../ShellDialog';
 import { ProcessingScreen } from '../ProcessingScreen';
 import { useState, useEffect, useRef } from 'react';
 import { ethAddress } from 'viem';
-import { ArrowDown } from 'lucide-react';
+import { ArrowDown, LogIn } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
@@ -20,6 +20,7 @@ import { SubText } from '../SubText';
 import { AssetPreview } from './AssetPreview';
 import { callTitle } from './DecodedCalldata';
 import { resolveBlockReason } from '../../utils/transactionFailure';
+import { PERMISSION_PROBLEM_TEXT } from '../../utils/permissionExecution';
 import { BatchStep, SingleCallData } from './CallSections';
 import { InlineWarning, PartyRow, Row, ValueAmount } from '../primitives';
 import { NetworkFeeRow } from '../NetworkFeeRow';
@@ -38,6 +39,9 @@ export const TransactionDialog = ({
   assetPreviewError,
   assetPreviewWillRevert,
   assetPreviewRevertCause,
+  onBehalfOf,
+  onBehalfOfLoading,
+  permissionProblem,
   onConfirm,
   onCancel,
   isProcessing,
@@ -92,6 +96,9 @@ export const TransactionDialog = ({
     if (walletAddress && currentTransaction?.chainId) {
       inputs.push({ address: walletAddress, chainId: currentTransaction.chainId });
     }
+    if (onBehalfOf && currentTransaction?.chainId) {
+      inputs.push({ address: onBehalfOf, chainId: currentTransaction.chainId });
+    }
     transactions.forEach((transaction) => {
       if (transaction.to && transaction.chainId) {
         inputs.push({ address: transaction.to, chainId: transaction.chainId });
@@ -124,7 +131,7 @@ export const TransactionDialog = ({
     return () => {
       cancelled = true;
     };
-  }, [walletAddress, transactions, currentTransaction?.chainId]);
+  }, [walletAddress, onBehalfOf, transactions, currentTransaction?.chainId]);
 
   // Resolve ERC-7730 `metadata.contractName` for every unique `to` in the batch.
   const [contractNames, setContractNames] = useState<Record<string, string>>({});
@@ -201,12 +208,20 @@ export const TransactionDialog = ({
     revertCause: assetPreviewRevertCause,
   });
 
+  // A permissioned execution is still "permissioned" while the granter is in flight, and after a
+  // lookup that failed — the extra row and the delegation badge must not flicker in and out.
+  const isPermissioned = !!onBehalfOf || !!onBehalfOfLoading || !!permissionProblem;
+
+  // A broken permission fails estimation too, so the fee row would blame the fee for something
+  // the banner already explains precisely. Name the cause once, at the top.
+  const feeBlockReason = permissionProblem ? null : blockReason;
+
   // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
   const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
-  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20EstimateMissing;
+  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20EstimateMissing && !permissionProblem;
 
   // Reverts, but gas estimated fine, so it stays submittable: warn rather than block.
-  const softRevertWarning = !blockReason && !!assetPreviewWillRevert;
+  const softRevertWarning = !blockReason && !permissionProblem && !!assetPreviewWillRevert;
 
   const singleValue = isSingleTransaction ? formatNativeValue(currentTransaction?.value) : null;
   // Dust renders in subscript notation like the fee rows; math keeps using the raw string.
@@ -277,23 +292,54 @@ export const TransactionDialog = ({
               </div>
             )}
 
-            {/* From / To */}
+            {/* From / On behalf of / To */}
             <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-3">
               <PartyRow
                 label="From"
                 value={displayWalletAddress}
                 address={walletAddress}
                 avatarUrl={resolvedAvatars[walletAddress]}
+                // Marks the signer as acting through a delegation rather than for itself.
+                badge={
+                  isPermissioned ? (
+                    <span className="bg-popover absolute -bottom-0.5 -right-0.5 flex size-3 items-center justify-center rounded-full">
+                      <LogIn className="text-success size-2" strokeWidth={2.6} />
+                    </span>
+                  ) : undefined
+                }
               />
+              {isPermissioned && (
+                <>
+                  <div className="bg-border h-px" />
+                  <PartyRow
+                    label="On behalf of"
+                    value={
+                      onBehalfOf
+                        ? getDisplayAddress(resolvedAddresses[onBehalfOf], onBehalfOf)
+                        : onBehalfOfLoading
+                          ? 'Loading…'
+                          : 'Unknown'
+                    }
+                    address={onBehalfOf ?? ''}
+                    avatarUrl={onBehalfOf ? resolvedAvatars[onBehalfOf] : undefined}
+                  />
+                </>
+              )}
               {isSingleTransaction && currentTransaction?.to && (
                 <>
-                  <div className="flex items-center">
-                    <div className="bg-border h-px flex-1" />
-                    <ArrowDown className="text-muted-foreground mx-1.5 size-3 flex-none" strokeWidth={2} />
-                    <div className="bg-border h-px flex-1" />
-                  </div>
+                  {/* The arrow reads as "value flows this way", which only holds for a plain
+                      two-party transfer — a delegated execution gets a neutral divider. */}
+                  {isPermissioned ? (
+                    <div className="bg-border h-px" />
+                  ) : (
+                    <div className="flex items-center">
+                      <div className="bg-border h-px flex-1" />
+                      <ArrowDown className="text-muted-foreground mx-1.5 size-3 flex-none" strokeWidth={2} />
+                      <div className="bg-border h-px flex-1" />
+                    </div>
+                  )}
                   <PartyRow
-                    label="To"
+                    label={isPermissioned ? 'To · Contract' : 'To'}
                     value={displayToAddress}
                     address={currentTransaction.to}
                     avatarUrl={resolvedAvatars[currentTransaction.to]}
@@ -301,6 +347,16 @@ export const TransactionDialog = ({
                 </>
               )}
             </div>
+
+            {/* The permission itself is unusable — a certain revert, named before signing. */}
+            {permissionProblem && (
+              <div className="px-0.5">
+                <InlineWarning
+                  text={PERMISSION_PROBLEM_TEXT[permissionProblem].text}
+                  detail={PERMISSION_PROBLEM_TEXT[permissionProblem].detail}
+                />
+              </div>
+            )}
 
             {/* Reverts but gas estimated fine, so it stays submittable. */}
             {softRevertWarning && (
@@ -375,7 +431,7 @@ export const TransactionDialog = ({
           {/* Pinned fee row + actions */}
           <div className="border-border flex-none space-y-3 border-t px-6 py-3.5">
             <NetworkFeeRow
-              blockReason={blockReason}
+              blockReason={feeBlockReason}
               fundsShortfallDetail={
                 assetPreviewRevertCause === 'balance'
                   ? "This account doesn't hold enough of the asset this transaction spends."
@@ -414,7 +470,13 @@ export const TransactionDialog = ({
                 disabled={!canConfirm}
                 className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
               >
-                {blockReason === 'funds' ? 'Insufficient Funds' : isProcessing ? 'Processing...' : 'Confirm'}
+                {blockReason === 'funds' && !permissionProblem
+                  ? 'Insufficient Funds'
+                  : isProcessing
+                    ? 'Processing...'
+                    : isPermissioned
+                      ? 'Execute'
+                      : 'Confirm'}
               </Button>
             </div>
           </div>

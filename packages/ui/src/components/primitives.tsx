@@ -58,20 +58,27 @@ export function PartyRow({
   value,
   address,
   avatarUrl,
+  badge,
 }: {
   label: string;
   value: string;
   address: string;
   avatarUrl?: string;
+  /** Pinned to the avatar's corner — marks this party as acting under a delegation. */
+  badge?: React.ReactNode;
 }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="size-7 flex-none rounded-[8px]" />
+      <span className="relative inline-flex flex-none">
+        <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="size-7 flex-none rounded-[8px]" />
+        {badge}
+      </span>
       <div className="min-w-0 flex-1">
         <Eyebrow>{label}</Eyebrow>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
           <p className="text-foreground truncate font-mono text-[12px] font-medium">{value}</p>
-          <CopyButton value={address} size={13} label="Copy address" />
+          {/* Nothing to copy while the address is still resolving, or never resolved. */}
+          {address && <CopyButton value={address} size={13} label="Copy address" />}
         </div>
       </div>
     </div>

@@ -1,6 +1,5 @@
 'use client';
 
-import { ANY_FN_SEL, ANY_TARGET } from '@jaw.id/core';
 import { TriangleAlert } from 'lucide-react';
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { AccountAvatar } from '../AccountAvatar';
@@ -9,19 +8,11 @@ import { Skeleton } from '../ui/skeleton';
 import { CopyButton } from '../CopyButton';
 import { Eyebrow } from '../primitives';
 import { isNativeToken } from '../../utils/tokenBalance';
+import { isWildcard } from '../../utils/permissionExecution';
 import { getDisplayAddress } from '../../utils';
 import type { CallPermission, SpendPermission } from './types';
 
-/**
- * The permission-manager sentinels standing for "unrestricted". One list so a target wildcard
- * and a selector wildcard can never be treated differently — an unbounded grant is the most
- * dangerous thing on this screen and must always read the same way.
- */
-const WILDCARDS = [ANY_TARGET, ANY_FN_SEL].map((v) => v.toLowerCase());
-
-export function isWildcard(value?: string): boolean {
-  return !!value && WILDCARDS.includes(value.toLowerCase());
-}
+export { isWildcard };
 
 /**
  * The allowance period as a rate suffix, so it reads on one line with the amount:

@@ -1,6 +1,7 @@
 import { FeeTokenOption } from '../FeeTokenSelector';
 import { AssetDelta } from '../../utils/assetPreview';
 import { RevertCause } from '../../utils/transactionFailure';
+import { PermissionProblem } from '../../utils/permissionExecution';
 
 export interface TransactionData {
   to: string;
@@ -36,6 +37,16 @@ export interface TransactionDialogProps {
   assetPreviewWillRevert?: boolean;
   /** Why the simulation reverted, when known — lets a balance shortfall read as insufficient funds. */
   assetPreviewRevertCause?: RevertCause;
+
+  /**
+   * Permissioned execution (`capabilities.permissions.id`): the granter whose assets move, while
+   * `walletAddress` is the spender that signs and pays the gas. Absent for an ordinary transaction.
+   */
+  onBehalfOf?: string;
+  /** The granter is still being fetched — the row shows a placeholder rather than blocking. */
+  onBehalfOfLoading?: boolean;
+  /** A permission problem that makes this execution a certain revert. */
+  permissionProblem?: PermissionProblem | null;
 
   // Actions
   onConfirm: () => Promise<void>;

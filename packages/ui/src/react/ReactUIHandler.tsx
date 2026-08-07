@@ -57,6 +57,7 @@ import {
 import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
+import { usePermissionExecution } from '../hooks/usePermissionExecution';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getSiweOriginWarning, isSiweMessage, parseSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
@@ -1438,13 +1439,28 @@ function TransactionDialogWrapper({
   const permissionId = request.data.capabilities?.permissions?.id as Hex | undefined;
 
   const {
+    onBehalfOf,
+    loading: onBehalfOfLoading,
+    problem: permissionProblem,
+  } = usePermissionExecution({
+    permissionId,
+    apiKey,
+    chainId,
+    from: request.data.from as Address | undefined,
+    calls: transactionCalls,
+  });
+
+  const {
     assetsOut,
     assetsIn,
     error: assetPreviewError,
     willRevert: assetPreviewWillRevert,
     revertCause: assetPreviewRevertCause,
   } = useAssetPreview({
-    account: request.data.from,
+    // Under a permission the calls execute as the granter, so the balance changes are theirs.
+    // Left undefined until the granter resolves: simulating from the spender would preview the
+    // wrong account, and a shortfall there would briefly read as "Insufficient funds".
+    account: permissionId ? onBehalfOf : (request.data.from as Address | undefined),
     calls: transactionCalls,
     chainId,
     apiKey,
@@ -1702,6 +1718,9 @@ function TransactionDialogWrapper({
       assetPreviewError={assetPreviewError}
       assetPreviewWillRevert={assetPreviewWillRevert}
       assetPreviewRevertCause={assetPreviewRevertCause}
+      onBehalfOf={onBehalfOf}
+      onBehalfOfLoading={onBehalfOfLoading}
+      permissionProblem={permissionProblem}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
