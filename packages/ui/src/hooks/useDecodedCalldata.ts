@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
-import { createPublicClient, decodeFunctionData, http, type Abi, type Hex } from 'viem';
+import { decodeFunctionData, type Abi, type Hex } from 'viem';
 import { whatsabi } from '@shazow/whatsabi';
-import { JAW_RPC_URL } from '@jaw.id/core';
+import { getPublicClient, jawRpcUrl } from '../utils/publicClient';
 import {
   applyFormat,
   createTokenResolver,
@@ -42,7 +42,7 @@ export interface DecodeResult {
 const abiCache = new Map<string, Abi>();
 const abiInflight = new Map<string, Promise<Abi>>();
 
-async function fetchAbi(address: string, rpcUrl: string): Promise<Abi> {
+async function fetchAbi(address: string, rpcUrl: string, chainId: number): Promise<Abi> {
   const key = address.toLowerCase();
   const cached = abiCache.get(key);
   if (cached) return cached;
@@ -51,7 +51,7 @@ async function fetchAbi(address: string, rpcUrl: string): Promise<Abi> {
   if (existing) return existing;
 
   const promise = (async () => {
-    const client = createPublicClient({ transport: http(rpcUrl) });
+    const client = getPublicClient(chainId, rpcUrl);
     const result = await whatsabi.autoload(address, {
       provider: client,
       followProxies: true,
@@ -78,9 +78,9 @@ function formatParamValue(value: unknown): string {
   return String(value);
 }
 
-async function rawDecode(to: string, data: string, rpcUrl: string): Promise<DecodedCalldata | null> {
+async function rawDecode(to: string, data: string, rpcUrl: string, chainId: number): Promise<DecodedCalldata | null> {
   try {
-    const abi = await fetchAbi(to, rpcUrl);
+    const abi = await fetchAbi(to, rpcUrl, chainId);
     const { functionName, args } = decodeFunctionData({ abi, data: data as Hex });
     const abiItem = abi.find((item) => 'name' in item && item.name === functionName && item.type === 'function');
     const inputs = abiItem && 'inputs' in abiItem ? (abiItem.inputs ?? []) : [];
@@ -141,7 +141,7 @@ export function useDecodedCalldata(
     let cancelled = false;
     setResult(LOADING);
 
-    const rpcUrl = apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`;
+    const rpcUrl = jawRpcUrl(chainId, apiKey);
 
     // Both pipelines run in parallel so the "Show raw details" disclosure is instant when opened.
     // Only the clear-signed side can reject (applyFormat rethrows unexpected formatter errors);
@@ -151,7 +151,7 @@ export function useDecodedCalldata(
         console.debug('[useDecodedCalldata] clear-signed decode failed:', err);
         return null;
       }),
-      rawDecode(to, data, rpcUrl),
+      rawDecode(to, data, rpcUrl, chainId),
     ])
       .then(([clearSigned, decoded]) => {
         if (!cancelled) setResult({ clearSigned, decoded, isLoading: false });

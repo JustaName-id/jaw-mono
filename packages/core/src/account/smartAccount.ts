@@ -154,6 +154,10 @@ export const getBundlerClient = (
     const publicClient = createPublicClient({
         chain: viemChain,
         transport: http(chain.rpcUrl),
+        // Collapse same-tick eth_calls into one Multicall3 aggregate3. See the
+        // note in store/chain-clients/utils.ts for why this is preferred over
+        // transport-level HTTP batching.
+        batch: { multicall: true },
     });
 
     // Priority: overrides (from capabilities) > chain config (from SDK config)
@@ -198,6 +202,7 @@ async function prepareEip7702Calls(
     const publicClient = createPublicClient({
         chain: SUPPORTED_CHAINS.find((c) => c.id === chain.id),
         transport: http(chain.rpcUrl),
+        batch: { multicall: true },
     });
 
     const implementationAddress = await readContract(publicClient, {

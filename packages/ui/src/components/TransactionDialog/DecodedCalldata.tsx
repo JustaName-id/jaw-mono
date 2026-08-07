@@ -139,8 +139,10 @@ export const DecodedCalldataView = ({
     const unique = [...new Set(addressParams)];
     if (unique.length === 0) return;
 
-    // Mark as attempted immediately to prevent re-fetching
+    // Mark as attempted immediately to prevent re-fetching. An attempt only "counts"
+    // once it lands — see the cleanup, which un-marks anything still in flight.
     unique.forEach((addr) => attemptedRef.current.add(addr.toLowerCase()));
+    const unmark = () => unique.forEach((addr) => attemptedRef.current.delete(addr.toLowerCase()));
 
     let cancelled = false;
     reverseResolveWithAvatars(
@@ -166,9 +168,14 @@ export const DecodedCalldataView = ({
           setLocalAvatars((prev) => ({ ...prev, ...avatarByAddress }));
         }
       })
-      .catch(() => undefined);
+      .catch(unmark);
     return () => {
       cancelled = true;
+      // This run will never write its result, so its "attempted" marks must not
+      // outlive it — otherwise the next run (a StrictMode re-invoke, or a chainId
+      // change) filters every address out as already-tried and resolution is
+      // blocked for good.
+      unmark();
     };
   }, [decoded, mainnetRpcUrl, chainId]);
 

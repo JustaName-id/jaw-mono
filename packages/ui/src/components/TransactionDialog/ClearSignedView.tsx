@@ -100,7 +100,9 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
     const unique = [...new Set(addresses)].filter((a) => !attemptedRef.current.has(`${chainId}:${a}`));
     if (unique.length === 0) return;
 
+    // An attempt only "counts" once it lands — the cleanup un-marks anything still in flight.
     unique.forEach((a) => attemptedRef.current.add(`${chainId}:${a}`));
+    const unmark = () => unique.forEach((a) => attemptedRef.current.delete(`${chainId}:${a}`));
 
     let cancelled = false;
     reverseResolveWithAvatars(
@@ -134,9 +136,13 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
           setAvatars((prev) => ({ ...prev, ...nextAvatars }));
         }
       })
-      .catch(() => undefined);
+      .catch(unmark);
     return () => {
       cancelled = true;
+      // This run will never write its result, so its "attempted" marks must not
+      // outlive it — otherwise the next run filters every address out as
+      // already-tried and resolution is blocked for good.
+      unmark();
     };
   }, [display, mainnetRpcUrl, chainId]);
 

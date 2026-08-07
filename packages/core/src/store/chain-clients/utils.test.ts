@@ -180,6 +180,43 @@ describe('chain-clients/utils', () => {
         expect(getBundlerClient(arbitrumSepolia.id)?.pollingInterval).toBe(500);
     });
 
+    // The synthesized chain must carry viem's `contracts` through, or the client's
+    // `batch.multicall` has no Multicall3 address to aggregate through and silently
+    // degrades to one request per eth_call.
+    it('should carry the Multicall3 address through to the public client', () => {
+        createClients([
+            {
+                id: sepolia.id,
+                rpcUrl: sepolia.rpcUrls.default.http[0],
+                nativeCurrency: {
+                    name: sepolia.nativeCurrency.name,
+                    symbol: sepolia.nativeCurrency.symbol,
+                    decimal: sepolia.nativeCurrency.decimals,
+                },
+            },
+        ]);
+
+        const client = getClient(sepolia.id);
+        expect(client?.chain?.contracts?.multicall3?.address).toBe(sepolia.contracts.multicall3.address);
+        expect(client?.batch?.multicall).toBe(true);
+    });
+
+    it('should leave a chain viem does not know without multicall config', () => {
+        const unknownChainId = 999_999;
+
+        createClients([
+            {
+                id: unknownChainId,
+                rpcUrl: 'https://rpc.example/unknown',
+                nativeCurrency: { name: 'Unknown', symbol: 'UNK', decimal: 18 },
+            },
+        ]);
+
+        // No contracts to carry over; viem swallows the missing-address lookup and
+        // issues plain eth_calls, so enabling the batch option stays safe.
+        expect(getClient(unknownChainId)?.chain?.contracts).toBeUndefined();
+    });
+
     it('should leave the polling interval at viem default for chains with no known blockTime', () => {
         // sepolia carries no blockTime in viem, so behaviour is unchanged there.
         expect(sepolia.blockTime).toBeUndefined();

@@ -1,16 +1,15 @@
 import {
-  createPublicClient,
   decodeFunctionResult,
   encodeFunctionData,
   ethAddress,
   formatUnits,
   hexToBigInt,
-  http,
   zeroAddress,
   type Address,
 } from 'viem';
 import { simulateBlocks, simulateCalls } from 'viem/actions';
-import { JAW_RPC_URL, type TransactionCall } from '@jaw.id/core';
+import { type TransactionCall } from '@jaw.id/core';
+import { getJawPublicClient } from './publicClient';
 import { deriveTransferDeltas, type SimulatedLog } from './transferDeltas';
 import { subscriptDecimal } from './displayFormat';
 import { classifyRevert, type RevertCause } from './transactionFailure';
@@ -78,21 +77,6 @@ export function formatAssetAmount(amountFormatted: string): string {
   return amountFormatter.format(n);
 }
 
-function jawRpcUrl(chainId: number, apiKey?: string): string {
-  return apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`;
-}
-
-const clientCache = new Map<string, ReturnType<typeof createPublicClient>>();
-function getClient(chainId: number, apiKey?: string) {
-  const key = `${chainId}:${apiKey ?? ''}`;
-  let client = clientCache.get(key);
-  if (!client) {
-    client = createPublicClient({ transport: http(jawRpcUrl(chainId, apiKey)) });
-    clientCache.set(key, client);
-  }
-  return client;
-}
-
 const ERC721_INTERFACE_ID = '0x80ac58cd' as const;
 const erc165Abi = [
   {
@@ -147,7 +131,7 @@ export async function simulateAssetChanges({
   account: Address;
   calls: TransactionCall[];
 }): Promise<AssetSimulationResult> {
-  const client = getClient(chainId, apiKey);
+  const client = getJawPublicClient(chainId, apiKey);
   const normalizedCalls = calls.map((c) => ({
     to: c.to as Address,
     value: c.value === undefined ? undefined : typeof c.value === 'string' ? BigInt(c.value) : c.value,
