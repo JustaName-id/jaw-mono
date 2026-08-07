@@ -23,6 +23,7 @@ import {
   JAW_PAYMASTER_URL,
   JAW_RPC_URL,
   type FeeTokenCapability,
+  SUPPORTED_CHAINS,
 } from '@jaw.id/core';
 
 // Transaction execution result
@@ -163,6 +164,13 @@ export const TransactionModal = ({
     }
   }, [chain, resetModalState]);
 
+  // The viem chain for this network — carries multicall3, so concurrent balance reads collapse
+  // into a single eth_call instead of one request per fee token.
+  const viemChain = useMemo(() => {
+    if (!chain?.id) return undefined;
+    return SUPPORTED_CHAINS.find((c) => c.id === chain.id);
+  }, [chain?.id]);
+
   // Extract paymasterUrl from capabilities (EIP-5792 paymasterService capability)
   // Priority: capabilities.paymasterService.url > chain.paymaster.url
   const effectivePaymasterUrl = useMemo(() => {
@@ -300,7 +308,7 @@ export const TransactionModal = ({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl, viemChain);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)

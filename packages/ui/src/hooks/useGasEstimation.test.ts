@@ -77,9 +77,12 @@ const usdtEstimate = { ...usdcEstimate, tokenAddress: USDT };
 let hook: UseGasEstimationResult;
 let tokensNow: FeeTokenOption[];
 
+let setTokensExternally: (tokens: FeeTokenOption[]) => void;
+
 function Probe({ account, initialTokens }: { account: Account; initialTokens: FeeTokenOption[] }) {
   const [tokens, setTokens] = useState(initialTokens);
   tokensNow = tokens;
+  setTokensExternally = setTokens;
   hook = useGasEstimation({
     account,
     transactionCalls: CALLS,
@@ -99,6 +102,10 @@ async function mount(account: Account, initialTokens: FeeTokenOption[]) {
     root!.render(createElement(Probe, { account, initialTokens }));
   });
   await settle();
+}
+
+async function flush() {
+  for (let i = 0; i < 20; i++) await act(() => Promise.resolve());
 }
 
 async function settle() {
@@ -249,5 +256,39 @@ describe('useGasEstimation fee-token selection', () => {
 
     expect(hook.gasEstimationError).toBe('');
     expect(hook.selectedFeeToken?.symbol).toBe('USDT');
+  });
+
+  // The ETH estimate depends on the calls, never on the fee-token list. These pin that a later
+  // token list reuses it, and that every path which invalidates the fee re-measures instead.
+  describe('ETH estimate reuse', () => {
+    it('does not re-measure when only the fee-token list changed', async () => {
+      erc20Mock.mockResolvedValue([usdcEstimate]);
+      const calc = vi.fn(async () => '0.0001');
+      await mount(makeAccount(calc), [nativeEth(1n)]);
+
+      expect(calc).toHaveBeenCalledTimes(1);
+      expect(hook.gasFee).toBe('0.0001');
+
+      // Balances land, introducing an ERC-20 — this is what re-triggers estimation.
+      await act(async () => setTokensExternally([nativeEth(1n), token({})]));
+      await flush();
+
+      expect(calc).toHaveBeenCalledTimes(1);
+      expect(hook.gasFee).toBe('0.0001');
+    });
+
+    it('re-measures on refetch', async () => {
+      erc20Mock.mockResolvedValue([usdcEstimate]);
+      const calc = vi.fn(async () => '0.0001');
+      await mount(makeAccount(calc), [nativeEth(1n)]);
+      expect(calc).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        hook.refetch();
+      });
+      await flush();
+
+      expect(calc).toHaveBeenCalledTimes(2);
+    });
   });
 });

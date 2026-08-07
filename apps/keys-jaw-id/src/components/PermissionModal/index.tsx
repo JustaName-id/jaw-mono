@@ -537,7 +537,7 @@ export const PermissionModal = ({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl, viemChain ?? undefined);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)

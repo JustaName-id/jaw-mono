@@ -1541,7 +1541,7 @@ function TransactionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl, viemChain);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -1906,7 +1906,7 @@ function SendTransactionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl, viemChain);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -2374,7 +2374,7 @@ function PermissionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.address, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.address, rpcUrl, viemChain);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -2961,7 +2961,12 @@ function RevokePermissionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.address as Address, rpcUrl);
+              const balance = await fetchTokenBalance(
+                token.address,
+                request.data.address as Address,
+                rpcUrl,
+                viemChain
+              );
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
