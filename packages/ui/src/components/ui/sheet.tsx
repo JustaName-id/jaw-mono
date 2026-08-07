@@ -9,30 +9,29 @@ import { cn, PortalContainerContext } from '../../lib/utils';
 function Sheet({ open, ...props }: React.ComponentProps<typeof SheetPrimitive.Root>) {
   const prevOpenRef = React.useRef(open);
 
-  // Cleanup pointer-events when sheet closes OR unmounts
+  // Cleanup pointer-events when sheet closes: wait out the close animation
+  // (300ms duration-300) plus buffer. The timer is cancelled if the sheet
+  // reopens or unmounts first — the unmount effect below takes over then.
   React.useEffect(() => {
-    // Track when sheet transitions from open to closed
-    if (prevOpenRef.current === true && open === false) {
-      // Wait for close animation to complete (300ms duration-300) plus buffer
-      const cleanup = setTimeout(() => {
-        document.body.style.removeProperty('pointer-events');
-      }, 350);
-
-      prevOpenRef.current = open;
-      return () => clearTimeout(cleanup);
-    }
-
+    const closing = prevOpenRef.current === true && open === false;
     prevOpenRef.current = open;
+    if (!closing) return;
 
-    // Cleanup on unmount - remove pointer-events if sheet was open
-    return () => {
-      if (open === true) {
-        setTimeout(() => {
-          document.body.style.removeProperty('pointer-events');
-        }, 350);
-      }
-    };
+    const cleanup = setTimeout(() => {
+      document.body.style.removeProperty('pointer-events');
+    }, 350);
+    return () => clearTimeout(cleanup);
   }, [open]);
+
+  // Cleanup on unmount. Synchronous, not a timer: the node is gone instantly so
+  // there is no animation to wait for, and a timer here would outlive the
+  // component with no way to cancel it (it also covers a close immediately
+  // followed by an unmount, which cancels the close-path timer above).
+  React.useEffect(() => {
+    return () => {
+      document.body.style.removeProperty('pointer-events');
+    };
+  }, []);
 
   return <SheetPrimitive.Root data-slot="sheet" open={open} {...props} />;
 }
