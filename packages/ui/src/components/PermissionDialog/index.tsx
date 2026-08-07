@@ -9,7 +9,6 @@ import { DialogAppHeader } from '../DialogAppHeader';
 import { NetworkFeeRow } from '../NetworkFeeRow';
 import { AppAvatar } from '../AppAvatar';
 import { AccountAvatar } from '../AccountAvatar';
-import { PartyRow } from '../primitives';
 import { CopyButton } from '../CopyButton';
 import { useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
@@ -17,6 +16,7 @@ import { getChainLabel } from '../../utils/resolveChainLabel';
 import { getDisplayAddress } from '../../utils';
 import { resolveBlockReason } from '../../utils/transactionFailure';
 import { PermissionDialogProps } from './types';
+import { PartyRow } from '../primitives';
 import { AllowedCalls, MetaCard, SpendLimits, isWildcard } from './Sections';
 
 export const PermissionDialog = ({
@@ -165,6 +165,74 @@ export const PermissionDialog = ({
   const truncateAddress = (address: string) => getDisplayAddress(undefined, address);
   const hasError = !!status && status.includes('Error');
 
+  // Grant leads with who you're granting to. Revoke leads with the permission's own id, and the
+  // spender becomes a detail row alongside From/Until.
+  const spenderCard = (
+    <div className="border-border rounded-[10.5px] border p-3">
+      <PartyRow
+        label="For"
+        value={spenderAddress ? displayAddress(spenderAddress) : 'Loading…'}
+        address={spenderAddress}
+        avatarUrl={resolvedAvatars[spenderAddress]}
+      />
+    </div>
+  );
+
+  const spenderRow = {
+    label: 'Spender',
+    value: spenderAddress ? (
+      <>
+        <AccountAvatar
+          seed={spenderAddress}
+          avatarUrl={resolvedAvatars[spenderAddress]}
+          size={15}
+          className="size-[15px] flex-none rounded-[4.5px]"
+        />
+        <span className="truncate">{displayAddress(spenderAddress)}</span>
+        <CopyButton value={spenderAddress} size={11} label="Copy spender address" />
+      </>
+    ) : (
+      <span className="text-muted-foreground">Loading…</span>
+    ),
+  };
+
+  const permissionIdRow = permissionId
+    ? {
+        label: 'permissionId',
+        value: (
+          <>
+            <span className="truncate">{truncateAddress(permissionId)}</span>
+            <CopyButton value={permissionId} size={11} label="Copy permission ID" />
+          </>
+        ),
+      }
+    : null;
+
+  const fromRow = accountAddress
+    ? {
+        label: 'From',
+        value: (
+          <>
+            <AccountAvatar
+              seed={accountAddress}
+              avatarUrl={resolvedAvatars[accountAddress]}
+              size={15}
+              className="size-[15px] flex-none rounded-[4.5px]"
+            />
+            <span className="truncate">{displayAddress(accountAddress)}</span>
+            <CopyButton value={accountAddress} size={11} label="Copy account address" />
+          </>
+        ),
+      }
+    : null;
+
+  const metaRows = [
+    ...(fromRow ? [fromRow] : []),
+    ...(isGrant ? [] : [spenderRow]),
+    ...(grantedDate ? [{ label: 'Granted', value: grantedDate }] : []),
+    ...(expiryDate ? [{ label: 'Until', value: expiryDate }] : []),
+  ];
+
   return (
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
       {isProcessing ? (
@@ -200,15 +268,7 @@ export const PermissionDialog = ({
               </div>
             )}
 
-            {/* Who the permission is for */}
-            <div className="border-border rounded-[10.5px] border p-3">
-              <PartyRow
-                label="For"
-                value={displayAddress(spenderAddress)}
-                address={spenderAddress}
-                avatarUrl={resolvedAvatars[spenderAddress]}
-              />
-            </div>
+            {isGrant ? spenderCard : permissionIdRow && <MetaCard rows={[permissionIdRow]} />}
 
             {spends.length > 0 && (
               <SpendLimits
@@ -219,44 +279,7 @@ export const PermissionDialog = ({
               />
             )}
 
-            <MetaCard
-              rows={[
-                ...(accountAddress
-                  ? [
-                      {
-                        label: 'From',
-                        value: (
-                          <>
-                            <AccountAvatar
-                              seed={accountAddress}
-                              avatarUrl={resolvedAvatars[accountAddress]}
-                              size={15}
-                              className="size-[15px] flex-none rounded-[4.5px]"
-                            />
-                            <span className="truncate">{displayAddress(accountAddress)}</span>
-                            <CopyButton value={accountAddress} size={11} label="Copy account address" />
-                          </>
-                        ),
-                      },
-                    ]
-                  : []),
-                ...(grantedDate ? [{ label: 'Granted', value: grantedDate }] : []),
-                ...(expiryDate ? [{ label: 'Until', value: expiryDate }] : []),
-                ...(permissionId
-                  ? [
-                      {
-                        label: 'permissionId',
-                        value: (
-                          <>
-                            <span className="truncate">{truncateAddress(permissionId)}</span>
-                            <CopyButton value={permissionId} size={11} label="Copy permission ID" />
-                          </>
-                        ),
-                      },
-                    ]
-                  : []),
-              ]}
-            />
+            {metaRows.length > 0 && <MetaCard rows={metaRows} />}
 
             {calls.length > 0 && (
               <AllowedCalls

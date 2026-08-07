@@ -3093,7 +3093,8 @@ function RevokePermissionDialogWrapper({
   }, [fetchedPermissionData]);
 
   // Spender address from fetched permission
-  const spenderAddress = fetchedPermissionData?.spender || '0x...';
+  // Empty until the relay responds — the dialog shows a placeholder row rather than a fake address.
+  const spenderAddress = fetchedPermissionData?.spender ?? '';
 
   const handleConfirm = async () => {
     if (!account) {
@@ -3145,6 +3146,7 @@ function RevokePermissionDialogWrapper({
       mode="revoke"
       permissionId={request.data.permissionId}
       spenderAddress={spenderAddress}
+      accountAddress={request.data.address}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={formattedSpends}
       calls={formattedCalls}
