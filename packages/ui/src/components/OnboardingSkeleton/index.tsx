@@ -27,8 +27,10 @@ export function OnboardingSkeleton() {
       <div className="flex flex-col p-6 pt-7">
         {/* "Welcome back." — h2 at 26px/leading-none */}
         <Skeleton className="h-[26px] w-48 rounded" />
-        {/* "Pick up where you left off." — 13px, mt-2 */}
-        <Skeleton className="mt-2.5 h-3 w-40 rounded" />
+        {/* "Pick up where you left off." — 13px x 1.5 = 19.5px row, mt-2 */}
+        <div className="mt-2 flex h-[19.5px] items-center">
+          <Skeleton className="h-3 w-40 rounded" />
+        </div>
 
         {/* The primary "Continue as" tile. Filled with bg-primary exactly like
             the real one, so the reveal changes content, never the tile itself.
@@ -46,9 +48,11 @@ export function OnboardingSkeleton() {
           <Skeleton className="bg-primary-foreground/10 h-4 w-4 flex-none rounded" />
         </div>
 
-        {/* The "or" divider, hairline only — its label is text. Same geometry as
-            MonoDivider so the rows above and below keep their spacing. */}
-        <div className="my-5 flex items-center gap-2.5">
+        {/* The "or" divider, hairline only — its label is text. MonoDivider's
+            row is as tall as that label's line box (9px x 1.5), not as tall as
+            the hairline, so the height is reserved explicitly: without it this
+            row swallows 12.5px and the rows below it ride up. */}
+        <div className="my-5 flex h-[13.5px] items-center gap-2.5">
           <span className="bg-border h-px flex-1" />
           <span className="bg-border h-px w-4 flex-none" />
           <span className="bg-border h-px flex-1" />
@@ -56,8 +60,12 @@ export function OnboardingSkeleton() {
 
         {/* "Switch account" — h-11 secondary button */}
         <Skeleton className="h-11 w-full rounded-[10.5px]" />
-        {/* "Create new account" — centered text link */}
-        <Skeleton className="mx-auto mt-4 h-3 w-28 rounded" />
+        {/* "Create new account" — centered text-xs link. h-4, NOT 12 x 1.5:
+            Tailwind's named sizes ship their own line-height (text-xs is
+            12px/16px), so only the arbitrary sizes above inherit the 1.5. */}
+        <div className="mt-4 flex h-4 items-center justify-center">
+          <Skeleton className="h-3 w-28 rounded" />
+        </div>
       </div>
     </DialogShell>
   );

@@ -58,4 +58,39 @@ describe('OnboardingSkeleton', () => {
     // would make the reveal jump.
     expect(skeletonClasses(markup()).length).toBeGreaterThanOrEqual(6);
   });
+
+  /**
+   * Every text row must reserve its *line box*, not its ink.
+   *
+   * A bar is only as tall as itself, but the row it stands in for is as tall
+   * as the line box of the text that lands there. Tailwind v3 emits font-size
+   * only for arbitrary `text-[Npx]` sizes, so those rows inherit
+   * `line-height: 1.5` (packages/ui/src/styles.css:210 for the embedded
+   * dialog, apps/keys-jaw-id/src/app/global.css:87 standalone). Sizing the
+   * rows by their bars instead left the card 22px short, so it grew on reveal.
+   *
+   * These assertions are class-string based: the suite renders through
+   * renderToStaticMarkup with no layout engine, so the heights themselves
+   * can't be measured here — what is pinned is that each row carries an
+   * explicit box.
+   */
+  it("reserves the subtitle's line box (13px x 1.5), not the bar's 12px", () => {
+    // <p class="text-muted-foreground mt-2 text-[13px]"> in the real card.
+    expect(markup()).toContain('h-[19.5px]');
+  });
+
+  it("reserves the divider label's line box (9px x 1.5), not the hairline's 1px", () => {
+    // MonoDivider's row is as tall as its text-[9px] "or" label; the skeleton
+    // draws only the rule, so without an explicit box it swallows 12.5px.
+    expect(markup()).toContain('h-[13.5px]');
+  });
+
+  it("reserves the create-account link at text-xs's own 16px leading, not 12 x 1.5", () => {
+    // The gotcha: named Tailwind sizes ship a paired line-height (text-xs is
+    // 12px/16px), so only the arbitrary sizes above inherit the 1.5. Sizing
+    // this row 18px overshoots the card by 2px.
+    const linkRow = markup().match(/<div class="([^"]*justify-center[^"]*)"/)?.[1] ?? '';
+    expect(linkRow).toMatch(/(^|\s)h-4(\s|$)/);
+    expect(markup()).not.toContain('h-[18px]');
+  });
 });
