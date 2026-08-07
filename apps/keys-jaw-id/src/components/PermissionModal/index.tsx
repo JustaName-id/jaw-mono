@@ -1,8 +1,15 @@
 'use client';
 
-import { PermissionDialog, useGasEstimation, type FeeTokenOption, fetchTokenBalance, isNativeToken } from '@jaw.id/ui';
+import {
+  PermissionDialog,
+  useGasEstimation,
+  type FeeTokenOption,
+  fetchTokenBalance,
+  getPublicClient,
+  isNativeToken,
+} from '@jaw.id/ui';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { formatUnits, erc20Abi, createPublicClient, http, type Address } from 'viem';
+import { formatUnits, erc20Abi, type Address } from 'viem';
 import { getChainNameFromId } from '../../lib/chain-handlers';
 import { useSessionAccount } from '../../hooks';
 import {
@@ -563,7 +570,7 @@ export const PermissionModal = ({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl, chain?.id);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -631,54 +638,48 @@ export const PermissionModal = ({
       // Get unique token addresses
       const uniqueTokens = Array.from(new Set(spendsData.map((spend: any) => spend.token as string))) as string[];
 
-      for (const tokenAddress of uniqueTokens) {
-        // Skip if already fetched
-        if (tokenInfoMap[tokenAddress]) {
-          newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
-          continue;
-        }
+      // Resolved in one pass rather than token-by-token: the shared client folds
+      // every decimals/symbol read issued in this tick into a single Multicall3
+      // request, so N tokens cost one round-trip instead of 2N sequential ones.
+      const publicClient = getPublicClient(chain.id, chain.rpcUrl || '');
 
-        // If native token, use ETH defaults
-        if (isNativeToken(tokenAddress)) {
-          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
-          continue;
-        }
+      await Promise.all(
+        uniqueTokens.map(async (tokenAddress) => {
+          // Skip if already fetched
+          if (tokenInfoMap[tokenAddress]) {
+            newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
+            return;
+          }
 
-        // Fetch ERC-20 token info
-        try {
-          const publicClient = createPublicClient({
-            chain: {
-              id: chain.id,
-              name: networkName,
-              nativeCurrency: { name: 'Ether', symbol: 'ETH', decimals: 18 },
-              rpcUrls: {
-                default: { http: [chain.rpcUrl || ''] },
-                public: { http: [chain.rpcUrl || ''] },
-              },
-            },
-            transport: http(chain.rpcUrl),
-          });
+          // If native token, use ETH defaults
+          if (isNativeToken(tokenAddress)) {
+            newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
+            return;
+          }
 
-          const [decimals, symbol] = await Promise.all([
-            publicClient.readContract({
-              address: tokenAddress as Address,
-              abi: erc20Abi,
-              functionName: 'decimals',
-            }),
-            publicClient.readContract({
-              address: tokenAddress as Address,
-              abi: erc20Abi,
-              functionName: 'symbol',
-            }),
-          ]);
+          // Fetch ERC-20 token info
+          try {
+            const [decimals, symbol] = await Promise.all([
+              publicClient.readContract({
+                address: tokenAddress as Address,
+                abi: erc20Abi,
+                functionName: 'decimals',
+              }),
+              publicClient.readContract({
+                address: tokenAddress as Address,
+                abi: erc20Abi,
+                functionName: 'symbol',
+              }),
+            ]);
 
-          newTokenInfoMap[tokenAddress] = { decimals, symbol };
-        } catch (error) {
-          console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
-          // Fallback to showing the token address
-          newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: tokenAddress };
-        }
-      }
+            newTokenInfoMap[tokenAddress] = { decimals, symbol };
+          } catch (error) {
+            console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
+            // Fallback to showing the token address
+            newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: tokenAddress };
+          }
+        })
+      );
 
       if (isMounted) {
         setTokenInfoMap((prev) => ({ ...prev, ...newTokenInfoMap }));
@@ -691,7 +692,7 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, spendsData, networkName]);
+  }, [chain, spendsData]);
 
   const handleConfirm = useCallback(async () => {
     try {

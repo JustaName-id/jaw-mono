@@ -100,9 +100,15 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
     const unique = [...new Set(addresses)].filter((a) => !attemptedRef.current.has(`${chainId}:${a}`));
     if (unique.length === 0) return;
 
+    // An attempt only "counts" once it lands — the cleanup un-marks anything still in flight.
     unique.forEach((a) => attemptedRef.current.add(`${chainId}:${a}`));
+    const unmark = () => unique.forEach((a) => attemptedRef.current.delete(`${chainId}:${a}`));
 
     let cancelled = false;
+    // Set once this run's result has landed. After that the attempt "counts" — including
+    // for addresses that resolved to no name — so the cleanup must leave the marks alone
+    // or every unresolvable address gets re-queried on the next run.
+    let wrote = false;
     reverseResolveWithAvatars(
       unique.map((address) => ({ address, chainId })),
       mainnetRpcUrl
@@ -111,6 +117,7 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
         if (cancelled) return;
         const label = await getChainLabel(chainId, mainnetRpcUrl);
         if (cancelled) return;
+        wrote = true;
         const nextResolved: Record<string, string> = {};
         const nextAvatars: Record<string, string> = {};
         for (const address of unique) {
@@ -134,9 +141,13 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
           setAvatars((prev) => ({ ...prev, ...nextAvatars }));
         }
       })
-      .catch(() => undefined);
+      .catch(unmark);
     return () => {
       cancelled = true;
+      // If this run never wrote its result, its "attempted" marks must not outlive it —
+      // otherwise the next run filters every address out as already-tried and resolution
+      // is blocked for good.
+      if (!wrote) unmark();
     };
   }, [display, mainnetRpcUrl, chainId]);
 

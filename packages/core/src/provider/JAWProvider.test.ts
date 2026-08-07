@@ -7,7 +7,7 @@ import { standardErrorCodes } from '../errors/index.js';
 import { correlationIds } from '../store/index.js';
 import { fetchRPCRequest, checkErrorForInvalidRequestArgs, buildHandleJawRpcUrl } from '../utils/index.js';
 import { createSigner, loadSignerType, storeSignerType } from '../signer/index.js';
-import { waitForReceiptInBackground } from '../rpc/index.js';
+import { waitForReceiptInBackground, clearCapabilitiesCache } from '../rpc/index.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { isSafari } from '../utils/user-agent.js';
 import type { AppMetadata, ConstructorOptions, RequestArguments } from './interface.js';
@@ -107,6 +107,10 @@ describe('JAWProvider', () => {
     let mockConstructorOptions: ConstructorOptions;
 
     beforeEach(() => {
+        // The capabilities handler memoizes responses at module scope; without this a
+        // case that fetched earlier would serve its result to the next one.
+        clearCapabilitiesCache();
+
         // Setup metadata
         mockMetadata = {
             appName: 'Test App',

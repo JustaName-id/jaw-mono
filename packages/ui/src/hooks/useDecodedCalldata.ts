@@ -1,7 +1,6 @@
 import { useEffect, useState } from 'react';
-import { createPublicClient, decodeFunctionData, http, type Abi, type Hex } from 'viem';
-import { whatsabi } from '@shazow/whatsabi';
-import { JAW_RPC_URL } from '@jaw.id/core';
+import { decodeFunctionData, type Abi, type Hex } from 'viem';
+import { getPublicClient, jawRpcUrl } from '../utils/publicClient';
 import {
   applyFormat,
   createTokenResolver,
@@ -42,8 +41,10 @@ export interface DecodeResult {
 const abiCache = new Map<string, Abi>();
 const abiInflight = new Map<string, Promise<Abi>>();
 
-async function fetchAbi(address: string, rpcUrl: string): Promise<Abi> {
-  const key = address.toLowerCase();
+async function fetchAbi(address: string, rpcUrl: string, chainId: number): Promise<Abi> {
+  // Keyed by chain: with `abiLoader: false` whatsabi derives the ABI from that chain's
+  // bytecode, so the same address on two chains is two different contracts.
+  const key = `${chainId}:${address.toLowerCase()}`;
   const cached = abiCache.get(key);
   if (cached) return cached;
 
@@ -51,7 +52,17 @@ async function fetchAbi(address: string, rpcUrl: string): Promise<Abi> {
   if (existing) return existing;
 
   const promise = (async () => {
-    const client = createPublicClient({ transport: http(rpcUrl) });
+    // Loaded on demand, and nothing needs it for the first paint — a native send never
+    // decodes at all, and a batch's calldata accordions start collapsed. Measured on
+    // `nx build @jaw.id/ui`: it splits out as a 60.09 kB chunk (16.73 kB gzip) and the
+    // entry drops from 655.57 kB to 603.90 kB (192.69 → 178.31 kB gzip). Keeping it out
+    // of the entry chunk matters most for the popup transport, which cannot prewarm.
+    //
+    // `chainId` below is threaded through for the shared-client dedup, not for batching:
+    // whatsabi drives a ViemProvider that calls `transport.request` directly, bypassing
+    // viem's action layer and its multicall scheduler entirely.
+    const { whatsabi } = await import('@shazow/whatsabi');
+    const client = getPublicClient(chainId, rpcUrl);
     const result = await whatsabi.autoload(address, {
       provider: client,
       followProxies: true,
@@ -78,9 +89,9 @@ function formatParamValue(value: unknown): string {
   return String(value);
 }
 
-async function rawDecode(to: string, data: string, rpcUrl: string): Promise<DecodedCalldata | null> {
+async function rawDecode(to: string, data: string, rpcUrl: string, chainId: number): Promise<DecodedCalldata | null> {
   try {
-    const abi = await fetchAbi(to, rpcUrl);
+    const abi = await fetchAbi(to, rpcUrl, chainId);
     const { functionName, args } = decodeFunctionData({ abi, data: data as Hex });
     const abiItem = abi.find((item) => 'name' in item && item.name === functionName && item.type === 'function');
     const inputs = abiItem && 'inputs' in abiItem ? (abiItem.inputs ?? []) : [];
@@ -141,7 +152,7 @@ export function useDecodedCalldata(
     let cancelled = false;
     setResult(LOADING);
 
-    const rpcUrl = apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`;
+    const rpcUrl = jawRpcUrl(chainId, apiKey);
 
     // Both pipelines run in parallel so the "Show raw details" disclosure is instant when opened.
     // Only the clear-signed side can reject (applyFormat rethrows unexpected formatter errors);
@@ -151,7 +162,7 @@ export function useDecodedCalldata(
         console.debug('[useDecodedCalldata] clear-signed decode failed:', err);
         return null;
       }),
-      rawDecode(to, data, rpcUrl),
+      rawDecode(to, data, rpcUrl, chainId),
     ])
       .then(([clearSigned, decoded]) => {
         if (!cancelled) setResult({ clearSigned, decoded, isLoading: false });

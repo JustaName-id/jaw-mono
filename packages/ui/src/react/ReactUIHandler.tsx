@@ -34,7 +34,7 @@ import {
   ensureIntNumber,
   standardErrorCodes,
 } from '@jaw.id/core';
-import { formatUnits, erc20Abi, createPublicClient, http } from 'viem';
+import { formatUnits, erc20Abi } from 'viem';
 import type { Address, Hex } from 'viem';
 import { createSiweMessage } from 'viem/siwe';
 
@@ -57,6 +57,7 @@ import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
+import { getPublicClient } from '../utils/publicClient';
 import { getSiweOriginWarning, isSiweMessage, parseSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
 import type { JawTheme } from '@jaw.id/core';
@@ -1536,7 +1537,7 @@ function TransactionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl, chainId);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -1901,7 +1902,7 @@ function SendTransactionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl, chainId);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -2238,7 +2239,11 @@ function PermissionDialogWrapper({
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
-    if (spendsData.length === 0) {
+    // Bail rather than passing an empty URL down: getPublicClient attaches the chain
+    // definition, so an empty URL would resolve to the chain's public RPC instead of
+    // the proxy. Nothing to read without a configured endpoint.
+    const rpcUrl = chain.rpcUrl;
+    if (spendsData.length === 0 || !rpcUrl) {
       setIsLoadingTokenInfo(false);
       return;
     }
@@ -2252,64 +2257,54 @@ function PermissionDialogWrapper({
       // Get unique token addresses
       const uniqueTokens = Array.from(new Set(spendsData.map((spend) => spend.token))) as string[];
 
-      for (const tokenAddress of uniqueTokens) {
-        // Skip if already fetched
-        if (tokenInfoMap[tokenAddress]) {
-          newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
-          continue;
-        }
+      // Resolved in one pass rather than token-by-token: the shared client folds
+      // every decimals/symbol read issued in this tick into a single Multicall3
+      // request, so N tokens cost one round-trip instead of 2N sequential ones.
+      const publicClient = getPublicClient(chainId, rpcUrl);
 
-        // If native token, use chain's native currency
-        if (isNativeToken(tokenAddress)) {
-          newTokenInfoMap[tokenAddress] = {
-            decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-            symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
-          };
-          continue;
-        }
+      await Promise.all(
+        uniqueTokens.map(async (tokenAddress) => {
+          // Skip if already fetched
+          if (tokenInfoMap[tokenAddress]) {
+            newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
+            return;
+          }
 
-        // Fetch ERC-20 token info
-        try {
-          const publicClient = createPublicClient({
-            chain: {
-              id: chainId,
-              name: networkName,
-              nativeCurrency: viemChain?.nativeCurrency || {
-                name: 'Ether',
-                symbol: 'ETH',
-                decimals: 18,
-              },
-              rpcUrls: {
-                default: { http: [chain.rpcUrl || ''] },
-                public: { http: [chain.rpcUrl || ''] },
-              },
-            },
-            transport: http(chain.rpcUrl),
-          });
+          // If native token, use chain's native currency
+          if (isNativeToken(tokenAddress)) {
+            newTokenInfoMap[tokenAddress] = {
+              decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+              symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
+            };
+            return;
+          }
 
-          const [decimals, symbol] = await Promise.all([
-            publicClient.readContract({
-              address: tokenAddress as Address,
-              abi: erc20Abi,
-              functionName: 'decimals',
-            }),
-            publicClient.readContract({
-              address: tokenAddress as Address,
-              abi: erc20Abi,
-              functionName: 'symbol',
-            }),
-          ]);
+          // Fetch ERC-20 token info
+          try {
+            const [decimals, symbol] = await Promise.all([
+              publicClient.readContract({
+                address: tokenAddress as Address,
+                abi: erc20Abi,
+                functionName: 'decimals',
+              }),
+              publicClient.readContract({
+                address: tokenAddress as Address,
+                abi: erc20Abi,
+                functionName: 'symbol',
+              }),
+            ]);
 
-          newTokenInfoMap[tokenAddress] = { decimals, symbol };
-        } catch (error) {
-          console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
-          // Fallback to showing truncated token address
-          newTokenInfoMap[tokenAddress] = {
-            decimals: 18,
-            symbol: tokenAddress.slice(0, 6) + '...' + tokenAddress.slice(-4),
-          };
-        }
-      }
+            newTokenInfoMap[tokenAddress] = { decimals, symbol };
+          } catch (error) {
+            console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
+            // Fallback to showing truncated token address
+            newTokenInfoMap[tokenAddress] = {
+              decimals: 18,
+              symbol: tokenAddress.slice(0, 6) + '...' + tokenAddress.slice(-4),
+            };
+          }
+        })
+      );
 
       if (isMounted) {
         setTokenInfoMap((prev) => ({ ...prev, ...newTokenInfoMap }));
@@ -2322,7 +2317,7 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [chainId, spendsData, networkName, chain.rpcUrl, viemChain]);
+  }, [chainId, spendsData, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens from capabilities (same pattern as TransactionDialogWrapper)
   useEffect(() => {
@@ -2368,7 +2363,7 @@ function PermissionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.address, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.address, rpcUrl, chainId);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -2894,32 +2889,26 @@ function RevokePermissionDialogWrapper({
         // Fetch token info for spends
         if (permData.spends && permData.spends.length > 0) {
           const newTokenInfoMap: TokenInfoMap = {};
-          for (const spend of permData.spends) {
-            const tokenAddress = spend.token;
-            if (isNativeToken(tokenAddress)) {
-              newTokenInfoMap[tokenAddress] = {
-                decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-                symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
-              };
-            } else {
-              try {
-                const publicClient = createPublicClient({
-                  chain: {
-                    id: chainId,
-                    name: networkName,
-                    nativeCurrency: viemChain?.nativeCurrency || {
-                      name: 'Ether',
-                      symbol: 'ETH',
-                      decimals: 18,
-                    },
-                    rpcUrls: {
-                      default: { http: [chain.rpcUrl || ''] },
-                      public: { http: [chain.rpcUrl || ''] },
-                    },
-                  },
-                  transport: http(chain.rpcUrl),
-                });
+          // One pass over the spends so the shared client can fold every
+          // decimals/symbol read into a single Multicall3 request. Left null when no
+          // endpoint is configured — getPublicClient attaches the chain definition, so
+          // an empty URL would resolve to the chain's public RPC rather than the proxy.
+          // Native spends still resolve below; ERC-20s take the same fallback a failed
+          // read would.
+          const publicClient = chain.rpcUrl ? getPublicClient(chainId, chain.rpcUrl) : null;
 
+          await Promise.all(
+            permData.spends.map(async (spend) => {
+              const tokenAddress = spend.token;
+              if (isNativeToken(tokenAddress)) {
+                newTokenInfoMap[tokenAddress] = {
+                  decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+                  symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
+                };
+                return;
+              }
+              try {
+                if (!publicClient) throw new Error(`No RPC URL configured for chain ${chainId}`);
                 const [decimals, symbol] = await Promise.all([
                   publicClient.readContract({
                     address: tokenAddress as Address,
@@ -2939,8 +2928,8 @@ function RevokePermissionDialogWrapper({
                   symbol: tokenAddress,
                 };
               }
-            }
-          }
+            })
+          );
           setTokenInfoMap(newTokenInfoMap);
         }
         setIsLoadingPermissionDetails(false);
@@ -2951,7 +2940,7 @@ function RevokePermissionDialogWrapper({
     };
 
     fetchPermissionDetails();
-  }, [request.data.permissionId, apiKey, chainId, networkName, chain.rpcUrl, viemChain]);
+  }, [request.data.permissionId, apiKey, chainId, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens for ERC-20 paymaster support
   useEffect(() => {
@@ -2990,7 +2979,7 @@ function RevokePermissionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.address as Address, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.address as Address, rpcUrl, chainId);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)

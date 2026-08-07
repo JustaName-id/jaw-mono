@@ -1,3 +1,4 @@
+export * from './publicClient';
 export * from './justaNameInstance';
 export * from './reverseResolve';
 export * from './tokenPrice';
