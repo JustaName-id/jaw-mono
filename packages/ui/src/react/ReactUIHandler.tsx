@@ -617,6 +617,7 @@ export class ReactUIHandler implements UIHandler {
             request={request as PermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
@@ -631,6 +632,7 @@ export class ReactUIHandler implements UIHandler {
             request={request as RevokePermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
@@ -2122,6 +2124,7 @@ function PermissionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
@@ -2131,6 +2134,7 @@ function PermissionDialogWrapper({
   request: PermissionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
@@ -2145,6 +2149,9 @@ function PermissionDialogWrapper({
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
+  // Synchronous re-entry guard: isProcessing disables the buttons only after a
+  // re-render, which is too soft a gate for a grant that delegates authority on-chain.
+  const submittingRef = useRef(false);
 
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
@@ -2523,12 +2530,15 @@ function PermissionDialogWrapper({
   }, [request.data.expiry]);
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
     if (!account) {
       console.error('[PermissionDialogWrapper] Account not initialized');
       return;
     }
 
+    submittingRef.current = true;
     setIsProcessing(true);
+    onSubmissionInFlight?.(true);
     setStatus('Granting permissions...');
     try {
       // Use the spends array directly from the request (already in correct format)
@@ -2561,11 +2571,18 @@ function PermissionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed grant proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };
@@ -2735,6 +2752,7 @@ function RevokePermissionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
@@ -2744,6 +2762,7 @@ function RevokePermissionDialogWrapper({
   request: RevokePermissionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
@@ -2759,6 +2778,9 @@ function RevokePermissionDialogWrapper({
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
+  // Synchronous re-entry guard: isProcessing disables the buttons only after a
+  // re-render, which is too soft a gate for an on-chain revocation.
+  const submittingRef = useRef(false);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
@@ -3116,12 +3138,15 @@ function RevokePermissionDialogWrapper({
   const spenderAddress = fetchedPermissionData?.spender ?? '';
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
     if (!account) {
       console.error('[RevokePermissionDialogWrapper] Account not initialized');
       return;
     }
 
+    submittingRef.current = true;
     setIsProcessing(true);
+    onSubmissionInFlight?.(true);
     setStatus('Revoking permission...');
     try {
       // Revoke permission using Account class with paymaster context
@@ -3146,11 +3171,18 @@ function RevokePermissionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed revocation proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };

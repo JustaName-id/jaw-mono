@@ -8,7 +8,7 @@ import {
   isNativeToken,
   isWildcard,
 } from '@jaw.id/ui';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, erc20Abi, createPublicClient, http, type Address } from 'viem';
 import { getChainNameFromId } from '../../lib/chain-handlers';
 import { useSessionAccount } from '../../hooks';
@@ -153,6 +153,9 @@ export const PermissionModal = ({
 
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  // Synchronous re-entry guard: isProcessing disables the buttons only after a
+  // re-render, which is too soft a gate for a grant that delegates authority on-chain.
+  const submittingRef = useRef(false);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
@@ -676,6 +679,8 @@ export const PermissionModal = ({
   }, [chain, spendsData, networkName]);
 
   const handleConfirm = useCallback(async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     try {
       setIsProcessing(true);
       setStatus(mode === 'grant' ? 'Granting permissions...' : 'Revoking permission...');
@@ -756,11 +761,15 @@ export const PermissionModal = ({
           ? standardErrorCodes.provider.userRejectedRequest
           : standardErrorCodes.rpc.internal;
       onError?.(errorObj, errorCode);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   }, [account, chain, permissionDetails, mode, onSuccess, onError, computedPaymasterUrl, computedPaymasterContext]);
 
   const handleCancel = useCallback(() => {
+    // isProcessing commits a render late; a same-tick cancel must not report
+    // "rejected" while the signed grant/revocation proceeds and lands on chain.
+    if (submittingRef.current) return;
     if (!isProcessing) {
       console.log('❌ User cancelled permission request');
       // User rejected request (EIP-1193 code 4001)
