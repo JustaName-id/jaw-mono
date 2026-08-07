@@ -594,27 +594,19 @@ export async function findOwnerIndex({ address, client, publicKey }: FindOwnerIn
             functionName: 'ownerCount',
         });
 
-        // Read every slot concurrently. Awaiting them one at a time costs a round-trip
-        // per owner on the signing hot path, where the whole set costs one. allSettled
-        // rather than all so a single reverting slot cannot hide a match behind it.
-        const owners = await Promise.allSettled(
-            Array.from({ length: Number(ownerCount) }, (_, i) =>
-                readContract(client, {
-                    address,
-                    abi,
-                    functionName: 'ownerAtIndex',
-                    args: [BigInt(i)],
-                })
-            )
-        );
+        // Iterate from lowest index up and return early when found
+        for (let i = 0; i < Number(ownerCount); i++) {
+            const owner = await readContract(client, {
+                address,
+                abi,
+                functionName: 'ownerAtIndex',
+                args: [BigInt(i)],
+            });
 
-        // Lowest matching index wins, same as the sequential scan it replaces.
-        const formatted = formatPublicKey(publicKey).toLowerCase();
-        const index = owners.findIndex(
-            (owner) => owner.status === 'fulfilled' && owner.value.toLowerCase() === formatted
-        );
-        if (index !== -1) {
-            return index;
+            const formatted = formatPublicKey(publicKey);
+            if (owner.toLowerCase() === formatted.toLowerCase()) {
+                return i;
+            }
         }
     } catch (error) {
         // If reading contract fails, return 0
@@ -660,35 +652,27 @@ export async function createSmartAccountForAddress(
         functionName: 'ownerCount',
     });
 
-    const formatted = formatPublicKey(ownerBytes).toLowerCase();
+    const formatted = formatPublicKey(ownerBytes);
 
-    // Concurrent for the same reason as findOwnerIndex: one round-trip for the whole
-    // owner set instead of one per slot, on the path that gates every signature.
-    const owners = await Promise.allSettled(
-        Array.from({ length: Number(ownerCount) }, (_, i) =>
-            readContract(bundlerClient, {
+    for (let i = 0; i < Number(ownerCount); i++) {
+        const owner = await readContract(bundlerClient, {
+            address: targetAddress,
+            abi,
+            functionName: 'ownerAtIndex',
+            args: [BigInt(i)],
+        });
+
+        if ((owner as string).toLowerCase() === formatted.toLowerCase()) {
+            return await toJustanAccount({
+                client: bundlerClient,
+                owners: [account, PERMISSIONS_MANAGER_ADDRESS],
+                ownerIndex: i,
                 address: targetAddress,
-                abi,
-                functionName: 'ownerAtIndex',
-                args: [BigInt(i)],
-            })
-        )
-    );
-
-    const ownerIndex = owners.findIndex(
-        (owner) => owner.status === 'fulfilled' && (owner.value as string).toLowerCase() === formatted
-    );
-
-    if (ownerIndex === -1) {
-        throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
+            });
+        }
     }
 
-    return await toJustanAccount({
-        client: bundlerClient,
-        owners: [account, PERMISSIONS_MANAGER_ADDRESS],
-        ownerIndex,
-        address: targetAddress,
-    });
+    throw standardErrors.rpc.invalidParams(`Signer is not an owner on account ${targetAddress}`);
 }
 
 export async function createSmartAccountEip7702(
