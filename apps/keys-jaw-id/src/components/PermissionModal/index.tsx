@@ -5,6 +5,7 @@ import {
   useGasEstimation,
   type FeeTokenOption,
   fetchTokenBalance,
+  formatSpendAmount,
   getPublicClient,
   isNativeToken,
   isWildcard,
@@ -129,7 +130,9 @@ const formatExpiryDate = (timestamp: number): string => {
 };
 
 // Token info cache type
-type TokenInfoMap = Record<string, { decimals: number; symbol: string }>;
+// `decimals: null` means the token's `decimals()` read failed — kept distinct from a number so a
+// failed read can never be mistaken for 18. See formatSpendAmount.
+type TokenInfoMap = Record<string, { decimals: number | null; symbol: string }>;
 
 export const PermissionModal = ({
   permissionRequest,
@@ -375,30 +378,25 @@ export const PermissionModal = ({
   const formattedSpends = useMemo(() => {
     return spendsData.map((spend: any) => {
       const tokenAddress = spend.token;
-      // No symbol until it resolves — a placeholder here would label every token "ETH".
+      // No symbol until it resolves — a placeholder here would label every token "ETH". Only a
+      // native token has decimals knowable without a read.
       const tokenInfo = tokenInfoMap[tokenAddress] || {
-        decimals: 18,
+        decimals: isNativeToken(tokenAddress) ? (viemChain?.nativeCurrency?.decimals ?? 18) : null,
         symbol: isNativeToken(tokenAddress) ? (viemChain?.nativeCurrency?.symbol ?? 'ETH') : '',
       };
 
-      let amount, limit, duration;
-
-      if (mode === 'revoke') {
-        // From relay - allowance is hex string, unit is period string, multiplier is number
-        const allowance = BigInt(spend.allowance);
-        amount = formatUnits(allowance, tokenInfo.decimals);
-        limit = `${amount} ${tokenInfo.symbol}`;
-        duration = formatDurationFromRelay(spend.unit, spend.multiplier ?? 1);
-      } else {
-        // From grant request - allowance is string, unit is SpendPeriod, multiplier is optional
-        const allowanceValue = BigInt(spend.allowance);
-        amount = formatUnits(allowanceValue, tokenInfo.decimals);
-        limit = `${amount} ${tokenInfo.symbol}`;
-        duration = formatDuration(spend.unit as SpendPeriod, spend.multiplier ?? 1);
-      }
+      // allowance is a hex string from the relay, a decimal string from a grant request; BigInt
+      // reads both. Only the duration formatting differs by mode.
+      const { amount, decimalsUnknown } = formatSpendAmount(BigInt(spend.allowance), tokenInfo.decimals);
+      const limit = decimalsUnknown ? `${amount} base units` : `${amount} ${tokenInfo.symbol}`;
+      const duration =
+        mode === 'revoke'
+          ? formatDurationFromRelay(spend.unit, spend.multiplier ?? 1)
+          : formatDuration(spend.unit as SpendPeriod, spend.multiplier ?? 1);
 
       return {
         amount,
+        decimalsUnknown,
         token: isNativeToken(tokenAddress)
           ? 'Native (ETH)'
           : tokenInfo.symbol === tokenAddress
@@ -650,7 +648,7 @@ export const PermissionModal = ({
             newTokenInfoMap[tokenAddress] = { decimals, symbol };
           } catch {
             // Not an ERC-20 (or unreachable) — unnamed, so the UI shows the address.
-            newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: '' };
+            newTokenInfoMap[tokenAddress] = { decimals: null, symbol: '' };
           }
         })
       );

@@ -35,6 +35,7 @@ import {
   standardErrorCodes,
 } from '@jaw.id/core';
 import { formatUnits, erc20Abi } from 'viem';
+import { formatSpendAmount } from '../utils/displayFormat';
 import type { Address, Hex } from 'viem';
 import { createSiweMessage } from 'viem/siwe';
 
@@ -102,7 +103,9 @@ const formatExpiryDate = (timestamp: number): string => {
 };
 
 // Token info cache type
-type TokenInfoMap = Record<string, { decimals: number; symbol: string }>;
+// `decimals: null` means the token's `decimals()` read failed. Kept distinct from a number so a
+// failed read can never be mistaken for 18 — see utils/spendAmount.
+type TokenInfoMap = Record<string, { decimals: number | null; symbol: string }>;
 
 // Type assertion to fix React types version mismatch
 const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> =
@@ -2327,8 +2330,9 @@ function PermissionDialogWrapper({
             ]);
             newTokenInfoMap[tokenAddress] = { decimals, symbol };
           } catch {
-            // Not an ERC-20 (or unreachable) — leave it unnamed so the UI shows the address.
-            newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: '' };
+            // Not an ERC-20 (or unreachable): unnamed, and decimals unknown, so the UI shows the
+            // address and the raw allowance rather than a figure scaled by a guessed 18.
+            newTokenInfoMap[tokenAddress] = { decimals: null, symbol: '' };
           }
         })
       );
@@ -2481,11 +2485,11 @@ function PermissionDialogWrapper({
                 decimals: viemChain?.nativeCurrency?.decimals ?? 18,
                 symbol: nativeSymbol,
               }
-            : { decimals: 18, symbol: '' });
+            : { decimals: null, symbol: '' });
 
         const allowance = BigInt(spend.allowance);
-        const amount = formatUnits(allowance, tokenInfo.decimals);
-        const limit = `${amount} ${tokenInfo.symbol}`;
+        const { amount, decimalsUnknown } = formatSpendAmount(allowance, tokenInfo.decimals);
+        const limit = decimalsUnknown ? `${amount} base units` : `${amount} ${tokenInfo.symbol}`;
 
         // Format duration with multiplier (defaults to 1 if not provided)
         const multiplier = spend.multiplier ?? 1;
@@ -2493,6 +2497,7 @@ function PermissionDialogWrapper({
 
         return {
           amount,
+          decimalsUnknown,
           token: isNativeToken(spend.token) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
           tokenAddress: spend.token,
           duration,
@@ -2929,8 +2934,9 @@ function RevokePermissionDialogWrapper({
                 ]);
                 newTokenInfoMap[tokenAddress] = { decimals, symbol };
               } catch {
-                // Not an ERC-20 (or unreachable) — unnamed, so the UI shows the address.
-                newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: '' };
+                // Not an ERC-20 (or unreachable): unnamed, and decimals unknown, so the UI shows
+                // the address and the raw allowance rather than a figure scaled by a guessed 18.
+                newTokenInfoMap[tokenAddress] = { decimals: null, symbol: '' };
               }
             })
           );
@@ -3070,18 +3076,20 @@ function RevokePermissionDialogWrapper({
       // Only a native token may borrow the chain symbol; anything else stays unnamed until
       // its own symbol resolves, or every token would render as the native currency.
       const tokenInfo = tokenInfoMap[tokenAddress] || {
-        decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+        // Only a native token has decimals knowable without a read.
+        decimals: isNativeToken(tokenAddress) ? (viemChain?.nativeCurrency?.decimals ?? 18) : null,
         symbol: isNativeToken(tokenAddress) ? nativeSymbol : '',
       };
       const allowance = BigInt(spend.allowance);
-      const amount = formatUnits(allowance, tokenInfo.decimals);
-      const limit = `${amount} ${tokenInfo.symbol}`;
+      const { amount, decimalsUnknown } = formatSpendAmount(allowance, tokenInfo.decimals);
+      const limit = decimalsUnknown ? `${amount} base units` : `${amount} ${tokenInfo.symbol}`;
       // Format duration with multiplier (unit is period string like 'day', 'week', etc.)
       const multiplier = spend.multiplier ?? 1;
       const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? 's' : ''}`;
 
       return {
         amount,
+        decimalsUnknown,
         token: isNativeToken(tokenAddress) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
         tokenAddress,
         duration,

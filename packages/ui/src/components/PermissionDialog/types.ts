@@ -2,12 +2,18 @@ import { ReactElement } from 'react';
 import { FeeTokenOption } from '../FeeTokenSelector';
 
 export interface SpendPermission {
+  /** Scaled by the token's decimals, or raw base units when `decimalsUnknown`. */
   amount: string;
   amountUsd?: string;
   token: string;
   tokenAddress: string;
   duration: string;
   limit: string;
+  /**
+   * The token's `decimals()` couldn't be read, so `amount` is unscaled. The row must say so —
+   * a guessed 18 would render a 100 USDC cap as "0.0000000001".
+   */
+  decimalsUnknown?: boolean;
 }
 
 export interface CallPermission {
@@ -35,8 +41,11 @@ export interface PermissionDialogProps {
   // Arrays of permissions
   spends?: SpendPermission[];
   calls?: CallPermission[];
-  /** Symbol/decimals for token addresses appearing in spends or call targets. */
-  tokenMeta?: Record<string, { symbol: string; decimals?: number }>;
+  /**
+   * Symbol/decimals for token addresses appearing in spends or call targets. `decimals: null`
+   * means the read failed — only `symbol` is consumed here, but the shape matches the resolver's.
+   */
+  tokenMeta?: Record<string, { symbol: string; decimals?: number | null }>;
 
   // Period and expiry
   expiryDate: string; // Formatted expiry date

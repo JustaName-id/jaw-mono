@@ -24,7 +24,6 @@ import {
   JAW_PAYMASTER_URL,
   JAW_RPC_URL,
   type FeeTokenCapability,
-  SUPPORTED_CHAINS,
 } from '@jaw.id/core';
 
 // Transaction execution result

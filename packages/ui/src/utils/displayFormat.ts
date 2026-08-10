@@ -6,7 +6,7 @@
 // identically. Core-free (viem only).
 // ============================================================================
 
-import { formatEther, maxUint160, maxUint256 } from 'viem';
+import { formatEther, formatUnits, maxUint160, maxUint256 } from 'viem';
 
 // Plausible unix-timestamp window (2000-01-01 .. 2100-01-01) for date detection.
 export const TS_MIN = 946684800n;
@@ -59,6 +59,44 @@ export function formatNativeValue(value?: string): string | null {
   } catch {
     return null;
   }
+}
+
+export interface SpendAmountDisplay {
+  /** Scaled amount, or raw base units when the token's decimals couldn't be read. */
+  amount: string;
+  /** True when `amount` is unscaled — the UI must say so rather than imply a denomination. */
+  decimalsUnknown: boolean;
+}
+
+/**
+ * Format a spend allowance for display. The ERC-20 counterpart to `formatNativeValue`, and the
+ * same rule: never infer the unit.
+ *
+ * There is no safe default for unknown decimals. Assuming 18 renders a 100 USDC/day cap as
+ * "0.0000000001" — off by 10^12, and wrong in the direction that makes a large authorization look
+ * like dust, which a token that reverts `decimals()` gets for free. The transaction screen already
+ * refuses to guess (`clearSigning/format.ts` renders raw wei as `kind: 'raw'`; `assetPreview.ts`
+ * drops the row). A spend limit can't be dropped — the user is being asked to approve it — so it
+ * reports raw base units and flags itself for the UI to label.
+ */
+export function formatSpendAmount(allowance: bigint, decimals: number | null | undefined): SpendAmountDisplay {
+  if (decimals === null || decimals === undefined) {
+    return { amount: allowance.toString(), decimalsUnknown: true };
+  }
+  return { amount: formatUnits(allowance, decimals), decimalsUnknown: false };
+}
+
+/**
+ * Whether a spend amount is too long to sit beside the token identity, and should drop to its own
+ * line a size smaller.
+ *
+ * The digits are never abbreviated — a cap the user is being asked to approve has to be legible in
+ * full, and an unscaled base-units figure runs to tens of digits (78 for a max-uint allowance) — so
+ * the layout yields instead of the number. 12 characters is where a 13px semibold figure stops
+ * fitting next to the token symbol and its rate at the dialog's width.
+ */
+export function isLongSpendAmount(amount: string): boolean {
+  return amount.length > 12;
 }
 
 /** Largest value a `uint<bits>` can hold — used to spot "unlimited"/"no expiry" sentinels. */

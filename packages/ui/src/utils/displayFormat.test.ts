@@ -9,6 +9,8 @@ import {
   isUnlimitedAmount,
   maxUintFor,
   subscriptDecimal,
+  formatSpendAmount,
+  isLongSpendAmount,
 } from './displayFormat';
 
 describe('subscriptDecimal', () => {
@@ -137,5 +139,63 @@ describe('dateTone', () => {
   });
   it('classifies near-future as normal', () => {
     expect(dateTone(now + 60 * 60 * 24 * 30)).toBe('normal');
+  });
+});
+
+describe('formatSpendAmount', () => {
+  it('scales by the token decimals', () => {
+    expect(formatSpendAmount(100_000_000n, 6)).toEqual({ amount: '100', decimalsUnknown: false });
+  });
+
+  it('handles a zero-decimals token', () => {
+    expect(formatSpendAmount(42n, 0)).toEqual({ amount: '42', decimalsUnknown: false });
+  });
+
+  // The regression this exists for: 100 USDC assumed to be 18dp reads as 0.0000000001 — a 10^12
+  // understatement of what the spender may take.
+  it('reports raw base units rather than assuming 18 when decimals are unknown', () => {
+    expect(formatSpendAmount(100_000_000n, null)).toEqual({
+      amount: '100000000',
+      decimalsUnknown: true,
+    });
+    expect(formatSpendAmount(100_000_000n, 18).amount).toBe('0.0000000001');
+  });
+
+  it('treats undefined the same as null', () => {
+    expect(formatSpendAmount(5n, undefined)).toEqual({ amount: '5', decimalsUnknown: true });
+  });
+
+  it('does not lose precision on a max-uint allowance', () => {
+    const max = 2n ** 256n - 1n;
+    expect(formatSpendAmount(max, null).amount).toBe(max.toString());
+  });
+
+  it('keeps zero readable in both modes', () => {
+    expect(formatSpendAmount(0n, 6)).toEqual({ amount: '0', decimalsUnknown: false });
+    expect(formatSpendAmount(0n, null)).toEqual({ amount: '0', decimalsUnknown: true });
+  });
+});
+
+describe('isLongSpendAmount', () => {
+  it('keeps an ordinary scaled amount inline', () => {
+    expect(isLongSpendAmount('100')).toBe(false);
+    expect(isLongSpendAmount('1234.5678')).toBe(false);
+  });
+
+  it('keeps a mid-size base-units figure inline', () => {
+    // 100 USDC unscaled — 9 digits, still fits beside the token symbol.
+    expect(isLongSpendAmount('100000000')).toBe(false);
+  });
+
+  it('breaks at the boundary', () => {
+    expect(isLongSpendAmount('1'.repeat(12))).toBe(false);
+    expect(isLongSpendAmount('1'.repeat(13))).toBe(true);
+  });
+
+  it('moves an unscaled max-uint allowance to its own line', () => {
+    // The case that broke the layout: 78 digits with nowhere to wrap.
+    const raw = formatSpendAmount(2n ** 256n - 1n, null).amount;
+    expect(raw).toHaveLength(78);
+    expect(isLongSpendAmount(raw)).toBe(true);
   });
 });

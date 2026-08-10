@@ -10,6 +10,7 @@ import { Eyebrow } from '../primitives';
 import { isNativeToken } from '../../utils/tokenBalance';
 import { isWildcard } from '../../utils/permissionExecution';
 import { getDisplayAddress } from '../../utils';
+import { isLongSpendAmount } from '../../utils/displayFormat';
 import type { CallPermission, SpendPermission } from './types';
 
 export { isWildcard };
@@ -62,8 +63,17 @@ function SpendRow({
   const symbol = isNative ? nativeSymbol : spend.token;
   const rate = spendRate(spend.duration);
 
+  // A raw base-units allowance runs to tens of digits (a max-uint cap is 78), which no dialog width
+  // holds. Every digit is kept — a spend cap must not be abbreviated — so instead the figure drops
+  // to its own line and steps down a size. Threshold is where the value stops fitting beside the
+  // token identity at 13px in a 345px dialog.
+  //
+  // The line break is `shrink-0` inside a wrapping row: rather than compress, the amount block
+  // moves down, where it has the full card width for `break-all` to work with.
+  const isLongAmount = isLongSpendAmount(spend.amount);
+
   return (
-    <div className="border-border flex items-center gap-2 border-t px-3 py-2 first:border-t-0">
+    <div className="border-border flex flex-wrap items-center gap-x-2 gap-y-1 border-t px-3 py-2 first:border-t-0">
       <span className="relative inline-flex size-[19.5px] flex-none items-center justify-center">
         <TokenIcon
           chainId={chainId}
@@ -71,24 +81,42 @@ function SpendRow({
           symbol={symbol}
           className="size-[19.5px] flex-none rounded-full"
         />
+        {/* A spend token that won't answer decimals() is either not an ERC-20 or deliberately
+            opaque — worth the same amber as an unbounded scope. */}
+        {!isLoading && spend.decimalsUnknown && <WarnBadge />}
       </span>
       {isLoading ? (
         <Skeleton className="bg-muted h-3.5 w-16 flex-1 rounded" />
       ) : (
-        <span className="flex min-w-0 flex-1 items-center gap-1.5">
-          <span className="text-foreground truncate text-[12px] font-semibold">
-            {symbol || getDisplayAddress(undefined, spend.tokenAddress)}
+        <span className="flex min-w-0 flex-1 flex-col items-start">
+          <span className="flex min-w-0 items-center gap-1.5">
+            <span className="text-foreground truncate text-[12px] font-semibold">
+              {symbol || getDisplayAddress(undefined, spend.tokenAddress)}
+            </span>
+            {!isNative && <CopyButton value={spend.tokenAddress} size={11} label="Copy token address" />}
           </span>
-          {!isNative && <CopyButton value={spend.tokenAddress} size={11} label="Copy token address" />}
+          {spend.decimalsUnknown && (
+            <span className="mt-0.5 font-mono text-[9px] text-amber-500">decimals unknown</span>
+          )}
         </span>
       )}
       {isLoading ? (
         <Skeleton className="bg-muted h-4 w-20 flex-none rounded" />
       ) : (
-        <span className="flex flex-none items-baseline gap-[3px]">
-          <span className="text-foreground text-[13px] font-semibold tracking-[-0.02em]">{spend.amount}</span>
+        <span
+          className={`ml-auto flex max-w-full shrink-0 items-baseline gap-[3px] ${isLongAmount ? 'flex-wrap justify-end' : ''}`}
+        >
+          <span
+            className={`text-foreground font-semibold tracking-[-0.02em] ${
+              isLongAmount ? 'min-w-0 break-all text-[11px]' : 'text-[13px]'
+            }`}
+          >
+            {spend.amount}
+          </span>
+          {spend.decimalsUnknown && <span className="text-muted-foreground font-mono text-[9px]">base units</span>}
           {rate && <span className="text-muted-foreground font-mono text-[9px]">{rate}</span>}
-          {spend.amountUsd && (
+          {/* A fiat figure derived from an unknown denomination would be wrong by the same factor. */}
+          {spend.amountUsd && !spend.decimalsUnknown && (
             <span className="text-muted-foreground ml-1 font-mono text-[9px]">${spend.amountUsd}</span>
           )}
         </span>
