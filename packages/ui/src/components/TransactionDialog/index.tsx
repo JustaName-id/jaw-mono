@@ -339,7 +339,7 @@ export const TransactionDialog = ({
                     </div>
                   )}
                   <PartyRow
-                    label={isPermissioned ? 'To · Contract' : 'To'}
+                    label="To"
                     value={displayToAddress}
                     address={currentTransaction.to}
                     avatarUrl={resolvedAvatars[currentTransaction.to]}
@@ -371,6 +371,10 @@ export const TransactionDialog = ({
             {/* Asset changes — a native send shows the same information in its hero. */}
             {!isNativeSend && (
               <AssetPreview
+                // Always someone else's balances: a valid permission has spender !== account
+                // (self-delegation is rejected) and the signer must be the spender, so the granter
+                // can never be the one executing.
+                onBehalf={!!onBehalfOf}
                 assetsOut={assetsOut ?? []}
                 assetsIn={assetsIn ?? []}
                 error={assetPreviewError ?? false}

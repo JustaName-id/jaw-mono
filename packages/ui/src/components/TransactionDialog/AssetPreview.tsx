@@ -16,6 +16,11 @@ interface AssetPreviewProps {
   nativeSymbol: string;
   /** Enables token icon lookups; rows fall back to the generic icon when absent. */
   chainId?: number;
+  /**
+   * These balances belong to an account other than the signer — a permissioned execution, where
+   * the calls run as the granter. The columns must not say "you".
+   */
+  onBehalf?: boolean;
 }
 
 /** Rows shown before the "+N" overflow toggle kicks in. */
@@ -106,12 +111,15 @@ function DeltaColumn({
   nativeSymbol,
   chainId,
   prices,
+  onBehalf,
 }: {
   direction: 'out' | 'in';
   deltas: AssetDelta[];
   nativeSymbol: string;
   chainId?: number;
   prices: Record<string, number>;
+  /** The balances belong to another account (a permissioned execution), so not "you". */
+  onBehalf?: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
   const out = direction === 'out';
@@ -124,7 +132,9 @@ function DeltaColumn({
       <div className="border-border bg-secondary/40 flex items-center gap-1.5 border-b px-3 py-2">
         <Arrow className={`size-3 flex-none ${out ? 'text-red-400' : 'text-green-400'}`} strokeWidth={2.7} />
         <span className="text-foreground text-[13px] font-semibold tracking-[-0.02em]">
-          {out ? 'You send' : 'You get'}
+          {/* Under a permission the funds move from the granter, not the signer reading this —
+              the subject is dropped and the "On behalf of" row above says whose they are. */}
+          {onBehalf ? (out ? 'Sends' : 'Receives') : out ? 'You send' : 'You get'}
         </span>
         {overflow > 0 && (
           <button
@@ -152,7 +162,7 @@ function DeltaColumn({
   );
 }
 
-export const AssetPreview = ({ assetsOut, assetsIn, error, nativeSymbol, chainId }: AssetPreviewProps) => {
+export const AssetPreview = ({ assetsOut, assetsIn, error, nativeSymbol, chainId, onBehalf }: AssetPreviewProps) => {
   const [prices, setPrices] = useState<Record<string, number>>({});
 
   useEffect(() => {
@@ -169,7 +179,7 @@ export const AssetPreview = ({ assetsOut, assetsIn, error, nativeSymbol, chainId
 
   if (error || (assetsOut.length === 0 && assetsIn.length === 0)) return null;
 
-  const columnProps = { nativeSymbol, chainId, prices };
+  const columnProps = { nativeSymbol, chainId, prices, onBehalf };
 
   // Both directions sit side by side (the swap/supply shape); a one-sided change takes
   // the full width rather than leaving a gap.

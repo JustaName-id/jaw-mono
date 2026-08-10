@@ -59,6 +59,7 @@ import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
 import { usePermissionExecution } from '../hooks/usePermissionExecution';
+import { useFunctionSignatures } from '../hooks/useFunctionSignatures';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getPublicClient } from '../utils/publicClient';
 import { getSiweOriginWarning, isSiweMessage, parseSiweMessage, hexToUtf8 } from '../utils/siwe';
@@ -2107,23 +2108,6 @@ function SendTransactionDialogWrapper({
 }
 
 // Known function selectors mapping
-const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
-  '0x32323232': 'Any Function',
-  '0xe0e0e0e0': 'Empty Calldata',
-  '0xcc53287f': 'lockdown((address,address)[])',
-  '0x87517c45': 'approve(address,address,uint160,uint48)',
-  '0x095ea7b3': 'approve(address,uint256)',
-  '0x23b872dd': 'transferFrom(address,address,uint256)',
-  '0xa9059cbb': 'transfer(address,uint256)',
-};
-
-// Resolve function selector to human-readable name
-const resolveFunctionSelector = (selector: string): string => {
-  const normalizedSelector = selector.toLowerCase();
-  const knownName = KNOWN_FUNCTION_SELECTORS[normalizedSelector];
-  return knownName || selector;
-};
-
 function PermissionDialogWrapper({
   request,
   onApprove,
@@ -2507,16 +2491,19 @@ function PermissionDialogWrapper({
     [spendsData, tokenInfoMap, viemChain, nativeSymbol]
   );
 
-  // Format call permissions
+  // Format call permissions. Signatures resolve asynchronously — a selector with no signature yet
+  // renders as its raw hex and upgrades in place.
+  const callSignatures = useFunctionSignatures(callsData.map((call) => call.selector));
   const calls = useMemo(
     () =>
       callsData.map((call) => ({
         target: call.target,
         selector: call.selector,
         functionSignature:
-          call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+          call.functionSignature ||
+          (call.selector ? (callSignatures[call.selector.toLowerCase()] ?? call.selector) : 'Unknown Function'),
       })),
-    [callsData]
+    [callsData, callSignatures]
   );
 
   // Format expiry date
@@ -3098,7 +3085,10 @@ function RevokePermissionDialogWrapper({
     });
   }, [fetchedPermissionData, tokenInfoMap, viemChain, nativeSymbol]);
 
-  // Format call permissions from fetched data
+  // Format call permissions from fetched data. Signatures resolve asynchronously.
+  const revokeCallSignatures = useFunctionSignatures(
+    (fetchedPermissionData?.calls ?? []).map((call: any) => call.selector)
+  );
   const formattedCalls = useMemo(() => {
     if (!fetchedPermissionData?.calls) return [];
 
@@ -3106,9 +3096,10 @@ function RevokePermissionDialogWrapper({
       target: call.target,
       selector: call.selector,
       functionSignature:
-        call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+        call.functionSignature ||
+        (call.selector ? (revokeCallSignatures[call.selector.toLowerCase()] ?? call.selector) : 'Unknown Function'),
     }));
-  }, [fetchedPermissionData]);
+  }, [fetchedPermissionData, revokeCallSignatures]);
 
   // Expiry date from fetched permission
   const expiryDate = useMemo(() => {

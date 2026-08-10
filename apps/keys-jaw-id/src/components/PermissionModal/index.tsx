@@ -7,6 +7,7 @@ import {
   fetchTokenBalance,
   formatSpendAmount,
   getPublicClient,
+  useFunctionSignatures,
   isNativeToken,
   isWildcard,
 } from '@jaw.id/ui';
@@ -33,23 +34,6 @@ import {
 } from '@jaw.id/core';
 
 // Known function selectors mapping
-const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
-  '0x32323232': 'Any Function',
-  '0xe0e0e0e0': 'Empty Calldata',
-  '0xcc53287f': 'lockdown((address,address)[])',
-  '0x87517c45': 'approve(address,address,uint160,uint48)',
-  '0x095ea7b3': 'approve(address,uint256)',
-  '0x23b872dd': 'transferFrom(address,address,uint256)',
-  '0xa9059cbb': 'transfer(address,uint256)',
-};
-
-// Resolve function selector to human-readable name
-const resolveFunctionSelector = (selector: string): string => {
-  const normalizedSelector = selector.toLowerCase();
-  const knownName = KNOWN_FUNCTION_SELECTORS[normalizedSelector];
-  return knownName || selector;
-};
-
 // Permission request data
 export interface PermissionRequestData {
   method: 'wallet_grantPermissions' | 'wallet_revokePermissions';
@@ -410,14 +394,17 @@ export const PermissionModal = ({
   }, [spendsData, tokenInfoMap, mode]);
 
   // Format call permissions
+  // Signatures resolve asynchronously — an unresolved selector renders as raw hex, then upgrades.
+  const callSignatures = useFunctionSignatures(callsData.map((call: any) => call.selector));
   const formattedCalls = useMemo(() => {
     return callsData.map((call: any) => ({
       target: call.target,
       selector: call.selector,
       functionSignature:
-        call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+        call.functionSignature ||
+        (call.selector ? (callSignatures[call.selector.toLowerCase()] ?? call.selector) : 'Unknown Function'),
     }));
-  }, [callsData]);
+  }, [callsData, callSignatures]);
 
   // Grant date (revoke only) — the stored permission's `start`, mirroring how expiry uses `end`.
   const grantedDate = useMemo(() => {
