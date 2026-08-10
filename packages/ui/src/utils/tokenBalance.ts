@@ -1,4 +1,6 @@
-import { createPublicClient, http, erc20Abi, type Address, type Chain, type PublicClient } from 'viem';
+import { erc20Abi, Address } from 'viem';
+
+import { getPublicClient } from './publicClient';
 
 // Common native token addresses used by various protocols
 const NATIVE_TOKEN_ADDRESSES = [
@@ -14,42 +16,22 @@ export function isNativeToken(tokenAddress: string): boolean {
 }
 
 /**
- * Clients are reused per (chain, endpoint) rather than created per call. This is what lets viem
- * fold concurrent `balanceOf` reads into one multicall `eth_call` — batching only happens across
- * calls issued through the *same* client. A client is a transport handle, not cached data, so
- * there's nothing here to go stale.
- */
-const clients = new Map<string, PublicClient>();
-
-function clientFor(rpcUrl: string, chain?: Chain): PublicClient {
-  const key = `${chain?.id ?? 0}:${rpcUrl}`;
-  let client = clients.get(key);
-  if (!client) {
-    client = createPublicClient({
-      chain,
-      transport: http(rpcUrl),
-      // Only when the chain actually declares multicall3; otherwise viem would fall back anyway.
-      ...(chain?.contracts?.multicall3 ? { batch: { multicall: true } } : {}),
-    }) as PublicClient;
-    clients.set(key, client);
-  }
-  return client;
-}
-
-/**
  * Fetches the balance of a token for a given wallet address.
  * Supports both native ETH (address = 0x0...0 or 0xeee...eee) and ERC-20 tokens.
  *
- * Pass `chain` (a viem chain, so it carries multicall3) and concurrent calls for the same
- * endpoint collapse into a single `eth_call` instead of one request per token.
+ * Callers typically fan out over a token list with `Promise.all`. Pass `chainId`
+ * so the shared client can fold those ERC-20 reads into a single Multicall3
+ * request instead of one per token — see {@link getPublicClient}. Native
+ * balances use `eth_getBalance`, which is not an eth_call and so stays a
+ * request of its own.
  */
 export async function fetchTokenBalance(
   tokenAddress: string,
   walletAddress: string,
   rpcUrl: string,
-  chain?: Chain
+  chainId?: number
 ): Promise<bigint> {
-  const client = clientFor(rpcUrl, chain);
+  const client = getPublicClient(chainId ?? 0, rpcUrl);
 
   // Native token (ETH) - check common native addresses
   if (isNativeToken(tokenAddress)) {

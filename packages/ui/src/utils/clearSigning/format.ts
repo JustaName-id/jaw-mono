@@ -6,7 +6,8 @@
 // resolver + native-coin helpers.
 //
 // This is the ONLY clear-signing module that depends on @jaw.id/core (for
-// SUPPORTED_CHAINS / JAW_RPC_URL). The resolvers (eip712/calldata) and the
+// SUPPORTED_CHAINS, and transitively via the shared public client). The
+// resolvers (eip712/calldata) and the
 // includes-merge (source) stay core-free so they're unit-testable in isolation.
 //
 // Supported field formats (v1):
@@ -19,8 +20,16 @@
 //   nftName / duration / enum / calldata → fall through to raw
 // ============================================================================
 
-import { createPublicClient, formatUnits, http, isAddress, parseAbiItem } from 'viem';
-import { JAW_RPC_URL, SUPPORTED_CHAINS } from '@jaw.id/core';
+import {
+  BaseError,
+  ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
+  formatUnits,
+  isAddress,
+  parseAbiItem,
+} from 'viem';
+import { SUPPORTED_CHAINS } from '@jaw.id/core';
+import { getJawPublicClient } from '../publicClient';
 import { resolvePath } from './path';
 import { isUnlimitedAmount } from '../displayFormat';
 import type {
@@ -342,29 +351,44 @@ export async function applyFormat(
 
 const tokenCache = new Map<string, TokenInfo | null>();
 
+/**
+ * Whether a failed `decimals()`/`symbol()` read proves the address is not an ERC-20,
+ * as opposed to the RPC merely being unavailable.
+ *
+ * Only the former may be cached as `null`: `tokenCache` has no TTL, so caching a
+ * transient failure blanks that token for the rest of the session — and because reads
+ * now share one `aggregate3`, a single 503 would otherwise poison every token in the
+ * batch at once.
+ *
+ * Both shapes are covered. A `success: false` entry in an `aggregate3` result throws a
+ * `RawContractError`, but viem wraps it through `ExecutionRevertedError` (code 3) before
+ * `getContractError` sees it, so the batched chain is
+ * `ContractFunctionExecutionError -> ContractFunctionRevertedError -> ... -> RawContractError`;
+ * an unbatched read of an address with no code decodes empty data into
+ * `ContractFunctionZeroDataError`. Transport failures (`HttpRequestError`, `TimeoutError`)
+ * match neither.
+ */
+function isNotAToken(err: unknown): boolean {
+  return (
+    err instanceof BaseError &&
+    Boolean(err.walk((e) => e instanceof ContractFunctionRevertedError || e instanceof ContractFunctionZeroDataError))
+  );
+}
+
 const ERC20_DECIMALS_SYMBOL = [
   parseAbiItem('function decimals() view returns (uint8)'),
   parseAbiItem('function symbol() view returns (string)'),
 ] as const;
 
-function jawRpcUrl(chainId: number, apiKey?: string): string {
-  return apiKey ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}` : `${JAW_RPC_URL}?chainId=${chainId}`;
-}
-
-const clientCache = new Map<string, ReturnType<typeof createPublicClient>>();
-function getPublicClient(chainId: number, apiKey?: string) {
-  const key = `${chainId}:${apiKey ?? ''}`;
-  let client = clientCache.get(key);
-  if (!client) {
-    client = createPublicClient({ transport: http(jawRpcUrl(chainId, apiKey)) });
-    clientCache.set(key, client);
-  }
-  return client;
-}
-
-/** Build a `resolveToken` callback bound to a specific chain (and optional JAW API key). */
+/**
+ * Build a `resolveToken` callback bound to a specific chain (and optional JAW API key).
+ *
+ * The shared client batches via Multicall3, so the `decimals` + `symbol` pair
+ * below costs one request instead of two — and resolving several tokens
+ * concurrently collapses into that same request.
+ */
 export function createTokenResolver(chainId: number, apiKey?: string) {
-  const client = getPublicClient(chainId, apiKey);
+  const client = getJawPublicClient(chainId, apiKey);
   return async function resolveToken(address: string): Promise<TokenInfo | null> {
     const key = `${chainId}:${address.toLowerCase()}`;
     if (tokenCache.has(key)) return tokenCache.get(key) ?? null;
@@ -384,8 +408,10 @@ export function createTokenResolver(chainId: number, apiKey?: string) {
       const info: TokenInfo = { address, decimals: Number(decimals), symbol: String(symbol) };
       tokenCache.set(key, info);
       return info;
-    } catch {
-      tokenCache.set(key, null);
+    } catch (err) {
+      // Negative-cache only a proven non-token; leave transient failures uncached so the
+      // next render retries once the RPC recovers.
+      if (isNotAToken(err)) tokenCache.set(key, null);
       return null;
     }
   };

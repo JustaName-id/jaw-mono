@@ -139,10 +139,16 @@ export const DecodedCalldataView = ({
     const unique = [...new Set(addressParams)];
     if (unique.length === 0) return;
 
-    // Mark as attempted immediately to prevent re-fetching
+    // Mark as attempted immediately to prevent re-fetching. An attempt only "counts"
+    // once it lands — see the cleanup, which un-marks anything still in flight.
     unique.forEach((addr) => attemptedRef.current.add(addr.toLowerCase()));
+    const unmark = () => unique.forEach((addr) => attemptedRef.current.delete(addr.toLowerCase()));
 
     let cancelled = false;
+    // Set once this run's result has landed. After that the attempt "counts" — including
+    // for addresses that resolved to no name — so the cleanup must leave the marks alone
+    // or every unresolvable address gets re-queried on the next run.
+    let wrote = false;
     reverseResolveWithAvatars(
       unique.map((address) => ({ address, chainId })),
       mainnetRpcUrl
@@ -151,6 +157,7 @@ export const DecodedCalldataView = ({
         if (cancelled) return;
         const label = await getChainLabel(chainId, mainnetRpcUrl);
         if (cancelled) return;
+        wrote = true;
         const next: Record<string, string> = {};
         const avatarByAddress: Record<string, string> = {};
         for (const address of unique) {
@@ -166,9 +173,13 @@ export const DecodedCalldataView = ({
           setLocalAvatars((prev) => ({ ...prev, ...avatarByAddress }));
         }
       })
-      .catch(() => undefined);
+      .catch(unmark);
     return () => {
       cancelled = true;
+      // If this run never wrote its result, its "attempted" marks must not outlive it —
+      // otherwise the next run (a StrictMode re-invoke, or a chainId change) filters
+      // every address out as already-tried and resolution is blocked for good.
+      if (!wrote) unmark();
     };
   }, [decoded, mainnetRpcUrl, chainId]);
 

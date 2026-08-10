@@ -5,11 +5,12 @@ import {
   useGasEstimation,
   type FeeTokenOption,
   fetchTokenBalance,
+  getPublicClient,
   isNativeToken,
   isWildcard,
 } from '@jaw.id/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { formatUnits, erc20Abi, createPublicClient, http, type Address } from 'viem';
+import { formatUnits, erc20Abi, type Address } from 'viem';
 import { getChainNameFromId } from '../../lib/chain-handlers';
 import { useSessionAccount } from '../../hooks';
 import {
@@ -540,7 +541,7 @@ export const PermissionModal = ({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl, viemChain ?? undefined);
+              const balance = await fetchTokenBalance(token.address, balanceAddress, rpcUrl, chain?.id);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -594,7 +595,11 @@ export const PermissionModal = ({
 
   // Token info for spend tokens and for any call target that turns out to be a token.
   useEffect(() => {
-    if (!chain || (spendsData.length === 0 && callsData.length === 0)) {
+    // Bail rather than passing an empty URL down: getPublicClient attaches the chain
+    // definition, so an empty URL would resolve to the chain's public RPC instead of the
+    // proxy — and it throws, which this fire-and-forget async fn would not catch.
+    const rpcUrl = chain?.rpcUrl;
+    if (!chain || !rpcUrl || (spendsData.length === 0 && callsData.length === 0)) {
       setIsLoadingTokenInfo(false);
       return;
     }
@@ -615,25 +620,10 @@ export const PermissionModal = ({
         ])
       ) as string[];
 
-      // One client for the whole set. `contracts.multicall3` + `batch: { multicall: true }` lets
-      // viem fold every decimals/symbol read into a single eth_call — which only works if the
-      // reads are issued together, hence the Promise.all below rather than a serial loop.
-      // Note this is multicall (one ordinary eth_call), not JSON-RPC request batching, which the
-      // RPC proxy rejects.
-      const publicClient = createPublicClient({
-        chain: {
-          id: chain.id,
-          name: networkName,
-          nativeCurrency: viemChain?.nativeCurrency ?? { name: 'Ether', symbol: 'ETH', decimals: 18 },
-          rpcUrls: {
-            default: { http: [chain.rpcUrl || ''] },
-            public: { http: [chain.rpcUrl || ''] },
-          },
-          contracts: viemChain?.contracts,
-        },
-        transport: http(chain.rpcUrl),
-        batch: { multicall: true },
-      });
+      // Resolved in one pass rather than token-by-token: the shared client folds every
+      // decimals/symbol read issued in this tick into a single Multicall3 request, so N
+      // tokens cost one round-trip instead of 2N sequential ones.
+      const publicClient = getPublicClient(chain.id, rpcUrl);
 
       const pending: string[] = [];
       for (const tokenAddress of uniqueTokens) {
@@ -676,7 +666,7 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, spendsData, networkName]);
+  }, [chain, spendsData]);
 
   const handleConfirm = useCallback(async () => {
     if (submittingRef.current) return;

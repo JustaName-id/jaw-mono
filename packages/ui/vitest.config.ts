@@ -2,6 +2,10 @@ import { resolve } from 'path';
 import { defineConfig } from 'vitest/config';
 
 export default defineConfig({
+  // Use the automatic JSX runtime (matches the package's tsconfig react-jsx) so
+  // .tsx component tests don't need an explicit React import. Mirrors
+  // apps/keys-jaw-id.
+  esbuild: { jsx: 'automatic' },
   resolve: {
     alias: {
       // Resolve the SDK to its TS source so tests don't require a built `dist`
@@ -13,7 +17,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: 'node',
-    include: ['src/**/*.test.ts'],
+    include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
     exclude: ['**/node_modules/**', '**/dist/**'],
   },
 });
