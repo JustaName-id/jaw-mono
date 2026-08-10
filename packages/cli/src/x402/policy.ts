@@ -1,5 +1,5 @@
 import { USDC_BY_NETWORK } from './asset-registry.js';
-import { parseBigInt } from './amount.js';
+import { parseBigInt, parseNonNegativeBigInt } from './amount.js';
 import { describePeriod, normalizePeriod, type PeriodUnit } from './period.js';
 import type { X402PaymentRequirement } from './types.js';
 import type { GrantedSpend } from '../lib/session-config.js';
@@ -167,6 +167,36 @@ export function resolveX402Policy(configPolicy?: X402Policy, grantPolicy?: X402P
     delete merged.maxTotalPerSession;
   }
   return merged;
+}
+
+/**
+ * Resolve the policy for a live session. Every front end goes through this, so
+ * `jaw x402 pay`, `jaw x402 status` and the MCP tool all enforce and report the
+ * same caps. Resolving from config alone is what let them drift: the CLI paid
+ * under the 10-USDC defaults on every registry network while the MCP tool
+ * refused at the granted per-period allowance, and status printed a session cap
+ * that the grant had already deleted.
+ */
+export function resolveSessionX402Policy(
+  configPolicy?: X402Policy,
+  session?: { grantedSpend?: GrantedSpend } | null
+): X402Policy {
+  return resolveX402Policy(configPolicy, policyFromGrant(session?.grantedSpend));
+}
+
+/**
+ * The most a single top-up may move into the payer: the smallest cap that
+ * actually binds, never a preferred one. Preferring the per-period cap let a
+ * 5-USDC/day grant pre-fund 5 USDC into a session the user had explicitly capped
+ * at 1, which is the idle-funds-at-risk case `TopUpOptions.maxTopUp` exists to
+ * prevent. Undefined when neither cap is set, meaning the on-chain permission is
+ * the only bound.
+ */
+export function topUpCeiling(policy: X402Policy): bigint | undefined {
+  const caps = [policy.maxPerPeriod, policy.maxTotalPerSession]
+    .map((cap) => parseNonNegativeBigInt(cap))
+    .filter((cap): cap is bigint => cap !== undefined);
+  return caps.length > 0 ? caps.reduce((a, b) => (a < b ? a : b)) : undefined;
 }
 
 /** Policy keys settable from the CLI, split by value shape. */

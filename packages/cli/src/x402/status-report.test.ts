@@ -98,6 +98,37 @@ describe('diagnose', () => {
     expect(diagnose({ ...healthy, spent: 99_000_000n, sessionCap: null })).toEqual([]);
   });
 
+  // A grant-seeded session usually has no session cap at all, so checking only
+  // that one stayed silent while the cap the chain enforces was exhausted.
+  it('flags an exhausted per-period allowance even with no session cap', () => {
+    const problems = diagnose({
+      ...healthy,
+      sessionCap: null,
+      periodCap: 5_000_000n,
+      periodSpent: 5_000_000n,
+      periodLabel: 'day',
+    });
+    expect(problems).toHaveLength(1);
+    expect(problems[0]).toMatch(/granted allowance for this day is used up/i);
+  });
+
+  it('stays quiet while the period allowance still has room', () => {
+    expect(diagnose({ ...healthy, periodCap: 5_000_000n, periodSpent: 1_000_000n, periodLabel: 'day' })).toEqual([]);
+  });
+
+  it('reports the period cap before the session cap when both are exhausted', () => {
+    const problems = diagnose({
+      ...healthy,
+      spent: 10_000_000n,
+      periodCap: 5_000_000n,
+      periodSpent: 5_000_000n,
+      periodLabel: 'day',
+    });
+    expect(problems).toHaveLength(2);
+    expect(problems[0]).toMatch(/granted allowance/i);
+    expect(problems[1]).toMatch(/session cap/i);
+  });
+
   it('flags a chain with no USDC and skips the balance complaint', () => {
     const problems = diagnose({ ...healthy, hasAsset: false, ownerBalance: null, payerBalance: null });
     expect(problems).toHaveLength(1);

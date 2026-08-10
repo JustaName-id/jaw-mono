@@ -5,7 +5,9 @@ import { tryLoadSessionConfig } from '../../lib/session-config.js';
 import { sessionPayerAddress } from '../../x402/payer.js';
 import { usdcBalance } from '../../x402/balance.js';
 import { sumSpentSince } from '../../x402/ledger.js';
-import { resolveX402Policy } from '../../x402/policy.js';
+import { resolveSessionX402Policy } from '../../x402/policy.js';
+import { currentPeriodSpend } from '../../x402/spend-window.js';
+import { describePeriod } from '../../x402/period.js';
 import { parseBigInt } from '../../x402/amount.js';
 import { USDC_BY_NETWORK } from '../../x402/asset-registry.js';
 import { formatUsdc, formatRemaining, diagnose } from '../../x402/status-report.js';
@@ -45,7 +47,10 @@ export default class X402Status extends BaseCommand {
     }
 
     const config = loadConfig();
-    const policy = resolveX402Policy(config.x402);
+    // Seeded from the grant, exactly as the paying paths resolve it. Resolving
+    // from config alone reported the 10-USDC default session cap that a
+    // grant-seeded policy deletes, so status promised budget nothing enforced.
+    const policy = resolveSessionX402Policy(config.x402, session);
     const now = Date.now() / 1000;
     const expired = session.expiry <= now;
 
@@ -72,6 +77,13 @@ export default class X402Status extends BaseCommand {
     const sessionCap = parseBigInt(policy.maxTotalPerSession);
     const decimals = asset?.decimals ?? 6;
 
+    // The cap that actually mirrors the permission, and what is left of it right
+    // now. Without this the report was silent about the only cap a grant-seeded
+    // session enforces.
+    const periodSpend = currentPeriodSpend(policy, payer, session);
+    const periodCap = parseBigInt(policy.maxPerPeriod);
+    const periodLabel = policy.period ? describePeriod(policy.period.unit, policy.period.multiplier) : null;
+
     // One verdict for both renderers. `ready` used to be its own expression and
     // drifted from the warnings: a setup whose owner was empty printed a loud
     // "the cap is not applying" and still reported ready:true to a script.
@@ -83,6 +95,9 @@ export default class X402Status extends BaseCommand {
       hasAsset: asset !== undefined,
       spent,
       sessionCap,
+      periodCap,
+      periodSpent: periodSpend?.spent ?? null,
+      periodLabel,
     });
 
     if (format === 'json') {
@@ -96,9 +111,17 @@ export default class X402Status extends BaseCommand {
           policy: {
             maxAmountPerPayment: policy.maxAmountPerPayment,
             maxTotalPerSession: policy.maxTotalPerSession,
+            maxPerPeriod: policy.maxPerPeriod,
+            period: policy.period,
             topUpFloat: policy.topUpFloat,
           },
           spentThisSession: spent.toString(),
+          ...(periodSpend
+            ? {
+                spentThisPeriod: periodSpend.spent.toString(),
+                periodEndsAt: new Date(periodSpend.window.end * 1000).toISOString(),
+              }
+            : {}),
           expiry: session.expiry,
           expired,
         },
@@ -114,6 +137,15 @@ export default class X402Status extends BaseCommand {
     this.log('');
     this.log(`  chain   ${session.chainId}${asset ? '' : '   (no USDC configured for this chain)'}`);
     this.log(`  caps    ${formatUsdc(policy.maxAmountPerPayment, decimals)} per payment`);
+    // The granted cap first: it is the one the chain enforces, and the one a
+    // refusal will quote back.
+    if (policy.maxPerPeriod !== undefined && periodLabel) {
+      const spentThisPeriod = periodSpend?.spent ?? 0n;
+      const resets = periodSpend ? ` (resets ${new Date(periodSpend.window.end * 1000).toISOString()})` : '';
+      this.log(
+        `          ${formatUsdc(spentThisPeriod.toString(), decimals)} of ${formatUsdc(policy.maxPerPeriod, decimals)} spent this ${periodLabel}${resets}`
+      );
+    }
     this.log(
       `          ${formatUsdc(spent.toString(), decimals)} of ${formatUsdc(policy.maxTotalPerSession, decimals)} spent this session`
     );

@@ -36,6 +36,17 @@ export interface StatusFacts {
   hasAsset: boolean;
   spent: bigint;
   sessionCap: bigint | null;
+  /**
+   * The granted per-period cap and what has gone against it in the current
+   * window. Null when no grant seeded one. Reported separately from the session
+   * cap because a grant-seeded policy usually has no session cap at all, and
+   * checking only that one stayed quiet while the cap that actually binds was
+   * exhausted.
+   */
+  periodCap?: bigint | null;
+  periodSpent?: bigint | null;
+  /** How the window reads in a sentence, e.g. "day" or "2 weeks". */
+  periodLabel?: string | null;
 }
 
 /**
@@ -73,6 +84,16 @@ export function diagnose(facts: StatusFacts): string[] {
         ? 'The owner account is empty but the payer holds USDC. Payments will work, but they bypass the ' +
             'permission, so the cap you granted is not applying. Move the funds to the owner.'
         : 'The owner account holds no USDC, so there is nothing to pay with.'
+    );
+  }
+
+  // Before the session cap: this is the one that mirrors the permission, so when
+  // both are exhausted it is the more useful thing to say, and it frees up on its
+  // own rather than needing a config change.
+  if (facts.periodCap != null && facts.periodSpent != null && facts.periodSpent >= facts.periodCap) {
+    problems.push(
+      `The granted allowance for this ${facts.periodLabel ?? 'period'} is used up. It resets at the end of ` +
+        'the window, or grant a new permission with `jaw session setup --x402`.'
     );
   }
 

@@ -8,8 +8,8 @@ import { payAndFetch } from '../../x402/http.js';
 import { appendX402Log, readX402Log, sumSpentSince } from '../../x402/ledger.js';
 import { withPaymentLock } from '../../lib/payment-lock.js';
 import { usdcBalance } from '../../x402/balance.js';
-import { resolveX402Policy, policyFromGrant } from '../../x402/policy.js';
-import { currentPeriodWindow, type PeriodWindow } from '../../x402/period.js';
+import { resolveSessionX402Policy, topUpCeiling } from '../../x402/policy.js';
+import { currentPeriodSpend } from '../../x402/spend-window.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import { tryLoadSessionConfig } from '../../lib/session-config.js';
@@ -82,7 +82,7 @@ export function registerPayTool(server: McpServer): void {
             const session = tryLoadSessionConfig();
             // Seed the policy from the on-chain grant captured at setup (caps +
             // allowlists agree with what the user approved); config still wins.
-            const policy = resolveX402Policy(config.x402, policyFromGrant(session?.grantedSpend));
+            const policy = resolveSessionX402Policy(config.x402, session);
             // Scoped to the session so a new grant starts a fresh budget; the
             // payer's whole history when there is no session to scope by.
             // Read inside the lock, every time. Caching this across calls was
@@ -95,21 +95,7 @@ export function registerPayTool(server: McpServer): void {
             // Recomputed per payment because the window moves on its own, and
             // re-read from the ledger for the same reason sessionSpent is: a
             // payment made by another process falls inside this window too.
-            let periodWindow: PeriodWindow | null = null;
-            let periodSpent = 0n;
-            if (policy.period && policy.maxPerPeriod !== undefined && session) {
-              const anchorMs = Date.parse(policy.period.anchor);
-              if (!Number.isNaN(anchorMs)) {
-                periodWindow = currentPeriodWindow({
-                  anchor: Math.floor(anchorMs / 1000),
-                  unit: policy.period.unit,
-                  multiplier: policy.period.multiplier,
-                  now: Math.floor(Date.now() / 1000),
-                  permissionEnd: session.expiry,
-                });
-                periodSpent = sumSpentSince(payer.address, new Date(periodWindow.start * 1000).toISOString());
-              }
-            }
+            const periodSpend = currentPeriodSpend(policy, payer.address, session);
 
             // Flow 2b: when a session (and its on-chain permission) exists, refill
             // the payer EOA through the permission whenever it can't cover a price.
@@ -121,13 +107,9 @@ export function registerPayTool(server: McpServer): void {
               // Defensive: a hand-edited, non-numeric amount must degrade to "no
               // float / no bound", never throw and take down every payment.
               const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
-              // Bound the top-up by the tightest RESOLVED cap, so a float pre-fund
-              // is clamped too and not just the payment itself. The grant's
-              // per-period cap is preferred when present: it is the one that
-              // mirrors the permission, and a grant-seeded policy deliberately
-              // leaves the session cap unset unless the user configured one.
-              const maxTopUp =
-                parseNonNegativeBigInt(policy.maxPerPeriod) ?? parseNonNegativeBigInt(policy.maxTotalPerSession);
+              // Bound the top-up by the tightest resolved cap, so a float pre-fund
+              // is clamped too and not just the payment itself.
+              const maxTopUp = topUpCeiling(policy);
               ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
                 ensurePayerFunds(requirement, payerAddress, bridge, {
                   floatTarget,
@@ -143,8 +125,8 @@ export function registerPayTool(server: McpServer): void {
               policy,
               ensureFunds,
               spentThisSession: sessionSpent,
-              spentThisPeriod: periodWindow ? periodSpent : undefined,
-              periodEndsAt: periodWindow ? new Date(periodWindow.end * 1000) : undefined,
+              spentThisPeriod: periodSpend?.spent,
+              periodEndsAt: periodSpend ? new Date(periodSpend.window.end * 1000) : undefined,
               maxAmount: params.maxAmount,
               asset: params.asset,
               network: params.network,

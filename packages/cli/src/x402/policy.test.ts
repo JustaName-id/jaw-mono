@@ -7,6 +7,8 @@ import {
   DEFAULT_X402_POLICY,
   isX402PolicyKey,
   X402_SCALAR_KEYS,
+  resolveSessionX402Policy,
+  topUpCeiling,
 } from './policy.js';
 import type { X402PaymentRequirement } from './types.js';
 
@@ -144,6 +146,61 @@ describe('resolveX402Policy — grant layer', () => {
     const policy = resolveX402Policy({ maxTotalPerSession: '50000000' }, policyFromGrant(periodGrant));
     expect(policy.maxTotalPerSession).toBe('50000000'); // honoured, not clamped to 5000000
     expect(policy.maxPerPeriod).toBe('5000000'); // the grant still constrains each period
+  });
+});
+
+describe('resolveSessionX402Policy', () => {
+  const grantedSpend = {
+    token: '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913',
+    allowance: '5000000',
+    network: 'eip155:8453',
+    unit: 'day' as const,
+    multiplier: 1,
+    periodAnchor: '2026-01-01T00:00:00.000Z',
+  };
+
+  // The regression this exists to stop: `jaw x402 pay` and `jaw x402 status`
+  // resolved from config alone, so they ran on the 10-USDC defaults across every
+  // registry network while the MCP tool refused at the granted per-period cap.
+  it('seeds from the session grant, matching what the MCP path enforces', () => {
+    const policy = resolveSessionX402Policy(undefined, { grantedSpend });
+    expect(policy.maxPerPeriod).toBe('5000000');
+    expect(policy.allowedNetworks).toEqual(['eip155:8453']);
+    expect(policy.maxTotalPerSession).toBeUndefined(); // the 10-USDC default gives way to the grant
+  });
+
+  it('falls back to config-only resolution when the session has no grant', () => {
+    expect(resolveSessionX402Policy(undefined, undefined)).toEqual(DEFAULT_X402_POLICY);
+    expect(resolveSessionX402Policy(undefined, {})).toEqual(DEFAULT_X402_POLICY);
+  });
+});
+
+describe('topUpCeiling', () => {
+  // Preferring the per-period cap pre-funded the payer with more than the session
+  // could ever spend: a 5-USDC/day grant against an explicit 1-USDC session cap
+  // moved 5 USDC into the payer for a session that stops at 1.
+  it('takes the smaller cap, not the per-period one', () => {
+    expect(topUpCeiling({ maxPerPeriod: '5000000', maxTotalPerSession: '1000000' })).toBe(1000000n);
+  });
+
+  it('takes the per-period cap when it is the smaller one', () => {
+    expect(topUpCeiling({ maxPerPeriod: '1000000', maxTotalPerSession: '5000000' })).toBe(1000000n);
+  });
+
+  it('uses whichever cap is set on its own', () => {
+    expect(topUpCeiling({ maxPerPeriod: '5000000' })).toBe(5000000n);
+    expect(topUpCeiling({ maxTotalPerSession: '3000000' })).toBe(3000000n);
+  });
+
+  it('is unbounded when neither cap is set, leaving the permission as the only bound', () => {
+    expect(topUpCeiling({})).toBeUndefined();
+  });
+
+  // Hand-edited config must not bound the top-up by a garbage number.
+  it('ignores unparseable and negative caps', () => {
+    expect(topUpCeiling({ maxPerPeriod: 'abc', maxTotalPerSession: '2000000' })).toBe(2000000n);
+    expect(topUpCeiling({ maxPerPeriod: '-1', maxTotalPerSession: '2000000' })).toBe(2000000n);
+    expect(topUpCeiling({ maxPerPeriod: 'abc' })).toBeUndefined();
   });
 });
 

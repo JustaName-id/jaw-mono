@@ -6,7 +6,8 @@ import { SessionBridge } from '../../lib/session-bridge.js';
 import { Eip3009EoaPayer } from '../../x402/payer.js';
 import { payAndFetch } from '../../x402/http.js';
 import { appendX402Log, sumSpentSince } from '../../x402/ledger.js';
-import { resolveX402Policy } from '../../x402/policy.js';
+import { resolveSessionX402Policy, topUpCeiling } from '../../x402/policy.js';
+import { currentPeriodSpend } from '../../x402/spend-window.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
 import { parseNonNegativeBigInt } from '../../x402/amount.js';
 import { usdcForNetwork, USDC_BY_NETWORK } from '../../x402/asset-registry.js';
@@ -62,7 +63,9 @@ export default class X402Pay extends BaseCommand {
     // Throws a clear "run jaw session setup" when there is no session key.
     const payer = Eip3009EoaPayer.fromSessionKey();
     const session = tryLoadSessionConfig();
-    const policy = resolveX402Policy(config.x402);
+    // Same resolution the MCP tool uses: this path ran on the bare defaults, so
+    // the two front ends enforced different caps for the same session.
+    const policy = resolveSessionX402Policy(config.x402, session);
 
     const spent = sumSpentSince(payer.address, session?.createdAt);
 
@@ -85,7 +88,7 @@ export default class X402Pay extends BaseCommand {
     if (flags.pay && session && config.apiKey) {
       const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
       const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
-      const maxTopUp = parseNonNegativeBigInt(policy.maxTotalPerSession);
+      const maxTopUp = topUpCeiling(policy);
       ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
         ensurePayerFunds(requirement, payerAddress, bridge, {
           floatTarget,
@@ -99,6 +102,7 @@ export default class X402Pay extends BaseCommand {
     // payer reads a total that does not yet include the payment just made, which
     // is the race the lock exists to close.
     const run = async () => {
+      const periodSpend = currentPeriodSpend(policy, payer.address, session);
       const outcome = await payAndFetch(args.url, payer, {
         method: flags.method,
         body: flags.body,
@@ -106,8 +110,10 @@ export default class X402Pay extends BaseCommand {
         ensureFunds,
         // Re-read here, not before the lock: another process may have paid while
         // we waited our turn, and a stale total waves through a payment the cap
-        // should have stopped.
+        // should have stopped. Same for the period window, which moves on its own.
         spentThisSession: flags.pay ? sumSpentSince(payer.address, session?.createdAt) : spent,
+        spentThisPeriod: periodSpend?.spent,
+        periodEndsAt: periodSpend ? new Date(periodSpend.window.end * 1000) : undefined,
         maxAmount: flags['max-amount'],
         dryRun: !flags.pay,
       });
