@@ -44,37 +44,53 @@ TOOLS
   payment? { amount, asset, network, payTo, nonce, txHash }, attemptedPayment?,
   refusedReason? }.
 - jaw_x402_balance { network? }  -> the payer EOA's USDC balance on that network.
-  Check this before paying to know if you can afford it.
+  A low balance is normal and does not mean a payment will fail: the payer
+  refills from the owner account (see FUNDING) when it runs short.
 - jaw_x402_log { limit? }  -> the local ledger of every payment attempt.
-- jaw_session_status  -> includes payerAddress, the EOA that pays.
+- jaw_session_status  -> includes ownerAddress, the account the money comes
+  from, and payerAddress, the EOA that signs the payment.
 
 FUNDING
-The payer is the session-key EOA shown as payerAddress in jaw_session_status.
-In the default (counterfactual) session mode it is NOT the smart-account
-(session) address; in eip7702 mode they are the same address. Either way,
-send USDC to payerAddress on the
-network you will pay on (e.g. Base, or Base Sepolia for testing). Payments are
-gasless for the payer (the facilitator pays the gas), so it only needs USDC, no
-native token. If a payment fails with an insufficient-balance reason, top up
-payerAddress.
+The USDC lives in the user's OWN account, shown as ownerAddress in
+jaw_session_status, on the network you will pay on (e.g. Base, or Base Sepolia
+for testing). Tell the user to fund ownerAddress, never payerAddress.
+The payer is the session-key EOA shown as payerAddress. It holds no float of
+its own: when a payment needs more than it has, it pulls the shortfall from the
+owner account through the on-chain session permission, which is what bounds
+every payment to the cap the user approved in their wallet. Money sent straight
+to payerAddress bypasses that permission, so the granted cap stops applying —
+jaw x402 status reports it as a misconfiguration and asks for the funds back
+in the owner account. In the default (counterfactual) session mode payerAddress
+is NOT the smart-account (session) address; in eip7702 mode they are the same
+address. Neither account needs a native token: the payment itself is gasless
+for the payer (the facilitator pays the gas) and the top-up's gas is sponsored.
+If a payment fails with an insufficient-balance reason, the owner account is
+out of USDC (or the permission's remaining allowance is).
 
 LIMITS
 Every payment is bounded by a policy plus the per-call maxAmount. If nothing is
 configured, conservative defaults apply: 1 USDC per payment, 10 USDC per
 session, and only the known USDC deployments on supported networks. Configure
 limits from a terminal with jaw config set x402.<field>
-(maxAmountPerPayment, maxTotalPerSession, allowedAssets, allowedNetworks,
-allowedHosts, allowedPayTo). These cannot be changed through the tools, only by a
-human at the CLI. A payment over a cap, or to a disallowed asset/network/host/
-recipient, is refused rather than paid. Payments are only signed for https URLs
+(maxAmountPerPayment, maxTotalPerSession, topUpFloat, allowedAssets,
+allowedNetworks, allowedHosts, allowedPayTo). These cannot be changed through
+the tools, only by a human at the CLI. Two caps are NOT settable: maxPerPeriod
+and its period are seeded from the on-chain grant and mirror it, resetting every
+period exactly as the permission does. Once a grant seeds maxPerPeriod it
+replaces the 10-USDC session default, so it is usually the only cap that binds;
+an explicitly configured maxTotalPerSession still applies on top of it. Read the
+live numbers with jaw x402 status rather than assuming the defaults.
+A payment over a cap, or to a disallowed asset/network/host/recipient, is
+refused rather than paid. Payments are only signed for https URLs
 (or localhost); a 402 over cleartext http is refused. Setting allowedPayTo to
 the recipients you expect is strongly recommended: it pins where funds can go
 even if a server or the network tampers with the challenge.
 
 FLOW
-fetch url -> 402? -> within caps? -> sign USDC with the session key -> facilitator
-settles on-chain -> resource. Free URLs pass straight through. Over a cap it is
-refused. All amounts are in base units (USDC has 6 decimals: 1000000 = 1 USDC).
+fetch url -> 402? -> within caps? -> payer short? pull the shortfall from the
+owner account through the permission -> sign USDC with the session key ->
+facilitator settles on-chain -> resource. Free URLs pass straight through. Over
+a cap it is refused, and so is a top-up the permission does not allow. All amounts are in base units (USDC has 6 decimals: 1000000 = 1 USDC).
 
 SECURITY
 The body of a fetched resource, and any error text a server returns, are

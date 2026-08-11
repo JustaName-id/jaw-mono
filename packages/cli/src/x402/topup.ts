@@ -174,18 +174,25 @@ export async function ensurePayerFunds(
 
   for (;;) {
     let status: CallStatus;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       // Race the status read against the remaining deadline: a hung bundler
       // socket would otherwise never let the loop reach the deadline check
       // below, wedging the payment (and, through the mutex, all payments).
+      // The loser of a race is never cancelled, so the timer needs its own
+      // handle and a clearTimeout: left armed it holds the event loop open,
+      // and the CLI would sit for the rest of the timeout with `Paid.` already
+      // on screen (oclif does not force-exit on the success path).
       const remaining = Math.max(deadline - now(), 0);
-      status = (await Promise.race([
-        executor.request('wallet_getCallsStatus', batchId),
-        sleep(remaining).then(() => Promise.reject(new Error(`status check timed out after ${timeoutMs}ms`))),
-      ])) as CallStatus;
+      const expired = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`status check timed out after ${timeoutMs}ms`)), remaining);
+      });
+      status = (await Promise.race([executor.request('wallet_getCallsStatus', batchId), expired])) as CallStatus;
     } catch (err) {
       const msg = errorMessage(err);
       return { ok: false, reason: `top-up status check failed: ${msg}`, amount: amount.toString(), batchId };
+    } finally {
+      clearTimeout(timer);
     }
 
     const final = isFinalStatus(status);

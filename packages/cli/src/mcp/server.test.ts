@@ -315,7 +315,10 @@ describe('jaw_pay_and_fetch', () => {
       ],
     })
   ).toString('base64');
-  const RECEIPT = Buffer.from(JSON.stringify({ success: true, transaction: '0xtx' })).toString('base64');
+  // A real 32-byte hash: the receipt's tx is shape-checked before it reaches the
+  // meta block, so a placeholder would be dropped.
+  const SETTLED_TX = '0x' + 'ab'.repeat(32);
+  const RECEIPT = Buffer.from(JSON.stringify({ success: true, transaction: SETTLED_TX })).toString('base64');
   const mkRes = (status: number, hdrs: Record<string, string>, body: string) =>
     ({ status, headers: { get: (k: string) => hdrs[k] ?? null }, text: async () => body }) as unknown as Response;
 
@@ -383,7 +386,7 @@ describe('jaw_pay_and_fetch', () => {
         await client.callTool({ name: 'jaw_pay_and_fetch', arguments: { url: 'https://api.example.com/paid' } })
       );
       expect(parsed.paid).toBe(true);
-      expect(parsed.payment.txHash).toBe('0xtx');
+      expect(parsed.payment.txHash).toBe(SETTLED_TX);
       expect(parsed.payment.nonce).toMatch(/^0x[0-9a-f]{64}$/);
       expect(parsed.payer.toLowerCase()).toBe('0x70997970c51812dc3a010c7d01b50e0d17dc79c8');
       // The retry carried a real signed proof from the session key.
@@ -712,7 +715,7 @@ describe('jaw_pay_and_fetch', () => {
       expect(log[0]).toMatchObject({
         status: 'paid',
         amount: '1000',
-        txHash: '0xtx',
+        txHash: SETTLED_TX,
         url: 'https://api.example.com/paid',
       });
     } finally {

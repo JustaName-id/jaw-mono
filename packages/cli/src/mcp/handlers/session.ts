@@ -24,10 +24,12 @@ export function registerSessionTools(server: McpServer): void {
           });
         }
         const config = loadSessionConfig();
-        // The EOA that jaw_pay_and_fetch pays USDC from — distinct from
+        // The EOA that jaw_pay_and_fetch signs payments from — distinct from
         // sessionAddress (the smart account) in counterfactual mode, the same
-        // address in eip7702 mode. This is the address to fund. Non-fatal: a
-        // malformed key must not break the whole status report.
+        // address in eip7702 mode. NOT the address to fund: it refills from
+        // ownerAddress through the permission, and money sent here directly
+        // bypasses the granted cap. Non-fatal: a malformed key must not break
+        // the whole status report.
         let payerAddress: string | undefined;
         try {
           payerAddress = sessionPayerAddress();

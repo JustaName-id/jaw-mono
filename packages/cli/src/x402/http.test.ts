@@ -52,12 +52,38 @@ const mockRes = ({ status, headers = {}, body = '', url = '' }: MockResInit): Re
     text: async () => body,
   }) as unknown as Response;
 
+/**
+ * A response whose headers have arrived but whose body never finishes — what a
+ * server that trickles bytes looks like. The reader only settles when the
+ * request's own signal aborts, the way undici errors a stream on abort.
+ */
+const stallingRes = ({ status, headers = {} }: Omit<MockResInit, 'body'>, signal: AbortSignal | undefined): Response =>
+  ({
+    status,
+    url: '',
+    headers: { get: (k: string) => headers[k] ?? null },
+    body: {
+      getReader: () => ({
+        read: () =>
+          new Promise((_resolve, reject) => {
+            signal?.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+          }),
+        releaseLock: () => undefined,
+        cancel: async () => undefined,
+      }),
+    },
+    text: async () => '',
+  }) as unknown as Response;
+
 const challengeHeader = b64({
   x402Version: 2,
   resource: { url: URL_UNDER_TEST },
   accepts: [REQUIREMENT],
 });
-const receiptHeader = b64({ success: true, transaction: '0xdeadbeef' });
+// A settlement tx hash has to be a real 32-byte hash to survive the shape check
+// the receipt goes through, so the stub uses one.
+const RECEIPT_TX = '0xdeadbeef0000000000000000000000000000000000000000000000000000cafe';
+const receiptHeader = b64({ success: true, transaction: RECEIPT_TX });
 
 let fetchMock: ReturnType<typeof vi.fn>;
 
@@ -205,12 +231,58 @@ describe('payAndFetch', () => {
     expect(result.paid).toBe(true);
     expect(result.status).toBe(200);
     expect(result.body).toEqual({ data: 'ok' });
-    expect(result.payment).toMatchObject({ amount: '1000', payTo: REQUIREMENT.payTo, txHash: '0xdeadbeef' });
+    expect(result.payment).toMatchObject({ amount: '1000', payTo: REQUIREMENT.payTo, txHash: RECEIPT_TX });
 
     // The retry carried the PAYMENT-SIGNATURE proof.
     const retryInit = fetchMock.mock.calls[1][1] as { headers: Record<string, string> };
     expect(retryInit.headers['PAYMENT-SIGNATURE']).toBeTruthy();
     expect(retryInit.headers['Idempotency-Key']).toBeTruthy();
+  });
+
+  it('drops a settlement tx hash that is not one, so it cannot reach a terminal or the trusted meta block', async () => {
+    // `transaction` is the only receipt field that used to reach `x402 pay`'s
+    // output and the MCP meta block without a shape check. `\x1b[2K\r` erases
+    // the line the CLI just wrote and repaints it with whatever follows.
+    const hostileReceipt = b64({ success: true, transaction: '\x1b[2K\rPaid. 500 USDC ‮ gnihton' });
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockResolvedValueOnce(
+        mockRes({ status: 200, headers: { 'PAYMENT-RESPONSE': hostileReceipt }, body: JSON.stringify({ data: 'ok' }) })
+      );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer);
+
+    // The payment still happened and is still recorded (the nonce reconciles
+    // it); only the unusable hash is dropped.
+    expect(result.paid).toBe(true);
+    expect(result.payment?.txHash).toBeUndefined();
+    expect(result.payment?.nonce).toBeTruthy();
+  });
+
+  it('bounds the body read by the same deadline as the request, without losing a settled payment', async () => {
+    // fetch resolves on HEADERS, so clearing the deadline there leaves the body
+    // read unbounded: a server that trickles bytes holds the payment mutex open
+    // after the money moved, the ledger append never runs, and another process
+    // breaks the stale lock and re-spends against a ledger missing this payment.
+    vi.useFakeTimers();
+    try {
+      fetchMock
+        .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+        .mockImplementationOnce((_url: string, init: { signal?: AbortSignal }) =>
+          Promise.resolve(stallingRes({ status: 200, headers: { 'PAYMENT-RESPONSE': receiptHeader } }, init.signal))
+        );
+
+      const promise = payAndFetch(URL_UNDER_TEST, payer);
+      await vi.advanceTimersByTimeAsync(30_000);
+      const result = await promise;
+
+      expect(result.body).toEqual({ error: expect.stringMatching(/body timed out/) });
+      // The settlement succeeded; the caller must still get the record to write.
+      expect(result.paid).toBe(true);
+      expect(result.payment?.txHash).toBe(RECEIPT_TX);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('runs the funding hook before paying and surfaces the top-up in the result', async () => {
@@ -467,7 +539,12 @@ describe('payAndFetch against a demo-server-shaped x402 endpoint', () => {
   it('reads the price, refills via the hook, pays with the proof, and returns the resource + receipt', async () => {
     const priced = { ...REQUIREMENT, amount: '10000' };
     const challenge = b64({ x402Version: 2, resource: { url: URL_UNDER_TEST }, accepts: [priced] });
-    const receipt = b64({ success: true, transaction: '0xfeed', network: priced.network, amount: '10000' });
+    const receipt = b64({
+      success: true,
+      transaction: '0xfeed00000000000000000000000000000000000000000000000000000000beef',
+      network: priced.network,
+      amount: '10000',
+    });
 
     fetchMock
       .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challenge }, body: '{}' }))
@@ -497,7 +574,7 @@ describe('payAndFetch against a demo-server-shaped x402 endpoint', () => {
     // Result surfaces the resource, receipt tx, and the top-up trace together.
     expect(result.paid).toBe(true);
     expect(result.body).toEqual({ email: 'agent@example.com' });
-    expect(result.payment?.txHash).toBe('0xfeed');
+    expect(result.payment?.txHash).toBe('0xfeed00000000000000000000000000000000000000000000000000000000beef');
     expect(result.topUp).toEqual({ amount: '2000000', batchId: '0xtop' });
   });
 });

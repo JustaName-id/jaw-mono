@@ -99,6 +99,22 @@ const b64json = <T>(header: string | null): T | null => {
   }
 };
 
+/**
+ * The settle receipt's tx hash, or nothing when the server sent something that
+ * isn't one. Every other field off the wire is shape-checked (`accepts` by
+ * `requirementSchema`, addresses by `hexAddress`, `network` by the CAIP-2
+ * regex); this one is decoded from a bare base64 header and then reaches a
+ * terminal line (`x402 pay` prints it unsanitized, so `\x1b[2K\r` would repaint
+ * what the CLI just wrote) and the MCP meta block, which claims to hold only
+ * validated shapes that cannot carry an instruction. Checking it here is what
+ * makes that claim true, and closes every sink at once. A receipt that fails
+ * the check still reconciles by nonce, which the ledger also records.
+ */
+function settledTxHash(receipt: X402SettleResponse | null): `0x${string}` | undefined {
+  const tx = receipt?.transaction;
+  return tx && /^0x[0-9a-fA-F]{64}$/.test(tx) ? tx : undefined;
+}
+
 // Cap the response body a server can make us buffer. The body is untrusted and
 // only ever carries a small JSON envelope; without a cap a malicious server
 // could stream gigabytes and OOM the agent process.
@@ -148,14 +164,60 @@ async function readBody(res: Response): Promise<unknown> {
 // makes progress.
 const FETCH_TIMEOUT_MS = 30_000;
 
-async function fetchWithTimeout(url: string, init: RequestInit): Promise<Response> {
+/**
+ * A response whose deadline is still armed. `fetch` resolves as soon as the
+ * HEADERS arrive, so disarming there leaves the body read unbounded in time: a
+ * server that trickles one byte a minute would hold the payment mutex open
+ * forever. That is worse than a hang — after a settled payment the ledger
+ * append never runs, another process eventually judges the lock stale and
+ * breaks it, and both payments clear the cap. So the deadline covers the body
+ * read too, and `read()` is the only thing that disarms it.
+ */
+interface TimedResponse {
+  res: Response;
+  /** Consume the body under the request's deadline, then disarm. */
+  read(): Promise<unknown>;
+  /** Drop an unread body (nothing needs it) and disarm. */
+  close(): void;
+}
+
+async function fetchWithTimeout(url: string, init: RequestInit): Promise<TimedResponse> {
   const controller = new AbortController();
   const timer = setTimeout(() => controller.abort(), FETCH_TIMEOUT_MS);
+  // The deadline must never be what keeps the process alive: the pending socket
+  // already holds the loop open while it matters, and an armed timer past that
+  // point would stall exit the way a payment's own timers must not.
+  timer.unref?.();
+  let res: Response;
   try {
-    return await fetch(url, { ...init, signal: controller.signal });
-  } finally {
+    res = await fetch(url, { ...init, signal: controller.signal });
+  } catch (err) {
     clearTimeout(timer);
+    throw err;
   }
+  return {
+    res,
+    read: async () => {
+      try {
+        return await readBody(res);
+      } catch (err) {
+        // An abort mid-body is the deadline firing, not a caller error. Report
+        // it as body content the way an oversized body is: throwing here would
+        // escape `payAndFetch` after settlement and lose a paid payment's
+        // record, which is exactly the trace the ledger needs.
+        if (controller.signal.aborted) {
+          return { error: `response body timed out after ${FETCH_TIMEOUT_MS}ms` };
+        }
+        throw err;
+      } finally {
+        clearTimeout(timer);
+      }
+    },
+    close: () => {
+      clearTimeout(timer);
+      void res.body?.cancel().catch(() => undefined);
+    },
+  };
 }
 
 function hostOf(url: string): string | undefined {
@@ -306,8 +368,8 @@ export async function payAndFetch(
 
   // 1. First attempt. Anything but 402 passes through unchanged.
   const first = await fetchWithTimeout(url, { method, headers: baseHeaders, body: opts.body });
-  if (first.status !== 402) {
-    return { status: first.status, body: await readBody(first), paid: false, payer: payer.address };
+  if (first.res.status !== 402) {
+    return { status: first.res.status, body: await first.read(), paid: false, payer: payer.address };
   }
 
   // A 402 means we are about to sign a payment. Gate on the FINAL url (after
@@ -317,11 +379,11 @@ export async function payAndFetch(
   // what the policy host allowlist must judge, and where the signed proof is
   // sent (never the original, which could redirect again). Free (non-402)
   // fetches returned above, so plain http still works as a generic fetch.
-  const resource = first.url || url;
+  const resource = first.res.url || url;
   if (!isPaymentUrlSecure(resource)) {
     return {
       status: 402,
-      body: await readBody(first),
+      body: await first.read(),
       paid: false,
       payer: payer.address,
       refusedReason: 'refusing to sign a payment over a non-HTTPS URL (use https, or localhost for testing)',
@@ -329,11 +391,11 @@ export async function payAndFetch(
   }
 
   // 2. The v2 challenge lives in the PAYMENT-REQUIRED header (body is opaque).
-  const challenge = b64json<X402PaymentRequired>(first.headers.get(X402_HEADERS.required));
+  const challenge = b64json<X402PaymentRequired>(first.res.headers.get(X402_HEADERS.required));
   if (!challenge || !Array.isArray(challenge.accepts)) {
     return {
       status: 402,
-      body: await readBody(first),
+      body: await first.read(),
       paid: false,
       payer: payer.address,
       refusedReason: 'missing or malformed PAYMENT-REQUIRED challenge',
@@ -349,7 +411,7 @@ export async function payAndFetch(
   };
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {
-    return { status: 402, body: await readBody(first), paid: false, payer: payer.address, refusedReason: reason };
+    return { status: 402, body: await first.read(), paid: false, payer: payer.address, refusedReason: reason };
   }
 
   // 3.75 Dry run stops here, the last point before anything costs or commits.
@@ -358,7 +420,7 @@ export async function payAndFetch(
   if (opts.dryRun) {
     return {
       status: 402,
-      body: await readBody(first),
+      body: await first.read(),
       paid: false,
       payer: payer.address,
       wouldPay: {
@@ -379,7 +441,7 @@ export async function payAndFetch(
     if (!funded.ok) {
       return {
         status: 402,
-        body: await readBody(first),
+        body: await first.read(),
         paid: false,
         payer: payer.address,
         refusedReason: funded.reason ?? 'payer funding failed',
@@ -405,7 +467,7 @@ export async function payAndFetch(
   } catch (err) {
     return {
       status: 402,
-      body: await readBody(first),
+      body: await first.read(),
       paid: false,
       payer: payer.address,
       refusedReason: `payment signing failed: ${errorMessage(err)}`,
@@ -420,6 +482,11 @@ export async function payAndFetch(
     nonce: payload.payload.authorization.nonce,
   };
   const proof = encodePaymentPayload(payload);
+
+  // Nothing reads the challenge's body from here on (the challenge itself came
+  // from the header), so let go of it: its deadline is still armed, and leaving
+  // it to expire mid-payment would abort a body no one is waiting for.
+  first.close();
 
   // 5. Retry with the proof, against the resolved secure `resource` and with
   //    redirects DISABLED: the PAYMENT-SIGNATURE header must never be followed
@@ -441,28 +508,28 @@ export async function payAndFetch(
   // A settled x402 response carries the resource directly (never a redirect).
   // A 3xx here means the endpoint tried to bounce the signed proof elsewhere —
   // treat it as a settlement failure, never follow it.
-  if (paid.status >= 300 && paid.status < 400) {
+  if (paid.res.status >= 300 && paid.res.status < 400) {
     return {
-      status: paid.status,
-      body: await readBody(paid),
+      status: paid.res.status,
+      body: await paid.read(),
       paid: false,
       payer: payer.address,
       attemptedPayment: details,
       topUp,
-      refusedReason: `settlement endpoint attempted a redirect (${paid.status}); not following it with the signed proof`,
+      refusedReason: `settlement endpoint attempted a redirect (${paid.res.status}); not following it with the signed proof`,
     };
   }
 
-  const receipt = b64json<X402SettleResponse>(paid.headers.get(X402_HEADERS.response));
-  const body = await readBody(paid);
-  if (paid.status >= 400) {
+  const receipt = b64json<X402SettleResponse>(paid.res.headers.get(X402_HEADERS.response));
+  const body = await paid.read();
+  if (paid.res.status >= 400) {
     // On rejection the server re-challenges with a fresh PAYMENT-REQUIRED whose
     // `error` carries the real reason (e.g. `invalid_exact_evm_insufficient_balance`),
     // which is far more actionable than the bare status. Prefer a settle receipt
     // error, then the re-challenge error, then the status.
-    const reChallenge = b64json<X402PaymentRequired>(paid.headers.get(X402_HEADERS.required));
+    const reChallenge = b64json<X402PaymentRequired>(paid.res.headers.get(X402_HEADERS.required));
     return {
-      status: paid.status,
+      status: paid.res.status,
       body,
       paid: false,
       payer: payer.address,
@@ -470,16 +537,16 @@ export async function payAndFetch(
       // (facilitator may have broadcast) can be reconciled by nonce.
       attemptedPayment: details,
       topUp,
-      refusedReason: receipt?.errorReason ?? reChallenge?.error ?? `settlement failed with status ${paid.status}`,
+      refusedReason: receipt?.errorReason ?? reChallenge?.error ?? `settlement failed with status ${paid.res.status}`,
     };
   }
 
   return {
-    status: paid.status,
+    status: paid.res.status,
     body,
     paid: true,
     topUp,
     payer: payer.address,
-    payment: { ...details, txHash: receipt?.transaction },
+    payment: { ...details, txHash: settledTxHash(receipt) },
   };
 }

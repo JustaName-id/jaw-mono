@@ -1,4 +1,4 @@
-import { describe, expect, test } from 'vitest';
+import { describe, expect, test, vi } from 'vitest';
 import { decodeFunctionData, erc20Abi } from 'viem';
 import { ensurePayerFunds, type TopUpExecutor } from './topup.js';
 import type { X402PaymentRequirement } from './types.js';
@@ -157,6 +157,28 @@ describe('ensurePayerFunds', () => {
     expect(out.ok).toBe(false);
     expect(out.reason).toContain('not confirmed after');
     expect(out.batchId).toBe('0xbatch1');
+  });
+
+  test('Given the status read wins the deadline race, When it returns, Then no timer is left armed to hold the process open', async () => {
+    // Promise.race settles but never cancels the loser. An armed deadline timer
+    // outlives the top-up and keeps the event loop alive, so `jaw x402 pay`
+    // would print `Paid.` and then sit there for the rest of the timeout.
+    vi.useFakeTimers();
+    try {
+      const { executor } = fakeExecutor();
+
+      // No injected sleep here on purpose: the leaked timer is the real one the
+      // default sleep arms, so injecting an instant sleep would test nothing.
+      const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
+        balanceReader: async () => 0n,
+        timeoutMs: 90_000,
+      });
+
+      expect(out.ok).toBe(true);
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   test('Given a bridge that returns a bare string id, When topping up, Then it still confirms (shape tolerance)', async () => {
