@@ -2581,6 +2581,7 @@ function PermissionDialogWrapper({
       }}
       mode="grant"
       spenderAddress={request.data.spender}
+      accountAddress={request.data.address}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={spends}
       calls={calls}

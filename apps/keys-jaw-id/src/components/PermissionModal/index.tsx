@@ -651,7 +651,9 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, spendsData]);
+    // tokenInfoMap is read for its cache but deliberately not a dep — the effect writes it,
+    // so listing it would loop. Everything else the body reads is here.
+  }, [chain, spendsData, callsData, viemChain]);
 
   const handleConfirm = useCallback(async () => {
     if (submittingRef.current) return;
