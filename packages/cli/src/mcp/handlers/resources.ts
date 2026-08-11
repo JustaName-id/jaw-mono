@@ -58,8 +58,8 @@ The payer is the session-key EOA shown as payerAddress. It holds no float of
 its own: when a payment needs more than it has, it pulls the shortfall from the
 owner account through the on-chain session permission, which is what bounds
 every payment to the cap the user approved in their wallet. Money sent straight
-to payerAddress bypasses that permission, so the granted cap stops applying —
-jaw x402 status reports it as a misconfiguration and asks for the funds back
+to payerAddress bypasses that permission, so the granted cap stops applying.
+jaw x402 status reports that as a misconfiguration and asks for the funds back
 in the owner account. In the default (counterfactual) session mode payerAddress
 is NOT the smart-account (session) address; in eip7702 mode they are the same
 address. Neither account needs a native token. The payment itself is gasless for
