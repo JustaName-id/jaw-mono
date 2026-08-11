@@ -177,8 +177,6 @@ interface TimedResponse {
   res: Response;
   /** Consume the body under the request's deadline, then disarm. */
   read(): Promise<unknown>;
-  /** Drop an unread body (nothing needs it) and disarm. */
-  close(): void;
 }
 
 async function fetchWithTimeout(url: string, init: RequestInit): Promise<TimedResponse> {
@@ -212,10 +210,6 @@ async function fetchWithTimeout(url: string, init: RequestInit): Promise<TimedRe
       } finally {
         clearTimeout(timer);
       }
-    },
-    close: () => {
-      clearTimeout(timer);
-      void res.body?.cancel().catch(() => undefined);
     },
   };
 }
@@ -372,6 +366,13 @@ export async function payAndFetch(
     return { status: first.res.status, body: await first.read(), paid: false, payer: payer.address };
   }
 
+  // Read the challenge's body now, while its deadline is fresh. Every refusal
+  // below returns it, and the alternative (reading it per-branch) leaves the
+  // response, and the deadline bounding it, open across the funding hook, which
+  // waits on an on-chain confirmation and can take a minute and a half. The
+  // body itself is opaque: the challenge that matters rides in the header.
+  const challengeBody = await first.read();
+
   // A 402 means we are about to sign a payment. Gate on the FINAL url (after
   // any redirects), not the original: fetch follows https->http downgrades by
   // default, so a trusted https endpoint that redirects to http would smuggle a
@@ -383,7 +384,7 @@ export async function payAndFetch(
   if (!isPaymentUrlSecure(resource)) {
     return {
       status: 402,
-      body: await first.read(),
+      body: challengeBody,
       paid: false,
       payer: payer.address,
       refusedReason: 'refusing to sign a payment over a non-HTTPS URL (use https, or localhost for testing)',
@@ -395,7 +396,7 @@ export async function payAndFetch(
   if (!challenge || !Array.isArray(challenge.accepts)) {
     return {
       status: 402,
-      body: await first.read(),
+      body: challengeBody,
       paid: false,
       payer: payer.address,
       refusedReason: 'missing or malformed PAYMENT-REQUIRED challenge',
@@ -411,7 +412,7 @@ export async function payAndFetch(
   };
   const { requirement, reason } = selectRequirement(challenge.accepts, opts, ctx);
   if (!requirement) {
-    return { status: 402, body: await first.read(), paid: false, payer: payer.address, refusedReason: reason };
+    return { status: 402, body: challengeBody, paid: false, payer: payer.address, refusedReason: reason };
   }
 
   // 3.75 Dry run stops here, the last point before anything costs or commits.
@@ -420,7 +421,7 @@ export async function payAndFetch(
   if (opts.dryRun) {
     return {
       status: 402,
-      body: await first.read(),
+      body: challengeBody,
       paid: false,
       payer: payer.address,
       wouldPay: {
@@ -441,7 +442,7 @@ export async function payAndFetch(
     if (!funded.ok) {
       return {
         status: 402,
-        body: await first.read(),
+        body: challengeBody,
         paid: false,
         payer: payer.address,
         refusedReason: funded.reason ?? 'payer funding failed',
@@ -467,7 +468,7 @@ export async function payAndFetch(
   } catch (err) {
     return {
       status: 402,
-      body: await first.read(),
+      body: challengeBody,
       paid: false,
       payer: payer.address,
       refusedReason: `payment signing failed: ${errorMessage(err)}`,
@@ -482,11 +483,6 @@ export async function payAndFetch(
     nonce: payload.payload.authorization.nonce,
   };
   const proof = encodePaymentPayload(payload);
-
-  // Nothing reads the challenge's body from here on (the challenge itself came
-  // from the header), so let go of it: its deadline is still armed, and leaving
-  // it to expire mid-payment would abort a body no one is waiting for.
-  first.close();
 
   // 5. Retry with the proof, against the resolved secure `resource` and with
   //    redirects DISABLED: the PAYMENT-SIGNATURE header must never be followed
