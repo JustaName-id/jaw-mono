@@ -9,30 +9,29 @@ import { cn, DialogAnchorContext, PortalContainerContext } from '../../lib/utils
 function Dialog({ open, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   const prevOpenRef = React.useRef(open);
 
-  // Cleanup pointer-events when dialog closes OR unmounts
+  // Cleanup pointer-events when dialog closes: wait out the close animation
+  // (200ms duration-200) plus buffer. The timer is cancelled if the dialog
+  // reopens or unmounts first — the unmount effect below takes over then.
   React.useEffect(() => {
-    // Track when dialog transitions from open to closed
-    if (prevOpenRef.current === true && open === false) {
-      // Wait for close animation to complete (200ms duration-200) plus buffer
-      const cleanup = setTimeout(() => {
-        document.body.style.removeProperty('pointer-events');
-      }, 250);
-
-      prevOpenRef.current = open;
-      return () => clearTimeout(cleanup);
-    }
-
+    const closing = prevOpenRef.current === true && open === false;
     prevOpenRef.current = open;
+    if (!closing) return;
 
-    // Cleanup on unmount - remove pointer-events if dialog was open
-    return () => {
-      if (open === true) {
-        setTimeout(() => {
-          document.body.style.removeProperty('pointer-events');
-        }, 250);
-      }
-    };
+    const cleanup = setTimeout(() => {
+      document.body.style.removeProperty('pointer-events');
+    }, 250);
+    return () => clearTimeout(cleanup);
   }, [open]);
+
+  // Cleanup on unmount. Synchronous, not a timer: the node is gone instantly so
+  // there is no animation to wait for, and a timer here would outlive the
+  // component with no way to cancel it (it also covers a close immediately
+  // followed by an unmount, which cancels the close-path timer above).
+  React.useEffect(() => {
+    return () => {
+      document.body.style.removeProperty('pointer-events');
+    };
+  }, []);
 
   return <DialogPrimitive.Root data-slot="dialog" open={open} {...props} />;
 }

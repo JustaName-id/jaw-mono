@@ -5,10 +5,13 @@ import {
   useGasEstimation,
   type FeeTokenOption,
   fetchTokenBalance,
+  formatSpendAmount,
   getPublicClient,
+  useFunctionSignatures,
   isNativeToken,
+  isWildcard,
 } from '@jaw.id/ui';
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, erc20Abi, type Address } from 'viem';
 import { getChainNameFromId } from '../../lib/chain-handlers';
 import { useSessionAccount } from '../../hooks';
@@ -31,23 +34,6 @@ import {
 } from '@jaw.id/core';
 
 // Known function selectors mapping
-const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
-  '0x32323232': 'Any Function',
-  '0xe0e0e0e0': 'Empty Calldata',
-  '0xcc53287f': 'lockdown((address,address)[])',
-  '0x87517c45': 'approve(address,address,uint160,uint48)',
-  '0x095ea7b3': 'approve(address,uint256)',
-  '0x23b872dd': 'transferFrom(address,address,uint256)',
-  '0xa9059cbb': 'transfer(address,uint256)',
-};
-
-// Resolve function selector to human-readable name
-const resolveFunctionSelector = (selector: string): string => {
-  const normalizedSelector = selector.toLowerCase();
-  const knownName = KNOWN_FUNCTION_SELECTORS[normalizedSelector];
-  return knownName || selector;
-};
-
 // Permission request data
 export interface PermissionRequestData {
   method: 'wallet_grantPermissions' | 'wallet_revokePermissions';
@@ -59,6 +45,8 @@ export interface PermissionModalProps {
   chain?: Chain;
   apiKey: string;
   origin?: string;
+  appName?: string;
+  appLogoUrl?: string;
   onSuccess?: (result: WalletGrantPermissionsResponse | { success: boolean }) => void;
   onError?: (error: Error, errorCode?: number) => void;
 }
@@ -126,13 +114,17 @@ const formatExpiryDate = (timestamp: number): string => {
 };
 
 // Token info cache type
-type TokenInfoMap = Record<string, { decimals: number; symbol: string }>;
+// `decimals: null` means the token's `decimals()` read failed — kept distinct from a number so a
+// failed read can never be mistaken for 18. See formatSpendAmount.
+type TokenInfoMap = Record<string, { decimals: number | null; symbol: string }>;
 
 export const PermissionModal = ({
   permissionRequest,
   chain,
   apiKey,
   origin,
+  appName,
+  appLogoUrl,
   onSuccess,
   onError,
 }: PermissionModalProps) => {
@@ -149,6 +141,9 @@ export const PermissionModal = ({
 
   const [status, setStatus] = useState<string>('');
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
+  // Synchronous re-entry guard: isProcessing disables the buttons only after a
+  // re-render, which is too soft a gate for a grant that delegates authority on-chain.
+  const submittingRef = useRef(false);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
@@ -367,26 +362,25 @@ export const PermissionModal = ({
   const formattedSpends = useMemo(() => {
     return spendsData.map((spend: any) => {
       const tokenAddress = spend.token;
-      const tokenInfo = tokenInfoMap[tokenAddress] || { decimals: 18, symbol: 'ETH' };
+      // No symbol until it resolves — a placeholder here would label every token "ETH". Only a
+      // native token has decimals knowable without a read.
+      const tokenInfo = tokenInfoMap[tokenAddress] || {
+        decimals: isNativeToken(tokenAddress) ? (viemChain?.nativeCurrency?.decimals ?? 18) : null,
+        symbol: isNativeToken(tokenAddress) ? (viemChain?.nativeCurrency?.symbol ?? 'ETH') : '',
+      };
 
-      let amount, limit, duration;
-
-      if (mode === 'revoke') {
-        // From relay - allowance is hex string, unit is period string, multiplier is number
-        const allowance = BigInt(spend.allowance);
-        amount = formatUnits(allowance, tokenInfo.decimals);
-        limit = `${amount} ${tokenInfo.symbol}`;
-        duration = formatDurationFromRelay(spend.unit, spend.multiplier ?? 1);
-      } else {
-        // From grant request - allowance is string, unit is SpendPeriod, multiplier is optional
-        const allowanceValue = BigInt(spend.allowance);
-        amount = formatUnits(allowanceValue, tokenInfo.decimals);
-        limit = `${amount} ${tokenInfo.symbol}`;
-        duration = formatDuration(spend.unit as SpendPeriod, spend.multiplier ?? 1);
-      }
+      // allowance is a hex string from the relay, a decimal string from a grant request; BigInt
+      // reads both. Only the duration formatting differs by mode.
+      const { amount, decimalsUnknown } = formatSpendAmount(BigInt(spend.allowance), tokenInfo.decimals);
+      const limit = decimalsUnknown ? `${amount} base units` : `${amount} ${tokenInfo.symbol}`;
+      const duration =
+        mode === 'revoke'
+          ? formatDurationFromRelay(spend.unit, spend.multiplier ?? 1)
+          : formatDuration(spend.unit as SpendPeriod, spend.multiplier ?? 1);
 
       return {
         amount,
+        decimalsUnknown,
         token: isNativeToken(tokenAddress)
           ? 'Native (ETH)'
           : tokenInfo.symbol === tokenAddress
@@ -400,14 +394,23 @@ export const PermissionModal = ({
   }, [spendsData, tokenInfoMap, mode]);
 
   // Format call permissions
+  // Signatures resolve asynchronously — an unresolved selector renders as raw hex, then upgrades.
+  const callSignatures = useFunctionSignatures(callsData.map((call: any) => call.selector));
   const formattedCalls = useMemo(() => {
     return callsData.map((call: any) => ({
       target: call.target,
       selector: call.selector,
       functionSignature:
-        call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+        call.functionSignature ||
+        (call.selector ? (callSignatures[call.selector.toLowerCase()] ?? call.selector) : 'Unknown Function'),
     }));
-  }, [callsData]);
+  }, [callsData, callSignatures]);
+
+  // Grant date (revoke only) — the stored permission's `start`, mirroring how expiry uses `end`.
+  const grantedDate = useMemo(() => {
+    if (mode !== 'revoke' || !fetchedPermissionData?.start) return undefined;
+    return formatExpiryDate(parseInt(fetchedPermissionData.start, 10));
+  }, [mode, fetchedPermissionData]);
 
   // Expiry date
   const expiryDate = useMemo(() => {
@@ -439,53 +442,6 @@ export const PermissionModal = ({
   }, [mode, fetchedPermissionData, permissionDetails]);
 
   // Generate warning message based on actual permissions
-  const warningMessage = useMemo(() => {
-    if (mode !== 'grant') return undefined;
-
-    const parts: string[] = [];
-
-    // Describe spend permissions
-    if (formattedSpends.length > 0) {
-      const spendDescriptions = formattedSpends.map((spend: { limit: string; duration: string }) => {
-        // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
-        const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
-        // Handle "forever" specially - no "per" prefix needed
-        if (normalizedDuration === 'forever') {
-          return spend.limit;
-        }
-        return `${spend.limit} per ${normalizedDuration}`;
-      });
-      parts.push(`spend up to ${spendDescriptions.join(', ')}`);
-    }
-
-    // Describe call permissions
-    if (formattedCalls.length > 0) {
-      const callDescriptions = formattedCalls.map((call: { functionSignature: string }) => {
-        const fnName = call.functionSignature;
-        // Check for special selectors
-        if (fnName === 'Any Function') {
-          return 'call any function';
-        }
-        if (fnName === 'Empty Calldata') {
-          return 'send transactions with empty calldata';
-        }
-        // Extract just the function name from signature like "transfer(address,uint256)"
-        const simpleName = fnName.split('(')[0];
-        return `call ${simpleName}`;
-      });
-
-      // Deduplicate and join
-      const uniqueCalls = [...new Set(callDescriptions)];
-      parts.push(uniqueCalls.join(', '));
-    }
-
-    if (parts.length === 0) {
-      return `You are granting permissions to this dApp until ${expiryDate}. Only approve if you trust this dApp.`;
-    }
-
-    return `This will allow the dApp to ${parts.join(' and ')} on your behalf until ${expiryDate}. Only approve if you trust this dApp.`;
-  }, [mode, formattedSpends, formattedCalls, expiryDate]);
-
   // Reset state
   const resetModalState = useCallback(() => {
     setStatus('');
@@ -622,9 +578,13 @@ export const PermissionModal = ({
     };
   }, [chain, extractedApiKey, viemChain, walletAddress, permissionDetails?.address, effectivePaymasterUrl]);
 
-  // Fetch token info for all unique tokens in spends
+  // Token info for spend tokens and for any call target that turns out to be a token.
   useEffect(() => {
-    if (!chain || spendsData.length === 0) {
+    // Bail rather than passing an empty URL down: getPublicClient attaches the chain
+    // definition, so an empty URL would resolve to the chain's public RPC instead of the
+    // proxy — and it throws, which this fire-and-forget async fn would not catch.
+    const rpcUrl = chain?.rpcUrl;
+    if (!chain || !rpcUrl || (spendsData.length === 0 && callsData.length === 0)) {
       setIsLoadingTokenInfo(false);
       return;
     }
@@ -636,47 +596,46 @@ export const PermissionModal = ({
       const newTokenInfoMap: TokenInfoMap = {};
 
       // Get unique token addresses
-      const uniqueTokens = Array.from(new Set(spendsData.map((spend: any) => spend.token as string))) as string[];
+      // A call target that is a token should read as "USDC", not as a raw address. A non-token
+      // contract simply fails the reads and falls back to its address.
+      const uniqueTokens = Array.from(
+        new Set([
+          ...spendsData.map((spend: any) => spend.token as string),
+          ...callsData.map((call: any) => call.target as string).filter((t: string) => t && !isWildcard(t)),
+        ])
+      ) as string[];
 
-      // Resolved in one pass rather than token-by-token: the shared client folds
-      // every decimals/symbol read issued in this tick into a single Multicall3
-      // request, so N tokens cost one round-trip instead of 2N sequential ones.
-      const publicClient = getPublicClient(chain.id, chain.rpcUrl || '');
+      // Resolved in one pass rather than token-by-token: the shared client folds every
+      // decimals/symbol read issued in this tick into a single Multicall3 request, so N
+      // tokens cost one round-trip instead of 2N sequential ones.
+      const publicClient = getPublicClient(chain.id, rpcUrl);
+
+      const pending: string[] = [];
+      for (const tokenAddress of uniqueTokens) {
+        if (tokenInfoMap[tokenAddress]) {
+          newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
+        } else if (isNativeToken(tokenAddress)) {
+          // Native token: the chain's own currency, not a hardcoded ETH.
+          newTokenInfoMap[tokenAddress] = {
+            decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+            symbol: viemChain?.nativeCurrency?.symbol ?? 'ETH',
+          };
+        } else {
+          pending.push(tokenAddress);
+        }
+      }
 
       await Promise.all(
-        uniqueTokens.map(async (tokenAddress) => {
-          // Skip if already fetched
-          if (tokenInfoMap[tokenAddress]) {
-            newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
-            return;
-          }
-
-          // If native token, use ETH defaults
-          if (isNativeToken(tokenAddress)) {
-            newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: 'ETH' };
-            return;
-          }
-
-          // Fetch ERC-20 token info
+        pending.map(async (tokenAddress) => {
           try {
             const [decimals, symbol] = await Promise.all([
-              publicClient.readContract({
-                address: tokenAddress as Address,
-                abi: erc20Abi,
-                functionName: 'decimals',
-              }),
-              publicClient.readContract({
-                address: tokenAddress as Address,
-                abi: erc20Abi,
-                functionName: 'symbol',
-              }),
+              publicClient.readContract({ address: tokenAddress as Address, abi: erc20Abi, functionName: 'decimals' }),
+              publicClient.readContract({ address: tokenAddress as Address, abi: erc20Abi, functionName: 'symbol' }),
             ]);
-
             newTokenInfoMap[tokenAddress] = { decimals, symbol };
-          } catch (error) {
-            console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
-            // Fallback to showing the token address
-            newTokenInfoMap[tokenAddress] = { decimals: 18, symbol: tokenAddress };
+          } catch {
+            // Not an ERC-20 (or unreachable) — unnamed, so the UI shows the address.
+            newTokenInfoMap[tokenAddress] = { decimals: null, symbol: '' };
           }
         })
       );
@@ -692,9 +651,13 @@ export const PermissionModal = ({
     return () => {
       isMounted = false;
     };
-  }, [chain, spendsData]);
+    // tokenInfoMap is read for its cache but deliberately not a dep — the effect writes it,
+    // so listing it would loop. Everything else the body reads is here.
+  }, [chain, spendsData, callsData, viemChain]);
 
   const handleConfirm = useCallback(async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     try {
       setIsProcessing(true);
       setStatus(mode === 'grant' ? 'Granting permissions...' : 'Revoking permission...');
@@ -775,11 +738,15 @@ export const PermissionModal = ({
           ? standardErrorCodes.provider.userRejectedRequest
           : standardErrorCodes.rpc.internal;
       onError?.(errorObj, errorCode);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   }, [account, chain, permissionDetails, mode, onSuccess, onError, computedPaymasterUrl, computedPaymasterContext]);
 
   const handleCancel = useCallback(() => {
+    // isProcessing commits a render late; a same-tick cancel must not report
+    // "rejected" while the signed grant/revocation proceeds and lands on chain.
+    if (submittingRef.current) return;
     if (!isProcessing) {
       console.log('❌ User cancelled permission request');
       // User rejected request (EIP-1193 code 4001)
@@ -807,8 +774,13 @@ export const PermissionModal = ({
         mode === 'revoke' && 'permissionId' in permissionDetails ? permissionDetails.permissionId : undefined
       }
       spenderAddress={spenderAddress}
+      accountAddress={walletAddress || undefined}
       origin={origin || ''}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
+      grantedDate={grantedDate}
       spends={formattedSpends}
+      tokenMeta={tokenInfoMap}
       calls={formattedCalls}
       expiryDate={expiryDate}
       networkName={networkName}
@@ -819,7 +791,6 @@ export const PermissionModal = ({
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingTokenInfo || isLoadingPermissionDetails || isAccountLoading}
-      warningMessage={warningMessage}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}

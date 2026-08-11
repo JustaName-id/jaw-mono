@@ -1021,6 +1021,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           chain={pendingRequest.chain as chain}
           apiKey={apiKey || ''}
           origin={pendingRequest.origin}
+          appName={pendingRequest.metadata?.appName}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
           onSuccess={async (result) => {
             setState('processing');
             try {
@@ -1071,6 +1073,8 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
           chain={pendingRequest.chain as chain}
           apiKey={apiKey || ''}
           origin={pendingRequest.origin}
+          appName={pendingRequest.metadata?.appName}
+          appLogoUrl={pendingRequest.metadata?.appLogoUrl}
           onSuccess={async (result) => {
             setState('processing');
             try {

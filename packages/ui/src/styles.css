@@ -20,6 +20,7 @@
     --jaw-color-accent: oklch(0.97 0 0);
     --jaw-color-accent-foreground: oklch(0.205 0 0);
     --jaw-color-destructive: oklch(0.577 0.245 27.325);
+    --jaw-color-destructive-hover: oklch(0.5 0.235 27.325);
     --jaw-color-destructive-foreground: oklch(0.985 0 0);
     --jaw-color-border: oklch(0.922 0 0);
     --jaw-color-input: oklch(0.922 0 0);
@@ -50,6 +51,7 @@
     --accent: var(--jaw-color-accent);
     --accent-foreground: var(--jaw-color-accent-foreground);
     --destructive: var(--jaw-color-destructive);
+    --destructive-hover: var(--jaw-color-destructive-hover);
     --destructive-foreground: var(--jaw-color-destructive-foreground);
     --border: var(--jaw-color-border);
     --input: var(--jaw-color-input);
@@ -102,6 +104,7 @@
     --jaw-color-accent: oklch(0.269 0 0);
     --jaw-color-accent-foreground: oklch(0.985 0 0);
     --jaw-color-destructive: oklch(0.396 0.141 25.723);
+    --jaw-color-destructive-hover: oklch(0.31 0.12 25.723);
     --jaw-color-destructive-foreground: oklch(0.637 0.237 25.331);
     --jaw-color-border: oklch(0.3 0 0);
     --jaw-color-input: oklch(0.3 0 0);
@@ -149,6 +152,7 @@
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
   --color-destructive: var(--destructive);
+  --color-destructive-hover: var(--destructive-hover);
   --color-destructive-foreground: var(--destructive-foreground);
   --color-border: var(--border);
   --color-input: var(--input);

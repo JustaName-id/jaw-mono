@@ -2,13 +2,11 @@
 
 import { Button } from '../ui/button';
 import { Accordion } from '../ui/accordion';
-import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '../ui/tooltip';
 import { ShellDialog } from '../ShellDialog';
 import { ProcessingScreen } from '../ProcessingScreen';
-import { FeeTokenSelector } from '../FeeTokenSelector';
 import { useState, useEffect, useRef } from 'react';
 import { ethAddress } from 'viem';
-import { Info, ArrowDown } from 'lucide-react';
+import { ArrowDown, LogIn } from 'lucide-react';
 import { TransactionDialogProps } from './types';
 import { useChainIconURI, useFeeTokenPrice } from '../../hooks';
 import { useDecodedCalldata } from '../../hooks/useDecodedCalldata';
@@ -22,27 +20,10 @@ import { SubText } from '../SubText';
 import { AssetPreview } from './AssetPreview';
 import { callTitle } from './DecodedCalldata';
 import { resolveBlockReason } from '../../utils/transactionFailure';
+import { isBlockingPermissionProblem, PERMISSION_PROBLEM_TEXT } from '../../utils/permissionExecution';
 import { BatchStep, SingleCallData } from './CallSections';
-import { Eyebrow, PartyRow, Row, ValueAmount } from './primitives';
-
-/** A one-line red message with the detail behind an info tooltip. */
-function InlineWarning({ text, detail }: { text: string; detail: string }) {
-  return (
-    <div className="flex items-center gap-1">
-      <p className="text-destructive font-mono text-[11px] font-medium">{text}</p>
-      <TooltipProvider delayDuration={0}>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <Info className="text-destructive size-3 flex-none cursor-help" />
-          </TooltipTrigger>
-          <TooltipContent side="top" className="max-w-[240px] text-xs">
-            <p>{detail}</p>
-          </TooltipContent>
-        </Tooltip>
-      </TooltipProvider>
-    </div>
-  );
-}
+import { InlineWarning, PartyRow, Row, ValueAmount } from '../primitives';
+import { NetworkFeeRow } from '../NetworkFeeRow';
 
 export const TransactionDialog = ({
   open,
@@ -58,6 +39,9 @@ export const TransactionDialog = ({
   assetPreviewError,
   assetPreviewWillRevert,
   assetPreviewRevertCause,
+  onBehalfOf,
+  onBehalfOfLoading,
+  permissionProblem,
   onConfirm,
   onCancel,
   isProcessing,
@@ -112,6 +96,9 @@ export const TransactionDialog = ({
     if (walletAddress && currentTransaction?.chainId) {
       inputs.push({ address: walletAddress, chainId: currentTransaction.chainId });
     }
+    if (onBehalfOf && currentTransaction?.chainId) {
+      inputs.push({ address: onBehalfOf, chainId: currentTransaction.chainId });
+    }
     transactions.forEach((transaction) => {
       if (transaction.to && transaction.chainId) {
         inputs.push({ address: transaction.to, chainId: transaction.chainId });
@@ -144,7 +131,7 @@ export const TransactionDialog = ({
     return () => {
       cancelled = true;
     };
-  }, [walletAddress, transactions, currentTransaction?.chainId]);
+  }, [walletAddress, onBehalfOf, transactions, currentTransaction?.chainId]);
 
   // Resolve ERC-7730 `metadata.contractName` for every unique `to` in the batch.
   const [contractNames, setContractNames] = useState<Record<string, string>>({});
@@ -221,12 +208,24 @@ export const TransactionDialog = ({
     revertCause: assetPreviewRevertCause,
   });
 
+  // A permissioned execution is still "permissioned" while the granter is in flight, and after a
+  // lookup that failed — the extra row and the delegation badge must not flicker in and out.
+  const isPermissioned = !!onBehalfOf || !!onBehalfOfLoading || !!permissionProblem;
+
+  // A failed lookup is uncertainty about the lookup, not a certain revert — it warns below but
+  // must not dead-end the dialog the way a genuinely broken permission does.
+  const permissionBlocks = !!permissionProblem && isBlockingPermissionProblem(permissionProblem);
+
+  // A broken permission fails estimation too, so the fee row would blame the fee for something
+  // the banner already explains precisely. Name the cause once, at the top.
+  const feeBlockReason = permissionBlocks ? null : blockReason;
+
   // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
   const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
-  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20EstimateMissing;
+  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20EstimateMissing && !permissionBlocks;
 
   // Reverts, but gas estimated fine, so it stays submittable: warn rather than block.
-  const softRevertWarning = !blockReason && !!assetPreviewWillRevert;
+  const softRevertWarning = !blockReason && !permissionBlocks && !!assetPreviewWillRevert;
 
   const singleValue = isSingleTransaction ? formatNativeValue(currentTransaction?.value) : null;
   // Dust renders in subscript notation like the fee rows; math keeps using the raw string.
@@ -250,122 +249,6 @@ export const TransactionDialog = ({
   // for it; otherwise that review screen would open with nothing on it. Batch steps always
   // start collapsed — their headers name the action, so the user opens the one they care about.
   const calldataOpen = !!assetPreviewError || ((assetsOut?.length ?? 0) === 0 && (assetsIn?.length ?? 0) === 0);
-
-  // While blocked the selector stays as long as some token is selectable — switching to it clears
-  // the block. Suppressed only when nothing can pay, where the choice would change nothing.
-  const feeSelector =
-    showFeeTokenSelector &&
-    !sponsored &&
-    !(blockReason && !hasSelectablePaymentOption) &&
-    feeTokens &&
-    onFeeTokenSelect ? (
-      <FeeTokenSelector
-        tokens={feeTokens}
-        chainId={currentTransaction?.chainId}
-        selectedToken={selectedFeeToken ?? null}
-        onSelect={onFeeTokenSelect}
-        isLoading={feeTokensLoading ?? false}
-        disabled={isProcessing}
-        nativeTokenPrice={nativeTokenPrice}
-        estimatedGasEth={gasFee || '0'}
-      />
-    ) : null;
-
-  const blockedCopy =
-    blockReason === 'funds'
-      ? {
-          text: 'Insufficient funds',
-          detail:
-            assetPreviewRevertCause === 'balance'
-              ? "This account doesn't hold enough of the asset this transaction spends."
-              : `This account can't cover the network fee in ${nativeSymbol} or any supported token.`,
-        }
-      : {
-          text: 'Transaction will fail',
-          detail: 'Simulating this transaction reverted, so the fee can’t be estimated and it can’t be submitted.',
-        };
-
-  const feeValue = (() => {
-    if (gasFeeLoading && !isPayingWithErc20) {
-      return <p className="text-muted-foreground font-mono text-[11px]">Estimating...</p>;
-    }
-    // Blocked: one short red string in the slot the fee would occupy, detail in the tooltip.
-    if (blockReason) {
-      return <InlineWarning {...blockedCopy} />;
-    }
-    if (sponsored) {
-      return (
-        <div className="flex flex-col items-start gap-0.5">
-          <div className="flex items-center gap-2">
-            {gasFee && gasFee !== 'sponsored' && nativeTokenPrice > 0 && (
-              <span className="text-muted-foreground font-mono text-[11px] line-through">
-                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
-              </span>
-            )}
-            <span className="text-success bg-success/10 rounded px-2 py-0.5 text-[10px] font-semibold">Sponsored</span>
-          </div>
-          <p className="text-muted-foreground font-mono text-[10px]">
-            <SubText>
-              {gasFee && gasFee !== 'sponsored'
-                ? (() => {
-                    const g = Number(gasFee);
-                    return g > 0 && g < 0.0001
-                      ? `${subscriptDecimal(g)} ${nativeSymbol}`
-                      : `${g.toFixed(4)} ${nativeSymbol}`;
-                  })()
-                : 'Gas fees covered'}
-            </SubText>
-          </p>
-        </div>
-      );
-    }
-    if (isPayingWithErc20 && selectedFeeToken) {
-      return (
-        <div className="flex flex-col items-start gap-0.5">
-          <p className="font-mono leading-tight">
-            {selectedFeeToken.gasCostFormatted ? (
-              <>
-                <span className="text-foreground text-[14px] font-semibold">${selectedFeeToken.gasCostFormatted}</span>
-                <span className="text-muted-foreground ml-1 text-[11px] font-normal">
-                  ≈ {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
-                </span>
-              </>
-            ) : (
-              <span className="text-muted-foreground text-[11px]">Estimating...</span>
-            )}
-          </p>
-          {(selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted) && (
-            <p className="text-muted-foreground font-mono text-[10px]">
-              Up to {selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted}{' '}
-              {selectedFeeToken.symbol}
-            </p>
-          )}
-        </div>
-      );
-    }
-    if (gasFee && gasFee !== 'sponsored') {
-      const g = Number(gasFee);
-      const nativeAmt =
-        g > 0 && g < 0.0001 ? `${subscriptDecimal(g)} ${nativeSymbol}` : `${g.toFixed(4)} ${nativeSymbol}`;
-      return (
-        <p className="font-mono leading-tight">
-          {nativeTokenPrice > 0 ? (
-            <>
-              <span className="text-foreground text-[14px] font-semibold">
-                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
-              </span>
-              <span className="text-muted-foreground ml-1 text-[11px] font-normal">
-                ≈ <SubText>{nativeAmt}</SubText>
-              </span>
-            </>
-          ) : (
-            <SubText className="text-foreground text-[14px] font-semibold">{nativeAmt}</SubText>
-          )}
-        </p>
-      );
-    }
-    return <p className="text-muted-foreground font-mono text-[11px]">Unable to estimate</p>;
-  })();
 
   return (
     <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
@@ -413,21 +296,52 @@ export const TransactionDialog = ({
               </div>
             )}
 
-            {/* From / To */}
+            {/* From / On behalf of / To */}
             <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-3">
               <PartyRow
                 label="From"
                 value={displayWalletAddress}
                 address={walletAddress}
                 avatarUrl={resolvedAvatars[walletAddress]}
+                // Marks the signer as acting through a delegation rather than for itself.
+                badge={
+                  isPermissioned ? (
+                    <span className="bg-popover absolute -bottom-0.5 -right-0.5 flex size-3 items-center justify-center rounded-full">
+                      <LogIn className="text-success size-2" strokeWidth={2.6} />
+                    </span>
+                  ) : undefined
+                }
               />
+              {isPermissioned && (
+                <>
+                  <div className="bg-border h-px" />
+                  <PartyRow
+                    label="On behalf of"
+                    value={
+                      onBehalfOf
+                        ? getDisplayAddress(resolvedAddresses[onBehalfOf], onBehalfOf)
+                        : onBehalfOfLoading
+                          ? 'Loading…'
+                          : 'Unknown'
+                    }
+                    address={onBehalfOf ?? ''}
+                    avatarUrl={onBehalfOf ? resolvedAvatars[onBehalfOf] : undefined}
+                  />
+                </>
+              )}
               {isSingleTransaction && currentTransaction?.to && (
                 <>
-                  <div className="flex items-center">
-                    <div className="bg-border h-px flex-1" />
-                    <ArrowDown className="text-muted-foreground mx-1.5 size-3 flex-none" strokeWidth={2} />
-                    <div className="bg-border h-px flex-1" />
-                  </div>
+                  {/* The arrow reads as "value flows this way", which only holds for a plain
+                      two-party transfer — a delegated execution gets a neutral divider. */}
+                  {isPermissioned ? (
+                    <div className="bg-border h-px" />
+                  ) : (
+                    <div className="flex items-center">
+                      <div className="bg-border h-px flex-1" />
+                      <ArrowDown className="text-muted-foreground mx-1.5 size-3 flex-none" strokeWidth={2} />
+                      <div className="bg-border h-px flex-1" />
+                    </div>
+                  )}
                   <PartyRow
                     label="To"
                     value={displayToAddress}
@@ -437,6 +351,17 @@ export const TransactionDialog = ({
                 </>
               )}
             </div>
+
+            {/* A certain revert named before signing — or, for a failed lookup, the honest
+                admission that we couldn't check. Only the former disables Confirm. */}
+            {permissionProblem && (
+              <div className="px-0.5">
+                <InlineWarning
+                  text={PERMISSION_PROBLEM_TEXT[permissionProblem].text}
+                  detail={PERMISSION_PROBLEM_TEXT[permissionProblem].detail}
+                />
+              </div>
+            )}
 
             {/* Reverts but gas estimated fine, so it stays submittable. */}
             {softRevertWarning && (
@@ -451,6 +376,10 @@ export const TransactionDialog = ({
             {/* Asset changes — a native send shows the same information in its hero. */}
             {!isNativeSend && (
               <AssetPreview
+                // Someone else's balances whenever a granter resolved — except the self-delegated
+                // edge case, where granter and spender are the same account; the banner above
+                // already names that oddity, so the badge stays simple.
+                onBehalf={!!onBehalfOf}
                 assetsOut={assetsOut ?? []}
                 assetsIn={assetsIn ?? []}
                 error={assetPreviewError ?? false}
@@ -510,41 +439,30 @@ export const TransactionDialog = ({
 
           {/* Pinned fee row + actions */}
           <div className="border-border flex-none space-y-3 border-t px-6 py-3.5">
-            {/* Network fee */}
-            <div className="border-border rounded-[10.5px] border p-3">
-              <div className="flex items-start justify-between gap-2">
-                <div className="min-w-0">
-                  <div className="flex items-center gap-1.5">
-                    <Eyebrow>Network fee</Eyebrow>
-                    <TooltipProvider delayDuration={0}>
-                      <Tooltip>
-                        <TooltipTrigger asChild>
-                          <Info className="text-muted-foreground size-3 cursor-help" />
-                        </TooltipTrigger>
-                        <TooltipContent side="top">
-                          <p>
-                            Gas fees paid to network validators to process your transaction. You can pay with{' '}
-                            {nativeSymbol} or supported tokens.
-                          </p>
-                        </TooltipContent>
-                      </Tooltip>
-                    </TooltipProvider>
-                  </div>
-                  <div className="mt-1.5">{feeValue}</div>
-                </div>
-                {/* Right column: chain on top, fee-token chip below. */}
-                <div className="flex flex-none flex-col items-end gap-1.5">
-                  <div className="text-muted-foreground flex items-center gap-1 font-mono text-[10px]">
-                    {/* Round chain badge — clipped to a circle so the logo never stretches. */}
-                    <span className="border-border bg-secondary flex size-4 flex-none items-center justify-center overflow-hidden rounded-full border [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0">
-                      {chainIcon}
-                    </span>
-                    <span className="truncate">{networkName || 'Ethereum'}</span>
-                  </div>
-                  {feeSelector}
-                </div>
-              </div>
-            </div>
+            <NetworkFeeRow
+              blockReason={feeBlockReason}
+              fundsShortfallDetail={
+                assetPreviewRevertCause === 'balance'
+                  ? "This account doesn't hold enough of the asset this transaction spends."
+                  : undefined
+              }
+              gasFee={gasFee}
+              gasFeeLoading={gasFeeLoading}
+              sponsored={sponsored}
+              nativeSymbol={nativeSymbol}
+              nativeTokenPrice={nativeTokenPrice}
+              networkName={networkName}
+              chainId={currentTransaction?.chainId}
+              chainIcon={chainIcon}
+              feeTokens={feeTokens}
+              feeTokensLoading={feeTokensLoading}
+              selectedFeeToken={selectedFeeToken}
+              onFeeTokenSelect={onFeeTokenSelect}
+              showFeeTokenSelector={showFeeTokenSelector}
+              isPayingWithErc20={isPayingWithErc20}
+              hasSelectablePaymentOption={hasSelectablePaymentOption}
+              disabled={isProcessing}
+            />
 
             {/* Actions */}
             <div className="flex gap-2">
@@ -561,7 +479,13 @@ export const TransactionDialog = ({
                 disabled={!canConfirm}
                 className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
               >
-                {blockReason === 'funds' ? 'Insufficient Funds' : isProcessing ? 'Processing...' : 'Confirm'}
+                {blockReason === 'funds' && !permissionBlocks
+                  ? 'Insufficient Funds'
+                  : isProcessing
+                    ? 'Processing...'
+                    : isPermissioned
+                      ? 'Execute'
+                      : 'Confirm'}
               </Button>
             </div>
           </div>

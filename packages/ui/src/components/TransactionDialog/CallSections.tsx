@@ -3,7 +3,7 @@
 import { Code } from 'lucide-react';
 import { AccordionContent, AccordionItem, AccordionTrigger } from '../ui/accordion';
 import { CopyButton } from '../CopyButton';
-import { Eyebrow, PartyRow, Row, ValueAmount } from './primitives';
+import { Eyebrow, PartyRow, Row, ValueAmount } from '../primitives';
 import { useDecodedCalldata, type DecodeResult } from '../../hooks/useDecodedCalldata';
 import { formatNativeValue } from '../../utils/displayFormat';
 import { DecodedCalldataView, callLabel } from './DecodedCalldata';

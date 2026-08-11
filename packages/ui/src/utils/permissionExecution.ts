@@ -1,0 +1,191 @@
+// ============================================================================
+// Executing calls under a granted permission (`capabilities.permissions.id`).
+// ----------------------------------------------------------------------------
+// The calls don't run from the connected account — they're routed through the permissions
+// manager and execute as the *granter*. Two addresses are therefore in play:
+//
+//   spender  = the connected account, signs the userOp and pays the gas
+//   account  = the granter, whose assets actually move ("on behalf of")
+//
+// Everything the manager checks on-chain is knowable here first, so a certain revert becomes
+// a named reason instead of a failed estimation.
+// ============================================================================
+
+import { ANY_FN_SEL, ANY_TARGET, EMPTY_CALLDATA_FN_SEL, PERMISSIONS_MANAGER_ADDRESS } from '@jaw.id/core';
+
+/**
+ * The permission-manager sentinels standing for "unrestricted". One list so a target wildcard
+ * and a selector wildcard can never be treated differently — an unbounded grant is the most
+ * dangerous thing on a permission screen and must always read the same way.
+ */
+const WILDCARDS = [ANY_TARGET, ANY_FN_SEL].map((v) => v.toLowerCase());
+
+export function isWildcard(value?: string): boolean {
+  return !!value && WILDCARDS.includes(value.toLowerCase());
+}
+
+/** The subset of a relay permission this screen needs. */
+export interface ExecutionPermission {
+  account: string;
+  spender: string;
+  /** Unix seconds; a permission is not usable before this. */
+  start: number;
+  /** Unix seconds. */
+  end: number;
+  /** Hex chain id, as the relay stores it. */
+  chainId: string;
+  calls: { target: string; selector: string }[];
+}
+
+/**
+ * Something worth saying about a permissioned execution before the user signs. Most entries are
+ * guaranteed on-chain reverts named up front rather than surfacing as "estimation failed"; see
+ * `isBlockingPermissionProblem` for the two that warn without blocking.
+ */
+export type PermissionProblem =
+  /** The relay answered 404: the permission was revoked, or never granted. */
+  | 'revoked'
+  /** The lookup itself failed (network, server error, missing key) — the permission may be fine. */
+  | 'lookup-failed'
+  /** Past its `end` timestamp. */
+  | 'expired'
+  /** Its `start` timestamp is still in the future. */
+  | 'not-yet-valid'
+  /** Granted for a different chain than the one this request targets. */
+  | 'chain-mismatch'
+  /** The signer isn't the spender, so the manager will reject the caller. */
+  | 'wrong-spender'
+  /** A call targets the permission manager itself — `CannotTargetSelf` at execute time. */
+  | 'targets-manager'
+  /** A call targets the granting account — `CannotTargetAccount` at execute time. */
+  | 'targets-account'
+  /**
+   * Granted by an account to itself. Verified against the deployed manager: this approves AND
+   * executes (nothing on-chain compares account to spender, and JustanAccount has no reentrancy
+   * guard), so it is pointless-but-valid rather than a revert. Warn, don't block.
+   */
+  | 'self-delegated'
+  /** A call's target/selector pair isn't in the permission's allow-list. */
+  | 'call-not-allowed';
+
+/**
+ * A blocking problem is a certain on-chain revert and disables Confirm. The two exceptions warn
+ * and let the user proceed: `lookup-failed` is uncertainty about our own lookup, not about the
+ * permission, and `self-delegated` executes fine on-chain — it is merely unusual. One predicate
+ * so the dialog and the copy can never disagree on that line.
+ */
+export function isBlockingPermissionProblem(problem: PermissionProblem): boolean {
+  return problem !== 'lookup-failed' && problem !== 'self-delegated';
+}
+
+/** Short label for the fee row, and the tooltip detail behind it. */
+export const PERMISSION_PROBLEM_TEXT: Record<PermissionProblem, { text: string; detail: string }> = {
+  revoked: {
+    text: 'Permission unavailable',
+    detail:
+      'The relay has no record of this permission — it was revoked or never granted. Executing it would be rejected on-chain.',
+  },
+  'lookup-failed': {
+    text: 'Permission couldn’t be verified',
+    detail:
+      'The permission lookup failed, so its details couldn’t be checked. You can still submit, but if the permission is invalid the execution will be rejected on-chain.',
+  },
+  'not-yet-valid': {
+    text: 'Permission not active yet',
+    detail: 'This permission doesn’t become valid until a later date, so executing it now would be rejected on-chain.',
+  },
+  expired: {
+    text: 'Permission expired',
+    detail: 'This permission has passed its expiry date and can no longer be used. Ask the app to request a new one.',
+  },
+  'chain-mismatch': {
+    text: 'Wrong network',
+    detail: 'This permission was granted on a different network than the one this transaction targets.',
+  },
+  'targets-manager': {
+    text: 'Calls the permission manager',
+    detail:
+      'This transaction calls the permission manager itself, which the manager forbids. Executing it would be rejected on-chain.',
+  },
+  'targets-account': {
+    text: 'Calls the granting account',
+    detail:
+      'This transaction calls the account that granted the permission, which the manager forbids. Executing it would be rejected on-chain.',
+  },
+  'self-delegated': {
+    text: 'Self-granted permission',
+    detail:
+      'This permission was granted by an account to itself. It will execute, but routing a transaction through the permission manager back to your own account is unusual and may be unintended.',
+  },
+  'wrong-spender': {
+    text: 'Not the spender',
+    detail: 'This permission was granted to a different account, so this wallet can’t execute it.',
+  },
+  'call-not-allowed': {
+    text: 'Call not permitted',
+    detail: 'This transaction calls something the permission doesn’t allow. Executing it would be rejected on-chain.',
+  },
+};
+
+const sameAddress = (a?: string, b?: string) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+
+/** True when the permission's allow-list covers this target/selector pair. */
+function isCallAllowed(permission: ExecutionPermission, call: { to?: string; data?: string }): boolean {
+  // The manager matches on the 4-byte selector; a bare value transfer carries none. Grants name
+  // that case with the EMPTY_CALLDATA_FN_SEL sentinel (the docs' "Only ETH transfers" preset).
+  const data = call.data ?? '0x';
+  const emptyCalldata = data === '0x' || data === '';
+  const selector = data.slice(0, 10).toLowerCase();
+  return permission.calls.some((allowed) => {
+    if (!isWildcard(allowed.target) && !sameAddress(allowed.target, call.to)) return false;
+    if (isWildcard(allowed.selector)) return true;
+    const allowedSelector = allowed.selector.toLowerCase();
+    if (emptyCalldata) return allowedSelector === EMPTY_CALLDATA_FN_SEL;
+    return allowedSelector === selector;
+  });
+}
+
+export interface PermissionExecutionInput {
+  permission: ExecutionPermission;
+  /** The account signing the userOp — must be the permission's spender. */
+  from?: string;
+  /** Chain the request targets. */
+  chainId?: number;
+  calls: { to?: string; data?: string }[];
+  /** Unix seconds; injected so the expiry check is testable. */
+  now: number;
+}
+
+/**
+ * The first thing worth saying about this execution, or null. Ordered by how fundamental the
+ * mismatch is — a permission for the wrong chain or the wrong signer is worth saying before
+ * picking apart individual calls — with the one non-blocking finding (`self-delegated`) last.
+ */
+export function validatePermissionExecution({
+  permission,
+  from,
+  chainId,
+  calls,
+  now,
+}: PermissionExecutionInput): PermissionProblem | null {
+  if (chainId !== undefined && permission.chainId && Number(permission.chainId) !== chainId) {
+    return 'chain-mismatch';
+  }
+  // Coerced rather than trusted: the relay type says number, but the revoke path parseInts it,
+  // and a string "0" would read as truthy-and-past where the number 0 means "no expiry".
+  const end = Number(permission.end);
+  if (Number.isFinite(end) && end > 0 && end <= now) return 'expired';
+
+  const start = Number(permission.start);
+  if (Number.isFinite(start) && start > now) return 'not-yet-valid';
+  if (from && !sameAddress(permission.spender, from)) return 'wrong-spender';
+  // The manager's own execute-time target checks, mirrored in its order: even a wildcard
+  // permission cannot call the manager (CannotTargetSelf) or the granting account
+  // (CannotTargetAccount) — reverts the allow-list check below would never name.
+  if (calls.some((call) => sameAddress(call.to, PERMISSIONS_MANAGER_ADDRESS))) return 'targets-manager';
+  if (calls.some((call) => sameAddress(call.to, permission.account))) return 'targets-account';
+  if (calls.some((call) => !isCallAllowed(permission, call))) return 'call-not-allowed';
+  // Last, because it is the only non-blocking finding here: it must never mask a certain revert.
+  if (sameAddress(permission.account, permission.spender)) return 'self-delegated';
+  return null;
+}

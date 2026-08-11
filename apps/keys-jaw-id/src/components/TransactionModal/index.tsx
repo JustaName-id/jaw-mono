@@ -8,6 +8,7 @@ import {
   isNativeToken,
   useGasEstimation,
   useAssetPreview,
+  usePermissionExecution,
 } from '@jaw.id/ui';
 import { debugLog } from '../../lib/debug-log';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -193,6 +194,23 @@ export const TransactionModal = ({
   // Permission ID for permission-based execution
   const permissionId = transactionRequest?.permissionId as Hex | undefined;
 
+  // `from` is optional in wallet_sendCalls, so the dialog falls back to the connected account for
+  // the From row. The permission check must read the same address, or a spender mismatch goes
+  // unreported while the row still shows who is signing.
+  const signerAddress = (transactionRequest?.from ?? walletAddress) as Address | undefined;
+
+  const {
+    onBehalfOf,
+    loading: onBehalfOfLoading,
+    problem: permissionProblem,
+  } = usePermissionExecution({
+    permissionId,
+    apiKey: effectiveApiKey,
+    chainId: chain?.id,
+    from: signerAddress,
+    calls: transactionCalls,
+  });
+
   // Use gas estimation hook for parallel ETH and ERC-20 estimation
   const {
     gasFee,
@@ -221,7 +239,10 @@ export const TransactionModal = ({
     willRevert: assetPreviewWillRevert,
     revertCause: assetPreviewRevertCause,
   } = useAssetPreview({
-    account: (transactionRequest?.from ?? walletAddress) as Address | undefined,
+    // Under a permission the calls execute as the granter, so the balance changes are theirs.
+    // Left undefined until the granter resolves: simulating from the spender would preview the
+    // wrong account, and a shortfall there would briefly read as "Insufficient funds".
+    account: permissionId ? onBehalfOf : signerAddress,
     calls: transactionCalls,
     chainId: chain?.id ?? 1,
     apiKey: effectiveApiKey,
@@ -478,7 +499,7 @@ export const TransactionModal = ({
         if (!o) handleCancel();
       }}
       transactions={normalizedTransactions}
-      walletAddress={transactionRequest?.from ?? walletAddress ?? ''}
+      walletAddress={signerAddress ?? ''}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading || isAccountLoading}
       gasEstimationError={gasEstimationError}
@@ -488,6 +509,9 @@ export const TransactionModal = ({
       assetPreviewError={assetPreviewError}
       assetPreviewWillRevert={assetPreviewWillRevert}
       assetPreviewRevertCause={assetPreviewRevertCause}
+      onBehalfOf={onBehalfOf}
+      onBehalfOfLoading={onBehalfOfLoading}
+      permissionProblem={permissionProblem}
       appName={appName}
       appLogoUrl={appLogoUrl}
       onConfirm={handleConfirm}

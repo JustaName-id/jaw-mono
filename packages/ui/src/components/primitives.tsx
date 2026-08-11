@@ -1,8 +1,10 @@
 import type { ReactNode } from 'react';
-import { AccountAvatar } from '../AccountAvatar';
-import { CopyButton } from '../CopyButton';
-import { SubText } from '../SubText';
-import { subscriptDecimal } from '../../utils/displayFormat';
+import { Info } from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from './ui/tooltip';
+import { AccountAvatar } from './AccountAvatar';
+import { CopyButton } from './CopyButton';
+import { SubText } from './SubText';
+import { subscriptDecimal } from '../utils/displayFormat';
 
 /** The dialog's small uppercase field label. */
 export function Eyebrow({ children }: { children: ReactNode }) {
@@ -56,22 +58,48 @@ export function PartyRow({
   value,
   address,
   avatarUrl,
+  badge,
 }: {
   label: string;
   value: string;
   address: string;
   avatarUrl?: string;
+  /** Pinned to the avatar's corner — marks this party as acting under a delegation. */
+  badge?: React.ReactNode;
 }) {
   return (
     <div className="flex min-w-0 items-center gap-3">
-      <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="size-7 flex-none rounded-[8px]" />
+      <span className="relative inline-flex flex-none">
+        <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="size-7 flex-none rounded-[8px]" />
+        {badge}
+      </span>
       <div className="min-w-0 flex-1">
         <Eyebrow>{label}</Eyebrow>
         <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
           <p className="text-foreground truncate font-mono text-[12px] font-medium">{value}</p>
-          <CopyButton value={address} size={13} label="Copy address" />
+          {/* Nothing to copy while the address is still resolving, or never resolved. */}
+          {address && <CopyButton value={address} size={13} label="Copy address" />}
         </div>
       </div>
+    </div>
+  );
+}
+
+/** A one-line red message with the detail behind an info tooltip. */
+export function InlineWarning({ text, detail }: { text: string; detail: string }) {
+  return (
+    <div className="flex items-center gap-1">
+      <p className="text-destructive font-mono text-[11px] font-medium">{text}</p>
+      <TooltipProvider delayDuration={0}>
+        <Tooltip>
+          <TooltipTrigger asChild>
+            <Info className="text-destructive size-3 flex-none cursor-help" />
+          </TooltipTrigger>
+          <TooltipContent side="top" className="max-w-[240px] text-xs">
+            <p>{detail}</p>
+          </TooltipContent>
+        </Tooltip>
+      </TooltipProvider>
     </div>
   );
 }

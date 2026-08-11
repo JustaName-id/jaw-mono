@@ -77,14 +77,31 @@ const usdtEstimate = { ...usdcEstimate, tokenAddress: USDT };
 let hook: UseGasEstimationResult;
 let tokensNow: FeeTokenOption[];
 
-function Probe({ account, initialTokens }: { account: Account; initialTokens: FeeTokenOption[] }) {
+let setTokensExternally: (tokens: FeeTokenOption[]) => void;
+let setCallsExternally: (calls: TransactionCall[]) => void;
+let setApiKeyExternally: (apiKey: string) => void;
+
+function Probe({
+  account,
+  initialTokens,
+  initialCalls = CALLS,
+}: {
+  account: Account;
+  initialTokens: FeeTokenOption[];
+  initialCalls?: TransactionCall[];
+}) {
   const [tokens, setTokens] = useState(initialTokens);
+  const [calls, setCalls] = useState(initialCalls);
+  const [apiKey, setApiKey] = useState('test-key');
   tokensNow = tokens;
+  setTokensExternally = setTokens;
+  setCallsExternally = setCalls;
+  setApiKeyExternally = setApiKey;
   hook = useGasEstimation({
     account,
-    transactionCalls: CALLS,
+    transactionCalls: calls,
     chainId: 84532,
-    apiKey: 'test-key',
+    apiKey,
     feeTokens: tokens,
     onFeeTokensUpdate: setTokens,
   });
@@ -93,12 +110,16 @@ function Probe({ account, initialTokens }: { account: Account; initialTokens: Fe
 
 let root: Root | null = null;
 
-async function mount(account: Account, initialTokens: FeeTokenOption[]) {
+async function mount(account: Account, initialTokens: FeeTokenOption[], initialCalls?: TransactionCall[]) {
   root = createRoot(document.createElement('div'));
   await act(async () => {
-    root!.render(createElement(Probe, { account, initialTokens }));
+    root!.render(createElement(Probe, { account, initialTokens, initialCalls }));
   });
   await settle();
+}
+
+async function flush() {
+  for (let i = 0; i < 20; i++) await act(() => Promise.resolve());
 }
 
 async function settle() {
@@ -249,5 +270,105 @@ describe('useGasEstimation fee-token selection', () => {
 
     expect(hook.gasEstimationError).toBe('');
     expect(hook.selectedFeeToken?.symbol).toBe('USDT');
+  });
+
+  // The ETH estimate depends on the calls, never on the fee-token list. These pin that a later
+  // token list reuses it, and that every path which invalidates the fee re-measures instead.
+  describe('ETH estimate reuse', () => {
+    it('does not re-measure when only the fee-token list changed', async () => {
+      erc20Mock.mockResolvedValue([usdcEstimate]);
+      const calc = vi.fn(async () => '0.0001');
+      await mount(makeAccount(calc), [nativeEth(1n)]);
+
+      expect(calc).toHaveBeenCalledTimes(1);
+      expect(hook.gasFee).toBe('0.0001');
+
+      // Balances land, introducing an ERC-20 — this is what re-triggers estimation.
+      await act(async () => setTokensExternally([nativeEth(1n), token({})]));
+      await flush();
+
+      expect(calc).toHaveBeenCalledTimes(1);
+      expect(hook.gasFee).toBe('0.0001');
+    });
+
+    it('re-measures on refetch', async () => {
+      erc20Mock.mockResolvedValue([usdcEstimate]);
+      const calc = vi.fn(async () => '0.0001');
+      await mount(makeAccount(calc), [nativeEth(1n)]);
+      expect(calc).toHaveBeenCalledTimes(1);
+
+      await act(async () => {
+        hook.refetch();
+      });
+      await flush();
+
+      expect(calc).toHaveBeenCalledTimes(2);
+    });
+
+    it('re-measures when the apiKey arrives after the first estimate', async () => {
+      erc20Mock.mockResolvedValue([usdcEstimate]);
+      const calc = vi.fn(async () => '0.0001');
+      await mount(makeAccount(calc), [nativeEth(1n)]);
+      expect(calc).toHaveBeenCalledTimes(1);
+
+      // A key change points estimation at a different endpoint — the old fee is not reusable.
+      await act(async () => setApiKeyExternally('real-key'));
+      await flush();
+
+      expect(calc).toHaveBeenCalledTimes(2);
+    });
+  });
+
+  // The permission dialogs estimate against a ZERO_ADDRESS dummy call until the real grant or
+  // revoke call is built. These pin that the swap to the real call re-enters the loading state
+  // (the dummy-derived fee must not read as final), while a token list arriving with unchanged
+  // inputs still doesn't flash "Estimating..." over a fee that was measured for these exact calls.
+  describe('loading state across re-estimation', () => {
+    it('shows loading again when the dummy call is replaced by the real call', async () => {
+      erc20Mock.mockResolvedValue([]);
+      const resolvers: Array<(v: string) => void> = [];
+      const calc = vi.fn(() => new Promise<string>((r) => resolvers.push(r)));
+      root = createRoot(document.createElement('div'));
+      await act(async () => {
+        // Empty calls — the hook substitutes its internal dummy call, like the dialogs pre-data.
+        root!.render(
+          createElement(Probe, { account: makeAccount(calc), initialTokens: [nativeEth(1n)], initialCalls: [] })
+        );
+      });
+      await act(async () => resolvers[0]('0.0001'));
+      await settle();
+      expect(hook.gasFee).toBe('0.0001');
+
+      // The real call lands. The dummy-derived fee is stale: the row must read as loading.
+      await act(async () => setCallsExternally(CALLS));
+      expect(hook.gasFeeLoading).toBe(true);
+
+      await act(async () => resolvers[1]('0.0003'));
+      await settle();
+      expect(hook.gasFee).toBe('0.0003');
+    });
+
+    it('does not flash loading when only the fee-token list changed', async () => {
+      let resolveErc20: ((v: (typeof usdcEstimate)[]) => void) | undefined;
+      // Mount holds no ERC-20 token, so the paymaster estimator is not called at all here —
+      // the pending implementation below is consumed by the re-run the new token triggers.
+      const calc = vi.fn(async () => '0.0001');
+      await mount(makeAccount(calc), [nativeEth(1n)]);
+      expect(hook.gasFee).toBe('0.0001');
+
+      // Balances land, introducing an ERC-20. While its estimate is in flight, the measured
+      // ETH fee stays on screen — no fallback to "Estimating...".
+      erc20Mock.mockImplementationOnce(() => new Promise((r) => (resolveErc20 = r)));
+      await act(async () => setTokensExternally([nativeEth(1n), token({})]));
+      for (let i = 0; i < 10 && !resolveErc20; i++) await act(() => Promise.resolve());
+      expect(resolveErc20).toBeDefined();
+      expect(hook.gasFeeLoading).toBe(false);
+      expect(hook.gasFee).toBe('0.0001');
+
+      await act(async () => resolveErc20!([usdcEstimate]));
+      await flush();
+      expect(hook.gasFee).toBe('0.0001');
+      expect(calc).toHaveBeenCalledTimes(1);
+    });
   });
 });

@@ -35,6 +35,7 @@ import {
   standardErrorCodes,
 } from '@jaw.id/core';
 import { formatUnits, erc20Abi } from 'viem';
+import { formatSpendAmount } from '../utils/displayFormat';
 import type { Address, Hex } from 'viem';
 import { createSiweMessage } from 'viem/siwe';
 
@@ -46,6 +47,7 @@ import { SiweDialog } from '../components/SiweDialog';
 import { Eip712Dialog } from '../components/Eip712Dialog';
 import { TransactionDialog } from '../components/TransactionDialog';
 import { PermissionDialog } from '../components/PermissionDialog';
+import { isWildcard } from '../components/PermissionDialog/Sections';
 import { ConnectDialog } from '../components/ConnectDialog';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
@@ -56,6 +58,8 @@ import {
 import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
+import { usePermissionExecution } from '../hooks/usePermissionExecution';
+import { useFunctionSignatures } from '../hooks/useFunctionSignatures';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getPublicClient } from '../utils/publicClient';
 import { getSiweOriginWarning, isSiweMessage, parseSiweMessage, hexToUtf8 } from '../utils/siwe';
@@ -100,7 +104,9 @@ const formatExpiryDate = (timestamp: number): string => {
 };
 
 // Token info cache type
-type TokenInfoMap = Record<string, { decimals: number; symbol: string }>;
+// `decimals: null` means the token's `decimals()` read failed. Kept distinct from a number so a
+// failed read can never be mistaken for 18 — see utils/spendAmount.
+type TokenInfoMap = Record<string, { decimals: number | null; symbol: string }>;
 
 // Type assertion to fix React types version mismatch
 const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> =
@@ -616,9 +622,12 @@ export class ReactUIHandler implements UIHandler {
             request={request as PermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
@@ -628,9 +637,12 @@ export class ReactUIHandler implements UIHandler {
             request={request as RevokePermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
@@ -1434,13 +1446,28 @@ function TransactionDialogWrapper({
   const permissionId = request.data.capabilities?.permissions?.id as Hex | undefined;
 
   const {
+    onBehalfOf,
+    loading: onBehalfOfLoading,
+    problem: permissionProblem,
+  } = usePermissionExecution({
+    permissionId,
+    apiKey,
+    chainId,
+    from: request.data.from as Address | undefined,
+    calls: transactionCalls,
+  });
+
+  const {
     assetsOut,
     assetsIn,
     error: assetPreviewError,
     willRevert: assetPreviewWillRevert,
     revertCause: assetPreviewRevertCause,
   } = useAssetPreview({
-    account: request.data.from,
+    // Under a permission the calls execute as the granter, so the balance changes are theirs.
+    // Left undefined until the granter resolves: simulating from the spender would preview the
+    // wrong account, and a shortfall there would briefly read as "Insufficient funds".
+    account: permissionId ? onBehalfOf : (request.data.from as Address | undefined),
     calls: transactionCalls,
     chainId,
     apiKey,
@@ -1698,6 +1725,9 @@ function TransactionDialogWrapper({
       assetPreviewError={assetPreviewError}
       assetPreviewWillRevert={assetPreviewWillRevert}
       assetPreviewRevertCause={assetPreviewRevertCause}
+      onBehalfOf={onBehalfOf}
+      onBehalfOfLoading={onBehalfOfLoading}
+      permissionProblem={permissionProblem}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
@@ -2078,37 +2108,26 @@ function SendTransactionDialogWrapper({
 }
 
 // Known function selectors mapping
-const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
-  '0x32323232': 'Any Function',
-  '0xe0e0e0e0': 'Empty Calldata',
-  '0xcc53287f': 'lockdown((address,address)[])',
-  '0x87517c45': 'approve(address,address,uint160,uint48)',
-  '0x095ea7b3': 'approve(address,uint256)',
-  '0x23b872dd': 'transferFrom(address,address,uint256)',
-  '0xa9059cbb': 'transfer(address,uint256)',
-};
-
-// Resolve function selector to human-readable name
-const resolveFunctionSelector = (selector: string): string => {
-  const normalizedSelector = selector.toLowerCase();
-  const knownName = KNOWN_FUNCTION_SELECTORS[normalizedSelector];
-  return knownName || selector;
-};
-
 function PermissionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: PermissionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -2118,6 +2137,9 @@ function PermissionDialogWrapper({
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
+  // Synchronous re-entry guard: isProcessing disables the buttons only after a
+  // re-render, which is too soft a gate for a grant that delegates authority on-chain.
+  const submittingRef = useRef(false);
 
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
@@ -2232,10 +2254,13 @@ function PermissionDialogWrapper({
   );
 
   // Get spends array from request (now using spends plural)
-  const spendsData = request.data.permissions.spends || [];
+  // Memoized because both keys are optional: `?? []` on an absent key returns a new array every
+  // render, and these feed effect dependency arrays. A calls-only grant otherwise re-triggered the
+  // token-info effect from its own setState, forever.
+  const spendsData = useMemo(() => request.data.permissions.spends ?? [], [request.data.permissions.spends]);
 
   // Get calls array from request
-  const callsData = request.data.permissions.calls || [];
+  const callsData = useMemo(() => request.data.permissions.calls ?? [], [request.data.permissions.calls]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
@@ -2243,7 +2268,7 @@ function PermissionDialogWrapper({
     // definition, so an empty URL would resolve to the chain's public RPC instead of
     // the proxy. Nothing to read without a configured endpoint.
     const rpcUrl = chain.rpcUrl;
-    if (spendsData.length === 0 || !rpcUrl) {
+    if ((spendsData.length === 0 && callsData.length === 0) || !rpcUrl) {
       setIsLoadingTokenInfo(false);
       return;
     }
@@ -2255,53 +2280,46 @@ function PermissionDialogWrapper({
       const newTokenInfoMap: TokenInfoMap = {};
 
       // Get unique token addresses
-      const uniqueTokens = Array.from(new Set(spendsData.map((spend) => spend.token))) as string[];
+      // Call targets are looked up too: a target that is a token should read as "USDC", not as a
+      // raw address. A non-token contract simply fails the reads and falls back to its address.
+      const uniqueTokens = Array.from(
+        new Set([
+          ...spendsData.map((spend) => spend.token),
+          ...callsData.map((call) => call.target).filter((t) => t && !isWildcard(t)),
+        ])
+      ) as string[];
 
-      // Resolved in one pass rather than token-by-token: the shared client folds
-      // every decimals/symbol read issued in this tick into a single Multicall3
-      // request, so N tokens cost one round-trip instead of 2N sequential ones.
+      // Resolved in one pass rather than token-by-token: the shared client folds every
+      // decimals/symbol read issued in this tick into a single Multicall3 request, so N
+      // tokens cost one round-trip instead of 2N sequential ones.
       const publicClient = getPublicClient(chainId, rpcUrl);
 
+      const pending: string[] = [];
+      for (const tokenAddress of uniqueTokens) {
+        if (tokenInfoMap[tokenAddress]) {
+          newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
+        } else if (isNativeToken(tokenAddress)) {
+          newTokenInfoMap[tokenAddress] = {
+            decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+            symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
+          };
+        } else {
+          pending.push(tokenAddress);
+        }
+      }
+
       await Promise.all(
-        uniqueTokens.map(async (tokenAddress) => {
-          // Skip if already fetched
-          if (tokenInfoMap[tokenAddress]) {
-            newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
-            return;
-          }
-
-          // If native token, use chain's native currency
-          if (isNativeToken(tokenAddress)) {
-            newTokenInfoMap[tokenAddress] = {
-              decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-              symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
-            };
-            return;
-          }
-
-          // Fetch ERC-20 token info
+        pending.map(async (tokenAddress) => {
           try {
             const [decimals, symbol] = await Promise.all([
-              publicClient.readContract({
-                address: tokenAddress as Address,
-                abi: erc20Abi,
-                functionName: 'decimals',
-              }),
-              publicClient.readContract({
-                address: tokenAddress as Address,
-                abi: erc20Abi,
-                functionName: 'symbol',
-              }),
+              publicClient.readContract({ address: tokenAddress as Address, abi: erc20Abi, functionName: 'decimals' }),
+              publicClient.readContract({ address: tokenAddress as Address, abi: erc20Abi, functionName: 'symbol' }),
             ]);
-
             newTokenInfoMap[tokenAddress] = { decimals, symbol };
-          } catch (error) {
-            console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
-            // Fallback to showing truncated token address
-            newTokenInfoMap[tokenAddress] = {
-              decimals: 18,
-              symbol: tokenAddress.slice(0, 6) + '...' + tokenAddress.slice(-4),
-            };
+          } catch {
+            // Not an ERC-20 (or unreachable): unnamed, and decimals unknown, so the UI shows the
+            // address and the raw allowance rather than a figure scaled by a guessed 18.
+            newTokenInfoMap[tokenAddress] = { decimals: null, symbol: '' };
           }
         })
       );
@@ -2317,7 +2335,7 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [chainId, spendsData, chain.rpcUrl, viemChain]);
+  }, [chainId, spendsData, callsData, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens from capabilities (same pattern as TransactionDialogWrapper)
   useEffect(() => {
@@ -2454,14 +2472,11 @@ function PermissionDialogWrapper({
                 decimals: viemChain?.nativeCurrency?.decimals ?? 18,
                 symbol: nativeSymbol,
               }
-            : {
-                decimals: 18,
-                symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4),
-              });
+            : { decimals: null, symbol: '' });
 
         const allowance = BigInt(spend.allowance);
-        const amount = formatUnits(allowance, tokenInfo.decimals);
-        const limit = `${amount} ${tokenInfo.symbol}`;
+        const { amount, decimalsUnknown } = formatSpendAmount(allowance, tokenInfo.decimals);
+        const limit = decimalsUnknown ? `${amount} base units` : `${amount} ${tokenInfo.symbol}`;
 
         // Format duration with multiplier (defaults to 1 if not provided)
         const multiplier = spend.multiplier ?? 1;
@@ -2469,6 +2484,7 @@ function PermissionDialogWrapper({
 
         return {
           amount,
+          decimalsUnknown,
           token: isNativeToken(spend.token) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
           tokenAddress: spend.token,
           duration,
@@ -2478,16 +2494,19 @@ function PermissionDialogWrapper({
     [spendsData, tokenInfoMap, viemChain, nativeSymbol]
   );
 
-  // Format call permissions
+  // Format call permissions. Signatures resolve asynchronously — a selector with no signature yet
+  // renders as its raw hex and upgrades in place.
+  const callSignatures = useFunctionSignatures(callsData.map((call) => call.selector));
   const calls = useMemo(
     () =>
       callsData.map((call) => ({
         target: call.target,
         selector: call.selector,
         functionSignature:
-          call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+          call.functionSignature ||
+          (call.selector ? (callSignatures[call.selector.toLowerCase()] ?? call.selector) : 'Unknown Function'),
       })),
-    [callsData]
+    [callsData, callSignatures]
   );
 
   // Format expiry date
@@ -2495,59 +2514,16 @@ function PermissionDialogWrapper({
     return formatExpiryDate(request.data.expiry);
   }, [request.data.expiry]);
 
-  // Generate warning message based on actual permissions
-  const warningMessage = useMemo(() => {
-    const parts: string[] = [];
-
-    // Describe spend permissions
-    if (spends.length > 0) {
-      const spendDescriptions = spends.map((spend) => {
-        // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
-        const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
-        // Handle "forever" specially - no "per" prefix needed
-        if (normalizedDuration === 'forever') {
-          return spend.limit;
-        }
-        return `${spend.limit} per ${normalizedDuration}`;
-      });
-      parts.push(`spend up to ${spendDescriptions.join(', ')}`);
-    }
-
-    // Describe call permissions
-    if (calls.length > 0) {
-      const callDescriptions = calls.map((call) => {
-        const fnName = call.functionSignature;
-        // Check for special selectors
-        if (fnName === 'Any Function') {
-          return 'call any function';
-        }
-        if (fnName === 'Empty Calldata') {
-          return 'send transactions with empty calldata';
-        }
-        // Extract just the function name from signature like "transfer(address,uint256)"
-        const simpleName = fnName.split('(')[0];
-        return `call ${simpleName}`;
-      });
-
-      // Deduplicate and join
-      const uniqueCalls = [...new Set(callDescriptions)];
-      parts.push(uniqueCalls.join(', '));
-    }
-
-    if (parts.length === 0) {
-      return `You are granting permissions to this dApp until ${expiryDate}. Only approve if you trust this dApp.`;
-    }
-
-    return `This will allow the dApp to ${parts.join(' and ')} on your behalf until ${expiryDate}. Only approve if you trust this dApp.`;
-  }, [spends, calls, expiryDate]);
-
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
     if (!account) {
       console.error('[PermissionDialogWrapper] Account not initialized');
       return;
     }
 
+    submittingRef.current = true;
     setIsProcessing(true);
+    onSubmissionInFlight?.(true);
     setStatus('Granting permissions...');
     try {
       // Use the spends array directly from the request (already in correct format)
@@ -2580,11 +2556,18 @@ function PermissionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed grant proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };
@@ -2598,20 +2581,22 @@ function PermissionDialogWrapper({
       }}
       mode="grant"
       spenderAddress={request.data.spender}
+      accountAddress={request.data.address}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={spends}
       calls={calls}
+      tokenMeta={tokenInfoMap}
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
       apiKey={apiKey}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingTokenInfo}
-      timestamp={new Date(request.timestamp)}
-      warningMessage={warningMessage}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
@@ -2753,16 +2738,22 @@ function RevokePermissionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: RevokePermissionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -2773,6 +2764,9 @@ function RevokePermissionDialogWrapper({
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
+  // Synchronous re-entry guard: isProcessing disables the buttons only after a
+  // re-render, which is too soft a gate for an on-chain revocation.
+  const submittingRef = useRef(false);
 
   const chainId = request.data.chainId || defaultChainId || 1;
   const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
@@ -2886,27 +2880,35 @@ function RevokePermissionDialogWrapper({
         const permData = await getPermissionFromRelay(request.data.permissionId as `0x${string}`, apiKey);
         setFetchedPermissionData(permData);
 
-        // Fetch token info for spends
-        if (permData.spends && permData.spends.length > 0) {
+        // Token info for spend tokens and for any call target that turns out to be a token.
+        const lookupAddresses = Array.from(
+          new Set([
+            ...(permData.spends ?? []).map((spend) => spend.token),
+            ...(permData.calls ?? []).map((call) => call.target).filter((t) => t && !isWildcard(t)),
+          ])
+        );
+        if (lookupAddresses.length > 0) {
           const newTokenInfoMap: TokenInfoMap = {};
-          // One pass over the spends so the shared client can fold every
-          // decimals/symbol read into a single Multicall3 request. Left null when no
-          // endpoint is configured — getPublicClient attaches the chain definition, so
-          // an empty URL would resolve to the chain's public RPC rather than the proxy.
-          // Native spends still resolve below; ERC-20s take the same fallback a failed
-          // read would.
+          // One pass over the lookup set so the shared client can fold every decimals/symbol
+          // read into a single Multicall3 request. Left null when no endpoint is configured —
+          // getPublicClient attaches the chain definition, so an empty URL would resolve to
+          // the chain's public RPC rather than the proxy.
           const publicClient = chain.rpcUrl ? getPublicClient(chainId, chain.rpcUrl) : null;
 
+          const pending: string[] = [];
+          for (const tokenAddress of lookupAddresses) {
+            if (isNativeToken(tokenAddress)) {
+              newTokenInfoMap[tokenAddress] = {
+                decimals: viemChain?.nativeCurrency?.decimals ?? 18,
+                symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
+              };
+            } else {
+              pending.push(tokenAddress);
+            }
+          }
+
           await Promise.all(
-            permData.spends.map(async (spend) => {
-              const tokenAddress = spend.token;
-              if (isNativeToken(tokenAddress)) {
-                newTokenInfoMap[tokenAddress] = {
-                  decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-                  symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
-                };
-                return;
-              }
+            pending.map(async (tokenAddress) => {
               try {
                 if (!publicClient) throw new Error(`No RPC URL configured for chain ${chainId}`);
                 const [decimals, symbol] = await Promise.all([
@@ -2923,10 +2925,9 @@ function RevokePermissionDialogWrapper({
                 ]);
                 newTokenInfoMap[tokenAddress] = { decimals, symbol };
               } catch {
-                newTokenInfoMap[tokenAddress] = {
-                  decimals: 18,
-                  symbol: tokenAddress,
-                };
+                // Not an ERC-20 (or unreachable): unnamed, and decimals unknown, so the UI shows
+                // the address and the raw allowance rather than a figure scaled by a guessed 18.
+                newTokenInfoMap[tokenAddress] = { decimals: null, symbol: '' };
               }
             })
           );
@@ -3063,19 +3064,23 @@ function RevokePermissionDialogWrapper({
 
     return fetchedPermissionData.spends.map((spend: any) => {
       const tokenAddress = spend.token;
+      // Only a native token may borrow the chain symbol; anything else stays unnamed until
+      // its own symbol resolves, or every token would render as the native currency.
       const tokenInfo = tokenInfoMap[tokenAddress] || {
-        decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-        symbol: nativeSymbol,
+        // Only a native token has decimals knowable without a read.
+        decimals: isNativeToken(tokenAddress) ? (viemChain?.nativeCurrency?.decimals ?? 18) : null,
+        symbol: isNativeToken(tokenAddress) ? nativeSymbol : '',
       };
       const allowance = BigInt(spend.allowance);
-      const amount = formatUnits(allowance, tokenInfo.decimals);
-      const limit = `${amount} ${tokenInfo.symbol}`;
+      const { amount, decimalsUnknown } = formatSpendAmount(allowance, tokenInfo.decimals);
+      const limit = decimalsUnknown ? `${amount} base units` : `${amount} ${tokenInfo.symbol}`;
       // Format duration with multiplier (unit is period string like 'day', 'week', etc.)
       const multiplier = spend.multiplier ?? 1;
       const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? 's' : ''}`;
 
       return {
         amount,
+        decimalsUnknown,
         token: isNativeToken(tokenAddress) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
         tokenAddress,
         duration,
@@ -3084,7 +3089,10 @@ function RevokePermissionDialogWrapper({
     });
   }, [fetchedPermissionData, tokenInfoMap, viemChain, nativeSymbol]);
 
-  // Format call permissions from fetched data
+  // Format call permissions from fetched data. Signatures resolve asynchronously.
+  const revokeCallSignatures = useFunctionSignatures(
+    (fetchedPermissionData?.calls ?? []).map((call: any) => call.selector)
+  );
   const formattedCalls = useMemo(() => {
     if (!fetchedPermissionData?.calls) return [];
 
@@ -3092,9 +3100,10 @@ function RevokePermissionDialogWrapper({
       target: call.target,
       selector: call.selector,
       functionSignature:
-        call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+        call.functionSignature ||
+        (call.selector ? (revokeCallSignatures[call.selector.toLowerCase()] ?? call.selector) : 'Unknown Function'),
     }));
-  }, [fetchedPermissionData]);
+  }, [fetchedPermissionData, revokeCallSignatures]);
 
   // Expiry date from fetched permission
   const expiryDate = useMemo(() => {
@@ -3104,15 +3113,19 @@ function RevokePermissionDialogWrapper({
   }, [fetchedPermissionData]);
 
   // Spender address from fetched permission
-  const spenderAddress = fetchedPermissionData?.spender || '0x...';
+  // Empty until the relay responds — the dialog shows a placeholder row rather than a fake address.
+  const spenderAddress = fetchedPermissionData?.spender ?? '';
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
     if (!account) {
       console.error('[RevokePermissionDialogWrapper] Account not initialized');
       return;
     }
 
+    submittingRef.current = true;
     setIsProcessing(true);
+    onSubmissionInFlight?.(true);
     setStatus('Revoking permission...');
     try {
       // Revoke permission using Account class with paymaster context
@@ -3137,11 +3150,18 @@ function RevokePermissionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed revocation proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };
@@ -3156,19 +3176,22 @@ function RevokePermissionDialogWrapper({
       mode="revoke"
       permissionId={request.data.permissionId}
       spenderAddress={spenderAddress}
+      accountAddress={request.data.address}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={formattedSpends}
       calls={formattedCalls}
+      tokenMeta={tokenInfoMap}
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
       apiKey={apiKey}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingPermissionDetails}
-      timestamp={new Date(request.timestamp)}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Gas estimation props
       gasFee={gasFee}

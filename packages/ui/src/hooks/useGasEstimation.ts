@@ -167,12 +167,34 @@ export function useGasEstimation({
   // Track estimation version to handle race conditions
   const estimationVersionRef = useRef<number>(0);
 
+  // Latest displayed fee, read inside estimateGas without making it a dependency.
+  const gasFeeRef = useRef<string>('');
+  gasFeeRef.current = gasFee;
+
   // Use refs for values that shouldn't trigger re-estimation
   const feeTokensRef = useRef(feeTokens);
   feeTokensRef.current = feeTokens;
 
   const onFeeTokensUpdateRef = useRef(onFeeTokensUpdate);
   onFeeTokensUpdateRef.current = onFeeTokensUpdate;
+
+  // The ETH estimate depends on the calls, the account and the endpoint, never on the fee-token
+  // list. Keyed separately so the list arriving later doesn't force a second identical bundler
+  // round-trip. `apiKey` and `isSponsored` are inputs too: a fee measured before the key arrived
+  // (or while sponsored) must not be reused as if it were measured for the current setup.
+  const ethInputsKey = useMemo(
+    () =>
+      JSON.stringify([
+        chainId,
+        permissionId ?? null,
+        address ?? null,
+        apiKey ?? null,
+        isSponsored,
+        transactionCalls.map((c) => [c.to, c.value?.toString() ?? null, c.data ?? null]),
+      ]),
+    [chainId, permissionId, address, apiKey, isSponsored, transactionCalls]
+  );
+  const ethEstimatedForRef = useRef<string>('');
 
   // Track ERC-20 token addresses to re-run estimation when new tokens are added
   // This is stable when only gasCostFormatted/isSelectable change (preventing infinite loops)
@@ -240,8 +262,12 @@ export function useGasEstimation({
     // Increment version to track this estimation
     const currentVersion = ++estimationVersionRef.current;
 
-    // Start loading
-    setGasFeeLoading(true);
+    // Re-estimating with unchanged inputs (the ERC-20 token list arrived) must not blank a fee
+    // that's already on screen — the row would fall back to "Estimating..." after having shown a
+    // value. But a changed key means the fee on screen was measured for a *different* userOp: the
+    // permission dialogs' first pass runs against a dummy call before the real one is built, and
+    // that number must read as loading rather than pass as final.
+    if (ethEstimatedForRef.current !== ethInputsKey) setGasFeeLoading(true);
     setEstimatingTokenCosts(true);
     setGasEstimationError('');
 
@@ -264,10 +290,18 @@ export function useGasEstimation({
       // Resolve the correct smart account for estimation (handles address override)
       const resolvedSmartAccount = await account.getSmartAccountFor(address);
 
-      // Run ETH and ERC-20 estimation in parallel
+      // Run ETH and ERC-20 estimation in parallel. The ETH leg is skipped when nothing it
+      // depends on has changed — re-running it just to pick up the fee-token list would repeat
+      // a bundler round-trip for a result we already have.
+      // Only a real measured fee is reusable — never the 'sponsored' sentinel, and only when
+      // the inputs it was measured for are unchanged.
+      const reuseEthEstimate =
+        ethEstimatedForRef.current === ethInputsKey && !!gasFeeRef.current && gasFeeRef.current !== 'sponsored';
       const [ethResult, erc20Result] = await Promise.allSettled([
         // ETH gas estimation
-        account.calculateGasCost(effectiveCalls, permissionId || address ? { permissionId, address } : undefined),
+        reuseEthEstimate
+          ? Promise.resolve(gasFeeRef.current)
+          : account.calculateGasCost(effectiveCalls, permissionId || address ? { permissionId, address } : undefined),
         // ERC-20 gas estimation (only for tokens with balance > 0)
         // Tokens with 0 balance will be marked as not selectable below
         erc20TokensWithBalance.length > 0
@@ -397,10 +431,15 @@ export function useGasEstimation({
       const ethInsufficientFunds = ethResult.status === 'rejected' && isPrefundError(ethResult.reason);
 
       if (ethSuccess) {
+        ethEstimatedForRef.current = ethInputsKey;
         handleEthSuccess(ethResult.value, updatedFeeTokens);
       } else if (ethInsufficientFunds) {
+        // Defensive: this branch only runs when the ETH leg was actually measured, so the key is
+        // already stale — but a fallback fee must never become reusable if that ever changes.
+        ethEstimatedForRef.current = '';
         handleEthInsufficientFunds(updatedFeeTokens);
       } else {
+        ethEstimatedForRef.current = '';
         handleEstimationError(ethResult.status === 'rejected' ? ethResult.reason : null, updatedFeeTokens);
       }
     } catch (error) {
@@ -408,6 +447,7 @@ export function useGasEstimation({
       if (currentVersion !== estimationVersionRef.current) {
         return;
       }
+      ethEstimatedForRef.current = '';
       handleEstimationError(error);
     } finally {
       // Only update loading states if this is still the current estimation
@@ -418,7 +458,23 @@ export function useGasEstimation({
     }
     // Note: feeTokens and onFeeTokensUpdate accessed via refs to prevent infinite loops
     // erc20TokenAddresses triggers re-estimation when new ERC-20 tokens are added (but not when estimates update)
-  }, [account, transactionCalls, chainId, apiKey, isSponsored, permissionId, address, erc20TokenAddresses]);
+  }, [
+    account,
+    transactionCalls,
+    chainId,
+    apiKey,
+    isSponsored,
+    permissionId,
+    address,
+    erc20TokenAddresses,
+    ethInputsKey,
+  ]);
+
+  /** Explicit refetch discards the reuse key so the ETH leg is genuinely re-measured. */
+  const forceRefetch = useCallback(() => {
+    ethEstimatedForRef.current = '';
+    void estimateGas();
+  }, [estimateGas]);
 
   // -------------------------------------------------------------------------
   // Result Handlers
@@ -523,6 +579,6 @@ export function useGasEstimation({
     selectedFeeToken,
     setSelectedFeeToken,
     isPayingWithErc20,
-    refetch: estimateGas,
+    refetch: forceRefetch,
   };
 }
