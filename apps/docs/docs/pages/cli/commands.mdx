@@ -200,6 +200,77 @@ jaw disconnect
 
 ---
 
+## jaw x402 pay
+
+Fetch a URL, paying an x402 `402` challenge with the session key. Dry run by default: pass `--pay` to actually spend. See [Paying for APIs](/cli/x402) for funding and limits.
+
+```bash
+jaw x402 pay <url>
+```
+
+### Flags
+
+| Flag           | Description                                               |
+| -------------- | --------------------------------------------------------- |
+| `--pay`        | Actually sign and send the payment                        |
+| `--max-amount` | Ceiling in base units for this call, on top of the policy |
+| `--method`     | HTTP method (default `GET`)                               |
+| `--body`       | Request body                                              |
+
+### Examples
+
+```bash
+jaw x402 pay https://api.example.com/resource
+```
+
+```bash
+jaw x402 pay https://api.example.com/resource --pay
+```
+
+```bash
+jaw x402 pay https://api.example.com/resource --pay --max-amount 50000
+```
+
+---
+
+## jaw x402 status
+
+Show x402 payment readiness: which account holds the funds, the resolved caps, and what has been spent. Reads only, never pays.
+
+```bash
+jaw x402 status
+jaw x402 status --output json
+```
+
+---
+
+## jaw x402 log
+
+Show the local x402 payment ledger: every attempt, paid, failed or refused, with amounts and transactions.
+
+```bash
+jaw x402 log
+```
+
+### Flags
+
+| Flag       | Description                             |
+| ---------- | --------------------------------------- |
+| `--limit`  | Show only the most recent N entries     |
+| `--status` | Filter by `paid`, `failed` or `refused` |
+
+### Examples
+
+```bash
+jaw x402 log --limit 20
+```
+
+```bash
+jaw x402 log --status failed
+```
+
+---
+
 ## jaw mcp
 
 Start the MCP server on stdio for AI agent integration. See the [MCP Server](/cli/mcp) page for setup details.

@@ -310,6 +310,10 @@ export default defineConfig({
         link: '/cli/commands',
       },
       {
+        text: 'Paying for APIs (x402)',
+        link: '/cli/x402',
+      },
+      {
         text: 'MCP Server',
         link: '/cli/mcp',
       },

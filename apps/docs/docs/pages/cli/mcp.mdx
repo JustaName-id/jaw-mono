@@ -37,6 +37,10 @@ Environment variables in the MCP config follow the same resolution order as the 
 | `jaw_status`         | Check relay session status and configuration in use                  |
 | `jaw_session_status` | Check local session-key (auto mode) status                           |
 | `jaw_disconnect`     | Close relay session and browser tab                                  |
+| `jaw_pay_and_fetch`  | Fetch a URL, paying an x402 `402` challenge in USDC if one appears   |
+| `jaw_discover`       | Search the x402 Bazaar for paid services (read only, never spends)   |
+| `jaw_x402_balance`   | The session payer's USDC balance on a network                        |
+| `jaw_x402_log`       | The local ledger of every payment attempt                            |
 
 ### jaw_rpc
 
@@ -83,14 +87,32 @@ Set `JAW_SESSION=true` in the MCP server's `env` block to make session mode the 
 
 Valid keys: `apiKey`, `defaultChain`, `keysUrl`, `ens`, `relayUrl`, `sessionExpiry`
 
+The `x402` spending limits are **not** settable here. An agent must not be able to raise its own caps, so those keys are only writable by a human at the terminal. See [Paying for APIs](/cli/x402#configuring-the-policy).
+
+### jaw_pay_and_fetch
+
+Fetches a URL. If it is free, it comes back as is. If it answers `402`, the agent pays in USDC and retries.
+
+```json
+{
+  "url": "https://api.example.com/resource",
+  "maxAmount": "50000"
+}
+```
+
+Requires a session with an x402 permission ([`jaw session setup --x402`](/cli/x402#setup)). Every payment is bounded by the configured policy plus the optional `maxAmount` for the call. An over cap, wrong asset, wrong network or disallowed recipient payment is refused, never silently paid.
+
+Read [Paying for APIs](/cli/x402) for funding and limits, including which of the two accounts to fund.
+
 ## Available Resources
 
 The MCP server exposes documentation resources that AI agents can read for context.
 
-| Resource URI                   | Description                                  |
-| ------------------------------ | -------------------------------------------- |
-| `jaw://api-reference`          | Index of all supported RPC methods           |
-| `jaw://api-reference/{method}` | Detailed documentation for a specific method |
+| Resource URI                   | Description                                                                                        |
+| ------------------------------ | -------------------------------------------------------------------------------------------------- |
+| `jaw://api-reference`          | Index of all supported RPC methods                                                                 |
+| `jaw://api-reference/{method}` | Detailed documentation for a specific method                                                       |
+| `jaw://x402`                   | How to pay for HTTP resources with x402: the tools, which account to fund, and the spending limits |
 
 ## Agent Skills
 
