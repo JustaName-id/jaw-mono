@@ -2254,10 +2254,13 @@ function PermissionDialogWrapper({
   );
 
   // Get spends array from request (now using spends plural)
-  const spendsData = request.data.permissions.spends || [];
+  // Memoized because both keys are optional: `?? []` on an absent key returns a new array every
+  // render, and these feed effect dependency arrays. A calls-only grant otherwise re-triggered the
+  // token-info effect from its own setState, forever.
+  const spendsData = useMemo(() => request.data.permissions.spends ?? [], [request.data.permissions.spends]);
 
   // Get calls array from request
-  const callsData = request.data.permissions.calls || [];
+  const callsData = useMemo(() => request.data.permissions.calls ?? [], [request.data.permissions.calls]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
@@ -2332,7 +2335,7 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [chainId, spendsData, chain.rpcUrl, viemChain]);
+  }, [chainId, spendsData, callsData, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens from capabilities (same pattern as TransactionDialogWrapper)
   useEffect(() => {

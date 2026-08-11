@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { resolveFunctionSignature, sentinelSignature } from '../utils/functionSignature';
 
 /**
@@ -36,10 +36,16 @@ export function useFunctionSignatures(selectors: (string | undefined)[]): Record
     };
   }, [key]);
 
-  const out: Record<string, string> = {};
-  for (const selector of key ? key.split(',') : []) {
-    const signature = sentinelSignature(selector) ?? resolved[selector];
-    if (signature) out[selector] = signature;
-  }
-  return out;
+  // Memoized on the content key: a fresh object every render makes every caller's `useMemo`
+  // unstable, and PermissionDialog lists the resulting `calls` in its reverse-resolution deps — so
+  // an unstable map refired the whole ENS batch on each parent render and re-disabled the confirm
+  // button mid-flow. `resolved` only changes when a lookup actually lands.
+  return useMemo(() => {
+    const out: Record<string, string> = {};
+    for (const selector of key ? key.split(',') : []) {
+      const signature = sentinelSignature(selector) ?? resolved[selector];
+      if (signature) out[selector] = signature;
+    }
+    return out;
+  }, [key, resolved]);
 }
