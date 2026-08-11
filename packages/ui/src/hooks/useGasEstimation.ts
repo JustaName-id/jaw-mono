@@ -178,17 +178,21 @@ export function useGasEstimation({
   const onFeeTokensUpdateRef = useRef(onFeeTokensUpdate);
   onFeeTokensUpdateRef.current = onFeeTokensUpdate;
 
-  // The ETH estimate depends on the calls and the account, never on the fee-token list. Keyed
-  // separately so the list arriving later doesn't force a second identical bundler round-trip.
+  // The ETH estimate depends on the calls, the account and the endpoint, never on the fee-token
+  // list. Keyed separately so the list arriving later doesn't force a second identical bundler
+  // round-trip. `apiKey` and `isSponsored` are inputs too: a fee measured before the key arrived
+  // (or while sponsored) must not be reused as if it were measured for the current setup.
   const ethInputsKey = useMemo(
     () =>
       JSON.stringify([
         chainId,
         permissionId ?? null,
         address ?? null,
+        apiKey ?? null,
+        isSponsored,
         transactionCalls.map((c) => [c.to, c.value?.toString() ?? null, c.data ?? null]),
       ]),
-    [chainId, permissionId, address, transactionCalls]
+    [chainId, permissionId, address, apiKey, isSponsored, transactionCalls]
   );
   const ethEstimatedForRef = useRef<string>('');
 
@@ -258,10 +262,12 @@ export function useGasEstimation({
     // Increment version to track this estimation
     const currentVersion = ++estimationVersionRef.current;
 
-    // Re-estimating (the ERC-20 token list arrived) must not blank a fee that's already on
-    // screen — the row would fall back to "Estimating..." after having shown a value. Only the
-    // first pass, with nothing to display yet, shows the loading state.
-    if (!gasFeeRef.current) setGasFeeLoading(true);
+    // Re-estimating with unchanged inputs (the ERC-20 token list arrived) must not blank a fee
+    // that's already on screen — the row would fall back to "Estimating..." after having shown a
+    // value. But a changed key means the fee on screen was measured for a *different* userOp: the
+    // permission dialogs' first pass runs against a dummy call before the real one is built, and
+    // that number must read as loading rather than pass as final.
+    if (ethEstimatedForRef.current !== ethInputsKey) setGasFeeLoading(true);
     setEstimatingTokenCosts(true);
     setGasEstimationError('');
 
