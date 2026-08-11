@@ -20,7 +20,7 @@ import { SubText } from '../SubText';
 import { AssetPreview } from './AssetPreview';
 import { callTitle } from './DecodedCalldata';
 import { resolveBlockReason } from '../../utils/transactionFailure';
-import { PERMISSION_PROBLEM_TEXT } from '../../utils/permissionExecution';
+import { isBlockingPermissionProblem, PERMISSION_PROBLEM_TEXT } from '../../utils/permissionExecution';
 import { BatchStep, SingleCallData } from './CallSections';
 import { InlineWarning, PartyRow, Row, ValueAmount } from '../primitives';
 import { NetworkFeeRow } from '../NetworkFeeRow';
@@ -212,16 +212,20 @@ export const TransactionDialog = ({
   // lookup that failed — the extra row and the delegation badge must not flicker in and out.
   const isPermissioned = !!onBehalfOf || !!onBehalfOfLoading || !!permissionProblem;
 
+  // A failed lookup is uncertainty about the lookup, not a certain revert — it warns below but
+  // must not dead-end the dialog the way a genuinely broken permission does.
+  const permissionBlocks = !!permissionProblem && isBlockingPermissionProblem(permissionProblem);
+
   // A broken permission fails estimation too, so the fee row would blame the fee for something
   // the banner already explains precisely. Name the cause once, at the top.
-  const feeBlockReason = permissionProblem ? null : blockReason;
+  const feeBlockReason = permissionBlocks ? null : blockReason;
 
   // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
   const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
-  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20EstimateMissing && !permissionProblem;
+  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20EstimateMissing && !permissionBlocks;
 
   // Reverts, but gas estimated fine, so it stays submittable: warn rather than block.
-  const softRevertWarning = !blockReason && !permissionProblem && !!assetPreviewWillRevert;
+  const softRevertWarning = !blockReason && !permissionBlocks && !!assetPreviewWillRevert;
 
   const singleValue = isSingleTransaction ? formatNativeValue(currentTransaction?.value) : null;
   // Dust renders in subscript notation like the fee rows; math keeps using the raw string.
@@ -348,7 +352,8 @@ export const TransactionDialog = ({
               )}
             </div>
 
-            {/* The permission itself is unusable — a certain revert, named before signing. */}
+            {/* A certain revert named before signing — or, for a failed lookup, the honest
+                admission that we couldn't check. Only the former disables Confirm. */}
             {permissionProblem && (
               <div className="px-0.5">
                 <InlineWarning
@@ -474,7 +479,7 @@ export const TransactionDialog = ({
                 disabled={!canConfirm}
                 className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
               >
-                {blockReason === 'funds' && !permissionProblem
+                {blockReason === 'funds' && !permissionBlocks
                   ? 'Insufficient Funds'
                   : isProcessing
                     ? 'Processing...'

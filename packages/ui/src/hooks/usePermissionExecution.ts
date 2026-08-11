@@ -43,16 +43,17 @@ export function usePermissionExecution({
   calls,
 }: UsePermissionExecutionOptions): UsePermissionExecutionResult {
   const [permission, setPermission] = useState<ExecutionPermission | null>(null);
-  const [unresolved, setUnresolved] = useState(false);
+  const [unresolved, setUnresolved] = useState<'revoked' | 'lookup-failed' | null>(null);
 
   useEffect(() => {
     setPermission(null);
-    setUnresolved(false);
+    setUnresolved(null);
     if (!permissionId) return;
     // No key means no way to reach the relay. Terminal, not pending — otherwise the screen
-    // renders as an ordinary transaction and never says whose funds are moving.
+    // renders as an ordinary transaction and never says whose funds are moving. A failed lookup,
+    // not a revocation: the permission itself may be perfectly valid.
     if (!apiKey) {
-      setUnresolved(true);
+      setUnresolved('lookup-failed');
       return;
     }
 
@@ -69,8 +70,15 @@ export function usePermissionExecution({
           calls: relay.calls ?? [],
         });
       })
-      .catch(() => {
-        if (!cancelled) setUnresolved(true);
+      .catch((err: unknown) => {
+        if (cancelled) return;
+        // Only a relay 404 proves the permission is gone; anything else (5xx, network, CORS)
+        // is our lookup failing, which must warn rather than dead-end the dialog. The status
+        // lives directly on errors the core rethrows from structured bodies, and on
+        // `response.status` for raw transport errors.
+        const status =
+          (err as { status?: number })?.status ?? (err as { response?: { status?: number } })?.response?.status;
+        setUnresolved(status === 404 ? 'revoked' : 'lookup-failed');
       });
 
     return () => {
@@ -79,7 +87,7 @@ export function usePermissionExecution({
   }, [permissionId, apiKey]);
 
   if (!permissionId) return { loading: false, problem: null };
-  if (unresolved) return { loading: false, problem: 'not-found' };
+  if (unresolved) return { loading: false, problem: unresolved };
   // Derived, not stored: a `loading` state initialised to false would report "not permissioned"
   // for the first render, dropping the extra row and the badge for a frame.
   if (!permission) return { loading: true, problem: null };

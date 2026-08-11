@@ -42,8 +42,10 @@ export interface ExecutionPermission {
  * we can name before the user signs, rather than letting it surface as "estimation failed".
  */
 export type PermissionProblem =
-  /** The relay has no such permission — never granted, or already revoked. */
-  | 'not-found'
+  /** The relay answered 404: the permission was revoked, or never granted. */
+  | 'revoked'
+  /** The lookup itself failed (network, server error, missing key) — the permission may be fine. */
+  | 'lookup-failed'
   /** Past its `end` timestamp. */
   | 'expired'
   /** Its `start` timestamp is still in the future. */
@@ -57,13 +59,26 @@ export type PermissionProblem =
   /** A call's target/selector pair isn't in the permission's allow-list. */
   | 'call-not-allowed';
 
+/**
+ * Every problem is a certain on-chain revert and blocks Confirm — except `lookup-failed`,
+ * which is uncertainty about our own lookup, not about the permission: it warns and lets the
+ * user proceed. One predicate so the dialog and the copy can never disagree on that line.
+ */
+export function isBlockingPermissionProblem(problem: PermissionProblem): boolean {
+  return problem !== 'lookup-failed';
+}
+
 /** Short label for the fee row, and the tooltip detail behind it. */
 export const PERMISSION_PROBLEM_TEXT: Record<PermissionProblem, { text: string; detail: string }> = {
-  'not-found': {
-    // Covers a revoked permission and a lookup that simply failed — the two are indistinguishable
-    // from here, so the copy must not assert which one it was.
+  revoked: {
     text: 'Permission unavailable',
-    detail: 'This permission couldn’t be loaded — it may have been revoked. Executing it would be rejected on-chain.',
+    detail:
+      'The relay has no record of this permission — it was revoked or never granted. Executing it would be rejected on-chain.',
+  },
+  'lookup-failed': {
+    text: 'Permission couldn’t be verified',
+    detail:
+      'The permission lookup failed, so its details couldn’t be checked. You can still submit, but if the permission is invalid the execution will be rejected on-chain.',
   },
   'not-yet-valid': {
     text: 'Permission not active yet',
