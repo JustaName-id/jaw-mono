@@ -1,10 +1,18 @@
 import { describe, expect, it } from 'vitest';
-import { ANY_FN_SEL, ANY_TARGET, EMPTY_CALLDATA_FN_SEL } from '@jaw.id/core';
-import { isWildcard, validatePermissionExecution, type ExecutionPermission } from './permissionExecution';
+import { ANY_FN_SEL, ANY_TARGET, EMPTY_CALLDATA_FN_SEL, PERMISSIONS_MANAGER_ADDRESS } from '@jaw.id/core';
+import {
+  isBlockingPermissionProblem,
+  isWildcard,
+  PERMISSION_PROBLEM_TEXT,
+  validatePermissionExecution,
+  type ExecutionPermission,
+  type PermissionProblem,
+} from './permissionExecution';
 
 const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
 const SPENDER = '0x000000000000000000000000000000000000dEaD';
 const GRANTER = '0x1111111111111111111111111111111111111111';
+const OTHER = '0x4444444444444444444444444444444444444444';
 const TRANSFER = '0xa9059cbb';
 const APPROVE = '0x095ea7b3';
 
@@ -74,8 +82,8 @@ describe('validatePermissionExecution', () => {
     expect(check(permission({ account: SPENDER }))).toBe('self-delegated');
   });
 
-  it('reports self-delegation ahead of a spender mismatch', () => {
-    expect(check(permission({ account: SPENDER }), [transferCall], GRANTER)).toBe('self-delegated');
+  it('reports a spender mismatch ahead of self-delegation — the certain revert wins', () => {
+    expect(check(permission({ account: SPENDER }), [transferCall], GRANTER)).toBe('wrong-spender');
   });
 
   it('detects self-delegation across address casing', () => {
@@ -97,7 +105,7 @@ describe('validatePermissionExecution', () => {
   });
 
   it('flags an allowed selector on a different contract', () => {
-    expect(check(permission(), [{ to: GRANTER, data: `${TRANSFER}00` }])).toBe('call-not-allowed');
+    expect(check(permission(), [{ to: OTHER, data: `${TRANSFER}00` }])).toBe('call-not-allowed');
   });
 
   it('flags a batch where only one call is disallowed', () => {
@@ -111,9 +119,9 @@ describe('validatePermissionExecution', () => {
   // The docs' "Only ETH transfers" preset: any target, empty calldata only.
   it('allows a bare value transfer under the empty-calldata sentinel', () => {
     const p = permission({ calls: [{ target: ANY_TARGET, selector: EMPTY_CALLDATA_FN_SEL }] });
-    expect(check(p, [{ to: GRANTER }])).toBeNull();
-    expect(check(p, [{ to: GRANTER, data: '0x' }])).toBeNull();
-    expect(check(p, [{ to: GRANTER, data: '' }])).toBeNull();
+    expect(check(p, [{ to: OTHER }])).toBeNull();
+    expect(check(p, [{ to: OTHER, data: '0x' }])).toBeNull();
+    expect(check(p, [{ to: OTHER, data: '' }])).toBeNull();
   });
 
   it('flags a call carrying calldata when only empty calldata is permitted', () => {
@@ -133,7 +141,7 @@ describe('validatePermissionExecution', () => {
 
   it('allows a permitted selector on any contract under a target wildcard', () => {
     const p = permission({ calls: [{ target: ANY_TARGET, selector: TRANSFER }] });
-    expect(check(p, [{ to: GRANTER, data: `${TRANSFER}00` }])).toBeNull();
+    expect(check(p, [{ to: OTHER, data: `${TRANSFER}00` }])).toBeNull();
   });
 
   it('reports the chain mismatch first when several checks fail', () => {
@@ -143,6 +151,60 @@ describe('validatePermissionExecution', () => {
 
   it('skips the spender check when the signer is unknown', () => {
     expect(check(permission(), [transferCall], undefined)).toBeNull();
+  });
+
+  // The manager's execute-time target checks (JustaPermissionManager: CannotTargetSelf and
+  // CannotTargetAccount), which even a wildcard allow-list can't bypass — without mirroring
+  // them here these certain reverts would surface as an unnamed estimation failure.
+  describe('mirrored CannotTargetSelf / CannotTargetAccount', () => {
+    const wildcard = permission({ calls: [{ target: ANY_TARGET, selector: ANY_FN_SEL }] });
+
+    it('flags a call to the permission manager itself', () => {
+      expect(check(wildcard, [{ to: PERMISSIONS_MANAGER_ADDRESS }])).toBe('targets-manager');
+    });
+
+    it('flags a call to the granting account', () => {
+      expect(check(wildcard, [{ to: GRANTER }])).toBe('targets-account');
+    });
+
+    it('names the target problem ahead of the allow-list check, like the contract', () => {
+      // Under the non-wildcard permission this call fails BOTH checks — the target one wins.
+      expect(check(permission(), [{ to: GRANTER, data: '0xdeadbeef' }])).toBe('targets-account');
+    });
+  });
+
+  // Verified against the deployed manager on Base Sepolia (eth_simulateV1): a self-delegated
+  // permission approves AND executes — nothing on-chain compares account to spender. So it is
+  // a warning, and it must never outrank a finding that IS a certain revert.
+  describe('self-delegated is a warning, not a block', () => {
+    const selfDelegated = permission({ account: SPENDER });
+
+    it('is non-blocking, unlike every revert-backed problem', () => {
+      expect(isBlockingPermissionProblem('self-delegated')).toBe(false);
+      expect(isBlockingPermissionProblem('lookup-failed')).toBe(false);
+      const blocking: PermissionProblem[] = [
+        'revoked',
+        'expired',
+        'not-yet-valid',
+        'chain-mismatch',
+        'wrong-spender',
+        'targets-manager',
+        'targets-account',
+        'call-not-allowed',
+      ];
+      for (const p of blocking) expect(isBlockingPermissionProblem(p)).toBe(true);
+    });
+
+    it('never masks a certain revert: blocking findings win', () => {
+      expect(check(selfDelegated, [{ to: USDC, data: `${APPROVE}00` }])).toBe('call-not-allowed');
+      expect(check(selfDelegated, [{ to: SPENDER }])).toBe('targets-account');
+      expect(check(selfDelegated, [transferCall], SPENDER, 1)).toBe('chain-mismatch');
+    });
+
+    it('its copy does not claim an on-chain rejection', () => {
+      expect(PERMISSION_PROBLEM_TEXT['self-delegated'].detail).not.toMatch(/rejected on-chain/i);
+      expect(PERMISSION_PROBLEM_TEXT['self-delegated'].detail).toMatch(/will execute/i);
+    });
   });
 });
 

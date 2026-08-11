@@ -16,6 +16,7 @@ vi.mock('@jaw.id/core', async () => {
     ANY_FN_SEL: actual.ANY_FN_SEL,
     ANY_TARGET: actual.ANY_TARGET,
     EMPTY_CALLDATA_FN_SEL: actual.EMPTY_CALLDATA_FN_SEL,
+    PERMISSIONS_MANAGER_ADDRESS: actual.PERMISSIONS_MANAGER_ADDRESS,
     getPermissionFromRelay: vi.fn(),
   };
 });

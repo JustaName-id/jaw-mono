@@ -7,6 +7,7 @@ export {
     JAW_WALLET_NAME,
     JAW_WALLET_ID,
     JAW_WALLET_RDNS,
+    PERMISSIONS_MANAGER_ADDRESS,
 } from './constants.js';
 
 /**  SDK Info **/

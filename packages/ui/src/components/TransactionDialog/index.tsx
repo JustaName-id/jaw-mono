@@ -376,9 +376,9 @@ export const TransactionDialog = ({
             {/* Asset changes — a native send shows the same information in its hero. */}
             {!isNativeSend && (
               <AssetPreview
-                // Always someone else's balances: a valid permission has spender !== account
-                // (self-delegation is rejected) and the signer must be the spender, so the granter
-                // can never be the one executing.
+                // Someone else's balances whenever a granter resolved — except the self-delegated
+                // edge case, where granter and spender are the same account; the banner above
+                // already names that oddity, so the badge stays simple.
                 onBehalf={!!onBehalfOf}
                 assetsOut={assetsOut ?? []}
                 assetsIn={assetsIn ?? []}

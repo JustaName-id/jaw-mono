@@ -11,7 +11,7 @@
 // a named reason instead of a failed estimation.
 // ============================================================================
 
-import { ANY_FN_SEL, ANY_TARGET, EMPTY_CALLDATA_FN_SEL } from '@jaw.id/core';
+import { ANY_FN_SEL, ANY_TARGET, EMPTY_CALLDATA_FN_SEL, PERMISSIONS_MANAGER_ADDRESS } from '@jaw.id/core';
 
 /**
  * The permission-manager sentinels standing for "unrestricted". One list so a target wildcard
@@ -38,8 +38,9 @@ export interface ExecutionPermission {
 }
 
 /**
- * Why a permissioned execution can't go through. Each one is a guaranteed on-chain revert that
- * we can name before the user signs, rather than letting it surface as "estimation failed".
+ * Something worth saying about a permissioned execution before the user signs. Most entries are
+ * guaranteed on-chain reverts named up front rather than surfacing as "estimation failed"; see
+ * `isBlockingPermissionProblem` for the two that warn without blocking.
  */
 export type PermissionProblem =
   /** The relay answered 404: the permission was revoked, or never granted. */
@@ -54,18 +55,27 @@ export type PermissionProblem =
   | 'chain-mismatch'
   /** The signer isn't the spender, so the manager will reject the caller. */
   | 'wrong-spender'
-  /** Granted to the account that granted it — storable, but not executable. */
+  /** A call targets the permission manager itself — `CannotTargetSelf` at execute time. */
+  | 'targets-manager'
+  /** A call targets the granting account — `CannotTargetAccount` at execute time. */
+  | 'targets-account'
+  /**
+   * Granted by an account to itself. Verified against the deployed manager: this approves AND
+   * executes (nothing on-chain compares account to spender, and JustanAccount has no reentrancy
+   * guard), so it is pointless-but-valid rather than a revert. Warn, don't block.
+   */
   | 'self-delegated'
   /** A call's target/selector pair isn't in the permission's allow-list. */
   | 'call-not-allowed';
 
 /**
- * Every problem is a certain on-chain revert and blocks Confirm — except `lookup-failed`,
- * which is uncertainty about our own lookup, not about the permission: it warns and lets the
- * user proceed. One predicate so the dialog and the copy can never disagree on that line.
+ * A blocking problem is a certain on-chain revert and disables Confirm. The two exceptions warn
+ * and let the user proceed: `lookup-failed` is uncertainty about our own lookup, not about the
+ * permission, and `self-delegated` executes fine on-chain — it is merely unusual. One predicate
+ * so the dialog and the copy can never disagree on that line.
  */
 export function isBlockingPermissionProblem(problem: PermissionProblem): boolean {
-  return problem !== 'lookup-failed';
+  return problem !== 'lookup-failed' && problem !== 'self-delegated';
 }
 
 /** Short label for the fee row, and the tooltip detail behind it. */
@@ -92,10 +102,20 @@ export const PERMISSION_PROBLEM_TEXT: Record<PermissionProblem, { text: string; 
     text: 'Wrong network',
     detail: 'This permission was granted on a different network than the one this transaction targets.',
   },
-  'self-delegated': {
-    text: 'Permission can’t be used',
+  'targets-manager': {
+    text: 'Calls the permission manager',
     detail:
-      'This permission was granted by an account to itself. The permissions manager can’t execute it, so it would be rejected on-chain. Grant it to a separate spender instead.',
+      'This transaction calls the permission manager itself, which the manager forbids. Executing it would be rejected on-chain.',
+  },
+  'targets-account': {
+    text: 'Calls the granting account',
+    detail:
+      'This transaction calls the account that granted the permission, which the manager forbids. Executing it would be rejected on-chain.',
+  },
+  'self-delegated': {
+    text: 'Self-granted permission',
+    detail:
+      'This permission was granted by an account to itself. It will execute, but routing a transaction through the permission manager back to your own account is unusual and may be unintended.',
   },
   'wrong-spender': {
     text: 'Not the spender',
@@ -137,9 +157,9 @@ export interface PermissionExecutionInput {
 }
 
 /**
- * The first reason this execution would be rejected, or null. Ordered by how fundamental the
+ * The first thing worth saying about this execution, or null. Ordered by how fundamental the
  * mismatch is — a permission for the wrong chain or the wrong signer is worth saying before
- * picking apart individual calls.
+ * picking apart individual calls — with the one non-blocking finding (`self-delegated`) last.
  */
 export function validatePermissionExecution({
   permission,
@@ -158,11 +178,14 @@ export function validatePermissionExecution({
 
   const start = Number(permission.start);
   if (Number.isFinite(start) && start > now) return 'not-yet-valid';
-  // Nothing stops a grant naming its own account as the spender, but routing it back through the
-  // manager can't execute. Checked before the spender comparison: when both apply, the permission
-  // being unusable at all is the more useful thing to say.
-  if (sameAddress(permission.account, permission.spender)) return 'self-delegated';
   if (from && !sameAddress(permission.spender, from)) return 'wrong-spender';
+  // The manager's own execute-time target checks, mirrored in its order: even a wildcard
+  // permission cannot call the manager (CannotTargetSelf) or the granting account
+  // (CannotTargetAccount) — reverts the allow-list check below would never name.
+  if (calls.some((call) => sameAddress(call.to, PERMISSIONS_MANAGER_ADDRESS))) return 'targets-manager';
+  if (calls.some((call) => sameAddress(call.to, permission.account))) return 'targets-account';
   if (calls.some((call) => !isCallAllowed(permission, call))) return 'call-not-allowed';
+  // Last, because it is the only non-blocking finding here: it must never mask a certain revert.
+  if (sameAddress(permission.account, permission.spender)) return 'self-delegated';
   return null;
 }
