@@ -110,7 +110,7 @@ export function registerResources(server: McpServer): void {
     {
       description:
         'How to pay for HTTP resources with x402 (USDC): the jaw_pay_and_fetch / jaw_x402_balance / ' +
-        'jaw_x402_log tools, how to fund the payer, and the spending limits. Read this before paying.',
+        'jaw_x402_log tools, which account to fund, and the spending limits. Read this before paying.',
       mimeType: 'text/plain',
     },
     async () => ({
