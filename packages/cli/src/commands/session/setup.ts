@@ -13,6 +13,7 @@ import {
 import { saveSessionConfig, tryLoadSessionConfig } from '../../lib/session-config.js';
 import type { OutputFormat, PermissionsConfig } from '../../lib/types.js';
 import { parsePermissionsConfig } from '../../lib/validation.js';
+import { extractGrantedSpend } from '../../x402/policy.js';
 import { buildX402Permissions, describeX402Grant, DEFAULT_X402_LIMIT } from '../../x402/grant-preset.js';
 
 export default class SessionSetup extends BaseCommand {
@@ -264,6 +265,7 @@ export default class SessionSetup extends BaseCommand {
         chainId,
         expiry: expiryTimestamp,
         mode,
+        grantedSpend: extractGrantedSpend(permissions.spends, chainId),
       });
 
       // 9. Output

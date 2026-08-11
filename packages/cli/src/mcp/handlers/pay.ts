@@ -8,7 +8,8 @@ import { payAndFetch } from '../../x402/http.js';
 import { appendX402Log, readX402Log, sumSpentSince } from '../../x402/ledger.js';
 import { withPaymentLock } from '../../lib/payment-lock.js';
 import { usdcBalance } from '../../x402/balance.js';
-import { resolveX402Policy } from '../../x402/policy.js';
+import { resolveSessionX402Policy, topUpCeiling } from '../../x402/policy.js';
+import { currentPeriodSpend } from '../../x402/spend-window.js';
 import { ensurePayerFunds } from '../../x402/topup.js';
 import { SessionBridge } from '../../lib/session-bridge.js';
 import { tryLoadSessionConfig } from '../../lib/session-config.js';
@@ -76,10 +77,12 @@ export function registerPayTool(server: McpServer): void {
             const config = loadConfig();
             // Throws a clear "run jaw session setup" error when no session exists.
             const payer = Eip3009EoaPayer.fromSessionKey();
-            const policy = resolveX402Policy(config.x402);
             // Read once and reuse: it only changes between `jaw session setup`
-            // runs, and both the spend window and the top-up path need it.
+            // runs, and the policy, both spend windows and the top-up path need it.
             const session = tryLoadSessionConfig();
+            // Seed the policy from the on-chain grant captured at setup (caps +
+            // allowlists agree with what the user approved); config still wins.
+            const policy = resolveSessionX402Policy(config.x402, session);
             // Scoped to the session so a new grant starts a fresh budget; the
             // payer's whole history when there is no session to scope by.
             // Read inside the lock, every time. Caching this across calls was
@@ -87,6 +90,12 @@ export function registerPayTool(server: McpServer): void {
             // other processes, a memoised total would miss what they spent and
             // wave through a payment the cap should have stopped.
             let sessionSpent = sumSpentSince(payer.address, session?.createdAt);
+
+            // Locate the grant period containing now, and count spend inside it.
+            // Recomputed per payment because the window moves on its own, and
+            // re-read from the ledger for the same reason sessionSpent is: a
+            // payment made by another process falls inside this window too.
+            const periodSpend = currentPeriodSpend(policy, payer.address, session);
 
             // Flow 2b: when a session (and its on-chain permission) exists, refill
             // the payer EOA through the permission whenever it can't cover a price.
@@ -98,7 +107,9 @@ export function registerPayTool(server: McpServer): void {
               // Defensive: a hand-edited, non-numeric amount must degrade to "no
               // float / no bound", never throw and take down every payment.
               const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
-              const maxTopUp = parseNonNegativeBigInt(config.x402?.maxTotalPerSession);
+              // Bound the top-up by the tightest resolved cap, so a float pre-fund
+              // is clamped too and not just the payment itself.
+              const maxTopUp = topUpCeiling(policy);
               ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
                 ensurePayerFunds(requirement, payerAddress, bridge, {
                   floatTarget,
@@ -114,6 +125,8 @@ export function registerPayTool(server: McpServer): void {
               policy,
               ensureFunds,
               spentThisSession: sessionSpent,
+              spentThisPeriod: periodSpend?.spent,
+              periodEndsAt: periodSpend ? new Date(periodSpend.window.end * 1000) : undefined,
               maxAmount: params.maxAmount,
               asset: params.asset,
               network: params.network,
