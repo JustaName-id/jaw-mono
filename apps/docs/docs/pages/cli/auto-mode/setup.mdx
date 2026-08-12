@@ -55,6 +55,19 @@ jaw session setup --permissions ./my-permissions.json
 
 Resolution order: `--permissions` flag > `config.permissions`. Error if neither is set.
 
+### `--x402` and `--limit` (optional)
+
+Grant exactly what [x402 payments](/cli/x402) need on this chain: a USDC transfer capped per period. The permission is built from the asset registry, so the USDC address and function selector are not written by hand.
+
+```bash
+jaw session setup --x402
+jaw session setup --x402 --limit 25/day
+```
+
+`--limit` takes `<amount>/<period>` and defaults to `10/day`. A bare amount is read as per day. Accepted periods: `minute`, `hour`, `day`, `week`, `month`, `year`, `forever`.
+
+Setup then prints which of the two addresses to fund, which is the one thing worth reading twice: the money goes in the owner account, not the session address.
+
 ### `--expiry` (optional override)
 
 Override `config.sessionExpiry` for this setup. Value in days:
