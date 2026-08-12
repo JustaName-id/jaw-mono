@@ -103,3 +103,30 @@ export function sumSpentSince(payerAddress: string, since?: string): bigint {
     }
   }, 0n);
 }
+
+/**
+ * Sum what a payer pulled through the permission since an ISO instant (its whole
+ * history when `since` is omitted).
+ *
+ * Distinct from `sumSpentSince` because the two meter different things: the
+ * on-chain allowance is drawn down by the top-up, not by the payment it later
+ * funds. With a `topUpFloat` the two run apart by whatever is still sitting in
+ * the payer, so measuring the granted per-period cap by payments reads a
+ * permission as having more left than it does.
+ *
+ * Every status counts, refusals included: the pull settled on-chain before the
+ * payment it was for was ever attempted, so the allowance is gone either way.
+ */
+export function sumToppedUpSince(payerAddress: string, since?: string): bigint {
+  const payer = payerAddress.toLowerCase();
+  return readX402Log().reduce((total, entry) => {
+    if (!entry.topUpAmount) return total;
+    if (entry.payer?.toLowerCase() !== payer) return total;
+    if (since && entry.at < since) return total;
+    try {
+      return total + BigInt(entry.topUpAmount);
+    } catch {
+      return total; // a hand-edited amount must not take the cap down
+    }
+  }, 0n);
+}

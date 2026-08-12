@@ -193,22 +193,29 @@ export function resolveSessionX402Policy(
  * the only bound.
  *
  * What is left of each cap, not the whole cap: a 10/day grant with 9 already
- * spent has 1 to give, and pulling 10 through the permission reverts on chain.
+ * used has 1 to give, and pulling 10 through the permission reverts on chain.
  * With `topUpFloat` set near the cap that revert is a refused payment whose
- * price fit comfortably, so the remaining spend has to be subtracted here.
+ * price fit comfortably, so what is already used has to be subtracted here.
+ *
+ * Each cap is measured against what actually consumes it, which is not the same
+ * meter for both. `maxPerPeriod` mirrors the on-chain allowance, and what draws
+ * that down is the top-up itself, so it counts top-ups. `maxTotalPerSession` is
+ * the user's own ceiling on what the session may spend, so it counts payments.
+ * Reading the period cap off payments made it lag by whatever float the payer
+ * still held, and the pull that overshot was refused on chain.
  */
 export function topUpCeiling(
   policy: X402Policy,
-  spent: { spentThisPeriod?: bigint; spentThisSession?: bigint } = {}
+  used: { toppedUpThisPeriod?: bigint; spentThisSession?: bigint } = {}
 ): bigint | undefined {
-  const left = (cap: string | undefined, alreadySpent = 0n): bigint | undefined => {
+  const left = (cap: string | undefined, alreadyUsed = 0n): bigint | undefined => {
     const parsed = parseNonNegativeBigInt(cap);
     if (parsed === undefined) return undefined;
-    return parsed > alreadySpent ? parsed - alreadySpent : 0n;
+    return parsed > alreadyUsed ? parsed - alreadyUsed : 0n;
   };
   const caps = [
-    left(policy.maxPerPeriod, spent.spentThisPeriod),
-    left(policy.maxTotalPerSession, spent.spentThisSession),
+    left(policy.maxPerPeriod, used.toppedUpThisPeriod),
+    left(policy.maxTotalPerSession, used.spentThisSession),
   ].filter((cap): cap is bigint => cap !== undefined);
   return caps.length > 0 ? caps.reduce((a, b) => (a < b ? a : b)) : undefined;
 }

@@ -110,7 +110,7 @@ export function registerPayTool(server: McpServer): void {
               // Bound the top-up by whatever is left of the tightest resolved cap,
               // so a float pre-fund is clamped too and not just the payment itself.
               const maxTopUp = topUpCeiling(policy, {
-                spentThisPeriod: periodSpend?.spent,
+                toppedUpThisPeriod: periodSpend?.toppedUp,
                 spentThisSession: sessionSpent,
               });
               ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>

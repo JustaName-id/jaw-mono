@@ -102,7 +102,7 @@ export default class X402Pay extends BaseCommand {
       if (flags.pay && session && config.apiKey) {
         const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
         const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
-        const maxTopUp = topUpCeiling(policy, { spentThisPeriod: periodSpend?.spent, spentThisSession });
+        const maxTopUp = topUpCeiling(policy, { toppedUpThisPeriod: periodSpend?.toppedUp, spentThisSession });
         ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
           ensurePayerFunds(requirement, payerAddress, bridge, {
             floatTarget,

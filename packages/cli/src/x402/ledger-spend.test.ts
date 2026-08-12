@@ -12,7 +12,7 @@ vi.mock('../lib/paths.js', () => {
   return { PATHS: { root, x402Log: p.join(root, 'x402-log.jsonl') } };
 });
 
-const { appendX402Log, sumSpentSince } = await import('./ledger.js');
+const { appendX402Log, sumSpentSince, sumToppedUpSince } = await import('./ledger.js');
 
 const PAYER = '0x1111111111111111111111111111111111111111';
 const OTHER = '0x2222222222222222222222222222222222222222';
@@ -75,5 +75,39 @@ describe('sumSpentSince', () => {
 
   it('is zero on an empty ledger', () => {
     expect(sumSpentSince(PAYER)).toBe(0n);
+  });
+});
+
+describe('sumToppedUpSince', () => {
+  it('adds what was pulled through the permission, not what was paid', () => {
+    entry({ amount: '1000', topUpAmount: '5000' });
+    entry({ amount: '1000' }); // paid out of the float, no pull
+    expect(sumToppedUpSince(PAYER)).toBe(5000n);
+    expect(sumSpentSince(PAYER)).toBe(2000n);
+  });
+
+  // The pull settled before the payment it was meant for was attempted, so the
+  // allowance is gone whatever the payment ended up doing.
+  it('counts a pull whose payment was then refused', () => {
+    entry({ status: 'refused', amount: undefined, topUpAmount: '5000' });
+    expect(sumToppedUpSince(PAYER)).toBe(5000n);
+  });
+
+  it('ignores other payers and entries before the cutoff', () => {
+    entry({ payer: OTHER, topUpAmount: '9000' });
+    entry({ at: '2026-01-01T00:00:00.000Z', topUpAmount: '4000' });
+    entry({ at: '2026-03-01T00:00:00.000Z', topUpAmount: '1000' });
+    expect(sumToppedUpSince(PAYER, '2026-02-01T00:00:00.000Z')).toBe(1000n);
+  });
+
+  it('skips a hand-edited amount instead of taking the cap down', () => {
+    entry({ topUpAmount: 'not-a-number' });
+    entry({ topUpAmount: '1000' });
+    expect(sumToppedUpSince(PAYER)).toBe(1000n);
+  });
+
+  it('is zero when nothing was ever topped up', () => {
+    entry({ amount: '1000' });
+    expect(sumToppedUpSince(PAYER)).toBe(0n);
   });
 });

@@ -1,5 +1,5 @@
 import { currentPeriodWindow, type PeriodWindow } from './period.js';
-import { sumSpentSince } from './ledger.js';
+import { sumSpentSince, sumToppedUpSince } from './ledger.js';
 import type { X402Policy } from './policy.js';
 
 export interface PeriodSpend {
@@ -7,6 +7,12 @@ export interface PeriodSpend {
   window: PeriodWindow;
   /** Base units the payer already spent inside that window. */
   spent: bigint;
+  /**
+   * Base units already pulled through the permission inside that window — what
+   * actually drew down the on-chain allowance, which the payments above only
+   * approximate while the payer still holds a float.
+   */
+  toppedUp: bigint;
 }
 
 /**
@@ -38,8 +44,10 @@ export function currentPeriodSpend(
     now: Math.floor(now.getTime() / 1000),
     permissionEnd: session.expiry,
   });
+  const since = new Date(window.start * 1000).toISOString();
   return {
     window,
-    spent: sumSpentSince(payerAddress, new Date(window.start * 1000).toISOString()),
+    spent: sumSpentSince(payerAddress, since),
+    toppedUp: sumToppedUpSince(payerAddress, since),
   };
 }
