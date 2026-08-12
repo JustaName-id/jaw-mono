@@ -196,6 +196,26 @@ describe('topUpCeiling', () => {
     expect(topUpCeiling({})).toBeUndefined();
   });
 
+  // Pulling the whole cap through a permission that has 1 USDC of allowance left
+  // reverts on-chain, refusing a payment whose price fit comfortably.
+  it('bounds by what is left of each cap, not its full width', () => {
+    expect(topUpCeiling({ maxPerPeriod: '10000000' }, { spentThisPeriod: 9000000n })).toBe(1000000n);
+    expect(topUpCeiling({ maxTotalPerSession: '10000000' }, { spentThisSession: 4000000n })).toBe(6000000n);
+  });
+
+  it('counts each cap against its own spend window', () => {
+    expect(
+      topUpCeiling(
+        { maxPerPeriod: '10000000', maxTotalPerSession: '20000000' },
+        { spentThisPeriod: 2000000n, spentThisSession: 19000000n }
+      )
+    ).toBe(1000000n);
+  });
+
+  it('floors an exhausted cap at zero rather than going negative', () => {
+    expect(topUpCeiling({ maxPerPeriod: '1000000' }, { spentThisPeriod: 5000000n })).toBe(0n);
+  });
+
   // Hand-edited config must not bound the top-up by a garbage number.
   it('ignores unparseable and negative caps', () => {
     expect(topUpCeiling({ maxPerPeriod: 'abc', maxTotalPerSession: '2000000' })).toBe(2000000n);

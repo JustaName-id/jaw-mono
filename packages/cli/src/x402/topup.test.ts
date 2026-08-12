@@ -99,12 +99,12 @@ describe('ensurePayerFunds', () => {
     expect(out.amount).toBe('10000000'); // clamped to the session cap, not the float
   });
 
-  test('Given a session cap below the price is impossible in practice, When shortfall exceeds maxTopUp, Then the shortfall is still covered (payment already cleared policy)', async () => {
+  test('Given a period nearly exhausted, When the shortfall exceeds what the caps have left, Then the shortfall is still covered (payment already cleared policy)', async () => {
     const { executor } = fakeExecutor();
 
     const out = await ensurePayerFunds(requirement('5000000'), PAYER, executor, {
       balanceReader: async () => 0n,
-      maxTopUp: 1_000_000n, // pathological: below the price
+      maxTopUp: 1_000_000n, // only 1 USDC left of the granted period
       ...instantly,
     });
 

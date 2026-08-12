@@ -191,11 +191,25 @@ export function resolveSessionX402Policy(
  * at 1, which is the idle-funds-at-risk case `TopUpOptions.maxTopUp` exists to
  * prevent. Undefined when neither cap is set, meaning the on-chain permission is
  * the only bound.
+ *
+ * What is left of each cap, not the whole cap: a 10/day grant with 9 already
+ * spent has 1 to give, and pulling 10 through the permission reverts on chain.
+ * With `topUpFloat` set near the cap that revert is a refused payment whose
+ * price fit comfortably, so the remaining spend has to be subtracted here.
  */
-export function topUpCeiling(policy: X402Policy): bigint | undefined {
-  const caps = [policy.maxPerPeriod, policy.maxTotalPerSession]
-    .map((cap) => parseNonNegativeBigInt(cap))
-    .filter((cap): cap is bigint => cap !== undefined);
+export function topUpCeiling(
+  policy: X402Policy,
+  spent: { spentThisPeriod?: bigint; spentThisSession?: bigint } = {}
+): bigint | undefined {
+  const left = (cap: string | undefined, alreadySpent = 0n): bigint | undefined => {
+    const parsed = parseNonNegativeBigInt(cap);
+    if (parsed === undefined) return undefined;
+    return parsed > alreadySpent ? parsed - alreadySpent : 0n;
+  };
+  const caps = [
+    left(policy.maxPerPeriod, spent.spentThisPeriod),
+    left(policy.maxTotalPerSession, spent.spentThisSession),
+  ].filter((cap): cap is bigint => cap !== undefined);
   return caps.length > 0 ? caps.reduce((a, b) => (a < b ? a : b)) : undefined;
 }
 

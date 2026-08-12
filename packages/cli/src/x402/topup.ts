@@ -37,11 +37,12 @@ export interface TopUpOptions {
    */
   floatTarget?: bigint;
   /**
-   * Upper bound on a single top-up (base units) — the session spend cap. The
-   * payer must never be pre-funded with more than the whole session could ever
-   * spend: that would be idle funds at risk with no benefit, weakening the
-   * blast-radius guarantee. The float is clamped to this; the shortfall itself
-   * can't exceed it because the payment already passed the per-payment cap.
+   * Upper bound on a single top-up (base units) — what is left of the tightest
+   * spend cap. The payer must never be pre-funded with more than the session
+   * could still spend: that would be idle funds at risk with no benefit,
+   * weakening the blast-radius guarantee. Only the float is clamped to it; the
+   * shortfall goes through even when the remaining cap is below it, so a
+   * near-exhausted period never turns an affordable price into a refusal.
    */
   maxTopUp?: bigint;
   /** Poll interval for the call status, ms. */
@@ -128,9 +129,9 @@ export async function ensurePayerFunds(
   const shortfall = price - balance;
   const target = opts.floatTarget !== undefined && opts.floatTarget > price ? opts.floatTarget : price;
   let amount = target - balance > shortfall ? target - balance : shortfall;
-  // Never pre-fund the payer past the session's total spend cap. The shortfall
-  // is always <= this bound (the payment cleared the per-payment cap), so a
-  // clamp only ever trims float excess, never the amount needed to pay.
+  // Never pre-fund the payer past what the caps still allow, and never let that
+  // clamp cut into the shortfall: pulling a float the permission would reject
+  // turns an affordable payment into a refusal, so only the float excess goes.
   if (opts.maxTopUp !== undefined && amount > opts.maxTopUp) {
     amount = opts.maxTopUp > shortfall ? opts.maxTopUp : shortfall;
   }

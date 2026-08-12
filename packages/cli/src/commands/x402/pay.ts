@@ -69,11 +69,6 @@ export default class X402Pay extends BaseCommand {
 
     const spent = sumSpentSince(payer.address, session?.createdAt);
 
-    // Only wired for a real payment: a dry run returns before the funding hook,
-    // so building a bridge for it would open a connection nothing uses.
-    let ensureFunds:
-      | ((requirement: X402PaymentRequirement, payerAddress: `0x${string}`) => ReturnType<typeof ensurePayerFunds>)
-      | undefined;
     if (flags.pay && (!session || !config.apiKey)) {
       // Without a session there is no permission to pull through, so the payer
       // spends whatever it already holds. Worth saying: the failure otherwise
@@ -85,17 +80,6 @@ export default class X402Pay extends BaseCommand {
           : 'No session, so a short payer cannot be topped up through a permission. Paying from its own balance.'
       );
     }
-    if (flags.pay && session && config.apiKey) {
-      const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
-      const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
-      const maxTopUp = topUpCeiling(policy);
-      ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
-        ensurePayerFunds(requirement, payerAddress, bridge, {
-          floatTarget,
-          maxTopUp,
-          sessionChainId: session.chainId,
-        });
-    }
 
     // Read, pay and record as one unit. The recording has to be inside the lock
     // with the rest: releasing before the append leaves a window where the next
@@ -103,15 +87,36 @@ export default class X402Pay extends BaseCommand {
     // is the race the lock exists to close.
     const run = async () => {
       const periodSpend = currentPeriodSpend(policy, payer.address, session);
+      // Re-read here, not before the lock: another process may have paid while
+      // we waited our turn, and a stale total waves through a payment the cap
+      // should have stopped. Same for the period window, which moves on its own.
+      const spentThisSession = flags.pay ? sumSpentSince(payer.address, session?.createdAt) : spent;
+
+      // Only wired for a real payment: a dry run returns before the funding hook,
+      // so building a bridge for it would open a connection nothing uses. Built
+      // inside the lock rather than before it so the top-up is bounded by what is
+      // left of the caps at this moment, not by their full width.
+      let ensureFunds:
+        | ((requirement: X402PaymentRequirement, payerAddress: `0x${string}`) => ReturnType<typeof ensurePayerFunds>)
+        | undefined;
+      if (flags.pay && session && config.apiKey) {
+        const bridge = new SessionBridge({ apiKey: config.apiKey, chainId: session.chainId });
+        const floatTarget = parseNonNegativeBigInt(config.x402?.topUpFloat);
+        const maxTopUp = topUpCeiling(policy, { spentThisPeriod: periodSpend?.spent, spentThisSession });
+        ensureFunds = (requirement: X402PaymentRequirement, payerAddress: `0x${string}`) =>
+          ensurePayerFunds(requirement, payerAddress, bridge, {
+            floatTarget,
+            maxTopUp,
+            sessionChainId: session.chainId,
+          });
+      }
+
       const outcome = await payAndFetch(args.url, payer, {
         method: flags.method,
         body: flags.body,
         policy,
         ensureFunds,
-        // Re-read here, not before the lock: another process may have paid while
-        // we waited our turn, and a stale total waves through a payment the cap
-        // should have stopped. Same for the period window, which moves on its own.
-        spentThisSession: flags.pay ? sumSpentSince(payer.address, session?.createdAt) : spent,
+        spentThisSession,
         spentThisPeriod: periodSpend?.spent,
         periodEndsAt: periodSpend ? new Date(periodSpend.window.end * 1000) : undefined,
         maxAmount: flags['max-amount'],
