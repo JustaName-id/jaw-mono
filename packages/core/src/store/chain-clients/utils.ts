@@ -4,7 +4,7 @@ import { BundlerClient, createBundlerClient, createPaymasterClient } from 'viem/
 import { ChainClients } from './store.js';
 import { RPCResponseNativeCurrency } from '../../messages/rpcMessage.js';
 import { JAW_RPC_URL } from '../../constants.js';
-import { getSupportedChains } from '../../account/smartAccount.js';
+import { getSupportedChains, SUPPORTED_CHAINS } from '../../account/smartAccount.js';
 import { createPaymasterFunctions } from '../../account/paymaster.js';
 import { store } from '../store.js';
 
@@ -39,8 +39,18 @@ function createClientForChain(chain: SDKChain): { client: PublicClient; bundlerC
         return undefined;
     }
 
+    // viem derives every client's pollingInterval from chain.blockTime, falling
+    // back to a 12s L1 assumption — which clamps to 4s of polling. This chain is
+    // synthesized from SDK config, so without blockTime the receipt wait in
+    // waitForReceiptInBackground polls every 4s even on chains with sub-second
+    // blocks, adding up to 4s of dead time after the userOp is already included.
+    // Carry over the real blockTime when viem knows the chain; unknown chains
+    // keep viem's default. blockTime has no other effect on these clients.
+    const blockTime = SUPPORTED_CHAINS.find((c) => c.id === chain.id)?.blockTime;
+
     const viemchain = defineChain({
         id: chain.id,
+        ...(blockTime !== undefined && { blockTime }),
         rpcUrls: {
             default: {
                 http: [chain.rpcUrl],

@@ -14,7 +14,9 @@ export async function handleGetCallsStatusRequest(request: RequestArguments) {
     const callStatus = getCallStatus(batchId);
 
     if (!callStatus) {
-        throw standardErrors.rpc.invalidParams(`No call status found for batchId: ${batchId}`);
+        // EIP-5792 5730 rather than -32602: the id is well-formed, this wallet
+        // just doesn't know it (issued in another browser, or storage cleared).
+        throw standardErrors.provider.unknownBundleId(`No call status found for batchId: ${batchId}`);
     }
 
     // If status is still pending, re-trigger receipt polling in background

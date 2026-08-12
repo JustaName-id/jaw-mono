@@ -53,6 +53,16 @@ type ConnectParameters = {
    * When provided, uses wallet_connect instead of eth_requestAccounts.
    */
   capabilities?: WalletConnectCapabilities | undefined;
+  /**
+   * wagmi's own flag (v3) deciding the shape of `accounts` in the result:
+   * `{ address, capabilities }[]` when true, bare addresses when not.
+   *
+   * Distinct from `capabilities` above, which asks the *wallet* for
+   * capabilities. wagmi's connect action only normalizes the result when it
+   * asked for capabilities, so returning objects unrequested puts objects
+   * where wagmi's store expects addresses.
+   */
+  withCapabilities?: boolean | undefined;
 };
 
 /** Account with capabilities returned from wallet_connect */
@@ -102,7 +112,7 @@ export function jaw(parameters: JawParameters) {
       }
     },
 
-    async connect({ chainId, isReconnecting, capabilities }: ConnectParameters = {}) {
+    async connect({ chainId, isReconnecting, capabilities, withCapabilities }: ConnectParameters = {}) {
       const targetChainId = chainId;
 
       let accounts: `0x${string}`[] = [];
@@ -180,9 +190,23 @@ export function jaw(parameters: JawParameters) {
           currentChainId = chain?.id ?? currentChainId;
         }
 
-        // Return accounts with capabilities if wallet_connect was used, otherwise plain accounts
+        // The shape follows wagmi's `withCapabilities` flag, not whether we
+        // happened to call wallet_connect: wagmi only maps objects back to
+        // addresses when it asked for capabilities, so returning them
+        // unrequested lands objects in `state.connections[].accounts` and
+        // useAccount().address stops being an address. JAW's own connect action
+        // reads either shape.
+        if (withCapabilities) {
+          return {
+            accounts: (accountsWithCapabilities.length > 0
+              ? accountsWithCapabilities
+              : accounts.map((address) => ({ address, capabilities: {} }))) as never,
+            chainId: currentChainId!,
+          };
+        }
+
         return {
-          accounts: (accountsWithCapabilities.length > 0 ? accountsWithCapabilities : accounts) as never,
+          accounts: accounts as never,
           chainId: currentChainId!,
         };
       } catch (error) {

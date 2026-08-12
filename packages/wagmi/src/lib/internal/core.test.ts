@@ -3,7 +3,7 @@ import { createConfig, http } from '@wagmi/core';
 import { arbitrum, mainnet } from 'viem/chains';
 import type { EIP1193Parameters } from 'viem';
 
-import { sign } from './core.js';
+import { getPermissions, sign } from './core.js';
 
 const ACCOUNT = '0xf39Fd6e51aad88F6F4ce6aB8827279cffFb92266' as const;
 
@@ -67,6 +67,35 @@ test('sign omits chainId from params when not provided', async () => {
   await sign(config, {
     connector: connector as never,
     request: { type: '0x45', data: { message: 'Hello World' } },
+  });
+
+  const params = (requests[0].params as [Record<string, unknown>])[0];
+  expect(params.chainId).toBeUndefined();
+});
+
+test('getPermissions forwards hex chainId and address in wallet_getPermissions params', async () => {
+  const { connector, requests } = fakeConnection();
+
+  await getPermissions(config, {
+    connector: connector as never,
+    address: ACCOUNT,
+    chainId: mainnet.id,
+  });
+
+  expect(requests).toHaveLength(1);
+  expect(requests[0].method).toBe('wallet_getPermissions');
+  const params = (requests[0].params as [Record<string, unknown>])[0];
+  expect(params.address).toBe(ACCOUNT);
+  // Before this test the param was silently dropped and the response spanned every chain.
+  expect(params.chainId).toBe('0x1');
+});
+
+test('getPermissions omits chainId from params when not provided', async () => {
+  const { connector, requests } = fakeConnection();
+
+  await getPermissions(config, {
+    connector: connector as never,
+    address: ACCOUNT,
   });
 
   const params = (requests[0].params as [Record<string, unknown>])[0];

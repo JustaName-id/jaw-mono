@@ -1,6 +1,6 @@
 import { UUID } from 'crypto';
 
-import { JAWSigner } from '../JAWSigner.js';
+import { JAWSigner, type NormalizedSigningParams } from '../JAWSigner.js';
 import { decodePersonalSignRequest } from '../SignerUtils.js';
 
 import { Communicator } from '../../communicator/index.js';
@@ -88,11 +88,12 @@ export class CrossPlatformSigner extends JAWSigner {
         // would open a popup the encrypted request never reaches).
         await this.communicator.waitForPopupLoaded?.();
 
-        // Validate and inject capabilities using base class method
+        // Validate and inject capabilities using base class method. This
+        // returns a new object, so carry the caller's correlation id across.
         const modifiedRequest = this.validateAndInjectCapabilities(request);
 
         this.emitConnect();
-        return this.sendRequestToPopup(modifiedRequest);
+        return this.sendRequestToPopup(modifiedRequest, undefined, false, this.getCorrelationId(request));
     }
 
     protected override async handleWalletConnectUnauthenticated(request: RequestArguments): Promise<unknown> {
@@ -103,17 +104,33 @@ export class CrossPlatformSigner extends JAWSigner {
         // would open a popup the encrypted request never reaches).
         await this.communicator.waitForPopupLoaded?.();
 
-        // Validate and inject capabilities using base class method
+        // Validate and inject capabilities using base class method. This
+        // returns a new object, so carry the caller's correlation id across.
         const modifiedRequest = this.validateAndInjectCapabilities(request);
-        return this.sendRequestToPopup(modifiedRequest);
+        return this.sendRequestToPopup(modifiedRequest, undefined, false, this.getCorrelationId(request));
     }
 
-    protected override async handleSigningRequest(request: RequestArguments): Promise<unknown> {
+    protected override async handleSigningRequest(
+        request: RequestArguments,
+        normalized?: NormalizedSigningParams
+    ): Promise<unknown> {
         let resolvedChain: SDKChain | undefined;
+
+        // The transforms below return a new request object, so read the
+        // correlation id (keyed on object identity) from the original.
+        const correlationId = this.getCorrelationId(request);
 
         // Decode hex-encoded messages for personal_sign before sending to popup
         // (wagmi and other libraries hex-encode messages before sending)
-        const processedRequest = decodePersonalSignRequest(request);
+        let processedRequest = decodePersonalSignRequest(request);
+
+        // Forward the validated envelope, not the dapp's raw one: a chainId sent
+        // as a number is hex by now, so the chain resolved below is the one the
+        // dapp asked for instead of whichever chain we happen to be on. Keys
+        // then reads the same quantities validation approved.
+        if (normalized) {
+            processedRequest = { ...processedRequest, params: [normalized.params] };
+        }
 
         // wallet_revokePermissions needs chainId from relay (not in request params)
         // because the permission may have been granted on a different chain
@@ -139,7 +156,7 @@ export class CrossPlatformSigner extends JAWSigner {
             resolvedChain = this.resolveChainFromRequest(processedRequest);
         }
 
-        return this.sendRequestToPopup(processedRequest, resolvedChain);
+        return this.sendRequestToPopup(processedRequest, resolvedChain, false, correlationId);
     }
 
     /**
@@ -191,7 +208,14 @@ export class CrossPlatformSigner extends JAWSigner {
     private async sendRequestToPopup(
         request: RequestArguments,
         overrideChain?: SDKChain,
-        isReconnectRetry = false
+        isReconnectRetry = false,
+        /**
+         * Correlation id of the caller's original request. Passed explicitly
+         * because request transforms (personal_sign decoding, typed-data
+         * serialization, capability injection) replace the object the id is
+         * keyed on.
+         */
+        correlationId?: string
     ): Promise<unknown> {
         // Ready the routed transport first. Method-less on purpose: the message
         // sent below is an encrypted envelope, which the router routes with no
@@ -201,7 +225,7 @@ export class CrossPlatformSigner extends JAWSigner {
         await this.communicator.waitForPopupLoaded?.();
 
         try {
-            const response = await this.sendEncryptedRequest(request, overrideChain);
+            const response = await this.sendEncryptedRequest(request, overrideChain, correlationId);
             const decrypted = await this.decryptResponseMessage(response);
 
             return this.handleResponse(request, decrypted);
@@ -217,7 +241,7 @@ export class CrossPlatformSigner extends JAWSigner {
                 // second caller doesn't fire its own (its forced-iframe flag
                 // would already be consumed and route the handshake to a popup).
                 await this.ensureReconnected();
-                return this.sendRequestToPopup(request, overrideChain, true);
+                return this.sendRequestToPopup(request, overrideChain, true, correlationId);
             }
             throw error;
         }
@@ -281,7 +305,9 @@ export class CrossPlatformSigner extends JAWSigner {
 
     private async sendEncryptedRequest(
         request: RequestArguments,
-        overrideChain?: SDKChain
+        overrideChain?: SDKChain,
+        /** Falls back to the request's own id when the caller didn't thread one. */
+        callerCorrelationId?: string
     ): Promise<RPCResponseMessage> {
         const sharedSecret = await this.keyManager.getSharedSecret();
         if (!sharedSecret) {
@@ -304,7 +330,7 @@ export class CrossPlatformSigner extends JAWSigner {
             },
             sharedSecret
         );
-        const correlationId = this.getCorrelationId(request);
+        const correlationId = callerCorrelationId ?? this.getCorrelationId(request);
         const message = await this.createRequestMessage({ encrypted }, correlationId);
 
         return this.communicator.postRequestAndWaitForResponse(message);

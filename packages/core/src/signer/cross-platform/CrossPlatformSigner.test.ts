@@ -49,7 +49,7 @@ vi.mock('../signerStorage.js', () => ({
 vi.mock('../../rpc/wallet_sendCalls.js', () => ({
     getCallStatus: vi.fn(),
     getCallStatusEIP5792: vi.fn(),
-    waitForReceiptInBackground: vi.fn(),
+    waitForReceiptInBackground: vi.fn().mockResolvedValue(undefined),
     storeCallStatus: vi.fn(),
 }));
 
@@ -525,6 +525,22 @@ describe('CrossPlatformSigner', () => {
             // Assert
             expect(result).toBe('0xtxhash...');
             expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+        });
+
+        it('should reject an eth_sendTransaction without `to` before opening a popup', async () => {
+            // Arrange - previously this reached the popup, which rendered the
+            // error and left the dapp's promise pending until the user closed it.
+            const txRequest: RequestArguments = {
+                method: 'eth_sendTransaction',
+                params: [{ from: '0x1234567890123456789012345678901234567890', data: '0xdeadbeef' }],
+            };
+
+            // Act & Assert
+            await expect(signer.request(txRequest)).rejects.toMatchObject({
+                code: -32602,
+                message: expect.stringContaining('to'),
+            });
+            expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
         });
 
         it('should switch chain successfully', async () => {
@@ -1293,7 +1309,7 @@ describe('CrossPlatformSigner', () => {
 
             const request: RequestArguments = {
                 method: 'wallet_sendCalls',
-                params: [{ calls: [] }],
+                params: [{ calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0x' }] }],
             };
 
             // Act
@@ -1303,6 +1319,241 @@ describe('CrossPlatformSigner', () => {
             expect(result).toBe('0xbatchId');
             // Encrypted envelope → method-less ready, matching send-time routing.
             expect(mockCommunicator.waitForPopupLoaded).toHaveBeenCalledWith();
+        });
+
+        it('should forward a viem v2.0.0 wallet_sendCalls envelope to the popup', async () => {
+            // Arrange - viem's sendCalls() default envelope: version '2.0.0',
+            // hex chainId, atomicRequired, capabilities.
+            const unauthenticatedSigner = new CrossPlatformSigner({
+                metadata: mockMetadata,
+                communicator: mockCommunicator,
+                callback: mockCallback,
+            });
+
+            const mockResponse: RPCResponseMessage = {
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: 'peer-public-key-hex',
+                content: { encrypted: mockEncryptedData },
+                timestamp: new Date(),
+            };
+
+            mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
+            (decryptContent as Mock).mockResolvedValue({
+                result: { value: { id: '0xbatchId', chainId: 1 } },
+            } as RPCResponse);
+
+            // The v2.0.0 envelope carries a hex chainId, which the signer resolves
+            // against the configured chains before routing to the popup.
+            vi.spyOn(store, 'getState').mockReturnValue({
+                account: { accounts: [], chain: undefined, capabilities: undefined },
+                chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
+                config: { metadata: mockMetadata, version: '1.0.0' },
+                keys: {},
+                callStatuses: {},
+            });
+
+            const request: RequestArguments = {
+                method: 'wallet_sendCalls',
+                params: [
+                    {
+                        atomicRequired: false,
+                        calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0xdeadbeef' }],
+                        capabilities: undefined,
+                        chainId: '0x1',
+                        from: '0x1234567890123456789012345678901234567890',
+                        id: undefined,
+                        version: '2.0.0',
+                    },
+                ],
+            };
+
+            // Act
+            const result = await unauthenticatedSigner.request(request);
+
+            // Assert
+            expect(result).toEqual({ id: '0xbatchId', chainId: 1 });
+            expect(mockCommunicator.postRequestAndWaitForResponse).toHaveBeenCalled();
+        });
+
+        it('should reject an unsupported wallet_sendCalls version with -32602 before opening a popup', async () => {
+            // Arrange
+            const unauthenticatedSigner = new CrossPlatformSigner({
+                metadata: mockMetadata,
+                communicator: mockCommunicator,
+                callback: mockCallback,
+            });
+
+            const request: RequestArguments = {
+                method: 'wallet_sendCalls',
+                params: [
+                    {
+                        version: '3.0.0',
+                        calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0x' }],
+                        chainId: '0x1',
+                    },
+                ],
+            };
+
+            // Act & Assert
+            await expect(unauthenticatedSigner.request(request)).rejects.toMatchObject({
+                code: -32602,
+                message: expect.stringContaining('unsupported version'),
+            });
+            expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
+        });
+
+        it('should reject an unconfigured chain with EIP-5792 5710, not 4200', async () => {
+            // Arrange - 4200 renders in viem as "the provider does not support
+            // the requested method", which reads as a missing method rather
+            // than a missing chain.
+            const unauthenticatedSigner = new CrossPlatformSigner({
+                metadata: mockMetadata,
+                communicator: mockCommunicator,
+                callback: mockCallback,
+            });
+
+            vi.spyOn(store, 'getState').mockReturnValue({
+                account: { accounts: [], chain: undefined, capabilities: undefined },
+                chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
+                config: { metadata: mockMetadata, version: '1.0.0' },
+                keys: {},
+                callStatuses: {},
+            });
+
+            const request: RequestArguments = {
+                method: 'wallet_sendCalls',
+                params: [
+                    {
+                        version: '2.0.0',
+                        chainId: '0x66eee', // Arbitrum Sepolia, not in `chains`
+                        calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0x' }],
+                    },
+                ],
+            };
+
+            // Act & Assert
+            await expect(unauthenticatedSigner.request(request)).rejects.toMatchObject({
+                code: 5710,
+                message: expect.stringContaining('showTestnets'),
+            });
+            expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
+        });
+
+        it('should honor a numeric chainId instead of falling back to the connected chain', async () => {
+            // Arrange - params validation accepts a numeric chainId and hex-encodes
+            // it, but the popup path only ever read a *string* chainId: dropping the
+            // normalized envelope meant chain 421614 was ignored and the batch was
+            // signed on whatever chain the wallet was connected to.
+            const unauthenticatedSigner = new CrossPlatformSigner({
+                metadata: mockMetadata,
+                communicator: mockCommunicator,
+                callback: mockCallback,
+            });
+
+            vi.spyOn(store, 'getState').mockReturnValue({
+                account: { accounts: [], chain: undefined, capabilities: undefined },
+                chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
+                config: { metadata: mockMetadata, version: '1.0.0' },
+                keys: {},
+                callStatuses: {},
+            });
+
+            const request: RequestArguments = {
+                method: 'wallet_sendCalls',
+                params: [
+                    {
+                        version: '2.0.0',
+                        chainId: 421614, // Arbitrum Sepolia as a number, not in `chains`
+                        calls: [{ to: '0x0987654321098765432109876543210987654321', data: '0x' }],
+                    },
+                ],
+            };
+
+            // Act & Assert - refused as an unsupported chain, not silently redirected
+            await expect(unauthenticatedSigner.request(request)).rejects.toMatchObject({
+                code: 5710,
+            });
+            expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
+        });
+
+        it("should send keys the normalized envelope, not the dapp's raw one", async () => {
+            // Arrange - a configured chain given as a number, plus a decimal wei
+            // value: keys must receive both hex-encoded, matching what validation
+            // approved and the chain resolved here.
+            const unauthenticatedSigner = new CrossPlatformSigner({
+                metadata: mockMetadata,
+                communicator: mockCommunicator,
+                callback: mockCallback,
+            });
+
+            const mockResponse: RPCResponseMessage = {
+                id: mockMessageId,
+                requestId: mockMessageId,
+                correlationId: mockCorrelationId,
+                sender: 'peer-public-key-hex',
+                content: { encrypted: mockEncryptedData },
+                timestamp: new Date(),
+            };
+
+            mockCommunicator.postRequestAndWaitForResponse.mockResolvedValue(mockResponse);
+            (decryptContent as Mock).mockResolvedValue({
+                result: { value: { id: '0xbatchId', chainId: 1 } },
+            } as RPCResponse);
+
+            vi.spyOn(store, 'getState').mockReturnValue({
+                account: { accounts: [], chain: undefined, capabilities: undefined },
+                chains: [{ id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' }],
+                config: { metadata: mockMetadata, version: '1.0.0' },
+                keys: {},
+                callStatuses: {},
+            });
+
+            const request: RequestArguments = {
+                method: 'wallet_sendCalls',
+                params: [
+                    {
+                        version: '2.0.0',
+                        chainId: 1,
+                        from: '0x1234567890123456789012345678901234567890',
+                        calls: [
+                            {
+                                to: '0x0987654321098765432109876543210987654321',
+                                value: '1000000000000000',
+                            },
+                        ],
+                    },
+                ],
+            };
+
+            // Act
+            await unauthenticatedSigner.request(request);
+
+            // Assert
+            expect(encryptContent).toHaveBeenCalledWith(
+                {
+                    action: {
+                        method: 'wallet_sendCalls',
+                        params: [
+                            {
+                                version: '2.0.0',
+                                from: '0x1234567890123456789012345678901234567890',
+                                chainId: '0x1',
+                                atomicRequired: false,
+                                calls: [
+                                    {
+                                        to: '0x0987654321098765432109876543210987654321',
+                                        value: '0x38d7ea4c68000',
+                                    },
+                                ],
+                            },
+                        ],
+                    },
+                    chain: { id: 1, rpcUrl: 'https://eth-mainnet.rpc.com' },
+                },
+                mockCryptoKey
+            );
         });
 
         it('should allow wallet_sign when unauthenticated', async () => {
@@ -1579,9 +1830,12 @@ describe('CrossPlatformSigner', () => {
                 await signer.request(switchRequest);
                 expect.fail('Should have thrown an error');
             } catch (error: any) {
-                expect(error.code).toBe(4200);
-                expect(error.message).toContain('wallet_switchEthereumChain');
+                // 4902 (EIP-3326 unrecognized chain ID), not 4200 — wallet
+                // libraries read 4902 to decide whether to offer
+                // wallet_addEthereumChain.
+                expect(error.code).toBe(4902);
                 expect(error.message).toContain('42');
+                expect(error.message).toContain('not configured');
             }
             expect(mockCommunicator.postRequestAndWaitForResponse).not.toHaveBeenCalled();
         });

@@ -62,11 +62,12 @@ Returns the transaction hash after the transaction is submitted.
 
 ## Errors
 
-| Code   | Description                      |
-| ------ | -------------------------------- |
-| 4001   | User rejected the request        |
-| 4100   | Unauthorized (not authenticated) |
-| -32602 | Invalid params                   |
+| Code   | Description                                                          |
+| ------ | -------------------------------------------------------------------- |
+| 4001   | User rejected the request                                            |
+| 4100   | Unauthorized (not authenticated)                                     |
+| 5710   | The chain isn't configured (testnets need `preference.showTestnets`) |
+| -32602 | Invalid params — missing `to`, or a field that isn't a hex quantity  |
 
 ## Example Usage
 

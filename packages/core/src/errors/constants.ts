@@ -20,6 +20,21 @@ interface ErrorCodes {
         readonly chainDisconnected: 4901;
         readonly unsupportedChain: 4902;
     };
+    /**
+     * EIP-5792 error codes we throw. viem maps each to a typed error, so a dapp
+     * can tell these apart from a generic rejection.
+     *
+     * Not the complete EIP-5792 set: 5720 (duplicate id) and 5740 (bundle too
+     * large) are absent because nothing raises them — a caller-supplied batch id
+     * is not honored, so there is no id to collide, and no batch size is
+     * refused. `errorValues` still carries their messages so an inbound error
+     * from elsewhere serializes with its code intact.
+     */
+    readonly eip5792: {
+        readonly unsupportedNonOptionalCapability: 5700;
+        readonly unsupportedChainId: 5710;
+        readonly unknownBundleId: 5730;
+    };
 }
 
 export const standardErrorCodes: ErrorCodes = {
@@ -43,6 +58,11 @@ export const standardErrorCodes: ErrorCodes = {
         disconnected: 4900,
         chainDisconnected: 4901,
         unsupportedChain: 4902,
+    },
+    eip5792: {
+        unsupportedNonOptionalCapability: 5700,
+        unsupportedChainId: 5710,
+        unknownBundleId: 5730,
     },
 };
 
@@ -115,5 +135,25 @@ export const errorValues = {
     '4902': {
         standard: 'EIP-3085',
         message: 'Unrecognized chain ID.',
+    },
+    '5700': {
+        standard: 'EIP-5792',
+        message: 'This wallet does not support a capability that was not marked as optional.',
+    },
+    '5710': {
+        standard: 'EIP-5792',
+        message: 'This wallet does not support the requested chain ID.',
+    },
+    '5720': {
+        standard: 'EIP-5792',
+        message: 'There is already a bundle with the requested ID.',
+    },
+    '5730': {
+        standard: 'EIP-5792',
+        message: 'This wallet does not recognize the requested bundle ID.',
+    },
+    '5740': {
+        standard: 'EIP-5792',
+        message: 'The requested bundle is too large.',
     },
 };
