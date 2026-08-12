@@ -98,8 +98,8 @@ body {
 /* Embedded (iframe) mode — flagged pre-paint by the inline script in layout.tsx.
    keys paints no chrome of its own: html/body go transparent so the host dApp
    shows through around the floating card — NO dimming scrim. The EmbeddedShell
-   overlay is see-through and a click on it dismisses the flow. The standalone
-   logo watermark is hidden; the modal card keeps its own bg-background. */
+   overlay is see-through and a click on it dismisses the flow. The modal card
+   keeps its own bg-background. */
 html.jaw-embedded,
 html.jaw-embedded body {
   background: transparent !important;
@@ -122,10 +122,6 @@ html.jaw-embedded {
    inline `style.colorScheme` set by the pre-paint theme script and listeners. */
 html.jaw-embedded {
   color-scheme: normal !important;
-}
-
-html.jaw-embedded [data-jaw-watermark] {
-  display: none !important;
 }
 
 h1,
