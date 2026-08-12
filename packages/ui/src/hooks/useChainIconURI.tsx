@@ -101,8 +101,8 @@ export const useChainIconURI = (chainId: number, apiKey?: string, size?: number)
     return (
       <div
         style={{
-          backgroundColor: isLoading ? 'var(--jaw-color-muted)' : 'var(--jaw-color-secondary)',
-          border: '1px solid var(--jaw-color-border)',
+          backgroundColor: isLoading ? 'oklch(var(--jaw-color-muted))' : 'oklch(var(--jaw-color-secondary))',
+          border: '1px solid oklch(var(--jaw-color-border))',
           display: 'flex',
           height: `${iconSize}px`,
           width: `${iconSize}px`,
@@ -112,7 +112,7 @@ export const useChainIconURI = (chainId: number, apiKey?: string, size?: number)
           textAlign: 'center',
           borderRadius: '50%',
           fontSize: `${Math.max(10, iconSize / 3)}px`,
-          color: 'var(--jaw-color-muted-foreground)',
+          color: 'oklch(var(--jaw-color-muted-foreground))',
         }}
       >
         {isLoading ? '...' : '?'}

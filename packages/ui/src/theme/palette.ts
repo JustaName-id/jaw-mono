@@ -93,7 +93,9 @@ export function oklchToString(oklch: Oklch): string {
   const l = oklch.l.toFixed(3);
   const c = oklch.c.toFixed(3);
   const h = oklch.h.toFixed(1);
-  return `oklch(${l} ${c} ${h})`;
+  // Channels only, no `oklch()` wrapper: these land in `--jaw-color-*`, and the Tailwind theme
+  // wraps them as `oklch(var(--x) / <alpha-value>)` so opacity modifiers (`bg-primary/90`) work.
+  return `${l} ${c} ${h}`;
 }
 
 /**
