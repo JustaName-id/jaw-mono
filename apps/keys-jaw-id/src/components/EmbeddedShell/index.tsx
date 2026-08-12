@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 
-import { DialogAnchorContext } from '@jaw.id/ui';
+import { DialogAnchorContext, PortalContainerContext } from '@jaw.id/ui';
 
 import type { PopupCommunicator } from '../../lib/popup-communicator';
 import {
@@ -89,6 +89,13 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   // children). Toggling `active` only changes classNames — children never
   // change tree position, so they are never remounted (they hold the keys
   // session/crypto state, which a remount would reset and break the connect).
+  // Styling scope for the SDK's CSS. Every utility the package ships is emitted as
+  // `[data-jaw-ui] .foo`, so this element is what makes those styles apply — and keeping the
+  // attribute here rather than on <body> is what stops them outranking this app's own palette.
+  // The Radix modals portal here too (PortalContainerContext below), so portaled content stays
+  // inside the scope; without that they would land on document.body and render unstyled.
+  const [scopeRoot, setScopeRoot] = useState<HTMLDivElement | null>(null);
+
   const active = embedded && mounted;
 
   const card =
@@ -124,29 +131,33 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     // is meant for popup/standalone contexts.
     <DialogAnchorContext.Provider value={active ? (presentation === 'floating' ? 'top' : 'bottom-sheet') : 'center'}>
       <div
+        ref={setScopeRoot}
+        data-jaw-ui
         className={
           // Transparent (no scrim): the dApp shows through around the card.
           active ? 'fixed inset-0 z-50' : 'contents'
         }
         onClick={onOverlayClick}
       >
-        {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
+        <PortalContainerContext.Provider value={scopeRoot}>
+          {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
             which must not stretch the card to the full viewport */}
-        <div
-          role={active ? 'document' : undefined}
-          className={
-            active
-              ? // Screens that bring their own DialogShell card (the revamped design)
-                // get no extra chrome — the shell IS the card. Legacy screens keep
-                // the classic card look until they migrate.
-                `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:bg-transparent has-[[data-jaw-shell]]:shadow-none [&_.min-h-screen]:min-h-0 ${card}`
-              : 'contents'
-          }
-        >
-          <EnsureVisibility communicator={communicator} active={active}>
-            {children}
-          </EnsureVisibility>
-        </div>
+          <div
+            role={active ? 'document' : undefined}
+            className={
+              active
+                ? // Screens that bring their own DialogShell card (the revamped design)
+                  // get no extra chrome — the shell IS the card. Legacy screens keep
+                  // the classic card look until they migrate.
+                  `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:bg-transparent has-[[data-jaw-shell]]:shadow-none [&_.min-h-screen]:min-h-0 ${card}`
+                : 'contents'
+            }
+          >
+            <EnsureVisibility communicator={communicator} active={active}>
+              {children}
+            </EnsureVisibility>
+          </div>
+        </PortalContainerContext.Provider>
       </div>
     </DialogAnchorContext.Provider>
   );

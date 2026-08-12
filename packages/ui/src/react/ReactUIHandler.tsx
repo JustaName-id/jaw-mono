@@ -247,6 +247,9 @@ export class ReactUIHandler implements UIHandler {
       try {
         const container = document.createElement('dialog');
         container.setAttribute('data-jaw-modal-container', '');
+        // Styling scope: every utility this package ships is emitted as `[data-jaw-ui] .foo`, so
+        // the attribute is what makes the SDK's CSS apply — and what keeps it off the host page.
+        container.setAttribute('data-jaw-ui', '');
 
         // Style isolation: prevent consumer app CSS from leaking into SDK modals.
         // Inline styles guarantee isolation regardless of CSS load order or specificity.
