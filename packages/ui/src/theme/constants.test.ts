@@ -51,16 +51,21 @@ describe('palette declarations agree', () => {
     expect(mismatches).toEqual([]);
   });
 
+  // Values are oklch *channels*, not `oklch(...)` strings: the Tailwind theme wraps them as
+  // `oklch(var(--x) / <alpha-value>)` so opacity modifiers (`bg-primary/90`, `text-…/60`) generate
+  // CSS at all. Stored as a complete colour, every one of the package's 80 `/alpha` utilities
+  // emitted nothing and the text silently inherited its parent.
+  //
   // Deliberately NOT the design spec's ink (#0A1020 / #F5F5F4 / #C7CEDA / #8A94A6). The dialogs
   // are pinned to shadcn's slate, which is what keys was lending them before the package became
   // self-contained — reviewed on screen and preferred. Revisit with the designer; until then these
   // assertions are the record of the decision, so a future "let's follow the spec" edit is a
   // conscious change rather than a silent one.
   it.each([
-    ['--jaw-color-card', 'oklch(0.1363 0.0364 259.201)', '#020817 surface'],
-    ['--jaw-color-foreground', 'oklch(0.9842 0.0034 247.858)', '#F8FAFC primary text'],
-    ['--jaw-color-muted-foreground', 'oklch(0.7107 0.0351 256.788)', '#94A3B8 muted'],
-    ['--jaw-color-border', 'oklch(0.2795 0.0368 260.031)', '#1E293B border'],
+    ['--jaw-color-card', '0.1363 0.0364 259.201', '#020817 surface'],
+    ['--jaw-color-foreground', '0.9842 0.0034 247.858', '#F8FAFC primary text'],
+    ['--jaw-color-muted-foreground', '0.7107 0.0351 256.788', '#94A3B8 muted'],
+    ['--jaw-color-border', '0.2795 0.0368 260.031', '#1E293B border'],
   ])('dark %s is the chosen slate value (%s → %s)', (token, expected) => {
     expect(DEFAULT_DARK_PALETTE[token]).toBe(expected);
   });

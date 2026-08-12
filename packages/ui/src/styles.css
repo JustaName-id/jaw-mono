@@ -42,16 +42,6 @@
     --jaw-color-chart-4: 0.828 0.189 84.429;
     --jaw-color-chart-5: 0.769 0.188 70.08;
 
-    /* Sidebar */
-    --jaw-color-sidebar-background: #fafafa;
-    --jaw-color-sidebar-foreground: 240 5.3% 26.1%;
-    --jaw-color-sidebar-primary: 240 5.9% 10%;
-    --jaw-color-sidebar-primary-foreground: 0 0% 98%;
-    --jaw-color-sidebar-accent: 240 4.8% 95.9%;
-    --jaw-color-sidebar-accent-foreground: 240 5.9% 10%;
-    --jaw-color-sidebar-border: #e5e7eb;
-    --jaw-color-sidebar-ring: #a1a1aa;
-
     /* Misc */
     --jaw-font-inter: 'Inter', sans-serif;
     --vh: 1vh;
@@ -95,14 +85,6 @@
     --jaw-color-chart-5: 0.645 0.246 16.439;
 
     /* Sidebar (dark) */
-    --jaw-color-sidebar-background: #111111;
-    --jaw-color-sidebar-foreground: 240 4.8% 95.9%;
-    --jaw-color-sidebar-primary: 0 0% 98%;
-    --jaw-color-sidebar-primary-foreground: 240 5.9% 10%;
-    --jaw-color-sidebar-accent: 240 3.7% 15.9%;
-    --jaw-color-sidebar-accent-foreground: 240 4.8% 95.9%;
-    --jaw-color-sidebar-border: #e5e7eb;
-    --jaw-color-sidebar-ring: #a1a1aa;
     --jaw-font-inter: 'Inter', sans-serif;
   }
 }

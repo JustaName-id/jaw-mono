@@ -105,6 +105,9 @@ module.exports = {
         destructive: {
           DEFAULT: 'oklch(var(--jaw-color-destructive) / <alpha-value>)',
           foreground: 'oklch(var(--jaw-color-destructive-foreground) / <alpha-value>)',
+          // `hover:bg-destructive-hover` on the revoke button. Without this key the class emitted
+          // no CSS — it only ever worked because a host app compiled our source with its own theme.
+          hover: 'oklch(var(--jaw-color-destructive-hover) / <alpha-value>)',
         },
         success: {
           DEFAULT: 'oklch(var(--jaw-color-success) / <alpha-value>)',
