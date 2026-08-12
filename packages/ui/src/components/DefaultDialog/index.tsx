@@ -65,7 +65,10 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
                 maxHeight: '85vh',
                 borderRadius: undefined,
                 // Clear the iOS home bar (the sheet sits on the bottom edge).
-                paddingBottom: 'env(safe-area-inset-bottom)',
+                // Yields to a caller that owns its own bottom inset — ShellDialog
+                // passes 0 because its DialogShell card applies the inset inside
+                // its own surface, and stacking both would leave two home-bar gaps.
+                paddingBottom: contentStyle.paddingBottom ?? 'env(safe-area-inset-bottom)',
               }
             : {}),
         }}

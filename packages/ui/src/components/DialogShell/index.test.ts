@@ -4,18 +4,35 @@
 // shrink to the container instead of overflowing — an overflowing card defeats
 // mx-auto centering and pins to the left edge, spilling off the right side of
 // the embedded bottom sheet.
+//
+// Plus the sheet presentation ('bottom-sheet' anchor): the same card must stop
+// being a card and become the sheet, or it renders as the desktop dialog merely
+// pinned to the bottom edge.
 import { describe, expect, it } from 'vitest';
 import { createElement } from 'react';
 import { renderToStaticMarkup } from 'react-dom/server';
 
+import { DialogAnchorContext, type DialogAnchor } from '../../lib/utils';
 import { DialogShell } from './index';
 
-function render(): { frame: HTMLElement; card: HTMLElement } {
+function render(anchor: DialogAnchor = 'center'): {
+  frame: HTMLElement;
+  card: HTMLElement;
+  grabber: HTMLElement | null;
+  halo: HTMLElement | null;
+} {
   const host = document.createElement('div');
-  host.innerHTML = renderToStaticMarkup(createElement(DialogShell, null, 'content'));
+  host.innerHTML = renderToStaticMarkup(
+    createElement(DialogAnchorContext.Provider, { value: anchor }, createElement(DialogShell, null, 'content'))
+  );
   const frame = host.querySelector('[data-jaw-shell]') as HTMLElement;
   const card = frame.querySelector('.jaw-scroll') as HTMLElement;
-  return { frame, card };
+  return {
+    frame,
+    card,
+    grabber: frame.querySelector('[data-jaw-grabber]'),
+    halo: frame.querySelector('.jaw-halo-ring'),
+  };
 }
 
 describe('DialogShell', () => {
@@ -33,5 +50,66 @@ describe('DialogShell', () => {
     const { card } = render();
     expect(card.className).toContain('w-[400px]');
     expect(card.className).toContain('max-w-full');
+  });
+
+  it('renders the card presentation for the top anchor, same as center', () => {
+    // The floating embedded card is the desktop card — only the drawer differs.
+    expect(render('top').card.className).toBe(render('center').card.className);
+    expect(render('top').frame.className).toBe(render('center').frame.className);
+  });
+
+  describe('sheet presentation (bottom-sheet anchor)', () => {
+    it('goes full-bleed instead of a centered 400px card', () => {
+      const { frame, card } = render('bottom-sheet');
+      expect(frame.className).toContain('w-full');
+      expect(frame.className).not.toContain('w-fit');
+      expect(frame.className).not.toContain('mx-auto');
+      expect(card.className).toContain('w-full');
+      expect(card.className).not.toContain('w-[400px]');
+    });
+
+    it('rounds only its top corners and draws only a top edge', () => {
+      const { frame, card } = render('bottom-sheet');
+      expect(frame.className).toContain('rounded-t-[18px]');
+      expect(frame.className).not.toContain('rounded-[18px]');
+      // The ring pads the top only — the other three edges are offscreen.
+      expect(frame.className).toContain('pt-[1.5px]');
+      expect(frame.className).not.toContain('p-[1.5px]');
+      expect(card.className).toContain('rounded-t-[16.5px]');
+      expect(card.className).not.toContain('rounded-[16.5px]');
+      expect(card.className).toContain('border-t');
+    });
+
+    it('drops the shadow and the halo, which need an all-around edge to read', () => {
+      const { card, halo } = render('bottom-sheet');
+      expect(card.className).not.toContain('shadow-xl');
+      expect(halo).toBeNull();
+      // Still present in the card presentation (dark-mode gated there).
+      expect(render('center').halo).not.toBeNull();
+    });
+
+    it('caps height at 85dvh so a strip of the host dApp stays visible above', () => {
+      expect(render('bottom-sheet').card.className).toContain('max-h-[85dvh]');
+      expect(render('center').card.className).toContain('max-h-[min(550px,90dvh)]');
+    });
+
+    it('applies the home-bar inset inside its own surface, so the sheet background runs under it', () => {
+      // Padding rather than an outer margin: the sheet must not float above the
+      // iOS home bar leaving a band of dApp behind it. EmbeddedShell and
+      // DefaultDialog both stand down (has-[[data-jaw-shell]]:pb-0 /
+      // paddingBottom: 0) so this is the only inset applied.
+      expect(render('bottom-sheet').card.className).toContain('pb-[env(safe-area-inset-bottom)]');
+      expect(render('center').card.className).not.toContain('pb-[env(safe-area-inset-bottom)]');
+    });
+
+    it('grows a grabber, sticky and hidden from assistive tech', () => {
+      const { grabber } = render('bottom-sheet');
+      expect(grabber).not.toBeNull();
+      // Decorative: not draggable in this design, so it must not be announced.
+      expect(grabber?.getAttribute('aria-hidden')).toBe('true');
+      // Pinned while the card (the single scroll owner) scrolls under it.
+      expect(grabber?.className).toContain('sticky');
+      expect(render('center').grabber).toBeNull();
+    });
   });
 });

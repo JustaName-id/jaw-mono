@@ -51,6 +51,9 @@ export function ShellDialog({
         boxShadow: 'none',
         overflow: 'visible',
         maxHeight: 'none',
+        // The shell card applies the safe-area inset inside its own surface, so
+        // the sheet presentation must not add a second one out here.
+        paddingBottom: 0,
       }}
       innerStyle={{ padding: 0, overflow: 'visible' }}
     >

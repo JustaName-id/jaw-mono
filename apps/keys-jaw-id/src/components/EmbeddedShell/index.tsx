@@ -95,8 +95,23 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     presentation === 'drawer'
       ? // Mobile: full-width bottom sheet, sliding up when the SDK reveals the
         // iframe (translate driven by `revealed`, see DialogVisibility above).
-        // Safe-area padding keeps content clear of the iOS home bar.
-        `fixed inset-x-0 bottom-0 max-h-[85vh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-out motion-reduce:transition-none ${
+        // Safe-area padding keeps content clear of the iOS home bar, and the
+        // height cap leaves a strip of dApp visible above (dvh so a collapsing
+        // mobile URL bar doesn't leave the sheet short). Both are LEGACY-screen
+        // chrome: a revamped screen's DialogShell renders as the sheet itself and
+        // owns its own inset and cap, so this wrapper drops them — keeping the
+        // inset from stacking into two home-bar gaps and the cap from making the
+        // wrapper a second scroll container around the card's own scroller.
+        // A revamped screen rendered INLINE (not portaled) also arrives wrapped in
+        // the popup's centering chrome — `min-h-screen items-center justify-center
+        // p-4` around a `w-full max-w-md`. Fine for a popup window, wrong for a
+        // sheet: the p-4 insets it 16px on the left, right and bottom so the edges
+        // stop touching the viewport, and max-w-md caps it at 448px near the
+        // breakpoint. Neutralized here, next to the existing min-h-0 reset, since
+        // the screens are created outside this provider and can't read the
+        // presentation themselves. The portaled dialogs are position:fixed and
+        // never see this wrapper — which is why only the inline screens need it.
+        `fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-out has-[[data-jaw-shell]]:max-h-none has-[[data-jaw-shell]]:pb-0 has-[[data-jaw-shell]]:[&_.max-w-md]:max-w-none has-[[data-jaw-shell]]:[&_.min-h-screen]:p-0 motion-reduce:transition-none ${
           revealed ? 'translate-y-0' : 'translate-y-full'
         }`
       : // Desktop: floating card near the top (like Porto's dialog), centered
