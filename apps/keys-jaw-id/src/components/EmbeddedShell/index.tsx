@@ -111,7 +111,10 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
         // the screens are created outside this provider and can't read the
         // presentation themselves. The portaled dialogs are position:fixed and
         // never see this wrapper — which is why only the inline screens need it.
-        `fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-out has-[[data-jaw-shell]]:max-h-none has-[[data-jaw-shell]]:pb-0 has-[[data-jaw-shell]]:[&_.max-w-md]:max-w-none has-[[data-jaw-shell]]:[&_.min-h-screen]:p-0 motion-reduce:transition-none ${
+        // Written as `[&:has(...)_.x]:` rather than a stacked
+        // `has-[...]:[&_.x]:`, which compiles to `.wrapper .x:has([data-jaw-shell])`
+        // — the :has() lands on the descendant, not on this wrapper.
+        `fixed inset-x-0 bottom-0 max-h-[85dvh] rounded-t-2xl pb-[env(safe-area-inset-bottom)] transition-transform duration-300 ease-out has-[[data-jaw-shell]]:max-h-none has-[[data-jaw-shell]]:pb-0 [&:has([data-jaw-shell])_.max-w-md]:max-w-none [&:has([data-jaw-shell])_.min-h-screen]:p-0 motion-reduce:transition-none ${
           revealed ? 'translate-y-0' : 'translate-y-full'
         }`
       : // Desktop: floating card near the top (like Porto's dialog), centered

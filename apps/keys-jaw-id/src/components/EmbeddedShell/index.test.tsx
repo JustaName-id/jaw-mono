@@ -140,10 +140,10 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
     );
     const content = document.body.querySelector('[data-slot="dialog-content"]') as HTMLElement;
     expect(content).not.toBeNull();
-    // Content-sized height capped at the card's 85vh — not the viewport-filling
+    // Content-sized height capped at the card's 85dvh — not the viewport-filling
     // height:100%/maxHeight:none the dialog asked for.
     expect(content.style.height).toBe('auto');
-    expect(content.style.maxHeight).toBe('85vh');
+    expect(content.style.maxHeight).toBe('85dvh');
     // Full-width sheet pinned to the bottom edge, like the shell's drawer card.
     expect(content.style.width).toBe('100%');
     expect(content.className).toContain('bottom-0');
@@ -232,10 +232,15 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
       // bites at the 460px breakpoint. Portaled dialogs are position:fixed and
       // never see this wrapper, so the inline screens are the only ones that
       // need the reset — and were the only ones showing the gap.
+      //
+      // The `:has()` must sit on the WRAPPER, not on the descendant: the stacked
+      // `has-[[data-jaw-shell]]:[&_.min-h-screen]:p-0` form compiles to
+      // `.wrapper .min-h-screen:has([data-jaw-shell])`, which only matches while
+      // the shell happens to live inside that exact child.
       stubViewport(400);
       mount(<div data-jaw-shell>revamped screen</div>);
-      expect(card().className).toContain('has-[[data-jaw-shell]]:[&_.min-h-screen]:p-0');
-      expect(card().className).toContain('has-[[data-jaw-shell]]:[&_.max-w-md]:max-w-none');
+      expect(card().className).toContain('[&:has([data-jaw-shell])_.min-h-screen]:p-0');
+      expect(card().className).toContain('[&:has([data-jaw-shell])_.max-w-md]:max-w-none');
     });
 
     it('defaults to revealed (old SDKs never send DialogVisibility)', () => {

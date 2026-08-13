@@ -69,7 +69,14 @@ export function DialogShell({ children, halo = true, className, contentClassName
               // background runs under the iOS home bar while content clears it.
               'max-h-[85dvh] w-full rounded-t-[16.5px] border-t pb-[env(safe-area-inset-bottom)]'
             : 'max-h-[min(550px,90dvh)] w-[400px] max-w-full rounded-[16.5px] border shadow-xl',
-          contentClassName
+          contentClassName,
+          // The dialogs pass a desktop min height (510px, 447px for Signature)
+          // through contentClassName, and in CSS min-height beats max-height —
+          // it would cancel the cap above, so under ~510px of viewport the sheet
+          // would grow past the top of the screen with nothing able to scroll it
+          // back (ShellDialog forces the Radix content to overflow: visible).
+          // Placed AFTER contentClassName so twMerge keeps this one.
+          sheet && 'min-h-0'
         )}
       >
         {/* Grabber: the affordance that says "sheet". Decorative — this is not a

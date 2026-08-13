@@ -12,6 +12,13 @@ export interface DefaultDialogProps {
   trigger?: ReactNode;
   fullScreen?: boolean;
   contentStyle?: React.CSSProperties;
+  /**
+   * The caller's own content applies the iOS home-bar inset, so the sheet
+   * presentation must not add a second one (two stacked gaps). ShellDialog sets
+   * it because its DialogShell card insets inside its own surface — which keeps
+   * the sheet background running under the home bar.
+   */
+  ownsBottomInset?: boolean;
 }
 
 export const DefaultDialog: FC<DefaultDialogProps> = ({
@@ -23,6 +30,7 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
   fullScreen,
   innerStyle = {},
   contentStyle = {},
+  ownsBottomInset = false,
 }) => {
   // In the embedded drawer presentation ('bottom-sheet') the dialog must
   // render as a full-width, content-sized bottom sheet. The per-dialog
@@ -62,13 +70,11 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
                 maxWidth: 'none',
                 height: 'auto',
                 minHeight: 0,
-                maxHeight: '85vh',
+                maxHeight: '85dvh',
                 borderRadius: undefined,
-                // Clear the iOS home bar (the sheet sits on the bottom edge).
-                // Yields to a caller that owns its own bottom inset — ShellDialog
-                // passes 0 because its DialogShell card applies the inset inside
-                // its own surface, and stacking both would leave two home-bar gaps.
-                paddingBottom: contentStyle.paddingBottom ?? 'env(safe-area-inset-bottom)',
+                // Clear the iOS home bar (the sheet sits on the bottom edge),
+                // unless the caller's content already does it (see the prop).
+                paddingBottom: ownsBottomInset ? 0 : 'env(safe-area-inset-bottom)',
               }
             : {}),
         }}

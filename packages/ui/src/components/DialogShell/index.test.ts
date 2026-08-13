@@ -15,7 +15,10 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { DialogAnchorContext, type DialogAnchor } from '../../lib/utils';
 import { DialogShell } from './index';
 
-function render(anchor: DialogAnchor = 'center'): {
+function render(
+  anchor: DialogAnchor = 'center',
+  contentClassName?: string
+): {
   frame: HTMLElement;
   card: HTMLElement;
   grabber: HTMLElement | null;
@@ -23,7 +26,11 @@ function render(anchor: DialogAnchor = 'center'): {
 } {
   const host = document.createElement('div');
   host.innerHTML = renderToStaticMarkup(
-    createElement(DialogAnchorContext.Provider, { value: anchor }, createElement(DialogShell, null, 'content'))
+    createElement(
+      DialogAnchorContext.Provider,
+      { value: anchor },
+      createElement(DialogShell, { contentClassName }, 'content')
+    )
   );
   const frame = host.querySelector('[data-jaw-shell]') as HTMLElement;
   const card = frame.querySelector('.jaw-scroll') as HTMLElement;
@@ -91,6 +98,21 @@ describe('DialogShell', () => {
     it('caps height at 85dvh so a strip of the host dApp stays visible above', () => {
       expect(render('bottom-sheet').card.className).toContain('max-h-[85dvh]');
       expect(render('center').card.className).toContain('max-h-[min(550px,90dvh)]');
+    });
+
+    it('drops the caller min height, which would otherwise cancel that cap', () => {
+      // All five dialogs pass a desktop min height through contentClassName, and
+      // min-height beats max-height in CSS: without this the sheet is 510px tall
+      // whatever the cap says, so on a short viewport it grows past the top of
+      // the screen — unreachable, since nothing above it scrolls.
+      const { card } = render('bottom-sheet', 'min-h-[510px]');
+      expect(card.className).toContain('min-h-0');
+      expect(card.className).not.toContain('min-h-[510px]');
+      expect(card.className).not.toContain('min-h-[234px]');
+      expect(card.className).toContain('max-h-[85dvh]');
+      // The desktop card still honours it — that is where the fixed height is
+      // the design.
+      expect(render('center', 'min-h-[510px]').card.className).toContain('min-h-[510px]');
     });
 
     it('applies the home-bar inset inside its own surface, so the sheet background runs under it', () => {
