@@ -59,6 +59,7 @@ import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
 import { usePermissionExecution } from '../hooks/usePermissionExecution';
+import { validatePermissionRevocation, type RevocationProblem } from '../utils/permissionExecution';
 import { useFunctionSignatures } from '../hooks/useFunctionSignatures';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getPublicClient } from '../utils/publicClient';
@@ -2763,6 +2764,10 @@ function RevokePermissionDialogWrapper({
   const [status, setStatus] = useState<string>('');
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState(true);
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
+  // Why the permission isn't available, when it isn't. Distinguished because a 404 proves the
+  // permission is gone while anything else is our lookup failing — different copy, both blocking,
+  // since the revoke call is built from this data.
+  const [lookupFailure, setLookupFailure] = useState<'not-found' | 'lookup-failed' | null>(null);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -2874,9 +2879,13 @@ function RevokePermissionDialogWrapper({
   // Fetch permission details from relay
   useEffect(() => {
     if (!request.data.permissionId || !apiKey) {
+      // No key means no way to reach the relay, so the revocation can never be built. Terminal,
+      // not pending — otherwise the dialog renders an empty permission with Confirm enabled.
+      setLookupFailure(request.data.permissionId ? 'lookup-failed' : null);
       setIsLoadingPermissionDetails(false);
       return;
     }
+    setLookupFailure(null);
 
     const fetchPermissionDetails = async () => {
       try {
@@ -2939,6 +2948,12 @@ function RevokePermissionDialogWrapper({
         setIsLoadingPermissionDetails(false);
       } catch (error) {
         console.error('❌ Failed to fetch permission details:', error);
+        // Only a relay 404 proves the permission is gone; anything else (5xx, network, CORS) is
+        // our lookup failing. The status lives directly on errors the core rethrows from
+        // structured bodies, and on `response.status` for raw transport errors.
+        const status =
+          (error as { status?: number })?.status ?? (error as { response?: { status?: number } })?.response?.status;
+        setLookupFailure(status === 404 ? 'not-found' : 'lookup-failed');
         setIsLoadingPermissionDetails(false);
       }
     };
@@ -3119,6 +3134,24 @@ function RevokePermissionDialogWrapper({
   // Empty until the relay responds — the dialog shows a placeholder row rather than a fake address.
   const spenderAddress = fetchedPermissionData?.spender ?? '';
 
+  // Named up front rather than surfacing as a failed estimation or an on-chain revert. Derived from
+  // the permission this screen already fetched, so it costs no extra round-trip.
+  const revocationProblem = useMemo<RevocationProblem | null>(() => {
+    if (lookupFailure) return lookupFailure;
+    if (!fetchedPermissionData) return null;
+    return validatePermissionRevocation({
+      permission: {
+        account: fetchedPermissionData.account,
+        spender: fetchedPermissionData.spender,
+        end: Number(fetchedPermissionData.end),
+        chainId: String(fetchedPermissionData.chainId ?? ''),
+      },
+      from: request.data.address,
+      chainId,
+      now: Math.floor(Date.now() / 1000),
+    });
+  }, [lookupFailure, fetchedPermissionData, request.data.address, chainId]);
+
   const handleConfirm = async () => {
     if (submittingRef.current) return;
     if (!account) {
@@ -3178,6 +3211,7 @@ function RevokePermissionDialogWrapper({
       }}
       mode="revoke"
       permissionId={request.data.permissionId}
+      revocationProblem={revocationProblem}
       spenderAddress={spenderAddress}
       accountAddress={request.data.address}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}

@@ -189,3 +189,113 @@ export function validatePermissionExecution({
   if (sameAddress(permission.account, permission.spender)) return 'self-delegated';
   return null;
 }
+
+// ============================================================================
+// Revoking a granted permission (`wallet_revokePermissions`).
+// ----------------------------------------------------------------------------
+// The mirror of the execution checks above, for the other direction. Only the granting account can
+// revoke, so the address in play is `account` rather than `spender`, and there are no calls to
+// match — a revocation carries none.
+//
+// One deliberate difference from the execution path: an unresolved permission BLOCKS here. The
+// revoke call is built from the fetched permission (`buildRevokePermissionCall`), so with no data
+// there is nothing to submit — where an execution's calls come from the request and can proceed.
+// ============================================================================
+
+/** The subset of a relay permission the revoke screen needs. No calls: a revocation has none. */
+export interface RevocablePermission {
+  account: string;
+  spender: string;
+  /** Unix seconds. */
+  end: number;
+  /** Hex chain id, as the relay stores it. */
+  chainId: string;
+}
+
+/** Something worth saying before signing a revocation. */
+export type RevocationProblem =
+  /** The relay answered 404: already revoked, or never granted. Nothing left to revoke. */
+  | 'not-found'
+  /** The lookup itself failed (network, server error, missing key) — the permission may be fine. */
+  | 'lookup-failed'
+  /** Stored against a different chain than the one this request targets. */
+  | 'chain-mismatch'
+  /** The signer isn't the granting account, so the manager will reject the caller. */
+  | 'not-granter'
+  /** Already past its `end`. Revoking succeeds but changes nothing — it only costs gas. */
+  | 'expired'
+  /** Granted by an account to itself. Unusual, but revoking it is perfectly ordinary. */
+  | 'self-delegated';
+
+/**
+ * A blocking problem disables Confirm. The two exceptions warn and let the user proceed: an
+ * `expired` permission revokes fine (it just achieves nothing), and `self-delegated` describes the
+ * grant rather than the revocation. One predicate so the dialog and the copy can't disagree.
+ */
+export function isBlockingRevocationProblem(problem: RevocationProblem): boolean {
+  return problem !== 'expired' && problem !== 'self-delegated';
+}
+
+/** Short label for the fee row, and the tooltip detail behind it. */
+export const REVOCATION_PROBLEM_TEXT: Record<RevocationProblem, { text: string; detail: string }> = {
+  'not-found': {
+    text: 'Nothing to revoke',
+    detail:
+      'The relay has no record of this permission — it was already revoked, or never granted. There is nothing left to remove.',
+  },
+  'lookup-failed': {
+    text: 'Permission couldn’t be loaded',
+    detail:
+      'The permission lookup failed, so its details couldn’t be read. The revocation is built from those details, so it can’t be submitted until the lookup succeeds — close this and try again.',
+  },
+  'chain-mismatch': {
+    text: 'Wrong network',
+    detail: 'This permission was granted on a different network than the one this request targets.',
+  },
+  'not-granter': {
+    text: 'Not the granting account',
+    detail:
+      'Only the account that granted a permission can revoke it, and this wallet isn’t it. Submitting would be rejected on-chain.',
+  },
+  expired: {
+    text: 'Already expired',
+    detail:
+      'This permission has passed its expiry date and can no longer be used, so revoking it changes nothing — it only costs the network fee. You can still proceed if you want it cleared.',
+  },
+  'self-delegated': {
+    text: 'Self-granted permission',
+    detail:
+      'This permission was granted by an account to itself. That is unusual for a grant, but revoking it works exactly like any other.',
+  },
+};
+
+/**
+ * The first thing worth saying about this revocation, or null. Ordered by how fundamental the
+ * mismatch is, with the two non-blocking findings last so neither can mask a certain revert.
+ */
+export function validatePermissionRevocation({
+  permission,
+  from,
+  chainId,
+  now,
+}: {
+  permission: RevocablePermission;
+  /** The account signing the revocation — must be the permission's granter. */
+  from?: string;
+  /** Chain the request targets. */
+  chainId?: number;
+  /** Unix seconds; injected so the expiry check is testable. */
+  now: number;
+}): RevocationProblem | null {
+  if (chainId !== undefined && permission.chainId && Number(permission.chainId) !== chainId) {
+    return 'chain-mismatch';
+  }
+  if (from && !sameAddress(permission.account, from)) return 'not-granter';
+
+  // Coerced rather than trusted: the relay type says number, but the revoke path parseInts it,
+  // and a string "0" would read as truthy-and-past where the number 0 means "no expiry".
+  const end = Number(permission.end);
+  if (Number.isFinite(end) && end > 0 && end <= now) return 'expired';
+  if (sameAddress(permission.account, permission.spender)) return 'self-delegated';
+  return null;
+}

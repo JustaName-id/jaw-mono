@@ -2,11 +2,16 @@ import { describe, expect, it } from 'vitest';
 import { ANY_FN_SEL, ANY_TARGET, EMPTY_CALLDATA_FN_SEL, PERMISSIONS_MANAGER_ADDRESS } from '@jaw.id/core';
 import {
   isBlockingPermissionProblem,
+  isBlockingRevocationProblem,
   isWildcard,
   PERMISSION_PROBLEM_TEXT,
+  REVOCATION_PROBLEM_TEXT,
   validatePermissionExecution,
+  validatePermissionRevocation,
   type ExecutionPermission,
   type PermissionProblem,
+  type RevocablePermission,
+  type RevocationProblem,
 } from './permissionExecution';
 
 const USDC = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
@@ -218,5 +223,128 @@ describe('isWildcard', () => {
     expect(isWildcard(USDC)).toBe(false);
     expect(isWildcard(TRANSFER)).toBe(false);
     expect(isWildcard(undefined)).toBe(false);
+  });
+});
+
+// ============================================================================
+// Revocation
+// ============================================================================
+
+function revocable(overrides: Partial<RevocablePermission> = {}): RevocablePermission {
+  return {
+    account: GRANTER,
+    spender: SPENDER,
+    end: NOW + 3600,
+    chainId: '84532',
+    ...overrides,
+  };
+}
+
+describe('validatePermissionRevocation', () => {
+  it('finds nothing wrong with a live permission revoked by its granter', () => {
+    expect(
+      validatePermissionRevocation({ permission: revocable(), from: GRANTER, chainId: 84532, now: NOW })
+    ).toBeNull();
+  });
+
+  it('names a chain mismatch before anything else', () => {
+    expect(
+      validatePermissionRevocation({
+        // Also expired and not-granter — the chain is the more fundamental mismatch.
+        permission: revocable({ chainId: '1', end: NOW - 1 }),
+        from: SPENDER,
+        chainId: 84532,
+        now: NOW,
+      })
+    ).toBe('chain-mismatch');
+  });
+
+  it('rejects a signer that is not the granter — the spender cannot revoke', () => {
+    expect(validatePermissionRevocation({ permission: revocable(), from: SPENDER, chainId: 84532, now: NOW })).toBe(
+      'not-granter'
+    );
+  });
+
+  it('warns on an already-expired permission', () => {
+    expect(
+      validatePermissionRevocation({ permission: revocable({ end: NOW - 1 }), from: GRANTER, chainId: 84532, now: NOW })
+    ).toBe('expired');
+  });
+
+  it('treats end === 0 as no expiry rather than long past', () => {
+    expect(
+      validatePermissionRevocation({ permission: revocable({ end: 0 }), from: GRANTER, chainId: 84532, now: NOW })
+    ).toBeNull();
+  });
+
+  it('coerces a string end, so "0" is not read as truthy-and-past', () => {
+    expect(
+      validatePermissionRevocation({
+        permission: revocable({ end: '0' as unknown as number }),
+        from: GRANTER,
+        chainId: 84532,
+        now: NOW,
+      })
+    ).toBeNull();
+  });
+
+  it('reports a self-granted permission, but only once nothing else is wrong', () => {
+    const selfGranted = revocable({ spender: GRANTER });
+    expect(validatePermissionRevocation({ permission: selfGranted, from: GRANTER, chainId: 84532, now: NOW })).toBe(
+      'self-delegated'
+    );
+    // An expiry outranks it: expired is about the revocation, self-granted about the grant.
+    expect(
+      validatePermissionRevocation({
+        permission: { ...selfGranted, end: NOW - 1 },
+        from: GRANTER,
+        chainId: 84532,
+        now: NOW,
+      })
+    ).toBe('expired');
+  });
+
+  it('skips the granter check when the signer is unknown', () => {
+    expect(validatePermissionRevocation({ permission: revocable(), chainId: 84532, now: NOW })).toBeNull();
+  });
+
+  it('is case-insensitive about the granter', () => {
+    expect(
+      validatePermissionRevocation({
+        permission: revocable(),
+        from: GRANTER.toUpperCase(),
+        chainId: 84532,
+        now: NOW,
+      })
+    ).toBeNull();
+  });
+});
+
+describe('isBlockingRevocationProblem', () => {
+  // An unresolved permission blocks here, unlike on the execution path: the revoke call is built
+  // from the fetched permission, so with no data there is nothing to submit.
+  it.each<RevocationProblem>(['not-found', 'lookup-failed', 'chain-mismatch', 'not-granter'])(
+    '%s blocks the revocation',
+    (problem) => {
+      expect(isBlockingRevocationProblem(problem)).toBe(true);
+    }
+  );
+
+  it.each<RevocationProblem>(['expired', 'self-delegated'])('%s only warns', (problem) => {
+    expect(isBlockingRevocationProblem(problem)).toBe(false);
+  });
+
+  it('has copy for every problem, and every problem is covered here', () => {
+    const all = Object.keys(REVOCATION_PROBLEM_TEXT) as RevocationProblem[];
+    expect(all).toHaveLength(6);
+    for (const problem of all) {
+      expect(REVOCATION_PROBLEM_TEXT[problem].text.length).toBeGreaterThan(0);
+      expect(REVOCATION_PROBLEM_TEXT[problem].detail.length).toBeGreaterThan(0);
+    }
+  });
+
+  it('does not claim an on-chain rejection for the non-blocking findings', () => {
+    expect(REVOCATION_PROBLEM_TEXT.expired.detail).not.toMatch(/rejected on-chain/i);
+    expect(REVOCATION_PROBLEM_TEXT['self-delegated'].detail).not.toMatch(/rejected on-chain/i);
   });
 });
