@@ -133,23 +133,21 @@ export class CrossPlatformSigner extends JAWSigner {
         }
 
         // wallet_revokePermissions needs chainId from relay (not in request params)
-        // because the permission may have been granted on a different chain
+        // because the permission may have been granted on a different chain.
         if (processedRequest.method === 'wallet_revokePermissions') {
             const params = processedRequest.params as [{ id: `0x${string}` }];
-            const permissionId = params[0]?.id;
-            if (permissionId) {
-                const apiKey = store.config.get().apiKey;
-                if (!apiKey) {
-                    throw standardErrors.rpc.internal('No API key configured');
-                }
-                try {
-                    const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
-                    resolvedChain = this.resolveChain(relayPermission.chainId);
-                } catch {
-                    throw standardErrors.rpc.invalidParams(
-                        `Permission not found: ${permissionId}. It may have already been revoked.`
-                    );
-                }
+            const permissionId = params[0].id;
+            const apiKey = store.config.get().apiKey;
+            if (!apiKey) {
+                throw standardErrors.rpc.internal('No API key configured');
+            }
+            try {
+                const relayPermission = await getPermissionFromRelay(permissionId, apiKey);
+                resolvedChain = this.resolveChain(relayPermission.chainId);
+            } catch {
+                throw standardErrors.rpc.invalidParams(
+                    `Permission not found: ${permissionId}. It may have already been revoked.`
+                );
             }
         } else {
             // For other methods, resolve chain from request params if present

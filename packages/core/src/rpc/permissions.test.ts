@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, test, vi } from 'vitest';
-import { handleGetPermissionsRequest } from './permissions.js';
+import { handleGetPermissionsRequest, normalizeRevokePermissionsParams } from './permissions.js';
 import { fetchRPCRequest } from '../utils/index.js';
 
 vi.mock('../utils/index.js', async (importOriginal) => {
@@ -55,5 +55,65 @@ describe('handleGetPermissionsRequest', () => {
         ).rejects.toMatchObject({ message: expect.stringContaining('address') });
 
         expect(fetchRPCRequest).not.toHaveBeenCalled();
+    });
+});
+
+const REVOKE_ID = `0x${'ab'.repeat(32)}` as const;
+
+/** Every input that must be refused before a signing window opens. */
+const REJECTED: [name: string, id: unknown][] = [
+    ['missing', undefined],
+    ['null', null],
+    ['empty string', ''],
+    ['bare 0x', '0x'],
+    ['too short', `0x${'ab'.repeat(31)}`],
+    ['too long', `0x${'ab'.repeat(33)}`],
+    ['no 0x prefix', 'ab'.repeat(32)],
+    ['non-hex characters', `0x${'zz'.repeat(32)}`],
+    ['a number', 1],
+    ['an object', {}],
+];
+
+describe('normalizeRevokePermissionsParams', () => {
+    it('accepts a 32-byte id and passes the rest through', () => {
+        expect(
+            normalizeRevokePermissionsParams([{ id: REVOKE_ID, address: ADDRESS, capabilities: { foo: 1 } }])
+        ).toEqual({ id: REVOKE_ID, address: ADDRESS, capabilities: { foo: 1 } });
+    });
+
+    it('leaves address undefined when the dapp omits it', () => {
+        expect(normalizeRevokePermissionsParams([{ id: REVOKE_ID }])).toEqual({
+            id: REVOKE_ID,
+            address: undefined,
+            capabilities: undefined,
+        });
+    });
+
+    it('accepts a lowercase, non-checksummed id', () => {
+        const lower = `0x${'AB'.repeat(32)}`.toLowerCase();
+        expect(normalizeRevokePermissionsParams([{ id: lower }]).id).toBe(lower);
+    });
+
+    // The bug this guards: both signers skipped their relay check with `if (permissionId)`, so a
+    // falsy id bypassed validation entirely and opened a window over an empty permission.
+    it.each(REJECTED)('rejects an id that is %s with -32602', (_name, id) => {
+        expect(() => normalizeRevokePermissionsParams([{ id }])).toThrow(/must be a 32-byte hex value/);
+        try {
+            normalizeRevokePermissionsParams([{ id }]);
+        } catch (err) {
+            expect((err as { code?: number }).code).toBe(-32602);
+        }
+    });
+
+    it('rejects a malformed envelope', () => {
+        for (const params of [undefined, null, [], [null], ['0x'], {}]) {
+            expect(() => normalizeRevokePermissionsParams(params)).toThrow(/expected a single object parameter/);
+        }
+    });
+
+    it('rejects a malformed address even when the id is fine', () => {
+        expect(() => normalizeRevokePermissionsParams([{ id: REVOKE_ID, address: '0xabc' }])).toThrow(
+            /must be a 20-byte hex address/
+        );
     });
 });

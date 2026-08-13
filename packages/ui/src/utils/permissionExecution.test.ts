@@ -323,7 +323,7 @@ describe('validatePermissionRevocation', () => {
 describe('isBlockingRevocationProblem', () => {
   // An unresolved permission blocks here, unlike on the execution path: the revoke call is built
   // from the fetched permission, so with no data there is nothing to submit.
-  it.each<RevocationProblem>(['not-found', 'lookup-failed', 'chain-mismatch', 'not-granter'])(
+  it.each<RevocationProblem>(['missing-id', 'not-found', 'lookup-failed', 'chain-mismatch', 'not-granter'])(
     '%s blocks the revocation',
     (problem) => {
       expect(isBlockingRevocationProblem(problem)).toBe(true);
@@ -336,10 +336,21 @@ describe('isBlockingRevocationProblem', () => {
 
   it('has copy for every problem, and every problem is covered here', () => {
     const all = Object.keys(REVOCATION_PROBLEM_TEXT) as RevocationProblem[];
-    expect(all).toHaveLength(6);
+    expect(all).toHaveLength(7);
     for (const problem of all) {
       expect(REVOCATION_PROBLEM_TEXT[problem].text.length).toBeGreaterThan(0);
       expect(REVOCATION_PROBLEM_TEXT[problem].detail.length).toBeGreaterThan(0);
+    }
+  });
+
+  // The bug this guards: a revoke request with no permission id reported *no* problem, so the
+  // dialog rendered an empty permission with Confirm live. Every problem must either block or be
+  // one of the two deliberate warnings — there is no third "say nothing" category.
+  it('classifies every problem, so none can fall through silently', () => {
+    const all = Object.keys(REVOCATION_PROBLEM_TEXT) as RevocationProblem[];
+    const warned: RevocationProblem[] = ['expired', 'self-delegated'];
+    for (const problem of all) {
+      expect(isBlockingRevocationProblem(problem)).toBe(!warned.includes(problem));
     }
   });
 

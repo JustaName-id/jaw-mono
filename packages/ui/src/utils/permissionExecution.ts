@@ -214,6 +214,7 @@ export interface RevocablePermission {
 
 /** Something worth saying before signing a revocation. */
 export type RevocationProblem =
+  | 'missing-id'
   /** The relay answered 404: already revoked, or never granted. Nothing left to revoke. */
   | 'not-found'
   /** The lookup itself failed (network, server error, missing key) — the permission may be fine. */
@@ -238,6 +239,11 @@ export function isBlockingRevocationProblem(problem: RevocationProblem): boolean
 
 /** Short label for the fee row, and the tooltip detail behind it. */
 export const REVOCATION_PROBLEM_TEXT: Record<RevocationProblem, { text: string; detail: string }> = {
+  'missing-id': {
+    text: 'No permission specified',
+    detail:
+      'This request didn’t include a permission ID, so there is nothing to revoke. The app needs to pass the id of the permission it wants removed.',
+  },
   'not-found': {
     text: 'Nothing to revoke',
     detail:

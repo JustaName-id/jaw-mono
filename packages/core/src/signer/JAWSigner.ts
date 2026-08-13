@@ -12,6 +12,7 @@ import {
 import { storeCallStatus, waitForReceiptInBackground } from '../rpc/wallet_sendCalls.js';
 import { normalizeSendCallsParams, type NormalizedSendCallsParams } from '../rpc/sendCallsParams.js';
 import { normalizeSendTransactionParams, type NormalizedSendTransactionParams } from '../rpc/sendTransactionParams.js';
+import { normalizeRevokePermissionsParams, type NormalizedRevokePermissionsParams } from '../rpc/permissions.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 import { handleGetCallsHistoryRequest } from '../rpc/wallet_getCallsHistory.js';
@@ -48,7 +49,8 @@ type ConstructorOptions = {
  */
 export type NormalizedSigningParams =
     | { method: 'wallet_sendCalls'; params: NormalizedSendCallsParams }
-    | { method: 'eth_sendTransaction'; params: NormalizedSendTransactionParams };
+    | { method: 'eth_sendTransaction'; params: NormalizedSendTransactionParams }
+    | { method: 'wallet_revokePermissions'; params: NormalizedRevokePermissionsParams };
 
 /**
  * Abstract base class for all JAW signers.
@@ -144,6 +146,14 @@ export abstract class JAWSigner implements Signer {
 
             case 'eth_sendTransaction':
                 return { method: 'eth_sendTransaction', params: normalizeSendTransactionParams(request.params) };
+
+            // Runs before handleSigningRequest, so a missing or malformed permission id is
+            // refused with -32602 instead of opening a window over an empty permission.
+            case 'wallet_revokePermissions':
+                return {
+                    method: 'wallet_revokePermissions',
+                    params: normalizeRevokePermissionsParams(request.params),
+                };
 
             default:
                 return undefined;

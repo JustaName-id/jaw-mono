@@ -200,7 +200,7 @@ export const PermissionDialog = ({
         <CopyButton value={spenderAddress} size={11} label="Copy spender address" />
       </>
     ) : (
-      <span className="text-muted-foreground">Loading…</span>
+      <span className="text-muted-foreground">{isLoadingTokenInfo ? 'Loading…' : 'Unavailable'}</span>
     ),
   };
 

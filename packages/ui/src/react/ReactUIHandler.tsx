@@ -2767,7 +2767,7 @@ function RevokePermissionDialogWrapper({
   // Why the permission isn't available, when it isn't. Distinguished because a 404 proves the
   // permission is gone while anything else is our lookup failing — different copy, both blocking,
   // since the revoke call is built from this data.
-  const [lookupFailure, setLookupFailure] = useState<'not-found' | 'lookup-failed' | null>(null);
+  const [lookupFailure, setLookupFailure] = useState<'missing-id' | 'not-found' | 'lookup-failed' | null>(null);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -2879,9 +2879,10 @@ function RevokePermissionDialogWrapper({
   // Fetch permission details from relay
   useEffect(() => {
     if (!request.data.permissionId || !apiKey) {
-      // No key means no way to reach the relay, so the revocation can never be built. Terminal,
-      // not pending — otherwise the dialog renders an empty permission with Confirm enabled.
-      setLookupFailure(request.data.permissionId ? 'lookup-failed' : null);
+      // Both are terminal, not pending — otherwise the dialog renders an empty permission with
+      // Confirm enabled. No id means the request itself is malformed; no key means no way to
+      // reach the relay, so the revocation can never be built.
+      setLookupFailure(!request.data.permissionId ? 'missing-id' : 'lookup-failed');
       setIsLoadingPermissionDetails(false);
       return;
     }
