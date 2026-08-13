@@ -31,7 +31,7 @@ export function spendRate(duration?: string): string {
 /** Amber badge pinned to an avatar, marking an unrestricted scope. */
 function WarnBadge() {
   return (
-    <span className="ring-popover absolute -bottom-0.5 -right-0.5 flex size-[11px] items-center justify-center rounded-full bg-amber-500 ring-2">
+    <span className="ring-popover absolute -bottom-0.5 -right-0.5 flex size-3 items-center justify-center rounded-full bg-amber-500 ring-2">
       <TriangleAlert className="size-2 text-black" strokeWidth={3} />
     </span>
   );
@@ -42,7 +42,7 @@ function SectionHeading({ label, count }: { label: string; count: number }) {
   return (
     <div className="flex items-baseline gap-1.5 pl-3">
       <Eyebrow>{label}</Eyebrow>
-      <span className="text-muted-foreground font-mono text-[9px] font-medium">{count}</span>
+      <span className="text-muted-foreground text-code font-mono font-medium">{count}</span>
     </div>
   );
 }
@@ -65,8 +65,8 @@ function SpendRow({
 
   // A raw base-units allowance runs to tens of digits (a max-uint cap is 78), which no dialog width
   // holds. Every digit is kept — a spend cap must not be abbreviated — so instead the figure drops
-  // to its own line and steps down a size. Threshold is where the value stops fitting beside the
-  // token identity at 13px in a 345px dialog.
+  // to its own line and steps down a size (`text-heading` → `text-body-sm`). Threshold is where the
+  // value stops fitting beside the token identity at the larger of those two sizes.
   //
   // The line break is `shrink-0` inside a wrapping row: rather than compress, the amount block
   // moves down, where it has the full card width for `break-all` to work with.
@@ -74,50 +74,48 @@ function SpendRow({
 
   return (
     <div className="border-border flex flex-wrap items-center gap-x-2 gap-y-1 border-t px-3 py-2 first:border-t-0">
-      <span className="relative inline-flex size-[19.5px] flex-none items-center justify-center">
+      <span className="size-token relative inline-flex flex-none items-center justify-center">
         <TokenIcon
           chainId={chainId}
           address={spend.tokenAddress}
           symbol={symbol}
-          className="size-[19.5px] flex-none rounded-full"
+          className="size-token flex-none rounded-full"
         />
         {/* A spend token that won't answer decimals() is either not an ERC-20 or deliberately
             opaque — worth the same amber as an unbounded scope. */}
         {!isLoading && spend.decimalsUnknown && <WarnBadge />}
       </span>
       {isLoading ? (
-        <Skeleton className="bg-muted h-3.5 w-16 flex-1 rounded" />
+        <Skeleton className="bg-muted rounded-xs h-3.5 w-16 flex-1" />
       ) : (
         <span className="flex min-w-0 flex-1 flex-col items-start">
           <span className="flex min-w-0 items-center gap-1.5">
-            <span className="text-foreground truncate text-[12px] font-semibold">
+            <span className="text-foreground text-value truncate font-semibold">
               {symbol || getDisplayAddress(undefined, spend.tokenAddress)}
             </span>
             {!isNative && <CopyButton value={spend.tokenAddress} size={11} label="Copy token address" />}
           </span>
-          {spend.decimalsUnknown && (
-            <span className="mt-0.5 font-mono text-[9px] text-amber-500">decimals unknown</span>
-          )}
+          {spend.decimalsUnknown && <span className="text-code mt-1 font-mono text-amber-500">decimals unknown</span>}
         </span>
       )}
       {isLoading ? (
-        <Skeleton className="bg-muted h-4 w-20 flex-none rounded" />
+        <Skeleton className="bg-muted rounded-xs h-4 w-20 flex-none" />
       ) : (
         <span
-          className={`ml-auto flex max-w-full shrink-0 items-baseline gap-[3px] ${isLongAmount ? 'flex-wrap justify-end' : ''}`}
+          className={`ml-auto flex max-w-full shrink-0 items-baseline gap-1 ${isLongAmount ? 'flex-wrap justify-end' : ''}`}
         >
           <span
-            className={`text-foreground font-semibold tracking-[-0.02em] ${
-              isLongAmount ? 'min-w-0 break-all text-[11px]' : 'text-[13px]'
+            className={`text-foreground ${
+              isLongAmount ? 'text-body-sm min-w-0 break-all font-semibold' : 'text-heading'
             }`}
           >
             {spend.amount}
           </span>
-          {spend.decimalsUnknown && <span className="text-muted-foreground font-mono text-[9px]">base units</span>}
-          {rate && <span className="text-muted-foreground font-mono text-[9px]">{rate}</span>}
+          {spend.decimalsUnknown && <span className="text-muted-foreground text-code font-mono">base units</span>}
+          {rate && <span className="text-muted-foreground text-code font-mono">{rate}</span>}
           {/* A fiat figure derived from an unknown denomination would be wrong by the same factor. */}
           {spend.amountUsd && !spend.decimalsUnknown && (
-            <span className="text-muted-foreground ml-1 font-mono text-[9px]">${spend.amountUsd}</span>
+            <span className="text-muted-foreground text-code ml-1 font-mono">${spend.amountUsd}</span>
           )}
         </span>
       )}
@@ -196,19 +194,19 @@ function ContractGroup({
     <AccordionItem value={group.target} className="border-border border-t first:border-t-0">
       <AccordionTrigger className="items-center px-3 py-2 hover:no-underline">
         <span className="flex min-w-0 flex-1 items-center gap-2">
-          <span className="relative inline-flex size-[19.5px] flex-none items-center justify-center">
+          <span className="size-token relative inline-flex flex-none items-center justify-center">
             {tokenSymbol ? (
               <TokenIcon
                 chainId={chainId}
                 address={group.target}
                 symbol={tokenSymbol}
-                className="size-[19.5px] flex-none rounded-full"
+                className="size-token flex-none rounded-full"
                 fallback={
                   <AccountAvatar
                     seed={group.target}
                     avatarUrl={avatarUrl}
-                    size={20}
-                    className="rounded-chip size-[19.5px] flex-none"
+                    size={24}
+                    className="rounded-chip size-token flex-none"
                   />
                 }
               />
@@ -216,48 +214,46 @@ function ContractGroup({
               <AccountAvatar
                 seed={group.target}
                 avatarUrl={avatarUrl}
-                size={20}
-                className="rounded-chip size-[19.5px] flex-none"
+                size={24}
+                className="rounded-chip size-token flex-none"
               />
             )}
             {(anyTarget || anyFunction) && <WarnBadge />}
           </span>
           <span className="flex min-w-0 flex-1 flex-col items-start">
             {anyTarget ? (
-              <span className="truncate text-[11px] font-semibold text-amber-500">Any contract</span>
+              <span className="text-body-sm truncate font-semibold text-amber-500">Any contract</span>
             ) : tokenSymbol || resolvedName ? (
               <>
-                <span className="text-foreground truncate text-[11px] font-medium">{tokenSymbol ?? resolvedName}</span>
-                <span className="text-muted-foreground mt-0.5 font-mono text-[9px]">{truncatedAddress}</span>
+                <span className="text-foreground text-body-sm truncate font-medium">{tokenSymbol ?? resolvedName}</span>
+                <span className="text-muted-foreground text-code mt-1 font-mono">{truncatedAddress}</span>
               </>
             ) : (
-              <span className="text-foreground truncate font-mono text-[10px] font-medium">{truncatedAddress}</span>
+              <span className="text-foreground text-body-xs truncate font-mono font-medium">{truncatedAddress}</span>
             )}
           </span>
-          <span
-            className={`flex-none font-mono text-[9px] ${anyFunction ? 'text-amber-500' : 'text-muted-foreground'}`}
-          >
+          <span className={`text-code flex-none font-mono ${anyFunction ? 'text-amber-500' : 'text-muted-foreground'}`}>
             {fnMeta}
           </span>
         </span>
       </AccordionTrigger>
-      <AccordionContent className="px-3 pb-2.5">
+      <AccordionContent className="px-3 pb-3">
         <div className="flex flex-col gap-1.5">
           {!anyTarget && (
             <div className="flex items-center gap-1.5">
-              <span className="text-muted-foreground min-w-0 break-all font-mono text-[9px]">{group.target}</span>
+              <span className="text-muted-foreground text-code min-w-0 break-all font-mono">{group.target}</span>
               <CopyButton value={group.target} size={11} label="Copy contract address" />
             </div>
           )}
           <ul className="bg-secondary rounded-chip flex flex-col gap-1 p-2">
             {group.calls.map((call, i) =>
               isWildcard(call.selector) ? (
-                <li key={i} className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-500">
+                <li key={i} className="text-body-sm flex items-center gap-1.5 font-semibold text-amber-500">
                   <TriangleAlert className="size-3 flex-none" strokeWidth={2.4} />
                   Any function
                 </li>
               ) : (
-                <li key={i} className="text-foreground flex gap-1.5 font-mono text-[11px] leading-[150%]">
+                <li key={i} className="text-foreground text-body-sm flex gap-1.5 font-mono">
                   <span aria-hidden className="text-muted-foreground flex-none">
                     •
                   </span>
@@ -299,7 +295,7 @@ export function AllowedCalls({
         <AccordionTrigger className="items-center px-3 py-2 hover:no-underline">
           <span className="flex flex-1 items-baseline gap-1.5">
             <Eyebrow>Allowed calls</Eyebrow>
-            <span className="text-muted-foreground font-mono text-[9px] font-medium">{calls.length}</span>
+            <span className="text-muted-foreground text-code font-mono font-medium">{calls.length}</span>
           </span>
         </AccordionTrigger>
         <AccordionContent className="border-border border-t p-0">
@@ -332,7 +328,7 @@ export function MetaCard({ rows }: { rows: { label: string; value: React.ReactNo
           className="border-border flex h-7 items-center justify-between gap-2 border-t px-3 first:border-t-0"
         >
           <Eyebrow>{row.label}</Eyebrow>
-          <span className="text-foreground flex min-w-0 items-center gap-1.5 font-mono text-[10px]">{row.value}</span>
+          <span className="text-foreground text-body-xs flex min-w-0 items-center gap-1.5 font-mono">{row.value}</span>
         </div>
       ))}
     </div>

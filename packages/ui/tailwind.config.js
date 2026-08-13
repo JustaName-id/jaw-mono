@@ -72,8 +72,8 @@ module.exports = {
       // 1/2/3/4/5/6, so spacing needs no tokens — only the habit of not writing px.
       size: {
         badge: '16px', // chain badge
-        token: '21px', // token logo — annotated "21 × 21" on the spec sheet
-        blob: '13.5px', // account blob, inline
+        token: '24px', // token logo — sheet annotates 21; raised by request, still under the 28 avatar
+        blob: '15px', // account blob, inline — in a MetaCard row
         'blob-lg': '34px',
         logo: '48px', // app logo circle
       },
