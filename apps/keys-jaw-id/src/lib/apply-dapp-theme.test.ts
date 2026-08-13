@@ -1,4 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
+import { BORDER_RADIUS_MAP } from '@jaw.id/ui';
 
 import { hexToHslTriplet, luminance, applyDappTheme, THEME_MODE_ATTR, isModePinned } from './apply-dapp-theme';
 
@@ -210,7 +211,6 @@ describe('feeds both token systems', () => {
   });
 
   it('writes both radius variables from the same preset', async () => {
-    const { BORDER_RADIUS_MAP } = await import('@jaw.id/ui');
     const { el, win } = stub();
     applyDappTheme({ borderRadius: 'lg' }, win);
     expect(el.style.setProperty).toHaveBeenCalledWith('--jaw-radius', BORDER_RADIUS_MAP.lg);
