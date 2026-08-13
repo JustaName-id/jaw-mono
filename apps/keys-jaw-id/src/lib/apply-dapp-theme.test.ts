@@ -176,3 +176,44 @@ describe('applyDappTheme', () => {
     }
   });
 });
+
+// The dialogs read `--jaw-color-*` channels and `--jaw-radius`; keys' own components read the HSL
+// triplets. Both must be written, or a dApp's accent is silently ignored by one of them — which is
+// what happened when keys stopped compiling the package's source with its own theme.
+describe('feeds both token systems', () => {
+  function stub() {
+    const el = {
+      style: { setProperty: vi.fn(), colorScheme: '' },
+      classList: { add: vi.fn(), remove: vi.fn() },
+      setAttribute: vi.fn(),
+    };
+    const win = { document: { documentElement: el }, matchMedia: () => ({ matches: false }) } as unknown as Window;
+    return { el, win };
+  }
+
+  it("writes the accent to the package's tokens as channels, not a wrapped colour", () => {
+    const { el, win } = stub();
+    applyDappTheme({ accentColor: '#6366F1' }, win);
+    const jaw = el.style.setProperty.mock.calls.filter(([k]: [string]) => k.startsWith('--jaw-color-'));
+    expect(jaw.map(([k]: [string]) => k).sort()).toEqual([
+      '--jaw-color-primary',
+      '--jaw-color-primary-foreground',
+      '--jaw-color-ring',
+    ]);
+    for (const [, v] of jaw) expect(v).toMatch(/^-?\d*\.?\d+ -?\d*\.?\d+ -?\d*\.?\d+$/);
+  });
+
+  it("keeps writing keys' own HSL triplets alongside", () => {
+    const { el, win } = stub();
+    applyDappTheme({ accentColor: '#6366F1' }, win);
+    expect(el.style.setProperty).toHaveBeenCalledWith('--primary', expect.stringMatching(/%/));
+  });
+
+  it('writes both radius variables from the same preset', async () => {
+    const { BORDER_RADIUS_MAP } = await import('@jaw.id/ui');
+    const { el, win } = stub();
+    applyDappTheme({ borderRadius: 'lg' }, win);
+    expect(el.style.setProperty).toHaveBeenCalledWith('--jaw-radius', BORDER_RADIUS_MAP.lg);
+    expect(el.style.setProperty).toHaveBeenCalledWith('--radius', '0.75rem');
+  });
+});

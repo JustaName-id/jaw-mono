@@ -86,7 +86,11 @@ export function hexToOklch(hex: string): Oklch {
 }
 
 /**
- * Format an OKLCH value as a CSS `oklch(L C H)` string.
+ * Format an OKLCH value as bare `L C H` channels — no `oklch()` wrapper.
+ *
+ * These land in `--jaw-color-*`, and the Tailwind theme wraps them as
+ * `oklch(var(--x) / <alpha-value>)` so opacity modifiers (`bg-primary/90`) generate CSS at all.
+ * Anything returning a complete colour here nests to `oklch(oklch(...) / 1)` and is dropped.
  * L and C use 3 decimal places; H uses 1 decimal place.
  */
 export function oklchToString(oklch: Oklch): string {
@@ -124,7 +128,11 @@ export function deriveAccentPalette(
   if (accentColorForeground) {
     foreground = oklchToString(hexToOklch(accentColorForeground));
   } else {
-    foreground = adjustedAccent.l > 0.6 ? 'oklch(0.205 0 0)' : 'oklch(0.985 0 0)';
+    // Channels, not `oklch(...)`: this lands in `--jaw-color-primary-foreground`, which the
+    // Tailwind theme wraps as `oklch(var(--x) / <alpha-value>)`. A wrapped value here nests to
+    // `oklch(oklch(...) / 1)`, which the browser drops — leaving the primary button's label
+    // inheriting the card colour, unreadable on a dark accent.
+    foreground = adjustedAccent.l > 0.6 ? '0.205 0 0' : '0.985 0 0';
   }
 
   // Ring: accent with reduced chroma (50%)
