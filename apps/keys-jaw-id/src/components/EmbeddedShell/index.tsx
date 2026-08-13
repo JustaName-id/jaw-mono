@@ -89,11 +89,17 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   // children). Toggling `active` only changes classNames — children never
   // change tree position, so they are never remounted (they hold the keys
   // session/crypto state, which a remount would reset and break the connect).
-  // Styling scope for the SDK's CSS. Every utility the package ships is emitted as
-  // `[data-jaw-ui] .foo`, so this element is what makes those styles apply — and keeping the
-  // attribute here rather than on <body> is what stops them outranking this app's own palette.
-  // The Radix modals portal here too (PortalContainerContext below), so portaled content stays
-  // inside the scope; without that they would land on document.body and render unstyled.
+  // Styling scope for the SDK's CSS, and the container the Radix modals portal into.
+  //
+  // Both sit on the overlay wrapper, not the card. Putting them on the card looks tempting — our
+  // utilities are `[data-jaw-ui] .foo`, a descendant selector, so the carrier is excluded and the
+  // card's own overrides stop competing — but it also moves the portal target, and a modal portaled
+  // into the card sits inside `max-h-[85vh] overflow-y-auto` and inherits `translate-y-full` while
+  // the drawer is concealed. It renders clipped, or offscreen entirely.
+  //
+  // So the card stays a descendant of the scope, which means `[data-jaw-ui] .bg-background` ties
+  // with its `has-[[data-jaw-shell]]` overrides at (0,2,0) and would win on stylesheet order. Those
+  // overrides carry `!` to settle it by weight instead.
   const [scopeRoot, setScopeRoot] = useState<HTMLDivElement | null>(null);
 
   const active = embedded && mounted;
@@ -149,7 +155,7 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
                 ? // Screens that bring their own DialogShell card (the revamped design)
                   // get no extra chrome — the shell IS the card. Legacy screens keep
                   // the classic card look until they migrate.
-                  `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:bg-transparent has-[[data-jaw-shell]]:shadow-none [&_.min-h-screen]:min-h-0 ${card}`
+                  `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:!bg-transparent has-[[data-jaw-shell]]:!shadow-none [&_.min-h-screen]:min-h-0 ${card}`
                 : 'contents'
             }
           >

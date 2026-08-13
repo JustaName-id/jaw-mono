@@ -1,6 +1,5 @@
 //@ts-check
 
-const path = require('path');
 const { composePlugins, withNx } = require('@nx/next');
 
 /**

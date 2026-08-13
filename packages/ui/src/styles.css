@@ -90,11 +90,17 @@
 }
 
 @layer base {
-  * {
+  /* Scoped by hand: Tailwind's `important` selector only rewrites *utilities*, so anything in the
+     base layer ships global. Unscoped, `* { border-color }` reset every border on a consuming app's
+     page — the opposite of what scoping the package is for.
+     
+     No background here. This used to paint `body`, which was harmless in a standalone page but
+     wrong once scoped: the element carrying the attribute is a full-screen, deliberately
+     transparent overlay in the embedded host, so painting it blacked out the dApp behind the
+     modal. Every surface that needs a background sets its own (`bg-popover` on the cards), and
+     text colour is inherited from the container's own `--jaw-color-foreground`. */
+  [data-jaw-ui] * {
     @apply border-border;
-  }
-  body {
-    @apply bg-background text-foreground;
   }
 }
 
@@ -297,15 +303,15 @@
     jaw-ring-rotate 14s linear infinite;
 }
 
+.jaw-flow-dot {
+  animation: jaw-flow-dot 1.6s ease-in-out infinite;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .jaw-halo-ring,
   .jaw-flow-dot {
     animation: none;
   }
-}
-
-.jaw-flow-dot {
-  animation: jaw-flow-dot 1.6s ease-in-out infinite;
 }
 
 /* Success checkmark: circle pops in, then the tick strokes on */
