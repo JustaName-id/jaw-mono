@@ -15,28 +15,43 @@ module.exports = {
     extend: {
       // Inter carries the interface. JetBrains Mono carries anything a user might verify —
       // addresses, amounts, hashes, labels. Nothing renders below 9px.
+      // Sizes are the spec's own px. They were briefly scaled by 400/350 to match the proportions
+      // of the sheet's narrower card; that was wrong — the card is wider, not taller, so the extra
+      // 50px buys room for long ENS names and addresses rather than asking for larger type. Only
+      // the title keeps a raised value (26 over the spec's 24), by explicit request.
+      //
+      // Every role also fixes its own line-height. The spec annotates gaps between text and the box
+      // around it, and an inherited line-height makes those gaps unreproducible — the same `pt-6`
+      // lands differently depending on what the text sits inside. Weights are the designer's; the
+      // line-heights are ours, chosen so the measured boxes come out right.
       fontSize: {
-        'title-xl': ['24px', { fontWeight: '700', letterSpacing: '-0.03em' }], // headerless card title
-        title: ['20px', { fontWeight: '500', letterSpacing: '-0.02em' }], // card title, with header
-        status: ['18px', { fontWeight: '500' }],
-        app: ['18px', { fontWeight: '600' }], // app name
-        body: ['12px', { fontWeight: '400' }],
-        'body-sm': ['11px', { fontWeight: '400' }],
-        'body-xs': ['10px', { fontWeight: '400' }],
-        button: ['11px', { fontWeight: '600' }],
-        url: ['12px', { fontWeight: '500' }], // mono, under the app name
-        value: ['10px', { fontWeight: '500' }], // mono, field values
-        label: ['9px', { fontWeight: '600', letterSpacing: '0.13em' }], // mono, caps field labels
-        code: ['9px', { fontWeight: '400' }], // mono, hashes and raw payload
+        // ── Annotated on the spec sheet's transaction frame ────────────────────────────────────
+        'title-xl': ['26px', { lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.03em' }], // spec 24, raised by request
+        heading: ['13px', { lineHeight: '1', fontWeight: '600', letterSpacing: '-0.02em' }], // "You send"
+        button: ['13px', { lineHeight: '1', fontWeight: '600' }], // Cancel / Confirm
+        value: ['12px', { lineHeight: '1.25', fontWeight: '500' }], // field value, asset amount
+        body: ['12px', { lineHeight: '1.4', fontWeight: '400' }],
+        'body-xs': ['10px', { lineHeight: '1.3', fontWeight: '400' }], // USD equivalent, chain name
+        // Spec says 9; raised to 10 by request. Measuring the sheet's own "NETWORK FEE" also came
+        // out at ~10, so the 9 may only ever have applied to the FROM/TO pair.
+        label: ['10px', { lineHeight: '1', fontWeight: '600', letterSpacing: '0.13em' }], // mono caps label
+
+        // ── Measured off the same frame, not annotated ─────────────────────────────────────────
+        // Derived from ink height against the annotated roles (a 13px ascender measures 10.0 spec
+        // px, 9px caps measure 6.7), so these carry roughly ±0.5px of measurement error.
+        amount: ['16px', { lineHeight: '1.2', fontWeight: '600' }], // fee figure "$0.84"
+        symbol: ['14px', { lineHeight: '1.2', fontWeight: '600' }], // asset symbol "USDC" — measured, ±1
 
         // ── Beyond the spec ───────────────────────────────────────────────────────────────────
-        // The spec measures four frames and names twelve roles; these screens have component kinds
-        // it never covered — in-card section headers and figures. Every size below is on the spec's
-        // grid (9/10/11/12/18/20/24); only the weight pairing is new. Kept in one block so they can
-        // be taken back to design and either adopted or collapsed into the roles above.
-        heading: ['12px', { fontWeight: '600', letterSpacing: '-0.02em' }], // "You send", "Allowed calls"
-        amount: ['12px', { fontWeight: '600' }], // fee and asset figures
-        'amount-lg': ['24px', { fontWeight: '700', letterSpacing: '-0.02em' }], // native-send hero
+        // Screens the sheet never framed. Kept in one block so they can be taken back to design
+        // and either adopted or collapsed into the roles above.
+        'body-sm': ['11px', { lineHeight: '1.4', fontWeight: '400' }],
+        code: ['9px', { lineHeight: '1.4', fontWeight: '400' }], // mono, hashes and raw payload
+        'amount-lg': ['26px', { lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.02em' }], // native-send hero
+        title: ['20px', { fontWeight: '500', letterSpacing: '-0.02em' }], // card title, with header
+        status: ['18px', { fontWeight: '500' }], // processing / success headline
+        app: ['18px', { fontWeight: '600' }], // app name
+        url: ['12px', { fontWeight: '500' }], // mono, under the app name
       },
 
       // Radii: 99 · 16.5 · 12 · 8 · 4. Nothing else is legal.
@@ -57,7 +72,7 @@ module.exports = {
       // 1/2/3/4/5/6, so spacing needs no tokens — only the habit of not writing px.
       size: {
         badge: '16px', // chain badge
-        token: '20px', // token logo
+        token: '21px', // token logo — annotated "21 × 21" on the spec sheet
         blob: '13.5px', // account blob, inline
         'blob-lg': '34px',
         logo: '48px', // app logo circle

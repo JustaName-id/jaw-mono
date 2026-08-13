@@ -8,11 +8,8 @@ import { subscriptDecimal } from '../utils/displayFormat';
 
 /** The dialog's small uppercase field label. */
 export function Eyebrow({ children }: { children: ReactNode }) {
-  return (
-    <span className="text-muted-foreground block font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-      {children}
-    </span>
-  );
+  // `text-label` carries the weight and the 0.13em tracking, so neither is repeated here.
+  return <span className="text-muted-foreground text-label block font-mono uppercase">{children}</span>;
 }
 
 /** A bordered label/value micro-card, matching the signing dialogs. */
@@ -42,9 +39,7 @@ export function ValueAmount({
   return (
     <p className={className}>
       <SubText>{`${shown} ${symbol}`}</SubText>
-      {price > 0 && (
-        <span className="text-muted-foreground ml-1.5 text-[11px] font-normal">≈ ${(num * price).toFixed(2)}</span>
-      )}
+      {price > 0 && <span className="text-muted-foreground text-body-xs ml-1.5">≈ ${(num * price).toFixed(2)}</span>}
     </p>
   );
 }
@@ -75,8 +70,10 @@ export function PartyRow({
       </span>
       <div className="min-w-0 flex-1">
         <Eyebrow>{label}</Eyebrow>
-        <div className="mt-0.5 flex min-w-0 items-center gap-1.5">
-          <p className="text-foreground truncate font-mono text-[12px] font-medium">{value}</p>
+        <div className="mt-1 flex min-w-0 items-center gap-1.5">
+          {/* The spec sets this value in Inter; it stays mono because the same slot renders raw
+              hex addresses, where a fixed advance width is what makes them checkable. */}
+          <p className="text-foreground text-value truncate font-mono">{value}</p>
           {/* Nothing to copy while the address is still resolving, or never resolved. */}
           {address && <CopyButton value={address} size={13} label="Copy address" />}
         </div>
@@ -89,7 +86,8 @@ export function PartyRow({
 export function InlineWarning({ text, detail }: { text: string; detail: string }) {
   return (
     <div className="flex items-center gap-1">
-      <p className="text-destructive font-mono text-[11px] font-medium">{text}</p>
+      {/* Sits where the fee figure would be, so it takes the body size rather than a label size. */}
+      <p className="text-destructive text-body-sm font-mono font-medium">{text}</p>
       <TooltipProvider delayDuration={0}>
         <Tooltip>
           <TooltipTrigger asChild>

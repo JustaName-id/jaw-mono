@@ -35,16 +35,14 @@ export function SingleCallData({
 }: DecodeContext & { to: string; data: string; decode: DecodeResult }) {
   return (
     <AccordionItem value="calldata" className="border-border rounded-box overflow-hidden border">
-      <AccordionTrigger className="items-center px-3 py-2.5 hover:no-underline">
-        <span className="flex min-w-0 items-center gap-2.5">
+      <AccordionTrigger className="items-center p-3 hover:no-underline">
+        <span className="flex min-w-0 items-center gap-3">
           <span className="border-border bg-secondary rounded-chip flex size-7 flex-none items-center justify-center border">
             <Code className="text-muted-foreground size-3.5" strokeWidth={1.5} />
           </span>
           <span className="flex min-w-0 flex-col items-start">
             <Eyebrow>Calldata</Eyebrow>
-            <span className="text-foreground mt-0.5 truncate text-[13px] font-medium">
-              {callLabel(decode, 'Contract call')}
-            </span>
+            <span className="text-foreground text-value mt-1 truncate">{callLabel(decode, 'Contract call')}</span>
           </span>
         </span>
       </AccordionTrigger>
@@ -81,26 +79,26 @@ export function BatchStep({
 
   return (
     <AccordionItem value={`transaction-${index}`} className="border-border rounded-box overflow-hidden border">
-      <AccordionTrigger className="items-center px-3 py-2.5 hover:no-underline">
+      <AccordionTrigger className="items-center p-3 hover:no-underline">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="bg-secondary text-foreground flex size-5 flex-none items-center justify-center rounded-full text-[10px] font-semibold">
+          <span className="bg-secondary text-foreground text-body-xs flex size-5 flex-none items-center justify-center rounded-full font-semibold">
             {index + 1}
           </span>
-          <span className="text-foreground truncate text-[13px] font-medium">
+          <span className="text-foreground text-value truncate">
             {callLabel(decode, transaction.action ?? stepFallbackLabel(index, hasData, value))}
           </span>
           {/* Native value in the header, so a collapsed step still shows what it moves.
               Token amounts live in the calldata, so they only appear once expanded. */}
           {value && (
-            <span className="text-muted-foreground flex-none font-mono text-[11px]">
+            <span className="text-muted-foreground text-body-sm flex-none font-mono">
               {value} {nativeSymbol}
             </span>
           )}
         </span>
       </AccordionTrigger>
       <AccordionContent className="px-3 pb-3">
-        <div className="flex flex-col gap-2.5">
-          <div className="border-border rounded-box border p-2.5">
+        <div className="flex flex-col gap-3">
+          <div className="border-border rounded-box border p-3">
             <PartyRow
               label="Interacting with"
               value={displayContractAddress(transaction.to)}
@@ -115,13 +113,13 @@ export function BatchStep({
                 amount={value}
                 symbol={nativeSymbol}
                 price={nativeTokenPrice}
-                className="text-foreground font-mono text-[12px] font-semibold"
+                className="text-foreground text-value font-mono font-semibold"
               />
             </Row>
           )}
 
           {hasData && (
-            <div className="border-border rounded-box flex flex-col gap-2 border p-2.5">
+            <div className="border-border rounded-box flex flex-col gap-2 border p-3">
               <div className="flex items-center justify-between">
                 <Eyebrow>Data</Eyebrow>
                 <CopyButton value={transaction.data ?? ''} label="Copy calldata" />

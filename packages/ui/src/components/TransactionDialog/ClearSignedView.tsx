@@ -32,7 +32,7 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
           className="size-4 flex-none"
         />
       )}
-      <p className={`break-all font-mono text-[11px] ${unlimited ? 'text-amber-500' : 'text-foreground'}`}>
+      <p className={`text-body-sm break-all font-mono ${unlimited ? 'text-amber-500' : 'text-foreground'}`}>
         <span className="font-semibold">{unlimited ? 'Unlimited' : groupNumber(row.value)}</span>
         {row.symbol && <span className={unlimited ? '' : 'text-muted-foreground'}> {row.symbol}</span>}
       </p>
@@ -47,7 +47,7 @@ function DateValue({ raw }: { raw: string }) {
   const note =
     tone === 'expired' ? 'This date is in the past.' : tone === 'far' ? 'More than a year in the future.' : undefined;
   return (
-    <span className={`flex min-w-0 items-center justify-end gap-1.5 break-all font-mono text-[11px] ${toneClass}`}>
+    <span className={`text-body-sm flex min-w-0 items-center justify-end gap-1.5 break-all font-mono ${toneClass}`}>
       {note && (
         <Tooltip>
           <TooltipTrigger asChild>
@@ -77,7 +77,7 @@ function AddressValue({
     <div className="flex min-w-0 flex-row items-center justify-end gap-1.5">
       <IdentityAvatar src={avatarSrc} fallback={null} />
       {/* Truncate — the raw column is right-aligned and must never wrap the row. */}
-      <span className="text-foreground truncate font-mono text-[11px]">
+      <span className="text-foreground text-body-sm truncate font-mono">
         {resolvedName ? resolvedName : formatAddress(addr)}
       </span>
       <CopyButton value={addr} size={12} resetAfterMs={1500} label="Copy address" className="text-muted-foreground" />
@@ -157,9 +157,7 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
 
   return (
     <div className="border-border rounded-box border p-3">
-      {hasHeader && (
-        <div className={`text-foreground text-[12px] font-semibold ${hasRows ? 'mb-2.5' : ''}`}>{display.intent}</div>
-      )}
+      {hasHeader && <div className={`text-foreground text-heading ${hasRows ? 'mb-3' : ''}`}>{display.intent}</div>}
       {hasRows && (
         <div className="divide-border/40 flex flex-col divide-y">
           {display.rows.map((row, i) => {
@@ -168,8 +166,8 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
             const avatarSrc = lookup ? avatars[lookup] : undefined;
             return (
               // Row-wise: label left, value right — one line each, value truncates.
-              <div key={i} className="flex items-baseline justify-between gap-3 py-[7px] first:pt-0 last:pb-0">
-                <span className="text-muted-foreground flex-none text-[11px] font-medium">{row.label}</span>
+              <div key={i} className="flex items-baseline justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                <span className="text-muted-foreground text-body-sm flex-none font-medium">{row.label}</span>
                 <div className="min-w-0 text-right">
                   {row.kind === 'tokenAmount' || row.kind === 'amount' ? (
                     <TokenAmountValue row={row} chainId={chainId} />
@@ -178,7 +176,7 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
                   ) : row.kind === 'date' && row.rawValue ? (
                     <DateValue raw={row.rawValue} />
                   ) : (
-                    <span className="text-foreground break-all font-mono text-[11px]">{row.value}</span>
+                    <span className="text-foreground text-body-sm break-all font-mono">{row.value}</span>
                   )}
                 </div>
               </div>

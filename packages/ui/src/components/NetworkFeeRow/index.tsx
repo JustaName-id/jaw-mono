@@ -78,7 +78,7 @@ export function NetworkFeeRow({
 
   const feeValue = (() => {
     if (gasFeeLoading && !isPayingWithErc20) {
-      return <p className="text-muted-foreground font-mono text-[11px]">Estimating...</p>;
+      return <p className="text-muted-foreground text-body-sm font-mono">Estimating...</p>;
     }
 
     // Blocked: one short red string in the slot the fee would occupy, detail in the tooltip.
@@ -100,16 +100,18 @@ export function NetworkFeeRow({
     if (sponsored) {
       const covered = gasFee && gasFee !== 'sponsored';
       return (
-        <div className="flex flex-col items-start gap-0.5">
+        <div className="flex flex-col items-start gap-1">
           <div className="flex items-center gap-2">
             {covered && nativeTokenPrice > 0 && (
-              <span className="text-muted-foreground font-mono text-[11px] line-through">
+              <span className="text-muted-foreground text-body-xs font-mono line-through">
                 ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
               </span>
             )}
-            <span className="text-success bg-success/10 rounded px-2 py-0.5 text-[10px] font-semibold">Sponsored</span>
+            <span className="text-success bg-success/10 rounded-xs text-body-xs px-2 py-0.5 font-semibold">
+              Sponsored
+            </span>
           </div>
-          <p className="text-muted-foreground font-mono text-[10px]">
+          <p className="text-muted-foreground text-body-xs font-mono">
             <SubText>{covered ? nativeAmount(gasFee, nativeSymbol) : 'Gas fees covered'}</SubText>
           </p>
         </div>
@@ -119,21 +121,21 @@ export function NetworkFeeRow({
     if (isPayingWithErc20 && selectedFeeToken) {
       const ceiling = selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted;
       return (
-        <div className="flex flex-col items-start gap-0.5">
+        <div className="flex flex-col items-start gap-1">
           <p className="font-mono leading-tight">
             {selectedFeeToken.gasCostFormatted ? (
               <>
-                <span className="text-foreground text-[14px] font-semibold">${selectedFeeToken.gasCostFormatted}</span>
-                <span className="text-muted-foreground ml-1 text-[11px] font-normal">
+                <span className="text-foreground text-amount">${selectedFeeToken.gasCostFormatted}</span>
+                <span className="text-muted-foreground text-body-xs ml-1">
                   ≈ {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
                 </span>
               </>
             ) : (
-              <span className="text-muted-foreground text-[11px]">Estimating...</span>
+              <span className="text-muted-foreground text-body-sm">Estimating...</span>
             )}
           </p>
           {ceiling && (
-            <p className="text-muted-foreground font-mono text-[10px]">
+            <p className="text-muted-foreground text-body-xs font-mono">
               Up to {ceiling} {selectedFeeToken.symbol}
             </p>
           )}
@@ -147,21 +149,19 @@ export function NetworkFeeRow({
         <p className="font-mono leading-tight">
           {nativeTokenPrice > 0 ? (
             <>
-              <span className="text-foreground text-[14px] font-semibold">
-                ${(nativeTokenPrice * Number(gasFee)).toFixed(4)}
-              </span>
-              <span className="text-muted-foreground ml-1 text-[11px] font-normal">
+              <span className="text-foreground text-amount">${(nativeTokenPrice * Number(gasFee)).toFixed(4)}</span>
+              <span className="text-muted-foreground text-body-xs ml-1">
                 ≈ <SubText>{amount}</SubText>
               </span>
             </>
           ) : (
-            <SubText className="text-foreground text-[14px] font-semibold">{amount}</SubText>
+            <SubText className="text-foreground text-amount">{amount}</SubText>
           )}
         </p>
       );
     }
 
-    return <p className="text-muted-foreground font-mono text-[11px]">Unable to estimate</p>;
+    return <p className="text-muted-foreground text-body-sm font-mono">Unable to estimate</p>;
   })();
 
   return (
@@ -184,13 +184,13 @@ export function NetworkFeeRow({
               </Tooltip>
             </TooltipProvider>
           </div>
-          <div className="mt-1.5">{feeValue}</div>
+          <div className="mt-1">{feeValue}</div>
         </div>
 
         <div className="flex flex-none flex-col items-end gap-1.5">
-          <div className="text-muted-foreground flex items-center gap-1 font-mono text-[10px]">
+          <div className="text-muted-foreground text-body-xs flex items-center gap-1 font-mono">
             {/* Round chain badge — clipped to a circle so the logo never stretches. */}
-            <span className="border-border bg-secondary flex size-4 flex-none items-center justify-center overflow-hidden rounded-full border [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0">
+            <span className="border-border bg-secondary size-badge flex flex-none items-center justify-center overflow-hidden rounded-full border [&>*]:!h-full [&>*]:!w-full [&>*]:!min-w-0">
               {chainIcon}
             </span>
             <span className="truncate">{networkName || 'Ethereum'}</span>
