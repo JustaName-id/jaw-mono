@@ -29,7 +29,7 @@ export const DigestRow = ({
         <p className={`text-foreground text-xs leading-[133%] ${prominent ? 'font-bold' : 'font-semibold'}`}>{label}</p>
         <CopyButton value={value} size={16} resetAfterMs={1500} label={`Copy ${label}`} />
       </div>
-      <div className="bg-secondary rounded-[6px] p-2">
+      <div className="bg-secondary rounded-chip p-2">
         <p className="text-foreground break-all font-mono text-xs leading-[150%]">{value}</p>
       </div>
     </div>
@@ -53,7 +53,7 @@ export const Eip712VerificationDigests = ({ typedDataJson }: { typedDataJson: st
   }
 
   return (
-    <details className="border-border group overflow-hidden rounded-[8.5px] border text-xs [&_summary::-webkit-details-marker]:hidden">
+    <details className="border-border rounded-chip group overflow-hidden border text-xs [&_summary::-webkit-details-marker]:hidden">
       <summary className="hover:bg-foreground/[0.03] flex cursor-pointer list-none items-center justify-between px-3 py-2">
         <span className="text-muted-foreground text-[11px] font-medium">Digests data</span>
         <svg

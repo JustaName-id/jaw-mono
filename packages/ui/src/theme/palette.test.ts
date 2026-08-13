@@ -6,7 +6,7 @@
 // That is exactly what happened to the auto-contrast branch of `deriveAccentPalette`: a consumer
 // passing `accentColor` without `accentColorForeground` got a primary button whose label was
 // invisible on a dark accent. There was no test file here at all, which is why it shipped.
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { deriveAccentPalette, hexToOklch, oklchToString } from './palette';
 
 /** Bare `L C H` channels — three numbers, no function wrapper. */
@@ -57,5 +57,37 @@ describe('deriveAccentPalette', () => {
     const lightnessOf = (channels: string) => Number(channels.split(' ')[0]);
     expect(lightnessOf(onLight)).toBeLessThan(0.5);
     expect(lightnessOf(onDark)).toBeGreaterThan(0.5);
+  });
+});
+
+// `cssVariables` colour tokens take bare OKLCH channels. A complete colour nests to
+// `oklch(oklch(...) / 1)` and is dropped by the browser, so the override vanishes. Channels are the
+// only accepted form — the value is passed through unrepaired, with a warning, because silently
+// fixing `oklch()` while `hsl()`/hex still failed would be inconsistent.
+describe('cssVariables colour format', () => {
+  it('passes channels straight through', async () => {
+    const { resolveTheme } = await import('./resolve-theme');
+    const { variables } = resolveTheme({ cssVariables: { '--jaw-color-background': '0.15 0.02 280' } }, 'dark');
+    expect(variables['--jaw-color-background']).toBe('0.15 0.02 280');
+  });
+
+  it.each([['oklch(0.15 0.02 280)'], ['hsl(280 20% 15%)'], ['#1a1030'], ['rgb(26 16 48)']])(
+    'warns on a complete colour (%s) and leaves it unrepaired',
+    async (value) => {
+      const { resolveTheme } = await import('./resolve-theme');
+      const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+      const { variables } = resolveTheme({ cssVariables: { '--jaw-color-background': value } }, 'dark');
+      expect(variables['--jaw-color-background']).toBe(value);
+      expect(warn).toHaveBeenCalledWith(expect.stringContaining('--jaw-color-background'));
+      warn.mockRestore();
+    }
+  );
+
+  it('says nothing about non-colour tokens', async () => {
+    const { resolveTheme } = await import('./resolve-theme');
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    resolveTheme({ cssVariables: { '--jaw-font-family': '"Berkeley Mono", monospace' } }, 'dark');
+    expect(warn).not.toHaveBeenCalled();
+    warn.mockRestore();
   });
 });

@@ -23,7 +23,7 @@ export function ProcessingScreen({ seedAddress, avatarUrl, appAvatar, title, sub
   return (
     <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
       <div className="flex items-center gap-3">
-        <AccountAvatar seed={seedAddress} avatarUrl={avatarUrl} size={44} className="h-11 w-11 rounded-[13px]" />
+        <AccountAvatar seed={seedAddress} avatarUrl={avatarUrl} size={44} className="rounded-box h-11 w-11" />
         <span className="flex items-center gap-1.5">
           {[0, 1, 2].map((i) => (
             <span

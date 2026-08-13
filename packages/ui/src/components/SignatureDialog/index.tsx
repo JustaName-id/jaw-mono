@@ -75,7 +75,7 @@ export const SignatureDialog = ({
           />
 
           {/* Message */}
-          <div className="border-border mt-4 flex min-h-0 flex-1 flex-col overflow-hidden rounded-[10.5px] border p-3">
+          <div className="border-border rounded-box mt-4 flex min-h-0 flex-1 flex-col overflow-hidden border p-3">
             <span className="text-muted-foreground mb-1.5 font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
               Message
             </span>
@@ -85,7 +85,7 @@ export const SignatureDialog = ({
           </div>
 
           {hasError && (
-            <div className="bg-destructive/10 border-destructive/20 mt-3 rounded-[10.5px] border px-3 py-2">
+            <div className="bg-destructive/10 border-destructive/20 rounded-box mt-3 border px-3 py-2">
               <span className="text-destructive break-words text-xs">{signatureStatus}</span>
             </div>
           )}
@@ -96,14 +96,14 @@ export const SignatureDialog = ({
               variant="secondary"
               onClick={onCancel}
               disabled={isProcessing}
-              className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+              className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
             >
               Cancel
             </Button>
             <Button
               onClick={onSign}
               disabled={!canSign}
-              className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+              className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
             >
               Sign
             </Button>

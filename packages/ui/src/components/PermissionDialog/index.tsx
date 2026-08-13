@@ -168,7 +168,7 @@ export const PermissionDialog = ({
   // Grant leads with who you're granting to. Revoke leads with the permission's own id, and the
   // spender becomes a detail row alongside From/Until.
   const spenderCard = (
-    <div className="border-border rounded-[10.5px] border p-3">
+    <div className="border-border rounded-box border p-3">
       <PartyRow
         label="For"
         value={spenderAddress ? displayAddress(spenderAddress) : 'Loading…'}
@@ -186,7 +186,7 @@ export const PermissionDialog = ({
           seed={spenderAddress}
           avatarUrl={resolvedAvatars[spenderAddress]}
           size={15}
-          className="size-[15px] flex-none rounded-[4.5px]"
+          className="rounded-xs size-[15px] flex-none"
         />
         <span className="truncate">{displayAddress(spenderAddress)}</span>
         <CopyButton value={spenderAddress} size={11} label="Copy spender address" />
@@ -217,7 +217,7 @@ export const PermissionDialog = ({
               seed={accountAddress}
               avatarUrl={resolvedAvatars[accountAddress]}
               size={15}
-              className="size-[15px] flex-none rounded-[4.5px]"
+              className="rounded-xs size-[15px] flex-none"
             />
             <span className="truncate">{displayAddress(accountAddress)}</span>
             <CopyButton value={accountAddress} size={11} label="Copy account address" />
@@ -259,7 +259,7 @@ export const PermissionDialog = ({
 
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
             {missingCalls && (
-              <div className="flex items-start gap-2 rounded-[10px] bg-amber-500/10 p-3">
+              <div className="rounded-box flex items-start gap-2 bg-amber-500/10 p-3">
                 <TriangleAlert className="mt-px size-3.5 flex-none text-amber-500" strokeWidth={2} />
                 <p className="text-[11px] leading-[140%] text-amber-500">
                   This permission has no allowed calls. A grant needs at least one call rule, so spend limits alone
@@ -299,7 +299,7 @@ export const PermissionDialog = ({
             </p>
 
             {hasError && (
-              <div className="bg-destructive/10 rounded-[10.5px] p-3">
+              <div className="bg-destructive/10 rounded-box p-3">
                 <p className="text-destructive text-[12px]">{status}</p>
               </div>
             )}
@@ -331,7 +331,7 @@ export const PermissionDialog = ({
                 variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
               >
                 {isGrant ? 'Cancel' : 'Keep it'}
               </Button>
@@ -339,7 +339,7 @@ export const PermissionDialog = ({
                 onClick={onConfirm}
                 disabled={!canConfirm}
                 variant={isGrant ? 'default' : 'destructive'}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
               >
                 {feeBlockReason === 'funds' ? 'Insufficient Funds' : isGrant ? 'Grant' : 'Revoke'}
               </Button>

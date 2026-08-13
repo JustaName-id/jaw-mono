@@ -156,7 +156,7 @@ export const ClearSignedView = ({ display, chainId, mainnetRpcUrl }: ClearSigned
   if (!hasHeader && !hasRows) return null;
 
   return (
-    <div className="border-border rounded-[10.5px] border p-3">
+    <div className="border-border rounded-box border p-3">
       {hasHeader && (
         <div className={`text-foreground text-[12px] font-semibold ${hasRows ? 'mb-2.5' : ''}`}>{display.intent}</div>
       )}

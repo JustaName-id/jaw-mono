@@ -199,7 +199,7 @@ export const DecodedCalldataView = ({
                   </span>
                   <span className="text-muted-foreground font-mono text-xs">{decoded.signature}</span>
                 </div>
-                <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
+                <div className="bg-secondary rounded-chip flex flex-col gap-1 p-2">
                   {decoded.params.length === 0 && <p className="text-muted-foreground text-xs">No parameters</p>}
                   {decoded.params.map((param, i) => (
                     <div key={i} className="flex flex-col gap-0.5">
@@ -213,7 +213,7 @@ export const DecodedCalldataView = ({
                 </div>
               </>
             ) : null}
-            <div className="bg-secondary max-h-[20vh] overflow-y-auto rounded-[6px] p-2">
+            <div className="bg-secondary rounded-chip max-h-[20vh] overflow-y-auto p-2">
               <p className="text-foreground break-all font-mono text-xs leading-[150%]">{data}</p>
             </div>
           </div>
@@ -230,7 +230,7 @@ export const DecodedCalldataView = ({
           <Spinner className="size-3" />
           <span className="text-muted-foreground text-xs">Decoding calldata...</span>
         </div>
-        <div className="bg-secondary max-h-[40vh] overflow-y-auto rounded-[6px] p-2.5 opacity-50">
+        <div className="bg-secondary rounded-chip max-h-[40vh] overflow-y-auto p-2.5 opacity-50">
           <p className="text-foreground break-all font-mono text-xs font-semibold leading-[150%]">{data}</p>
         </div>
       </div>
@@ -240,7 +240,7 @@ export const DecodedCalldataView = ({
   if (!decoded) {
     return (
       <div className="flex flex-col gap-2">
-        <div className="bg-secondary max-h-[40vh] overflow-y-auto rounded-[6px] p-2.5">
+        <div className="bg-secondary rounded-chip max-h-[40vh] overflow-y-auto p-2.5">
           <p className="text-foreground break-all font-mono text-xs font-semibold leading-[150%]">{data}</p>
         </div>
         <CalldataDigest data={data} />
@@ -260,7 +260,7 @@ export const DecodedCalldataView = ({
       </div>
 
       {/* Always boxed, even with no params — a zero-arg call would otherwise render as loose text. */}
-      <div className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
+      <div className="bg-secondary rounded-chip flex flex-col gap-1 p-2">
         {decoded.params.length === 0 && <p className="text-muted-foreground text-xs">No parameters</p>}
         {decoded.params.map((param, i) => {
           const resolvedName = param.rawValue ? allResolved[param.rawValue.toLowerCase()] : undefined;
@@ -297,7 +297,7 @@ export const DecodedCalldataView = ({
 
       <details className="text-xs">
         <summary className="text-muted-foreground hover:text-foreground cursor-pointer">Raw calldata</summary>
-        <div className="bg-secondary mt-1 max-h-[20vh] overflow-y-auto rounded-[6px] p-2">
+        <div className="bg-secondary rounded-chip mt-1 max-h-[20vh] overflow-y-auto p-2">
           <p className="text-foreground break-all font-mono text-xs leading-[150%]">{data}</p>
         </div>
       </details>

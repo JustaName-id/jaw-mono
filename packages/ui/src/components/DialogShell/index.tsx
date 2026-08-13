@@ -30,12 +30,12 @@ export function DialogShell({ children, halo = true, className, contentClassName
       // preferred width on narrower viewports (375–390px phones), overflowing
       // the container — which defeats mx-auto centering and pins the card to
       // the left edge, spilling off the right side of the bottom sheet.
-      className={cn('bg-border relative mx-auto w-fit max-w-full overflow-hidden rounded-[18px] p-[1.5px]', className)}
+      className={cn('bg-border rounded-card relative mx-auto w-fit max-w-full overflow-hidden p-[1.5px]', className)}
     >
       {halo && <div aria-hidden className="jaw-halo-ring absolute inset-[-60%] z-0 hidden dark:block" />}
       <div
         className={cn(
-          'jaw-scroll bg-popover text-popover-foreground border-border relative z-[1] flex max-h-[min(550px,90dvh)] min-h-[234px] w-[400px] max-w-full flex-col overflow-y-auto overflow-x-hidden rounded-[16.5px] border shadow-xl',
+          'jaw-scroll bg-popover text-popover-foreground border-border rounded-card relative z-[1] flex max-h-[min(550px,90dvh)] min-h-[234px] w-[400px] max-w-full flex-col overflow-y-auto overflow-x-hidden border shadow-xl',
           contentClassName
         )}
       >

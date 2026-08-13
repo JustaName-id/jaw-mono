@@ -216,7 +216,7 @@ function CreateAccountForm({
         placeholder="username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        className="bg-muted h-11 rounded-[10.5px] font-mono text-[13px]"
+        className="bg-muted rounded-box h-11 font-mono text-[13px]"
         // Prevent password-manager extensions (1Password, LastPass, Dashlane,
         // Bitwarden) from attaching their inline overlay to this field. Their
         // overlay covers the embedded iframe, which the clickjacking guard
@@ -254,7 +254,7 @@ function CreateAccountForm({
             }
           }}
           disabled={!isValid || isLoading}
-          className="h-11 w-full rounded-[10.5px] text-[13px] font-semibold"
+          className="rounded-box h-11 w-full text-[13px] font-semibold"
         >
           <ScanFace className="!h-4 !w-4" />
           Create Account
@@ -407,11 +407,7 @@ export function OnboardingDialog({
   );
 
   const passkeyButton = (
-    <Button
-      onClick={onImportAccount}
-      disabled={isBusy}
-      className="h-11 w-full rounded-[10.5px] text-[13px] font-semibold"
-    >
+    <Button onClick={onImportAccount} disabled={isBusy} className="rounded-box h-11 w-full text-[13px] font-semibold">
       <Fingerprint className="!h-4 !w-4" />
       {isImporting ? 'Opening Passkey...' : 'Sign in with Passkey'}
     </Button>
@@ -460,14 +456,14 @@ export function OnboardingDialog({
         <button
           onClick={() => onAccountSelect(defaultAccount)}
           disabled={isBusy}
-          className="bg-primary hover:bg-primary/90 mt-6 flex cursor-pointer items-center gap-3 rounded-[12px] p-3 text-left transition-colors disabled:cursor-default disabled:opacity-70"
+          className="bg-primary hover:bg-primary/90 rounded-box mt-6 flex cursor-pointer items-center gap-3 p-3 text-left transition-colors disabled:cursor-default disabled:opacity-70"
         >
           {identityPending(defaultAccount) ? (
             // Skeleton until the identity settles — one reveal, no
             // blob→avatar / username→name flip.
             <>
               {/* bg override: the default bg-accent token is near-invisible on this white tile */}
-              <Skeleton className="bg-primary-foreground/10 h-10 w-10 flex-none rounded-[12px]" />
+              <Skeleton className="bg-primary-foreground/10 rounded-box h-10 w-10 flex-none" />
               <span className="flex min-w-0 flex-1 flex-col gap-1.5">
                 <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
                   Continue as
@@ -484,7 +480,7 @@ export function OnboardingDialog({
                 seed={defaultAccount.address ?? defaultAccount.username}
                 avatarUrl={avatarFor(defaultAccount)}
                 size={40}
-                className="h-10 w-10 rounded-[12px]"
+                className="rounded-box h-10 w-10"
               />
               <span className="flex min-w-0 flex-1 flex-col gap-0.5">
                 <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
@@ -514,7 +510,7 @@ export function OnboardingDialog({
           onClick={onImportAccount}
           disabled={isBusy}
           variant="secondary"
-          className="h-11 w-full rounded-[10.5px] text-[13px] font-semibold"
+          className="rounded-box h-11 w-full text-[13px] font-semibold"
         >
           <ArrowRightLeft className="!h-3.5 !w-3.5" />
           {isImporting ? 'Opening Passkey...' : 'Switch account'}

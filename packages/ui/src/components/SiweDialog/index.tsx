@@ -239,7 +239,7 @@ export const SiweDialog = ({
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
             {/* Unparseable → no checks ran; tell the user plainly, raw message shown below. */}
             {parseFailed && (
-              <div className="border-destructive/30 bg-destructive/10 flex items-start gap-2 rounded-[10.5px] border p-3">
+              <div className="border-destructive/30 bg-destructive/10 rounded-box flex items-start gap-2 border p-3">
                 <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
                 <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">
                   We couldn't read the full sign-in request. Review the raw message below carefully before signing.
@@ -250,7 +250,7 @@ export const SiweDialog = ({
             {/* The dApp's statement, quarantined in its own box so this
                 attacker-supplied text is unmistakably content, never chrome. */}
             {parsed?.statement && (
-              <div className="border-border bg-foreground/[0.03] rounded-[10.5px] border p-3">
+              <div className="border-border bg-foreground/[0.03] rounded-box border p-3">
                 <p className="text-foreground whitespace-pre-wrap break-words text-[11px] leading-[1.5]">
                   {parsed.statement}
                 </p>
@@ -258,7 +258,7 @@ export const SiweDialog = ({
             )}
 
             {fields.length > 0 ? (
-              <div className="border-border overflow-hidden rounded-[10.5px] border">
+              <div className="border-border rounded-box overflow-hidden border">
                 {fields.map((f) => (
                   <Field
                     key={f.label}
@@ -272,7 +272,7 @@ export const SiweDialog = ({
               </div>
             ) : (
               // Fallback: message didn't parse as SIWE — show it raw.
-              <div className="border-border rounded-[10.5px] border p-3">
+              <div className="border-border rounded-box border p-3">
                 <p className="text-foreground whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.6]">
                   {message || 'No message provided'}
                 </p>
@@ -282,7 +282,7 @@ export const SiweDialog = ({
             {/* Resources — ReCap/EIP-5573 capability grants the signature authorizes.
                 Security-relevant, so listed explicitly rather than hidden. */}
             {parsed?.resources && parsed.resources.length > 0 && (
-              <div className="border-border rounded-[10.5px] border p-3">
+              <div className="border-border rounded-box border p-3">
                 <span className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
                   Resources
                 </span>
@@ -298,7 +298,7 @@ export const SiweDialog = ({
 
             {/* Raw message under a disclosure (canvas: "Message text"). */}
             {fields.length > 0 && (
-              <details className="border-border group overflow-hidden rounded-[8.5px] border [&_summary::-webkit-details-marker]:hidden">
+              <details className="border-border rounded-chip group overflow-hidden border [&_summary::-webkit-details-marker]:hidden">
                 <summary className="hover:bg-foreground/[0.03] flex cursor-pointer list-none items-center justify-between px-3 py-2">
                   <span className="text-muted-foreground text-[11px] font-medium">Message text</span>
                   <svg
@@ -322,7 +322,7 @@ export const SiweDialog = ({
             )}
 
             {hasError && (
-              <div className="bg-destructive/10 border-destructive/20 rounded-[10.5px] border px-3 py-2">
+              <div className="bg-destructive/10 border-destructive/20 rounded-box border px-3 py-2">
                 <span className="text-destructive break-words text-xs">{siweStatus}</span>
               </div>
             )}
@@ -330,7 +330,7 @@ export const SiweDialog = ({
             {/* Phishing warning + acknowledgement gate (error state). In the scroll
                   flow — below the expandable message, not pinned over it. */}
             {warningMessage && (
-              <div className="border-destructive/30 bg-destructive/10 rounded-[10.5px] border p-3">
+              <div className="border-destructive/30 bg-destructive/10 rounded-box border p-3">
                 <div className="flex items-start gap-2">
                   <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
                   <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">{warningMessage}</p>
@@ -354,14 +354,14 @@ export const SiweDialog = ({
                 variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
               >
                 Cancel
               </Button>
               <Button
                 onClick={onSign}
                 disabled={!canSign || (!!warningMessage && !acknowledged)}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
               >
                 Sign In
               </Button>

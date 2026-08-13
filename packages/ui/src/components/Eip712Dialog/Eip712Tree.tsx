@@ -295,7 +295,7 @@ export function Eip712Tree({ typedData }: { typedData: TypedData }) {
   walk(rootNodes);
 
   return (
-    <div className="border-border overflow-hidden rounded-[10.5px] border">
+    <div className="border-border rounded-box overflow-hidden border">
       <div className="border-border border-b px-[10.5px] py-[7.5px]">
         <span className="text-muted-foreground font-mono text-[9px] font-semibold uppercase tracking-[0.11em]">
           {typedData.primaryType}
@@ -326,7 +326,7 @@ export function Eip712Tree({ typedData }: { typedData: TypedData }) {
               <div className="flex items-center gap-1.5" style={{ paddingLeft: pad }}>
                 <span className="text-muted-foreground flex-none font-mono text-[9px] font-medium">{r.label}</span>
                 {r.badge && (
-                  <span className="text-muted-foreground/70 bg-foreground/5 flex-none rounded-[4px] px-1 py-px font-mono text-[7px] font-medium">
+                  <span className="text-muted-foreground/70 bg-foreground/5 rounded-xs flex-none px-1 py-px font-mono text-[7px] font-medium">
                     {r.badge}
                   </span>
                 )}
