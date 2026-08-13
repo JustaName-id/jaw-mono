@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 
-import { DialogAnchorContext } from '@jaw.id/ui';
+import { DialogAnchorContext, PortalContainerContext } from '@jaw.id/ui';
 
 import type { PopupCommunicator } from '../../lib/popup-communicator';
 import {
@@ -89,6 +89,19 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   // children). Toggling `active` only changes classNames — children never
   // change tree position, so they are never remounted (they hold the keys
   // session/crypto state, which a remount would reset and break the connect).
+  // Styling scope for the SDK's CSS, and the container the Radix modals portal into.
+  //
+  // Both sit on the overlay wrapper, not the card. Putting them on the card looks tempting — our
+  // utilities are `[data-jaw-ui] .foo`, a descendant selector, so the carrier is excluded and the
+  // card's own overrides stop competing — but it also moves the portal target, and a modal portaled
+  // into the card sits inside `max-h-[85vh] overflow-y-auto` and inherits `translate-y-full` while
+  // the drawer is concealed. It renders clipped, or offscreen entirely.
+  //
+  // So the card stays a descendant of the scope, which means `[data-jaw-ui] .bg-background` ties
+  // with its `has-[[data-jaw-shell]]` overrides at (0,2,0) and would win on stylesheet order. Those
+  // overrides carry `!` to settle it by weight instead.
+  const [scopeRoot, setScopeRoot] = useState<HTMLDivElement | null>(null);
+
   const active = embedded && mounted;
 
   const card =
@@ -142,29 +155,33 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
     // is meant for popup/standalone contexts.
     <DialogAnchorContext.Provider value={active ? (presentation === 'floating' ? 'top' : 'bottom-sheet') : 'center'}>
       <div
+        ref={setScopeRoot}
+        data-jaw-ui
         className={
           // Transparent (no scrim): the dApp shows through around the card.
           active ? 'fixed inset-0 z-50' : 'contents'
         }
         onClick={onOverlayClick}
       >
-        {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
+        <PortalContainerContext.Provider value={scopeRoot}>
+          {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
             which must not stretch the card to the full viewport */}
-        <div
-          role={active ? 'document' : undefined}
-          className={
-            active
-              ? // Screens that bring their own DialogShell card (the revamped design)
-                // get no extra chrome — the shell IS the card. Legacy screens keep
-                // the classic card look until they migrate.
-                `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:bg-transparent has-[[data-jaw-shell]]:shadow-none [&_.min-h-screen]:min-h-0 ${card}`
-              : 'contents'
-          }
-        >
-          <EnsureVisibility communicator={communicator} active={active}>
-            {children}
-          </EnsureVisibility>
-        </div>
+          <div
+            role={active ? 'document' : undefined}
+            className={
+              active
+                ? // Screens that bring their own DialogShell card (the revamped design)
+                  // get no extra chrome — the shell IS the card. Legacy screens keep
+                  // the classic card look until they migrate.
+                  `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:!bg-transparent has-[[data-jaw-shell]]:!shadow-none [&_.min-h-screen]:min-h-0 ${card}`
+                : 'contents'
+            }
+          >
+            <EnsureVisibility communicator={communicator} active={active}>
+              {children}
+            </EnsureVisibility>
+          </div>
+        </PortalContainerContext.Provider>
       </div>
     </DialogAnchorContext.Provider>
   );

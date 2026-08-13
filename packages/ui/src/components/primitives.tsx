@@ -18,7 +18,7 @@ export function Eyebrow({ children }: { children: ReactNode }) {
 /** A bordered label/value micro-card, matching the signing dialogs. */
 export function Row({ label, className, children }: { label: string; className?: string; children: ReactNode }) {
   return (
-    <div className={`border-border rounded-[10.5px] border p-3 ${className ?? ''}`}>
+    <div className={`border-border rounded-box border p-3 ${className ?? ''}`}>
       <Eyebrow>{label}</Eyebrow>
       <div className="mt-1">{children}</div>
     </div>
@@ -70,7 +70,7 @@ export function PartyRow({
   return (
     <div className="flex min-w-0 items-center gap-3">
       <span className="relative inline-flex flex-none">
-        <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="size-7 flex-none rounded-[8px]" />
+        <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="rounded-chip size-7 flex-none" />
         {badge}
       </span>
       <div className="min-w-0 flex-1">

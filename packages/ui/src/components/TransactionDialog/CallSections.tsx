@@ -34,10 +34,10 @@ export function SingleCallData({
   ...ctx
 }: DecodeContext & { to: string; data: string; decode: DecodeResult }) {
   return (
-    <AccordionItem value="calldata" className="border-border overflow-hidden rounded-[10.5px] border">
+    <AccordionItem value="calldata" className="border-border rounded-box overflow-hidden border">
       <AccordionTrigger className="items-center px-3 py-2.5 hover:no-underline">
         <span className="flex min-w-0 items-center gap-2.5">
-          <span className="border-border bg-secondary flex size-7 flex-none items-center justify-center rounded-[8px] border">
+          <span className="border-border bg-secondary rounded-chip flex size-7 flex-none items-center justify-center border">
             <Code className="text-muted-foreground size-3.5" strokeWidth={1.5} />
           </span>
           <span className="flex min-w-0 flex-col items-start">
@@ -80,7 +80,7 @@ export function BatchStep({
   const hasData = !!transaction.data && transaction.data !== '0x';
 
   return (
-    <AccordionItem value={`transaction-${index}`} className="border-border overflow-hidden rounded-[10.5px] border">
+    <AccordionItem value={`transaction-${index}`} className="border-border rounded-box overflow-hidden border">
       <AccordionTrigger className="items-center px-3 py-2.5 hover:no-underline">
         <span className="flex min-w-0 items-center gap-2">
           <span className="bg-secondary text-foreground flex size-5 flex-none items-center justify-center rounded-full text-[10px] font-semibold">
@@ -100,7 +100,7 @@ export function BatchStep({
       </AccordionTrigger>
       <AccordionContent className="px-3 pb-3">
         <div className="flex flex-col gap-2.5">
-          <div className="border-border rounded-[10.5px] border p-2.5">
+          <div className="border-border rounded-box border p-2.5">
             <PartyRow
               label="Interacting with"
               value={displayContractAddress(transaction.to)}
@@ -121,7 +121,7 @@ export function BatchStep({
           )}
 
           {hasData && (
-            <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-2.5">
+            <div className="border-border rounded-box flex flex-col gap-2 border p-2.5">
               <div className="flex items-center justify-between">
                 <Eyebrow>Data</Eyebrow>
                 <CopyButton value={transaction.data ?? ''} label="Copy calldata" />

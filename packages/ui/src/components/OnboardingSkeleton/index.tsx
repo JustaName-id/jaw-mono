@@ -36,8 +36,8 @@ export function OnboardingSkeleton() {
             the real one, so the reveal changes content, never the tile itself.
             Inner bars use the primary-foreground tint because the default
             bg-accent token is near-invisible on this tile. */}
-        <div className="bg-primary mt-6 flex items-center gap-3 rounded-[12px] p-3">
-          <Skeleton className="bg-primary-foreground/10 h-10 w-10 flex-none rounded-[12px]" />
+        <div className="bg-primary rounded-box mt-6 flex items-center gap-3 p-3">
+          <Skeleton className="bg-primary-foreground/10 rounded-box h-10 w-10 flex-none" />
           <span className="flex min-w-0 flex-1 flex-col gap-1.5">
             {/* "CONTINUE AS" label */}
             <Skeleton className="bg-primary-foreground/10 h-2 w-16 rounded" />
@@ -59,7 +59,7 @@ export function OnboardingSkeleton() {
         </div>
 
         {/* "Switch account" — h-11 secondary button */}
-        <Skeleton className="h-11 w-full rounded-[10.5px]" />
+        <Skeleton className="rounded-box h-11 w-full" />
         {/* "Create new account" — centered text-xs link. h-4, NOT 12 x 1.5:
             Tailwind's named sizes ship their own line-height (text-xs is
             12px/16px), so only the arbitrary sizes above inherit the 1.5. */}

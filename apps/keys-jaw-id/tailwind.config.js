@@ -15,9 +15,6 @@ module.exports = {
   content: [
     './{src,pages,components,app}/**/*.{ts,tsx,js,jsx,html}',
     '!./{src,pages,components,app}/**/*.{stories,spec}.{ts,tsx,js,jsx,html}',
-    // Include UI package components
-    '../../packages/ui/src/**/*.{ts,tsx,js,jsx,html}',
-    '!../../packages/ui/src/**/*.{stories,spec}.{ts,tsx,js,jsx,html}',
     //     ...createGlobPatternsForDependencies(__dirname)
   ],
   theme: {

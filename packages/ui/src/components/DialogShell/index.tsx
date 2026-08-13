@@ -45,12 +45,12 @@ export function DialogShell({ children, halo = true, className, contentClassName
           ? // Only the top edge of the ring is on screen — the other three sit at
             // or past the viewport edge, so padding them would just inset the
             // surface for no visible hairline.
-            'w-full rounded-t-[18px] pt-[1.5px]'
+            'rounded-t-card w-full pt-[1.5px]'
           : // max-w-full: without it the fit-content frame keeps the card's 400px
             // preferred width on narrower viewports (375–390px phones),
             // overflowing the container — which defeats mx-auto centering and
             // pins the card to the left edge, spilling off the right side.
-            'mx-auto w-fit max-w-full rounded-[18px] p-[1.5px]',
+            'rounded-card mx-auto w-fit max-w-full p-[1.5px]',
         className
       )}
     >
@@ -67,8 +67,8 @@ export function DialogShell({ children, halo = true, className, contentClassName
               // off, and against the bottom bezel it renders as a smudge. The
               // safe-area inset is padding INSIDE the surface, so the sheet
               // background runs under the iOS home bar while content clears it.
-              'max-h-[85dvh] w-full rounded-t-[16.5px] border-t pb-[env(safe-area-inset-bottom)]'
-            : 'max-h-[min(550px,90dvh)] w-[400px] max-w-full rounded-[16.5px] border shadow-xl',
+              'rounded-t-card max-h-[85dvh] w-full border-t pb-[env(safe-area-inset-bottom)]'
+            : 'rounded-card max-h-[min(550px,90dvh)] w-[400px] max-w-full border shadow-xl',
           contentClassName,
           // The dialogs pass a desktop min height (510px, 447px for Signature)
           // through contentClassName, and in CSS min-height beats max-height —

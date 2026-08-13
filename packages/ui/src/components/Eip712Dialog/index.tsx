@@ -154,7 +154,7 @@ export const Eip712Dialog = ({
                 the region would never scroll. space-y gives the gaps. */}
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-2.5">
             {!typedData ? (
-              <div className="bg-destructive/10 border-destructive/20 rounded-[10.5px] border p-4">
+              <div className="bg-destructive/10 border-destructive/20 rounded-box border p-4">
                 <p className="text-destructive text-sm">Failed to parse typed data</p>
               </div>
             ) : clearSigned && clearSigned.rows.length > 0 ? (
@@ -185,7 +185,7 @@ export const Eip712Dialog = ({
             {typedData && <Eip712VerificationDigests typedDataJson={typedDataJson} />}
 
             {hasError && (
-              <div className="bg-destructive/10 border-destructive/20 rounded-[10.5px] border px-3 py-2">
+              <div className="bg-destructive/10 border-destructive/20 rounded-box border px-3 py-2">
                 <span className="text-destructive break-words text-xs">{signatureStatus}</span>
               </div>
             )}
@@ -198,7 +198,7 @@ export const Eip712Dialog = ({
                 variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
               >
                 Cancel
               </Button>
@@ -207,7 +207,7 @@ export const Eip712Dialog = ({
                 // The screen owns this invariant: never offer to sign what it couldn't
                 // render, whatever `canSign` a host passes.
                 disabled={!canSign || !typedData}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
               >
                 Sign
               </Button>

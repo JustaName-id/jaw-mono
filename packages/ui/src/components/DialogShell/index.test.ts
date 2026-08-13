@@ -77,13 +77,13 @@ describe('DialogShell', () => {
 
     it('rounds only its top corners and draws only a top edge', () => {
       const { frame, card } = render('bottom-sheet');
-      expect(frame.className).toContain('rounded-t-[18px]');
-      expect(frame.className).not.toContain('rounded-[18px]');
+      expect(frame.className).toContain('rounded-t-card');
+      expect(frame.className).not.toContain('rounded-card');
       // The ring pads the top only — the other three edges are offscreen.
       expect(frame.className).toContain('pt-[1.5px]');
       expect(frame.className).not.toContain('p-[1.5px]');
-      expect(card.className).toContain('rounded-t-[16.5px]');
-      expect(card.className).not.toContain('rounded-[16.5px]');
+      expect(card.className).toContain('rounded-t-card');
+      expect(card.className).not.toContain('rounded-card');
       expect(card.className).toContain('border-t');
     });
 

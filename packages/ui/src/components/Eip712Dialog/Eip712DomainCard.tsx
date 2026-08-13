@@ -37,7 +37,7 @@ export function Eip712DomainCard({
   if (!verifyingContract && !networkLabel && !safeName) return null;
 
   return (
-    <div className="border-border rounded-[10.5px] border p-3">
+    <div className="border-border rounded-box border p-3">
       <div className="divide-border/40 flex flex-col divide-y">
         {safeName && (
           <Row label="Domain">

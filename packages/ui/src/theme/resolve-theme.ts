@@ -25,6 +25,31 @@ export interface ResolvedTheme {
  * 4. Border radius & font stack presets
  * 5. Raw `cssVariables` (Layer 2 user overrides)
  */
+/**
+ * Warn when a `--jaw-color-*` override looks like a complete colour.
+ *
+ * These variables hold bare `L C H` channels, because the Tailwind theme wraps them as
+ * `oklch(var(--x) / <alpha-value>)` — that wrapper is what makes opacity modifiers (`bg-primary/90`)
+ * generate CSS at all. A complete `oklch(...)` here nests to `oklch(oklch(...) / 1)`, which browsers
+ * drop, so the override is silently ignored.
+ *
+ * Channels are the only accepted form. The value is passed through unchanged rather than repaired:
+ * quietly rewriting one wrong format while a different one (`hsl()`, hex) still fails would make the
+ * behaviour inconsistent. This warning is the compensation for that — the failure is loud instead.
+ */
+function warnOnWrappedColors(vars: Readonly<Record<string, string>>): void {
+  for (const [name, value] of Object.entries(vars)) {
+    if (!name.startsWith('--jaw-color-')) continue;
+    if (/^(oklch|hsl|rgba?|color-mix)\(|^#/.test(value.trim())) {
+      console.warn(
+        `[jaw] ${name}: "${value}" looks like a complete color. Color tokens take bare OKLCH ` +
+          `channels ("0.15 0.02 280"), which the theme wraps for opacity support. This value will ` +
+          `produce invalid CSS and be ignored.`
+      );
+    }
+  }
+}
+
 export function resolveTheme(theme: JawTheme, systemMode: 'light' | 'dark'): ResolvedTheme {
   // 1. Determine effective color scheme
   const effectiveMode: 'light' | 'dark' = theme.mode === 'light' || theme.mode === 'dark' ? theme.mode : systemMode;
@@ -65,6 +90,7 @@ export function resolveTheme(theme: JawTheme, systemMode: 'light' | 'dark'): Res
 
   // 7. Raw CSS variable overrides (highest priority)
   if (theme.cssVariables) {
+    warnOnWrappedColors(theme.cssVariables);
     Object.assign(result, theme.cssVariables);
   }
 

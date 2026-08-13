@@ -21,7 +21,7 @@ export function SuccessScreen({ seedAddress, avatarUrl, label = 'Signed' }: Succ
   return (
     <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-4 p-6 text-center">
       <div className="relative flex-none">
-        <AccountAvatar seed={seedAddress} avatarUrl={avatarUrl} size={56} className="h-14 w-14 rounded-[16px]" />
+        <AccountAvatar seed={seedAddress} avatarUrl={avatarUrl} size={56} className="rounded-card h-14 w-14" />
         <span className="bg-popover absolute -bottom-1.5 -right-1.5 rounded-full p-[3px]">
           <SuccessCheck size={24} />
         </span>

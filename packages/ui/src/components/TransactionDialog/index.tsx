@@ -297,7 +297,7 @@ export const TransactionDialog = ({
             )}
 
             {/* From / On behalf of / To */}
-            <div className="border-border flex flex-col gap-2 rounded-[10.5px] border p-3">
+            <div className="border-border rounded-box flex flex-col gap-2 border p-3">
               <PartyRow
                 label="From"
                 value={displayWalletAddress}
@@ -470,14 +470,14 @@ export const TransactionDialog = ({
                 variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
               >
                 Cancel
               </Button>
               <Button
                 onClick={onConfirm}
                 disabled={!canConfirm}
-                className="h-11 flex-1 rounded-[10.5px] text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
               >
                 {blockReason === 'funds' && !permissionBlocks
                   ? 'Insufficient Funds'

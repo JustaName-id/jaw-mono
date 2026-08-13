@@ -128,7 +128,7 @@ function DeltaColumn({
   const shown = expanded ? deltas : deltas.slice(0, COLLAPSED_ROWS);
 
   return (
-    <div className="border-border min-w-0 flex-1 overflow-hidden rounded-[10.5px] border">
+    <div className="border-border rounded-box min-w-0 flex-1 overflow-hidden border">
       <div className="border-border bg-secondary/40 flex items-center gap-1.5 border-b px-3 py-2">
         <Arrow className={`size-3 flex-none ${out ? 'text-red-400' : 'text-green-400'}`} strokeWidth={2.7} />
         <span className="text-foreground text-[13px] font-semibold tracking-[-0.02em]">

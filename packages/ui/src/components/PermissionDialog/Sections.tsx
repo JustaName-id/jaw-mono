@@ -139,7 +139,7 @@ export function SpendLimits({
   return (
     <div className="flex flex-col gap-2">
       <SectionHeading label="Spend limit" count={spends.length} />
-      <div className="border-border overflow-hidden rounded-[10px] border">
+      <div className="border-border rounded-box overflow-hidden border">
         {spends.map((spend, i) => (
           <SpendRow key={i} spend={spend} chainId={chainId} nativeSymbol={nativeSymbol} isLoading={isLoading} />
         ))}
@@ -208,7 +208,7 @@ function ContractGroup({
                     seed={group.target}
                     avatarUrl={avatarUrl}
                     size={20}
-                    className="size-[19.5px] flex-none rounded-[6px]"
+                    className="rounded-chip size-[19.5px] flex-none"
                   />
                 }
               />
@@ -217,7 +217,7 @@ function ContractGroup({
                 seed={group.target}
                 avatarUrl={avatarUrl}
                 size={20}
-                className="size-[19.5px] flex-none rounded-[6px]"
+                className="rounded-chip size-[19.5px] flex-none"
               />
             )}
             {(anyTarget || anyFunction) && <WarnBadge />}
@@ -249,7 +249,7 @@ function ContractGroup({
               <CopyButton value={group.target} size={11} label="Copy contract address" />
             </div>
           )}
-          <ul className="bg-secondary flex flex-col gap-1 rounded-[6px] p-2">
+          <ul className="bg-secondary rounded-chip flex flex-col gap-1 p-2">
             {group.calls.map((call, i) =>
               isWildcard(call.selector) ? (
                 <li key={i} className="flex items-center gap-1.5 text-[11px] font-semibold text-amber-500">
@@ -295,7 +295,7 @@ export function AllowedCalls({
 
   return (
     <Accordion type="single" collapsible>
-      <AccordionItem value="calls" className="border-border overflow-hidden rounded-[10px] border">
+      <AccordionItem value="calls" className="border-border rounded-box overflow-hidden border">
         <AccordionTrigger className="items-center px-3 py-2 hover:no-underline">
           <span className="flex flex-1 items-baseline gap-1.5">
             <Eyebrow>Allowed calls</Eyebrow>
@@ -325,7 +325,7 @@ export function AllowedCalls({
 /** The From / Granted / Until / permissionId block — label left, value right, one row each. */
 export function MetaCard({ rows }: { rows: { label: string; value: React.ReactNode }[] }) {
   return (
-    <div className="border-border overflow-hidden rounded-[10px] border">
+    <div className="border-border rounded-box overflow-hidden border">
       {rows.map((row) => (
         <div
           key={row.label}
