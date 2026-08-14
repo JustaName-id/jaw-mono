@@ -10,6 +10,9 @@ import {
   useFunctionSignatures,
   isNativeToken,
   isWildcard,
+  classifyPermissionLookupFailure,
+  validatePermissionRevocation,
+  type RevocationProblem,
 } from '@jaw.id/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, erc20Abi, type Address } from 'viem';
@@ -148,6 +151,7 @@ export const PermissionModal = ({
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
   const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
   const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
+  const [lookupFailure, setLookupFailure] = useState<'missing-id' | 'not-found' | 'lookup-failed' | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState<boolean>(true);
 
@@ -213,6 +217,23 @@ export const PermissionModal = ({
   const isSponsored = !!effectivePaymasterUrl;
 
   // Build the actual permission call for gas estimation (grant or revoke)
+  const revocationProblem = useMemo<RevocationProblem | null>(() => {
+    if (mode !== 'revoke') return null;
+    if (lookupFailure) return lookupFailure;
+    if (!fetchedPermissionData) return null;
+    return validatePermissionRevocation({
+      permission: {
+        account: fetchedPermissionData.account,
+        spender: fetchedPermissionData.spender,
+        end: Number(fetchedPermissionData.end),
+        chainId: String(fetchedPermissionData.chainId ?? ''),
+      },
+      from: walletAddress || undefined,
+      chainId: chain?.id,
+      now: Math.floor(Date.now() / 1000),
+    });
+  }, [mode, lookupFailure, fetchedPermissionData, walletAddress, chain?.id]);
+
   const transactionCalls = useMemo(() => {
     if (mode === 'grant') {
       // Grant mode: build grant permission call
@@ -463,19 +484,21 @@ export const PermissionModal = ({
 
     const permissionId = permissionDetails.permissionId;
     if (!permissionId || !extractedApiKey) {
+      setLookupFailure(!permissionId ? 'missing-id' : 'lookup-failed');
       setIsLoadingPermissionDetails(false);
       return;
     }
 
     setIsLoadingPermissionDetails(true);
+    setLookupFailure(null);
     const fetchPermissionDetails = async () => {
       try {
         const permData = await getPermissionFromRelay(permissionId, extractedApiKey);
-        console.log('✅ Fetched permission details from relay:', permData);
         setFetchedPermissionData(permData);
         setIsLoadingPermissionDetails(false);
       } catch (error) {
         console.error('❌ Failed to fetch permission details:', error);
+        setLookupFailure(classifyPermissionLookupFailure(error));
         setIsLoadingPermissionDetails(false);
       }
     };
@@ -773,6 +796,7 @@ export const PermissionModal = ({
       permissionId={
         mode === 'revoke' && 'permissionId' in permissionDetails ? permissionDetails.permissionId : undefined
       }
+      revocationProblem={revocationProblem}
       spenderAddress={spenderAddress}
       accountAddress={walletAddress || undefined}
       origin={origin || ''}

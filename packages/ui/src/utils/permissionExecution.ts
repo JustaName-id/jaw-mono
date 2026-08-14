@@ -202,6 +202,27 @@ export function validatePermissionExecution({
 // there is nothing to submit — where an execution's calls come from the request and can proceed.
 // ============================================================================
 
+/**
+ * Why a relay permission lookup failed, in the two terms the revoke screen distinguishes.
+ *
+ * A 404 proves the permission is gone; anything else is our lookup failing, and the copy differs.
+ * The status arrives in three shapes: directly on errors the core rethrows from structured bodies,
+ * on `response.status` for raw transport errors, and — on the relay's HTTP-200-with-error-body path
+ * — not at all, because `controlledAxiosPromise` throws a bare `Error(message)` there. The message
+ * test covers that last case; without it a permission the relay reports as missing over a 200 reads
+ * as "couldn't be loaded" rather than "nothing to revoke".
+ *
+ * Both outcomes block the revocation, so a misread costs accuracy of explanation, not safety.
+ */
+export function classifyPermissionLookupFailure(error: unknown): 'not-found' | 'lookup-failed' {
+  const status =
+    (error as { status?: number })?.status ?? (error as { response?: { status?: number } })?.response?.status;
+  if (status === 404) return 'not-found';
+  if (status !== undefined) return 'lookup-failed';
+  const message = error instanceof Error ? error.message : typeof error === 'string' ? error : '';
+  return /not\s*found|does not exist|no such permission/i.test(message) ? 'not-found' : 'lookup-failed';
+}
+
 /** The subset of a relay permission the revoke screen needs. No calls: a revocation has none. */
 export interface RevocablePermission {
   account: string;

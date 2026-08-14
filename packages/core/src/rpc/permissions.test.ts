@@ -72,6 +72,9 @@ const REJECTED: [name: string, id: unknown][] = [
     ['non-hex characters', `0x${'zz'.repeat(32)}`],
     ['a number', 1],
     ['an object', {}],
+    // A BigInt used to crash the validator itself: the message interpolated JSON.stringify(value),
+    // which throws on one. `request` is in-process, so the dapp saw that TypeError, not -32602.
+    ['a bigint', 1n],
 ];
 
 describe('normalizeRevokePermissionsParams', () => {

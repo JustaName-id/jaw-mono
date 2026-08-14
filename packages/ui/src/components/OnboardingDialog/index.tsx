@@ -220,7 +220,9 @@ function CreateAccountForm({
         placeholder="username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        className="bg-muted rounded-box text-body h-11 font-mono"
+        // `md:text-body` too: the Input primitive ships `md:text-sm`, and tailwind-merge keeps a
+        // modifier-prefixed class in its own group, so the bare role loses above 768px.
+        className="bg-muted rounded-box text-body md:text-body h-11 font-mono"
         // Prevent password-manager extensions (1Password, LastPass, Dashlane,
         // Bitwarden) from attaching their inline overlay to this field. Their
         // overlay covers the embedded iframe, which the clickjacking guard

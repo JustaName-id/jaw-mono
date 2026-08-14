@@ -59,7 +59,11 @@ import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
 import { usePermissionExecution } from '../hooks/usePermissionExecution';
-import { validatePermissionRevocation, type RevocationProblem } from '../utils/permissionExecution';
+import {
+  classifyPermissionLookupFailure,
+  validatePermissionRevocation,
+  type RevocationProblem,
+} from '../utils/permissionExecution';
 import { useFunctionSignatures } from '../hooks/useFunctionSignatures';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getPublicClient } from '../utils/publicClient';
@@ -2949,12 +2953,7 @@ function RevokePermissionDialogWrapper({
         setIsLoadingPermissionDetails(false);
       } catch (error) {
         console.error('❌ Failed to fetch permission details:', error);
-        // Only a relay 404 proves the permission is gone; anything else (5xx, network, CORS) is
-        // our lookup failing. The status lives directly on errors the core rethrows from
-        // structured bodies, and on `response.status` for raw transport errors.
-        const status =
-          (error as { status?: number })?.status ?? (error as { response?: { status?: number } })?.response?.status;
-        setLookupFailure(status === 404 ? 'not-found' : 'lookup-failed');
+        setLookupFailure(classifyPermissionLookupFailure(error));
         setIsLoadingPermissionDetails(false);
       }
     };

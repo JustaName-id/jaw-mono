@@ -24,7 +24,7 @@ import { DialogShell } from '../DialogShell';
 export function OnboardingSkeleton() {
   return (
     <DialogShell>
-      <div className="flex flex-col p-6 pt-7">
+      <div className="flex flex-col p-6">
         {/* "Welcome back." — h2 at 26px/leading-none */}
         <Skeleton className="h-[26px] w-48 rounded" />
         {/* "Pick up where you left off." — `text-body` is 12px x 1.4 = 16.8px, mt-2 */}

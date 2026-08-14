@@ -144,20 +144,23 @@ export const PermissionDialog = ({
     isPayingWithErc20: !!isPayingWithErc20,
   });
 
+  // Same shape as the transaction screen: a certain revert (or a permission we couldn't load)
+  // disables Confirm; `expired` and `self-delegated` warn and let the user proceed.
+  const revocationBlocks = !!revocationProblem && isBlockingRevocationProblem(revocationProblem);
+
   // The permission manager stores call rules; a spend-only grant has nothing to store and is
   // rejected onchain. Say so up front rather than letting the grant fail after a signature.
   const missingCalls = isGrant && calls.length === 0;
 
   // With no call rule the grant can't be built at all, so gas estimation fails for a reason that
   // has nothing to do with funds. Suppress the fee-derived cause and let the banner speak.
-  const feeBlockReason = missingCalls ? null : blockReason;
+  // A blocked revocation is also suppressed here, not just the grant-side blocker: with no
+  // permission the fee row prices a placeholder call, so letting it speak would put a second,
+  // different reason on screen next to the banner that already named the real one.
+  const feeBlockReason = missingCalls || revocationBlocks ? null : blockReason;
 
   // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
   const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
-
-  // Same shape as the transaction screen: a certain revert (or a permission we couldn't load)
-  // disables Confirm; `expired` and `self-delegated` warn and let the user proceed.
-  const revocationBlocks = !!revocationProblem && isBlockingRevocationProblem(revocationProblem);
 
   const canConfirm =
     !isProcessing &&
@@ -360,7 +363,7 @@ export const PermissionDialog = ({
                 variant={isGrant ? 'default' : 'destructive'}
                 className="rounded-box text-button h-10 flex-[56] font-semibold focus-visible:ring-1"
               >
-                {feeBlockReason === 'funds' ? 'Insufficient Funds' : isGrant ? 'Grant' : 'Revoke'}
+                {feeBlockReason === 'funds' && !revocationBlocks ? 'Insufficient Funds' : isGrant ? 'Grant' : 'Revoke'}
               </Button>
             </div>
           </div>

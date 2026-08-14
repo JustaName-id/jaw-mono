@@ -63,9 +63,10 @@ export function requireHexAddress(value: unknown, method: string, field: string)
  */
 export function requireHexBytes32(value: unknown, method: string, field: string): `0x${string}` {
     if (typeof value !== 'string' || !/^0x[0-9a-fA-F]{64}$/.test(value)) {
-        throw standardErrors.rpc.invalidParams(
-            `${method}: ${field} must be a 32-byte hex value, got ${JSON.stringify(value)}`
-        );
+        // The value is deliberately not echoed: JSON.stringify throws on a BigInt (and on a
+        // circular object), and `request` is in-process, so a dapp passing `{ id: 1n }` would get
+        // that TypeError out of the validator instead of -32602. `requireHexAddress` does the same.
+        throw standardErrors.rpc.invalidParams(`${method}: ${field} must be a 32-byte hex value`);
     }
     return value as `0x${string}`;
 }
