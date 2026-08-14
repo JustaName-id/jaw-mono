@@ -324,12 +324,16 @@ describe('validatePermissionRevocation', () => {
 describe('isBlockingRevocationProblem', () => {
   // An unresolved permission blocks here, unlike on the execution path: the revoke call is built
   // from the fetched permission, so with no data there is nothing to submit.
-  it.each<RevocationProblem>(['missing-id', 'not-found', 'lookup-failed', 'chain-mismatch', 'not-granter'])(
-    '%s blocks the revocation',
-    (problem) => {
-      expect(isBlockingRevocationProblem(problem)).toBe(true);
-    }
-  );
+  it.each<RevocationProblem>([
+    'missing-id',
+    'not-found',
+    'lookup-failed',
+    'chain-mismatch',
+    'not-granter',
+    'unknown-chain',
+  ])('%s blocks the revocation', (problem) => {
+    expect(isBlockingRevocationProblem(problem)).toBe(true);
+  });
 
   it.each<RevocationProblem>(['expired', 'self-delegated'])('%s only warns', (problem) => {
     expect(isBlockingRevocationProblem(problem)).toBe(false);
@@ -337,7 +341,7 @@ describe('isBlockingRevocationProblem', () => {
 
   it('has copy for every problem, and every problem is covered here', () => {
     const all = Object.keys(REVOCATION_PROBLEM_TEXT) as RevocationProblem[];
-    expect(all).toHaveLength(7);
+    expect(all).toHaveLength(8);
     for (const problem of all) {
       expect(REVOCATION_PROBLEM_TEXT[problem].text.length).toBeGreaterThan(0);
       expect(REVOCATION_PROBLEM_TEXT[problem].detail.length).toBeGreaterThan(0);
@@ -393,5 +397,53 @@ describe('classifyPermissionLookupFailure', () => {
   it('survives a non-Error throw', () => {
     expect(classifyPermissionLookupFailure(undefined)).toBe('lookup-failed');
     expect(classifyPermissionLookupFailure('not found')).toBe('not-found');
+  });
+});
+
+// ── An unreadable stored chain id must not masquerade as a network mismatch ──────────────────────
+// Both revoke callers derive the chainId they pass from the same relay record the validator reads,
+// so `NaN !== NaN` (always true) made a corrupt stored id report "Wrong network".
+
+describe('unreadable stored chain id', () => {
+  it.each(['not-a-chain', 'NaN', '0x', 'null'])('revocation names it unknown-chain, not chain-mismatch: %s', (bad) => {
+    expect(
+      validatePermissionRevocation({
+        permission: revocable({ chainId: bad }),
+        from: GRANTER,
+        chainId: Number.parseInt(bad, 16),
+        now: NOW,
+      })
+    ).toBe('unknown-chain');
+  });
+
+  it('execution names it unknown-chain too', () => {
+    expect(check(permission({ chainId: 'not-a-chain' }))).toBe('unknown-chain');
+  });
+
+  it('blocks a revocation but only warns an execution', () => {
+    // The revoke call is built from the record we could not read, so there is nothing to submit.
+    expect(isBlockingRevocationProblem('unknown-chain')).toBe(true);
+    // An execution's calls come from the request; the manager still enforces the chain on-chain.
+    expect(isBlockingPermissionProblem('unknown-chain')).toBe(false);
+  });
+
+  it('a readable chain id still compares as before', () => {
+    expect(
+      validatePermissionRevocation({ permission: revocable({ chainId: '1' }), from: GRANTER, chainId: 84532, now: NOW })
+    ).toBe('chain-mismatch');
+    expect(
+      validatePermissionRevocation({
+        permission: revocable({ chainId: '0x14a34' }),
+        from: GRANTER,
+        chainId: 84532,
+        now: NOW,
+      })
+    ).toBeNull();
+  });
+
+  it('an absent chain id is not a problem — nothing to compare', () => {
+    expect(
+      validatePermissionRevocation({ permission: revocable({ chainId: '' }), from: GRANTER, chainId: 84532, now: NOW })
+    ).toBeNull();
   });
 });

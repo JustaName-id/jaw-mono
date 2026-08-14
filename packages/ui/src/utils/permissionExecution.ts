@@ -53,6 +53,12 @@ export type PermissionProblem =
   | 'not-yet-valid'
   /** Granted for a different chain than the one this request targets. */
   | 'chain-mismatch'
+  /**
+   * The relay's stored chain id can't be read, so which network this permission belongs to is
+   * unknown. Distinct from `chain-mismatch`: that one says the networks differ, this one says we
+   * can't tell what the permission's network is at all.
+   */
+  | 'unknown-chain'
   /** The signer isn't the spender, so the manager will reject the caller. */
   | 'wrong-spender'
   /** A call targets the permission manager itself — `CannotTargetSelf` at execute time. */
@@ -75,7 +81,11 @@ export type PermissionProblem =
  * so the dialog and the copy can never disagree on that line.
  */
 export function isBlockingPermissionProblem(problem: PermissionProblem): boolean {
-  return problem !== 'lookup-failed' && problem !== 'self-delegated';
+  // `unknown-chain` joins the warn-only set for the same reason as `lookup-failed`: it is
+  // uncertainty about a check of ours, not a certain revert. The manager still enforces the chain
+  // on-chain, so the execution may well succeed. On the revocation side the same finding DOES
+  // block, because there the call is built from the record we couldn't read.
+  return problem !== 'lookup-failed' && problem !== 'self-delegated' && problem !== 'unknown-chain';
 }
 
 /** Short label for the fee row, and the tooltip detail behind it. */
@@ -102,6 +112,11 @@ export const PERMISSION_PROBLEM_TEXT: Record<PermissionProblem, { text: string; 
     text: 'Wrong network',
     detail: 'This permission was granted on a different network than the one this transaction targets.',
   },
+  'unknown-chain': {
+    text: 'Permission network unreadable',
+    detail:
+      'The network this permission was granted on could not be read from the stored record, so it can’t be checked against this transaction. Executing it may be rejected on-chain.',
+  },
   'targets-manager': {
     text: 'Calls the permission manager',
     detail:
@@ -126,6 +141,20 @@ export const PERMISSION_PROBLEM_TEXT: Record<PermissionProblem, { text: string; 
     detail: 'This transaction calls something the permission doesn’t allow. Executing it would be rejected on-chain.',
   },
 };
+
+/**
+ * The permission's own chain, or null when the relay's stored value can't be read.
+ *
+ * `Number` is used rather than trusting the type: the relay stores hex ('0x14a34'), the revoke path
+ * parseInts it, and a decimal string reaches us too — `Number` handles all three. An unreadable
+ * value must NOT fall through to the mismatch comparison: `NaN !== anything` is always true, so a
+ * corrupt stored id would report "Wrong network", which describes a different problem entirely.
+ */
+function permissionChainId(stored: string): number | null {
+  if (!stored) return null;
+  const parsed = Number(stored);
+  return Number.isFinite(parsed) ? parsed : null;
+}
 
 const sameAddress = (a?: string, b?: string) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
 
@@ -168,7 +197,9 @@ export function validatePermissionExecution({
   calls,
   now,
 }: PermissionExecutionInput): PermissionProblem | null {
-  if (chainId !== undefined && permission.chainId && Number(permission.chainId) !== chainId) {
+  const permissionChain = permissionChainId(permission.chainId);
+  if (permission.chainId && permissionChain === null) return 'unknown-chain';
+  if (chainId !== undefined && permissionChain !== null && permissionChain !== chainId) {
     return 'chain-mismatch';
   }
   // Coerced rather than trusted: the relay type says number, but the revoke path parseInts it,
@@ -242,6 +273,8 @@ export type RevocationProblem =
   | 'lookup-failed'
   /** Stored against a different chain than the one this request targets. */
   | 'chain-mismatch'
+  /** The stored chain id can't be read, so the revocation can't be built against a known network. */
+  | 'unknown-chain'
   /** The signer isn't the granting account, so the manager will reject the caller. */
   | 'not-granter'
   /** Already past its `end`. Revoking succeeds but changes nothing — it only costs gas. */
@@ -279,6 +312,11 @@ export const REVOCATION_PROBLEM_TEXT: Record<RevocationProblem, { text: string; 
     text: 'Wrong network',
     detail: 'This permission was granted on a different network than the one this request targets.',
   },
+  'unknown-chain': {
+    text: 'Permission network unreadable',
+    detail:
+      'The network this permission was granted on could not be read from the stored record. The revocation is built from that record, so it can’t be submitted — close this and try again.',
+  },
   'not-granter': {
     text: 'Not the granting account',
     detail:
@@ -314,7 +352,13 @@ export function validatePermissionRevocation({
   /** Unix seconds; injected so the expiry check is testable. */
   now: number;
 }): RevocationProblem | null {
-  if (chainId !== undefined && permission.chainId && Number(permission.chainId) !== chainId) {
+  // Both callers derive the chainId they pass from this same relay record — AppSpecificSigner
+  // parseInts it, CrossPlatformSigner resolves a chain from it — so a genuine mismatch is not
+  // reachable here today. The check stays for callers that supply an independent chain, and the
+  // unreadable case is named for what it is rather than as a network mismatch.
+  const permissionChain = permissionChainId(permission.chainId);
+  if (permission.chainId && permissionChain === null) return 'unknown-chain';
+  if (chainId !== undefined && permissionChain !== null && permissionChain !== chainId) {
     return 'chain-mismatch';
   }
   if (from && !sameAddress(permission.account, from)) return 'not-granter';
