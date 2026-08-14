@@ -435,6 +435,16 @@ export class ReactUIHandler implements UIHandler {
     });
   }
 
+  /**
+   * Every wrapper below is keyed by `request.id`.
+   *
+   * The SDK does not serialize requests, so a second one can arrive while a dialog is mounted. Two
+   * requests of the same type would otherwise reuse the component instance, and each wrapper holds
+   * request-scoped state — a fetched permission, token metadata, a loading flag. That state is not
+   * reset by a prop change, so the new request would render against the previous one's data with the
+   * Confirm gate already open. The key makes a new request a new component, which is the only way to
+   * be sure none of that state survives. `page.tsx` keys the popup's dialogs the same way.
+   */
   private renderDialog(
     request: UIRequest,
     onApprove: (data: any) => void,
@@ -445,6 +455,7 @@ export class ReactUIHandler implements UIHandler {
       case 'wallet_connect':
         return (
           <OnboardingDialogWrapper
+            key={request.id}
             request={request as ConnectUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -461,6 +472,7 @@ export class ReactUIHandler implements UIHandler {
         if (isSiweMessage(signRequest.data.message)) {
           return (
             <SiweDialogWrapper
+              key={request.id}
               request={signRequest}
               onApprove={onApprove}
               onReject={onReject}
@@ -474,6 +486,7 @@ export class ReactUIHandler implements UIHandler {
         }
         return (
           <SignatureDialogWrapper
+            key={request.id}
             request={signRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -499,6 +512,7 @@ export class ReactUIHandler implements UIHandler {
           if (isSiweMessage(message)) {
             return (
               <SiweDialogWrapper
+                key={request.id}
                 request={
                   {
                     ...walletSignRequest,
@@ -522,6 +536,7 @@ export class ReactUIHandler implements UIHandler {
           }
           return (
             <SignatureDialogWrapper
+              key={request.id}
               request={
                 {
                   ...walletSignRequest,
@@ -549,6 +564,7 @@ export class ReactUIHandler implements UIHandler {
           const typedDataJson = typeof typedDataRaw === 'string' ? typedDataRaw : JSON.stringify(typedDataRaw);
           return (
             <Eip712DialogWrapper
+              key={request.id}
               request={
                 {
                   ...walletSignRequest,
@@ -578,6 +594,7 @@ export class ReactUIHandler implements UIHandler {
       case 'eth_signTypedData_v4':
         return (
           <Eip712DialogWrapper
+            key={request.id}
             request={request as TypedDataUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -592,6 +609,7 @@ export class ReactUIHandler implements UIHandler {
       case 'wallet_sendCalls':
         return (
           <TransactionDialogWrapper
+            key={request.id}
             request={request as TransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -607,6 +625,7 @@ export class ReactUIHandler implements UIHandler {
       case 'eth_sendTransaction':
         return (
           <SendTransactionDialogWrapper
+            key={request.id}
             request={request as SendTransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -622,6 +641,7 @@ export class ReactUIHandler implements UIHandler {
       case 'wallet_grantPermissions':
         return (
           <PermissionDialogWrapper
+            key={request.id}
             request={request as PermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -637,6 +657,7 @@ export class ReactUIHandler implements UIHandler {
       case 'wallet_revokePermissions':
         return (
           <RevokePermissionDialogWrapper
+            key={request.id}
             request={request as RevokePermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
