@@ -14,7 +14,8 @@ module.exports = {
   theme: {
     extend: {
       // Inter carries the interface. JetBrains Mono carries anything a user might verify —
-      // addresses, amounts, hashes, labels. Nothing renders below 9px.
+      // addresses, amounts, hashes, labels. 9px is the floor for every role here; the sole
+      // sub-9px value in the package is the EIP-712 tree's raw 7px type badge (see Eip712Tree).
       // Sizes are the spec's own px. They were briefly scaled by 400/350 to match the proportions
       // of the sheet's narrower card; that was wrong — the card is wider, not taller, so the extra
       // 50px buys room for long ENS names and addresses rather than asking for larger type. Only
@@ -49,9 +50,9 @@ module.exports = {
         code: ['9px', { lineHeight: '1.4', fontWeight: '400' }], // mono, hashes and raw payload
         'amount-lg': ['26px', { lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.02em' }], // native-send hero
         title: ['20px', { fontWeight: '500', letterSpacing: '-0.02em' }], // card title, with header
-        status: ['18px', { fontWeight: '500' }], // processing / success headline
-        app: ['18px', { fontWeight: '600' }], // app name
-        url: ['12px', { fontWeight: '500' }], // mono, under the app name
+        status: ['15px', { lineHeight: '1.2', fontWeight: '600', letterSpacing: '-0.02em' }], // processing / success headline
+        app: ['17px', { lineHeight: '1.2', fontWeight: '600', letterSpacing: '-0.02em' }], // app name, dialog header
+        url: ['10px', { lineHeight: '1.3', fontWeight: '400' }], // mono origin, under the app name
       },
 
       // Radii: 99 · 16.5 · 12 · 8 · 4. Nothing else is legal.

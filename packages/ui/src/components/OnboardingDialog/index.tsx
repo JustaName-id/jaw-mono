@@ -36,6 +36,12 @@ type CreateAccountFormProps = Pick<
  * names render in FULL — an ellipsized name misrepresents the identity.
  * `base` is the size used for comfortably short names; truncation remains only
  * as a backstop for pathological lengths (60+ chars).
+ *
+ * Deliberately raw sizes rather than the design-spec type roles: every role
+ * carries a weight, line-height and tracking alongside its size, so stepping
+ * through them would also step the weight — a long name would render lighter
+ * than a short one. This ladder must change size and nothing else, leaving the
+ * caller's own `font-*` intact.
  */
 function nameFitClass(name: string, base: string): string {
   if (name.length > 36) return 'text-[9px]';
@@ -48,11 +54,9 @@ function nameFitClass(name: string, base: string): string {
 /** Hairline divider with a small mono uppercase label ("NEW TO JAW?", "OR"). */
 function MonoDivider({ label, className }: { label: string; className?: string }) {
   return (
-    <div className={cn('flex items-center gap-2.5', className)}>
+    <div className={cn('flex items-center gap-3', className)}>
       <span className="bg-border h-px flex-1" />
-      <span className="text-muted-foreground font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-        {label}
-      </span>
+      <span className="text-muted-foreground text-label font-mono uppercase">{label}</span>
       <span className="bg-border h-px flex-1" />
     </div>
   );
@@ -216,7 +220,7 @@ function CreateAccountForm({
         placeholder="username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        className="bg-muted rounded-box h-11 font-mono text-[13px]"
+        className="bg-muted rounded-box text-body h-11 font-mono"
         // Prevent password-manager extensions (1Password, LastPass, Dashlane,
         // Bitwarden) from attaching their inline overlay to this field. Their
         // overlay covers the embedded iframe, which the clickjacking guard
@@ -254,7 +258,7 @@ function CreateAccountForm({
             }
           }}
           disabled={!isValid || isLoading}
-          className="rounded-box h-11 w-full text-[13px] font-semibold"
+          className="rounded-box text-button h-11 w-full font-semibold"
         >
           <ScanFace className="!h-4 !w-4" />
           Create Account
@@ -407,7 +411,7 @@ export function OnboardingDialog({
   );
 
   const passkeyButton = (
-    <Button onClick={onImportAccount} disabled={isBusy} className="rounded-box h-11 w-full text-[13px] font-semibold">
+    <Button onClick={onImportAccount} disabled={isBusy} className="rounded-box text-button h-11 w-full font-semibold">
       <Fingerprint className="!h-4 !w-4" />
       {isImporting ? 'Opening Passkey...' : 'Sign in with Passkey'}
     </Button>
@@ -417,11 +421,11 @@ export function OnboardingDialog({
   if (view === 'signin' || !defaultAccount) {
     return (
       <DialogShell>
-        <div className="flex flex-col p-6 pt-7">
-          <h2 className="text-foreground text-[26px] font-bold leading-none tracking-[-0.03em]">
+        <div className="flex flex-col p-6">
+          <h2 className="text-foreground text-title-xl leading-none">
             Sign <span className="italic">in.</span>
           </h2>
-          <p className="text-muted-foreground mt-2 text-[13px]">Use a saved passkey, or create a new account.</p>
+          <p className="text-muted-foreground text-body mt-2">Use a saved passkey, or create a new account.</p>
 
           <div className="mt-6">{passkeyButton}</div>
 
@@ -447,11 +451,11 @@ export function OnboardingDialog({
   // Welcome-back view — one-tap continue with the last account.
   return (
     <DialogShell>
-      <div className="flex flex-col p-6 pt-7">
-        <h2 className="text-foreground text-[26px] font-bold leading-none tracking-[-0.03em]">
+      <div className="flex flex-col p-6">
+        <h2 className="text-foreground text-title-xl leading-none">
           Welcome <span className="italic">back.</span>
         </h2>
-        <p className="text-muted-foreground mt-2 text-[13px]">Pick up where you left off.</p>
+        <p className="text-muted-foreground text-body mt-2">Pick up where you left off.</p>
 
         <button
           onClick={() => onAccountSelect(defaultAccount)}
@@ -465,10 +469,8 @@ export function OnboardingDialog({
               {/* bg override: the default bg-accent token is near-invisible on this white tile */}
               <Skeleton className="bg-primary-foreground/10 rounded-box h-10 w-10 flex-none" />
               <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-                  Continue as
-                </span>
-                <Skeleton className="bg-primary-foreground/10 h-3.5 w-36 rounded" />
+                <span className="text-primary-foreground/60 text-label font-mono uppercase">Continue as</span>
+                <Skeleton className="bg-primary-foreground/10 rounded-xs h-3.5 w-36" />
               </span>
             </>
           ) : (
@@ -482,10 +484,8 @@ export function OnboardingDialog({
                 size={40}
                 className="rounded-box h-10 w-10"
               />
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-                  Continue as
-                </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-primary-foreground/60 text-label font-mono uppercase">Continue as</span>
                 <span
                   className={cn(
                     'text-primary-foreground truncate font-semibold',
@@ -510,7 +510,7 @@ export function OnboardingDialog({
           onClick={onImportAccount}
           disabled={isBusy}
           variant="secondary"
-          className="rounded-box h-11 w-full text-[13px] font-semibold"
+          className="rounded-box text-button h-11 w-full font-semibold"
         >
           <ArrowRightLeft className="!h-3.5 !w-3.5" />
           {isImporting ? 'Opening Passkey...' : 'Switch account'}

@@ -79,11 +79,11 @@ export const ConnectDialog = ({
           {showPermissions && (
             <div className="border-border rounded-box mt-4 flex flex-col overflow-hidden border">
               {CAPABILITY_ROWS.map(({ Icon, label }) => (
-                <div key={label} className="border-border flex items-center gap-2.5 border-b p-3 last:border-b-0">
+                <div key={label} className="border-border flex items-center gap-3 border-b p-3 last:border-b-0">
                   <span className="bg-secondary border-border rounded-chip flex h-6 w-6 flex-none items-center justify-center border">
                     <Icon className="text-secondary-foreground h-3.5 w-3.5" strokeWidth={1.5} />
                   </span>
-                  <p className="text-foreground text-[13px]">{label}</p>
+                  <p className="text-foreground text-body">{label}</p>
                 </div>
               ))}
             </div>
@@ -95,14 +95,14 @@ export const ConnectDialog = ({
               variant="secondary"
               onClick={onCancel}
               disabled={isProcessing}
-              className="rounded-box h-11 flex-1 text-[13px] font-semibold"
+              className="rounded-box text-button h-11 flex-1 font-semibold"
             >
               Cancel
             </Button>
             <Button
               onClick={onConnect}
               disabled={isProcessing}
-              className="rounded-box h-11 flex-1 text-[13px] font-semibold"
+              className="rounded-box text-button h-11 flex-1 font-semibold"
             >
               Connect
             </Button>

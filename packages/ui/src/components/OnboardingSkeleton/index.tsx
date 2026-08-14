@@ -27,8 +27,8 @@ export function OnboardingSkeleton() {
       <div className="flex flex-col p-6 pt-7">
         {/* "Welcome back." — h2 at 26px/leading-none */}
         <Skeleton className="h-[26px] w-48 rounded" />
-        {/* "Pick up where you left off." — 13px x 1.5 = 19.5px row, mt-2 */}
-        <div className="mt-2 flex h-[19.5px] items-center">
+        {/* "Pick up where you left off." — `text-body` is 12px x 1.4 = 16.8px, mt-2 */}
+        <div className="mt-2 flex h-[17px] items-center">
           <Skeleton className="h-3 w-40 rounded" />
         </div>
 
@@ -49,10 +49,10 @@ export function OnboardingSkeleton() {
         </div>
 
         {/* The "or" divider, hairline only — its label is text. MonoDivider's
-            row is as tall as that label's line box (9px x 1.5), not as tall as
+            row is as tall as that label's line box (`text-label`, 10px x 1), not as tall as
             the hairline, so the height is reserved explicitly: without it this
-            row swallows 12.5px and the rows below it ride up. */}
-        <div className="my-5 flex h-[13.5px] items-center gap-2.5">
+            row swallows the gap and the rows below it ride up. */}
+        <div className="my-5 flex h-2.5 items-center gap-3">
           <span className="bg-border h-px flex-1" />
           <span className="bg-border h-px w-4 flex-none" />
           <span className="bg-border h-px flex-1" />

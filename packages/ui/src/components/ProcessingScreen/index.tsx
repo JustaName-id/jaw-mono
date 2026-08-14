@@ -38,7 +38,7 @@ export function ProcessingScreen({ seedAddress, avatarUrl, appAvatar, title, sub
         </span>
       </div>
       <div className="flex flex-col gap-1">
-        <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">{title}</h2>
+        <h2 className="text-foreground text-status">{title}</h2>
         {subtitle && <p className="text-muted-foreground text-xs">{subtitle}</p>}
       </div>
     </div>

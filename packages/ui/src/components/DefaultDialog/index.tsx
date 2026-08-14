@@ -74,7 +74,7 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
 
         <div
           onWheel={(e) => e.nativeEvent.stopPropagation()}
-          className={`jaw-scroll flex p-2.5 ${fullScreen ? 'rounded-none' : 'rounded-3xl'} box-border flex-1 flex-col gap-5 overflow-auto md:max-h-[calc(100%-45px)]`}
+          className={`jaw-scroll flex p-3 ${fullScreen ? 'rounded-none' : 'rounded-3xl'} box-border flex-1 flex-col gap-5 overflow-auto md:max-h-[calc(100%-45px)]`}
           style={{
             ...innerStyle,
           }}

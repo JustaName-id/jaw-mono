@@ -26,7 +26,7 @@ export function SuccessScreen({ seedAddress, avatarUrl, label = 'Signed' }: Succ
           <SuccessCheck size={24} />
         </span>
       </div>
-      <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">{label}</h2>
+      <h2 className="text-foreground text-status">{label}</h2>
     </div>
   );
 }

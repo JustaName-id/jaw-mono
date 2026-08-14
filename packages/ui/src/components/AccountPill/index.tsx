@@ -31,10 +31,7 @@ export function AccountPill({ seedAddress, label, avatarUrl, copyValue, classNam
     >
       <AccountAvatar seed={seedAddress} avatarUrl={avatarUrl} size={15} className="h-[15px] w-[15px] rounded-full" />
       <span
-        className={cn(
-          'text-secondary-foreground truncate font-mono',
-          label.length > 40 ? 'text-[9px]' : 'text-[10.5px]'
-        )}
+        className={cn('text-secondary-foreground truncate font-mono', label.length > 40 ? 'text-code' : 'text-body-xs')}
       >
         {label}
       </span>

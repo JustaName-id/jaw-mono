@@ -63,10 +63,9 @@ describe('OnboardingSkeleton', () => {
    * Every text row must reserve its *line box*, not its ink.
    *
    * A bar is only as tall as itself, but the row it stands in for is as tall
-   * as the line box of the text that lands there. Tailwind v3 emits font-size
-   * only for arbitrary `text-[Npx]` sizes, so those rows inherit
-   * `line-height: 1.5` (packages/ui/src/styles.css:210 for the embedded
-   * dialog, apps/keys-jaw-id/src/app/global.css:87 standalone). Sizing the
+   * as the line box of the text that lands there. The real card now uses the
+   * design-spec type roles, and each role fixes its own line-height — so a row's
+   * height follows from its role rather than from an inherited 1.5. Sizing the
    * rows by their bars instead left the card 22px short, so it grew on reveal.
    *
    * These assertions are class-string based: the suite renders through
@@ -74,15 +73,17 @@ describe('OnboardingSkeleton', () => {
    * can't be measured here — what is pinned is that each row carries an
    * explicit box.
    */
-  it("reserves the subtitle's line box (13px x 1.5), not the bar's 12px", () => {
-    // <p class="text-muted-foreground mt-2 text-[13px]"> in the real card.
-    expect(markup()).toContain('h-[19.5px]');
+  it("reserves the subtitle's line box (text-body, 12px x 1.4), not the bar's 12px", () => {
+    // <p class="text-muted-foreground text-body mt-2"> in the real card → 16.8px.
+    expect(markup()).toContain('h-[17px]');
   });
 
-  it("reserves the divider label's line box (9px x 1.5), not the hairline's 1px", () => {
-    // MonoDivider's row is as tall as its text-[9px] "or" label; the skeleton
-    // draws only the rule, so without an explicit box it swallows 12.5px.
-    expect(markup()).toContain('h-[13.5px]');
+  it("reserves the divider label's line box (text-label, 10px x 1), not the hairline's 1px", () => {
+    // MonoDivider's row is as tall as its `text-label` "or"; the skeleton draws
+    // only the rule, so without an explicit box it swallows the difference. The
+    // role's 10px line box lands on the spacing grid, so h-2.5 is exact.
+    const dividerRow = markup().match(/<div class="([^"]*my-5[^"]*)"/)?.[1] ?? '';
+    expect(dividerRow).toMatch(/(^|\s)h-2\.5(\s|$)/);
   });
 
   it("reserves the create-account link at text-xs's own 16px leading, not 12 x 1.5", () => {

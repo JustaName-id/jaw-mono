@@ -26,11 +26,11 @@ export const DigestRow = ({
   return (
     <div className="flex flex-col gap-1">
       <div className="flex flex-row items-center justify-between gap-2">
-        <p className={`text-foreground text-xs leading-[133%] ${prominent ? 'font-bold' : 'font-semibold'}`}>{label}</p>
+        <p className={`text-foreground text-xs leading-snug ${prominent ? 'font-bold' : 'font-semibold'}`}>{label}</p>
         <CopyButton value={value} size={16} resetAfterMs={1500} label={`Copy ${label}`} />
       </div>
       <div className="bg-secondary rounded-chip p-2">
-        <p className="text-foreground break-all font-mono text-xs leading-[150%]">{value}</p>
+        <p className="text-foreground break-all font-mono text-xs leading-normal">{value}</p>
       </div>
     </div>
   );
@@ -55,7 +55,7 @@ export const Eip712VerificationDigests = ({ typedDataJson }: { typedDataJson: st
   return (
     <details className="border-border rounded-chip group overflow-hidden border text-xs [&_summary::-webkit-details-marker]:hidden">
       <summary className="hover:bg-foreground/[0.03] flex cursor-pointer list-none items-center justify-between px-3 py-2">
-        <span className="text-muted-foreground text-[11px] font-medium">Digests data</span>
+        <span className="text-muted-foreground text-body-sm font-medium">Digests data</span>
         <svg
           className="text-muted-foreground h-3 w-3 transition-transform group-open:rotate-180"
           viewBox="0 0 24 24"
@@ -68,7 +68,7 @@ export const Eip712VerificationDigests = ({ typedDataJson }: { typedDataJson: st
           <path d="M6 9l6 6 6-6" />
         </svg>
       </summary>
-      <div className="border-border flex flex-col gap-2.5 border-t p-3">
+      <div className="border-border flex flex-col gap-3 border-t p-3">
         <DigestRow label="Domain Hash" value={digests.domainHash} />
         <DigestRow label="Message Hash" value={digests.messageHash} />
         <DigestRow label="EIP-712 Digest" value={digests.eip712Digest} prominent />

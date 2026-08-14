@@ -41,13 +41,15 @@ export function Eip712DomainCard({
       <div className="divide-border/40 flex flex-col divide-y">
         {safeName && (
           <Row label="Domain">
-            <span className="text-foreground truncate font-mono text-[11px]">{safeName}</span>
+            <span className="text-foreground text-body-sm truncate font-mono">{safeName}</span>
           </Row>
         )}
         {verifyingContract && (
           <Row label="Verifying contract">
             <div className="flex min-w-0 items-center justify-end gap-1.5">
-              <span className="text-foreground truncate font-mono text-[11px]">{formatAddress(verifyingContract)}</span>
+              <span className="text-foreground text-body-sm truncate font-mono">
+                {formatAddress(verifyingContract)}
+              </span>
               <CopyButton value={verifyingContract} size={14} resetAfterMs={1500} label="Copy address" />
             </div>
           </Row>
@@ -56,7 +58,7 @@ export function Eip712DomainCard({
           <Row label="Network">
             <div className="flex min-w-0 items-center justify-end gap-1.5">
               <span className="flex-none">{chainIcon}</span>
-              <span className="text-foreground truncate font-mono text-[11px]">{networkLabel}</span>
+              <span className="text-foreground text-body-sm truncate font-mono">{networkLabel}</span>
             </div>
           </Row>
         )}
@@ -67,8 +69,8 @@ export function Eip712DomainCard({
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex items-center justify-between gap-3 py-[7px] first:pt-0 last:pb-0">
-      <span className="text-muted-foreground flex-none text-[11px] font-medium">{label}</span>
+    <div className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+      <span className="text-muted-foreground text-body-sm flex-none font-medium">{label}</span>
       <div className="min-w-0 text-right">{children}</div>
     </div>
   );
