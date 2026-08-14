@@ -236,14 +236,18 @@ export function validatePermissionExecution({
 /**
  * Why a relay permission lookup failed, in the two terms the revoke screen distinguishes.
  *
- * A 404 proves the permission is gone; anything else is our lookup failing, and the copy differs.
- * The status arrives in three shapes: directly on errors the core rethrows from structured bodies,
- * on `response.status` for raw transport errors, and — on the relay's HTTP-200-with-error-body path
- * — not at all, because `controlledAxiosPromise` throws a bare `Error(message)` there. The message
- * test covers that last case; without it a permission the relay reports as missing over a 200 reads
- * as "couldn't be loaded" rather than "nothing to revoke".
+ * Deliberately here and not in `@jaw.id/core` beside `getPermissionFromRelay`, even though the error
+ * shapes below are core's: what this returns is UI vocabulary — two `RevocationProblem` members —
+ * and core has no notion of a revocation problem. A message regex choosing which sentence a dialog
+ * shows also has no business in the package that owns signing. Its one caller is
+ * `usePermissionRevocation`, in this package.
  *
- * Both outcomes block the revocation, so a misread costs accuracy of explanation, not safety.
+ * The status arrives three ways: directly on errors core rethrows from a structured body, on
+ * `response.status` for a raw transport error, and not at all on the relay's HTTP-200-with-error-body
+ * path, where `controlledAxiosPromise` throws a bare `Error(message)`. The message test covers that
+ * last case; without it a permission the relay reports as missing over a 200 reads as "couldn't be
+ * loaded" instead of "nothing to revoke". Both outcomes block, so a misread costs accuracy of
+ * explanation, not safety.
  */
 export function classifyPermissionLookupFailure(error: unknown): 'not-found' | 'lookup-failed' {
   const status =

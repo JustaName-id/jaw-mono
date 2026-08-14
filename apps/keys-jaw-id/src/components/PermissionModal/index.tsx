@@ -10,9 +10,7 @@ import {
   useFunctionSignatures,
   isNativeToken,
   isWildcard,
-  classifyPermissionLookupFailure,
-  validatePermissionRevocation,
-  type RevocationProblem,
+  usePermissionRevocation,
 } from '@jaw.id/ui';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { formatUnits, erc20Abi, type Address } from 'viem';
@@ -24,7 +22,6 @@ import {
   type WalletRevokePermissionsRequest,
   type WalletGrantPermissionsResponse,
   type SpendPeriod,
-  getPermissionFromRelay,
   buildGrantPermissionCall,
   buildRevokePermissionCall,
   buildErc20PaymasterContext,
@@ -149,9 +146,6 @@ export const PermissionModal = ({
   const submittingRef = useRef(false);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [isLoadingTokenInfo, setIsLoadingTokenInfo] = useState<boolean>(true); // Start true to prevent early clicks
-  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState<boolean>(true); // Start true to prevent early clicks
-  const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
-  const [lookupFailure, setLookupFailure] = useState<'missing-id' | 'not-found' | 'lookup-failed' | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState<boolean>(true);
 
@@ -216,24 +210,54 @@ export const PermissionModal = ({
   // Check if this is a sponsored transaction (paymaster provided)
   const isSponsored = !!effectivePaymasterUrl;
 
-  // Build the actual permission call for gas estimation (grant or revoke)
-  const revocationProblem = useMemo<RevocationProblem | null>(() => {
-    if (mode !== 'revoke') return null;
-    if (lookupFailure) return lookupFailure;
-    if (!fetchedPermissionData) return null;
-    return validatePermissionRevocation({
-      permission: {
-        account: fetchedPermissionData.account,
-        spender: fetchedPermissionData.spender,
-        end: Number(fetchedPermissionData.end),
-        chainId: String(fetchedPermissionData.chainId ?? ''),
-      },
-      from: walletAddress || undefined,
-      chainId: chain?.id,
-      now: Math.floor(Date.now() / 1000),
-    });
-  }, [mode, lookupFailure, fetchedPermissionData, walletAddress, chain?.id]);
+  // Extract permission details from request (needed before gas estimation for address override)
+  const permissionDetails = useMemo(() => {
+    if (!permissionRequest) return null;
 
+    if (mode === 'grant') {
+      const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
+      const [grantParams] = params;
+
+      return {
+        spender: grantParams.spender,
+        expiry: grantParams.expiry,
+        spends: grantParams.permissions.spends || [],
+        calls: grantParams.permissions.calls || [],
+        address: grantParams.address,
+      };
+    } else {
+      const params = permissionRequest.params as WalletRevokePermissionsRequest['params'];
+      const [revokeParams] = params;
+
+      return {
+        permissionId: revokeParams.id,
+        address: revokeParams.address,
+      };
+    }
+  }, [permissionRequest, mode]);
+
+  // Owns the relay fetch, the 404-vs-transport split and the validation, shared with the SDK's own
+  // handler so both revoke screens read the same `from`. `permissionDetails?.address` is the
+  // request's own account: the bare connected wallet reports `not-granter` whenever a request names
+  // another account this passkey owns, which blocks a legitimate revocation.
+  const {
+    permission: fetchedPermissionData,
+    // Feeds the Confirm gate alongside the token-info flag below, exactly as the local state it
+    // replaced did — the permission and its token metadata must both land before signing.
+    loading: isLoadingPermissionDetails,
+    problem: revocationProblem,
+  } = usePermissionRevocation({
+    permissionId:
+      permissionDetails && 'permissionId' in permissionDetails
+        ? (permissionDetails.permissionId as `0x${string}`)
+        : undefined,
+    apiKey: extractedApiKey,
+    chainId: chain?.id,
+    from: (permissionDetails?.address ?? walletAddress ?? undefined) as `0x${string}` | undefined,
+    enabled: mode === 'revoke',
+  });
+
+  // Build the actual permission call for gas estimation (grant or revoke)
   const transactionCalls = useMemo(() => {
     if (mode === 'grant') {
       // Grant mode: build grant permission call
@@ -268,32 +292,6 @@ export const PermissionModal = ({
       }
     }
   }, [mode, walletAddress, permissionRequest, fetchedPermissionData]);
-
-  // Extract permission details from request (needed before gas estimation for address override)
-  const permissionDetails = useMemo(() => {
-    if (!permissionRequest) return null;
-
-    if (mode === 'grant') {
-      const params = permissionRequest.params as WalletGrantPermissionsRequest['params'];
-      const [grantParams] = params;
-
-      return {
-        spender: grantParams.spender,
-        expiry: grantParams.expiry,
-        spends: grantParams.permissions.spends || [],
-        calls: grantParams.permissions.calls || [],
-        address: grantParams.address,
-      };
-    } else {
-      const params = permissionRequest.params as WalletRevokePermissionsRequest['params'];
-      const [revokeParams] = params;
-
-      return {
-        permissionId: revokeParams.id,
-        address: revokeParams.address,
-      };
-    }
-  }, [permissionRequest, mode]);
 
   // Use the gas estimation hook for both ETH and ERC-20 cost estimation
   const {
@@ -363,7 +361,7 @@ export const PermissionModal = ({
       return fetchedPermissionData.spends;
     }
     if (mode === 'grant' && permissionDetails && 'spends' in permissionDetails) {
-      return permissionDetails.spends;
+      return permissionDetails.spends ?? [];
     }
     return [];
   }, [mode, fetchedPermissionData, permissionDetails]);
@@ -374,7 +372,7 @@ export const PermissionModal = ({
       return fetchedPermissionData.calls;
     }
     if (mode === 'grant' && permissionDetails && 'calls' in permissionDetails) {
-      return permissionDetails.calls;
+      return permissionDetails.calls ?? [];
     }
     return [];
   }, [mode, fetchedPermissionData, permissionDetails]);
@@ -430,7 +428,7 @@ export const PermissionModal = ({
   // Grant date (revoke only) — the stored permission's `start`, mirroring how expiry uses `end`.
   const grantedDate = useMemo(() => {
     if (mode !== 'revoke' || !fetchedPermissionData?.start) return undefined;
-    return formatExpiryDate(parseInt(fetchedPermissionData.start, 10));
+    return formatExpiryDate(Number(fetchedPermissionData.start));
   }, [mode, fetchedPermissionData]);
 
   // Expiry date
@@ -438,7 +436,7 @@ export const PermissionModal = ({
     if (!permissionDetails) return '';
 
     if (mode === 'revoke' && fetchedPermissionData) {
-      const endTimestamp = parseInt(fetchedPermissionData.end, 10);
+      const endTimestamp = Number(fetchedPermissionData.end);
       return formatExpiryDate(endTimestamp);
     }
 
@@ -474,37 +472,6 @@ export const PermissionModal = ({
       resetModalState();
     }
   }, [chain, resetModalState]);
-
-  // Fetch permission details from relay for revoke mode
-  useEffect(() => {
-    if (mode !== 'revoke' || !permissionDetails || !('permissionId' in permissionDetails)) {
-      setIsLoadingPermissionDetails(false);
-      return;
-    }
-
-    const permissionId = permissionDetails.permissionId;
-    if (!permissionId || !extractedApiKey) {
-      setLookupFailure(!permissionId ? 'missing-id' : 'lookup-failed');
-      setIsLoadingPermissionDetails(false);
-      return;
-    }
-
-    setIsLoadingPermissionDetails(true);
-    setLookupFailure(null);
-    const fetchPermissionDetails = async () => {
-      try {
-        const permData = await getPermissionFromRelay(permissionId, extractedApiKey);
-        setFetchedPermissionData(permData);
-        setIsLoadingPermissionDetails(false);
-      } catch (error) {
-        console.error('❌ Failed to fetch permission details:', error);
-        setLookupFailure(classifyPermissionLookupFailure(error));
-        setIsLoadingPermissionDetails(false);
-      }
-    };
-
-    fetchPermissionDetails();
-  }, [mode, permissionDetails, extractedApiKey]);
 
   // Fetch fee tokens (ETH + available ERC-20 tokens from chain config)
   useEffect(() => {

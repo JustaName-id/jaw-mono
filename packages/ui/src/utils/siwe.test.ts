@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isSiweMessage, parseSiweMessage, getSiweOriginWarning, getSiweOriginWarningFromMessage } from './siwe';
+import {
+  isSiweMessage,
+  parseSiweMessage,
+  getSiweOriginWarning,
+  getSiweOriginWarningFromMessage,
+  bestEffortSiweAddress,
+} from './siwe';
 
 const ADDRESS = '0x6270000000000000000000000000000000003847';
 
@@ -259,5 +265,62 @@ describe('getSiweOriginWarningFromMessage', () => {
     expect(getSiweOriginWarningFromMessage('https://example.com', message)).toBe(
       getSiweOriginWarning('https://example.com', { domain: parsed.domain, uri: parsed.uri })
     );
+  });
+});
+
+// The account-mismatch advisory hangs off the declared address. When the parse failed it silently
+// evaluated to false — the wrong failure mode, since the dapp writes the message and so would choose
+// whether the advisory appears.
+describe('bestEffortSiweAddress', () => {
+  const message = (address: string, uriLine = 'URI:\thttps://example.com') =>
+    [
+      'example.com wants you to sign in with your Ethereum account:',
+      address,
+      '',
+      'Sign in',
+      '',
+      uriLine,
+      'Version: 1',
+      'Chain ID: 1',
+      'Nonce: abc12345',
+      'Issued At: 2026-01-01T00:00:00Z',
+    ].join('\n');
+
+  it('recovers the address from a message that does not parse', () => {
+    const addr = '0x1111111111111111111111111111111111111111';
+    const m = message(addr);
+    expect(isSiweMessage(m)).toBe(true);
+    expect(parseSiweMessage(m)).toBeNull();
+    expect(bestEffortSiweAddress(m)).toBe(addr);
+  });
+
+  it('agrees with the parser when the message does parse', () => {
+    const addr = '0x2222222222222222222222222222222222222222';
+    const m = message(addr, 'URI: https://example.com');
+    expect(parseSiweMessage(m)?.address?.toLowerCase()).toBe(addr);
+    expect(bestEffortSiweAddress(m)?.toLowerCase()).toBe(addr);
+  });
+
+  it('is shape-checked, not checksum-checked — it is only ever compared case-insensitively', () => {
+    const mixed = '0xAbCdEf1111111111111111111111111111111111';
+    expect(bestEffortSiweAddress(message(mixed))).toBe(mixed);
+  });
+
+  it.each([
+    ['too short', '0xabc'],
+    ['not hex', '0xzzzz111111111111111111111111111111111111'],
+    ['no prefix', '1111111111111111111111111111111111111111'],
+  ])('returns undefined for an address-like line that is %s', (_label, bad) => {
+    expect(bestEffortSiweAddress(message(bad))).toBeUndefined();
+  });
+
+  it('ignores an address that shares its line with other text', () => {
+    const m = [
+      'example.com wants you to sign in with your Ethereum account:',
+      'spender 0x1111111111111111111111111111111111111111 approved',
+      '',
+      'URI: https://example.com',
+    ].join('\n');
+    expect(bestEffortSiweAddress(m)).toBeUndefined();
   });
 });

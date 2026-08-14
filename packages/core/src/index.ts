@@ -47,6 +47,7 @@ export {
     type WalletRevokePermissionsRequest,
     type RevokePermissionApiResponse,
     // Permission utilities for UI (fetching permission details without Account instance)
+    type StorePermissionApiResponse,
     getPermissionFromRelay,
     // Permission call builders (for gas estimation)
     buildGrantPermissionCall,

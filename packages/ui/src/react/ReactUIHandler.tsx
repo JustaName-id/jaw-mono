@@ -22,7 +22,6 @@ import {
   JAW_RPC_URL,
   JAW_PAYMASTER_URL,
   SubnameTextRecordCapabilityRequest,
-  getPermissionFromRelay,
   handleGetCapabilitiesRequest,
   buildGrantPermissionCall,
   buildRevokePermissionCall,
@@ -59,11 +58,7 @@ import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
 import { usePermissionExecution } from '../hooks/usePermissionExecution';
-import {
-  classifyPermissionLookupFailure,
-  validatePermissionRevocation,
-  type RevocationProblem,
-} from '../utils/permissionExecution';
+import { usePermissionRevocation } from '../hooks/usePermissionRevocation';
 import { useFunctionSignatures } from '../hooks/useFunctionSignatures';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getPublicClient } from '../utils/publicClient';
@@ -2768,12 +2763,10 @@ function RevokePermissionDialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState<string>('');
-  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState(true);
-  const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
-  // Why the permission isn't available, when it isn't. Distinguished because a 404 proves the
-  // permission is gone while anything else is our lookup failing — different copy, both blocking,
-  // since the revoke call is built from this data.
-  const [lookupFailure, setLookupFailure] = useState<'missing-id' | 'not-found' | 'lookup-failed' | null>(null);
+  // Covers ONLY the token metadata; whether the permission itself is in flight comes from the hook.
+  // Kept apart deliberately: one flag covering both is never re-armed when the request changes, so a
+  // second revoke arriving without a remount left the gate open on an empty permission.
+  const [isLoadingTokenMetadata, setIsLoadingTokenMetadata] = useState(true);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -2783,6 +2776,19 @@ function RevokePermissionDialogWrapper({
   const submittingRef = useRef(false);
 
   const chainId = request.data.chainId || defaultChainId || 1;
+
+  // Owns the relay fetch, the 404-vs-transport split and the validation. Shared with the keys popup
+  // so both revoke screens read the same `from` — they drifted apart when this lived twice.
+  const {
+    permission: fetchedPermissionData,
+    loading: isLoadingPermission,
+    problem: revocationProblem,
+  } = usePermissionRevocation({
+    permissionId: request.data.permissionId as `0x${string}` | undefined,
+    apiKey,
+    chainId,
+    from: request.data.address,
+  });
   const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
 
@@ -2882,23 +2888,22 @@ function RevokePermissionDialogWrapper({
     [chainId, apiKey, computedPaymasterUrl]
   );
 
-  // Fetch permission details from relay
+  // Token metadata for the spend tokens and any call target that turns out to be a token, keyed on
+  // the permission `usePermissionRevocation` resolved. `isLoadingTokenMetadata` stays true until
+  // this lands as well, because the Confirm gate reads it and a spend amount must never render
+  // scaled by a guessed decimals.
   useEffect(() => {
-    if (!request.data.permissionId || !apiKey) {
-      // Both are terminal, not pending — otherwise the dialog renders an empty permission with
-      // Confirm enabled. No id means the request itself is malformed; no key means no way to
-      // reach the relay, so the revocation can never be built.
-      setLookupFailure(!request.data.permissionId ? 'missing-id' : 'lookup-failed');
-      setIsLoadingPermissionDetails(false);
+    const permData = fetchedPermissionData;
+    if (!permData) {
+      // The hook reached a terminal problem, so no permission is coming and nothing gates on it.
+      if (revocationProblem) setIsLoadingTokenMetadata(false);
       return;
     }
-    setLookupFailure(null);
 
-    const fetchPermissionDetails = async () => {
+    let cancelled = false;
+    setIsLoadingTokenMetadata(true);
+    const fetchTokenInfo = async () => {
       try {
-        const permData = await getPermissionFromRelay(request.data.permissionId as `0x${string}`, apiKey);
-        setFetchedPermissionData(permData);
-
         // Token info for spend tokens and for any call target that turns out to be a token.
         const lookupAddresses = Array.from(
           new Set([
@@ -2952,16 +2957,20 @@ function RevokePermissionDialogWrapper({
           );
           setTokenInfoMap(newTokenInfoMap);
         }
-        setIsLoadingPermissionDetails(false);
       } catch (error) {
-        console.error('❌ Failed to fetch permission details:', error);
-        setLookupFailure(classifyPermissionLookupFailure(error));
-        setIsLoadingPermissionDetails(false);
+        // Token metadata is enrichment: a failed read renders the raw allowance rather than
+        // blocking, so it must not become a revocation problem.
+        console.error('❌ Failed to fetch token info for permission:', error);
+      } finally {
+        if (!cancelled) setIsLoadingTokenMetadata(false);
       }
     };
 
-    fetchPermissionDetails();
-  }, [request.data.permissionId, apiKey, chainId, chain.rpcUrl, viemChain]);
+    fetchTokenInfo();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchedPermissionData, revocationProblem, chainId, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens for ERC-20 paymaster support
   useEffect(() => {
@@ -3128,31 +3137,15 @@ function RevokePermissionDialogWrapper({
   // Expiry date from fetched permission
   const expiryDate = useMemo(() => {
     if (!fetchedPermissionData) return '';
-    const endTimestamp = parseInt(fetchedPermissionData.end, 10);
+    // `Number`, not `parseInt`: the hook returns the relay's own typed record, where `end` may
+    // already be a number.
+    const endTimestamp = Number(fetchedPermissionData.end);
     return formatExpiryDate(endTimestamp);
   }, [fetchedPermissionData]);
 
   // Spender address from fetched permission
   // Empty until the relay responds — the dialog shows a placeholder row rather than a fake address.
   const spenderAddress = fetchedPermissionData?.spender ?? '';
-
-  // Named up front rather than surfacing as a failed estimation or an on-chain revert. Derived from
-  // the permission this screen already fetched, so it costs no extra round-trip.
-  const revocationProblem = useMemo<RevocationProblem | null>(() => {
-    if (lookupFailure) return lookupFailure;
-    if (!fetchedPermissionData) return null;
-    return validatePermissionRevocation({
-      permission: {
-        account: fetchedPermissionData.account,
-        spender: fetchedPermissionData.spender,
-        end: Number(fetchedPermissionData.end),
-        chainId: String(fetchedPermissionData.chainId ?? ''),
-      },
-      from: request.data.address,
-      chainId,
-      now: Math.floor(Date.now() / 1000),
-    });
-  }, [lookupFailure, fetchedPermissionData, request.data.address, chainId]);
 
   const handleConfirm = async () => {
     if (submittingRef.current) return;
@@ -3230,7 +3223,8 @@ function RevokePermissionDialogWrapper({
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
-      isLoadingTokenInfo={isLoadingPermissionDetails}
+      // Either half closes the gate: no Confirm until the permission AND its metadata land.
+      isLoadingTokenInfo={isLoadingPermission || isLoadingTokenMetadata}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Gas estimation props
       gasFee={gasFee}

@@ -365,41 +365,6 @@ describe('isBlockingRevocationProblem', () => {
   });
 });
 
-describe('classifyPermissionLookupFailure', () => {
-  it('reads a 404 off the error directly', () => {
-    expect(classifyPermissionLookupFailure(Object.assign(new Error('gone'), { status: 404 }))).toBe('not-found');
-  });
-
-  it('reads a 404 off response.status, the raw transport shape', () => {
-    expect(classifyPermissionLookupFailure({ response: { status: 404 } })).toBe('not-found');
-  });
-
-  it.each([500, 502, 400, 403])('treats %s as our lookup failing, not a missing permission', (status) => {
-    expect(classifyPermissionLookupFailure({ status })).toBe('lookup-failed');
-  });
-
-  // The relay's HTTP-200-with-error-body path: controlledAxiosPromise throws a bare Error with no
-  // status at all, so a status check alone reads a missing permission as "couldn't be loaded".
-  it.each(['Permission not found', 'permission NOT FOUND', 'record does not exist', 'no such permission'])(
-    'falls back to the message when there is no status: %s',
-    (message) => {
-      expect(classifyPermissionLookupFailure(new Error(message))).toBe('not-found');
-    }
-  );
-
-  it.each(['Network Error', 'timeout of 5000ms exceeded', 'Something went wrong'])(
-    'a status-less error that does not read as missing stays lookup-failed: %s',
-    (message) => {
-      expect(classifyPermissionLookupFailure(new Error(message))).toBe('lookup-failed');
-    }
-  );
-
-  it('survives a non-Error throw', () => {
-    expect(classifyPermissionLookupFailure(undefined)).toBe('lookup-failed');
-    expect(classifyPermissionLookupFailure('not found')).toBe('not-found');
-  });
-});
-
 // ── An unreadable stored chain id must not masquerade as a network mismatch ──────────────────────
 // Both revoke callers derive the chainId they pass from the same relay record the validator reads,
 // so `NaN !== NaN` (always true) made a corrupt stored id report "Wrong network".
@@ -445,5 +410,40 @@ describe('unreadable stored chain id', () => {
     expect(
       validatePermissionRevocation({ permission: revocable({ chainId: '' }), from: GRANTER, chainId: 84532, now: NOW })
     ).toBeNull();
+  });
+});
+
+describe('classifyPermissionLookupFailure', () => {
+  it('reads a 404 off the error directly', () => {
+    expect(classifyPermissionLookupFailure(Object.assign(new Error('gone'), { status: 404 }))).toBe('not-found');
+  });
+
+  it('reads a 404 off response.status, the raw transport shape', () => {
+    expect(classifyPermissionLookupFailure({ response: { status: 404 } })).toBe('not-found');
+  });
+
+  it.each([500, 502, 400, 403])('treats %s as our lookup failing, not a missing permission', (status) => {
+    expect(classifyPermissionLookupFailure({ status })).toBe('lookup-failed');
+  });
+
+  // The relay's HTTP-200-with-error-body path: controlledAxiosPromise throws a bare Error with no
+  // status at all, so a status check alone reads a missing permission as "couldn't be loaded".
+  it.each(['Permission not found', 'permission NOT FOUND', 'record does not exist', 'no such permission'])(
+    'falls back to the message when there is no status: %s',
+    (message) => {
+      expect(classifyPermissionLookupFailure(new Error(message))).toBe('not-found');
+    }
+  );
+
+  it.each(['Network Error', 'timeout of 5000ms exceeded', 'Something went wrong'])(
+    'a status-less error that does not read as missing stays lookup-failed: %s',
+    (message) => {
+      expect(classifyPermissionLookupFailure(new Error(message))).toBe('lookup-failed');
+    }
+  );
+
+  it('survives a non-Error throw', () => {
+    expect(classifyPermissionLookupFailure(undefined)).toBe('lookup-failed');
+    expect(classifyPermissionLookupFailure('not found')).toBe('not-found');
   });
 });

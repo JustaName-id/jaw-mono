@@ -13,7 +13,7 @@ import { SiweDialogProps } from './types';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { dateTone } from '../../utils/displayFormat';
-import { parseSiweMessage } from '../../utils/siwe';
+import { bestEffortSiweAddress, parseSiweMessage } from '../../utils/siwe';
 import { formatAddress } from '../../utils/formatAddress';
 import { AppAvatar } from '../AppAvatar';
 import { CopyButton } from '../CopyButton';
@@ -88,6 +88,10 @@ export const SiweDialog = ({
   warningMessage,
 }: SiweDialogProps) => {
   const parsed = useMemo(() => parseSiweMessage(message), [message]);
+  // Falls back to a shape-checked read when the parse fails. Without it the mismatch advisory below
+  // silently evaluates to false on a message that detects as SIWE but doesn't parse — and the dapp
+  // writes the message, so it would choose whether the advisory appears.
+  const declaredAddress = useMemo(() => parsed?.address ?? bestEffortSiweAddress(message), [parsed, message]);
 
   // "Sign In as" = the CONNECTED account (whose key signs) — safe to reverse-resolve to an
   // ENS name + avatar. The MESSAGE's declared address is resolved separately for the
@@ -99,14 +103,14 @@ export const SiweDialog = ({
     mainnetRpcUrl
   );
   const displayName = resolvedName || formatAddress(signerAddress);
-  const { name: messageAccountName } = useReverseIdentity(parsed?.address || undefined, parsed?.chainId, mainnetRpcUrl);
+  const { name: messageAccountName } = useReverseIdentity(declaredAddress || undefined, parsed?.chainId, mainnetRpcUrl);
   const hasError = siweStatus.includes('Error');
 
   // The message names an account; the signature is produced by the connected
   // account. If they differ, the signature won't verify for the named account —
   // surface it (advisory, not a hard gate).
   const addressMismatch =
-    !!accountAddress && !!parsed?.address && accountAddress.toLowerCase() !== parsed.address.toLowerCase();
+    !!accountAddress && !!declaredAddress && accountAddress.toLowerCase() !== declaredAddress.toLowerCase();
 
   // EIP-4361 requires the nonce to be at least 8 alphanumeric chars; a shorter one
   // means the site's replay protection is weak. Advisory (amber), not a hard gate.
@@ -155,17 +159,20 @@ export const SiweDialog = ({
     warning?: string;
     warningTone?: 'danger' | 'warning';
   }> = [];
+  // The Account row is built from `declaredAddress`, so it survives a failed parse — otherwise the
+  // mismatch advisory would compute correctly and then have nowhere to render, which is how it went
+  // missing before. Everything below it still requires a parse: those values are only trustworthy
+  // when the whole message read cleanly.
+  if (declaredAddress)
+    fields.push({
+      label: 'Account',
+      value: messageAccountName || formatAddress(declaredAddress),
+      copyValue: declaredAddress,
+      warning: addressMismatch
+        ? "This request names a different account than the one you're connected with, so the signature won't be valid for it."
+        : undefined,
+    });
   if (parsed) {
-    const account = parsed.address;
-    if (account)
-      fields.push({
-        label: 'Account',
-        value: messageAccountName || formatAddress(account),
-        copyValue: account,
-        warning: addressMismatch
-          ? "This request names a different account than the one you're connected with, so the signature won't be valid for it."
-          : undefined,
-      });
     if (parsed.uri) fields.push({ label: 'URL', value: parsed.uri });
     if (parsed.version) fields.push({ label: 'Version', value: parsed.version });
     if (parsed.chainId) {

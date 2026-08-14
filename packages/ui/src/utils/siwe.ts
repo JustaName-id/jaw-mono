@@ -177,6 +177,11 @@ function bestEffortOriginFields(decoded: string): { domain?: string; uri?: strin
   return { domain: header?.[1]?.trim(), uri: uri?.[1] };
 }
 
+export function bestEffortSiweAddress(decoded: string): string | undefined {
+  const line = /^\s*(0x[a-fA-F0-9]{40})\s*$/m.exec(decoded);
+  return line?.[1];
+}
+
 /**
  * The phishing warning for a raw message, whether or not it parses.
  *
