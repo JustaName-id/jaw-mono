@@ -4,7 +4,7 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot, type Root } from 'react-dom/client';
 import { act, useContext } from 'react';
 
-import { DefaultDialog, DialogAnchorContext, useDialogMobileFullScreen } from '@jaw.id/ui';
+import { DefaultDialog, DialogAnchorContext, ShellDialog, useDialogMobileFullScreen } from '@jaw.id/ui';
 
 import { EmbeddedShell } from './index';
 import type { PopupCommunicator, CommunicatorContext } from '../../lib/popup-communicator';
@@ -140,10 +140,10 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
     );
     const content = document.body.querySelector('[data-slot="dialog-content"]') as HTMLElement;
     expect(content).not.toBeNull();
-    // Content-sized height capped at the card's 85vh — not the viewport-filling
+    // Content-sized height capped at the card's 85dvh — not the viewport-filling
     // height:100%/maxHeight:none the dialog asked for.
     expect(content.style.height).toBe('auto');
-    expect(content.style.maxHeight).toBe('85vh');
+    expect(content.style.maxHeight).toBe('85dvh');
     // Full-width sheet pinned to the bottom edge, like the shell's drawer card.
     expect(content.style.width).toBe('100%');
     expect(content.className).toContain('bottom-0');
@@ -157,6 +157,30 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
     // (home-bar clearance), but jsdom's CSS parser drops env() values so it
     // cannot be asserted here; the shell card's equivalent is covered via its
     // pb-[env(safe-area-inset-bottom)] class below.
+  });
+
+  it('drawer: a revamped modal reaches the sheet presentation through the portal and owns the home-bar inset', () => {
+    stubViewport(400);
+    mount(
+      <ShellDialog open>
+        <div>shell content</div>
+      </ShellDialog>
+    );
+    const content = document.body.querySelector('[data-slot="dialog-content"]') as HTMLElement;
+    // Radix portals to document.body, but React context still flows — so the
+    // shell card inside sees 'bottom-sheet' and renders as the sheet itself
+    // (full-bleed, grabber) rather than a 400px card floating in a full-width
+    // invisible sheet, which is what a card presentation would look like here.
+    const shell = content.querySelector('[data-jaw-shell]') as HTMLElement;
+    expect(shell).not.toBeNull();
+    expect(shell.className).toContain('w-full');
+    expect(shell.querySelector('[data-jaw-grabber]')).not.toBeNull();
+    // The shell applies the safe-area inset inside its own surface, so the Radix
+    // sheet stands down (0 instead of its default env(safe-area-inset-bottom))
+    // — stacking both would leave two home-bar gaps.
+    expect(content.style.paddingBottom).toBe('0px');
+    // ShellDialog's own `width: fit-content` must still lose to the sheet.
+    expect(content.style.width).toBe('100%');
   });
 
   it('floating: a portaled dialog keeps its own sizing and anchors at the top offset', () => {
@@ -187,6 +211,36 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
       expect(card().className).not.toContain('top-0');
       // iOS home-bar clearance
       expect(card().className).toContain('pb-[env(safe-area-inset-bottom)]');
+    });
+
+    it('stands down from the inset and height cap for a revamped screen, which owns them', () => {
+      // A DialogShell child renders as the sheet itself and applies its own
+      // safe-area inset and 85dvh cap. Keeping the wrapper's copies would stack
+      // two home-bar gaps, and the wrapper cap (it is also `overflow-y-auto`)
+      // would make it a second scroll container around the card's own scroller.
+      stubViewport(400);
+      mount(<div data-jaw-shell>revamped screen</div>);
+      expect(card().className).toContain('has-[[data-jaw-shell]]:pb-0');
+      expect(card().className).toContain('has-[[data-jaw-shell]]:max-h-none');
+    });
+
+    it('neutralizes the popup centering chrome an inline screen arrives wrapped in', () => {
+      // page.tsx wraps the inline screens in `min-h-screen items-center
+      // justify-center p-4` around a `w-full max-w-md` — popup-window chrome.
+      // In a sheet the p-4 stops the edges touching the viewport (16px on the
+      // left, right AND bottom) and max-w-md caps the width at 448px, which
+      // bites at the 460px breakpoint. Portaled dialogs are position:fixed and
+      // never see this wrapper, so the inline screens are the only ones that
+      // need the reset — and were the only ones showing the gap.
+      //
+      // The `:has()` must sit on the WRAPPER, not on the descendant: the stacked
+      // `has-[[data-jaw-shell]]:[&_.min-h-screen]:p-0` form compiles to
+      // `.wrapper .min-h-screen:has([data-jaw-shell])`, which only matches while
+      // the shell happens to live inside that exact child.
+      stubViewport(400);
+      mount(<div data-jaw-shell>revamped screen</div>);
+      expect(card().className).toContain('[&:has([data-jaw-shell])_.min-h-screen]:p-0');
+      expect(card().className).toContain('[&:has([data-jaw-shell])_.max-w-md]:max-w-none');
     });
 
     it('defaults to revealed (old SDKs never send DialogVisibility)', () => {
