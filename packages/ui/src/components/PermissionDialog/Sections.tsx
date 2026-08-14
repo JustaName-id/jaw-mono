@@ -73,7 +73,7 @@ function SpendRow({
   const isLongAmount = isLongSpendAmount(spend.amount);
 
   return (
-    <div className="border-border flex flex-wrap items-center gap-x-2 gap-y-1 border-t px-3 py-2 first:border-t-0">
+    <div className="border-border/40 flex flex-wrap items-center gap-x-2 gap-y-1 border-t px-3 py-2 first:border-t-0">
       <span className="size-token relative inline-flex flex-none items-center justify-center">
         <TokenIcon
           chainId={chainId}
@@ -191,7 +191,7 @@ function ContractGroup({
     : `${group.calls.length} ${group.calls.length === 1 ? 'function' : 'functions'}`;
 
   return (
-    <AccordionItem value={group.target} className="border-border border-t first:border-t-0">
+    <AccordionItem value={group.target} className="border-border/40 border-t first:border-t-0">
       <AccordionTrigger className="items-center px-3 py-2 hover:no-underline">
         <span className="flex min-w-0 flex-1 items-center gap-2">
           <span className="size-token relative inline-flex flex-none items-center justify-center">
@@ -298,7 +298,7 @@ export function AllowedCalls({
             <span className="text-muted-foreground text-code font-mono font-medium">{calls.length}</span>
           </span>
         </AccordionTrigger>
-        <AccordionContent className="border-border border-t p-0">
+        <AccordionContent className="border-border/40 border-t p-0">
           <Accordion type="multiple">
             {groups.map((group) => (
               <ContractGroup
@@ -325,7 +325,7 @@ export function MetaCard({ rows }: { rows: { label: string; value: React.ReactNo
       {rows.map((row) => (
         <div
           key={row.label}
-          className="border-border flex h-7 items-center justify-between gap-2 border-t px-3 first:border-t-0"
+          className="border-border/40 flex h-7 items-center justify-between gap-2 border-t px-3 first:border-t-0"
         >
           <Eyebrow>{row.label}</Eyebrow>
           <span className="text-foreground text-body-xs flex min-w-0 items-center gap-1.5 font-mono">{row.value}</span>

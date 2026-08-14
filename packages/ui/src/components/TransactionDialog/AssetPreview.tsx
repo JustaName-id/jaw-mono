@@ -129,7 +129,7 @@ function DeltaColumn({
 
   return (
     <div className="border-border rounded-box min-w-0 flex-1 overflow-hidden border">
-      <div className="border-border bg-secondary/40 flex items-center gap-2 border-b p-3">
+      <div className="border-border/40 bg-secondary/40 flex items-center gap-2 border-b p-3">
         <Arrow className={`size-3 flex-none ${out ? 'text-red-400' : 'text-green-400'}`} strokeWidth={2.7} />
         <span className="text-foreground text-heading">
           {/* Under a permission the funds move from the granter, not the signer reading this —

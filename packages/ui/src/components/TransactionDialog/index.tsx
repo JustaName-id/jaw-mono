@@ -442,7 +442,7 @@ export const TransactionDialog = ({
           </div>
 
           {/* Pinned fee row + actions */}
-          <div className="border-border flex-none space-y-2 border-t px-6 pb-5 pt-3">
+          <div className="border-border/40 flex-none space-y-2 border-t px-6 pb-5 pt-3">
             <NetworkFeeRow
               blockReason={feeBlockReason}
               fundsShortfallDetail={

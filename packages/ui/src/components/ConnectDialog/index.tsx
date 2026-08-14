@@ -79,7 +79,7 @@ export const ConnectDialog = ({
           {showPermissions && (
             <div className="border-border rounded-box mt-4 flex flex-col overflow-hidden border">
               {CAPABILITY_ROWS.map(({ Icon, label }) => (
-                <div key={label} className="border-border flex items-center gap-3 border-b p-3 last:border-b-0">
+                <div key={label} className="border-border/40 flex items-center gap-3 border-b p-3 last:border-b-0">
                   <span className="bg-secondary border-border rounded-chip flex h-6 w-6 flex-none items-center justify-center border">
                     <Icon className="text-secondary-foreground h-3.5 w-3.5" strokeWidth={1.5} />
                   </span>

@@ -39,7 +39,7 @@ function Field({
   const warnText = warningTone === 'warning' ? 'text-amber-600 dark:text-amber-500' : 'text-destructive';
   const warnIcon = warningTone === 'warning' ? 'text-amber-500' : 'text-destructive';
   return (
-    <div className="border-foreground/[0.06] flex items-center justify-between gap-3 border-t px-3 py-2 first:border-t-0">
+    <div className="border-border/40 flex items-center justify-between gap-3 border-t px-3 py-2 first:border-t-0">
       <span className="text-muted-foreground text-label flex-none font-mono uppercase">{label}</span>
       <span className="flex min-w-0 items-center justify-end gap-1.5">
         {warning && (
@@ -310,7 +310,7 @@ export const SiweDialog = ({
                     <path d="M6 9l6 6 6-6" />
                   </svg>
                 </summary>
-                <div className="border-border border-t p-3">
+                <div className="border-border/40 border-t p-3">
                   <p className="text-muted-foreground text-code whitespace-pre-wrap break-words font-mono leading-relaxed">
                     {message}
                   </p>
@@ -346,7 +346,7 @@ export const SiweDialog = ({
           </div>
 
           {/* Pinned actions */}
-          <div className="border-border flex-none border-t px-6 pb-5 pt-3">
+          <div className="border-border/40 flex-none border-t px-6 pb-5 pt-3">
             <div className="flex gap-2">
               <Button
                 variant="secondary"

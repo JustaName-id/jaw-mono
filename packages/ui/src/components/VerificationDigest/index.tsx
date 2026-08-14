@@ -68,7 +68,7 @@ export const Eip712VerificationDigests = ({ typedDataJson }: { typedDataJson: st
           <path d="M6 9l6 6 6-6" />
         </svg>
       </summary>
-      <div className="border-border flex flex-col gap-3 border-t p-3">
+      <div className="border-border/40 flex flex-col gap-3 border-t p-3">
         <DigestRow label="Domain Hash" value={digests.domainHash} />
         <DigestRow label="Message Hash" value={digests.messageHash} />
         <DigestRow label="EIP-712 Digest" value={digests.eip712Digest} prominent />

@@ -296,13 +296,13 @@ export function Eip712Tree({ typedData }: { typedData: TypedData }) {
 
   return (
     <div className="border-border rounded-box overflow-hidden border">
-      <div className="border-border border-b px-3 py-2">
+      <div className="border-border/40 border-b px-3 py-2">
         <span className="text-muted-foreground text-label font-mono uppercase">{typedData.primaryType}</span>
       </div>
       <div>
         {rows.map((r, i) => {
           const pad = r.depth * INDENT;
-          const border = i === 0 ? '' : 'border-foreground/[0.06] border-t';
+          const border = i === 0 ? '' : 'border-border/40 border-t';
           if (r.kind === 'group') {
             const open = !collapsed.has(r.id);
             return (

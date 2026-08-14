@@ -192,7 +192,7 @@ export const Eip712Dialog = ({
           </div>
 
           {/* Pinned actions */}
-          <div className="border-border flex-none border-t px-6 pb-5 pt-3">
+          <div className="border-border/40 flex-none border-t px-6 pb-5 pt-3">
             <div className="flex gap-2">
               <Button
                 variant="secondary"
