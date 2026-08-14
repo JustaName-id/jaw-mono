@@ -1,13 +1,27 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
-  ExecutionRevertedError,
-  HttpRequestError,
-  RawContractError,
+  concat,
+  createPublicClient,
+  custom,
+  encodeAbiParameters,
   ethAddress,
+  pad,
+  zeroAddress,
   type Address,
-  type Client,
+  type Hex,
 } from 'viem';
+import { base } from 'viem/chains';
 import { formatAssetAmount, mapAssetChanges, resolveTokenUnits, type RawAssetChange } from './assetPreview';
+
+const publicClient = vi.hoisted(() => ({ current: undefined as unknown }));
+vi.mock('./publicClient', () => ({
+  getJawPublicClient: () => publicClient.current,
+  getPublicClient: () => publicClient.current,
+  jawRpcUrl: () => 'https://rpc.test',
+}));
+
+// Imported after the mock so `simulateAssetChanges` resolves the stubbed client.
+const { simulateAssetChanges } = await import('./assetPreview');
 
 /** A viem `assetChanges` entry, in the shape `simulateCalls` returns. */
 function change(
@@ -86,42 +100,87 @@ describe('mapAssetChanges', () => {
 
     expect(delta).toMatchObject({ isNative: true, decimals: 18, symbol: 'ETH' });
   });
+
+  it('drops a token reporting decimals past a uint8 instead of formatting it', () => {
+    // viem decodes the `decimals()` word as `uint256` and reports `Number` of it, so a contract
+    // picks this number. `formatUnits` pads to that many digits, quadratically: 100_000 blocks
+    // the render thread for ~4.5s, 1_000_000 for minutes, `Number(2n ** 200n)` throws
+    // `RangeError: Out of memory`. A batch only has to touch such a contract to be measured.
+    //
+    // The inputs stop at the boundary rather than including a 1_000_000 — every value above 255
+    // takes the same branch, and one that renders for minutes would turn a regression here from
+    // a red test into a hung CI job.
+    const hostile = [
+      change(USDC, 1n, { decimals: 256, symbol: 'OVER' }),
+      change(USDC, 1n, { decimals: Number(2n ** 200n), symbol: 'OOM' }),
+      change(USDC, 1n, { decimals: -1, symbol: 'NEG' }),
+      change(USDC, 1n, { decimals: 6.5, symbol: 'FRAC' }),
+    ];
+
+    expect(mapAssetChanges(hostile)).toEqual([]);
+  });
+
+  it('still formats the largest decimals a compliant token can declare', () => {
+    // The bound is ERC-20's own `uint8`, not an arbitrary cutoff — 255 must still render.
+    const [delta] = mapAssetChanges([change(USDC, 1n, { decimals: 255, symbol: 'MAX' })]);
+
+    expect(delta).toMatchObject({ decimals: 255, direction: 'in' });
+  });
 });
 
 const SUPPORTS_INTERFACE = '0x01ffc9a7';
 const DECIMALS = '0x313ce567';
 const BLOCK = 31_337n;
+const BLOCK_HEX = '0x7a69';
 
-const word = (n: number) => `0x${n.toString(16).padStart(64, '0')}` as const;
+const word = (n: number | bigint) => `0x${n.toString(16).padStart(64, '0')}` as const;
+const str = (s: string) => encodeAbiParameters([{ type: 'string' }], [s]);
+
+/** A probe's on-chain outcome: the bytes it returned, or `revert` for a function it has not got. */
+type Outcome = Hex | 'revert';
+
+const ok = (returnData: Hex) => ({ status: '0x1', returnData, gasUsed: '0x0' });
+const failed = (returnData: Hex = '0x') => ({ status: '0x0', returnData, gasUsed: '0x0' });
+const outcome = (o: Outcome) => (o === 'revert' ? failed() : ok(o));
 
 interface Probe {
   to: Address;
-  data: `0x${string}`;
-  blockNumber?: bigint;
+  data: Hex;
+  block: string;
 }
 
 /**
- * A client stubbed at the `call` seam `readContract` dispatches through (viem's `getAction`
- * prefers `client.call` over the tree-shakable action), so the probes still run their real
- * ABI encode/decode and their real error classification — only the transport is fake.
+ * A client stubbed at the transport, so `resolveTokenUnits` runs its real `eth_simulateV1`
+ * encoding, its real per-call status handling and its real ABI decoding — only the node is fake.
+ * Stubbing higher up (at `client.call`, say) would skip the seam where a request failure and a
+ * contract's "no" have to stay distinguishable, which is the behaviour these tests exist for.
  *
- * `answer` receives the 4-byte selector and returns either return data or an error to throw.
+ * `answer` receives the 4-byte selector and the target. Pass `transportError` to make the node
+ * itself fail.
  */
-function stubClient(answer: (selector: string, to: string) => `0x${string}` | Error) {
+function stubClient(answer: (selector: string, to: string) => Outcome, transportError?: Error) {
   const probes: Probe[] = [];
-  const client = {
-    call: async (params: Probe) => {
-      probes.push(params);
-      const result = answer(params.data.slice(0, 10), params.to.toLowerCase());
-      if (result instanceof Error) throw result;
-      return { data: result };
-    },
-  };
-  return { client: client as unknown as Client, probes };
+  let requests = 0;
+  const client = createPublicClient({
+    chain: base,
+    transport: custom({
+      async request({ method, params }: { method: string; params: readonly unknown[] }) {
+        if (method !== 'eth_simulateV1') throw new Error(`unexpected ${method}`);
+        requests++;
+        if (transportError) throw transportError;
+        const [{ blockStateCalls }, block] = params as [{ blockStateCalls: { calls: Probe[] }[] }, string];
+        return blockStateCalls.map((b) => ({
+          number: block,
+          calls: b.calls.map((c) => {
+            probes.push({ to: c.to, data: c.data, block });
+            return outcome(answer(c.data.slice(0, 10), c.to.toLowerCase()));
+          }),
+        }));
+      },
+    }),
+  });
+  return { client, probes, requestCount: () => requests };
 }
-
-/** What a contract missing the function returns through Multicall3's `allowFailure`. */
-const reverted = () => new RawContractError({ data: '0x' });
 
 describe('resolveTokenUnits', () => {
   it('confirms an ERC-721 that viem guessed at decimals 1', async () => {
@@ -137,7 +196,7 @@ describe('resolveTokenUnits', () => {
   });
 
   it('recovers a 0-decimal ERC-20 that viem reported as undefined', async () => {
-    const { client } = stubClient((selector) => (selector === SUPPORTS_INTERFACE ? reverted() : word(0)));
+    const { client } = stubClient((selector) => (selector === SUPPORTS_INTERFACE ? 'revert' : word(0)));
     const changes = [change(ZERO_DEC, 42n, { symbol: 'ZERO' })];
 
     const units = await resolveTokenUnits(client, changes, BLOCK);
@@ -161,15 +220,19 @@ describe('resolveTokenUnits', () => {
     expect(units.changes[0].token.decimals).toBeUndefined();
   });
 
-  it('issues every probe in one tick so they fold into a single Multicall3', async () => {
-    const { client, probes } = stubClient(() => word(1));
+  it('asks every question in one request, whatever the candidate count', async () => {
+    const { client, probes, requestCount } = stubClient(() => word(1));
 
-    const pending = resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK);
+    await resolveTokenUnits(
+      client,
+      [change(AERO_POS, 1n, { symbol: 'POS' }), change(ZERO_DEC, 1n, { symbol: 'ZERO' })],
+      BLOCK
+    );
 
-    // viem's multicall scheduler only batches calls made on one client within a tick, so both
-    // questions must be asked before either answer is awaited.
-    expect(probes.map((p) => p.data.slice(0, 10))).toEqual([SUPPORTS_INTERFACE, DECIMALS]);
-    await pending;
+    expect(requestCount()).toBe(1);
+    // Two tokens, each asked both questions. Order between the groups is an implementation detail.
+    expect(probes).toHaveLength(4);
+    expect(new Set(probes.map((p) => p.data.slice(0, 10)))).toEqual(new Set([SUPPORTS_INTERFACE, DECIMALS]));
   });
 
   it('reads the probes at the block the balances were measured against', async () => {
@@ -177,26 +240,57 @@ describe('resolveTokenUnits', () => {
 
     await resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1, symbol: 'BRZ' })], BLOCK);
 
-    expect(probes.every((p) => p.blockNumber === BLOCK)).toBe(true);
+    expect(probes.every((p) => p.block === BLOCK_HEX)).toBe(true);
   });
 
   it('rejects when the request fails, rather than reading that as "not an NFT"', async () => {
-    // The probes share one Multicall3 request, which rejects wholesale — swallowing this would
-    // drop every NFT in the batch from the preview and show no error for it.
-    const { client } = stubClient(
-      () => new HttpRequestError({ details: 'Service Unavailable', status: 503, url: 'https://rpc.jaw.id' })
-    );
+    // One failed request must never read as every candidate answering "no" — that would drop
+    // NFTs and unreadable-decimals tokens from the preview and show no error for it.
+    const { client } = stubClient(() => word(1), new Error('503 Service Unavailable'));
 
     await expect(resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1 })], BLOCK)).rejects.toThrow();
+  });
+
+  it('rejects rather than degrading when the node reverts the probe request wholesale', async () => {
+    // The distinction the structural `eth_simulateV1` status exists for. Through N batched
+    // `readContract`s this arrived as an `ExecutionRevertedError` per call — the same shape a
+    // single token missing `decimals()` produces — so a batch-wide failure read as "every
+    // candidate answered no" and silently shortened the asset list.
+    const { client } = stubClient(() => word(1), new Error('execution reverted'));
+
+    await expect(
+      resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1 }), change(AERO_POS, 1n, {})], BLOCK)
+    ).rejects.toThrow();
+  });
+
+  it('keeps the rest of the batch when one token answers with junk', async () => {
+    // The other direction of the same guard: a per-call failure is local to its call, so a
+    // hostile token cannot empty the preview for the assets beside it.
+    const huge = `0x${(2n ** 200n).toString(16).padStart(64, '0')}` as const;
+    const { client } = stubClient((selector, to) => {
+      if (selector === SUPPORTS_INTERFACE) return 'revert';
+      return to === ZERO_DEC ? huge : word(0);
+    });
+
+    const units = await resolveTokenUnits(
+      client,
+      [change(ZERO_DEC, 42n, { symbol: 'HUGE' }), change(AERO_POS, 7n, { symbol: 'FINE' })],
+      BLOCK
+    );
+
+    expect(units.changes[0].token.decimals).toBeUndefined();
+    expect(units.changes[1].token.decimals).toBe(0);
+    expect(mapAssetChanges(units.changes, units.erc721)).toEqual([
+      expect.objectContaining({ symbol: 'FINE', decimals: 0, amountFormatted: '7' }),
+    ]);
   });
 
   it('reads a decimals() past the safe-integer range as no answer', async () => {
     // viem decodes `uint8` by reading the whole 32-byte word and range-checking it only
     // against `Number.MAX_SAFE_INTEGER`, so a hostile token can throw from *decoding*. That
-    // is still the contract answering: rejecting would empty the preview for every other
-    // asset in the batch, and accepting the number would hand `formatUnits` a 10^60 padStart.
+    // is still the contract answering, and it stays local to its own probe.
     const huge = `0x${(2n ** 200n).toString(16).padStart(64, '0')}` as const;
-    const { client } = stubClient((selector) => (selector === SUPPORTS_INTERFACE ? reverted() : huge));
+    const { client } = stubClient((selector) => (selector === SUPPORTS_INTERFACE ? 'revert' : huge));
 
     const units = await resolveTokenUnits(client, [change(ZERO_DEC, 42n, { symbol: 'HUGE' })], BLOCK);
 
@@ -215,8 +309,7 @@ describe('resolveTokenUnits', () => {
   });
 
   it('reads empty return data as no answer', async () => {
-    // A candidate with no code: Multicall3 reports success with `0x`, which viem surfaces as
-    // `ContractFunctionZeroDataError` rather than as a revert.
+    // A candidate with no code: the call succeeds and returns nothing at all.
     const { client } = stubClient(() => '0x');
 
     const units = await resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK);
@@ -225,10 +318,8 @@ describe('resolveTokenUnits', () => {
     expect(units.changes[0].token.decimals).toBeUndefined();
   });
 
-  it('reads a node-level execution revert as no answer', async () => {
-    // The unbatched path: on a chain with no Multicall3 address viem issues plain eth_calls,
-    // so a revert arrives as `ExecutionRevertedError` instead of through `allowFailure`.
-    const { client } = stubClient(() => new ExecutionRevertedError({}));
+  it('reads a reverted probe as no answer', async () => {
+    const { client } = stubClient(() => 'revert');
     const changes = [change(BRZ, -1n, { decimals: 1, symbol: 'BRZ' })];
 
     const units = await resolveTokenUnits(client, changes, BLOCK);
@@ -247,7 +338,7 @@ describe('resolveTokenUnits', () => {
   });
 
   it('probes only what viem could have guessed wrong', async () => {
-    const { client, probes } = stubClient(() => reverted());
+    const { client, probes } = stubClient(() => 'revert');
 
     await resolveTokenUnits(
       client,
@@ -265,11 +356,11 @@ describe('resolveTokenUnits', () => {
 
   it('treats decimals 1 as ambiguous and 2 as an answer', async () => {
     // Pins *our* reading of viem's `decimals() ?? 1` fallback, not the fallback itself: the
-    // stub answers below `readContract` and never reaches `simulateCalls`, so nothing here
-    // can catch upstream moving that sentinel. Nothing in this suite can. A release inside
+    // stub answers at the transport and never reaches `simulateCalls`, so nothing here can
+    // catch upstream moving that sentinel. Nothing in this suite can. A release inside
     // `^2.55.16` that changed it would silently render every NFT as "0.1" again, which is why
     // `resolveTokenUnits` spells out the expression it depends on.
-    const { client, probes } = stubClient(() => reverted());
+    const { client, probes } = stubClient(() => 'revert');
 
     await resolveTokenUnits(
       client,
@@ -281,14 +372,138 @@ describe('resolveTokenUnits', () => {
   });
 
   it('asks nothing when every token reported readable decimals', async () => {
-    const { client, probes } = stubClient(() => word(1));
+    const { client, requestCount } = stubClient(() => word(1));
     const changes = [change(USDC, 5n, { decimals: 6, symbol: 'USDC' })];
 
     const units = await resolveTokenUnits(client, changes, BLOCK);
 
-    expect(probes).toHaveLength(0);
+    expect(requestCount()).toBe(0);
     expect(units.changes).toEqual(changes);
     expect(units.erc721.size).toBe(0);
+  });
+});
+
+const ACCOUNT = '0x1111111111111111111111111111111111111111' as Address;
+const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
+const ETH_BALANCE = word(10n ** 18n);
+
+/**
+ * Drives one whole `simulateAssetChanges` against a fake node, so the wiring between
+ * `getBlockNumber`, viem's `traceAssetChanges` and `resolveTokenUnits` is covered rather than
+ * assumed. The three `eth_simulateV1` requests are answered by ordinal: viem's log discovery,
+ * viem's balance measurement (six blocks: batch, ETH post, asset post, decimals, tokenURI,
+ * symbol), then ours.
+ *
+ * The fixture is one ERC-721 with a reverting `decimals()` and an answering `tokenURI` — the
+ * shape viem hands back as `decimals: 1`, which the preview must render as a count.
+ */
+function stubNode({ batchReverts = false } = {}) {
+  const blockParams: unknown[] = [];
+  let blockNumberCalls = 0;
+  let simulations = 0;
+  const client = createPublicClient({
+    chain: base,
+    transport: custom({
+      async request({ method, params }: { method: string; params: readonly unknown[] }) {
+        if (method === 'eth_blockNumber') {
+          blockNumberCalls++;
+          return BLOCK_HEX;
+        }
+        // viem's pre-balance probes: the ETH one carries no `to`, the token one targets its
+        // deployed staticcall helper. Both must return a word to count as a balance.
+        if (method === 'eth_call') {
+          const [request] = params as [{ to?: Address }];
+          return request.to === undefined ? ETH_BALANCE : word(0);
+        }
+        if (method !== 'eth_simulateV1') throw new Error(`unexpected ${method}`);
+        const [{ blockStateCalls }, block] = params as [{ blockStateCalls: { calls: unknown[] }[] }, string];
+        blockParams.push(block);
+        simulations++;
+
+        if (simulations === 1)
+          return [
+            {
+              number: block,
+              calls: [
+                {
+                  ...ok('0x'),
+                  logs: [
+                    {
+                      address: AERO_POS,
+                      topics: [TRANSFER_TOPIC, pad(zeroAddress), pad(ACCOUNT)],
+                      data: word(1),
+                    },
+                  ],
+                },
+              ],
+            },
+          ];
+
+        if (simulations === 2) {
+          const batch = batchReverts
+            ? [
+                failed(
+                  concat([
+                    '0x08c379a0',
+                    encodeAbiParameters([{ type: 'string' }], ['ERC20: transfer amount exceeds balance']),
+                  ])
+                ),
+                ok('0x'),
+              ]
+            : [ok('0x'), ok('0x')];
+          return [
+            { number: block, calls: batch },
+            { number: block, calls: [ok(ETH_BALANCE)] }, // ETH post — unchanged, so no ETH row
+            { number: block, calls: [ok(word(1))] }, // NFT count post: 0 -> 1
+            { number: block, calls: [failed()] }, // decimals() reverts
+            { number: block, calls: [ok(str('ipfs://1'))] }, // ...but tokenURI answers
+            { number: block, calls: [ok(str('PUNK'))] },
+          ];
+        }
+
+        return [{ number: block, calls: blockStateCalls[0].calls.map(() => ok(word(1))) }];
+      },
+    }),
+  });
+  publicClient.current = client;
+  return { blockParams, blockNumberCalls: () => blockNumberCalls, simulations: () => simulations };
+}
+
+describe('simulateAssetChanges', () => {
+  const calls = [{ to: AERO_POS as Address, data: '0x12345678' as Hex }];
+
+  it('renders a batch viem could only describe as "0.1" as a whole-token count', async () => {
+    const node = stubNode();
+
+    const result = await simulateAssetChanges({ chainId: base.id, account: ACCOUNT, calls });
+
+    expect(result.willRevert).toBe(false);
+    expect(result.deltas).toEqual([
+      expect.objectContaining({ symbol: 'PUNK', decimals: 0, direction: 'in', amountFormatted: '1', isNative: false }),
+    ]);
+    // Discovery, measurement, metadata. Two of those exist only because `traceAssetChanges` is
+    // on — without it viem returns no `assetChanges` and this preview is silently empty.
+    expect(node.simulations()).toBe(3);
+  });
+
+  it('pins every simulation and probe to one block, resolved once', async () => {
+    const node = stubNode();
+
+    await simulateAssetChanges({ chainId: base.id, account: ACCOUNT, calls });
+
+    expect(node.blockParams).toEqual([BLOCK_HEX, BLOCK_HEX, BLOCK_HEX]);
+    // Ours is the only one: handing viem the number stops it resolving its own, and the metadata
+    // probes reuse it instead of reading `latest` a block or two later.
+    expect(node.blockNumberCalls()).toBe(1);
+  });
+
+  it('reports a reverting batch instead of an asset list, and stops probing', async () => {
+    const node = stubNode({ batchReverts: true });
+
+    const result = await simulateAssetChanges({ chainId: base.id, account: ACCOUNT, calls });
+
+    expect(result).toMatchObject({ willRevert: true, deltas: [], revertCause: 'balance' });
+    expect(node.simulations()).toBe(2);
   });
 });
 

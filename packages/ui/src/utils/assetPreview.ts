@@ -1,17 +1,13 @@
 import {
-  AbiDecodingDataSizeTooSmallError,
-  BaseError,
-  ContractFunctionRevertedError,
-  ContractFunctionZeroDataError,
-  ExecutionRevertedError,
-  IntegerOutOfRangeError,
-  InvalidBytesBooleanError,
+  decodeFunctionResult,
+  encodeFunctionData,
   ethAddress,
   formatUnits,
   type Address,
   type Client,
+  type Hex,
 } from 'viem';
-import { getBlockNumber, readContract, simulateCalls } from 'viem/actions';
+import { getBlockNumber, simulateBlocks, simulateCalls } from 'viem/actions';
 import { type TransactionCall } from '@jaw.id/core';
 import { getJawPublicClient } from './publicClient';
 import { subscriptDecimal } from './displayFormat';
@@ -33,6 +29,20 @@ export interface AssetDelta {
 }
 
 /**
+ * ERC-20 declares `decimals()` as `uint8`, so this is the largest value a compliant token can
+ * report — but viem decodes the return word as `uint256` and hands back `Number(...)` of it, so
+ * the number that reaches here is whatever the contract chose to put in 32 bytes.
+ *
+ * Past a byte it stops being a formatting question. `formatUnits` pads the value out to
+ * `decimals` digits and does it quadratically: 10_000 costs 45ms, 100_000 costs 4.5s, 1_000_000
+ * runs for minutes, and `Number(2n ** 200n)` throws `RangeError: Out of memory`. All of that is
+ * on the thread rendering a dialog someone is mid-signature on, and a batch only has to *touch*
+ * such a contract for it to be measured and formatted. So an out-of-range `decimals` is read the
+ * way an unreadable one is: no usable unit, and the row is dropped rather than rendered.
+ */
+const MAX_DECIMALS = 255;
+
+/**
  * Normalize viem's `assetChanges` into the rows the UI renders.
  * Drops zero-diff entries and non-native entries without a usable symbol/decimals.
  * Addresses in `erc721` are rendered as whole-token counts (viem reports NFT decimals
@@ -50,20 +60,21 @@ export function mapAssetChanges(
     const isNative = c.token.address.toLowerCase() === ethAddress;
     const isNft = erc721.has(c.token.address.toLowerCase());
     const symbol = isNative ? (c.token.symbol ?? 'ETH') : c.token.symbol;
-    const decimals = isNative ? 18 : isNft ? 0 : c.token.decimals;
+    const reported = c.token.decimals;
+    const usable = reported !== undefined && Number.isInteger(reported) && reported >= 0 && reported <= MAX_DECIMALS;
+    const decimals = isNative ? 18 : isNft ? 0 : usable ? reported : undefined;
 
-    if (!isNative && !isNft && decimals === undefined) continue;
+    if (decimals === undefined) continue;
     if (!isNative && !symbol) continue;
 
-    const resolvedDecimals = decimals ?? 18;
     const magnitude = diff < 0n ? -diff : diff;
     out.push({
       address: c.token.address,
       symbol,
-      decimals: resolvedDecimals,
+      decimals,
       diff,
       direction: diff < 0n ? 'out' : 'in',
-      amountFormatted: formatUnits(magnitude, resolvedDecimals),
+      amountFormatted: formatUnits(magnitude, decimals),
       isNative,
     });
   }
@@ -102,51 +113,32 @@ export interface AssetSimulationResult {
   revertCause?: RevertCause;
 }
 
-/**
- * Whether a probe failed because the *contract* answered "no" rather than because the
- * *request* did. A contract without the function reverts, one without code returns empty
- * data, and one that answers with bytes the ABI cannot read has still answered — all three
- * are answers. A node error or a proxy 5xx is not one, and must never be read as one: these
- * probes share a Multicall3 batch, which rejects wholesale (see `publicClient.ts`), so
- * swallowing a transport failure would mark every candidate as "not an NFT, decimals
- * unknown" and silently drop them from a signing preview.
- *
- * The malformed-data arm matters because viem wraps *every* failure — transport included —
- * in a `ContractFunctionExecutionError`, so the cause is the only thing separating "this
- * token returned junk" from "the request never landed". Without it a single token whose
- * `decimals()` exceeds `Number.MAX_SAFE_INTEGER` rejects the shared `Promise.all` and empties
- * the preview for every other asset in the batch — the exact failure this guard exists to
- * prevent, arriving from the other direction.
- *
- * The list stays explicit rather than "anything that is not a transport error" so an error
- * shape neither we nor viem anticipated still fails loudly. Showing an error beats showing a
- * confidently short list of assets on a screen someone is about to sign.
- */
-function isContractAnswer(error: unknown): boolean {
-  return (
-    error instanceof BaseError &&
-    Boolean(
-      error.walk(
-        (e) =>
-          e instanceof ContractFunctionRevertedError ||
-          e instanceof ContractFunctionZeroDataError ||
-          e instanceof ExecutionRevertedError ||
-          // Return data that decodes to nothing usable: a word short of 32 bytes, a
-          // `decimals` past the safe-integer range, a `bool` that is neither 0 nor 1.
-          e instanceof AbiDecodingDataSizeTooSmallError ||
-          e instanceof IntegerOutOfRangeError ||
-          e instanceof InvalidBytesBooleanError
-      )
-    )
-  );
-}
+/** One entry of a `simulateBlocks` block, narrowed to what a probe reads. */
+type ProbeResult = { status: 'success' | 'failure'; data?: Hex } | undefined;
 
-/** Read a contract's "no" as `fallback`; let a failed request reject and take the preview with it. */
-function answerOr<T>(fallback: T) {
-  return (error: unknown): T => {
-    if (isContractAnswer(error)) return fallback;
-    throw error;
-  };
+/**
+ * Decode one probe's answer, or `null` when the contract had none: it reverted, it has no code
+ * (empty return data), or it answered with bytes the ABI cannot read. All three are the contract
+ * answering, and — this is the point — all three are *local to that call*. A failure of the
+ * request rejects `simulateBlocks` before anything reaches here, so a node error or a proxy 5xx
+ * can never be read as "not an NFT, decimals unknown" and quietly shorten a signing preview.
+ *
+ * That separation is why the probes go through `simulateBlocks` rather than N `readContract`s.
+ * `readContract` collapses both into a thrown error, and on a client with `batch.multicall` the
+ * two are genuinely indistinguishable: a per-call revert and a revert of the whole `aggregate3`
+ * both surface as `ExecutionRevertedError`, so classifying by error type has to either swallow a
+ * batch-wide failure or reject on a token that merely lacks `decimals()`. viem's `multicall`
+ * action does not help — under `allowFailure` it reports a rejected request as a per-call
+ * failure too (see `multicall.js`). `eth_simulateV1` reports per-call status structurally, which
+ * is the distinction this needs.
+ */
+function probeAnswer<T>(call: ProbeResult, decode: (data: Hex) => T): T | null {
+  if (!call || call.status !== 'success' || !call.data || call.data === '0x') return null;
+  try {
+    return decode(call.data);
+  } catch {
+    return null;
+  }
 }
 
 export interface ResolvedTokenUnits {
@@ -169,8 +161,16 @@ export interface ResolvedTokenUnits {
  *   `decimals()` ourselves recovers it.
  *
  * Only those two shapes are suspects, so a batch of tokens with readable non-1 decimals asks
- * nothing extra. When it does ask, every probe is issued in one tick against the block the
- * simulation measured, so they share the cached client's single Multicall3 request.
+ * nothing extra. When it does ask, every probe rides in one `eth_simulateV1` — one request
+ * whatever the candidate count — simulated on top of the block the balances were measured
+ * against, with nothing ahead of it in that block to move state.
+ *
+ * A suspect viem reported as `1` is asked only the interface question. Its `1` is either a real
+ * `decimals()` reading or viem's `?? 1` standing in for an NFT whose `tokenURI` answered, and
+ * re-reading `decimals()` would tell the two apart — but acting on that is not worth it. ERC-721
+ * mandates ERC-165, so the gap is limited to non-compliant NFTs, while treating a silent
+ * `decimals()` as proof of one would restate a genuine 1-decimal ERC-20's amount by 10x. A
+ * misread NFT count is a wrong row; a misread ERC-20 is a wrong number on a signing screen.
  *
  * Note the ERC-165 answer is the token's own claim, so a contract can opt into being counted in
  * whole units. That only rescales a row for a token the batch already touches, and `symbol` is
@@ -189,39 +189,44 @@ export async function resolveTokenUnits(
   );
   if (suspects.length === 0) return { changes: [...changes], erc721: new Set() };
 
-  const [isErc721, readDecimals] = await Promise.all([
-    Promise.all(
-      suspects.map((c) =>
-        readContract(client, {
-          address: c.token.address as Address,
-          abi: erc165Abi,
-          functionName: 'supportsInterface',
-          args: [ERC721_INTERFACE_ID],
-          blockNumber,
-        }).catch(answerOr(false))
-      )
-    ),
-    Promise.all(
-      suspects.map((c) =>
-        // A `1` is already a usable unit; it is only wrong if the token turns out to be an NFT.
-        c.token.decimals !== undefined
-          ? Promise.resolve(undefined)
-          : readContract(client, {
-              address: c.token.address as Address,
-              abi: erc20DecimalsAbi,
-              functionName: 'decimals',
-              blockNumber,
-            }).catch(answerOr(undefined))
-      )
-    ),
-  ]);
+  const unknownDecimals = suspects.filter((c) => c.token.decimals === undefined);
+  const supportsInterfaceData = encodeFunctionData({
+    abi: erc165Abi,
+    functionName: 'supportsInterface',
+    args: [ERC721_INTERFACE_ID],
+  });
+  const decimalsData = encodeFunctionData({ abi: erc20DecimalsAbi, functionName: 'decimals' });
+  // Raw calldata rather than `simulateBlocks`' `abi` shortcut: that shortcut decodes inside the
+  // action, where a throw escapes as a node error and takes every other probe with it.
+  const [block] = await simulateBlocks(client, {
+    blockNumber,
+    blocks: [
+      {
+        calls: [
+          ...suspects.map((c) => ({ to: c.token.address as Address, data: supportsInterfaceData })),
+          ...unknownDecimals.map((c) => ({ to: c.token.address as Address, data: decimalsData })),
+        ],
+      },
+    ],
+  });
 
   const erc721 = new Set<string>();
   const recovered = new Map<string, number>();
   suspects.forEach((c, i) => {
     const address = c.token.address.toLowerCase();
-    if (isErc721[i]) erc721.add(address);
-    else if (readDecimals[i] !== undefined) recovered.set(address, readDecimals[i]);
+    const isErc721 = probeAnswer(block.calls[i], (data) =>
+      decodeFunctionResult({ abi: erc165Abi, functionName: 'supportsInterface', data })
+    );
+    if (isErc721) {
+      erc721.add(address);
+      return;
+    }
+    const j = unknownDecimals.indexOf(c);
+    if (j === -1) return;
+    const read = probeAnswer(block.calls[suspects.length + j], (data) =>
+      decodeFunctionResult({ abi: erc20DecimalsAbi, functionName: 'decimals', data })
+    );
+    if (read !== null) recovered.set(address, read);
   });
 
   return {
@@ -246,12 +251,14 @@ export async function resolveTokenUnits(
  * against *current* state, which both lost the output token of a dependent batch and threw
  * on the reverting probe, taking the whole preview with it.
  *
- * Costs `N + 4` requests for `N` discovered candidates — a block number, two
- * `eth_simulateV1`s, and one `eth_call` per pre-balance probe, viem's probes carrying a
- * `from` and a state override so they cannot fold into a Multicall3. That is up from the two
- * flat requests the hand-rolled version took, and it is upstream's to shrink; what is ours is
- * resolving the block once and handing it to viem, so nothing here refetches it and the
- * metadata probes read the same state the balances were measured against.
+ * Costs `N + 5` requests for `N` discovered candidates — a block number, three
+ * `eth_simulateV1`s (viem's discovery, viem's measurement, our metadata probes), and one
+ * `eth_call` per pre-balance probe, viem's probes carrying a `from` and a state override so
+ * they cannot fold into a Multicall3. Four of those are *serial*, up from two, and that depth
+ * is what the confirm screen waits on — the `N` pre-balance probes are parallel and nearly
+ * free by comparison. Shrinking it is upstream's; what is ours is resolving the block once and
+ * handing it to viem, so nothing here refetches it and the metadata probes read the same state
+ * the balances were measured against.
  */
 export async function simulateAssetChanges({
   chainId,
@@ -270,9 +277,11 @@ export async function simulateAssetChanges({
     value: c.value === undefined ? undefined : typeof c.value === 'string' ? BigInt(c.value) : c.value,
     data: c.data,
   }));
-  // Left to itself viem resolves this with `cacheTime: 0`, and the number stays internal — so
-  // the follow-up metadata probes would read `latest`, a different block than the balances.
-  const blockNumber = await getBlockNumber(client);
+  // Left to itself viem resolves this internally and keeps it private, so the follow-up metadata
+  // probes would read `latest` — a different block than the balances. `cacheTime: 0` matches what
+  // viem passes; the client's default would be its 4s polling interval, which is a long time to
+  // simulate against a stale block on a screen that is about to spend money.
+  const blockNumber = await getBlockNumber(client, { cacheTime: 0 });
   const { results, assetChanges } = await simulateCalls(client, {
     account,
     calls: normalizedCalls,
