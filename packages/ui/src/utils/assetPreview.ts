@@ -1,16 +1,19 @@
 import {
-  decodeFunctionResult,
-  encodeFunctionData,
+  AbiDecodingDataSizeTooSmallError,
+  BaseError,
+  ContractFunctionRevertedError,
+  ContractFunctionZeroDataError,
+  ExecutionRevertedError,
+  IntegerOutOfRangeError,
+  InvalidBytesBooleanError,
   ethAddress,
   formatUnits,
-  hexToBigInt,
-  zeroAddress,
   type Address,
+  type Client,
 } from 'viem';
-import { simulateBlocks, simulateCalls } from 'viem/actions';
+import { getBlockNumber, readContract, simulateCalls } from 'viem/actions';
 import { type TransactionCall } from '@jaw.id/core';
 import { getJawPublicClient } from './publicClient';
-import { deriveTransferDeltas, type SimulatedLog } from './transferDeltas';
 import { subscriptDecimal } from './displayFormat';
 import { classifyRevert, type RevertCause } from './transactionFailure';
 
@@ -87,6 +90,9 @@ const erc165Abi = [
     outputs: [{ type: 'bool' }],
   },
 ] as const;
+const erc20DecimalsAbi = [
+  { type: 'function', name: 'decimals', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
+] as const;
 
 export interface AssetSimulationResult {
   deltas: AssetDelta[];
@@ -96,29 +102,156 @@ export interface AssetSimulationResult {
   revertCause?: RevertCause;
 }
 
-const erc20MetadataAbi = [
-  {
-    type: 'function',
-    name: 'balanceOf',
-    stateMutability: 'view',
-    inputs: [{ type: 'address' }],
-    outputs: [{ type: 'uint256' }],
-  },
-  { type: 'function', name: 'symbol', stateMutability: 'view', inputs: [], outputs: [{ type: 'string' }] },
-  { type: 'function', name: 'decimals', stateMutability: 'view', inputs: [], outputs: [{ type: 'uint8' }] },
-] as const;
+/**
+ * Whether a probe failed because the *contract* answered "no" rather than because the
+ * *request* did. A contract without the function reverts, one without code returns empty
+ * data, and one that answers with bytes the ABI cannot read has still answered — all three
+ * are answers. A node error or a proxy 5xx is not one, and must never be read as one: these
+ * probes share a Multicall3 batch, which rejects wholesale (see `publicClient.ts`), so
+ * swallowing a transport failure would mark every candidate as "not an NFT, decimals
+ * unknown" and silently drop them from a signing preview.
+ *
+ * The malformed-data arm matters because viem wraps *every* failure — transport included —
+ * in a `ContractFunctionExecutionError`, so the cause is the only thing separating "this
+ * token returned junk" from "the request never landed". Without it a single token whose
+ * `decimals()` exceeds `Number.MAX_SAFE_INTEGER` rejects the shared `Promise.all` and empties
+ * the preview for every other asset in the batch — the exact failure this guard exists to
+ * prevent, arriving from the other direction.
+ *
+ * The list stays explicit rather than "anything that is not a transport error" so an error
+ * shape neither we nor viem anticipated still fails loudly. Showing an error beats showing a
+ * confidently short list of assets on a screen someone is about to sign.
+ */
+function isContractAnswer(error: unknown): boolean {
+  return (
+    error instanceof BaseError &&
+    Boolean(
+      error.walk(
+        (e) =>
+          e instanceof ContractFunctionRevertedError ||
+          e instanceof ContractFunctionZeroDataError ||
+          e instanceof ExecutionRevertedError ||
+          // Return data that decodes to nothing usable: a word short of 32 bytes, a
+          // `decimals` past the safe-integer range, a `bool` that is neither 0 nor 1.
+          e instanceof AbiDecodingDataSizeTooSmallError ||
+          e instanceof IntegerOutOfRangeError ||
+          e instanceof InvalidBytesBooleanError
+      )
+    )
+  );
+}
+
+/** Read a contract's "no" as `fallback`; let a failed request reject and take the preview with it. */
+function answerOr<T>(fallback: T) {
+  return (error: unknown): T => {
+    if (isContractAnswer(error)) return fallback;
+    throw error;
+  };
+}
+
+export interface ResolvedTokenUnits {
+  /** `changes`, with the decimals viem left `undefined` filled in wherever they could be read. */
+  changes: RawAssetChange[];
+  /** Lowercased addresses confirmed as ERC-721, whose diffs read as whole-token counts. */
+  erc721: Set<string>;
+}
+
+/**
+ * Repair the token metadata viem could not pin down, for the two shapes where it renders wrong.
+ *
+ * viem infers `decimals` as `Number(decimals() ?? 1)` when either `decimals()` or `tokenURI(0)`
+ * answers, and `undefined` when both revert. That misses:
+ *
+ * - **ERC-721s**, which arrive as `1` (one NFT would render as "0.1") or as `undefined`, which
+ *   `mapAssetChanges` drops. ERC-165 separates them from a genuine 1-decimal ERC-20.
+ * - **0-decimal ERC-20s**, which arrive as `undefined` because viem's `tokenURI_ || decimals_`
+ *   guard reads a `0n` result as falsy — so a real transfer vanishes from the preview. Reading
+ *   `decimals()` ourselves recovers it.
+ *
+ * Only those two shapes are suspects, so a batch of tokens with readable non-1 decimals asks
+ * nothing extra. When it does ask, every probe is issued in one tick against the block the
+ * simulation measured, so they share the cached client's single Multicall3 request.
+ *
+ * Note the ERC-165 answer is the token's own claim, so a contract can opt into being counted in
+ * whole units. That only rescales a row for a token the batch already touches, and `symbol` is
+ * equally the token's word — the preview reports what the batch moves, not whether to trust it.
+ */
+export async function resolveTokenUnits(
+  client: Client,
+  changes: readonly RawAssetChange[],
+  blockNumber: bigint
+): Promise<ResolvedTokenUnits> {
+  const suspects = changes.filter(
+    (c) =>
+      c.value.diff !== 0n &&
+      c.token.address.toLowerCase() !== ethAddress &&
+      (c.token.decimals === undefined || c.token.decimals === 1)
+  );
+  if (suspects.length === 0) return { changes: [...changes], erc721: new Set() };
+
+  const [isErc721, readDecimals] = await Promise.all([
+    Promise.all(
+      suspects.map((c) =>
+        readContract(client, {
+          address: c.token.address as Address,
+          abi: erc165Abi,
+          functionName: 'supportsInterface',
+          args: [ERC721_INTERFACE_ID],
+          blockNumber,
+        }).catch(answerOr(false))
+      )
+    ),
+    Promise.all(
+      suspects.map((c) =>
+        // A `1` is already a usable unit; it is only wrong if the token turns out to be an NFT.
+        c.token.decimals !== undefined
+          ? Promise.resolve(undefined)
+          : readContract(client, {
+              address: c.token.address as Address,
+              abi: erc20DecimalsAbi,
+              functionName: 'decimals',
+              blockNumber,
+            }).catch(answerOr(undefined))
+      )
+    ),
+  ]);
+
+  const erc721 = new Set<string>();
+  const recovered = new Map<string, number>();
+  suspects.forEach((c, i) => {
+    const address = c.token.address.toLowerCase();
+    if (isErc721[i]) erc721.add(address);
+    else if (readDecimals[i] !== undefined) recovered.set(address, readDecimals[i]);
+  });
+
+  return {
+    erc721,
+    changes: changes.map((c) => {
+      const decimals = recovered.get(c.token.address.toLowerCase());
+      return decimals === undefined ? c : { ...c, token: { ...c.token, decimals } };
+    }),
+  };
+}
 
 /**
  * Simulate the batch against current chain state and return the net per-asset balance
  * changes for `account`. Throws on simulation failure — the caller owns the fallback.
  *
- * Candidate assets are every contract that emitted a log during the batch, and changes
- * are measured as actual `balanceOf` diffs probed before/after the batch in a second
- * simulation (native ETH via `traceTransfers` pseudo-logs). This replaces viem's
- * `traceAssetChanges`, whose per-call `eth_createAccessList` discovery runs each call
- * against *current* state — in dependent batches (approve → swap) the swap probe reverts
- * at the allowance check, which both loses the output token and, as of viem 2.55,
- * rejects the whole simulation.
+ * viem's `traceAssetChanges` owns the measurement: it discovers candidates from the logs of
+ * the batch simulated *as a whole*, so dependent batches (approve → swap) report the output
+ * token, and it pins both of its simulations to one block. Only the metadata repair is ours —
+ * see `resolveTokenUnits`.
+ *
+ * Requires viem >= 2.55.16. Before that, discovery ran one `eth_createAccessList` per call
+ * against *current* state, which both lost the output token of a dependent batch and threw
+ * on the reverting probe, taking the whole preview with it.
+ *
+ * Costs `N + 4` requests for `N` discovered candidates — a block number, two
+ * `eth_simulateV1`s, and one `eth_call` per pre-balance probe, viem's probes carrying a
+ * `from` and a state override so they cannot fold into a Multicall3. That is up from the two
+ * flat requests the hand-rolled version took, and it is upstream's to shrink; what is ours is
+ * resolving the block once and handing it to viem, so nothing here refetches it and the
+ * metadata probes read the same state the balances were measured against.
  */
 export async function simulateAssetChanges({
   chainId,
@@ -137,86 +270,18 @@ export async function simulateAssetChanges({
     value: c.value === undefined ? undefined : typeof c.value === 'string' ? BigInt(c.value) : c.value,
     data: c.data,
   }));
-  const { results } = await simulateCalls(client, {
+  // Left to itself viem resolves this with `cacheTime: 0`, and the number stays internal — so
+  // the follow-up metadata probes would read `latest`, a different block than the balances.
+  const blockNumber = await getBlockNumber(client);
+  const { results, assetChanges } = await simulateCalls(client, {
     account,
     calls: normalizedCalls,
-    traceTransfers: true,
+    traceAssetChanges: true,
+    blockNumber,
   });
   const failed = results.find((r) => r.status !== 'success');
   if (failed) return { deltas: [], willRevert: true, revertCause: classifyRevert(failed.error) };
 
-  const logs = results.flatMap((r) => (r.logs ?? []) as SimulatedLog[]);
-
-  // The simulation charges no gas, so the account's ETH delta is exactly the net of the
-  // traceTransfers pseudo-logs (emitted from viem's ETH pseudo-address).
-  const ethEntries: RawAssetChange[] = deriveTransferDeltas(logs, account)
-    .filter((d) => d.address === ethAddress)
-    .map((d) => ({
-      token: { address: ethAddress, decimals: 18, symbol: 'ETH' },
-      value: { pre: 0n, post: d.diff, diff: d.diff },
-    }));
-
-  const candidates = [...new Set(logs.map((l) => l.address.toLowerCase()))].filter((a) => a !== ethAddress);
-  if (candidates.length === 0) return { deltas: mapAssetChanges(ethEntries), willRevert: false };
-
-  // Probe balances before/after the batch, plus metadata and ERC-165, all as extra blocks
-  // of ONE simulation — the whole preview costs exactly two RPC requests regardless of
-  // candidate count. Non-token contracts fail the probes and are skipped.
-  type SimCall = { to: Address; data?: `0x${string}`; value?: bigint; from: Address; nonce?: number };
-  const probeBlock = (data: `0x${string}`) => ({
-    calls: candidates.map((address, i): SimCall => ({ to: address as Address, data, from: zeroAddress, nonce: i })),
-    stateOverrides: [{ address: zeroAddress, nonce: 0 }],
-  });
-  const balanceOfBlock = probeBlock(
-    encodeFunctionData({ abi: erc20MetadataAbi, functionName: 'balanceOf', args: [account] })
-  );
-  const batchCalls: SimCall[] = normalizedCalls.map((c) => ({ ...c, from: account }));
-  const [preBlock, batchBlock, postBlock, decimalsBlock, symbolsBlock, erc165Block] = await simulateBlocks(client, {
-    blocks: [
-      balanceOfBlock,
-      { calls: batchCalls },
-      balanceOfBlock,
-      probeBlock(encodeFunctionData({ abi: erc20MetadataAbi, functionName: 'decimals' })),
-      probeBlock(encodeFunctionData({ abi: erc20MetadataAbi, functionName: 'symbol' })),
-      probeBlock(
-        encodeFunctionData({ abi: erc165Abi, functionName: 'supportsInterface', args: [ERC721_INTERFACE_ID] })
-      ),
-    ],
-  });
-  // Chain state can move between the two simulations; if the batch reverts in this run,
-  // the balance diffs are meaningless and the run-1 deltas would be stale.
-  const failedCall = batchBlock.calls.find((c) => c.status !== 'success');
-  if (failedCall) return { deltas: [], willRevert: true, revertCause: classifyRevert(failedCall.error) };
-
-  const probeData = (block: typeof preBlock | undefined, i: number): `0x${string}` | null => {
-    const call = block?.calls[i];
-    return call?.status === 'success' && call.data && call.data !== '0x' ? call.data : null;
-  };
-  const toBigInt = (data: `0x${string}` | null): bigint | null => (data === null ? null : hexToBigInt(data));
-
-  const erc721 = new Set<string>();
-  const tokenEntries: RawAssetChange[] = [];
-  candidates.forEach((address, i) => {
-    const pre = toBigInt(probeData(preBlock, i));
-    const post = toBigInt(probeData(postBlock, i));
-    if (pre === null || post === null || pre === post) return;
-
-    const rawDecimals = toBigInt(probeData(decimalsBlock, i));
-    const decimals = rawDecimals === null ? undefined : Number(rawDecimals);
-    const symbolData = probeData(symbolsBlock, i);
-    let symbol: string | undefined;
-    try {
-      if (symbolData)
-        symbol = decodeFunctionResult({ abi: erc20MetadataAbi, functionName: 'symbol', data: symbolData });
-    } catch {
-      symbol = undefined;
-    }
-    // A balanceOf diff on an ERC-721 is a whole-token count; confirm via ERC-165 (checked
-    // only when decimals are missing/1) so NFTs render as counts instead of being dropped.
-    if ((decimals === undefined || decimals === 1) && toBigInt(probeData(erc165Block, i)) === 1n) erc721.add(address);
-
-    tokenEntries.push({ token: { address, symbol, decimals }, value: { pre, post, diff: post - pre } });
-  });
-
-  return { deltas: mapAssetChanges([...ethEntries, ...tokenEntries], erc721), willRevert: false };
+  const { changes, erc721 } = await resolveTokenUnits(client, assetChanges, blockNumber);
+  return { deltas: mapAssetChanges(changes, erc721), willRevert: false };
 }
