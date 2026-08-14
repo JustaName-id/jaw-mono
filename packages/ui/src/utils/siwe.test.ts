@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from './siwe';
+import { isSiweMessage, parseSiweMessage, getSiweOriginWarning, getSiweOriginWarningFromMessage } from './siwe';
 
 const ADDRESS = '0x6270000000000000000000000000000000003847';
 
@@ -190,5 +190,74 @@ describe('getSiweOriginWarning', () => {
 
   it('is silent (fails open) when nothing is comparable', () => {
     expect(getSiweOriginWarning('https://app.example', {})).toBeUndefined();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+// The cross-domain warning must not depend on the message parsing.
+//
+// `isSiweMessage` accepts `\s*` after each field colon; the parser (viem) needs a canonical single
+// space. A dapp can sit in that gap — the message reaches the SIWE dialog, the parse returns null,
+// and every parse-gated protection disappears, including the MANDATORY "I accept the risk"
+// checkbox that the cross-domain warning carries. So the warning is computed with a best-effort
+// fallback instead.
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+describe('getSiweOriginWarningFromMessage', () => {
+  const phishing = (uriLine: string) =>
+    [
+      'evil.com wants you to sign in with your Ethereum account:',
+      '0x1111111111111111111111111111111111111111',
+      '',
+      'Sign in please',
+      '',
+      uriLine,
+      'Version: 1',
+      'Chain ID: 1',
+      'Nonce: abc12345',
+      'Issued At: 2026-01-01T00:00:00Z',
+    ].join('\n');
+
+  it('warns on a canonical message whose domain differs from the requesting origin', () => {
+    const warning = getSiweOriginWarningFromMessage('https://example.com', phishing('URI: https://evil.com'));
+    expect(warning).toMatch(/evil\.com/);
+    expect(warning).toMatch(/example\.com/);
+  });
+
+  it.each([
+    ['no space after the colon', 'URI:https://evil.com'],
+    ['a tab after the colon', 'URI:\thttps://evil.com'],
+    ['a newline after the colon', 'URI:\nhttps://evil.com'],
+    ['two spaces after the colon', 'URI:  https://evil.com'],
+  ])('still warns when the message does not parse — %s', (_label, uriLine) => {
+    const message = phishing(uriLine);
+    // Precondition: this is exactly the detect-but-don't-parse gap.
+    expect(isSiweMessage(message)).toBe(true);
+    expect(getSiweOriginWarningFromMessage('https://example.com', message)).toMatch(/phishing/i);
+  });
+
+  it('stays silent when the domain matches, parsed or not', () => {
+    for (const uriLine of ['URI: https://example.com', 'URI:\thttps://example.com']) {
+      const message = [
+        'example.com wants you to sign in with your Ethereum account:',
+        '0x1111111111111111111111111111111111111111',
+        '',
+        'Sign in',
+        '',
+        uriLine,
+        'Version: 1',
+        'Chain ID: 1',
+        'Nonce: abc12345',
+        'Issued At: 2026-01-01T00:00:00Z',
+      ].join('\n');
+      expect(getSiweOriginWarningFromMessage('https://example.com', message)).toBeUndefined();
+    }
+  });
+
+  it('agrees with the parse-based helper whenever the message does parse', () => {
+    const message = phishing('URI: https://evil.com');
+    const parsed = parseSiweMessage(message)!;
+    expect(getSiweOriginWarningFromMessage('https://example.com', message)).toBe(
+      getSiweOriginWarning('https://example.com', { domain: parsed.domain, uri: parsed.uri })
+    );
   });
 });

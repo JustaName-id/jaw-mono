@@ -120,21 +120,28 @@ export function NetworkFeeRow({
 
     if (isPayingWithErc20 && selectedFeeToken) {
       const ceiling = selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted;
+      // `gasCostFormatted` is a quantity of the fee token, not a fiat figure — and the hook has no
+      // price source for one. It used to render as `$0.0004` beside `≈ 0.0004 WETH`: the same number
+      // wearing two units, one of them wrong by orders of magnitude. One honest line instead.
+      //
+      // It can also hold the sentinels 'Insufficient' and 'Estimation failed' (useGasEstimation),
+      // which the selector blocks picking but the re-estimate sync can copy onto an already-chosen
+      // token — rendering "Estimation failed USDC". Gating on a number sends those to "Estimating".
+      const tokenCost = Number(selectedFeeToken.gasCostFormatted);
+      const hasTokenCost = selectedFeeToken.gasCostFormatted !== undefined && Number.isFinite(tokenCost);
       return (
         <div className="flex flex-col items-start gap-1">
           <p className="font-mono leading-tight">
-            {selectedFeeToken.gasCostFormatted ? (
-              <>
-                <span className="text-foreground text-amount">${selectedFeeToken.gasCostFormatted}</span>
-                <span className="text-muted-foreground text-body-xs ml-1">
-                  ≈ {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
-                </span>
-              </>
+            {hasTokenCost ? (
+              <span className="text-foreground text-amount">
+                {selectedFeeToken.gasCostFormatted} {selectedFeeToken.symbol}
+              </span>
             ) : (
               <span className="text-muted-foreground text-body-sm">Estimating...</span>
             )}
           </p>
-          {ceiling && (
+          {/* Same sentinel guard: a non-numeric ceiling would read "Up to Insufficient USDC". */}
+          {ceiling && Number.isFinite(Number(ceiling)) && (
             <p className="text-muted-foreground text-body-xs font-mono">
               Up to {ceiling} {selectedFeeToken.symbol}
             </p>

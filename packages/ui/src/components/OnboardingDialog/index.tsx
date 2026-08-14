@@ -268,11 +268,11 @@ function CreateAccountForm({
       )}
       {error && (
         <div className="bg-destructive/10 border-destructive/20 flex flex-col gap-2 overflow-hidden rounded-md border px-2 py-2">
-          <span className="text-destructive-foreground break-all text-xs font-medium">{error}</span>
+          <span className="text-destructive break-all text-xs font-medium">{error}</span>
           <Button
             onClick={() => setError(null)}
             variant="ghost"
-            className="text-destructive-foreground hover:text-destructive-foreground/80 hover:bg-destructive/10 h-6 text-xs"
+            className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-6 text-xs"
           >
             Dismiss
           </Button>

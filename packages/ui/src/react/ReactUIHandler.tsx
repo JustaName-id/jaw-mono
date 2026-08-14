@@ -67,7 +67,7 @@ import {
 import { useFunctionSignatures } from '../hooks/useFunctionSignatures';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getPublicClient } from '../utils/publicClient';
-import { getSiweOriginWarning, isSiweMessage, parseSiweMessage, hexToUtf8 } from '../utils/siwe';
+import { getSiweOriginWarning, getSiweOriginWarningFromMessage, isSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
 import type { JawTheme } from '@jaw.id/core';
 import { resolveTheme } from '../theme/resolve-theme.js';
@@ -2672,12 +2672,14 @@ function SiweDialogWrapper({
     return match ? match[1] : 'dApp';
   }, [decodedMessage]);
 
-  // Gated on a successful parse by design — an unreadable message gets the raw text and
-  // no claims. Tradeoff: malforming the field block suppresses this warning.
-  const warningMessage = useMemo(() => {
-    const parsed = parseSiweMessage(decodedMessage);
-    return parsed ? getSiweOriginWarning(origin, { domain: parsed.domain, uri: parsed.uri }) : undefined;
-  }, [decodedMessage, origin]);
+  // NOT gated on a successful parse. The parse is strict on purpose, but this warning carries
+  // the mandatory acknowledgement checkbox, so gating it let a dapp drop the hard block by
+  // writing a message that detects as SIWE and then fails to parse (a tab after `URI:` is
+  // enough). The helper falls back to a best-effort domain/URI read.
+  const warningMessage = useMemo(
+    () => getSiweOriginWarningFromMessage(origin, decodedMessage),
+    [decodedMessage, origin]
+  );
 
   const handleSign = async () => {
     setIsProcessing(true);
