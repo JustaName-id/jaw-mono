@@ -49,7 +49,6 @@ module.exports = {
         'body-sm': ['11px', { lineHeight: '1.4', fontWeight: '400' }],
         code: ['9px', { lineHeight: '1.4', fontWeight: '400' }], // mono, hashes and raw payload
         'amount-lg': ['26px', { lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.02em' }], // native-send hero
-        title: ['20px', { fontWeight: '500', letterSpacing: '-0.02em' }], // card title, with header
         status: ['15px', { lineHeight: '1.2', fontWeight: '600', letterSpacing: '-0.02em' }], // processing / success headline
         app: ['17px', { lineHeight: '1.2', fontWeight: '600', letterSpacing: '-0.02em' }], // app name, dialog header
         url: ['10px', { lineHeight: '1.3', fontWeight: '400' }], // mono origin, under the app name
@@ -71,12 +70,16 @@ module.exports = {
 
       // Object sizes the spec fixes by name. The 4/8/12/16/20/24 spacing scale is Tailwind's own
       // 1/2/3/4/5/6, so spacing needs no tokens — only the habit of not writing px.
+      //
+      // The avatar ladder, smallest first. Every size here is rendered somewhere; `blob-lg` used to
+      // say 34px, which nothing drew, and `logo` said 48 while the two app-logo sites disagreed
+      // (48 in the header, 44 on the processing screen). One value each now, so they cannot drift.
       size: {
         badge: '16px', // chain badge
-        token: '24px', // token logo — sheet annotates 21; raised by request, still under the 28 avatar
         blob: '15px', // account blob, inline — in a MetaCard row
-        'blob-lg': '34px',
-        logo: '48px', // app logo circle
+        'blob-lg': '28px', // account avatar in a party row (From / To / Interacting with)
+        token: '24px', // token logo — sheet annotates 21; raised by request, still under blob-lg
+        logo: '44px', // app logo circle — dialog header and processing screen
       },
       fontFamily: {
         sans: [

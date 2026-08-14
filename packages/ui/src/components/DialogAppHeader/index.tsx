@@ -42,7 +42,7 @@ export function DialogAppHeader({ appName, appLogoUrl, origin, chainName, chainI
   return (
     <div className="flex items-center gap-3">
       <span className="relative flex-none">
-        <span className="bg-secondary border-border flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border">
+        <span className="bg-secondary border-border size-logo flex items-center justify-center overflow-hidden rounded-full border">
           {appAvatar}
         </span>
         {chainIcon && (

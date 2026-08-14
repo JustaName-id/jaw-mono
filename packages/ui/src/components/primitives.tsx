@@ -65,7 +65,7 @@ export function PartyRow({
   return (
     <div className="flex min-w-0 items-center gap-3">
       <span className="relative inline-flex flex-none">
-        <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="rounded-chip size-7 flex-none" />
+        <AccountAvatar seed={address} avatarUrl={avatarUrl} size={28} className="rounded-chip size-blob-lg flex-none" />
         {badge}
       </span>
       <div className="min-w-0 flex-1">
