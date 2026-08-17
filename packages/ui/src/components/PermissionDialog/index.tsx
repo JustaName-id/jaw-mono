@@ -272,7 +272,9 @@ export const PermissionDialog = ({
               chainName={networkName}
               chainIcon={displayChainIcon}
             />
-            <h2 className="text-foreground text-title-xl mt-4">
+            {/* `title-lg`, not `title-xl`: these two-word titles read at 24 by request — the only
+                titles that do. */}
+            <h2 className="text-foreground text-title-lg mt-4">
               {isGrant ? 'Requesting Permission' : 'Revoke Permission'}
             </h2>
           </div>
