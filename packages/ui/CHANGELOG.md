@@ -1,3 +1,17 @@
+## 1.3.0 (2026-08-17)
+
+### 🚀 Features
+
+- keys ui revamp ([#248](https://github.com/JustaName-id/jaw-mono/pull/248))
+
+### 🧱 Updated Dependencies
+
+- Updated @jaw.id/core to 1.2.0
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.2.17 (2026-08-05)
 
 ### 🧱 Updated Dependencies

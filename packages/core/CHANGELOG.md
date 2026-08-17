@@ -1,3 +1,13 @@
+## 1.2.0 (2026-08-17)
+
+### 🚀 Features
+
+- keys ui revamp ([#248](https://github.com/JustaName-id/jaw-mono/pull/248))
+
+### ❤️ Thank You
+
+- Leo Franklin @LeoFranklin015
+
 ## 1.1.4 (2026-08-05)
 
 ### 🩹 Fixes
