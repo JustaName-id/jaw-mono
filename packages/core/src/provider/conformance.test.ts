@@ -73,6 +73,11 @@ const WITHOUT_SESSION: Record<string, NoSessionOutcome> = {
     eth_accounts: { kind: 'answers', expect: (r) => expect(r).toEqual([]) },
     eth_coinbase: { kind: 'answers', expect: (r) => expect(r).toBeNull() },
     eth_chainId: { kind: 'answers', expect: (r) => expect(r).toBe('0x2105') },
+    // A number, where JSON-RPC and every mainstream wallet return the decimal
+    // as a string. Pinned as-is because the connected path returns a number too
+    // (JAWSigner.ts), so the SDK is at least self-consistent, and changing both
+    // is a behavior change rather than a test change. A consumer calling a
+    // string method on this throws instead of getting a wrong answer.
     net_version: { kind: 'answers', expect: (r) => expect(r).toBe(8453) },
 
     // Silent reads served by the API, no session required.
@@ -109,7 +114,14 @@ const EVERY_CODE: ReadonlyArray<[string, number]> = [
     ...Object.entries(standardErrorCodes.rpc),
     ...Object.entries(standardErrorCodes.provider),
     ...Object.entries(standardErrorCodes.eip5792),
-].map(([name, code]) => [name, code]);
+];
+
+/** The methods whose outcome is of one kind, typed so the cases need no casts. */
+function casesOf<K extends NoSessionOutcome['kind']>(kind: K) {
+    return Object.entries(WITHOUT_SESSION).flatMap(([method, outcome]) =>
+        outcome.kind === kind ? [[method, outcome as Extract<NoSessionOutcome, { kind: K }>] as const] : []
+    );
+}
 
 let signer: Signer;
 
@@ -139,57 +151,81 @@ describe('EIP-1193 conformance', () => {
     });
 
     describe('without a session', () => {
-        const cases = Object.entries(WITHOUT_SESSION);
-
-        it.each(cases.filter(([, o]) => o.kind === 'rejects'))(
-            '%s rejects with its documented code',
-            async (method, outcome) => {
-                const code = (outcome as { code: number }).code;
-                await expect(newProvider().request({ method })).rejects.toMatchObject({ code });
-            }
-        );
-
-        it.each(cases.filter(([, o]) => o.kind === 'answers'))(
-            '%s answers from local state',
-            async (method, outcome) => {
-                const result = await newProvider().request({ method });
-                (outcome as { expect: (r: unknown) => void }).expect(result);
-                expect(createSigner).not.toHaveBeenCalled();
-            }
-        );
-
-        it.each(cases.filter(([, o]) => o.kind === 'delegates'))(
-            '%s routes to its read handler',
-            async (method, outcome) => {
-                const handler = (outcome as { handler: () => Mock }).handler();
-                handler.mockResolvedValue('ok');
-
-                await expect(newProvider().request({ method })).resolves.toBe('ok');
-                expect(handler).toHaveBeenCalled();
-                expect(createSigner).not.toHaveBeenCalled();
-            }
-        );
-
-        it.each(cases.filter(([, o]) => o.kind === 'connects'))('%s handshakes before answering', async (method) => {
-            (signer.request as Mock).mockResolvedValue('connected');
-
-            await expect(newProvider().request({ method })).resolves.toBe('connected');
-            expect(signer.handshake).toHaveBeenCalled();
+        it.each(casesOf('rejects'))('%s rejects with its documented code', async (method, outcome) => {
+            await expect(newProvider().request({ method })).rejects.toMatchObject({ code: outcome.code });
         });
 
-        it.each(cases.filter(([, o]) => o.kind === 'ephemeral'))(
-            '%s signs through a throwaway signer',
-            async (method) => {
-                (signer.request as Mock).mockResolvedValue('signed');
+        it.each(casesOf('answers'))('%s answers from local state', async (method, outcome) => {
+            const result = await newProvider().request({ method });
+            outcome.expect(result);
+            expect(createSigner).not.toHaveBeenCalled();
+        });
 
-                await expect(newProvider().request({ method })).resolves.toBe('signed');
-                expect(signer.handshake).toHaveBeenCalled();
-                // Throwaway: the session keys are rotated, and the provider stays
-                // disconnected afterwards.
-                expect(signer.cleanup).toHaveBeenCalled();
-                await expect(newProvider().request({ method: 'eth_accounts' })).resolves.toEqual([]);
-            }
-        );
+        it.each(casesOf('delegates'))('%s routes to its read handler', async (method, outcome) => {
+            const handler = outcome.handler();
+            handler.mockResolvedValue('ok');
+
+            await expect(newProvider().request({ method })).resolves.toBe('ok');
+            expect(handler).toHaveBeenCalled();
+            expect(createSigner).not.toHaveBeenCalled();
+        });
+
+        it.each(casesOf('connects'))('%s leaves the provider connected', async (method) => {
+            (signer.request as Mock).mockResolvedValue('connected');
+            const provider = newProvider();
+
+            await expect(provider.request({ method })).resolves.toBe('connected');
+            expect(signer.handshake).toHaveBeenCalled();
+
+            // The session stuck: the next silent read goes through the signer
+            // rather than being answered with the not-connected default.
+            (signer.request as Mock).mockResolvedValue(['0xabc']);
+            await expect(provider.request({ method: 'eth_accounts' })).resolves.toEqual(['0xabc']);
+        });
+
+        it.each(casesOf('ephemeral'))('%s signs through a throwaway signer', async (method) => {
+            (signer.request as Mock).mockResolvedValue('signed');
+            const provider = newProvider();
+
+            await expect(provider.request({ method })).resolves.toBe('signed');
+            expect(signer.handshake).toHaveBeenCalled();
+            expect(signer.cleanup).toHaveBeenCalled();
+
+            // Throwaway means throwaway: signing this way must not leave the
+            // ephemeral signer installed, or every later read would route
+            // through a session the user never agreed to keep. Asserted on the
+            // same provider instance, since a fresh one would answer `[]` no
+            // matter what this one did.
+            await expect(provider.request({ method: 'eth_accounts' })).resolves.toEqual([]);
+        });
+    });
+
+    describe('connection lifecycle events', () => {
+        /**
+         * Pinned as it behaves today, and it looks wrong.
+         *
+         * `_request` calls `disconnect()` whenever the code is 4100, and the
+         * no-session branch throws exactly 4100 for the sign methods. So a dapp
+         * that feature-detects by calling `personal_sign` before connecting
+         * makes a provider that was never connected emit `disconnect`, and
+         * `disconnect()` also runs `PasskeyManager.logout()` and tears down the
+         * iframe. In AppSpecific mode that wipes stored auth state, so the next
+         * connect needs a fresh ceremony.
+         *
+         * Left as-is because this file is about pinning the contract, and
+         * changing it is a behavior change that belongs in its own PR. If that
+         * happens, this test should flip to asserting no events.
+         */
+        it('emits accountsChanged and disconnect when a never-connected provider refuses with 4100', async () => {
+            const provider = newProvider();
+            const events: string[] = [];
+            provider.on('accountsChanged', () => events.push('accountsChanged'));
+            provider.on('disconnect', () => events.push('disconnect'));
+
+            await expect(provider.request({ method: 'personal_sign' })).rejects.toMatchObject({ code: 4100 });
+
+            expect(events).toEqual(['accountsChanged', 'disconnect']);
+        });
     });
 
     describe('error codes survive the trip to the dapp', () => {
