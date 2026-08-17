@@ -32,7 +32,9 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
           className="size-4 flex-none"
         />
       )}
-      <p className={`text-body-sm break-all font-mono ${unlimited ? 'text-amber-500' : 'text-foreground'}`}>
+      <p
+        className={`text-body-sm break-all font-mono ${unlimited ? 'text-amber-600 dark:text-amber-500' : 'text-foreground'}`}
+      >
         <span className="font-semibold">{unlimited ? 'Unlimited' : groupNumber(row.value)}</span>
         {row.symbol && <span className={unlimited ? '' : 'text-muted-foreground'}> {row.symbol}</span>}
       </p>
@@ -43,7 +45,8 @@ function TokenAmountValue({ row, chainId }: { row: DisplayRow; chainId: number }
 /** Deadline/expiry value: "1 Jan 2030", tinted + a hover ⚠ when expired (past) or far-future. */
 function DateValue({ raw }: { raw: string }) {
   const tone = dateTone(raw);
-  const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
+  const toneClass =
+    tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-600 dark:text-amber-500' : 'text-foreground';
   const note =
     tone === 'expired' ? 'This date is in the past.' : tone === 'far' ? 'More than a year in the future.' : undefined;
   return (

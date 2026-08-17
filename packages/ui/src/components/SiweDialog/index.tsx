@@ -352,6 +352,10 @@ export const SiweDialog = ({
                     id={ackId}
                     checked={acknowledged}
                     onCheckedChange={(checked) => setAcknowledged(checked === true)}
+                    // The primitive's border-input is near-white in light mode and vanishes
+                    // on this red-tinted box — theme the control destructive, with an opaque
+                    // base fill so the unchecked box reads clearly on the tint.
+                    className="bg-background border-destructive/60 data-[state=checked]:border-destructive data-[state=checked]:bg-destructive data-[state=checked]:text-destructive-foreground dark:data-[state=checked]:bg-destructive"
                   />
                   <span className="text-destructive text-body-sm font-medium">I accept the risk</span>
                 </label>
