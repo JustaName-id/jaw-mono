@@ -220,9 +220,12 @@ export const TransactionDialog = ({
   // the banner already explains precisely. Name the cause once, at the top.
   const feeBlockReason = permissionBlocks ? null : blockReason;
 
-  // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
-  const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
-  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20EstimateMissing && !permissionBlocks;
+  // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled, nor when the
+  // balance can't cover that ceiling (a priced token with isSelectable false). NetworkFeeRow
+  // shows its unpayable warning on the same condition.
+  const erc20CannotPay =
+    isPayingWithErc20 && (!selectedFeeToken?.gasCostMaxFormatted || !selectedFeeToken?.isSelectable);
+  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20CannotPay && !permissionBlocks;
 
   // Reverts, but gas estimated fine, so it stays submittable: warn rather than block.
   const softRevertWarning = !blockReason && !permissionBlocks && !!assetPreviewWillRevert;

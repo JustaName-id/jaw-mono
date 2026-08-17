@@ -436,14 +436,15 @@ export class ReactUIHandler implements UIHandler {
   }
 
   /**
-   * Every wrapper below is keyed by `request.id`.
+   * Every wrapper below is keyed by `request.id` as belt-and-braces, not because anything is
+   * reused today: `request()` mounts a fresh root in a fresh container per request, so each
+   * dialog already gets a brand-new component instance.
    *
-   * The SDK does not serialize requests, so a second one can arrive while a dialog is mounted. Two
-   * requests of the same type would otherwise reuse the component instance, and each wrapper holds
-   * request-scoped state — a fetched permission, token metadata, a loading flag. That state is not
-   * reset by a prop change, so the new request would render against the previous one's data with the
-   * Confirm gate already open. The key makes a new request a new component, which is the only way to
-   * be sure none of that state survives. `page.tsx` keys the popup's dialogs the same way.
+   * The keys exist for a future refactor that keeps one root mounted across requests. Each
+   * wrapper holds request-scoped state — a fetched permission, token metadata, a loading flag —
+   * that a prop change would not reset, so in a shared-root world an unkeyed wrapper would render
+   * a new request against the previous one's data. The popup's `page.tsx` is that world (one tree
+   * mounted across requests) and relies on the same keying for correctness.
    */
   private renderDialog(
     request: UIRequest,

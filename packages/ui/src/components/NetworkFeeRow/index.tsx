@@ -124,11 +124,34 @@ export function NetworkFeeRow({
       // price source for one. It used to render as `$0.0004` beside `≈ 0.0004 WETH`: the same number
       // wearing two units, one of them wrong by orders of magnitude. One honest line instead.
       //
-      // It can also hold the sentinels 'Insufficient' and 'Estimation failed' (useGasEstimation),
-      // which the selector blocks picking but the re-estimate sync can copy onto an already-chosen
-      // token — rendering "Estimation failed USDC". Gating on a number sends those to "Estimating".
-      const tokenCost = Number(selectedFeeToken.gasCostFormatted);
-      const hasTokenCost = selectedFeeToken.gasCostFormatted !== undefined && Number.isFinite(tokenCost);
+      // It can also mark the token unpayable (useGasEstimation): a sentinel string or required
+      // amount with no ceiling, or a priced estimate the balance can't cover (isSelectable false).
+      // A re-estimate can put those on the already-selected token, where blockReason stays null —
+      // so this slot must say why. Mirrors the dialogs' erc20CannotPay Confirm gate exactly.
+      const hasTokenCost = selectedFeeToken.gasCostFormatted !== undefined;
+      if (hasTokenCost && (!selectedFeeToken.gasCostMaxFormatted || !selectedFeeToken.isSelectable)) {
+        if (selectedFeeToken.gasCostFormatted === 'Estimation failed') {
+          return (
+            <InlineWarning
+              text="Estimation failed"
+              detail={`The fee in ${selectedFeeToken.symbol} couldn't be estimated. Pick another token to pay with.`}
+            />
+          );
+        }
+        // The balance must cover the worst-case ceiling; the ceiling-less legs carry the
+        // required amount (or a sentinel) as the cost.
+        const needed = selectedFeeToken.gasCostMaxFormatted ?? selectedFeeToken.gasCostFormatted;
+        return (
+          <InlineWarning
+            text="Insufficient funds"
+            detail={
+              Number.isFinite(Number(needed))
+                ? `This account needs about ${needed} ${selectedFeeToken.symbol} to cover the network fee but doesn't hold enough. Pick another token to pay with.`
+                : `This account doesn't hold enough ${selectedFeeToken.symbol} to cover the network fee. Pick another token to pay with.`
+            }
+          />
+        );
+      }
       return (
         <div className="flex flex-col items-start gap-1">
           <p className="font-mono leading-tight">
@@ -140,7 +163,6 @@ export function NetworkFeeRow({
               <span className="text-muted-foreground text-body-sm">Estimating...</span>
             )}
           </p>
-          {/* Same sentinel guard: a non-numeric ceiling would read "Up to Insufficient USDC". */}
           {ceiling && Number.isFinite(Number(ceiling)) && (
             <p className="text-muted-foreground text-body-xs font-mono">
               Up to {ceiling} {selectedFeeToken.symbol}
