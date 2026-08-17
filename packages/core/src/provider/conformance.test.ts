@@ -24,7 +24,7 @@ import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 import { JAWProvider } from './JAWProvider.js';
 import { SILENT_METHODS, INTERACTIVE_METHODS } from '../method-policy.js';
 import { standardErrorCodes, standardErrors } from '../errors/index.js';
-import { createSigner, loadSignerType, type Signer } from '../signer/index.js';
+import { createSigner, loadSignerType, storeSignerType, type Signer } from '../signer/index.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
 import {
@@ -177,6 +177,12 @@ describe('EIP-1193 conformance', () => {
             await expect(provider.request({ method })).resolves.toBe('connected');
             expect(signer.handshake).toHaveBeenCalled();
 
+            // Persisted, not just live in memory. This is what lets the next
+            // page load restore the signer instead of running a fresh ceremony,
+            // so dropping it would cost the user a biometric on every reload
+            // while everything else here stayed green.
+            expect(storeSignerType).toHaveBeenCalledWith('crossPlatform');
+
             // The session stuck: the next silent read goes through the signer
             // rather than being answered with the not-connected default.
             (signer.request as Mock).mockResolvedValue(['0xabc']);
@@ -229,11 +235,15 @@ describe('EIP-1193 conformance', () => {
     });
 
     describe('error codes survive the trip to the dapp', () => {
-        // The provider's exit runs serializeError, which keeps a code only when
-        // errors/constants.ts knows it and flattens everything else to -32603.
-        // A code added to standardErrorCodes without its errorValues entry would
-        // degrade silently, and the dapp would see an internal error where it
-        // expected, say, a user rejection.
+        // The provider's exit runs serializeError. It keeps a code when
+        // errors/constants.ts lists it, and separately lets the whole JSON-RPC
+        // server range (-32099 to -32000) through by range check. Outside both,
+        // the code is flattened to -32603.
+        //
+        // So dropping an errorValues entry degrades the CODE for the 4xxx and
+        // 5xxx families, and only the MESSAGE for the server range. Both are
+        // asserted, since a dapp that shows the message to a user cares about
+        // the second just as much.
         it.each(EVERY_CODE)('%s (%i) reaches the dapp unchanged', async (_name, code) => {
             const provider = connectedProvider();
             // A plain object, not an Error instance, because that is what an
@@ -241,7 +251,15 @@ describe('EIP-1193 conformance', () => {
             // postMessage structured-clones it and the prototype is gone.
             (signer.request as Mock).mockRejectedValue({ code, message: 'from the wallet' });
 
-            await expect(provider.request({ method: 'wallet_sign' })).rejects.toMatchObject({ code });
+            await expect(provider.request({ method: 'wallet_sign' })).rejects.toMatchObject({
+                code,
+                message: 'from the wallet',
+            });
+
+            // Routed through the restored session, not through the ephemeral
+            // branch. Without this the whole block would keep passing if signer
+            // restore broke, since the ephemeral path calls the same mock.
+            expect(signer.handshake).not.toHaveBeenCalled();
         });
 
         it('reports a user rejection as 4001, not as an internal error', async () => {
@@ -261,6 +279,33 @@ describe('EIP-1193 conformance', () => {
                 code: standardErrorCodes.rpc.internal,
                 message: 'boom',
             });
+        });
+    });
+
+    describe('answers that differ with and without a session', () => {
+        // eth_coinbase reports "no account" two different ways: null with no
+        // session (JAWProvider), undefined from a connected signer holding an
+        // empty account list (JAWSigner). A dapp branching on `=== null` gets
+        // different answers for the same situation. Pinned on both sides so the
+        // split is visible rather than folklore.
+        it('eth_coinbase answers null with no session and undefined when connected without accounts', async () => {
+            await expect(newProvider().request({ method: 'eth_coinbase' })).resolves.toBeNull();
+
+            const provider = connectedProvider();
+            (signer.request as Mock).mockResolvedValue(undefined);
+            await expect(provider.request({ method: 'eth_coinbase' })).resolves.toBeUndefined();
+        });
+    });
+
+    describe('methods the policy does not list', () => {
+        // wallet_disconnect is dispatched by the provider in both branches yet
+        // appears in neither SILENT_METHODS nor INTERACTIVE_METHODS, so the
+        // coverage check above cannot see it. It is also the method that runs
+        // PasskeyManager.logout() and tears down the transport, which makes it
+        // the one most worth pinning. Classifying it is a call for whoever owns
+        // the policy; pinned here meanwhile.
+        it('wallet_disconnect resolves to null even on a provider that never connected', async () => {
+            await expect(newProvider().request({ method: 'wallet_disconnect' })).resolves.toBeNull();
         });
     });
 });
