@@ -14,6 +14,12 @@ export interface ShellDialogProps {
   dismissable?: boolean;
   /** Animated halo behind the card edge (dark mode only). Defaults to on. */
   halo?: boolean;
+  /**
+   * The screen's own cancel handler, rendered as the shell's top-right X. Pass the SAME function
+   * the footer Cancel calls — it carries that flow's specific rejection — never a generic dismiss.
+   * Shown only while `dismissable` is true, so it follows the same rule as outside-click / ESC.
+   */
+  onClose?: () => void;
   /** Extra classes for the shell card (e.g. a taller min-height). */
   contentClassName?: string;
   children: ReactNode;
@@ -37,6 +43,7 @@ export function ShellDialog({
   onOpenChange,
   dismissable = true,
   halo,
+  onClose,
   contentClassName,
   children,
 }: ShellDialogProps) {
@@ -57,7 +64,7 @@ export function ShellDialog({
       }}
       innerStyle={{ padding: 0, overflow: 'visible' }}
     >
-      <DialogShell halo={halo} contentClassName={contentClassName}>
+      <DialogShell halo={halo} onClose={dismissable ? onClose : undefined} contentClassName={contentClassName}>
         {children}
       </DialogShell>
     </DefaultDialog>

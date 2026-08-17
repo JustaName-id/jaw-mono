@@ -1,6 +1,7 @@
 'use client';
 
 import { ReactNode, useContext } from 'react';
+import { X } from 'lucide-react';
 
 import { cn, DialogAnchorContext } from '../../lib/utils';
 
@@ -13,6 +14,14 @@ export interface DialogShellProps {
    * sheet presentation (see below).
    */
   halo?: boolean;
+  /**
+   * Renders the close X pinned over the card's top-right corner. This must be the SCREEN'S OWN
+   * cancel handler — the one its footer Cancel calls, carrying that flow's specific rejection —
+   * never a generic dismiss: in the keys popup `onOpenChange` is a no-op and only `onCancel`
+   * settles the pending request. Omit while cancelling is not allowed (a passkey ceremony in
+   * flight, a response already delivered).
+   */
+  onClose?: () => void;
   className?: string;
   contentClassName?: string;
 }
@@ -31,7 +40,7 @@ export interface DialogShellProps {
  * a sheet. The slide-up itself is not ours — EmbeddedShell drives it from the
  * SDK's DialogVisibility for inline screens, Radix animates it for portaled ones.
  */
-export function DialogShell({ children, halo = true, className, contentClassName }: DialogShellProps) {
+export function DialogShell({ children, halo = true, onClose, className, contentClassName }: DialogShellProps) {
   const sheet = useContext(DialogAnchorContext) === 'bottom-sheet';
 
   return (
@@ -95,6 +104,21 @@ export function DialogShell({ children, halo = true, className, contentClassName
         )}
         {children}
       </div>
+      {/* Pinned to the frame, not the scroll container, so content scrolls under it. After the
+          content div in the DOM so it paints above at the same stacking level. The circle is the
+          spec sheet's own: secondary fill, border ring, muted X (measured off the mock's close
+          button at ~26px; size-7 is our grid's neighbour). */}
+      {onClose && (
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cancel"
+          className="bg-secondary border-border text-muted-foreground hover:text-foreground absolute right-5 top-6 z-[2] flex size-7 cursor-pointer items-center justify-center rounded-full border transition-colors"
+        >
+          {/* 12 in a 28 circle ≈ the mock's own proportion (its X measures ~10 in a 26 circle). */}
+          <X className="size-3" strokeWidth={2.2} />
+        </button>
+      )}
     </div>
   );
 }

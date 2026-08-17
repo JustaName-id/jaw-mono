@@ -117,7 +117,14 @@ export const Eip712Dialog = ({
   const rawTree = typedData ? <Eip712Tree typedData={typedData} /> : null;
 
   return (
-    <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
+    <ShellDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissable={!isProcessing}
+      // No X once the signature is delivered — there is nothing left to cancel.
+      onClose={isSuccess ? undefined : onCancel}
+      contentClassName="min-h-[510px]"
+    >
       {isSuccess ? (
         // Brief success beat before the parent closes the dialog.
         <SuccessScreen seedAddress={signerAddress} avatarUrl={signerAvatar} />

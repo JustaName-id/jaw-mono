@@ -248,7 +248,13 @@ export const PermissionDialog = ({
   ];
 
   return (
-    <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
+    <ShellDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissable={!isProcessing}
+      onClose={onCancel}
+      contentClassName="min-h-[510px]"
+    >
       {isProcessing ? (
         <ProcessingScreen
           seedAddress={accountAddress || spenderAddress}
