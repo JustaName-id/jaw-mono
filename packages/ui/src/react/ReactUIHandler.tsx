@@ -1178,6 +1178,9 @@ function OnboardingDialogWrapper({
       innerStyle={{ padding: 0, overflow: 'visible' }}
     >
       <OnboardingDialog
+        // The SAME handleCancel the outside-click dismiss above already calls — the X is only a
+        // visible affordance for the existing decline path, not a second one.
+        onClose={handleCancel}
         accounts={accounts}
         onAccountSelect={handleAccountSelect}
         loggingInAccount={loggingInAccount}

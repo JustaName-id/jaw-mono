@@ -47,7 +47,7 @@ export const ConnectDialog = ({
   const appAvatar = <AppAvatar appName={appName} appLogoUrl={appLogoUrl} />;
 
   return (
-    <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing}>
+    <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} onClose={onCancel}>
       {isProcessing ? (
         // Connecting state — secure session being established.
         <ProcessingScreen

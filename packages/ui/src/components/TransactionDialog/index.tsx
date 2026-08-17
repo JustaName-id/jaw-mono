@@ -254,7 +254,13 @@ export const TransactionDialog = ({
   const calldataOpen = !!assetPreviewError || ((assetsOut?.length ?? 0) === 0 && (assetsIn?.length ?? 0) === 0);
 
   return (
-    <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
+    <ShellDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissable={!isProcessing}
+      onClose={onCancel}
+      contentClassName="min-h-[510px]"
+    >
       {isProcessing ? (
         <ProcessingScreen
           seedAddress={walletAddress}
@@ -264,9 +270,10 @@ export const TransactionDialog = ({
         />
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
-          {/* Pinned header */}
+          {/* Pinned header. The close X comes from DialogShell, pinned over the top-right corner,
+              so the title keeps clear of it. */}
           <div className="flex-none px-6 pt-6">
-            <h2 className="text-foreground text-title-xl">{title}</h2>
+            <h2 className="text-foreground text-title-xl truncate pr-9">{title}</h2>
             {totalTransactions > 1 && currentTransaction?.description && (
               <p className="text-muted-foreground text-body mt-1">
                 {currentTransaction.action}: {currentTransaction.description}

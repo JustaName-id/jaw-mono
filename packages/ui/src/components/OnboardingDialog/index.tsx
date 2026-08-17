@@ -298,6 +298,7 @@ export function OnboardingDialog({
   isImporting,
   onCreateNewAccount,
   startInCreate,
+  onClose,
   onCreateAccount,
   onAccountCreationComplete,
   onAccountCreationError,
@@ -438,7 +439,7 @@ export function OnboardingDialog({
   // Fresh sign-in / create view — also the "Create new account" destination.
   if (view !== 'welcome' || !defaultAccount) {
     return (
-      <DialogShell>
+      <DialogShell onClose={isBusy ? undefined : onClose}>
         <div className="flex flex-col p-6">
           {defaultAccount && (
             // Top-left escape back to the welcome view, styled as the dialog's
@@ -453,9 +454,7 @@ export function OnboardingDialog({
               Back
             </button>
           )}
-          <h2 className="text-foreground text-title-xl leading-none">
-            Sign <span className="italic">{isSignUp ? 'up.' : 'in.'}</span>
-          </h2>
+          <h2 className="text-foreground text-title-xl leading-none">Sign {isSignUp ? 'up.' : 'in.'}</h2>
           <p className="text-muted-foreground text-body mt-2">
             {isSignUp ? 'Pick a username to create your account.' : 'Use a saved passkey, or create a new account.'}
           </p>
@@ -480,11 +479,9 @@ export function OnboardingDialog({
 
   // Welcome-back view — one-tap continue with the last account.
   return (
-    <DialogShell>
+    <DialogShell onClose={isBusy ? undefined : onClose}>
       <div className="flex flex-col p-6">
-        <h2 className="text-foreground text-title-xl leading-none">
-          Welcome <span className="italic">back.</span>
-        </h2>
+        <h2 className="text-foreground text-title-xl leading-none">Welcome back.</h2>
         <p className="text-muted-foreground text-body mt-2">Pick up where you left off.</p>
 
         <button

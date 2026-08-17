@@ -42,7 +42,14 @@ export const SignatureDialog = ({
   return (
     // Taller floor than the default shell so the message box has room and the
     // card doesn't jump between short and long messages (canvas: min 447).
-    <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[447px]">
+    <ShellDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissable={!isProcessing}
+      // No X once the signature is delivered — there is nothing left to cancel.
+      onClose={isSuccess ? undefined : onCancel}
+      contentClassName="min-h-[447px]"
+    >
       {isSuccess ? (
         // Brief success beat before the parent closes the dialog.
         <SuccessScreen seedAddress={signerAddress} avatarUrl={avatarUrl} />

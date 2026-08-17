@@ -1219,6 +1219,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         <div className="flex min-h-screen items-center justify-center p-4">
           <div className="w-full max-w-md">
             <SignInScreen
+              // The same call the EmbeddedShell overlay tap makes — the SDK rejects the pending
+              // request; in a popup it closes the window. The X is a visible twin, not a new path.
+              onClose={() => communicator.requestClose('cancelled')}
               ensConfig={ensConfig}
               chainId={effectiveChainId}
               apiKey={apiKey}
@@ -1288,6 +1291,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
         <div className="flex min-h-screen items-center justify-center p-4">
           <div className="w-full max-w-md">
             <SignInScreen
+              // The same call the EmbeddedShell overlay tap makes — the SDK rejects the pending
+              // request; in a popup it closes the window. The X is a visible twin, not a new path.
+              onClose={() => communicator.requestClose('cancelled')}
               ensConfig={ensConfig}
               chainId={effectiveChainId}
               apiKey={apiKey}

@@ -10,6 +10,8 @@ import { extendTailwindMerge } from 'tailwind-merge';
  */
 const FONT_SIZE_ROLES = [
   'title-xl',
+  'title-lg',
+  'title',
   'status',
   'app',
   'heading',

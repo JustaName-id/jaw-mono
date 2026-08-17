@@ -20,7 +20,7 @@ export interface AccountHeaderRowProps {
 export function AccountHeaderRow({ label, seedAddress, displayName, avatarUrl, className }: AccountHeaderRowProps) {
   return (
     <div className={cn('mt-4 flex flex-wrap items-center gap-2', className)}>
-      <h2 className="text-foreground text-status">{label}</h2>
+      <h2 className="text-foreground text-title">{label}</h2>
       {seedAddress && (
         <AccountPill seedAddress={seedAddress} label={displayName} avatarUrl={avatarUrl} copyValue={seedAddress} />
       )}

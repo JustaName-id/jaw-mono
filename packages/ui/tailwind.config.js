@@ -28,6 +28,9 @@ module.exports = {
       fontSize: {
         // ── Annotated on the spec sheet's transaction frame ────────────────────────────────────
         'title-xl': ['26px', { lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.03em' }], // spec 24, raised by request
+        // Same face as title-xl one step down — the permission grant/revoke titles only, whose
+        // two-word headings read better at 24 (by request). Every other card title stays title-xl.
+        'title-lg': ['24px', { lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.03em' }],
         heading: ['13px', { lineHeight: '1', fontWeight: '600', letterSpacing: '-0.02em' }], // "You send"
         button: ['13px', { lineHeight: '1', fontWeight: '600' }], // Cancel / Confirm
         value: ['12px', { lineHeight: '1.25', fontWeight: '500' }], // field value, asset amount
@@ -50,6 +53,10 @@ module.exports = {
         code: ['9px', { lineHeight: '1.4', fontWeight: '400' }], // mono, hashes and raw payload
         'amount-lg': ['26px', { lineHeight: '1.2', fontWeight: '700', letterSpacing: '-0.02em' }], // native-send hero
         status: ['15px', { lineHeight: '1.2', fontWeight: '600', letterSpacing: '-0.02em' }], // processing / success headline
+        // Deleted once as unused, reinstated when AccountHeaderRow's heading moved off `status`:
+        // "Sign In as" / "Signing as" / "Connecting to" read at 20 where the processing headline
+        // stays 15. Size raised by request; weight and tracking kept from the row's prior look.
+        title: ['20px', { lineHeight: '1.2', fontWeight: '600', letterSpacing: '-0.02em' }],
         app: ['17px', { lineHeight: '1.2', fontWeight: '600', letterSpacing: '-0.02em' }], // app name, dialog header
         url: ['10px', { lineHeight: '1.3', fontWeight: '400' }], // mono origin, under the app name
       },

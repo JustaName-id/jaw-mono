@@ -40,7 +40,9 @@ export function DialogAppHeader({ appName, appLogoUrl, origin, chainName, chainI
   const appAvatar = <AppAvatar appName={appName} appLogoUrl={appLogoUrl} />;
 
   return (
-    <div className="flex items-center gap-3">
+    // pr-9 clears the shell's close X: every consumer of this header sits in a ShellDialog that
+    // pins one over the top-right corner, and a long app name would otherwise truncate under it.
+    <div className="flex items-center gap-3 pr-9">
       <span className="relative flex-none">
         <span className="bg-secondary border-border size-logo flex items-center justify-center overflow-hidden rounded-full border">
           {appAvatar}

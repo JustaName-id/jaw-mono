@@ -248,7 +248,13 @@ export const PermissionDialog = ({
   ];
 
   return (
-    <ShellDialog open={open} onOpenChange={onOpenChange} dismissable={!isProcessing} contentClassName="min-h-[510px]">
+    <ShellDialog
+      open={open}
+      onOpenChange={onOpenChange}
+      dismissable={!isProcessing}
+      onClose={onCancel}
+      contentClassName="min-h-[510px]"
+    >
       {isProcessing ? (
         <ProcessingScreen
           seedAddress={accountAddress || spenderAddress}
@@ -266,7 +272,9 @@ export const PermissionDialog = ({
               chainName={networkName}
               chainIcon={displayChainIcon}
             />
-            <h2 className="text-foreground text-title-xl mt-4">
+            {/* `title-lg`, not `title-xl`: these two-word titles read at 24 by request — the only
+                titles that do. */}
+            <h2 className="text-foreground text-title-lg mt-4">
               {isGrant ? 'Requesting Permission' : 'Revoke Permission'}
             </h2>
           </div>
