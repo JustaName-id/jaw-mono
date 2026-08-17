@@ -218,7 +218,8 @@ function LeafValue({
   tone?: DateTone;
   note?: string;
 }) {
-  const toneClass = tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-500' : 'text-foreground';
+  const toneClass =
+    tone === 'expired' ? 'text-destructive' : tone === 'far' ? 'text-amber-600 dark:text-amber-500' : 'text-foreground';
   const showIcon = tone === 'expired' || tone === 'far';
   return (
     <span className="ml-auto flex min-w-0 items-center justify-end gap-1">
