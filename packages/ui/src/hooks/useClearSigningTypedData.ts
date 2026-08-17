@@ -1,10 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import {
   applyFormat,
   createTokenResolver,
   getDefaultDescriptorSource,
   getNativeDecimals,
   getNativeSymbol,
+  normalizeChainId,
   resolveEip712Descriptor,
   type ClearSigningDisplay,
 } from '../utils/clearSigning';
@@ -19,6 +20,7 @@ interface TypedData {
 interface UseClearSigningTypedDataResult {
   display: ClearSigningDisplay | null;
   isLoading: boolean;
+  chainId: number;
 }
 
 /**
@@ -34,17 +36,19 @@ export function useClearSigningTypedData(
   const [display, setDisplay] = useState<ClearSigningDisplay | null>(null);
   const [isLoading, setIsLoading] = useState(false);
 
-  useEffect(() => {
-    if (!typedDataJson) {
-      setDisplay(null);
-      setIsLoading(false);
-      return;
-    }
-
-    let parsed: TypedData;
+  const parsed = useMemo(() => {
+    if (!typedDataJson) return null;
     try {
-      parsed = JSON.parse(typedDataJson) as TypedData;
+      return JSON.parse(typedDataJson) as TypedData;
     } catch {
+      return null;
+    }
+  }, [typedDataJson]);
+
+  const effectiveChainId = normalizeChainId(parsed?.domain?.chainId) ?? chainId;
+
+  useEffect(() => {
+    if (!parsed) {
       setDisplay(null);
       setIsLoading(false);
       return;
@@ -65,7 +69,7 @@ export function useClearSigningTypedData(
       try {
         const match = await resolveEip712Descriptor(
           getDefaultDescriptorSource(),
-          chainId,
+          effectiveChainId,
           verifyingContract,
           primaryType,
           parsed.types,
@@ -84,11 +88,11 @@ export function useClearSigningTypedData(
           // verifyingContract, numeric chainId) win when a dApp ships a differently-cased
           // address or a hex chainId. Renderer reads from this; we don't want descriptor
           // rows to surface dApp-controlled spelling.
-          tx: { ...parsed.domain, chainId, verifyingContract: verifyingContract.toLowerCase() },
-          chainId,
-          nativeSymbol: getNativeSymbol(chainId),
-          nativeDecimals: getNativeDecimals(chainId),
-          resolveToken: createTokenResolver(chainId, apiKey),
+          tx: { ...parsed.domain, chainId: effectiveChainId, verifyingContract: verifyingContract.toLowerCase() },
+          chainId: effectiveChainId,
+          nativeSymbol: getNativeSymbol(effectiveChainId),
+          nativeDecimals: getNativeDecimals(effectiveChainId),
+          resolveToken: createTokenResolver(effectiveChainId, apiKey),
         });
 
         if (!cancelled) {
@@ -109,7 +113,7 @@ export function useClearSigningTypedData(
     return () => {
       cancelled = true;
     };
-  }, [typedDataJson, chainId, apiKey]);
+  }, [parsed, effectiveChainId, apiKey]);
 
-  return { display, isLoading };
+  return { display, isLoading, chainId: effectiveChainId };
 }

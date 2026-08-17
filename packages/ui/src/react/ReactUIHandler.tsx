@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useMemo, useState, useEffect } from 'react';
+import React, { useMemo, useState, useEffect, useRef } from 'react';
 import { createRoot } from 'react-dom/client';
 import {
   UIHandler,
@@ -22,7 +22,6 @@ import {
   JAW_RPC_URL,
   JAW_PAYMASTER_URL,
   SubnameTextRecordCapabilityRequest,
-  getPermissionFromRelay,
   handleGetCapabilitiesRequest,
   buildGrantPermissionCall,
   buildRevokePermissionCall,
@@ -34,7 +33,8 @@ import {
   ensureIntNumber,
   standardErrorCodes,
 } from '@jaw.id/core';
-import { formatUnits, erc20Abi, createPublicClient, http } from 'viem';
+import { formatUnits, erc20Abi } from 'viem';
+import { formatSpendAmount } from '../utils/displayFormat';
 import type { Address, Hex } from 'viem';
 import { createSiweMessage } from 'viem/siwe';
 
@@ -46,7 +46,9 @@ import { SiweDialog } from '../components/SiweDialog';
 import { Eip712Dialog } from '../components/Eip712Dialog';
 import { TransactionDialog } from '../components/TransactionDialog';
 import { PermissionDialog } from '../components/PermissionDialog';
+import { isWildcard } from '../components/PermissionDialog/Sections';
 import { ConnectDialog } from '../components/ConnectDialog';
+import { ResponsiveDialogAnchor } from '../components/DialogPresentation';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
 import {
@@ -56,13 +58,21 @@ import {
 import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
+import { usePermissionExecution } from '../hooks/usePermissionExecution';
+import { usePermissionRevocation } from '../hooks/usePermissionRevocation';
+import { useFunctionSignatures } from '../hooks/useFunctionSignatures';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
-import { getSiweOriginWarning, isSiweMessage, hexToUtf8 } from '../utils/siwe';
+import { getPublicClient } from '../utils/publicClient';
+import { getSiweOriginWarning, getSiweOriginWarningFromMessage, isSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
 import type { JawTheme } from '@jaw.id/core';
 import { resolveTheme } from '../theme/resolve-theme.js';
 import { applyThemeToContainer } from '../theme/apply-theme.js';
 import { getSystemColorScheme, useColorScheme } from '../theme/use-color-scheme.js';
+
+// How long signing dialogs hold the "Signed ✓" tick after delivery (dApp promise is
+// already resolved by then — see handleApprove — so it never delays the dApp).
+const SIGNED_TICK_MS = 850;
 
 // ============================================================================
 // Chain Utilities
@@ -95,7 +105,9 @@ const formatExpiryDate = (timestamp: number): string => {
 };
 
 // Token info cache type
-type TokenInfoMap = Record<string, { decimals: number; symbol: string }>;
+// `decimals: null` means the token's `decimals()` read failed. Kept distinct from a number so a
+// failed read can never be mistaken for 18 — see utils/spendAmount.
+type TokenInfoMap = Record<string, { decimals: number | null; symbol: string }>;
 
 // Type assertion to fix React types version mismatch
 const DefaultDialogComponent: React.ComponentType<DefaultDialogProps> =
@@ -117,6 +129,38 @@ function ThemeWatcher({ theme, container }: { theme: JawTheme; container: HTMLEl
   }, [systemScheme, theme, container]);
 
   return null;
+}
+
+/**
+ * Rejects the pending request when a dialog throws while rendering.
+ *
+ * Without this, a render throw leaves nothing mounted, `resolve`/`reject` never called,
+ * and the container still in the top layer — so the caller waits forever and the host
+ * page stays inert. React unmounts the tree on an uncaught error but cannot settle a
+ * promise it knows nothing about. Renders nothing: a half-drawn signing screen is worse
+ * than none.
+ */
+// Exported for tests only — deliberately absent from src/index.ts.
+export class DialogErrorBoundary extends React.Component<
+  { onError: (error: Error) => void; children: React.ReactNode },
+  { failed: boolean }
+> {
+  override state = { failed: false };
+
+  static getDerivedStateFromError() {
+    return { failed: true };
+  }
+
+  override componentDidCatch(error: Error, info: React.ErrorInfo) {
+    console.error('[ReactUIHandler] Dialog render failed:', error, info.componentStack);
+    // Deferred out of the commit phase: onError tears the dialog down, and unmounting a
+    // root while React is still rendering warns and postpones the unmount anyway.
+    queueMicrotask(() => this.props.onError(error));
+  }
+
+  override render() {
+    return this.state.failed ? null : this.props.children;
+  }
 }
 
 /**
@@ -163,6 +207,8 @@ export interface ReactUIHandlerOptions {
 export class ReactUIHandler implements UIHandler {
   private config: UIHandlerConfig = {} as UIHandlerConfig;
   private localTheme?: JawTheme;
+  /** Teardown of the request that resolved but is still holding its success tick. */
+  private pendingTeardown: (() => void) | null = null;
 
   constructor(options?: ReactUIHandlerOptions) {
     this.localTheme = options?.theme;
@@ -192,10 +238,19 @@ export class ReactUIHandler implements UIHandler {
   }
 
   async request<T = unknown>(request: UIRequest): Promise<UIResponse<T>> {
+    // The previous request may have resolved and left its teardown on a timer so its
+    // success tick could finish showing. Flush it now: left to fire on its own it
+    // would land mid-flow and strip the body pointer-events lock and focus scope that
+    // Radix sets up for THIS dialog, and briefly stack two modals in the top layer.
+    this.pendingTeardown?.();
+
     return new Promise((resolve, reject) => {
       try {
         const container = document.createElement('dialog');
         container.setAttribute('data-jaw-modal-container', '');
+        // Styling scope: every utility this package ships is emitted as `[data-jaw-ui] .foo`, so
+        // the attribute is what makes the SDK's CSS apply — and what keeps it off the host page.
+        container.setAttribute('data-jaw-ui', '');
 
         // Style isolation: prevent consumer app CSS from leaking into SDK modals.
         // Inline styles guarantee isolation regardless of CSS load order or specificity.
@@ -256,7 +311,32 @@ export class ReactUIHandler implements UIHandler {
 
         const root = createRoot(container);
 
+        let torndown = false;
+        let holdTimer: ReturnType<typeof setTimeout> | null = null;
+        // The host promise must settle exactly once, and with the TRUE outcome.
+        // `settled` makes first-wins explicit; `submissionInFlight` marks the window
+        // where a signed transaction is racing the UI, so a render crash must not
+        // report "rejected" for a submission that may still land on chain.
+        let settled = false;
+        let submissionInFlight = false;
+
+        const settle = (response: UIResponse<T>) => {
+          if (settled) return;
+          settled = true;
+          resolve(response);
+        };
+
         const cleanup = () => {
+          // Idempotent: a held teardown can be raced by ESC/outside-click during the
+          // tick, by the next request flushing it, and by its own timer.
+          if (torndown) return;
+          torndown = true;
+          if (holdTimer) {
+            clearTimeout(holdTimer);
+            holdTimer = null;
+          }
+          if (this.pendingTeardown === cleanup) this.pendingTeardown = null;
+
           try {
             document.body.style.removeProperty('pointer-events');
 
@@ -273,27 +353,33 @@ export class ReactUIHandler implements UIHandler {
           }
         };
 
-        const handleApprove = (data: T) => {
-          cleanup();
-          resolve({
-            id: request.id,
-            approved: true,
-            data,
-          });
+        const handleApprove = (data: T, holdMs = 0) => {
+          if (holdMs > 0) {
+            // Signing dialogs: resolve the dApp first, then defer teardown so the tick
+            // shows. Registered on the handler so the next request can flush it instead
+            // of letting it fire underneath a newer dialog.
+            settle({ id: request.id, approved: true, data });
+            this.pendingTeardown = cleanup;
+            holdTimer = setTimeout(cleanup, holdMs);
+          } else {
+            cleanup();
+            settle({ id: request.id, approved: true, data });
+          }
         };
 
         const handleReject = (error?: Error) => {
           cleanup();
-          const response = {
+          settle({
             id: request.id,
             approved: false,
             error: (error as UIError) || UIError.userRejected(),
-          };
-          resolve(response);
+          });
         };
 
         // Render appropriate dialog based on request type
-        const dialog = this.renderDialog(request, handleApprove, handleReject);
+        const dialog = this.renderDialog(request, handleApprove, handleReject, (inFlight: boolean) => {
+          submissionInFlight = inFlight;
+        });
         const effectiveTheme = this.effectiveTheme;
         root.render(
           React.createElement(
@@ -303,7 +389,26 @@ export class ReactUIHandler implements UIHandler {
               theme: effectiveTheme,
               container,
             }),
-            dialog
+            React.createElement(DialogErrorBoundary, {
+              onError: (error: Error) => {
+                if (submissionInFlight) {
+                  // The UI crashed while a signed submission is racing it. Tear down the
+                  // broken dialog but do NOT settle: the in-flight sendCalls closure is
+                  // still alive and its own onApprove/onReject delivers the true outcome
+                  // (rejecting here could report "rejected" for a tx that lands on chain).
+                  console.error('[ReactUIHandler] Dialog crashed mid-submission:', error);
+                  cleanup();
+                  return;
+                }
+                handleReject(new Error(`The wallet could not display this request: ${error.message}`));
+              },
+              // No host shell lays these dialogs out (the iframe transport has
+              // EmbeddedShell), so the presentation is chosen from the viewport
+              // here: bottom sheet on phones, centered card otherwise. Inside
+              // the boundary, so a throw from it is caught like any other
+              // render failure.
+              children: React.createElement(ResponsiveDialogAnchor, null, dialog),
+            })
           )
         );
       } catch (error) {
@@ -336,15 +441,28 @@ export class ReactUIHandler implements UIHandler {
     });
   }
 
+  /**
+   * Every wrapper below is keyed by `request.id` as belt-and-braces, not because anything is
+   * reused today: `request()` mounts a fresh root in a fresh container per request, so each
+   * dialog already gets a brand-new component instance.
+   *
+   * The keys exist for a future refactor that keeps one root mounted across requests. Each
+   * wrapper holds request-scoped state — a fetched permission, token metadata, a loading flag —
+   * that a prop change would not reset, so in a shared-root world an unkeyed wrapper would render
+   * a new request against the previous one's data. The popup's `page.tsx` is that world (one tree
+   * mounted across requests) and relies on the same keying for correctness.
+   */
   private renderDialog(
     request: UIRequest,
     onApprove: (data: any) => void,
-    onReject: (error?: Error) => void
+    onReject: (error?: Error) => void,
+    onSubmissionInFlight?: (inFlight: boolean) => void
   ): React.ReactElement {
     switch (request.type) {
       case 'wallet_connect':
         return (
           <OnboardingDialogWrapper
+            key={request.id}
             request={request as ConnectUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -361,23 +479,29 @@ export class ReactUIHandler implements UIHandler {
         if (isSiweMessage(signRequest.data.message)) {
           return (
             <SiweDialogWrapper
+              key={request.id}
               request={signRequest}
               onApprove={onApprove}
               onReject={onReject}
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
               paymasters={this.config.paymasters}
+              appName={this.config.appName}
+              appLogoUrl={this.config.appLogoUrl}
             />
           );
         }
         return (
           <SignatureDialogWrapper
+            key={request.id}
             request={signRequest}
             onApprove={onApprove}
             onReject={onReject}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
       }
@@ -395,6 +519,7 @@ export class ReactUIHandler implements UIHandler {
           if (isSiweMessage(message)) {
             return (
               <SiweDialogWrapper
+                key={request.id}
                 request={
                   {
                     ...walletSignRequest,
@@ -411,11 +536,14 @@ export class ReactUIHandler implements UIHandler {
                 apiKey={this.config.apiKey}
                 defaultChainId={this.config.defaultChainId}
                 paymasters={this.config.paymasters}
+                appName={this.config.appName}
+                appLogoUrl={this.config.appLogoUrl}
               />
             );
           }
           return (
             <SignatureDialogWrapper
+              key={request.id}
               request={
                 {
                   ...walletSignRequest,
@@ -432,6 +560,8 @@ export class ReactUIHandler implements UIHandler {
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
               paymasters={this.config.paymasters}
+              appName={this.config.appName}
+              appLogoUrl={this.config.appLogoUrl}
             />
           );
         } else if (signType === '0x01') {
@@ -441,6 +571,7 @@ export class ReactUIHandler implements UIHandler {
           const typedDataJson = typeof typedDataRaw === 'string' ? typedDataRaw : JSON.stringify(typedDataRaw);
           return (
             <Eip712DialogWrapper
+              key={request.id}
               request={
                 {
                   ...walletSignRequest,
@@ -457,6 +588,8 @@ export class ReactUIHandler implements UIHandler {
               apiKey={this.config.apiKey}
               defaultChainId={this.config.defaultChainId}
               paymasters={this.config.paymasters}
+              appName={this.config.appName}
+              appLogoUrl={this.config.appLogoUrl}
             />
           );
         } else {
@@ -468,60 +601,79 @@ export class ReactUIHandler implements UIHandler {
       case 'eth_signTypedData_v4':
         return (
           <Eip712DialogWrapper
+            key={request.id}
             request={request as TypedDataUIRequest}
             onApprove={onApprove}
             onReject={onReject}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
       case 'wallet_sendCalls':
         return (
           <TransactionDialogWrapper
+            key={request.id}
             request={request as TransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
       case 'eth_sendTransaction':
         return (
           <SendTransactionDialogWrapper
+            key={request.id}
             request={request as SendTransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
       case 'wallet_grantPermissions':
         return (
           <PermissionDialogWrapper
+            key={request.id}
             request={request as PermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
       case 'wallet_revokePermissions':
         return (
           <RevokePermissionDialogWrapper
+            key={request.id}
             request={request as RevokePermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
+            onSubmissionInFlight={onSubmissionInFlight}
             apiKey={this.config.apiKey}
             defaultChainId={this.config.defaultChainId}
             paymasters={this.config.paymasters}
+            appName={this.config.appName}
+            appLogoUrl={this.config.appLogoUrl}
           />
         );
 
@@ -972,7 +1124,6 @@ function OnboardingDialogWrapper({
           }}
           message={siweMessage}
           origin={origin}
-          timestamp={new Date()}
           appName={request.data.appName || 'dApp'}
           appLogoUrl={request.data.appLogoUrl ?? undefined}
           accountAddress={authenticatedWalletAddress}
@@ -1002,7 +1153,6 @@ function OnboardingDialogWrapper({
         appName={request.data.appName || 'dApp'}
         appLogoUrl={request.data.appLogoUrl ?? undefined}
         origin={origin}
-        timestamp={new Date()}
         accountName={authenticatedAccountName || 'Account'}
         walletAddress={authenticatedWalletAddress}
         chainName={chainName}
@@ -1024,12 +1174,24 @@ function OnboardingDialogWrapper({
         if (!newOpen) handleCancel();
         else setOpen(newOpen);
       }}
+      // OnboardingDialog brings its own DialogShell, which applies the
+      // home-bar inset inside its own surface — the sheet must not add a
+      // second one (see ShellDialog, which does the same for every other
+      // revamped dialog).
+      ownsBottomInset
       contentStyle={{
         width: 'fit-content',
         maxWidth: '450px',
+        background: 'transparent',
+        border: 'none',
+        boxShadow: 'none',
       }}
+      innerStyle={{ padding: 0, overflow: 'visible' }}
     >
       <OnboardingDialog
+        // The SAME handleCancel the outside-click dismiss above already calls — the X is only a
+        // visible affordance for the existing decline path, not a second one.
+        onClose={handleCancel}
         accounts={accounts}
         onAccountSelect={handleAccountSelect}
         loggingInAccount={loggingInAccount}
@@ -1058,16 +1220,21 @@ function SignatureDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: SignatureUIRequest;
-  onApprove: (data: any) => void;
+  onApprove: (data: any, holdMs?: number) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
@@ -1086,7 +1253,9 @@ function SignatureDialogWrapper({
       const signature = await account.signMessage(request.data.message, { address: request.data.address });
 
       setSignatureStatus('Signature successful!');
-      onApprove(signature);
+      // Deliver, then hold the tick (onApprove resolves now, defers teardown — no delay).
+      onApprove(signature, SIGNED_TICK_MS);
+      setIsSuccess(true);
     } catch (error) {
       console.error('Signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -1117,7 +1286,8 @@ function SignatureDialogWrapper({
       }}
       message={request.data.message}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
-      timestamp={new Date(request.timestamp)}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       accountAddress={request.data.address}
       chainName={chainName}
       chainId={chainId}
@@ -1126,6 +1296,7 @@ function SignatureDialogWrapper({
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
       canSign={!isProcessing && !!request.data.message}
     />
@@ -1139,20 +1310,27 @@ function Eip712DialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: TypedDataUIRequest;
-  onApprove: (data: any) => void;
+  onApprove: (data: any, holdMs?: number) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
   const chainId = request.data.chainId || defaultChainId || 1;
+  const chainName = getChainNameFromId(chainId);
+  const chainIcon = useChainIconURI(chainId, apiKey, 24);
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -1177,7 +1355,9 @@ function Eip712DialogWrapper({
       );
 
       setSignatureStatus('Signature successful!');
-      onApprove(signature);
+      // Deliver to the dApp, then hold the tick (no delay — see handleApprove).
+      onApprove(signature, SIGNED_TICK_MS);
+      setIsSuccess(true);
     } catch (error) {
       console.error('EIP-712 signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -1208,14 +1388,19 @@ function Eip712DialogWrapper({
       }}
       typedDataJson={request.data.typedData}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
-      timestamp={new Date(request.timestamp)}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       accountAddress={request.data.address}
+      chainName={chainName}
+      chainId={chainId}
+      chainIcon={chainIcon}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
-      canSign={true}
+      canSign={!isProcessing && !!request.data.typedData}
     />
   );
 }
@@ -1224,21 +1409,31 @@ function TransactionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: TransactionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  /** Marks the window where a signed submission is racing the UI (see request()). */
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Synchronous re-entry guard: isProcessing disables the button only after a
+  // re-render, which is too soft a gate for a call that moves funds (permission
+  // and EIP-7702 paths sign without a passkey prompt).
+  const submittingRef = useRef(false);
   const [account, setAccount] = useState<Account | null>(null);
-  const [transactionStatus, setTransactionStatus] = useState<string>('');
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
@@ -1290,12 +1485,28 @@ function TransactionDialogWrapper({
   const permissionId = request.data.capabilities?.permissions?.id as Hex | undefined;
 
   const {
+    onBehalfOf,
+    loading: onBehalfOfLoading,
+    problem: permissionProblem,
+  } = usePermissionExecution({
+    permissionId,
+    apiKey,
+    chainId,
+    from: request.data.from as Address | undefined,
+    calls: transactionCalls,
+  });
+
+  const {
     assetsOut,
     assetsIn,
     error: assetPreviewError,
     willRevert: assetPreviewWillRevert,
+    revertCause: assetPreviewRevertCause,
   } = useAssetPreview({
-    account: request.data.from,
+    // Under a permission the calls execute as the granter, so the balance changes are theirs.
+    // Left undefined until the granter resolves: simulating from the spender would preview the
+    // wrong account, and a shortfall there would briefly read as "Insufficient funds".
+    account: permissionId ? onBehalfOf : (request.data.from as Address | undefined),
     calls: transactionCalls,
     chainId,
     apiKey,
@@ -1392,7 +1603,7 @@ function TransactionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl, chainId);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -1473,8 +1684,10 @@ function TransactionDialogWrapper({
   // Note: Gas estimation is now handled by useGasEstimation hook
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsProcessing(true);
-    setTransactionStatus('Processing transaction...');
+    onSubmissionInFlight?.(true);
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1490,7 +1703,6 @@ function TransactionDialogWrapper({
         computedPaymasterContext
       );
 
-      setTransactionStatus('Transaction successful!');
       onApprove({
         id: result.id,
         chainId: result.chainId,
@@ -1499,7 +1711,6 @@ function TransactionDialogWrapper({
       console.error('Transaction failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
-      setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -1516,11 +1727,18 @@ function TransactionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed submission proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };
@@ -1545,10 +1763,13 @@ function TransactionDialogWrapper({
       assetsIn={assetsIn}
       assetPreviewError={assetPreviewError}
       assetPreviewWillRevert={assetPreviewWillRevert}
+      assetPreviewRevertCause={assetPreviewRevertCause}
+      onBehalfOf={onBehalfOf}
+      onBehalfOfLoading={onBehalfOfLoading}
+      permissionProblem={permissionProblem}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus={transactionStatus}
       networkName={networkName}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       apiKey={apiKey}
@@ -1560,6 +1781,8 @@ function TransactionDialogWrapper({
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
       nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
     />
   );
 }
@@ -1569,21 +1792,31 @@ function SendTransactionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: SendTransactionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  /** Marks the window where a signed submission is racing the UI (see request()). */
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  // Synchronous re-entry guard: isProcessing disables the button only after a
+  // re-render, which is too soft a gate for a call that moves funds (permission
+  // and EIP-7702 paths sign without a passkey prompt).
+  const submittingRef = useRef(false);
   const [account, setAccount] = useState<Account | null>(null);
-  const [transactionStatus, setTransactionStatus] = useState<string>('');
   // Fee token state for ERC-20 paymaster
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(false);
@@ -1640,6 +1873,7 @@ function SendTransactionDialogWrapper({
     assetsIn,
     error: assetPreviewError,
     willRevert: assetPreviewWillRevert,
+    revertCause: assetPreviewRevertCause,
   } = useAssetPreview({
     account: request.data.from as Address | undefined,
     calls: transactionCalls,
@@ -1737,7 +1971,7 @@ function SendTransactionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.from, rpcUrl, chainId);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const isNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -1818,8 +2052,10 @@ function SendTransactionDialogWrapper({
   // Note: Gas estimation is now handled by useGasEstimation hook
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
+    submittingRef.current = true;
     setIsProcessing(true);
-    setTransactionStatus('Processing transaction...');
+    onSubmissionInFlight?.(true);
     try {
       if (!account) {
         throw new Error('Account not initialized');
@@ -1832,13 +2068,11 @@ function SendTransactionDialogWrapper({
         request.data.from
       );
 
-      setTransactionStatus('Transaction successful!');
       onApprove(txHash);
     } catch (error) {
       console.error('Transaction failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
       const errorMessage = errorObj.message;
-      setTransactionStatus(`Error: ${errorMessage}`);
       // Check if user cancelled passkey prompt (NotAllowedError)
       if (errorObj.name === 'NotAllowedError') {
         onReject(UIError.userRejected('User cancelled the passkey prompt'));
@@ -1855,11 +2089,18 @@ function SendTransactionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorMessage));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed submission proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };
@@ -1884,10 +2125,10 @@ function SendTransactionDialogWrapper({
       assetsIn={assetsIn}
       assetPreviewError={assetPreviewError}
       assetPreviewWillRevert={assetPreviewWillRevert}
+      assetPreviewRevertCause={assetPreviewRevertCause}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
-      transactionStatus={transactionStatus}
       networkName={networkName}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       apiKey={apiKey}
@@ -1899,42 +2140,33 @@ function SendTransactionDialogWrapper({
       showFeeTokenSelector={showFeeTokenSelector}
       isPayingWithErc20={isPayingWithErc20}
       nativeCurrencySymbol={viemChain?.nativeCurrency?.symbol}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
     />
   );
 }
 
 // Known function selectors mapping
-const KNOWN_FUNCTION_SELECTORS: Record<string, string> = {
-  '0x32323232': 'Any Function',
-  '0xe0e0e0e0': 'Empty Calldata',
-  '0xcc53287f': 'lockdown((address,address)[])',
-  '0x87517c45': 'approve(address,address,uint160,uint48)',
-  '0x095ea7b3': 'approve(address,uint256)',
-  '0x23b872dd': 'transferFrom(address,address,uint256)',
-  '0xa9059cbb': 'transfer(address,uint256)',
-};
-
-// Resolve function selector to human-readable name
-const resolveFunctionSelector = (selector: string): string => {
-  const normalizedSelector = selector.toLowerCase();
-  const knownName = KNOWN_FUNCTION_SELECTORS[normalizedSelector];
-  return knownName || selector;
-};
-
 function PermissionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: PermissionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
@@ -1944,6 +2176,9 @@ function PermissionDialogWrapper({
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
+  // Synchronous re-entry guard: isProcessing disables the buttons only after a
+  // re-render, which is too soft a gate for a grant that delegates authority on-chain.
+  const submittingRef = useRef(false);
 
   // chainId can be number or hex string (like '0x1')
   const requestChainId = request.data.chainId;
@@ -2058,14 +2293,21 @@ function PermissionDialogWrapper({
   );
 
   // Get spends array from request (now using spends plural)
-  const spendsData = request.data.permissions.spends || [];
+  // Memoized because both keys are optional: `?? []` on an absent key returns a new array every
+  // render, and these feed effect dependency arrays. A calls-only grant otherwise re-triggered the
+  // token-info effect from its own setState, forever.
+  const spendsData = useMemo(() => request.data.permissions.spends ?? [], [request.data.permissions.spends]);
 
   // Get calls array from request
-  const callsData = request.data.permissions.calls || [];
+  const callsData = useMemo(() => request.data.permissions.calls ?? [], [request.data.permissions.calls]);
 
   // Fetch token info for all unique tokens in spends
   useEffect(() => {
-    if (spendsData.length === 0) {
+    // Bail rather than passing an empty URL down: getPublicClient attaches the chain
+    // definition, so an empty URL would resolve to the chain's public RPC instead of
+    // the proxy. Nothing to read without a configured endpoint.
+    const rpcUrl = chain.rpcUrl;
+    if ((spendsData.length === 0 && callsData.length === 0) || !rpcUrl) {
       setIsLoadingTokenInfo(false);
       return;
     }
@@ -2077,66 +2319,49 @@ function PermissionDialogWrapper({
       const newTokenInfoMap: TokenInfoMap = {};
 
       // Get unique token addresses
-      const uniqueTokens = Array.from(new Set(spendsData.map((spend) => spend.token))) as string[];
+      // Call targets are looked up too: a target that is a token should read as "USDC", not as a
+      // raw address. A non-token contract simply fails the reads and falls back to its address.
+      const uniqueTokens = Array.from(
+        new Set([
+          ...spendsData.map((spend) => spend.token),
+          ...callsData.map((call) => call.target).filter((t) => t && !isWildcard(t)),
+        ])
+      ) as string[];
 
+      // Resolved in one pass rather than token-by-token: the shared client folds every
+      // decimals/symbol read issued in this tick into a single Multicall3 request, so N
+      // tokens cost one round-trip instead of 2N sequential ones.
+      const publicClient = getPublicClient(chainId, rpcUrl);
+
+      const pending: string[] = [];
       for (const tokenAddress of uniqueTokens) {
-        // Skip if already fetched
         if (tokenInfoMap[tokenAddress]) {
           newTokenInfoMap[tokenAddress] = tokenInfoMap[tokenAddress];
-          continue;
-        }
-
-        // If native token, use chain's native currency
-        if (isNativeToken(tokenAddress)) {
+        } else if (isNativeToken(tokenAddress)) {
           newTokenInfoMap[tokenAddress] = {
             decimals: viemChain?.nativeCurrency?.decimals ?? 18,
             symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
           };
-          continue;
-        }
-
-        // Fetch ERC-20 token info
-        try {
-          const publicClient = createPublicClient({
-            chain: {
-              id: chainId,
-              name: networkName,
-              nativeCurrency: viemChain?.nativeCurrency || {
-                name: 'Ether',
-                symbol: 'ETH',
-                decimals: 18,
-              },
-              rpcUrls: {
-                default: { http: [chain.rpcUrl || ''] },
-                public: { http: [chain.rpcUrl || ''] },
-              },
-            },
-            transport: http(chain.rpcUrl),
-          });
-
-          const [decimals, symbol] = await Promise.all([
-            publicClient.readContract({
-              address: tokenAddress as Address,
-              abi: erc20Abi,
-              functionName: 'decimals',
-            }),
-            publicClient.readContract({
-              address: tokenAddress as Address,
-              abi: erc20Abi,
-              functionName: 'symbol',
-            }),
-          ]);
-
-          newTokenInfoMap[tokenAddress] = { decimals, symbol };
-        } catch (error) {
-          console.error(`Failed to fetch token info for ${tokenAddress}:`, error);
-          // Fallback to showing truncated token address
-          newTokenInfoMap[tokenAddress] = {
-            decimals: 18,
-            symbol: tokenAddress.slice(0, 6) + '...' + tokenAddress.slice(-4),
-          };
+        } else {
+          pending.push(tokenAddress);
         }
       }
+
+      await Promise.all(
+        pending.map(async (tokenAddress) => {
+          try {
+            const [decimals, symbol] = await Promise.all([
+              publicClient.readContract({ address: tokenAddress as Address, abi: erc20Abi, functionName: 'decimals' }),
+              publicClient.readContract({ address: tokenAddress as Address, abi: erc20Abi, functionName: 'symbol' }),
+            ]);
+            newTokenInfoMap[tokenAddress] = { decimals, symbol };
+          } catch {
+            // Not an ERC-20 (or unreachable): unnamed, and decimals unknown, so the UI shows the
+            // address and the raw allowance rather than a figure scaled by a guessed 18.
+            newTokenInfoMap[tokenAddress] = { decimals: null, symbol: '' };
+          }
+        })
+      );
 
       if (isMounted) {
         setTokenInfoMap((prev) => ({ ...prev, ...newTokenInfoMap }));
@@ -2149,7 +2374,7 @@ function PermissionDialogWrapper({
     return () => {
       isMounted = false;
     };
-  }, [chainId, spendsData, networkName, chain.rpcUrl, viemChain]);
+  }, [chainId, spendsData, callsData, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens from capabilities (same pattern as TransactionDialogWrapper)
   useEffect(() => {
@@ -2195,7 +2420,7 @@ function PermissionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.address, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.address, rpcUrl, chainId);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -2286,14 +2511,11 @@ function PermissionDialogWrapper({
                 decimals: viemChain?.nativeCurrency?.decimals ?? 18,
                 symbol: nativeSymbol,
               }
-            : {
-                decimals: 18,
-                symbol: spend.token.slice(0, 6) + '...' + spend.token.slice(-4),
-              });
+            : { decimals: null, symbol: '' });
 
         const allowance = BigInt(spend.allowance);
-        const amount = formatUnits(allowance, tokenInfo.decimals);
-        const limit = `${amount} ${tokenInfo.symbol}`;
+        const { amount, decimalsUnknown } = formatSpendAmount(allowance, tokenInfo.decimals);
+        const limit = decimalsUnknown ? `${amount} base units` : `${amount} ${tokenInfo.symbol}`;
 
         // Format duration with multiplier (defaults to 1 if not provided)
         const multiplier = spend.multiplier ?? 1;
@@ -2301,6 +2523,7 @@ function PermissionDialogWrapper({
 
         return {
           amount,
+          decimalsUnknown,
           token: isNativeToken(spend.token) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
           tokenAddress: spend.token,
           duration,
@@ -2310,16 +2533,19 @@ function PermissionDialogWrapper({
     [spendsData, tokenInfoMap, viemChain, nativeSymbol]
   );
 
-  // Format call permissions
+  // Format call permissions. Signatures resolve asynchronously — a selector with no signature yet
+  // renders as its raw hex and upgrades in place.
+  const callSignatures = useFunctionSignatures(callsData.map((call) => call.selector));
   const calls = useMemo(
     () =>
       callsData.map((call) => ({
         target: call.target,
         selector: call.selector,
         functionSignature:
-          call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+          call.functionSignature ||
+          (call.selector ? (callSignatures[call.selector.toLowerCase()] ?? call.selector) : 'Unknown Function'),
       })),
-    [callsData]
+    [callsData, callSignatures]
   );
 
   // Format expiry date
@@ -2327,59 +2553,16 @@ function PermissionDialogWrapper({
     return formatExpiryDate(request.data.expiry);
   }, [request.data.expiry]);
 
-  // Generate warning message based on actual permissions
-  const warningMessage = useMemo(() => {
-    const parts: string[] = [];
-
-    // Describe spend permissions
-    if (spends.length > 0) {
-      const spendDescriptions = spends.map((spend) => {
-        // Remove "1 " prefix from duration (e.g., "1 Day" -> "day", "1 Week" -> "week")
-        const normalizedDuration = spend.duration.replace(/^1\s+/, '').toLowerCase();
-        // Handle "forever" specially - no "per" prefix needed
-        if (normalizedDuration === 'forever') {
-          return spend.limit;
-        }
-        return `${spend.limit} per ${normalizedDuration}`;
-      });
-      parts.push(`spend up to ${spendDescriptions.join(', ')}`);
-    }
-
-    // Describe call permissions
-    if (calls.length > 0) {
-      const callDescriptions = calls.map((call) => {
-        const fnName = call.functionSignature;
-        // Check for special selectors
-        if (fnName === 'Any Function') {
-          return 'call any function';
-        }
-        if (fnName === 'Empty Calldata') {
-          return 'send transactions with empty calldata';
-        }
-        // Extract just the function name from signature like "transfer(address,uint256)"
-        const simpleName = fnName.split('(')[0];
-        return `call ${simpleName}`;
-      });
-
-      // Deduplicate and join
-      const uniqueCalls = [...new Set(callDescriptions)];
-      parts.push(uniqueCalls.join(', '));
-    }
-
-    if (parts.length === 0) {
-      return `You are granting permissions to this dApp until ${expiryDate}. Only approve if you trust this dApp.`;
-    }
-
-    return `This will allow the dApp to ${parts.join(' and ')} on your behalf until ${expiryDate}. Only approve if you trust this dApp.`;
-  }, [spends, calls, expiryDate]);
-
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
     if (!account) {
       console.error('[PermissionDialogWrapper] Account not initialized');
       return;
     }
 
+    submittingRef.current = true;
     setIsProcessing(true);
+    onSubmissionInFlight?.(true);
     setStatus('Granting permissions...');
     try {
       // Use the spends array directly from the request (already in correct format)
@@ -2412,11 +2595,18 @@ function PermissionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed grant proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };
@@ -2430,20 +2620,22 @@ function PermissionDialogWrapper({
       }}
       mode="grant"
       spenderAddress={request.data.spender}
+      accountAddress={request.data.address}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={spends}
       calls={calls}
+      tokenMeta={tokenInfoMap}
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
       apiKey={apiKey}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
       isLoadingTokenInfo={isLoadingTokenInfo}
-      timestamp={new Date(request.timestamp)}
-      warningMessage={warningMessage}
       gasFee={gasFee}
       gasFeeLoading={gasFeeLoading}
       gasEstimationError={gasEstimationError}
@@ -2469,16 +2661,21 @@ function SiweDialogWrapper({
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: SignatureUIRequest;
-  onApprove: (data: any) => void;
+  onApprove: (data: any, holdMs?: number) => void;
   onReject: (error?: Error) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [isSuccess, setIsSuccess] = useState(false);
   const [siweStatus, setSiweStatus] = useState<string>('');
 
   // Use chainId from request (current chain), fallback to defaultChainId
@@ -2500,18 +2697,20 @@ function SiweDialogWrapper({
     return msg;
   }, [request.data.message]);
 
-  // Extract app name from SIWE message (sanitized for display by SiweDialog).
-  const appName = useMemo(() => {
+  // Fallback app name from the SIWE domain line, used only when config supplies none.
+  const messageAppName = useMemo(() => {
     const match = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/);
     return match ? match[1] : 'dApp';
   }, [decodedMessage]);
 
-  // Warn if the SIWE domain/uri doesn't match the origin the user is on
-  const warningMessage = useMemo(() => {
-    const domain = decodedMessage.match(/^([^\n]+)\s+wants you to sign in/)?.[1];
-    const uri = decodedMessage.match(/URI:\s*(.+)/)?.[1]?.trim();
-    return getSiweOriginWarning(origin, { domain, uri });
-  }, [decodedMessage, origin]);
+  // NOT gated on a successful parse. The parse is strict on purpose, but this warning carries
+  // the mandatory acknowledgement checkbox, so gating it let a dapp drop the hard block by
+  // writing a message that detects as SIWE and then fails to parse (a tab after `URI:` is
+  // enough). The helper falls back to a best-effort domain/URI read.
+  const warningMessage = useMemo(
+    () => getSiweOriginWarningFromMessage(origin, decodedMessage),
+    [decodedMessage, origin]
+  );
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -2524,7 +2723,9 @@ function SiweDialogWrapper({
       const signature = await account.signMessage(request.data.message);
 
       setSiweStatus('Sign-in successful!');
-      onApprove(signature);
+      // Deliver, then hold the tick (onApprove resolves now, defers teardown — no delay).
+      onApprove(signature, SIGNED_TICK_MS);
+      setIsSuccess(true);
     } catch (error) {
       console.error('SIWE signature failed:', error);
       const errorObj = error instanceof Error ? error : new Error(String(error));
@@ -2555,8 +2756,8 @@ function SiweDialogWrapper({
       }}
       message={decodedMessage}
       origin={origin}
-      timestamp={new Date(request.timestamp)}
-      appName={appName}
+      appName={appName ?? messageAppName}
+      appLogoUrl={appLogoUrl ?? undefined}
       accountAddress={request.data.address}
       chainName={chainName}
       chainId={chainId}
@@ -2565,6 +2766,7 @@ function SiweDialogWrapper({
       onSign={handleSign}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       siweStatus={siweStatus}
       canSign={!isProcessing}
       warningMessage={warningMessage}
@@ -2577,28 +2779,52 @@ function RevokePermissionDialogWrapper({
   request,
   onApprove,
   onReject,
+  onSubmissionInFlight,
   apiKey,
   defaultChainId,
   paymasters,
+  appName,
+  appLogoUrl,
 }: {
   request: RevokePermissionUIRequest;
   onApprove: (data: any) => void;
   onReject: (error?: Error) => void;
+  onSubmissionInFlight?: (inFlight: boolean) => void;
   apiKey?: string;
   defaultChainId?: number;
   paymasters?: Record<number, PaymasterConfig>;
+  appName?: string;
+  appLogoUrl?: string | null;
 }) {
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState<string>('');
-  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState(true);
-  const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
+  // Covers ONLY the token metadata; whether the permission itself is in flight comes from the hook.
+  // Kept apart deliberately: one flag covering both is never re-armed when the request changes, so a
+  // second revoke arriving without a remount left the gate open on an empty permission.
+  const [isLoadingTokenMetadata, setIsLoadingTokenMetadata] = useState(true);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
   const [feeTokensLoading, setFeeTokensLoading] = useState(true);
+  // Synchronous re-entry guard: isProcessing disables the buttons only after a
+  // re-render, which is too soft a gate for an on-chain revocation.
+  const submittingRef = useRef(false);
 
   const chainId = request.data.chainId || defaultChainId || 1;
+
+  // Owns the relay fetch, the 404-vs-transport split and the validation. Shared with the keys popup
+  // so both revoke screens read the same `from` — they drifted apart when this lived twice.
+  const {
+    permission: fetchedPermissionData,
+    loading: isLoadingPermission,
+    problem: revocationProblem,
+  } = usePermissionRevocation({
+    permissionId: request.data.permissionId as `0x${string}` | undefined,
+    apiKey,
+    chainId,
+    from: request.data.address,
+  });
   const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
 
@@ -2698,47 +2924,53 @@ function RevokePermissionDialogWrapper({
     [chainId, apiKey, computedPaymasterUrl]
   );
 
-  // Fetch permission details from relay
+  // Token metadata for the spend tokens and any call target that turns out to be a token, keyed on
+  // the permission `usePermissionRevocation` resolved. `isLoadingTokenMetadata` stays true until
+  // this lands as well, because the Confirm gate reads it and a spend amount must never render
+  // scaled by a guessed decimals.
   useEffect(() => {
-    if (!request.data.permissionId || !apiKey) {
-      setIsLoadingPermissionDetails(false);
+    const permData = fetchedPermissionData;
+    if (!permData) {
+      // The hook reached a terminal problem, so no permission is coming and nothing gates on it.
+      if (revocationProblem) setIsLoadingTokenMetadata(false);
       return;
     }
 
-    const fetchPermissionDetails = async () => {
+    let cancelled = false;
+    setIsLoadingTokenMetadata(true);
+    const fetchTokenInfo = async () => {
       try {
-        const permData = await getPermissionFromRelay(request.data.permissionId as `0x${string}`, apiKey);
-        setFetchedPermissionData(permData);
-
-        // Fetch token info for spends
-        if (permData.spends && permData.spends.length > 0) {
+        // Token info for spend tokens and for any call target that turns out to be a token.
+        const lookupAddresses = Array.from(
+          new Set([
+            ...(permData.spends ?? []).map((spend) => spend.token),
+            ...(permData.calls ?? []).map((call) => call.target).filter((t) => t && !isWildcard(t)),
+          ])
+        );
+        if (lookupAddresses.length > 0) {
           const newTokenInfoMap: TokenInfoMap = {};
-          for (const spend of permData.spends) {
-            const tokenAddress = spend.token;
+          // One pass over the lookup set so the shared client can fold every decimals/symbol
+          // read into a single Multicall3 request. Left null when no endpoint is configured —
+          // getPublicClient attaches the chain definition, so an empty URL would resolve to
+          // the chain's public RPC rather than the proxy.
+          const publicClient = chain.rpcUrl ? getPublicClient(chainId, chain.rpcUrl) : null;
+
+          const pending: string[] = [];
+          for (const tokenAddress of lookupAddresses) {
             if (isNativeToken(tokenAddress)) {
               newTokenInfoMap[tokenAddress] = {
                 decimals: viemChain?.nativeCurrency?.decimals ?? 18,
                 symbol: viemChain?.nativeCurrency?.symbol || 'ETH',
               };
             } else {
-              try {
-                const publicClient = createPublicClient({
-                  chain: {
-                    id: chainId,
-                    name: networkName,
-                    nativeCurrency: viemChain?.nativeCurrency || {
-                      name: 'Ether',
-                      symbol: 'ETH',
-                      decimals: 18,
-                    },
-                    rpcUrls: {
-                      default: { http: [chain.rpcUrl || ''] },
-                      public: { http: [chain.rpcUrl || ''] },
-                    },
-                  },
-                  transport: http(chain.rpcUrl),
-                });
+              pending.push(tokenAddress);
+            }
+          }
 
+          await Promise.all(
+            pending.map(async (tokenAddress) => {
+              try {
+                if (!publicClient) throw new Error(`No RPC URL configured for chain ${chainId}`);
                 const [decimals, symbol] = await Promise.all([
                   publicClient.readContract({
                     address: tokenAddress as Address,
@@ -2753,24 +2985,28 @@ function RevokePermissionDialogWrapper({
                 ]);
                 newTokenInfoMap[tokenAddress] = { decimals, symbol };
               } catch {
-                newTokenInfoMap[tokenAddress] = {
-                  decimals: 18,
-                  symbol: tokenAddress,
-                };
+                // Not an ERC-20 (or unreachable): unnamed, and decimals unknown, so the UI shows
+                // the address and the raw allowance rather than a figure scaled by a guessed 18.
+                newTokenInfoMap[tokenAddress] = { decimals: null, symbol: '' };
               }
-            }
-          }
+            })
+          );
           setTokenInfoMap(newTokenInfoMap);
         }
-        setIsLoadingPermissionDetails(false);
       } catch (error) {
-        console.error('❌ Failed to fetch permission details:', error);
-        setIsLoadingPermissionDetails(false);
+        // Token metadata is enrichment: a failed read renders the raw allowance rather than
+        // blocking, so it must not become a revocation problem.
+        console.error('❌ Failed to fetch token info for permission:', error);
+      } finally {
+        if (!cancelled) setIsLoadingTokenMetadata(false);
       }
     };
 
-    fetchPermissionDetails();
-  }, [request.data.permissionId, apiKey, chainId, networkName, chain.rpcUrl, viemChain]);
+    fetchTokenInfo();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchedPermissionData, revocationProblem, chainId, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens for ERC-20 paymaster support
   useEffect(() => {
@@ -2809,7 +3045,7 @@ function RevokePermissionDialogWrapper({
         const tokensWithBalances = await Promise.all(
           feeTokenCap.tokens.map(async (token) => {
             try {
-              const balance = await fetchTokenBalance(token.address, request.data.address as Address, rpcUrl);
+              const balance = await fetchTokenBalance(token.address, request.data.address as Address, rpcUrl, chainId);
               const balanceFormatted = formatUnits(balance, token.decimals);
               const tokenIsNative = isNativeToken(token.address);
               // For native token (ETH): selectable if any balance (gas estimation will catch insufficient)
@@ -2893,19 +3129,23 @@ function RevokePermissionDialogWrapper({
 
     return fetchedPermissionData.spends.map((spend: any) => {
       const tokenAddress = spend.token;
+      // Only a native token may borrow the chain symbol; anything else stays unnamed until
+      // its own symbol resolves, or every token would render as the native currency.
       const tokenInfo = tokenInfoMap[tokenAddress] || {
-        decimals: viemChain?.nativeCurrency?.decimals ?? 18,
-        symbol: nativeSymbol,
+        // Only a native token has decimals knowable without a read.
+        decimals: isNativeToken(tokenAddress) ? (viemChain?.nativeCurrency?.decimals ?? 18) : null,
+        symbol: isNativeToken(tokenAddress) ? nativeSymbol : '',
       };
       const allowance = BigInt(spend.allowance);
-      const amount = formatUnits(allowance, tokenInfo.decimals);
-      const limit = `${amount} ${tokenInfo.symbol}`;
+      const { amount, decimalsUnknown } = formatSpendAmount(allowance, tokenInfo.decimals);
+      const limit = decimalsUnknown ? `${amount} base units` : `${amount} ${tokenInfo.symbol}`;
       // Format duration with multiplier (unit is period string like 'day', 'week', etc.)
       const multiplier = spend.multiplier ?? 1;
       const duration = `${multiplier} ${spend.unit}${multiplier > 1 ? 's' : ''}`;
 
       return {
         amount,
+        decimalsUnknown,
         token: isNativeToken(tokenAddress) ? `Native (${nativeSymbol})` : tokenInfo.symbol,
         tokenAddress,
         duration,
@@ -2914,7 +3154,10 @@ function RevokePermissionDialogWrapper({
     });
   }, [fetchedPermissionData, tokenInfoMap, viemChain, nativeSymbol]);
 
-  // Format call permissions from fetched data
+  // Format call permissions from fetched data. Signatures resolve asynchronously.
+  const revokeCallSignatures = useFunctionSignatures(
+    (fetchedPermissionData?.calls ?? []).map((call: any) => call.selector)
+  );
   const formattedCalls = useMemo(() => {
     if (!fetchedPermissionData?.calls) return [];
 
@@ -2922,27 +3165,34 @@ function RevokePermissionDialogWrapper({
       target: call.target,
       selector: call.selector,
       functionSignature:
-        call.functionSignature || (call.selector ? resolveFunctionSelector(call.selector) : 'Unknown Function'),
+        call.functionSignature ||
+        (call.selector ? (revokeCallSignatures[call.selector.toLowerCase()] ?? call.selector) : 'Unknown Function'),
     }));
-  }, [fetchedPermissionData]);
+  }, [fetchedPermissionData, revokeCallSignatures]);
 
   // Expiry date from fetched permission
   const expiryDate = useMemo(() => {
     if (!fetchedPermissionData) return '';
-    const endTimestamp = parseInt(fetchedPermissionData.end, 10);
+    // `Number`, not `parseInt`: the hook returns the relay's own typed record, where `end` may
+    // already be a number.
+    const endTimestamp = Number(fetchedPermissionData.end);
     return formatExpiryDate(endTimestamp);
   }, [fetchedPermissionData]);
 
   // Spender address from fetched permission
-  const spenderAddress = fetchedPermissionData?.spender || '0x...';
+  // Empty until the relay responds — the dialog shows a placeholder row rather than a fake address.
+  const spenderAddress = fetchedPermissionData?.spender ?? '';
 
   const handleConfirm = async () => {
+    if (submittingRef.current) return;
     if (!account) {
       console.error('[RevokePermissionDialogWrapper] Account not initialized');
       return;
     }
 
+    submittingRef.current = true;
     setIsProcessing(true);
+    onSubmissionInFlight?.(true);
     setStatus('Revoking permission...');
     try {
       // Revoke permission using Account class with paymaster context
@@ -2967,11 +3217,18 @@ function RevokePermissionDialogWrapper({
         onReject(new UIError(standardErrorCodes.rpc.internal as UIErrorCode, errorObj.message));
       }
     } finally {
+      // Order matters: onApprove/onReject settled above, so clearing the in-flight
+      // flag here never opens a window where a boundary crash could mis-settle.
+      onSubmissionInFlight?.(false);
+      submittingRef.current = false;
       setIsProcessing(false);
     }
   };
 
   const handleCancel = () => {
+    // The disabled/dismissable gates commit a render late; a same-tick cancel must
+    // not settle "rejected" while the signed revocation proceeds and lands on chain.
+    if (submittingRef.current) return;
     setOpen(false);
     onReject(UIError.userRejected());
   };
@@ -2985,20 +3242,25 @@ function RevokePermissionDialogWrapper({
       }}
       mode="revoke"
       permissionId={request.data.permissionId}
+      revocationProblem={revocationProblem}
       spenderAddress={spenderAddress}
+      accountAddress={request.data.address}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
       spends={formattedSpends}
       calls={formattedCalls}
+      tokenMeta={tokenInfoMap}
       expiryDate={expiryDate}
       networkName={networkName}
       chainId={chainId}
       apiKey={apiKey}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
       onConfirm={handleConfirm}
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
-      isLoadingTokenInfo={isLoadingPermissionDetails}
-      timestamp={new Date(request.timestamp)}
+      // Either half closes the gate: no Confirm until the permission AND its metadata land.
+      isLoadingTokenInfo={isLoadingPermission || isLoadingTokenMetadata}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Gas estimation props
       gasFee={gasFee}

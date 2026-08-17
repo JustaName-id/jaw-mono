@@ -67,6 +67,9 @@
       },
       "test": {
         "cache": true,
+        "dependsOn": [
+          "^build"
+        ],
         "inputs": [
           "default",
           "^production",
@@ -101,13 +104,14 @@
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tabs": "^1.1.9",
     "@radix-ui/react-tooltip": "^1.2.8",
+    "@shazow/whatsabi": "^0.26.0",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.545.0",
+    "minidenticons": "^4.2.1",
     "react-hook-form": "^7.65.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7",
-    "@shazow/whatsabi": "^0.26.0",
     "viem": "^2.48.0",
     "zod": "^4.1.12"
   },

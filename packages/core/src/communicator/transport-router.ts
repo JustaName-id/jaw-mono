@@ -87,6 +87,7 @@ export class TransportRouter implements TransportRouterContract {
             theme: config.theme,
             getLastAccount: config.getLastAccount,
             getApiKey: config.getApiKey,
+            consumeSwitchReason: config.consumeSwitchReason,
             onDismiss: config.onDismiss,
         };
         this.mode = config.mode ?? 'popup';

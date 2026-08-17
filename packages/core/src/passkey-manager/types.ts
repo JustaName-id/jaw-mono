@@ -15,6 +15,7 @@ export interface PasskeyAccount {
     isImported: boolean;
     username: string;
     publicKey: `0x${string}`;
+    address?: `0x${string}`;
 }
 
 export interface AuthCheckResult {

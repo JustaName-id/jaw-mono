@@ -2,7 +2,7 @@
 
 import { useEffect } from 'react';
 
-import { THEME_MODE_ATTR, isModePinned } from '../../lib/apply-dapp-theme';
+import { THEME_MODE_ATTR, isModePinned } from '../../lib/theme-mode';
 
 /**
  * Watches `prefers-color-scheme` for live changes and updates the

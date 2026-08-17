@@ -1,8 +1,20 @@
 import './styles.css';
 
 export * from './components/DefaultDialog';
+export * from './components/DialogShell';
+export * from './components/DialogPresentation';
+export * from './components/ShellDialog';
+export * from './components/DialogAppHeader';
+export * from './components/AccountPill';
+export * from './components/AccountIdenticon';
+export * from './components/SuccessCheck';
+export * from './components/SuccessScreen';
+export * from './components/ProcessingScreen';
+export * from './components/AccountAvatar';
+export * from './components/AccountHeaderRow';
 export * from './components/OrSeparator';
 export * from './components/OnboardingDialog';
+export * from './components/OnboardingSkeleton';
 export * from './components/TransactionDialog';
 export * from './components/SignatureDialog';
 export * from './components/SiweDialog';

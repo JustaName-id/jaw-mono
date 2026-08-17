@@ -1,13 +1,24 @@
 import type { JawTheme } from '@jaw.id/core';
+import { BORDER_RADIUS_MAP, hexToOklch, oklchToString } from '@jaw.id/ui';
+
+// Imported (not just re-exported) because applyDappTheme below writes the attribute itself.
+// Re-exported so existing importers of this module keep working.
+import { THEME_MODE_ATTR, isModePinned } from './theme-mode';
+
+export { THEME_MODE_ATTR, isModePinned };
 
 /**
  * Applies a dApp-provided JawTheme to the keys app.
  *
- * keys uses shadcn-style HSL-triplet tokens (`--primary: 222 47% 11%`,
- * consumed as `hsl(var(--primary))`), NOT @jaw.id/ui's oklch tokens — so we
- * translate into keys' own variable names/format here rather than reusing
- * @jaw.id/ui's applyThemeToContainer (which would write `oklch(...)` into
- * vars keys wraps in `hsl(...)`, producing invalid colors → transparency).
+ * Two token systems have to be fed, because two stylesheets are in play:
+ *
+ *   keys' own  — shadcn HSL triplets (`--primary: 222 47% 11%`, read as `hsl(var(--primary))`)
+ *   @jaw.id/ui — `--jaw-color-*` oklch channels, read as `oklch(var(--x) / <alpha-value>)`
+ *
+ * The package's utilities are scoped as `[data-jaw-ui] .foo`, which outranks keys' own `.foo`
+ * inside the shell — so writing only keys' names left the dApp's accent silently ignored by both
+ * the dialogs and keys' own components. Both are written here; the formats are not
+ * interchangeable, so each needs its own conversion.
  *
  * Scope: light/dark mode, accent color, border radius, font stack. Background
  * and other tokens stay under keys' own light/dark palette.
@@ -17,18 +28,6 @@ import type { JawTheme } from '@jaw.id/core';
  * and the dApp's choice survives an OS color-scheme flip. `auto`/unset records
  * `auto`, leaving the OS listener in charge.
  */
-
-/** Attribute on `<html>` recording the dApp's mode intent ('light' | 'dark' | 'auto'). */
-export const THEME_MODE_ATTR = 'data-jaw-theme-mode';
-
-/**
- * Whether the dApp pinned an explicit light/dark mode (so the OS listener must
- * not override it). `auto`, `null` (no dApp theme) and any other value are not
- * pins — the OS stays in charge.
- */
-export function isModePinned(attr: string | null): boolean {
-  return attr === 'light' || attr === 'dark';
-}
 
 /**
  * Font stacks, mirroring @jaw.id/ui's FONT_STACK_MAP so the embedded keys
@@ -91,6 +90,10 @@ const RADIUS_REM: Record<NonNullable<JawTheme['borderRadius']>, string> = {
 const FG_DARK = '222.2 47.4% 11.2%';
 const FG_LIGHT = '210 40% 98%';
 
+// The same two, as oklch channels for the package's tokens.
+const JAW_FG_DARK = '0.2077 0.0398 265.755';
+const JAW_FG_LIGHT = '0.9842 0.0034 247.858';
+
 export function applyDappTheme(theme: JawTheme, win: Window = window): void {
   const root = win.document?.documentElement;
   if (!root) return;
@@ -122,11 +125,26 @@ export function applyDappTheme(theme: JawTheme, win: Window = window): void {
           : FG_LIGHT;
       if (fg) root.style.setProperty('--primary-foreground', fg);
     }
+
+    // …and the same accent in the package's own tokens, reusing its converters so the two can't
+    // drift. Channels, not `oklch(...)`: the theme wraps them for the alpha modifier.
+    const accent = oklchToString(hexToOklch(theme.accentColor));
+    if (accent) {
+      root.style.setProperty('--jaw-color-primary', accent);
+      root.style.setProperty('--jaw-color-ring', accent);
+      const jawFg = theme.accentColorForeground
+        ? oklchToString(hexToOklch(theme.accentColorForeground))
+        : luminance(theme.accentColor) > 0.5
+          ? JAW_FG_DARK
+          : JAW_FG_LIGHT;
+      root.style.setProperty('--jaw-color-primary-foreground', jawFg);
+    }
   }
 
-  // Border radius preset → --radius.
+  // Border radius preset → --radius (keys) and --jaw-radius (the package).
   if (theme.borderRadius) {
     root.style.setProperty('--radius', RADIUS_REM[theme.borderRadius]);
+    root.style.setProperty('--jaw-radius', BORDER_RADIUS_MAP[theme.borderRadius]);
   }
 
   // Font stack preset → --app-font-family (consumed by `html` in global.css).

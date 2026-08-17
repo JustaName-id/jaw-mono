@@ -46,34 +46,7 @@ export default async function RootLayout({ children }: { children: React.ReactNo
       <body className="bg-background text-foreground">
         <ReactQueryProvider>
           <SystemThemeListener />
-          <div
-            data-jaw-watermark
-            aria-hidden="true"
-            style={{
-              position: 'fixed',
-              inset: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              pointerEvents: 'none',
-              zIndex: 0,
-            }}
-          >
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src="/jaw-logo.png"
-              alt=""
-              className="dark:invert"
-              style={{
-                height: '90vh',
-                width: 'auto',
-                opacity: 0.06,
-                userSelect: 'none',
-              }}
-              draggable={false}
-            />
-          </div>
-          <div style={{ position: 'relative', zIndex: 1 }}>{children}</div>
+          {children}
         </ReactQueryProvider>
       </body>
     </html>

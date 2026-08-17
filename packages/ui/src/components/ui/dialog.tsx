@@ -4,35 +4,34 @@ import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { XIcon } from 'lucide-react';
 
-import { cn, DialogAnchorContext, PortalContainerContext } from '../../lib/utils';
+import { cn, DialogAnchorContext, DialogScrimContext, PortalContainerContext } from '../../lib/utils';
 
 function Dialog({ open, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   const prevOpenRef = React.useRef(open);
 
-  // Cleanup pointer-events when dialog closes OR unmounts
+  // Cleanup pointer-events when dialog closes: wait out the close animation
+  // (200ms duration-200) plus buffer. The timer is cancelled if the dialog
+  // reopens or unmounts first — the unmount effect below takes over then.
   React.useEffect(() => {
-    // Track when dialog transitions from open to closed
-    if (prevOpenRef.current === true && open === false) {
-      // Wait for close animation to complete (200ms duration-200) plus buffer
-      const cleanup = setTimeout(() => {
-        document.body.style.removeProperty('pointer-events');
-      }, 250);
-
-      prevOpenRef.current = open;
-      return () => clearTimeout(cleanup);
-    }
-
+    const closing = prevOpenRef.current === true && open === false;
     prevOpenRef.current = open;
+    if (!closing) return;
 
-    // Cleanup on unmount - remove pointer-events if dialog was open
-    return () => {
-      if (open === true) {
-        setTimeout(() => {
-          document.body.style.removeProperty('pointer-events');
-        }, 250);
-      }
-    };
+    const cleanup = setTimeout(() => {
+      document.body.style.removeProperty('pointer-events');
+    }, 250);
+    return () => clearTimeout(cleanup);
   }, [open]);
+
+  // Cleanup on unmount. Synchronous, not a timer: the node is gone instantly so
+  // there is no animation to wait for, and a timer here would outlive the
+  // component with no way to cancel it (it also covers a close immediately
+  // followed by an unmount, which cancels the close-path timer above).
+  React.useEffect(() => {
+    return () => {
+      document.body.style.removeProperty('pointer-events');
+    };
+  }, []);
 
   return <DialogPrimitive.Root data-slot="dialog" open={open} {...props} />;
 }
@@ -87,26 +86,36 @@ function DialogContent({
   ...props
 }: DialogContentProps) {
   const anchor = React.useContext(DialogAnchorContext);
+  const scrim = React.useContext(DialogScrimContext);
   return (
     <DialogPortal data-slot="dialog-portal">
-      {/* 'top'/'top-sheet' = embedded card presentation: no scrim, matching the
-          shell's transparent backdrop. The overlay still captures outside clicks. */}
-      <DialogOverlay className={anchor !== 'center' ? 'bg-transparent' : undefined} />
+      {/* The embedded (iframe) shell opts out of the scrim to match its own
+          transparent backdrop — the host dApp shows through around the card.
+          It is keyed on its own context rather than on the anchor: the
+          app-specific handler uses the same bottom-sheet anchor but renders
+          straight onto the dApp, where an undimmed backdrop would leave the
+          sheet floating over live content. The overlay still captures outside
+          clicks either way. */}
+      <DialogOverlay className={scrim ? undefined : 'bg-transparent'} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(
           'bg-background fixed left-[50%] top-[50%] z-[100] grid max-h-[calc(100vh-2rem)] w-full max-w-[calc(100%-2rem)] translate-x-[-50%] translate-y-[-50%] gap-4 overflow-y-auto rounded-lg border p-6 shadow-lg sm:max-w-lg',
           // max-h also caps dialogs styled `height: 100%` (max-height beats
-          // height), so a top-anchored dialog can't run past the viewport.
-          // No enter/exit animation for either embedded anchor: the embedded
-          // card they align with appears via a plain visibility flip, so the
-          // dialog must snap in the same way.
+          // height), so an anchored dialog can't run past the viewport.
+          // No enter/exit animation for the floating anchor: the embedded card
+          // it aligns with appears via a plain visibility flip, so the dialog
+          // must snap in the same way.
           anchor === 'top' && !fullScreen && 'top-6 max-h-[85vh] translate-y-0',
-          // Full-width sheet pinned to the top edge, height sized to content —
-          // mirrors the EmbeddedShell drawer card (inset-x-0 top-0 rounded-b-2xl).
-          anchor === 'top-sheet' &&
+          // Full-width sheet pinned to the bottom edge, height sized to content —
+          // mirrors the EmbeddedShell drawer card (inset-x-0 bottom-0
+          // rounded-t-2xl). Unlike 'top', this one animates: Radix mounts the
+          // dialog while the iframe is already revealed, so the slide is
+          // actually visible (the shell card's own reveal slide is driven by
+          // DialogVisibility). Reduced motion snaps instead.
+          anchor === 'bottom-sheet' &&
             !fullScreen &&
-            'left-0 top-0 max-h-[85vh] max-w-none translate-x-0 translate-y-0 rounded-none rounded-b-2xl border-x-0 border-t-0 sm:max-w-none',
+            'data-[state=open]:animate-in data-[state=open]:slide-in-from-bottom data-[state=closed]:animate-out data-[state=closed]:slide-out-to-bottom bottom-0 left-0 top-auto max-h-[85vh] max-w-none translate-x-0 translate-y-0 rounded-none rounded-t-2xl border-x-0 border-b-0 data-[state=closed]:duration-200 data-[state=open]:duration-300 motion-reduce:data-[state=closed]:animate-none motion-reduce:data-[state=open]:animate-none sm:max-w-none',
           (anchor === 'center' || fullScreen) &&
             'data-[state=open]:animate-in data-[state=closed]:animate-out data-[state=closed]:fade-out-0 data-[state=open]:fade-in-0 data-[state=closed]:zoom-out-95 data-[state=open]:zoom-in-95 duration-200',
           fullScreen ? 'h-[100vh] min-h-[100vh] w-[100vw] min-w-[100vw] translate-x-0 translate-y-0' : '',
@@ -118,7 +127,7 @@ function DialogContent({
         {showCloseButton && (
           <DialogPrimitive.Close
             data-slot="dialog-close"
-            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground focus:outline-hidden absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:ring-2 focus:ring-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0"
+            className="ring-offset-background focus:ring-ring data-[state=open]:bg-accent data-[state=open]:text-muted-foreground absolute right-4 top-4 rounded-sm opacity-70 transition-opacity hover:opacity-100 focus:outline-none focus:ring-2 focus:ring-offset-2 disabled:pointer-events-none [&_svg]:pointer-events-none [&_svg]:shrink-0"
           >
             <XIcon />
             <span className="sr-only">Close</span>

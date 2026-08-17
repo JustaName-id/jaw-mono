@@ -14,6 +14,9 @@ export interface Eip712ModalProps {
   address?: string;
   chain: chain;
   apiKey?: string;
+  appName?: string;
+  appLogoUrl?: string;
+  isSuccess?: boolean;
   onSuccess: (signature: string) => void;
   onError: (error: Error, errorCode?: number) => void;
 }
@@ -32,11 +35,18 @@ export const Eip712Modal = ({
   address,
   chain,
   apiKey,
+  appName,
+  appLogoUrl,
+  isSuccess,
   onSuccess,
   onError,
 }: Eip712ModalProps) => {
   // Single hook handles session lookup + account restoration
-  const { account, isLoading: isAccountLoading } = useSessionAccount({
+  const {
+    account,
+    walletAddress,
+    isLoading: isAccountLoading,
+  } = useSessionAccount({
     origin,
     chain,
     apiKey,
@@ -44,7 +54,6 @@ export const Eip712Modal = ({
 
   const [isProcessing, setIsProcessing] = useState<boolean>(false);
   const [signatureStatus, setSignatureStatus] = useState<string>('');
-  const [timestamp] = useState(() => new Date());
 
   // Extract API key for other uses (chain icon, mainnet RPC)
   const effectiveApiKey = useMemo(() => {
@@ -103,8 +112,6 @@ export const Eip712Modal = ({
       );
 
       setSignatureStatus('Signature created successfully!');
-
-      // Call onSuccess immediately - parent will handle closing
       onSuccess(signature);
     } catch (error) {
       console.error('Error signing typed data:', error);
@@ -138,8 +145,9 @@ export const Eip712Modal = ({
       }}
       typedDataJson={typedDataJson}
       origin={origin}
-      timestamp={timestamp}
-      accountAddress={address}
+      appName={appName}
+      appLogoUrl={appLogoUrl}
+      accountAddress={address || walletAddress || undefined}
       chainName={chainName}
       chainIcon={chainIcon}
       chainId={chain.id}
@@ -147,6 +155,7 @@ export const Eip712Modal = ({
       onSign={signTypedData}
       onCancel={handleCancel}
       isProcessing={isProcessing}
+      isSuccess={isSuccess}
       signatureStatus={signatureStatus}
       canSign={canSign}
     />

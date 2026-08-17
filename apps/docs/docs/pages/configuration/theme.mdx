@@ -89,8 +89,11 @@ const jaw = JAW.create({
     mode: 'dark',
     accentColor: '#7b3fe4',
     cssVariables: {
-      '--jaw-color-background': 'oklch(0.15 0.02 280)',
-      '--jaw-color-card': 'oklch(0.20 0.02 280)',
+      // Colors are bare OKLCH channels — `L C H`, no `oklch()` wrapper. The SDK wraps them
+      // as `oklch(var(--x) / <alpha-value>)` so opacity modifiers work. A complete color
+      // (`oklch(...)`, `hsl(...)`, hex) produces invalid CSS and is ignored, with a console warning.
+      '--jaw-color-background': '0.15 0.02 280',
+      '--jaw-color-card': '0.20 0.02 280',
       '--jaw-font-family': '"Berkeley Mono", monospace',
     },
   },
@@ -103,8 +106,10 @@ Target `[data-jaw-modal-container]` in your own CSS. No SDK changes needed. This
 
 ```css
 [data-jaw-modal-container] {
-  --jaw-color-primary: oklch(0.65 0.25 270);
-  --jaw-color-background: oklch(0.12 0.01 260);
+  /* Bare OKLCH channels, no `oklch()` wrapper — this path bypasses the SDK, so nothing
+     unwraps it for you. A wrapped value nests to `oklch(oklch(...) / 1)` and is dropped. */
+  --jaw-color-primary: 0.65 0.25 270;
+  --jaw-color-background: 0.12 0.01 260;
   font-family: 'Inter', sans-serif;
 }
 ```
@@ -180,6 +185,10 @@ jaw?.setTheme?.({ mode: 'dark', accentColor: '#6366f1' });
 Use these with `cssVariables` for granular overrides. All values use the [OKLCH](https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/oklch) color space.
 
 ### Colors
+
+Color tokens hold bare OKLCH channels (`L C H`), not a complete `oklch(...)` color — the SDK
+wraps them so opacity modifiers like `bg-primary/90` work. Non-color tokens (`--jaw-radius`,
+`--jaw-font-family`) take ordinary CSS values.
 
 | Variable                             | Description                    |
 | ------------------------------------ | ------------------------------ |
