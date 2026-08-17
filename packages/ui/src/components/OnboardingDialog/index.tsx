@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Skeleton } from '../ui/skeleton';
 import { Spinner } from '../ui/spinner';
-import { ChevronLeft, ChevronRight, Fingerprint, ScanFace, Users } from 'lucide-react';
+import { Check, ChevronLeft, ChevronRight, Fingerprint, ScanFace, Users, X } from 'lucide-react';
 import { DialogShell } from '../DialogShell';
 import { AccountAvatar } from '../AccountAvatar';
 import { OnboardingDialogProps, LocalStorageAccount } from './types';
@@ -30,8 +30,10 @@ type CreateAccountFormProps = Pick<
   | 'supportedChains'
   | 'subnameTextRecords'
 > & {
-  /** Primary on the sign-up view (create is the main action), secondary on sign-in. */
+  /** Primary when create is the main action (sign-up view, or a username draft in progress), secondary otherwise. */
   buttonVariant?: 'default' | 'secondary';
+  /** Reports whether the username field has text, so the parent can shift emphasis to Create. */
+  onDraftChange?: (hasText: boolean) => void;
 };
 
 /**
@@ -81,6 +83,7 @@ function CreateAccountForm({
   supportedChains,
   subnameTextRecords,
   buttonVariant = 'secondary',
+  onDraftChange,
 }: CreateAccountFormProps) {
   const [isValid, setIsValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -88,6 +91,18 @@ function CreateAccountForm({
   const [username, setUsername] = useState('');
   const [debouncedUsername, setDebouncedUsername] = useState('');
   const [error, setError] = useState<string | null>(null);
+
+  // Deliberately keyed on the live username, not the debounced one: emphasis must
+  // track every keystroke (including backspacing to empty) with zero lag. Trimmed
+  // so a stray space doesn't count as create intent. Reset on unmount so a stale
+  // draft can't keep Create promoted after the form is gone.
+  const hasDraft = username.trim().length > 0;
+  useEffect(() => {
+    onDraftChange?.(hasDraft);
+  }, [hasDraft, onDraftChange]);
+  useEffect(() => {
+    return () => onDraftChange?.(false);
+  }, [onDraftChange]);
 
   // Debounce username input
   useEffect(() => {
@@ -167,6 +182,51 @@ function CreateAccountForm({
     };
   }, [debouncedUsername, username, ensDomain, chainId, mainnetRpcUrl]);
 
+  // Availability rendered as an inline icon at the input's right edge instead of a
+  // text line below, so the layout stays stable while typing. The debounce-pending
+  // window counts as 'checking': to the user the check began at the keystroke, and
+  // it stops the icon blinking out between debounce and query. Only 'invalid' still
+  // gets a text line below — an X alone can't distinguish taken / too short / bad
+  // format, and those need different fixes.
+  const availabilityStatus: 'idle' | 'checking' | 'available' | 'invalid' = (() => {
+    if (username.length === 0) return 'idle';
+    if (isValid) return 'available';
+    if (isLoading) return 'checking';
+    if (message) return 'invalid';
+    if (ensDomain && chainId && debouncedUsername !== username) return 'checking';
+    return 'idle';
+  })();
+
+  const availabilityIcon = availabilityStatus !== 'idle' && (
+    // Keyed by status so each swap re-runs the fade-in — no hard tick↔X strobe.
+    <span
+      key={availabilityStatus}
+      role="status"
+      className="animate-in fade-in flex items-center duration-150 motion-reduce:animate-none"
+    >
+      {availabilityStatus === 'checking' && <Spinner className="text-muted-foreground !h-3.5 !w-3.5" />}
+      {availabilityStatus === 'available' && <Check className="text-success h-3.5 w-3.5" strokeWidth={3} />}
+      {availabilityStatus === 'invalid' && <X className="text-destructive h-3.5 w-3.5" strokeWidth={3} />}
+      <span className="sr-only">
+        {availabilityStatus === 'checking'
+          ? 'Checking availability'
+          : availabilityStatus === 'available'
+            ? 'Available'
+            : message || 'Invalid username'}
+      </span>
+    </span>
+  );
+
+  // The invalid message reveals via an animated height collapse (0fr→1fr grid trick)
+  // rather than mounting/unmounting, so the Create button glides instead of jumping.
+  // The last message is held in state so the collapse animates with its text still
+  // visible — unmounting the text first would blank-flash the closing box.
+  const showInvalidMessage = availabilityStatus === 'invalid' && !!message && !error;
+  const [displayedMessage, setDisplayedMessage] = useState('');
+  useEffect(() => {
+    if (showInvalidMessage) setDisplayedMessage(message);
+  }, [showInvalidMessage, message]);
+
   const handleCreateAccountClick = async () => {
     setError(null);
 
@@ -237,18 +297,27 @@ function CreateAccountForm({
         data-form-type="other"
         data-bwignore
         right={
-          ensDomain ? <span className="text-muted-foreground font-mono text-xs">{`.${ensDomain}`}</span> : undefined
+          ensDomain || availabilityIcon ? (
+            <span className="flex items-center gap-2">
+              {ensDomain && <span className="text-muted-foreground font-mono text-xs">{`.${ensDomain}`}</span>}
+              {availabilityIcon}
+            </span>
+          ) : undefined
         }
       />
-      {username.length > 0 && message && !error && (
-        <span
-          className={`px-1 text-xs font-medium ${
-            isLoading ? 'text-muted-foreground' : isValid ? 'text-success' : 'text-destructive'
-          }`}
-        >
-          {message}
-        </span>
-      )}
+      {/* -mt-2 cancels the parent's gap-2 while collapsed, so the input→button
+          rhythm is identical to having no message row at all. */}
+      <div
+        aria-hidden={!showInvalidMessage}
+        className={cn(
+          '-mt-2 grid transition-[grid-template-rows,opacity] duration-200 ease-out motion-reduce:transition-none',
+          showInvalidMessage ? 'grid-rows-[1fr] opacity-100' : 'grid-rows-[0fr] opacity-0'
+        )}
+      >
+        <div className="overflow-hidden">
+          <span className="text-destructive block px-1 pt-1 text-xs font-medium">{displayedMessage}</span>
+        </div>
+      </div>
       {isCreating ? (
         <div className="flex h-11 items-center justify-center">
           <Spinner className="h-6 w-6" />
@@ -408,6 +477,12 @@ export function OnboardingDialog({
   // action, passkey sign-in demoted to a secondary escape hatch below.
   const isSignUp = view === 'signup';
 
+  // Typing a username on the sign-in view is the same declaration of intent, so
+  // it promotes Create too — variant swap only, layout order never changes.
+  // Emptying the field (backspace, clear) reverts instantly.
+  const [hasCreateDraft, setHasCreateDraft] = useState(false);
+  const promoteCreate = isSignUp || hasCreateDraft;
+
   const createForm = (
     <CreateAccountForm
       onCreateAccount={onCreateAccount}
@@ -420,7 +495,8 @@ export function OnboardingDialog({
       apiKey={apiKey}
       supportedChains={supportedChains}
       subnameTextRecords={subnameTextRecords}
-      buttonVariant={isSignUp ? 'default' : 'secondary'}
+      buttonVariant={promoteCreate ? 'default' : 'secondary'}
+      onDraftChange={setHasCreateDraft}
     />
   );
 
@@ -428,7 +504,7 @@ export function OnboardingDialog({
     <Button
       onClick={onImportAccount}
       disabled={isBusy}
-      variant={isSignUp ? 'secondary' : 'default'}
+      variant={promoteCreate ? 'secondary' : 'default'}
       className="rounded-box text-button h-11 w-full font-semibold"
     >
       <Fingerprint className="!h-4 !w-4" />
