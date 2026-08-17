@@ -125,11 +125,13 @@ export function NetworkFeeRow({
       // wearing two units, one of them wrong by orders of magnitude. One honest line instead.
       //
       // It can also mark the token unpayable (useGasEstimation): a sentinel string or required
-      // amount with no ceiling, or a priced estimate the balance can't cover (isSelectable false).
-      // A re-estimate can put those on the already-selected token, where blockReason stays null —
-      // so this slot must say why. Mirrors the dialogs' erc20CannotPay Confirm gate exactly.
+      // amount with no ceiling, a priced estimate the balance can't cover, or a settled zero
+      // balance (both fields undefined) — all with isSelectable false. A re-estimate can put those
+      // on the already-selected token, where blockReason stays null — so this slot must say why.
+      // Only a selectable token may show "Estimating...": the selector admits only selectable
+      // tokens, so an unselectable selection is always a settled verdict, never in flight.
       const hasTokenCost = selectedFeeToken.gasCostFormatted !== undefined;
-      if (hasTokenCost && (!selectedFeeToken.gasCostMaxFormatted || !selectedFeeToken.isSelectable)) {
+      if (!selectedFeeToken.isSelectable || (hasTokenCost && !selectedFeeToken.gasCostMaxFormatted)) {
         if (selectedFeeToken.gasCostFormatted === 'Estimation failed') {
           return (
             <InlineWarning

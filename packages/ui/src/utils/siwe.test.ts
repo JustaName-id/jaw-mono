@@ -324,3 +324,40 @@ describe('bestEffortSiweAddress', () => {
     expect(bestEffortSiweAddress(m)).toBeUndefined();
   });
 });
+
+// The dapp controls the message and nothing caps its length on this path, so the best-effort
+// readers must run in linear time. The lazy-regex header reader was quadratic — `.+?` and `\s+`
+// overlap on whitespace — and a padded 400 KB personal_sign payload froze the dialog for ~98s,
+// denying the user the ability to reject. Bounds are generous for CI; the broken versions
+// exceed them by orders of magnitude.
+describe('best-effort readers are not quadratic on padded input', () => {
+  it('handles a whitespace-padded non-parsing message quickly, and still warns', () => {
+    const message = [
+      `${' '.repeat(400_000)}x`,
+      'wants you to sign in with your Ethereum account',
+      '0x1111111111111111111111111111111111111111',
+      '',
+      'URI:\thttps://evil.com',
+      'Version: 1',
+      'Chain ID: 1',
+      'Nonce: abc12345',
+      'Issued At: 2026-01-01T00:00:00Z',
+    ].join('\n');
+    // Precondition: detected as SIWE, refused by the parser — the best-effort path.
+    expect(isSiweMessage(message)).toBe(true);
+    expect(parseSiweMessage(message)).toBeNull();
+
+    const start = performance.now();
+    const warning = getSiweOriginWarningFromMessage('https://example.com', message);
+    expect(performance.now() - start).toBeLessThan(500);
+    // The padding must not cost the phishing warning either: the URI fallback still reads.
+    expect(warning).toMatch(/evil\.com/);
+  });
+
+  it('recovers no address from a whitespace-padded message quickly', () => {
+    const message = '\n'.repeat(200_000) + ' '.repeat(200_000);
+    const start = performance.now();
+    expect(bestEffortSiweAddress(message)).toBeUndefined();
+    expect(performance.now() - start).toBeLessThan(500);
+  });
+});

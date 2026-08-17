@@ -221,8 +221,8 @@ export const TransactionDialog = ({
   const feeBlockReason = permissionBlocks ? null : blockReason;
 
   // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled, nor when the
-  // balance can't cover that ceiling (a priced token with isSelectable false). NetworkFeeRow
-  // shows its unpayable warning on the same condition.
+  // balance can't cover it (isSelectable false). NetworkFeeRow warns for every settled
+  // unpayable state; the in-flight remainder of this gate renders there as "Estimating...".
   const erc20CannotPay =
     isPayingWithErc20 && (!selectedFeeToken?.gasCostMaxFormatted || !selectedFeeToken?.isSelectable);
   const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20CannotPay && !permissionBlocks;

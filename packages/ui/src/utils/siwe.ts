@@ -156,29 +156,33 @@ function parseSiweHost(value?: string | null): string | null {
 }
 
 /**
- * Per EIP-4361 the SIWE `domain` must be the origin requesting the signature.
- * Returns a warning when the asserted domain/uri host differs from the origin
- * the user is actually on (cross-domain phishing), or undefined when they match
- * or cannot be compared.
- */
-/**
  * Domain and URI on a best-effort basis, for a message that did NOT parse.
  *
  * Deliberately permissive where `parseSiweMessage` is strict: it reads the two fields the
  * phishing check needs and ignores everything else. Nothing here is shown to the user as a
  * fact — it only feeds `getSiweOriginWarning`, whose output is a warning plus a mandatory
  * acknowledgement. Being wrong costs a spurious warning; being absent costs the hard block.
+ *
+ * No lazy regex on the header: `.+?` and `\s+` overlap on whitespace, nothing caps message
+ * length on this path, and the dApp controls the string — a padded message made the
+ * backtracking quadratic (~1s at 40 KB), freezing the dialog before the user could reject.
+ * EIP-4361 puts the header on line 1, so it is read from line 1 alone, with indexOf.
  */
 function bestEffortOriginFields(decoded: string): { domain?: string; uri?: string } {
-  // Per EIP-4361 the first line is "<domain> wants you to sign in with your Ethereum account:".
-  const header = /^(.+?)\s+wants you to sign in with your Ethereum account/m.exec(decoded);
+  // Per EIP-4361 line 1 is "<domain> wants you to sign in with your Ethereum account:".
+  const newline = decoded.indexOf('\n');
+  const firstLine = newline === -1 ? decoded : decoded.slice(0, newline);
+  const marker = firstLine.indexOf('wants you to sign in with your Ethereum account');
+  const domain = marker > 0 && /\s/.test(firstLine[marker - 1]) ? firstLine.slice(0, marker).trim() : undefined;
   // Lenient about whitespace after the colon, unlike the canonical field block.
   const uri = /^URI:[^\S\n]*(\S+)/m.exec(decoded);
-  return { domain: header?.[1]?.trim(), uri: uri?.[1] };
+  return { domain: domain || undefined, uri: uri?.[1] };
 }
 
 export function bestEffortSiweAddress(decoded: string): string | undefined {
-  const line = /^\s*(0x[a-fA-F0-9]{40})\s*$/m.exec(decoded);
+  // [^\S\n] rather than \s: the multiline ^/$ anchors already visit every line, and letting
+  // the whitespace class cross newlines re-opens the quadratic-backtracking overlap above.
+  const line = /^[^\S\n]*(0x[a-fA-F0-9]{40})[^\S\n]*$/m.exec(decoded);
   return line?.[1];
 }
 
@@ -198,6 +202,12 @@ export function getSiweOriginWarningFromMessage(requestOrigin: string, decodedMe
   return getSiweOriginWarning(requestOrigin, fields);
 }
 
+/**
+ * Per EIP-4361 the SIWE `domain` must be the origin requesting the signature.
+ * Returns a warning when the asserted domain/uri host differs from the origin
+ * the user is actually on (cross-domain phishing), or undefined when they match
+ * or cannot be compared.
+ */
 export function getSiweOriginWarning(
   requestOrigin: string,
   siwe: { domain?: string; uri?: string }

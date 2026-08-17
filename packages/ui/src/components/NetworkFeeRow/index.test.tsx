@@ -70,10 +70,18 @@ describe('NetworkFeeRow — ERC-20 fee slot', () => {
     expect(html).not.toContain('Estimating');
   });
 
-  it('still shows Estimating... while the estimate is genuinely in flight (undefined)', () => {
-    const html = markup(usdc({ gasCostFormatted: undefined, gasCostMaxFormatted: undefined }));
+  it('still shows Estimating... while the estimate is genuinely in flight (undefined, selectable)', () => {
+    const html = markup(usdc({ gasCostFormatted: undefined, gasCostMaxFormatted: undefined, isSelectable: true }));
     expect(html).toContain('Estimating');
     expect(html).not.toContain('text-destructive');
+  });
+
+  it('renders a settled zero-balance token as a warning, not a spinner that cannot resolve', () => {
+    // All three zero-balance legs of useGasEstimation emit this exact state: both fee fields
+    // undefined, isSelectable false. It is a verdict, not an estimate in flight.
+    const html = markup(usdc({ gasCostFormatted: undefined, gasCostMaxFormatted: undefined, isSelectable: false }));
+    expect(html).toContain('Insufficient funds');
+    expect(html).not.toContain('Estimating');
   });
 
   it('renders a numeric cost with its ceiling, unchanged', () => {
