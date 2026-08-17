@@ -1,0 +1,230 @@
+/**
+ * EIP-1193 conformance.
+ *
+ * What a dapp depends on behaviorally is not what a method returns, it is the
+ * shape of the contract around it: which methods answer without a session,
+ * which refuse, and which error code comes back when they refuse. Wallet
+ * libraries branch on those codes, so swapping a typed throw for a plain
+ * `Error` is a breaking change that no type checker catches.
+ *
+ * Two things make this file different from JAWProvider.test.ts, which covers
+ * behavior per method:
+ *
+ * 1. The table is checked against `method-policy.ts`, so a method added to the
+ *    policy without a case here fails rather than going uncovered.
+ * 2. The real error module runs. JAWProvider.test.ts stubs `serializeError` to
+ *    identity, which is the exact function that can flatten a code on the way
+ *    out, so the degradation it exists to prevent would be invisible there.
+ *
+ * Only the transport seams are mocked. A request travels the same path a dapp
+ * would trigger.
+ */
+import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
+
+import { JAWProvider } from './JAWProvider.js';
+import { SILENT_METHODS, INTERACTIVE_METHODS } from '../method-policy.js';
+import { standardErrorCodes, standardErrors } from '../errors/index.js';
+import { createSigner, loadSignerType, type Signer } from '../signer/index.js';
+import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
+import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
+import {
+    handleGetPermissionsRequest,
+    handleGetCapabilitiesRequest,
+    handleGetCallsHistoryRequest,
+} from '../rpc/index.js';
+import type { ConstructorOptions } from './interface.js';
+
+vi.mock('../communicator/index.js');
+vi.mock('../signer/index.js', () => ({
+    createSigner: vi.fn(),
+    loadSignerType: vi.fn(),
+    storeSignerType: vi.fn(),
+    clearSignerType: vi.fn(),
+}));
+
+// The read-only handlers reach the API. Their responses are not what this file
+// is about, only the fact that these methods route to them without a session.
+vi.mock('../rpc/wallet_getCallStatus.js', () => ({ handleGetCallsStatusRequest: vi.fn() }));
+vi.mock('../rpc/wallet_getAssets.js', () => ({ handleGetAssetsRequest: vi.fn() }));
+vi.mock('../rpc/index.js', async (importOriginal) => ({
+    ...(await importOriginal<typeof import('../rpc/index.js')>()),
+    handleGetPermissionsRequest: vi.fn(),
+    handleGetCapabilitiesRequest: vi.fn(),
+    handleGetCallsHistoryRequest: vi.fn(),
+}));
+
+const OPTIONS: ConstructorOptions = {
+    metadata: { appName: 'Conformance', appLogoUrl: 'https://test.example/logo.png', defaultChainId: 8453 },
+    preference: { keysUrl: 'https://keys.test.example', mode: 'CrossPlatform' },
+    apiKey: 'test-api-key',
+};
+
+/** What a method does when the provider has no session yet. */
+type NoSessionOutcome =
+    | { kind: 'rejects'; code: number }
+    | { kind: 'answers'; expect: (result: unknown) => void }
+    | { kind: 'connects' }
+    | { kind: 'ephemeral' }
+    | { kind: 'delegates'; handler: () => Mock };
+
+const WITHOUT_SESSION: Record<string, NoSessionOutcome> = {
+    // Silent reads answered from local state. A wallet library probes these on
+    // mount, so they resolve instead of prompting.
+    eth_accounts: { kind: 'answers', expect: (r) => expect(r).toEqual([]) },
+    eth_coinbase: { kind: 'answers', expect: (r) => expect(r).toBeNull() },
+    eth_chainId: { kind: 'answers', expect: (r) => expect(r).toBe('0x2105') },
+    net_version: { kind: 'answers', expect: (r) => expect(r).toBe(8453) },
+
+    // Silent reads served by the API, no session required.
+    wallet_getAssets: { kind: 'delegates', handler: () => handleGetAssetsRequest as Mock },
+    wallet_getCallsStatus: { kind: 'delegates', handler: () => handleGetCallsStatusRequest as Mock },
+    wallet_getCallsHistory: { kind: 'delegates', handler: () => handleGetCallsHistoryRequest as Mock },
+    wallet_getPermissions: { kind: 'delegates', handler: () => handleGetPermissionsRequest as Mock },
+    wallet_getCapabilities: { kind: 'delegates', handler: () => handleGetCapabilitiesRequest as Mock },
+
+    // Establish the session.
+    eth_requestAccounts: { kind: 'connects' },
+    wallet_connect: { kind: 'connects' },
+
+    // Sign through a throwaway signer, so they work without connecting first.
+    wallet_sendCalls: { kind: 'ephemeral' },
+    wallet_sign: { kind: 'ephemeral' },
+    wallet_grantPermissions: { kind: 'ephemeral' },
+    wallet_revokePermissions: { kind: 'ephemeral' },
+
+    // Refused outright, before the session is even consulted: eth_sign is blind
+    // signing, and 4200 says "this wallet does not offer it" rather than
+    // "connect first", which would imply it works once you do.
+    eth_sign: { kind: 'rejects', code: standardErrorCodes.provider.unsupportedMethod },
+
+    // Everything else needs the user to connect first.
+    personal_sign: { kind: 'rejects', code: standardErrorCodes.provider.unauthorized },
+    eth_signTypedData: { kind: 'rejects', code: standardErrorCodes.provider.unauthorized },
+    eth_signTypedData_v4: { kind: 'rejects', code: standardErrorCodes.provider.unauthorized },
+    eth_sendTransaction: { kind: 'rejects', code: standardErrorCodes.provider.unauthorized },
+};
+
+/** Every code this SDK can put in front of a dapp. */
+const EVERY_CODE: ReadonlyArray<[string, number]> = [
+    ...Object.entries(standardErrorCodes.rpc),
+    ...Object.entries(standardErrorCodes.provider),
+    ...Object.entries(standardErrorCodes.eip5792),
+].map(([name, code]) => [name, code]);
+
+let signer: Signer;
+
+function newProvider(): JAWProvider {
+    return new JAWProvider(OPTIONS);
+}
+
+/** A provider with a live session, so requests route through the signer. */
+function connectedProvider(): JAWProvider {
+    (loadSignerType as Mock).mockReturnValue('crossPlatform');
+    return new JAWProvider(OPTIONS);
+}
+
+beforeEach(() => {
+    vi.clearAllMocks();
+    signer = { request: vi.fn(), handshake: vi.fn(), cleanup: vi.fn() } as unknown as Signer;
+    (createSigner as Mock).mockReturnValue(signer);
+    (loadSignerType as Mock).mockReturnValue(null);
+});
+
+describe('EIP-1193 conformance', () => {
+    describe('the table tracks method-policy', () => {
+        it('covers every method the policy declares', () => {
+            const declared = [...SILENT_METHODS, ...INTERACTIVE_METHODS].sort();
+            expect(Object.keys(WITHOUT_SESSION).sort()).toEqual(declared);
+        });
+    });
+
+    describe('without a session', () => {
+        const cases = Object.entries(WITHOUT_SESSION);
+
+        it.each(cases.filter(([, o]) => o.kind === 'rejects'))(
+            '%s rejects with its documented code',
+            async (method, outcome) => {
+                const code = (outcome as { code: number }).code;
+                await expect(newProvider().request({ method })).rejects.toMatchObject({ code });
+            }
+        );
+
+        it.each(cases.filter(([, o]) => o.kind === 'answers'))(
+            '%s answers from local state',
+            async (method, outcome) => {
+                const result = await newProvider().request({ method });
+                (outcome as { expect: (r: unknown) => void }).expect(result);
+                expect(createSigner).not.toHaveBeenCalled();
+            }
+        );
+
+        it.each(cases.filter(([, o]) => o.kind === 'delegates'))(
+            '%s routes to its read handler',
+            async (method, outcome) => {
+                const handler = (outcome as { handler: () => Mock }).handler();
+                handler.mockResolvedValue('ok');
+
+                await expect(newProvider().request({ method })).resolves.toBe('ok');
+                expect(handler).toHaveBeenCalled();
+                expect(createSigner).not.toHaveBeenCalled();
+            }
+        );
+
+        it.each(cases.filter(([, o]) => o.kind === 'connects'))('%s handshakes before answering', async (method) => {
+            (signer.request as Mock).mockResolvedValue('connected');
+
+            await expect(newProvider().request({ method })).resolves.toBe('connected');
+            expect(signer.handshake).toHaveBeenCalled();
+        });
+
+        it.each(cases.filter(([, o]) => o.kind === 'ephemeral'))(
+            '%s signs through a throwaway signer',
+            async (method) => {
+                (signer.request as Mock).mockResolvedValue('signed');
+
+                await expect(newProvider().request({ method })).resolves.toBe('signed');
+                expect(signer.handshake).toHaveBeenCalled();
+                // Throwaway: the session keys are rotated, and the provider stays
+                // disconnected afterwards.
+                expect(signer.cleanup).toHaveBeenCalled();
+                await expect(newProvider().request({ method: 'eth_accounts' })).resolves.toEqual([]);
+            }
+        );
+    });
+
+    describe('error codes survive the trip to the dapp', () => {
+        // The provider's exit runs serializeError, which keeps a code only when
+        // errors/constants.ts knows it and flattens everything else to -32603.
+        // A code added to standardErrorCodes without its errorValues entry would
+        // degrade silently, and the dapp would see an internal error where it
+        // expected, say, a user rejection.
+        it.each(EVERY_CODE)('%s (%i) reaches the dapp unchanged', async (_name, code) => {
+            const provider = connectedProvider();
+            // A plain object, not an Error instance, because that is what an
+            // error looks like once it has crossed the popup or iframe boundary:
+            // postMessage structured-clones it and the prototype is gone.
+            (signer.request as Mock).mockRejectedValue({ code, message: 'from the wallet' });
+
+            await expect(provider.request({ method: 'wallet_sign' })).rejects.toMatchObject({ code });
+        });
+
+        it('reports a user rejection as 4001, not as an internal error', async () => {
+            const provider = connectedProvider();
+            (signer.request as Mock).mockRejectedValue(standardErrors.provider.userRejectedRequest('User denied'));
+
+            await expect(provider.request({ method: 'wallet_sendCalls' })).rejects.toMatchObject({
+                code: standardErrorCodes.provider.userRejectedRequest,
+            });
+        });
+
+        it('flattens an untyped Error to -32603 rather than guessing a code', async () => {
+            const provider = connectedProvider();
+            (signer.request as Mock).mockRejectedValue(new Error('boom'));
+
+            await expect(provider.request({ method: 'wallet_sign' })).rejects.toMatchObject({
+                code: standardErrorCodes.rpc.internal,
+                message: 'boom',
+            });
+        });
+    });
+});
