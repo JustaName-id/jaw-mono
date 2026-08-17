@@ -4,9 +4,16 @@ import { renderToStaticMarkup } from 'react-dom/server';
 import { createRoot, type Root } from 'react-dom/client';
 import { act, useContext } from 'react';
 
-import { DefaultDialog, DialogAnchorContext, ShellDialog, useDialogMobileFullScreen } from '@jaw.id/ui';
+import {
+  DefaultDialog,
+  DialogAnchorContext,
+  SHEET_BREAKPOINT_PX,
+  ShellDialog,
+  useDialogMobileFullScreen,
+} from '@jaw.id/ui';
 
 import { EmbeddedShell } from './index';
+import { EMBEDDED_BREAKPOINT_PX } from '../../lib/embedded-ui';
 import type { PopupCommunicator, CommunicatorContext } from '../../lib/popup-communicator';
 
 type EmittingCommunicator = PopupCommunicator & {
@@ -181,6 +188,38 @@ describe('EmbeddedShell — dialog anchor and drawer sheet presentation', () => 
     expect(content.style.paddingBottom).toBe('0px');
     // ShellDialog's own `width: fit-content` must still lose to the sheet.
     expect(content.style.width).toBe('100%');
+  });
+
+  // The scrim is opted out of by the SHELL, not implied by the anchor: the
+  // app-specific handler renders the same bottom sheet directly on the dApp,
+  // where it must dim the page. Only the iframe is see-through.
+  describe('scrim', () => {
+    const overlay = () => document.body.querySelector('[data-slot="dialog-overlay"]') as HTMLElement;
+
+    it('drawer: the portaled dialog draws no scrim, matching the shell backdrop', () => {
+      stubViewport(400);
+      mount(<DefaultDialog open>sheet</DefaultDialog>);
+      expect(overlay().className).toContain('bg-transparent');
+      expect(overlay().className).not.toContain('bg-black/50');
+    });
+
+    it('floating: same — the dApp shows through around the card', () => {
+      stubViewport(1024);
+      mount(<DefaultDialog open>card</DefaultDialog>);
+      expect(overlay().className).toContain('bg-transparent');
+    });
+
+    it('popup/standalone: the shell is inactive, so the dialog dims the page as usual', () => {
+      stubViewport(400);
+      mount(<DefaultDialog open>card</DefaultDialog>, mockCommunicator('standalone'));
+      expect(overlay().className).toContain('bg-black/50');
+    });
+  });
+
+  it('shares its drawer breakpoint with the app-specific sheet, so the two modes agree', () => {
+    // The same wallet on the same phone must not be a sheet in one transport
+    // and a centered card in the other.
+    expect(EMBEDDED_BREAKPOINT_PX).toBe(SHEET_BREAKPOINT_PX);
   });
 
   it('floating: a portaled dialog keeps its own sizing and anchors at the top offset', () => {

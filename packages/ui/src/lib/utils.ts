@@ -61,3 +61,21 @@ export const PortalContainerContext = createContext<HTMLElement | null>(null);
  */
 export type DialogAnchor = 'center' | 'top' | 'bottom-sheet';
 export const DialogAnchorContext = createContext<DialogAnchor>('center');
+
+/**
+ * Viewport width (inclusive) at or below which dialogs present as a bottom
+ * sheet rather than a centered card. Shared so the two hosts agree: keys'
+ * EmbeddedShell picks the iframe drawer at the same width (its
+ * EMBEDDED_BREAKPOINT_PX, guarded against drift in that shell's tests), and
+ * ResponsiveDialogAnchor picks the app-specific sheet here.
+ */
+export const SHEET_BREAKPOINT_PX = 460;
+
+/**
+ * Whether dialogs draw their dimming scrim. Kept separate from the anchor: a
+ * bottom sheet is a POSITION, not a backdrop treatment. The iframe shell opts
+ * out because it is see-through by design — it draws no scrim of its own and
+ * the host dApp shows through around the card — while the same sheet rendered
+ * by the app-specific handler sits directly ON the dApp and must dim it.
+ */
+export const DialogScrimContext = createContext(true);

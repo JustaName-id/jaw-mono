@@ -4,7 +4,7 @@ import * as React from 'react';
 import * as DialogPrimitive from '@radix-ui/react-dialog';
 import { XIcon } from 'lucide-react';
 
-import { cn, DialogAnchorContext, PortalContainerContext } from '../../lib/utils';
+import { cn, DialogAnchorContext, DialogScrimContext, PortalContainerContext } from '../../lib/utils';
 
 function Dialog({ open, ...props }: React.ComponentProps<typeof DialogPrimitive.Root>) {
   const prevOpenRef = React.useRef(open);
@@ -86,11 +86,17 @@ function DialogContent({
   ...props
 }: DialogContentProps) {
   const anchor = React.useContext(DialogAnchorContext);
+  const scrim = React.useContext(DialogScrimContext);
   return (
     <DialogPortal data-slot="dialog-portal">
-      {/* 'top'/'bottom-sheet' = embedded card presentation: no scrim, matching the
-          shell's transparent backdrop. The overlay still captures outside clicks. */}
-      <DialogOverlay className={anchor !== 'center' ? 'bg-transparent' : undefined} />
+      {/* The embedded (iframe) shell opts out of the scrim to match its own
+          transparent backdrop — the host dApp shows through around the card.
+          It is keyed on its own context rather than on the anchor: the
+          app-specific handler uses the same bottom-sheet anchor but renders
+          straight onto the dApp, where an undimmed backdrop would leave the
+          sheet floating over live content. The overlay still captures outside
+          clicks either way. */}
+      <DialogOverlay className={scrim ? undefined : 'bg-transparent'} />
       <DialogPrimitive.Content
         data-slot="dialog-content"
         className={cn(

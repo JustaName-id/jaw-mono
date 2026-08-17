@@ -48,6 +48,7 @@ import { TransactionDialog } from '../components/TransactionDialog';
 import { PermissionDialog } from '../components/PermissionDialog';
 import { isWildcard } from '../components/PermissionDialog/Sections';
 import { ConnectDialog } from '../components/ConnectDialog';
+import { ResponsiveDialogAnchor } from '../components/DialogPresentation';
 import { type FeeTokenOption } from '../components/FeeTokenSelector';
 import { type LocalStorageAccount, type CreatedAccountData } from '../components/OnboardingDialog/types';
 import {
@@ -401,7 +402,12 @@ export class ReactUIHandler implements UIHandler {
                 }
                 handleReject(new Error(`The wallet could not display this request: ${error.message}`));
               },
-              children: dialog,
+              // No host shell lays these dialogs out (the iframe transport has
+              // EmbeddedShell), so the presentation is chosen from the viewport
+              // here: bottom sheet on phones, centered card otherwise. Inside
+              // the boundary, so a throw from it is caught like any other
+              // render failure.
+              children: React.createElement(ResponsiveDialogAnchor, null, dialog),
             })
           )
         );
@@ -1168,6 +1174,11 @@ function OnboardingDialogWrapper({
         if (!newOpen) handleCancel();
         else setOpen(newOpen);
       }}
+      // OnboardingDialog brings its own DialogShell, which applies the
+      // home-bar inset inside its own surface — the sheet must not add a
+      // second one (see ShellDialog, which does the same for every other
+      // revamped dialog).
+      ownsBottomInset
       contentStyle={{
         width: 'fit-content',
         maxWidth: '450px',

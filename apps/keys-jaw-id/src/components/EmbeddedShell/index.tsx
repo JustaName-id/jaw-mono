@@ -2,7 +2,7 @@
 
 import { useEffect, useState, type MouseEvent, type ReactNode } from 'react';
 
-import { DialogAnchorContext, PortalContainerContext } from '@jaw.id/ui';
+import { DialogAnchorContext, DialogScrimContext, PortalContainerContext } from '@jaw.id/ui';
 
 import type { PopupCommunicator } from '../../lib/popup-communicator';
 import {
@@ -147,42 +147,49 @@ export function EmbeddedShell({ communicator, children }: EmbeddedShellProps) {
   return (
     // The Radix-based modals (Connect, Transaction, …) portal to document.body,
     // escaping this card and Radix-centering at 50% by default. Anchor them via
-    // context so they line up with the card's inline screens; the same context
-    // makes their overlay transparent, matching this shell's scrim-free
-    // backdrop. 'top' matches the floating card; 'bottom-sheet' matches the
-    // drawer card (full-width, bottom-pinned, content-sized, sliding up on
-    // open) and suppresses the dialogs' own mobile full-screen sizing, which
-    // is meant for popup/standalone contexts.
+    // context so they line up with the card's inline screens. 'top' matches the
+    // floating card; 'bottom-sheet' matches the drawer card (full-width,
+    // bottom-pinned, content-sized, sliding up on open) and suppresses the
+    // dialogs' own mobile full-screen sizing, which is meant for
+    // popup/standalone contexts.
+    //
+    // The scrim opt-out is a SEPARATE context, because it belongs to this shell
+    // rather than to the anchor: app-specific mode renders the same
+    // bottom-sheet anchor directly on the dApp's page, where the scrim must
+    // stay. Here it goes, so the modals match this shell's own transparent
+    // backdrop and the dApp shows through around the card.
     <DialogAnchorContext.Provider value={active ? (presentation === 'floating' ? 'top' : 'bottom-sheet') : 'center'}>
-      <div
-        ref={setScopeRoot}
-        data-jaw-ui
-        className={
-          // Transparent (no scrim): the dApp shows through around the card.
-          active ? 'fixed inset-0 z-50' : 'contents'
-        }
-        onClick={onOverlayClick}
-      >
-        <PortalContainerContext.Provider value={scopeRoot}>
-          {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
+      <DialogScrimContext.Provider value={!active}>
+        <div
+          ref={setScopeRoot}
+          data-jaw-ui
+          className={
+            // Transparent (no scrim): the dApp shows through around the card.
+            active ? 'fixed inset-0 z-50' : 'contents'
+          }
+          onClick={onOverlayClick}
+        >
+          <PortalContainerContext.Provider value={scopeRoot}>
+            {/* [&_.min-h-screen]:min-h-0 — existing screens center with min-h-screen,
             which must not stretch the card to the full viewport */}
-          <div
-            role={active ? 'document' : undefined}
-            className={
-              active
-                ? // Screens that bring their own DialogShell card (the revamped design)
-                  // get no extra chrome — the shell IS the card. Legacy screens keep
-                  // the classic card look until they migrate.
-                  `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:!bg-transparent has-[[data-jaw-shell]]:!shadow-none [&_.min-h-screen]:min-h-0 ${card}`
-                : 'contents'
-            }
-          >
-            <EnsureVisibility communicator={communicator} active={active}>
-              {children}
-            </EnsureVisibility>
-          </div>
-        </PortalContainerContext.Provider>
-      </div>
+            <div
+              role={active ? 'document' : undefined}
+              className={
+                active
+                  ? // Screens that bring their own DialogShell card (the revamped design)
+                    // get no extra chrome — the shell IS the card. Legacy screens keep
+                    // the classic card look until they migrate.
+                    `bg-background overflow-y-auto shadow-xl has-[[data-jaw-shell]]:!bg-transparent has-[[data-jaw-shell]]:!shadow-none [&_.min-h-screen]:min-h-0 ${card}`
+                  : 'contents'
+              }
+            >
+              <EnsureVisibility communicator={communicator} active={active}>
+                {children}
+              </EnsureVisibility>
+            </div>
+          </PortalContainerContext.Provider>
+        </div>
+      </DialogScrimContext.Provider>
     </DialogAnchorContext.Provider>
   );
 }

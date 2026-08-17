@@ -56,7 +56,15 @@ export const DefaultDialog: FC<DefaultDialogProps> = ({
         aria-describedby={undefined}
         showCloseButton={false}
         style={{
-          padding: 0,
+          // Longhands, not a `padding: 0` shorthand: the sheet presentation
+          // below sets paddingBottom, and React cannot reliably remove a
+          // longhand when a conflicting shorthand is set — it warns and can
+          // leave the inset behind when a rotation flips the presentation on a
+          // live dialog.
+          paddingTop: 0,
+          paddingRight: 0,
+          paddingBottom: 0,
+          paddingLeft: 0,
           transition: 'all 0.4 ease-in-out',
           display: 'flex',
           flexDirection: 'column',
