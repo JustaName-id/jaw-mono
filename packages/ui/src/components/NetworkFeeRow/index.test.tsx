@@ -6,13 +6,10 @@ import type { FeeTokenOption } from '../FeeTokenSelector';
 
 /**
  * The ERC-20 fee slot. useGasEstimation overloads `gasCostFormatted`: a numeric amount on
- * success, `undefined` while the estimate is in flight, and the sentinel strings
- * 'Insufficient' / 'Estimation failed' when the ERC-20 leg rejected. The selector refuses to
- * pick a sentinel-carrying token, but the re-estimate sync can copy a sentinel onto an
- * already-selected one — handleEthSuccess only fills an empty selection, and nothing swaps a
- * blocked token away outside the ETH-insufficient branch. On that path `blockReason` stays null
- * (another token is usually still selectable) and Confirm is disabled by the missing ceiling,
- * so the slot itself is the only place the user can learn why the flow is stuck.
+ * success, `undefined` while in flight, and a sentinel string or required amount when the token
+ * can't pay. A re-estimate can put an unpayable token in the selection, where blockReason stays
+ * null and Confirm is disabled with no banner — so the slot itself must say why, never a fee
+ * figure or an "Estimating..." that can't resolve.
  */
 describe('NetworkFeeRow — ERC-20 fee slot', () => {
   const usdc = (overrides: Partial<FeeTokenOption> = {}): FeeTokenOption => ({
@@ -41,8 +38,6 @@ describe('NetworkFeeRow — ERC-20 fee slot', () => {
 
   it("renders the 'Estimation failed' sentinel as a warning, not a fee and not a spinner", () => {
     const html = markup(usdc({ gasCostFormatted: 'Estimation failed', gasCostMaxFormatted: undefined }));
-    // The two regressions this branch guards against: the sentinel worn as a cost
-    // ("Estimation failed USDC"), and an "Estimating..." that never resolves.
     expect(html).not.toContain('Estimation failed USDC');
     expect(html).not.toContain('Estimating');
     expect(html).toContain('Estimation failed');
@@ -57,14 +52,20 @@ describe('NetworkFeeRow — ERC-20 fee slot', () => {
   });
 
   it("renders the amount parsed from an 'X required but sender has Y' error as a warning, not a fee", () => {
-    // useGasEstimation:392 replaces 'Insufficient' with the required amount when the error
-    // carries one — numeric, so a number gate would wear it as the fee while Confirm sits
-    // disabled by the missing ceiling with nothing on screen saying why.
     const html = markup(usdc({ gasCostFormatted: '1.25', gasCostMaxFormatted: undefined }));
     expect(html).toContain('Insufficient funds');
-    // The required amount lives in the tooltip detail (closed in static markup), never in the
-    // fee slot — "1.25 USDC" in the body would be the old dead end wearing a plausible fee.
+    // The amount belongs in the tooltip detail (closed in static markup), never the fee slot.
     expect(html).not.toContain('1.25 USDC');
+    expect(html).not.toContain('Up to');
+    expect(html).not.toContain('Estimating');
+  });
+
+  it('renders a priced token whose balance cannot cover the ceiling as a warning, not a payable fee', () => {
+    // A successful estimate can report hasSufficientBalance false: real cost and ceiling,
+    // isSelectable false. A ceiling-only gate would render this as a normal, payable fee.
+    const html = markup(usdc({ gasCostFormatted: '0.0421', gasCostMaxFormatted: '0.0512', isSelectable: false }));
+    expect(html).toContain('Insufficient funds');
+    expect(html).not.toContain('0.0421 USDC');
     expect(html).not.toContain('Up to');
     expect(html).not.toContain('Estimating');
   });

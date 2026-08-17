@@ -159,8 +159,11 @@ export const PermissionDialog = ({
   // different reason on screen next to the banner that already named the real one.
   const feeBlockReason = missingCalls || revocationBlocks ? null : blockReason;
 
-  // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
-  const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
+  // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled, nor when the
+  // balance can't cover that ceiling (a priced token with isSelectable false). NetworkFeeRow
+  // shows its unpayable warning on the same condition.
+  const erc20CannotPay =
+    isPayingWithErc20 && (!selectedFeeToken?.gasCostMaxFormatted || !selectedFeeToken?.isSelectable);
 
   const canConfirm =
     !isProcessing &&
@@ -170,7 +173,7 @@ export const PermissionDialog = ({
     !blockReason &&
     !missingCalls &&
     !revocationBlocks &&
-    !erc20EstimateMissing;
+    !erc20CannotPay;
 
   const displayAddress = (address: string) => getDisplayAddress(resolvedAddresses[address], address);
   const truncateAddress = (address: string) => getDisplayAddress(undefined, address);
