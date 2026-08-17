@@ -42,7 +42,7 @@ export function DialogAppHeader({ appName, appLogoUrl, origin, chainName, chainI
   return (
     <div className="flex items-center gap-3">
       <span className="relative flex-none">
-        <span className="bg-secondary border-border flex h-12 w-12 items-center justify-center overflow-hidden rounded-full border">
+        <span className="bg-secondary border-border size-logo flex items-center justify-center overflow-hidden rounded-full border">
           {appAvatar}
         </span>
         {chainIcon && (
@@ -57,9 +57,9 @@ export function DialogAppHeader({ appName, appLogoUrl, origin, chainName, chainI
           </span>
         )}
       </span>
-      <span className="flex min-w-0 flex-col gap-0.5">
-        <span className="text-foreground truncate text-[17px] font-semibold tracking-[-0.02em]">{safeAppName}</span>
-        <span className="text-muted-foreground truncate font-mono text-[10px]">{formatOrigin(origin)}</span>
+      <span className="flex min-w-0 flex-col gap-1">
+        <span className="text-foreground text-app truncate">{safeAppName}</span>
+        <span className="text-muted-foreground text-url truncate font-mono">{formatOrigin(origin)}</span>
       </span>
     </div>
   );

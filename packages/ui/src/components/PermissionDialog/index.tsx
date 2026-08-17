@@ -15,8 +15,9 @@ import { reverseResolveWithAvatars } from '../../utils/reverseResolve';
 import { getChainLabel } from '../../utils/resolveChainLabel';
 import { getDisplayAddress } from '../../utils';
 import { resolveBlockReason } from '../../utils/transactionFailure';
+import { isBlockingRevocationProblem, REVOCATION_PROBLEM_TEXT } from '../../utils/permissionExecution';
 import { PermissionDialogProps } from './types';
-import { PartyRow } from '../primitives';
+import { InlineWarning, PartyRow } from '../primitives';
 import { AllowedCalls, MetaCard, SpendLimits, isWildcard } from './Sections';
 
 export const PermissionDialog = ({
@@ -24,6 +25,7 @@ export const PermissionDialog = ({
   onOpenChange,
   mode,
   permissionId,
+  revocationProblem,
   spenderAddress,
   accountAddress,
   origin,
@@ -142,16 +144,27 @@ export const PermissionDialog = ({
     isPayingWithErc20: !!isPayingWithErc20,
   });
 
+  // Same shape as the transaction screen: a certain revert (or a permission we couldn't load)
+  // disables Confirm; `expired` and `self-delegated` warn and let the user proceed.
+  const revocationBlocks = !!revocationProblem && isBlockingRevocationProblem(revocationProblem);
+
   // The permission manager stores call rules; a spend-only grant has nothing to store and is
   // rejected onchain. Say so up front rather than letting the grant fail after a signature.
   const missingCalls = isGrant && calls.length === 0;
 
   // With no call rule the grant can't be built at all, so gas estimation fails for a reason that
   // has nothing to do with funds. Suppress the fee-derived cause and let the banner speak.
-  const feeBlockReason = missingCalls ? null : blockReason;
+  // A blocked revocation is also suppressed here, not just the grant-side blocker: with no
+  // permission the fee row prices a placeholder call, so letting it speak would put a second,
+  // different reason on screen next to the banner that already named the real one.
+  const feeBlockReason = missingCalls || revocationBlocks ? null : blockReason;
 
-  // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
-  const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
+  // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled, nor when the
+  // balance can't cover it (isSelectable false). NetworkFeeRow warns for every settled
+  // unpayable state; the in-flight remainder of this gate renders there as "Estimating...".
+  const erc20CannotPay =
+    isPayingWithErc20 && (!selectedFeeToken?.gasCostMaxFormatted || !selectedFeeToken?.isSelectable);
+
   const canConfirm =
     !isProcessing &&
     !isLoadingTokenInfo &&
@@ -159,7 +172,8 @@ export const PermissionDialog = ({
     !gasFeeLoading &&
     !blockReason &&
     !missingCalls &&
-    !erc20EstimateMissing;
+    !revocationBlocks &&
+    !erc20CannotPay;
 
   const displayAddress = (address: string) => getDisplayAddress(resolvedAddresses[address], address);
   const truncateAddress = (address: string) => getDisplayAddress(undefined, address);
@@ -186,13 +200,13 @@ export const PermissionDialog = ({
           seed={spenderAddress}
           avatarUrl={resolvedAvatars[spenderAddress]}
           size={15}
-          className="rounded-xs size-[15px] flex-none"
+          className="rounded-xs size-blob flex-none"
         />
         <span className="truncate">{displayAddress(spenderAddress)}</span>
         <CopyButton value={spenderAddress} size={11} label="Copy spender address" />
       </>
     ) : (
-      <span className="text-muted-foreground">Loading…</span>
+      <span className="text-muted-foreground">{isLoadingTokenInfo ? 'Loading…' : 'Unavailable'}</span>
     ),
   };
 
@@ -217,7 +231,7 @@ export const PermissionDialog = ({
               seed={accountAddress}
               avatarUrl={resolvedAvatars[accountAddress]}
               size={15}
-              className="rounded-xs size-[15px] flex-none"
+              className="rounded-xs size-blob flex-none"
             />
             <span className="truncate">{displayAddress(accountAddress)}</span>
             <CopyButton value={accountAddress} size={11} label="Copy account address" />
@@ -252,19 +266,30 @@ export const PermissionDialog = ({
               chainName={networkName}
               chainIcon={displayChainIcon}
             />
-            <h2 className="text-foreground mt-4 text-[26px] font-bold tracking-[-0.03em]">
+            <h2 className="text-foreground text-title-xl mt-4">
               {isGrant ? 'Requesting Permission' : 'Revoke Permission'}
             </h2>
           </div>
 
-          <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
+          <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-6 pb-3 pt-6">
             {missingCalls && (
               <div className="rounded-box flex items-start gap-2 bg-amber-500/10 p-3">
                 <TriangleAlert className="mt-px size-3.5 flex-none text-amber-500" strokeWidth={2} />
-                <p className="text-[11px] leading-[140%] text-amber-500">
+                <p className="text-body-sm text-amber-500">
                   This permission has no allowed calls. A grant needs at least one call rule, so spend limits alone
                   can't be granted.
                 </p>
+              </div>
+            )}
+
+            {/* A certain revert named before signing — or, for a failed lookup, the honest
+                admission that we couldn't read the permission. Only the former disables Confirm. */}
+            {revocationProblem && (
+              <div>
+                <InlineWarning
+                  text={REVOCATION_PROBLEM_TEXT[revocationProblem].text}
+                  detail={REVOCATION_PROBLEM_TEXT[revocationProblem].detail}
+                />
               </div>
             )}
 
@@ -292,7 +317,7 @@ export const PermissionDialog = ({
               />
             )}
 
-            <p className="text-muted-foreground px-0.5 text-[11px] leading-[140%]">
+            <p className="text-muted-foreground text-body-sm">
               {isGrant
                 ? 'Limits are enforced onchain. Revoke anytime, one tap.'
                 : 'Revoking is onchain and immediate. This spender loses all access above.'}
@@ -300,12 +325,12 @@ export const PermissionDialog = ({
 
             {hasError && (
               <div className="bg-destructive/10 rounded-box p-3">
-                <p className="text-destructive text-[12px]">{status}</p>
+                <p className="text-destructive text-body">{status}</p>
               </div>
             )}
           </div>
 
-          <div className="border-border flex-none space-y-3 border-t px-6 py-3.5">
+          <div className="border-border/40 flex-none space-y-2 border-t px-6 pb-5 pt-3">
             <NetworkFeeRow
               blockReason={feeBlockReason}
               gasFee={gasFee}
@@ -331,7 +356,7 @@ export const PermissionDialog = ({
                 variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box text-button h-10 flex-[44] font-semibold focus-visible:ring-1"
               >
                 {isGrant ? 'Cancel' : 'Keep it'}
               </Button>
@@ -339,9 +364,9 @@ export const PermissionDialog = ({
                 onClick={onConfirm}
                 disabled={!canConfirm}
                 variant={isGrant ? 'default' : 'destructive'}
-                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box text-button h-10 flex-[56] font-semibold focus-visible:ring-1"
               >
-                {feeBlockReason === 'funds' ? 'Insufficient Funds' : isGrant ? 'Grant' : 'Revoke'}
+                {feeBlockReason === 'funds' && !revocationBlocks ? 'Insufficient Funds' : isGrant ? 'Grant' : 'Revoke'}
               </Button>
             </div>
           </div>

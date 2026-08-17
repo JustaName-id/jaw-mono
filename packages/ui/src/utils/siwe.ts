@@ -74,6 +74,11 @@ const toIsoString = (d: Date | undefined): string | undefined =>
  * The five required EIP-4361 fields, anchored per line. Fresh per call — a `/g` regex
  * carries `lastIndex`. Counted rather than first-matched: viem's own suffix match is
  * unanchored, so a block embedded in the statement would shadow the real one.
+ *
+ * A single literal space is deliberate: viem's parser — which extracts the values — requires
+ * canonical `URI: `, so admitting more here would locate a block whose fields viem still
+ * cannot read. Detection (`isSiweMessage`) is looser on purpose, and the gap that opens is
+ * closed by `getSiweOriginWarning` working without a parse rather than by loosening this.
  */
 const requiredFieldBlock = () => /^URI: .+\nVersion: .+\nChain ID: .+\nNonce: .+\nIssued At: .+$/gm;
 
@@ -148,6 +153,53 @@ function parseSiweHost(value?: string | null): string | null {
   } catch {
     return null;
   }
+}
+
+/**
+ * Domain and URI on a best-effort basis, for a message that did NOT parse.
+ *
+ * Deliberately permissive where `parseSiweMessage` is strict: it reads the two fields the
+ * phishing check needs and ignores everything else. Nothing here is shown to the user as a
+ * fact — it only feeds `getSiweOriginWarning`, whose output is a warning plus a mandatory
+ * acknowledgement. Being wrong costs a spurious warning; being absent costs the hard block.
+ *
+ * No lazy regex on the header: `.+?` and `\s+` overlap on whitespace, nothing caps message
+ * length on this path, and the dApp controls the string — a padded message made the
+ * backtracking quadratic (~1s at 40 KB), freezing the dialog before the user could reject.
+ * EIP-4361 puts the header on line 1, so it is read from line 1 alone, with indexOf.
+ */
+function bestEffortOriginFields(decoded: string): { domain?: string; uri?: string } {
+  // Per EIP-4361 line 1 is "<domain> wants you to sign in with your Ethereum account:".
+  const newline = decoded.indexOf('\n');
+  const firstLine = newline === -1 ? decoded : decoded.slice(0, newline);
+  const marker = firstLine.indexOf('wants you to sign in with your Ethereum account');
+  const domain = marker > 0 && /\s/.test(firstLine[marker - 1]) ? firstLine.slice(0, marker).trim() : undefined;
+  // Lenient about whitespace after the colon, unlike the canonical field block.
+  const uri = /^URI:[^\S\n]*(\S+)/m.exec(decoded);
+  return { domain: domain || undefined, uri: uri?.[1] };
+}
+
+export function bestEffortSiweAddress(decoded: string): string | undefined {
+  // [^\S\n] rather than \s: the multiline ^/$ anchors already visit every line, and letting
+  // the whitespace class cross newlines re-opens the quadratic-backtracking overlap above.
+  const line = /^[^\S\n]*(0x[a-fA-F0-9]{40})[^\S\n]*$/m.exec(decoded);
+  return line?.[1];
+}
+
+/**
+ * The phishing warning for a raw message, whether or not it parses.
+ *
+ * Prefer this over pairing `parseSiweMessage` with `getSiweOriginWarning`: the parse is strict
+ * by design (fails closed rather than inventing fields), and gating the warning on it let a
+ * dapp suppress the cross-domain block — and with it the mandatory "I accept the risk"
+ * checkbox — by writing a message that detects as SIWE but does not parse. `isSiweMessage`
+ * accepts `\s*` after each colon where the parser needs a canonical single space, so a tab or
+ * no space at all was enough. The fallback means the block no longer depends on formatting.
+ */
+export function getSiweOriginWarningFromMessage(requestOrigin: string, decodedMessage: string): string | undefined {
+  const parsed = parseSiweMessage(decodedMessage);
+  const fields = parsed ? { domain: parsed.domain, uri: parsed.uri } : bestEffortOriginFields(decodedMessage);
+  return getSiweOriginWarning(requestOrigin, fields);
 }
 
 /**

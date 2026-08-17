@@ -76,10 +76,8 @@ export const SignatureDialog = ({
 
           {/* Message */}
           <div className="border-border rounded-box mt-4 flex min-h-0 flex-1 flex-col overflow-hidden border p-3">
-            <span className="text-muted-foreground mb-1.5 font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-              Message
-            </span>
-            <p className="text-foreground min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.65]">
+            <span className="text-muted-foreground text-label mb-1.5 font-mono uppercase">Message</span>
+            <p className="text-foreground text-body-xs min-h-0 flex-1 overflow-auto whitespace-pre-wrap break-words font-mono leading-relaxed">
               {message || 'No message provided'}
             </p>
           </div>
@@ -96,14 +94,14 @@ export const SignatureDialog = ({
               variant="secondary"
               onClick={onCancel}
               disabled={isProcessing}
-              className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+              className="rounded-box text-button h-11 flex-1 font-semibold focus-visible:ring-1"
             >
               Cancel
             </Button>
             <Button
               onClick={onSign}
               disabled={!canSign}
-              className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+              className="rounded-box text-button h-11 flex-1 font-semibold focus-visible:ring-1"
             >
               Sign
             </Button>

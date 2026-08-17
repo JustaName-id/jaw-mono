@@ -220,9 +220,12 @@ export const TransactionDialog = ({
   // the banner already explains precisely. Name the cause once, at the top.
   const feeBlockReason = permissionBlocks ? null : blockReason;
 
-  // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled.
-  const erc20EstimateMissing = isPayingWithErc20 && !selectedFeeToken?.gasCostMaxFormatted;
-  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20EstimateMissing && !permissionBlocks;
+  // An ERC-20 fee can't be confirmed until its worst-case ceiling has settled, nor when the
+  // balance can't cover it (isSelectable false). NetworkFeeRow warns for every settled
+  // unpayable state; the in-flight remainder of this gate renders there as "Estimating...".
+  const erc20CannotPay =
+    isPayingWithErc20 && (!selectedFeeToken?.gasCostMaxFormatted || !selectedFeeToken?.isSelectable);
+  const canConfirm = !isProcessing && !gasFeeLoading && !blockReason && !erc20CannotPay && !permissionBlocks;
 
   // Reverts, but gas estimated fine, so it stays submittable: warn rather than block.
   const softRevertWarning = !blockReason && !permissionBlocks && !!assetPreviewWillRevert;
@@ -262,20 +265,22 @@ export const TransactionDialog = ({
       ) : (
         <div className="flex min-h-0 flex-1 flex-col">
           {/* Pinned header */}
-          <div className="flex-none px-6 pt-7">
-            <h2 className="text-foreground text-[26px] font-bold tracking-[-0.03em]">{title}</h2>
+          <div className="flex-none px-6 pt-6">
+            <h2 className="text-foreground text-title-xl">{title}</h2>
             {totalTransactions > 1 && currentTransaction?.description && (
-              <p className="text-muted-foreground mt-0.5 text-[12px]">
+              <p className="text-muted-foreground text-body mt-1">
                 {currentTransaction.action}: {currentTransaction.description}
               </p>
             )}
           </div>
 
           {/* Scrollable body */}
-          <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
+          <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-6 pb-3 pt-6">
             {/* Native send → one prominent hero amount */}
             {isNativeSend && (
-              <div className="flex items-center gap-3 pb-0.5 pt-1">
+              // The spec sheet frames an ERC-20 supply, so it never measured the native-send hero.
+              // Sizes here are the spec's own (24 title, 12 body) rather than new ones.
+              <div className="flex items-center gap-3">
                 <TokenIcon
                   chainId={currentTransaction.chainId}
                   address={ethAddress}
@@ -284,11 +289,11 @@ export const TransactionDialog = ({
                   fallback={<IdentityAvatar />}
                 />
                 <div className="flex min-w-0 items-baseline gap-2">
-                  <span className="text-foreground text-[26px] font-bold tracking-[-0.02em]">
+                  <span className="text-foreground text-amount-lg">
                     <SubText>{`${heroAmount} ${nativeSymbol}`}</SubText>
                   </span>
                   {nativeTokenPrice > 0 && (
-                    <span className="text-muted-foreground text-[15px] font-normal">
+                    <span className="text-muted-foreground text-body">
                       ≈ ${(Number(singleValue) * nativeTokenPrice).toFixed(2)}
                     </span>
                   )}
@@ -297,7 +302,9 @@ export const TransactionDialog = ({
             )}
 
             {/* From / On behalf of / To */}
-            <div className="border-border rounded-box flex flex-col gap-2 border p-3">
+            {/* 12 above the connector and 12 below it — the spec's two stacked 12s. Its own frame
+                has no connector, so there the same rule reads as a single 24 gap. */}
+            <div className="border-border rounded-box flex flex-col gap-3 border p-3">
               <PartyRow
                 label="From"
                 value={displayWalletAddress}
@@ -355,7 +362,7 @@ export const TransactionDialog = ({
             {/* A certain revert named before signing — or, for a failed lookup, the honest
                 admission that we couldn't check. Only the former disables Confirm. */}
             {permissionProblem && (
-              <div className="px-0.5">
+              <div>
                 <InlineWarning
                   text={PERMISSION_PROBLEM_TEXT[permissionProblem].text}
                   detail={PERMISSION_PROBLEM_TEXT[permissionProblem].detail}
@@ -365,7 +372,7 @@ export const TransactionDialog = ({
 
             {/* Reverts but gas estimated fine, so it stays submittable. */}
             {softRevertWarning && (
-              <div className="px-0.5">
+              <div>
                 <InlineWarning
                   text="Transaction is likely to fail"
                   detail="Simulation shows this transaction reverting on-chain. You can still submit it, but it will probably fail and consume gas."
@@ -395,7 +402,7 @@ export const TransactionDialog = ({
                   amount={singleValue}
                   symbol={nativeSymbol}
                   price={nativeTokenPrice}
-                  className="text-foreground font-mono text-[13px] font-semibold"
+                  className="text-foreground text-value font-mono font-semibold"
                 />
               </Row>
             )}
@@ -418,7 +425,7 @@ export const TransactionDialog = ({
 
             {/* Batch steps */}
             {!isSingleTransaction && (
-              <Accordion type="multiple" className="space-y-2.5">
+              <Accordion type="multiple" className="space-y-3">
                 {transactions.map((transaction, index) => (
                   <BatchStep
                     key={index}
@@ -438,7 +445,7 @@ export const TransactionDialog = ({
           </div>
 
           {/* Pinned fee row + actions */}
-          <div className="border-border flex-none space-y-3 border-t px-6 py-3.5">
+          <div className="border-border/40 flex-none space-y-2 border-t px-6 pb-5 pt-3">
             <NetworkFeeRow
               blockReason={feeBlockReason}
               fundsShortfallDetail={
@@ -464,20 +471,23 @@ export const TransactionDialog = ({
               disabled={isProcessing}
             />
 
-            {/* Actions */}
+            {/* Actions. The spec gives Confirm the wider half — 128 / 165 of the content width.
+                `font-semibold` is repeated even though `text-button` carries weight 600: Button's
+                base sets `font-medium`, which lives in a different tailwind-merge group and so
+                survives the merge to win on source order. */}
             <div className="flex gap-2">
               <Button
                 variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box text-button h-10 flex-[44] font-semibold focus-visible:ring-1"
               >
                 Cancel
               </Button>
               <Button
                 onClick={onConfirm}
                 disabled={!canConfirm}
-                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box text-button h-10 flex-[56] font-semibold focus-visible:ring-1"
               >
                 {blockReason === 'funds' && !permissionBlocks
                   ? 'Insufficient Funds'

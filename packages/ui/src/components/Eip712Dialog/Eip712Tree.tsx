@@ -238,7 +238,7 @@ function LeafValue({
           // Self-explanatory (Unlimited / No expiry) — icon only, no note.
           <TriangleAlert className={`size-3 flex-none ${toneClass}`} strokeWidth={2} />
         ))}
-      <span className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${toneClass}`}>{display}</span>
+      <span className={`text-body-xs min-w-0 break-all text-right font-mono font-medium ${toneClass}`}>{display}</span>
       {copyValue && <CopyButton value={copyValue} size={12} resetAfterMs={1500} label="Copy value" />}
     </span>
   );
@@ -296,35 +296,36 @@ export function Eip712Tree({ typedData }: { typedData: TypedData }) {
 
   return (
     <div className="border-border rounded-box overflow-hidden border">
-      <div className="border-border border-b px-[10.5px] py-[7.5px]">
-        <span className="text-muted-foreground font-mono text-[9px] font-semibold uppercase tracking-[0.11em]">
-          {typedData.primaryType}
-        </span>
+      <div className="border-border/40 border-b px-3 py-2">
+        <span className="text-muted-foreground text-label font-mono uppercase">{typedData.primaryType}</span>
       </div>
       <div>
         {rows.map((r, i) => {
           const pad = r.depth * INDENT;
-          const border = i === 0 ? '' : 'border-foreground/[0.06] border-t';
+          const border = i === 0 ? '' : 'border-border/40 border-t';
           if (r.kind === 'group') {
             const open = !collapsed.has(r.id);
             return (
               <button
                 key={r.id}
                 onClick={() => toggle(r.id)}
-                className={`hover:bg-foreground/[0.03] relative flex w-full items-center gap-1.5 py-[7.5px] pr-[10.5px] text-left ${border}`}
+                className={`hover:bg-foreground/[0.03] relative flex w-full items-center gap-1.5 py-2 pr-3 text-left ${border}`}
                 style={{ paddingLeft: 9 + pad }}
               >
                 <Spines depth={r.depth} />
                 <Caret open={open} />
-                <span className="text-foreground/90 font-mono text-[9px] font-medium">{r.label}</span>
+                <span className="text-foreground/90 text-code font-mono font-medium">{r.label}</span>
               </button>
             );
           }
           return (
-            <div key={r.id} className={`relative py-[7px] pl-[9px] pr-[10.5px] ${border}`}>
+            <div key={r.id} className={`relative py-2 pl-2 pr-3 ${border}`}>
               <Spines depth={r.depth} />
               <div className="flex items-center gap-1.5" style={{ paddingLeft: pad }}>
-                <span className="text-muted-foreground flex-none font-mono text-[9px] font-medium">{r.label}</span>
+                <span className="text-muted-foreground text-code flex-none font-mono font-medium">{r.label}</span>
+                {/* 7px is below the 9px floor every type role observes — kept because this badge
+                    carries the Solidity type beside a dense tree row, where the role's 9px pushes
+                    the row taller. The only sub-9px value in the package; see tailwind.config.js. */}
                 {r.badge && (
                   <span className="text-muted-foreground/70 bg-foreground/5 rounded-xs flex-none px-1 py-px font-mono text-[7px] font-medium">
                     {r.badge}

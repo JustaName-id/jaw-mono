@@ -13,7 +13,7 @@ import { SiweDialogProps } from './types';
 import { SUPPORTED_CHAINS } from '@jaw.id/core';
 import { useReverseIdentity } from '../../hooks/useReverseIdentity';
 import { dateTone } from '../../utils/displayFormat';
-import { parseSiweMessage } from '../../utils/siwe';
+import { bestEffortSiweAddress, parseSiweMessage } from '../../utils/siwe';
 import { formatAddress } from '../../utils/formatAddress';
 import { AppAvatar } from '../AppAvatar';
 import { CopyButton } from '../CopyButton';
@@ -39,10 +39,8 @@ function Field({
   const warnText = warningTone === 'warning' ? 'text-amber-600 dark:text-amber-500' : 'text-destructive';
   const warnIcon = warningTone === 'warning' ? 'text-amber-500' : 'text-destructive';
   return (
-    <div className="border-foreground/[0.06] flex items-center justify-between gap-2.5 border-t px-[11.5px] py-[8.5px] first:border-t-0">
-      <span className="text-muted-foreground flex-none font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-        {label}
-      </span>
+    <div className="border-border/40 flex items-center justify-between gap-3 border-t px-3 py-2 first:border-t-0">
+      <span className="text-muted-foreground text-label flex-none font-mono uppercase">{label}</span>
       <span className="flex min-w-0 items-center justify-end gap-1.5">
         {warning && (
           <Tooltip>
@@ -57,7 +55,7 @@ function Field({
           </Tooltip>
         )}
         <span
-          className={`min-w-0 break-all text-right font-mono text-[10px] font-medium ${warning ? warnText : 'text-foreground'}`}
+          className={`text-body-xs min-w-0 break-all text-right font-mono font-medium ${warning ? warnText : 'text-foreground'}`}
         >
           {value}
         </span>
@@ -90,6 +88,10 @@ export const SiweDialog = ({
   warningMessage,
 }: SiweDialogProps) => {
   const parsed = useMemo(() => parseSiweMessage(message), [message]);
+  // Falls back to a shape-checked read when the parse fails. Without it the mismatch advisory below
+  // silently evaluates to false on a message that detects as SIWE but doesn't parse — and the dapp
+  // writes the message, so it would choose whether the advisory appears.
+  const declaredAddress = useMemo(() => parsed?.address ?? bestEffortSiweAddress(message), [parsed, message]);
 
   // "Sign In as" = the CONNECTED account (whose key signs) — safe to reverse-resolve to an
   // ENS name + avatar. The MESSAGE's declared address is resolved separately for the
@@ -101,14 +103,14 @@ export const SiweDialog = ({
     mainnetRpcUrl
   );
   const displayName = resolvedName || formatAddress(signerAddress);
-  const { name: messageAccountName } = useReverseIdentity(parsed?.address || undefined, parsed?.chainId, mainnetRpcUrl);
+  const { name: messageAccountName } = useReverseIdentity(declaredAddress || undefined, parsed?.chainId, mainnetRpcUrl);
   const hasError = siweStatus.includes('Error');
 
   // The message names an account; the signature is produced by the connected
   // account. If they differ, the signature won't verify for the named account —
   // surface it (advisory, not a hard gate).
   const addressMismatch =
-    !!accountAddress && !!parsed?.address && accountAddress.toLowerCase() !== parsed.address.toLowerCase();
+    !!accountAddress && !!declaredAddress && accountAddress.toLowerCase() !== declaredAddress.toLowerCase();
 
   // EIP-4361 requires the nonce to be at least 8 alphanumeric chars; a shorter one
   // means the site's replay protection is weak. Advisory (amber), not a hard gate.
@@ -157,17 +159,20 @@ export const SiweDialog = ({
     warning?: string;
     warningTone?: 'danger' | 'warning';
   }> = [];
+  // The Account row is built from `declaredAddress`, so it survives a failed parse — otherwise the
+  // mismatch advisory would compute correctly and then have nowhere to render, which is how it went
+  // missing before. Everything below it still requires a parse: those values are only trustworthy
+  // when the whole message read cleanly.
+  if (declaredAddress)
+    fields.push({
+      label: 'Account',
+      value: messageAccountName || formatAddress(declaredAddress),
+      copyValue: declaredAddress,
+      warning: addressMismatch
+        ? "This request names a different account than the one you're connected with, so the signature won't be valid for it."
+        : undefined,
+    });
   if (parsed) {
-    const account = parsed.address;
-    if (account)
-      fields.push({
-        label: 'Account',
-        value: messageAccountName || formatAddress(account),
-        copyValue: account,
-        warning: addressMismatch
-          ? "This request names a different account than the one you're connected with, so the signature won't be valid for it."
-          : undefined,
-      });
     if (parsed.uri) fields.push({ label: 'URL', value: parsed.uri });
     if (parsed.version) fields.push({ label: 'Version', value: parsed.version });
     if (parsed.chainId) {
@@ -230,18 +235,19 @@ export const SiweDialog = ({
             {/* Generic wallet-chrome line describing the action. The dApp's own
                 statement text is NOT shown here — it goes in a quarantined,
                 labelled box in the scroll area so it can't masquerade as chrome. */}
-            <p className="text-muted-foreground mt-2 pl-2.5 text-[10px] leading-[1.5]">
+            <p className="text-muted-foreground text-body-xs mt-2 pl-3 leading-normal">
               A site wants you to sign in to prove you own this account.
             </p>
           </div>
 
           {/* Scrollable content (block layout so children overflow, not shrink). */}
-          <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-3">
+          <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-6 pb-3 pt-3">
             {/* Unparseable → no checks ran; tell the user plainly, raw message shown below. */}
             {parseFailed && (
               <div className="border-destructive/30 bg-destructive/10 rounded-box flex items-start gap-2 border p-3">
+                {/* mt-0.5: optical nudge onto the first text line, not spacing rhythm. */}
                 <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
-                <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">
+                <p className="text-destructive text-body-sm min-w-0">
                   We couldn't read the full sign-in request. Review the raw message below carefully before signing.
                 </p>
               </div>
@@ -251,7 +257,7 @@ export const SiweDialog = ({
                 attacker-supplied text is unmistakably content, never chrome. */}
             {parsed?.statement && (
               <div className="border-border bg-foreground/[0.03] rounded-box border p-3">
-                <p className="text-foreground whitespace-pre-wrap break-words text-[11px] leading-[1.5]">
+                <p className="text-foreground text-body-sm whitespace-pre-wrap break-words leading-normal">
                   {parsed.statement}
                 </p>
               </div>
@@ -273,7 +279,7 @@ export const SiweDialog = ({
             ) : (
               // Fallback: message didn't parse as SIWE — show it raw.
               <div className="border-border rounded-box border p-3">
-                <p className="text-foreground whitespace-pre-wrap break-words font-mono text-[10px] leading-[1.6]">
+                <p className="text-foreground text-body-xs whitespace-pre-wrap break-words font-mono leading-relaxed">
                   {message || 'No message provided'}
                 </p>
               </div>
@@ -283,12 +289,10 @@ export const SiweDialog = ({
                 Security-relevant, so listed explicitly rather than hidden. */}
             {parsed?.resources && parsed.resources.length > 0 && (
               <div className="border-border rounded-box border p-3">
-                <span className="text-muted-foreground font-mono text-[8px] font-semibold uppercase tracking-[0.13em]">
-                  Resources
-                </span>
-                <div className="mt-1.5 flex flex-col gap-1">
+                <span className="text-muted-foreground text-label font-mono uppercase">Resources</span>
+                <div className="mt-2 flex flex-col gap-1">
                   {parsed.resources.map((r, i) => (
-                    <span key={i} className="text-foreground break-all font-mono text-[10px] leading-[1.5]">
+                    <span key={i} className="text-foreground text-body-xs break-all font-mono leading-normal">
                       {r}
                     </span>
                   ))}
@@ -300,7 +304,7 @@ export const SiweDialog = ({
             {fields.length > 0 && (
               <details className="border-border rounded-chip group overflow-hidden border [&_summary::-webkit-details-marker]:hidden">
                 <summary className="hover:bg-foreground/[0.03] flex cursor-pointer list-none items-center justify-between px-3 py-2">
-                  <span className="text-muted-foreground text-[11px] font-medium">Message text</span>
+                  <span className="text-muted-foreground text-body-sm font-medium">Message text</span>
                   <svg
                     className="text-muted-foreground h-3 w-3 transition-transform group-open:rotate-180"
                     viewBox="0 0 24 24"
@@ -313,8 +317,8 @@ export const SiweDialog = ({
                     <path d="M6 9l6 6 6-6" />
                   </svg>
                 </summary>
-                <div className="border-border border-t p-3">
-                  <p className="text-muted-foreground whitespace-pre-wrap break-words font-mono text-[9px] leading-[1.6]">
+                <div className="border-border/40 border-t p-3">
+                  <p className="text-muted-foreground text-code whitespace-pre-wrap break-words font-mono leading-relaxed">
                     {message}
                   </p>
                 </div>
@@ -332,36 +336,37 @@ export const SiweDialog = ({
             {warningMessage && (
               <div className="border-destructive/30 bg-destructive/10 rounded-box border p-3">
                 <div className="flex items-start gap-2">
+                  {/* mt-0.5: optical nudge onto the first text line, not spacing rhythm. */}
                   <TriangleAlert className="text-destructive mt-0.5 h-3.5 w-3.5 flex-none" strokeWidth={2} />
-                  <p className="text-destructive min-w-0 text-[11px] leading-[1.45]">{warningMessage}</p>
+                  <p className="text-destructive text-body-sm min-w-0">{warningMessage}</p>
                 </div>
-                <label htmlFor={ackId} className="mt-2.5 flex cursor-pointer items-center gap-2">
+                <label htmlFor={ackId} className="mt-3 flex cursor-pointer items-center gap-2">
                   <Checkbox
                     id={ackId}
                     checked={acknowledged}
                     onCheckedChange={(checked) => setAcknowledged(checked === true)}
                   />
-                  <span className="text-destructive text-[11px] font-medium">I accept the risk</span>
+                  <span className="text-destructive text-body-sm font-medium">I accept the risk</span>
                 </label>
               </div>
             )}
           </div>
 
           {/* Pinned actions */}
-          <div className="border-border flex-none border-t px-6 py-3.5">
+          <div className="border-border/40 flex-none border-t px-6 pb-5 pt-3">
             <div className="flex gap-2">
               <Button
                 variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box text-button h-10 flex-[44] font-semibold focus-visible:ring-1"
               >
                 Cancel
               </Button>
               <Button
                 onClick={onSign}
                 disabled={!canSign || (!!warningMessage && !acknowledged)}
-                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box text-button h-10 flex-[56] font-semibold focus-visible:ring-1"
               >
                 Sign In
               </Button>

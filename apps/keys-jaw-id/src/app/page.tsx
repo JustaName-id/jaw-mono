@@ -26,7 +26,7 @@ import type { RPCRequestMessage, RPCResponseMessage, MessageID } from '@jaw.id/c
 import { RECONNECT_REQUIRED } from '@jaw.id/core';
 import type { Chain as chain } from '@jaw.id/core';
 import { extractTransactionData, type WalletSendCallsReturn, type EthSendTransactionReturn } from '../lib/tx-handler';
-import { isSiweMessage, parseSiweMessage, getSiweOriginWarning, OnboardingSkeleton } from '@jaw.id/ui';
+import { isSiweMessage, getSiweOriginWarning, getSiweOriginWarningFromMessage, OnboardingSkeleton } from '@jaw.id/ui';
 import { applyDappTheme } from '../lib/apply-dapp-theme';
 import { createSiweMessage } from 'viem/siwe';
 import { ChainId } from '@justaname.id/sdk';
@@ -831,11 +831,9 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
 
       // Render SiweModal for SIWE messages, SignatureModal for regular messages
       if (isSiwe) {
-        // Parse-gated by design; see parseSiweMessage for the tradeoff.
-        const parsedSiwe = parseSiweMessage(messageToSign);
-        const siweWarning = parsedSiwe
-          ? getSiweOriginWarning(pendingRequest.origin, { domain: parsedSiwe.domain, uri: parsedSiwe.uri })
-          : undefined;
+        // Deliberately not gated on a successful parse: this warning carries the mandatory
+        // acknowledgement checkbox, and a message can detect as SIWE while failing to parse.
+        const siweWarning = getSiweOriginWarningFromMessage(pendingRequest.origin, messageToSign);
         return (
           // Keyed by request — see TransactionModal above.
           <SiweModal
@@ -1476,6 +1474,12 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
                 await pendingRequest.onApprove(response);
                 // Delivery confirmed — show the tick (held through the handoff + beat).
                 setSignDelivered(true);
+                // Marked here, NOT left to the finishDeliveredFlow() below: the handoff is awaited
+                // in between, and across that await the listener's reset guard sees neither a
+                // terminal state nor flowDoneRef, so a request arriving in the gap is not cleared.
+                // The continuation would then land on the new request's screen and close the popup
+                // with it unanswered.
+                flowDoneRef.current = true;
                 // Only after approval (never on mere authentication, which the
                 // user may still cancel): let the SDK persist the account hint
                 // dApp-side, so the next embedded visit can show "Continue as"
@@ -1537,6 +1541,10 @@ function KeysJawIdAppContent({ communicator }: { communicator: PopupCommunicator
               };
 
               await pendingRequest.onApprove(response);
+              // Same reason as the SIWE path above: the response is delivered, so mark the flow
+              // done before the awaited handoff rather than leaving it to the setState('success')
+              // that only runs after it.
+              flowDoneRef.current = true;
               // Only after approval (never on mere authentication, which the
               // user may still cancel): let the SDK persist the account hint
               // dApp-side, so the next embedded visit can show "Continue as"

@@ -152,7 +152,7 @@ export const Eip712Dialog = ({
           {/* Scrollable content. Block layout (not flex-col) is deliberate: a flex
                 column shrinks its children to fit instead of letting them overflow, so
                 the region would never scroll. space-y gives the gaps. */}
-          <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-2.5 overflow-y-auto px-6 pb-2.5 pt-2.5">
+          <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-6 pb-3 pt-3">
             {!typedData ? (
               <div className="bg-destructive/10 border-destructive/20 rounded-box border p-4">
                 <p className="text-destructive text-sm">Failed to parse typed data</p>
@@ -192,13 +192,13 @@ export const Eip712Dialog = ({
           </div>
 
           {/* Pinned actions */}
-          <div className="border-border flex-none border-t px-6 py-3.5">
+          <div className="border-border/40 flex-none border-t px-6 pb-5 pt-3">
             <div className="flex gap-2">
               <Button
                 variant="secondary"
                 onClick={onCancel}
                 disabled={isProcessing}
-                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box text-button h-10 flex-[44] font-semibold focus-visible:ring-1"
               >
                 Cancel
               </Button>
@@ -207,7 +207,7 @@ export const Eip712Dialog = ({
                 // The screen owns this invariant: never offer to sign what it couldn't
                 // render, whatever `canSign` a host passes.
                 disabled={!canSign || !typedData}
-                className="rounded-box h-11 flex-1 text-[13px] font-semibold focus-visible:ring-1"
+                className="rounded-box text-button h-10 flex-[56] font-semibold focus-visible:ring-1"
               >
                 Sign
               </Button>

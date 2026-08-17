@@ -1,5 +1,6 @@
 import { ReactElement } from 'react';
 import { FeeTokenOption } from '../FeeTokenSelector';
+import type { RevocationProblem } from '../../utils/permissionExecution';
 
 export interface SpendPermission {
   /** Scaled by the token's decimals, or raw base units when `decimalsUnknown`. */
@@ -31,6 +32,11 @@ export interface PermissionDialogProps {
 
   // Permission details
   permissionId?: string; // Only for revoke mode
+  /**
+   * Revoke only: a named reason this revocation would revert or achieve nothing, resolved from the
+   * fetched permission. The mirror of the transaction screen's `permissionProblem`.
+   */
+  revocationProblem?: RevocationProblem | null;
   spenderAddress: string;
   /** The granting account — shown as "From", and seeds the processing screen's avatar. */
   accountAddress?: string;

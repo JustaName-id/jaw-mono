@@ -22,7 +22,6 @@ import {
   JAW_RPC_URL,
   JAW_PAYMASTER_URL,
   SubnameTextRecordCapabilityRequest,
-  getPermissionFromRelay,
   handleGetCapabilitiesRequest,
   buildGrantPermissionCall,
   buildRevokePermissionCall,
@@ -59,10 +58,11 @@ import { useChainIconURI } from '../hooks/useChainIconURI';
 import { useGasEstimation } from '../hooks/useGasEstimation';
 import { useAssetPreview } from '../hooks/useAssetPreview';
 import { usePermissionExecution } from '../hooks/usePermissionExecution';
+import { usePermissionRevocation } from '../hooks/usePermissionRevocation';
 import { useFunctionSignatures } from '../hooks/useFunctionSignatures';
 import { fetchTokenBalance, isNativeToken } from '../utils/tokenBalance';
 import { getPublicClient } from '../utils/publicClient';
-import { getSiweOriginWarning, isSiweMessage, parseSiweMessage, hexToUtf8 } from '../utils/siwe';
+import { getSiweOriginWarning, getSiweOriginWarningFromMessage, isSiweMessage, hexToUtf8 } from '../utils/siwe';
 import { PortalContainerContext } from '../lib/utils';
 import type { JawTheme } from '@jaw.id/core';
 import { resolveTheme } from '../theme/resolve-theme.js';
@@ -435,6 +435,17 @@ export class ReactUIHandler implements UIHandler {
     });
   }
 
+  /**
+   * Every wrapper below is keyed by `request.id` as belt-and-braces, not because anything is
+   * reused today: `request()` mounts a fresh root in a fresh container per request, so each
+   * dialog already gets a brand-new component instance.
+   *
+   * The keys exist for a future refactor that keeps one root mounted across requests. Each
+   * wrapper holds request-scoped state — a fetched permission, token metadata, a loading flag —
+   * that a prop change would not reset, so in a shared-root world an unkeyed wrapper would render
+   * a new request against the previous one's data. The popup's `page.tsx` is that world (one tree
+   * mounted across requests) and relies on the same keying for correctness.
+   */
   private renderDialog(
     request: UIRequest,
     onApprove: (data: any) => void,
@@ -445,6 +456,7 @@ export class ReactUIHandler implements UIHandler {
       case 'wallet_connect':
         return (
           <OnboardingDialogWrapper
+            key={request.id}
             request={request as ConnectUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -461,6 +473,7 @@ export class ReactUIHandler implements UIHandler {
         if (isSiweMessage(signRequest.data.message)) {
           return (
             <SiweDialogWrapper
+              key={request.id}
               request={signRequest}
               onApprove={onApprove}
               onReject={onReject}
@@ -474,6 +487,7 @@ export class ReactUIHandler implements UIHandler {
         }
         return (
           <SignatureDialogWrapper
+            key={request.id}
             request={signRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -499,6 +513,7 @@ export class ReactUIHandler implements UIHandler {
           if (isSiweMessage(message)) {
             return (
               <SiweDialogWrapper
+                key={request.id}
                 request={
                   {
                     ...walletSignRequest,
@@ -522,6 +537,7 @@ export class ReactUIHandler implements UIHandler {
           }
           return (
             <SignatureDialogWrapper
+              key={request.id}
               request={
                 {
                   ...walletSignRequest,
@@ -549,6 +565,7 @@ export class ReactUIHandler implements UIHandler {
           const typedDataJson = typeof typedDataRaw === 'string' ? typedDataRaw : JSON.stringify(typedDataRaw);
           return (
             <Eip712DialogWrapper
+              key={request.id}
               request={
                 {
                   ...walletSignRequest,
@@ -578,6 +595,7 @@ export class ReactUIHandler implements UIHandler {
       case 'eth_signTypedData_v4':
         return (
           <Eip712DialogWrapper
+            key={request.id}
             request={request as TypedDataUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -592,6 +610,7 @@ export class ReactUIHandler implements UIHandler {
       case 'wallet_sendCalls':
         return (
           <TransactionDialogWrapper
+            key={request.id}
             request={request as TransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -607,6 +626,7 @@ export class ReactUIHandler implements UIHandler {
       case 'eth_sendTransaction':
         return (
           <SendTransactionDialogWrapper
+            key={request.id}
             request={request as SendTransactionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -622,6 +642,7 @@ export class ReactUIHandler implements UIHandler {
       case 'wallet_grantPermissions':
         return (
           <PermissionDialogWrapper
+            key={request.id}
             request={request as PermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -637,6 +658,7 @@ export class ReactUIHandler implements UIHandler {
       case 'wallet_revokePermissions':
         return (
           <RevokePermissionDialogWrapper
+            key={request.id}
             request={request as RevokePermissionUIRequest}
             onApprove={onApprove}
             onReject={onReject}
@@ -2667,12 +2689,14 @@ function SiweDialogWrapper({
     return match ? match[1] : 'dApp';
   }, [decodedMessage]);
 
-  // Gated on a successful parse by design — an unreadable message gets the raw text and
-  // no claims. Tradeoff: malforming the field block suppresses this warning.
-  const warningMessage = useMemo(() => {
-    const parsed = parseSiweMessage(decodedMessage);
-    return parsed ? getSiweOriginWarning(origin, { domain: parsed.domain, uri: parsed.uri }) : undefined;
-  }, [decodedMessage, origin]);
+  // NOT gated on a successful parse. The parse is strict on purpose, but this warning carries
+  // the mandatory acknowledgement checkbox, so gating it let a dapp drop the hard block by
+  // writing a message that detects as SIWE and then fails to parse (a tab after `URI:` is
+  // enough). The helper falls back to a best-effort domain/URI read.
+  const warningMessage = useMemo(
+    () => getSiweOriginWarningFromMessage(origin, decodedMessage),
+    [decodedMessage, origin]
+  );
 
   const handleSign = async () => {
     setIsProcessing(true);
@@ -2761,8 +2785,10 @@ function RevokePermissionDialogWrapper({
   const [open, setOpen] = useState(true);
   const [isProcessing, setIsProcessing] = useState(false);
   const [status, setStatus] = useState<string>('');
-  const [isLoadingPermissionDetails, setIsLoadingPermissionDetails] = useState(true);
-  const [fetchedPermissionData, setFetchedPermissionData] = useState<any>(null);
+  // Covers ONLY the token metadata; whether the permission itself is in flight comes from the hook.
+  // Kept apart deliberately: one flag covering both is never re-armed when the request changes, so a
+  // second revoke arriving without a remount left the gate open on an empty permission.
+  const [isLoadingTokenMetadata, setIsLoadingTokenMetadata] = useState(true);
   const [tokenInfoMap, setTokenInfoMap] = useState<TokenInfoMap>({});
   const [account, setAccount] = useState<Account | null>(null);
   const [feeTokens, setFeeTokens] = useState<FeeTokenOption[]>([]);
@@ -2772,6 +2798,19 @@ function RevokePermissionDialogWrapper({
   const submittingRef = useRef(false);
 
   const chainId = request.data.chainId || defaultChainId || 1;
+
+  // Owns the relay fetch, the 404-vs-transport split and the validation. Shared with the keys popup
+  // so both revoke screens read the same `from` — they drifted apart when this lived twice.
+  const {
+    permission: fetchedPermissionData,
+    loading: isLoadingPermission,
+    problem: revocationProblem,
+  } = usePermissionRevocation({
+    permissionId: request.data.permissionId as `0x${string}` | undefined,
+    apiKey,
+    chainId,
+    from: request.data.address,
+  });
   const viemChain = SUPPORTED_CHAINS.find((c) => c.id === chainId);
   const networkName = viemChain?.name || 'Unknown Network';
 
@@ -2871,18 +2910,22 @@ function RevokePermissionDialogWrapper({
     [chainId, apiKey, computedPaymasterUrl]
   );
 
-  // Fetch permission details from relay
+  // Token metadata for the spend tokens and any call target that turns out to be a token, keyed on
+  // the permission `usePermissionRevocation` resolved. `isLoadingTokenMetadata` stays true until
+  // this lands as well, because the Confirm gate reads it and a spend amount must never render
+  // scaled by a guessed decimals.
   useEffect(() => {
-    if (!request.data.permissionId || !apiKey) {
-      setIsLoadingPermissionDetails(false);
+    const permData = fetchedPermissionData;
+    if (!permData) {
+      // The hook reached a terminal problem, so no permission is coming and nothing gates on it.
+      if (revocationProblem) setIsLoadingTokenMetadata(false);
       return;
     }
 
-    const fetchPermissionDetails = async () => {
+    let cancelled = false;
+    setIsLoadingTokenMetadata(true);
+    const fetchTokenInfo = async () => {
       try {
-        const permData = await getPermissionFromRelay(request.data.permissionId as `0x${string}`, apiKey);
-        setFetchedPermissionData(permData);
-
         // Token info for spend tokens and for any call target that turns out to be a token.
         const lookupAddresses = Array.from(
           new Set([
@@ -2936,15 +2979,20 @@ function RevokePermissionDialogWrapper({
           );
           setTokenInfoMap(newTokenInfoMap);
         }
-        setIsLoadingPermissionDetails(false);
       } catch (error) {
-        console.error('❌ Failed to fetch permission details:', error);
-        setIsLoadingPermissionDetails(false);
+        // Token metadata is enrichment: a failed read renders the raw allowance rather than
+        // blocking, so it must not become a revocation problem.
+        console.error('❌ Failed to fetch token info for permission:', error);
+      } finally {
+        if (!cancelled) setIsLoadingTokenMetadata(false);
       }
     };
 
-    fetchPermissionDetails();
-  }, [request.data.permissionId, apiKey, chainId, chain.rpcUrl, viemChain]);
+    fetchTokenInfo();
+    return () => {
+      cancelled = true;
+    };
+  }, [fetchedPermissionData, revocationProblem, chainId, chain.rpcUrl, viemChain]);
 
   // Fetch fee tokens for ERC-20 paymaster support
   useEffect(() => {
@@ -3111,7 +3159,9 @@ function RevokePermissionDialogWrapper({
   // Expiry date from fetched permission
   const expiryDate = useMemo(() => {
     if (!fetchedPermissionData) return '';
-    const endTimestamp = parseInt(fetchedPermissionData.end, 10);
+    // `Number`, not `parseInt`: the hook returns the relay's own typed record, where `end` may
+    // already be a number.
+    const endTimestamp = Number(fetchedPermissionData.end);
     return formatExpiryDate(endTimestamp);
   }, [fetchedPermissionData]);
 
@@ -3178,6 +3228,7 @@ function RevokePermissionDialogWrapper({
       }}
       mode="revoke"
       permissionId={request.data.permissionId}
+      revocationProblem={revocationProblem}
       spenderAddress={spenderAddress}
       accountAddress={request.data.address}
       origin={typeof window !== 'undefined' ? window.location.origin : 'unknown'}
@@ -3194,7 +3245,8 @@ function RevokePermissionDialogWrapper({
       onCancel={handleCancel}
       isProcessing={isProcessing}
       status={status}
-      isLoadingTokenInfo={isLoadingPermissionDetails}
+      // Either half closes the gate: no Confirm until the permission AND its metadata land.
+      isLoadingTokenInfo={isLoadingPermission || isLoadingTokenMetadata}
       mainnetRpcUrl={getMainnetRpcUrl(apiKey)}
       // Gas estimation props
       gasFee={gasFee}

@@ -4,7 +4,7 @@ import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Skeleton } from '../ui/skeleton';
 import { Spinner } from '../ui/spinner';
-import { ArrowRightLeft, ChevronLeft, ChevronRight, Fingerprint, ScanFace } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Fingerprint, ScanFace, Users } from 'lucide-react';
 import { DialogShell } from '../DialogShell';
 import { AccountAvatar } from '../AccountAvatar';
 import { OnboardingDialogProps, LocalStorageAccount } from './types';
@@ -29,13 +29,22 @@ type CreateAccountFormProps = Pick<
   | 'apiKey'
   | 'supportedChains'
   | 'subnameTextRecords'
->;
+> & {
+  /** Primary on the sign-up view (create is the main action), secondary on sign-in. */
+  buttonVariant?: 'default' | 'secondary';
+};
 
 /**
  * Font-size class for an account name, stepped down by length so long ENS
  * names render in FULL — an ellipsized name misrepresents the identity.
  * `base` is the size used for comfortably short names; truncation remains only
  * as a backstop for pathological lengths (60+ chars).
+ *
+ * Deliberately raw sizes rather than the design-spec type roles: every role
+ * carries a weight, line-height and tracking alongside its size, so stepping
+ * through them would also step the weight — a long name would render lighter
+ * than a short one. This ladder must change size and nothing else, leaving the
+ * caller's own `font-*` intact.
  */
 function nameFitClass(name: string, base: string): string {
   if (name.length > 36) return 'text-[9px]';
@@ -48,11 +57,9 @@ function nameFitClass(name: string, base: string): string {
 /** Hairline divider with a small mono uppercase label ("NEW TO JAW?", "OR"). */
 function MonoDivider({ label, className }: { label: string; className?: string }) {
   return (
-    <div className={cn('flex items-center gap-2.5', className)}>
+    <div className={cn('flex items-center gap-3', className)}>
       <span className="bg-border h-px flex-1" />
-      <span className="text-muted-foreground font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-        {label}
-      </span>
+      <span className="text-muted-foreground text-label font-mono uppercase">{label}</span>
       <span className="bg-border h-px flex-1" />
     </div>
   );
@@ -73,6 +80,7 @@ function CreateAccountForm({
   apiKey,
   supportedChains,
   subnameTextRecords,
+  buttonVariant = 'secondary',
 }: CreateAccountFormProps) {
   const [isValid, setIsValid] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -216,7 +224,9 @@ function CreateAccountForm({
         placeholder="username"
         value={username}
         onChange={(e) => setUsername(e.target.value)}
-        className="bg-muted rounded-box h-11 font-mono text-[13px]"
+        // `md:text-body` too: the Input primitive ships `md:text-sm`, and tailwind-merge keeps a
+        // modifier-prefixed class in its own group, so the bare role loses above 768px.
+        className="bg-muted rounded-box text-body md:text-body h-11 font-mono"
         // Prevent password-manager extensions (1Password, LastPass, Dashlane,
         // Bitwarden) from attaching their inline overlay to this field. Their
         // overlay covers the embedded iframe, which the clickjacking guard
@@ -245,7 +255,7 @@ function CreateAccountForm({
         </div>
       ) : (
         <Button
-          variant="secondary"
+          variant={buttonVariant}
           onClick={async () => {
             try {
               await handleCreateAccountClick();
@@ -254,7 +264,7 @@ function CreateAccountForm({
             }
           }}
           disabled={!isValid || isLoading}
-          className="rounded-box h-11 w-full text-[13px] font-semibold"
+          className="rounded-box text-button h-11 w-full font-semibold"
         >
           <ScanFace className="!h-4 !w-4" />
           Create Account
@@ -262,11 +272,11 @@ function CreateAccountForm({
       )}
       {error && (
         <div className="bg-destructive/10 border-destructive/20 flex flex-col gap-2 overflow-hidden rounded-md border px-2 py-2">
-          <span className="text-destructive-foreground break-all text-xs font-medium">{error}</span>
+          <span className="text-destructive break-all text-xs font-medium">{error}</span>
           <Button
             onClick={() => setError(null)}
             variant="ghost"
-            className="text-destructive-foreground hover:text-destructive-foreground/80 hover:bg-destructive/10 h-6 text-xs"
+            className="text-destructive hover:text-destructive/80 hover:bg-destructive/10 h-6 text-xs"
           >
             Dismiss
           </Button>
@@ -276,7 +286,9 @@ function CreateAccountForm({
   );
 }
 
-type OnboardingView = 'welcome' | 'signin';
+// 'signin' and 'signup' are the same screen with intent-swapped emphasis:
+// sign-in leads with the passkey button, sign-up leads with the create form.
+type OnboardingView = 'welcome' | 'signin' | 'signup';
 
 export function OnboardingDialog({
   accounts,
@@ -303,7 +315,7 @@ export function OnboardingDialog({
     [accounts, lastAuthenticatedCredentialId]
   );
 
-  const [view, setView] = useState<OnboardingView>(defaultAccount && !startInCreate ? 'welcome' : 'signin');
+  const [view, setView] = useState<OnboardingView>(startInCreate ? 'signup' : defaultAccount ? 'welcome' : 'signin');
   const isBusy = loggingInAccount !== null || isImporting || isCreating;
 
   // Addresses for the switch-account chips and avatar resolution. New records
@@ -391,6 +403,10 @@ export function OnboardingDialog({
     return backfillInFlight && !!account.credentialId;
   };
 
+  // Sign-up intent flips the screen's emphasis: create on top as the primary
+  // action, passkey sign-in demoted to a secondary escape hatch below.
+  const isSignUp = view === 'signup';
+
   const createForm = (
     <CreateAccountForm
       onCreateAccount={onCreateAccount}
@@ -403,41 +419,59 @@ export function OnboardingDialog({
       apiKey={apiKey}
       supportedChains={supportedChains}
       subnameTextRecords={subnameTextRecords}
+      buttonVariant={isSignUp ? 'default' : 'secondary'}
     />
   );
 
   const passkeyButton = (
-    <Button onClick={onImportAccount} disabled={isBusy} className="rounded-box h-11 w-full text-[13px] font-semibold">
+    <Button
+      onClick={onImportAccount}
+      disabled={isBusy}
+      variant={isSignUp ? 'secondary' : 'default'}
+      className="rounded-box text-button h-11 w-full font-semibold"
+    >
       <Fingerprint className="!h-4 !w-4" />
-      {isImporting ? 'Opening Passkey...' : 'Sign in with Passkey'}
+      {isImporting ? 'Opening Passkey...' : 'Sign in'}
     </Button>
   );
 
   // Fresh sign-in / create view — also the "Create new account" destination.
-  if (view === 'signin' || !defaultAccount) {
+  if (view !== 'welcome' || !defaultAccount) {
     return (
       <DialogShell>
-        <div className="flex flex-col p-6 pt-7">
-          <h2 className="text-foreground text-[26px] font-bold leading-none tracking-[-0.03em]">
-            Sign <span className="italic">in.</span>
-          </h2>
-          <p className="text-muted-foreground mt-2 text-[13px]">Use a saved passkey, or create a new account.</p>
-
-          <div className="mt-6">{passkeyButton}</div>
-
-          <MonoDivider label="New to JAW?" className="my-5" />
-
-          {createForm}
-
+        <div className="flex flex-col p-6">
           {defaultAccount && (
+            // Top-left escape back to the welcome view, styled as the dialog's
+            // mono uppercase label language. -ml-1 optically aligns the chevron
+            // with the title's left edge.
             <button
               onClick={() => setView('welcome')}
               disabled={isBusy}
-              className="text-muted-foreground hover:text-foreground mx-auto mt-4 flex cursor-pointer items-center gap-1 bg-transparent text-xs font-medium transition-colors"
+              className="text-muted-foreground hover:text-foreground text-label -ml-1 mb-4 flex w-fit cursor-pointer items-center gap-1 bg-transparent font-mono uppercase transition-colors"
             >
               <ChevronLeft className="h-3.5 w-3.5" />
               Back
             </button>
+          )}
+          <h2 className="text-foreground text-title-xl leading-none">
+            Sign <span className="italic">{isSignUp ? 'up.' : 'in.'}</span>
+          </h2>
+          <p className="text-muted-foreground text-body mt-2">
+            {isSignUp ? 'Pick a username to create your account.' : 'Use a saved passkey, or create a new account.'}
+          </p>
+
+          {isSignUp ? (
+            <>
+              <div className="mt-6">{createForm}</div>
+              <MonoDivider label="Already have an account?" className="my-5" />
+              {passkeyButton}
+            </>
+          ) : (
+            <>
+              <div className="mt-6">{passkeyButton}</div>
+              <MonoDivider label="New to JAW?" className="my-5" />
+              {createForm}
+            </>
           )}
         </div>
       </DialogShell>
@@ -447,11 +481,11 @@ export function OnboardingDialog({
   // Welcome-back view — one-tap continue with the last account.
   return (
     <DialogShell>
-      <div className="flex flex-col p-6 pt-7">
-        <h2 className="text-foreground text-[26px] font-bold leading-none tracking-[-0.03em]">
+      <div className="flex flex-col p-6">
+        <h2 className="text-foreground text-title-xl leading-none">
           Welcome <span className="italic">back.</span>
         </h2>
-        <p className="text-muted-foreground mt-2 text-[13px]">Pick up where you left off.</p>
+        <p className="text-muted-foreground text-body mt-2">Pick up where you left off.</p>
 
         <button
           onClick={() => onAccountSelect(defaultAccount)}
@@ -465,10 +499,8 @@ export function OnboardingDialog({
               {/* bg override: the default bg-accent token is near-invisible on this white tile */}
               <Skeleton className="bg-primary-foreground/10 rounded-box h-10 w-10 flex-none" />
               <span className="flex min-w-0 flex-1 flex-col gap-1.5">
-                <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-                  Continue as
-                </span>
-                <Skeleton className="bg-primary-foreground/10 h-3.5 w-36 rounded" />
+                <span className="text-primary-foreground/60 text-label font-mono uppercase">Last used</span>
+                <Skeleton className="bg-primary-foreground/10 rounded-xs h-3.5 w-36" />
               </span>
             </>
           ) : (
@@ -482,10 +514,8 @@ export function OnboardingDialog({
                 size={40}
                 className="rounded-box h-10 w-10"
               />
-              <span className="flex min-w-0 flex-1 flex-col gap-0.5">
-                <span className="text-primary-foreground/60 font-mono text-[9px] font-medium uppercase tracking-[0.14em]">
-                  Continue as
-                </span>
+              <span className="flex min-w-0 flex-1 flex-col gap-1">
+                <span className="text-primary-foreground/60 text-label font-mono uppercase">Last used</span>
                 <span
                   className={cn(
                     'text-primary-foreground truncate font-semibold',
@@ -510,14 +540,14 @@ export function OnboardingDialog({
           onClick={onImportAccount}
           disabled={isBusy}
           variant="secondary"
-          className="rounded-box h-11 w-full text-[13px] font-semibold"
+          className="rounded-box text-button h-11 w-full font-semibold"
         >
-          <ArrowRightLeft className="!h-3.5 !w-3.5" />
-          {isImporting ? 'Opening Passkey...' : 'Switch account'}
+          <Users className="!h-4 !w-4" />
+          {isImporting ? 'Opening Passkey...' : 'Show more accounts'}
         </Button>
 
         <button
-          onClick={onCreateNewAccount ?? (() => setView('signin'))}
+          onClick={onCreateNewAccount ?? (() => setView('signup'))}
           disabled={isBusy}
           className="text-muted-foreground hover:text-foreground mx-auto mt-4 cursor-pointer bg-transparent text-xs font-medium transition-colors"
         >

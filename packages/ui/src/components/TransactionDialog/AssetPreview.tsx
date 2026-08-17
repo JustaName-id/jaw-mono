@@ -55,7 +55,7 @@ function AssetRow({
   const usd = price && price > 0 ? Number(delta.amountFormatted) * price : 0;
 
   const amount = (
-    <span className={`break-all text-right font-mono text-[12px] font-medium ${colorClass}`}>
+    <span className={`text-value break-all text-right font-mono ${colorClass}`}>
       {sign}
       <SubText>{rounded}</SubText>
     </span>
@@ -69,12 +69,12 @@ function AssetRow({
         chainId={chainId}
         address={delta.isNative ? ethAddress : delta.address}
         symbol={symbol}
-        className="size-[21px] flex-none"
+        className="size-token flex-none"
       />
       <div className="flex min-w-0 flex-1 flex-col">
-        <span className="text-foreground truncate text-[12px] font-medium">{symbol}</span>
+        <span className="text-foreground text-symbol truncate">{symbol}</span>
         {!delta.isNative && (
-          <span className="text-muted-foreground flex min-w-0 flex-row items-center gap-1 font-mono text-[10px]">
+          <span className="text-muted-foreground text-body-xs flex min-w-0 flex-row items-center gap-1 font-mono">
             <span className="truncate">{formatAddress(delta.address)}</span>
             <CopyButton value={delta.address} size={10} label="Copy token address" />
           </span>
@@ -94,7 +94,7 @@ function AssetRow({
         ) : (
           amount
         )}
-        {usd > 0 && <span className="text-muted-foreground text-[10px]">{formatUsd(usd)}</span>}
+        {usd > 0 && <span className="text-muted-foreground text-body-xs">{formatUsd(usd)}</span>}
       </div>
     </div>
   );
@@ -129,9 +129,9 @@ function DeltaColumn({
 
   return (
     <div className="border-border rounded-box min-w-0 flex-1 overflow-hidden border">
-      <div className="border-border bg-secondary/40 flex items-center gap-1.5 border-b px-3 py-2">
+      <div className="border-border/40 bg-secondary/40 flex items-center gap-2 border-b p-3">
         <Arrow className={`size-3 flex-none ${out ? 'text-red-400' : 'text-green-400'}`} strokeWidth={2.7} />
-        <span className="text-foreground text-[13px] font-semibold tracking-[-0.02em]">
+        <span className="text-foreground text-heading">
           {/* Under a permission the funds move from the granter, not the signer reading this —
               the subject is dropped and the "On behalf of" row above says whose they are. */}
           {onBehalf ? (out ? 'Sends' : 'Receives') : out ? 'You send' : 'You get'}
@@ -140,14 +140,14 @@ function DeltaColumn({
           <button
             type="button"
             onClick={() => setExpanded((v) => !v)}
-            className="text-muted-foreground hover:text-foreground ml-auto flex flex-none items-center gap-0.5 font-mono text-[10px] font-medium"
+            className="text-muted-foreground hover:text-foreground text-body-xs ml-auto flex flex-none items-center gap-1 font-mono font-medium"
           >
             {expanded ? 'Show less' : `+${overflow}`}
             <ChevronDown className={`size-3 transition-transform ${expanded ? 'rotate-180' : ''}`} strokeWidth={2.2} />
           </button>
         )}
       </div>
-      <div className="flex flex-col gap-3 px-2 py-3">
+      <div className="flex flex-col gap-3 p-2">
         {shown.map((d) => (
           <AssetRow
             key={`${direction}-${d.address}`}
@@ -184,7 +184,7 @@ export const AssetPreview = ({ assetsOut, assetsIn, error, nativeSymbol, chainId
   // Both directions sit side by side (the swap/supply shape); a one-sided change takes
   // the full width rather than leaving a gap.
   return (
-    <div className="flex items-stretch gap-2.5">
+    <div className="flex items-stretch gap-3">
       {assetsOut.length > 0 && <DeltaColumn direction="out" deltas={assetsOut} {...columnProps} />}
       {assetsIn.length > 0 && <DeltaColumn direction="in" deltas={assetsIn} {...columnProps} />}
     </div>

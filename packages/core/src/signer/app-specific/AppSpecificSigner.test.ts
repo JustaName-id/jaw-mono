@@ -527,7 +527,7 @@ describe('AppSpecificSigner', () => {
             const mockResponse: UIResponse = {
                 id: 'test-response-id',
                 approved: true,
-                data: { permissionId: '0xpermission123' },
+                data: { permissionId: '0xabababababababababababababababababababababababababababababababab' },
             };
 
             (mockUIHandler.request as Mock).mockResolvedValue(mockResponse);
@@ -536,7 +536,9 @@ describe('AppSpecificSigner', () => {
             const result = await signer.request(request);
 
             // Assert
-            expect(result).toEqual({ permissionId: '0xpermission123' });
+            expect(result).toEqual({
+                permissionId: '0xabababababababababababababababababababababababababababababababab',
+            });
             expect(mockUIHandler.request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     type: 'wallet_grantPermissions',
@@ -554,7 +556,7 @@ describe('AppSpecificSigner', () => {
         it('should handle wallet_revokePermissions request', async () => {
             // Arrange - Using WalletRevokePermissionsRequest params structure
             const revokeData = {
-                id: '0xpermission123' as `0x${string}`,
+                id: '0xabababababababababababababababababababababababababababababababab' as `0x${string}`,
             };
 
             const request: RequestArguments = {
@@ -570,7 +572,7 @@ describe('AppSpecificSigner', () => {
 
             // Mock the relay permission response with chainId
             (getPermissionFromRelay as Mock).mockResolvedValue({
-                hash: '0xpermission123',
+                hash: '0xabababababababababababababababababababababababababababababababab',
                 account: '0x1234567890123456789012345678901234567890',
                 spender: '0xspender',
                 start: '0',
@@ -588,12 +590,15 @@ describe('AppSpecificSigner', () => {
 
             // Assert
             expect(result).toEqual({ success: true });
-            expect(getPermissionFromRelay).toHaveBeenCalledWith('0xpermission123', 'test-api-key');
+            expect(getPermissionFromRelay).toHaveBeenCalledWith(
+                '0xabababababababababababababababababababababababababababababababab',
+                'test-api-key'
+            );
             expect(mockUIHandler.request).toHaveBeenCalledWith(
                 expect.objectContaining({
                     type: 'wallet_revokePermissions',
                     data: expect.objectContaining({
-                        permissionId: '0xpermission123',
+                        permissionId: '0xabababababababababababababababababababababababababababababababab',
                         address: '0x1234567890123456789012345678901234567890',
                         chainId: 1,
                     }),
@@ -604,7 +609,7 @@ describe('AppSpecificSigner', () => {
         it('should throw error when permission not found in relay', async () => {
             // Arrange
             const revokeData = {
-                id: '0xnonexistent' as `0x${string}`,
+                id: '0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd' as `0x${string}`,
             };
 
             const request: RequestArguments = {
@@ -617,9 +622,12 @@ describe('AppSpecificSigner', () => {
 
             // Act & Assert
             await expect(signer.request(request)).rejects.toThrow(
-                'Permission not found: 0xnonexistent. It may have already been revoked.'
+                'Permission not found: 0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd. It may have already been revoked.'
             );
-            expect(getPermissionFromRelay).toHaveBeenCalledWith('0xnonexistent', 'test-api-key');
+            expect(getPermissionFromRelay).toHaveBeenCalledWith(
+                '0xcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcdcd',
+                'test-api-key'
+            );
             expect(mockUIHandler.request).not.toHaveBeenCalled();
         });
 
@@ -1141,6 +1149,30 @@ describe('AppSpecificSigner', () => {
 
             // The load-bearing assertion: no dialog for a request that cannot succeed.
             expect(mockUIHandler.request).not.toHaveBeenCalled();
+        });
+
+        // A revocation is built entirely from the stored permission, so a request that names no
+        // usable permission cannot succeed. Both signers used to guard the relay lookup with
+        // `if (permissionId)`, which skipped the check for exactly the input that needed it: an
+        // empty id reached the UI, which rendered an empty permission and offered to sign it.
+        it.each([
+            ['missing', undefined],
+            ['an empty string', ''],
+            ['a bare 0x', '0x'],
+            ['too short', '0xdeadbeef'],
+            ['not hex', `0x${'zz'.repeat(32)}`],
+        ])('rejects a revoke id that is %s with -32602 and opens no dialog', async (_label, id) => {
+            await expect(
+                signer.request({
+                    method: 'wallet_revokePermissions',
+                    params: [{ id, address: '0x1234567890123456789012345678901234567890' }],
+                } as never)
+            ).rejects.toMatchObject({ code: -32602 });
+
+            // The load-bearing assertion: no dialog for a request that cannot succeed.
+            expect(mockUIHandler.request).not.toHaveBeenCalled();
+            // And the relay is never consulted for an id that can't be one.
+            expect(getPermissionFromRelay).not.toHaveBeenCalled();
         });
 
         // ERC-7871 wallet_sign 0x01 reaches the same EIP-712 dialog, so it must be

@@ -1,6 +1,38 @@
 import { clsx, type ClassValue } from 'clsx';
 import { createContext } from 'react';
-import { twMerge } from 'tailwind-merge';
+import { extendTailwindMerge } from 'tailwind-merge';
+
+/**
+ * The design-spec type roles from `tailwind.config.js`. tailwind-merge only knows Tailwind's own
+ * `text-xs…text-9xl`, so without this a component's base `text-sm` and an override's `text-heading`
+ * both survive the merge — and since Tailwind emits `.text-sm` *after* our custom keys, the base
+ * silently wins and the token does nothing. Every key added to `fontSize` belongs here too.
+ */
+const FONT_SIZE_ROLES = [
+  'title-xl',
+  'status',
+  'app',
+  'heading',
+  'button',
+  'value',
+  'body',
+  'body-sm',
+  'body-xs',
+  'label',
+  'code',
+  'url',
+  'amount',
+  'amount-lg',
+  'symbol',
+];
+
+const twMerge = extendTailwindMerge({
+  extend: {
+    classGroups: {
+      'font-size': [{ text: FONT_SIZE_ROLES }],
+    },
+  },
+});
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));

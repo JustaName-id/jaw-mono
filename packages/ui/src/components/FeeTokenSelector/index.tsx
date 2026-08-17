@@ -242,7 +242,7 @@ export const FeeTokenSelector = ({
           <div className="flex items-center gap-1">
             <span className={cn('text-xs font-semibold', isSelected && 'text-foreground')}>{token.symbol}</span>
           </div>
-          <div className="text-muted-foreground truncate text-[10px]">
+          <div className="text-muted-foreground text-body-xs truncate">
             Bal:{' '}
             <SubText>{balanceUsd || `${formatBalance(token.balanceFormatted, token.symbol)} ${token.symbol}`}</SubText>
           </div>
@@ -254,7 +254,7 @@ export const FeeTokenSelector = ({
             gasCost.usd ? (
               <>
                 <div className="text-xs font-semibold">{gasCost.usd}</div>
-                <div className="text-muted-foreground text-[10px]">
+                <div className="text-muted-foreground text-body-xs">
                   Up to <SubText>{gasCost.maxFormatted ?? gasCost.formatted}</SubText>
                 </div>
               </>
@@ -264,7 +264,7 @@ export const FeeTokenSelector = ({
               </div>
             )
           ) : !token.isSelectable ? (
-            <span className="text-destructive text-[10px]">{token.balance === 0n ? '0' : 'Insufficient'}</span>
+            <span className="text-destructive text-body-xs">{token.balance === 0n ? '0' : 'Insufficient'}</span>
           ) : null}
         </div>
       </button>
@@ -288,9 +288,9 @@ export const FeeTokenSelector = ({
       </PopoverTrigger>
       <PopoverContent className="w-64 p-0" align="end" sideOffset={4}>
         {/* Header */}
-        <div className="flex items-center justify-between border-b px-3 py-2.5">
+        <div className="flex items-center justify-between border-b p-3">
           <h3 className="text-sm font-semibold">Pay with</h3>
-          <button onClick={() => setOpen(false)} className="hover:bg-muted rounded-full p-0.5 transition-colors">
+          <button onClick={() => setOpen(false)} className="hover:bg-muted rounded-full p-1 transition-colors">
             <X className="size-4" />
           </button>
         </div>

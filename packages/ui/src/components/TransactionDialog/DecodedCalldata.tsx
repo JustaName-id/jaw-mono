@@ -194,7 +194,7 @@ export const DecodedCalldataView = ({
             {decoded ? (
               <>
                 <div className="flex items-center gap-2">
-                  <span className="text-foreground bg-primary/10 rounded px-2 py-0.5 text-xs font-semibold">
+                  <span className="text-foreground bg-primary/10 rounded-xs px-2 py-0.5 text-xs font-semibold">
                     {decoded.functionName}
                   </span>
                   <span className="text-muted-foreground font-mono text-xs">{decoded.signature}</span>
@@ -202,19 +202,19 @@ export const DecodedCalldataView = ({
                 <div className="bg-secondary rounded-chip flex flex-col gap-1 p-2">
                   {decoded.params.length === 0 && <p className="text-muted-foreground text-xs">No parameters</p>}
                   {decoded.params.map((param, i) => (
-                    <div key={i} className="flex flex-col gap-0.5">
+                    <div key={i} className="flex flex-col gap-1">
                       <div className="flex items-baseline gap-1.5">
                         <span className="text-muted-foreground text-xs font-semibold">{param.name}</span>
-                        <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
+                        <span className="text-muted-foreground/60 text-body-xs font-mono">{param.type}</span>
                       </div>
-                      <p className="text-foreground break-all font-mono text-xs leading-[150%]">{param.value}</p>
+                      <p className="text-foreground break-all font-mono text-xs leading-normal">{param.value}</p>
                     </div>
                   ))}
                 </div>
               </>
             ) : null}
             <div className="bg-secondary rounded-chip max-h-[20vh] overflow-y-auto p-2">
-              <p className="text-foreground break-all font-mono text-xs leading-[150%]">{data}</p>
+              <p className="text-foreground break-all font-mono text-xs leading-normal">{data}</p>
             </div>
           </div>
         </details>
@@ -230,8 +230,8 @@ export const DecodedCalldataView = ({
           <Spinner className="size-3" />
           <span className="text-muted-foreground text-xs">Decoding calldata...</span>
         </div>
-        <div className="bg-secondary rounded-chip max-h-[40vh] overflow-y-auto p-2.5 opacity-50">
-          <p className="text-foreground break-all font-mono text-xs font-semibold leading-[150%]">{data}</p>
+        <div className="bg-secondary rounded-chip max-h-[40vh] overflow-y-auto p-2 opacity-50">
+          <p className="text-foreground break-all font-mono text-xs font-semibold leading-normal">{data}</p>
         </div>
       </div>
     );
@@ -240,8 +240,8 @@ export const DecodedCalldataView = ({
   if (!decoded) {
     return (
       <div className="flex flex-col gap-2">
-        <div className="bg-secondary rounded-chip max-h-[40vh] overflow-y-auto p-2.5">
-          <p className="text-foreground break-all font-mono text-xs font-semibold leading-[150%]">{data}</p>
+        <div className="bg-secondary rounded-chip max-h-[40vh] overflow-y-auto p-2">
+          <p className="text-foreground break-all font-mono text-xs font-semibold leading-normal">{data}</p>
         </div>
         <CalldataDigest data={data} />
       </div>
@@ -253,7 +253,7 @@ export const DecodedCalldataView = ({
   return (
     <div className="flex flex-col gap-2">
       <div className="flex items-center gap-2">
-        <span className="text-foreground bg-primary/10 rounded px-2 py-0.5 text-xs font-semibold">
+        <span className="text-foreground bg-primary/10 rounded-xs px-2 py-0.5 text-xs font-semibold">
           {decoded.functionName}
         </span>
         <span className="text-muted-foreground font-mono text-xs">{decoded.signature}</span>
@@ -267,27 +267,27 @@ export const DecodedCalldataView = ({
           const resolvedAvatar = param.rawValue ? allAvatars[param.rawValue.toLowerCase()] : undefined;
           const unlimitedApproval = approveShape && i === 1 && isUnlimitedAmount(param.value);
           return (
-            <div key={i} className="flex flex-col gap-0.5">
+            <div key={i} className="flex flex-col gap-1">
               <div className="flex items-baseline gap-1.5">
                 <span className="text-muted-foreground text-xs font-semibold">{param.name}</span>
-                <span className="text-muted-foreground/60 font-mono text-[10px]">{param.type}</span>
+                <span className="text-muted-foreground/60 text-body-xs font-mono">{param.type}</span>
               </div>
               <div className="flex flex-row items-center gap-1">
                 {resolvedAvatar && <IdentityAvatar src={resolvedAvatar} fallback={null} />}
                 {unlimitedApproval ? (
-                  <p className="flex items-center gap-1.5 font-mono text-xs font-semibold leading-[150%] text-amber-500">
+                  <p className="flex items-center gap-1.5 font-mono text-xs font-semibold leading-normal text-amber-500">
                     <TriangleAlert className="size-3.5 flex-none" strokeWidth={2} />
                     Unlimited
                   </p>
                 ) : (
-                  <p className="text-foreground break-all font-mono text-xs leading-[150%]">
+                  <p className="text-foreground break-all font-mono text-xs leading-normal">
                     {resolvedName ? `${resolvedName} (${formatAddress(param.rawValue!)})` : param.value}
                   </p>
                 )}
                 {param.rawValue && param.rawValue.toLowerCase() !== ZERO_ADDRESS && !resolvedAvatar && (
                   // Address params with no ENS avatar: known token contracts get their logo after the address.
                   // The zero address is excluded — tokenIconUrl maps it to the native icon, wrong for calldata params.
-                  <TokenIcon chainId={chainId} address={param.rawValue} className="ml-0.5 size-4" />
+                  <TokenIcon chainId={chainId} address={param.rawValue} className="ml-1 size-4" />
                 )}
               </div>
             </div>
@@ -298,7 +298,7 @@ export const DecodedCalldataView = ({
       <details className="text-xs">
         <summary className="text-muted-foreground hover:text-foreground cursor-pointer">Raw calldata</summary>
         <div className="bg-secondary rounded-chip mt-1 max-h-[20vh] overflow-y-auto p-2">
-          <p className="text-foreground break-all font-mono text-xs leading-[150%]">{data}</p>
+          <p className="text-foreground break-all font-mono text-xs leading-normal">{data}</p>
         </div>
       </details>
 

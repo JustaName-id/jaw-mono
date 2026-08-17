@@ -23,7 +23,9 @@ export function ProcessingScreen({ seedAddress, avatarUrl, appAvatar, title, sub
   return (
     <div className="flex min-h-[234px] flex-1 flex-col items-center justify-center gap-5 p-6 text-center">
       <div className="flex items-center gap-3">
-        <AccountAvatar seed={seedAddress} avatarUrl={avatarUrl} size={44} className="rounded-box h-11 w-11" />
+        {/* Account and app circles flank the flow dots and must stay the same size, so both
+            take `size-logo` rather than two independently-written values. */}
+        <AccountAvatar seed={seedAddress} avatarUrl={avatarUrl} size={44} className="rounded-box size-logo" />
         <span className="flex items-center gap-1.5">
           {[0, 1, 2].map((i) => (
             <span
@@ -33,12 +35,12 @@ export function ProcessingScreen({ seedAddress, avatarUrl, appAvatar, title, sub
             />
           ))}
         </span>
-        <span className="bg-secondary border-border flex h-11 w-11 items-center justify-center overflow-hidden rounded-full border">
+        <span className="bg-secondary border-border size-logo flex items-center justify-center overflow-hidden rounded-full border">
           {appAvatar}
         </span>
       </div>
       <div className="flex flex-col gap-1">
-        <h2 className="text-foreground text-[15px] font-semibold tracking-[-0.02em]">{title}</h2>
+        <h2 className="text-foreground text-status">{title}</h2>
         {subtitle && <p className="text-muted-foreground text-xs">{subtitle}</p>}
       </div>
     </div>

@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { isSiweMessage, parseSiweMessage, getSiweOriginWarning } from './siwe';
+import {
+  isSiweMessage,
+  parseSiweMessage,
+  getSiweOriginWarning,
+  getSiweOriginWarningFromMessage,
+  bestEffortSiweAddress,
+} from './siwe';
 
 const ADDRESS = '0x6270000000000000000000000000000000003847';
 
@@ -190,5 +196,168 @@ describe('getSiweOriginWarning', () => {
 
   it('is silent (fails open) when nothing is comparable', () => {
     expect(getSiweOriginWarning('https://app.example', {})).toBeUndefined();
+  });
+});
+
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+// The cross-domain warning must not depend on the message parsing.
+//
+// `isSiweMessage` accepts `\s*` after each field colon; the parser (viem) needs a canonical single
+// space. A dapp can sit in that gap — the message reaches the SIWE dialog, the parse returns null,
+// and every parse-gated protection disappears, including the MANDATORY "I accept the risk"
+// checkbox that the cross-domain warning carries. So the warning is computed with a best-effort
+// fallback instead.
+// ────────────────────────────────────────────────────────────────────────────────────────────────
+describe('getSiweOriginWarningFromMessage', () => {
+  const phishing = (uriLine: string) =>
+    [
+      'evil.com wants you to sign in with your Ethereum account:',
+      '0x1111111111111111111111111111111111111111',
+      '',
+      'Sign in please',
+      '',
+      uriLine,
+      'Version: 1',
+      'Chain ID: 1',
+      'Nonce: abc12345',
+      'Issued At: 2026-01-01T00:00:00Z',
+    ].join('\n');
+
+  it('warns on a canonical message whose domain differs from the requesting origin', () => {
+    const warning = getSiweOriginWarningFromMessage('https://example.com', phishing('URI: https://evil.com'));
+    expect(warning).toMatch(/evil\.com/);
+    expect(warning).toMatch(/example\.com/);
+  });
+
+  it.each([
+    ['no space after the colon', 'URI:https://evil.com'],
+    ['a tab after the colon', 'URI:\thttps://evil.com'],
+    ['a newline after the colon', 'URI:\nhttps://evil.com'],
+    ['two spaces after the colon', 'URI:  https://evil.com'],
+  ])('still warns when the message does not parse — %s', (_label, uriLine) => {
+    const message = phishing(uriLine);
+    // Precondition: this is exactly the detect-but-don't-parse gap.
+    expect(isSiweMessage(message)).toBe(true);
+    expect(getSiweOriginWarningFromMessage('https://example.com', message)).toMatch(/phishing/i);
+  });
+
+  it('stays silent when the domain matches, parsed or not', () => {
+    for (const uriLine of ['URI: https://example.com', 'URI:\thttps://example.com']) {
+      const message = [
+        'example.com wants you to sign in with your Ethereum account:',
+        '0x1111111111111111111111111111111111111111',
+        '',
+        'Sign in',
+        '',
+        uriLine,
+        'Version: 1',
+        'Chain ID: 1',
+        'Nonce: abc12345',
+        'Issued At: 2026-01-01T00:00:00Z',
+      ].join('\n');
+      expect(getSiweOriginWarningFromMessage('https://example.com', message)).toBeUndefined();
+    }
+  });
+
+  it('agrees with the parse-based helper whenever the message does parse', () => {
+    const message = phishing('URI: https://evil.com');
+    const parsed = parseSiweMessage(message)!;
+    expect(getSiweOriginWarningFromMessage('https://example.com', message)).toBe(
+      getSiweOriginWarning('https://example.com', { domain: parsed.domain, uri: parsed.uri })
+    );
+  });
+});
+
+// The account-mismatch advisory hangs off the declared address. When the parse failed it silently
+// evaluated to false — the wrong failure mode, since the dapp writes the message and so would choose
+// whether the advisory appears.
+describe('bestEffortSiweAddress', () => {
+  const message = (address: string, uriLine = 'URI:\thttps://example.com') =>
+    [
+      'example.com wants you to sign in with your Ethereum account:',
+      address,
+      '',
+      'Sign in',
+      '',
+      uriLine,
+      'Version: 1',
+      'Chain ID: 1',
+      'Nonce: abc12345',
+      'Issued At: 2026-01-01T00:00:00Z',
+    ].join('\n');
+
+  it('recovers the address from a message that does not parse', () => {
+    const addr = '0x1111111111111111111111111111111111111111';
+    const m = message(addr);
+    expect(isSiweMessage(m)).toBe(true);
+    expect(parseSiweMessage(m)).toBeNull();
+    expect(bestEffortSiweAddress(m)).toBe(addr);
+  });
+
+  it('agrees with the parser when the message does parse', () => {
+    const addr = '0x2222222222222222222222222222222222222222';
+    const m = message(addr, 'URI: https://example.com');
+    expect(parseSiweMessage(m)?.address?.toLowerCase()).toBe(addr);
+    expect(bestEffortSiweAddress(m)?.toLowerCase()).toBe(addr);
+  });
+
+  it('is shape-checked, not checksum-checked — it is only ever compared case-insensitively', () => {
+    const mixed = '0xAbCdEf1111111111111111111111111111111111';
+    expect(bestEffortSiweAddress(message(mixed))).toBe(mixed);
+  });
+
+  it.each([
+    ['too short', '0xabc'],
+    ['not hex', '0xzzzz111111111111111111111111111111111111'],
+    ['no prefix', '1111111111111111111111111111111111111111'],
+  ])('returns undefined for an address-like line that is %s', (_label, bad) => {
+    expect(bestEffortSiweAddress(message(bad))).toBeUndefined();
+  });
+
+  it('ignores an address that shares its line with other text', () => {
+    const m = [
+      'example.com wants you to sign in with your Ethereum account:',
+      'spender 0x1111111111111111111111111111111111111111 approved',
+      '',
+      'URI: https://example.com',
+    ].join('\n');
+    expect(bestEffortSiweAddress(m)).toBeUndefined();
+  });
+});
+
+// The dapp controls the message and nothing caps its length on this path, so the best-effort
+// readers must run in linear time. The lazy-regex header reader was quadratic — `.+?` and `\s+`
+// overlap on whitespace — and a padded 400 KB personal_sign payload froze the dialog for ~98s,
+// denying the user the ability to reject. Bounds are generous for CI; the broken versions
+// exceed them by orders of magnitude.
+describe('best-effort readers are not quadratic on padded input', () => {
+  it('handles a whitespace-padded non-parsing message quickly, and still warns', () => {
+    const message = [
+      `${' '.repeat(400_000)}x`,
+      'wants you to sign in with your Ethereum account',
+      '0x1111111111111111111111111111111111111111',
+      '',
+      'URI:\thttps://evil.com',
+      'Version: 1',
+      'Chain ID: 1',
+      'Nonce: abc12345',
+      'Issued At: 2026-01-01T00:00:00Z',
+    ].join('\n');
+    // Precondition: detected as SIWE, refused by the parser — the best-effort path.
+    expect(isSiweMessage(message)).toBe(true);
+    expect(parseSiweMessage(message)).toBeNull();
+
+    const start = performance.now();
+    const warning = getSiweOriginWarningFromMessage('https://example.com', message);
+    expect(performance.now() - start).toBeLessThan(500);
+    // The padding must not cost the phishing warning either: the URI fallback still reads.
+    expect(warning).toMatch(/evil\.com/);
+  });
+
+  it('recovers no address from a whitespace-padded message quickly', () => {
+    const message = '\n'.repeat(200_000) + ' '.repeat(200_000);
+    const start = performance.now();
+    expect(bestEffortSiweAddress(message)).toBeUndefined();
+    expect(performance.now() - start).toBeLessThan(500);
   });
 });
