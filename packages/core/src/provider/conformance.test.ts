@@ -214,11 +214,17 @@ describe('EIP-1193 conformance', () => {
             return events;
         }
 
-        it('stays quiet when a never-connected provider refuses with 4100', async () => {
+        // Driven off the table so all four methods that refuse with 4100 stay
+        // honest, rather than personal_sign standing in for the rest.
+        const refusesUnauthorized = casesOf('rejects').filter(
+            ([, outcome]) => outcome.code === standardErrorCodes.provider.unauthorized
+        );
+
+        it.each(refusesUnauthorized)('stays quiet when %s is refused on a never-connected provider', async (method) => {
             const provider = newProvider();
             const events = recordEvents(provider);
 
-            await expect(provider.request({ method: 'personal_sign' })).rejects.toMatchObject({ code: 4100 });
+            await expect(provider.request({ method })).rejects.toMatchObject({ code: 4100 });
 
             // "Connect first" is not a disconnection. A dapp that probes before
             // connecting must not see a lifecycle event for a session it never
