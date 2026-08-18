@@ -92,7 +92,18 @@ export type BundledTransactionResult = {
     chainId: number;
 };
 
-export const MAINNET_CHAINS = [
+/**
+ * The chain lists are annotated rather than inferred on purpose. Without the
+ * annotation TypeScript keeps the full literal type of every viem chain, down
+ * to each explorer URL, which is not a contract we want to publish: it made the
+ * api-extractor report 14988 lines, of which these four exports were 90%, and
+ * any viem minor that edits chain metadata rewrote thousands of report lines on
+ * a PR that changed nothing here.
+ *
+ * `readonly` because these are module-level constants shared by every consumer.
+ * Mutating one in place would corrupt chain resolution process-wide.
+ */
+export const MAINNET_CHAINS: readonly ViemChain[] = [
     mainnet,
     base,
     optimism,
@@ -110,7 +121,7 @@ export const MAINNET_CHAINS = [
     soneium,
 ];
 
-export const TESTNET_CHAINS = [
+export const TESTNET_CHAINS: readonly ViemChain[] = [
     sepolia,
     baseSepolia,
     optimismSepolia,
@@ -120,7 +131,7 @@ export const TESTNET_CHAINS = [
     arcTestnet,
 ];
 
-export const SUPPORTED_CHAINS = [...MAINNET_CHAINS, ...TESTNET_CHAINS];
+export const SUPPORTED_CHAINS: readonly ViemChain[] = [...MAINNET_CHAINS, ...TESTNET_CHAINS];
 
 /**
  * Get supported chains based on testnet preference.
@@ -128,7 +139,7 @@ export const SUPPORTED_CHAINS = [...MAINNET_CHAINS, ...TESTNET_CHAINS];
  * @param showTestnets - Whether to include testnet chains (default: false)
  * @returns Array of supported chains
  */
-export function getSupportedChains(showTestnets = false) {
+export function getSupportedChains(showTestnets = false): readonly ViemChain[] {
     return showTestnets ? SUPPORTED_CHAINS : MAINNET_CHAINS;
 }
 
