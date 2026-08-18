@@ -123,22 +123,25 @@ describe('Communicator', () => {
 
     describe('two requests in flight at once', () => {
         // Every other test here drives one request at a time, or rejects them
-        // all at once on disconnect. Nothing covered the case a dapp actually
-        // produces: a second call arriving while the first is still out. Both
-        // share the `inflight` map and one window listener each, so a mixed-up
-        // key hands a caller someone else's answer, and the caller has no way
-        // to tell.
+        // all at once. Nothing covered the case a dapp actually produces: a
+        // second call arriving while the first is still out. They share the
+        // `inflight` map and register one window listener each, so the ways
+        // this breaks are a caller getting someone else's answer, a caller
+        // never getting one, and a request that quietly never left.
+        //
+        // The keying of `inflight` itself is covered by the SwitchTransport
+        // replay tests, which are the only consumer that reads the map back.
 
-        async function openPopup() {
+        function openPopup() {
             queueMessageEvent(popupLoadedMessage);
             queueMessageEvent(popupReadyMessage);
         }
 
-        it('answers each caller with its own response, whatever order they arrive in', async () => {
-            const first: Message & { id: MessageID } = { id: 'req-first-0000-0000-0000', data: {} };
-            const second: Message & { id: MessageID } = { id: 'req-second-0000-0000-0000', data: {} };
+        const first: Message & { id: MessageID } = { id: 'req-first-0000-0000-0000', data: {} };
+        const second: Message & { id: MessageID } = { id: 'req-second-0000-0000-0000', data: {} };
 
-            await openPopup();
+        it('answers each caller with its own response, whatever order they arrive in', async () => {
+            openPopup();
             const firstResponse = communicator.postRequestAndWaitForResponse(first);
             const secondResponse = communicator.postRequestAndWaitForResponse(second);
 
@@ -151,25 +154,38 @@ describe('Communicator', () => {
                 result: 'for-second',
             });
             expect(await firstResponse).toMatchObject({ requestId: 'req-first-0000-0000-0000', result: 'for-first' });
+
+            // Both actually reached the popup. The response listener is armed
+            // before the transport is acquired, so a request that never gets
+            // posted still resolves off a manufactured answer, and every
+            // assertion above would hold while the popup never saw it.
+            expect(mockPopup.postMessage).toHaveBeenCalledWith(first, urlOrigin);
+            expect(mockPopup.postMessage).toHaveBeenCalledWith(second, urlOrigin);
         });
 
         it('leaves both waiting when a response arrives for an id nobody asked about', async () => {
-            const first: Message & { id: MessageID } = { id: 'req-a-0000-0000-0000', data: {} };
-            const second: Message & { id: MessageID } = { id: 'req-b-0000-0000-0000', data: {} };
-
-            await openPopup();
-            let firstSettled = false;
-            let secondSettled = false;
-            const firstResponse = communicator.postRequestAndWaitForResponse(first).then(() => (firstSettled = true));
+            openPopup();
+            // Tracked as a value, not a flag: a boolean set only from the
+            // fulfilled branch reads the same whether the promise is pending or
+            // rejected, which is the opposite of what this asserts.
+            let firstState = 'pending';
+            let secondState = 'pending';
+            const firstResponse = communicator
+                .postRequestAndWaitForResponse(first)
+                .then(() => (firstState = 'fulfilled'))
+                .catch(() => (firstState = 'rejected'));
             const secondResponse = communicator
                 .postRequestAndWaitForResponse(second)
-                .then(() => (secondSettled = true));
+                .then(() => (secondState = 'fulfilled'))
+                .catch(() => (secondState = 'rejected'));
 
             queueMessageEvent({ data: { requestId: 'req-nobody-sent-this', result: 'stray' } });
             await new Promise((resolve) => setTimeout(resolve, 400));
 
-            expect(firstSettled).toBe(false);
-            expect(secondSettled).toBe(false);
+            expect(firstState).toBe('pending');
+            expect(secondState).toBe('pending');
+            expect(mockPopup.postMessage).toHaveBeenCalledWith(first, urlOrigin);
+            expect(mockPopup.postMessage).toHaveBeenCalledWith(second, urlOrigin);
 
             // Settle them so the test does not leave promises hanging.
             queueMessageEvent({ data: { requestId: first.id } });
@@ -177,21 +193,26 @@ describe('Communicator', () => {
             await Promise.all([firstResponse, secondResponse]);
         });
 
-        it('rejects both when the popup goes away mid-flight, not just the first', async () => {
-            const first: Message & { id: MessageID } = { id: 'req-x-0000-0000-0000', data: {} };
-            const second: Message & { id: MessageID } = { id: 'req-y-0000-0000-0000', data: {} };
-
-            await openPopup();
+        it('gives both callers an error when the popup goes away, rather than hanging one', async () => {
+            // Pins the outcome, not the mechanism. Two things can reject an
+            // in-flight request when the window dies: the dismissal bridge
+            // (PopupUnload -> rejectPendingRequests) and the liveness poller
+            // that backstops it for a popup killed before it can post anything.
+            // Either is fine, and one hanging forever is not. The bridge itself
+            // is pinned by the disconnect tests above, which use raw listeners
+            // and so are not backstopped by the poller.
+            openPopup();
             const firstResponse = communicator.postRequestAndWaitForResponse(first);
             const secondResponse = communicator.postRequestAndWaitForResponse(second);
-            // Let both reach the transport before it disappears.
-            await new Promise((resolve) => setTimeout(resolve, 300));
 
-            communicator.disconnect();
+            setTimeout(
+                () => dispatchMessageEvent({ data: { event: 'PopupUnload', id: 'unload-id' }, origin: urlOrigin }),
+                350
+            );
 
-            await expect(firstResponse).rejects.toThrow();
-            await expect(secondResponse).rejects.toThrow();
-        });
+            await expect(firstResponse).rejects.toThrow(/Request rejected/);
+            await expect(secondResponse).rejects.toThrow(/Request rejected/);
+        }, 2000);
     });
 
     describe('prewarm', () => {

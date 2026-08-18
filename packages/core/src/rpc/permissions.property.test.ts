@@ -27,6 +27,10 @@ import { describe, it, expect } from 'vitest';
 
 import { buildGrantPermissionCall, SPEND_PERMISSIONS_MANAGER_ABI, type SpendPeriod } from './permissions.js';
 
+// A fixed seed, so a red build means someone broke something rather than that
+// the generator picked differently today.
+fc.configureGlobal({ seed: 0x1a7, numRuns: 200 });
+
 const ACCOUNT = '0x1111111111111111111111111111111111111111' as const;
 const SPENDER = '0x2222222222222222222222222222222222222222' as const;
 const TOKEN = '0x3333333333333333333333333333333333333333' as const;
@@ -68,6 +72,20 @@ describe('the period a spend limit is enforced over', () => {
 
                 expect(spend.unit).toBe(PERIOD_UNIT.Month);
                 expect(spend.multiplier).toBe(years * 12);
+            })
+        );
+    });
+
+    it('refuses a year multiplier whose months overflow the uint16', () => {
+        // The ceiling on this path is 5461, not the 65535 the struct allows,
+        // because the year is multiplied out before it is encoded. Nothing
+        // guards it, so it surfaces as a raw viem range error rather than as
+        // invalidParams. Pinned as it behaves; worth a guard in the source.
+        fc.assert(
+            fc.property(fc.integer({ min: 5_462, max: 65_535 }), (years) => {
+                expect(() =>
+                    encodedSpends([{ token: TOKEN, allowance: '1000', unit: 'year' as SpendPeriod, multiplier: years }])
+                ).toThrow();
             })
         );
     });

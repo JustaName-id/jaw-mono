@@ -10,6 +10,11 @@
 import fc from 'fast-check';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+// A fixed seed, so a red build means someone broke something rather than that
+// the generator happened to pick differently today. The interesting inputs are
+// pinned as explicit cases below; the random ones are the bonus on top.
+fc.configureGlobal({ seed: 0x1a7, numRuns: 200 });
+
 import { isSessionExpired, DEFAULT_AUTH_TTL } from './SignerUtils.js';
 import { store, sdkstore } from '../store/index.js';
 import { SDK_VERSION } from '../sdk-info.js';
@@ -42,7 +47,11 @@ describe('isSessionExpired', () => {
         fc.assert(
             fc.property(
                 fc.integer({ min: 1, max: 60 * 60 * 24 * 30 }), // TTL in seconds
-                fc.integer({ min: -5_000, max: 5_000 }), // offset around the boundary
+                // The three values that decide an off-by-one are drawn
+                // explicitly. Left to a uniform draw over 10001 integers, the
+                // boundary itself shows up in a minority of runs, and flipping
+                // the comparison to `>=` passed 4 runs out of 6.
+                fc.oneof(fc.constant(0), fc.constant(1), fc.constant(-1), fc.integer({ min: -5_000, max: 5_000 })),
                 (ttl, offset) => {
                     reset();
                     store.config.set({ preference: { authTTL: ttl } });
@@ -71,7 +80,10 @@ describe('isSessionExpired', () => {
 
     it('expires any dated session when caching is switched off', () => {
         fc.assert(
-            fc.property(fc.integer({ min: 0, max: NOW }), (connectedAt) => {
+            // `NOW` is drawn explicitly: it is the only stamp where removing
+            // the TTL-0 short circuit changes the answer, so a uniform draw
+            // over the whole range misses the mutation most runs.
+            fc.property(fc.oneof(fc.constant(NOW), fc.integer({ min: 0, max: NOW })), (connectedAt) => {
                 reset();
                 store.config.set({ preference: { authTTL: 0 } });
                 store.account.set({ connectedAt });
