@@ -1,4 +1,7 @@
 /**
+ * Shared by every project whose tests touch `localStorage`: apps/keys-jaw-id
+ * and @jaw.id/ui today.
+ *
  * Node 25 exposes a `localStorage` global whose methods are absent unless the
  * process was started with `--localstorage-file`. The stub takes the global
  * slot before the jsdom environment installs its own, so `localStorage.clear()`
