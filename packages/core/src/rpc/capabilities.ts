@@ -45,7 +45,7 @@ export function clearCapabilitiesCache(): void {
  * - If showTestnets is true: fetches capabilities for all chains
  * - If showTestnets is false: fetches capabilities only for mainnet chains
  *
- * Responses are memoized per (api key, effective params) for {@link CAPABILITIES_TTL_MS},
+ * Responses are memoized per (api key, effective params) for `CAPABILITIES_TTL_MS`,
  * and concurrent callers for the same key share a single request — the dialogs ask for
  * this on mount from several places at once, and it gates the fee-token chain.
  * Failures are never cached, and every caller gets its own copy of the response.

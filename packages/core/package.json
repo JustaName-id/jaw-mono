@@ -61,6 +61,31 @@
           "generate-sdk-info"
         ]
       },
+      "api-check": {
+        "dependsOn": [
+          "build"
+        ],
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "bunx api-extractor run"
+        },
+        "cache": true,
+        "inputs": [
+          "production",
+          "^production"
+        ]
+      },
+      "api-update": {
+        "dependsOn": [
+          "build"
+        ],
+        "executor": "nx:run-commands",
+        "options": {
+          "cwd": "{projectRoot}",
+          "command": "bunx api-extractor run --local"
+        }
+      },
       "test": {
         "cache": true,
         "inputs": [

@@ -35,6 +35,12 @@ bunx nx lint @jaw.id/core
 # Typecheck
 bunx nx run-many -t typecheck
 
+# Check the public API of @jaw.id/core against the committed report
+bunx nx api-check @jaw.id/core
+
+# Update that report after an intentional API change (commit the diff)
+bunx nx api-update @jaw.id/core
+
 # Run the playground Next.js app
 bunx nx dev @jaw-mono/playground
 
