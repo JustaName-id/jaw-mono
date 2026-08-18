@@ -56,10 +56,12 @@ const WEBAUTHN = {
     authenticatorData: '0x49960de5880e8c687434170f6476605b8fe4aeb9a28632c7995cf3ba831d97631d00000000' as Hex,
     clientDataJSON:
         '{"type":"webauthn.get","challenge":"9jEFijuhEWrM4SOW-tChJbUEHEP44VcjcJ-Bqo1fTM8","origin":"https://keys.jaw.id"}',
-    // Offsets into clientDataJSON above, where the challenge and the type
-    // values actually start. The contract slices at these to verify.
-    challengeIndex: 35,
-    typeIndex: 8,
+    // Offsets into clientDataJSON above. Solady's WebAuthn.verify compares the
+    // bytes at typeIndex against the literal `"type":"webauthn.get"` and the
+    // bytes at challengeIndex against `"challenge":"`, so these point at the
+    // KEYS, not at the values. They match the fallbacks in `sign`.
+    challengeIndex: 23,
+    typeIndex: 1,
     userVerificationRequired: true,
 };
 
@@ -110,8 +112,8 @@ describe('toWebAuthnSignature', () => {
 
         const [decoded] = decodeAbiParameters(WEBAUTHN_SIGNATURE, out);
         expect(decoded.authenticatorData).toBe(WEBAUTHN.authenticatorData);
-        expect(decoded.challengeIndex).toBe(35n);
-        expect(decoded.typeIndex).toBe(8n);
+        expect(decoded.challengeIndex).toBe(23n);
+        expect(decoded.typeIndex).toBe(1n);
         // r and s are the halves of the P-256 signature, each padded to 32 bytes.
         expect(decoded.r).toBe(`0x${'11'.repeat(32)}`);
         expect(decoded.s).toBe(`0x${'22'.repeat(32)}`);
@@ -126,13 +128,17 @@ describe('toWebAuthnSignature', () => {
         expect(Buffer.from(decoded.clientDataJSON.slice(2), 'hex').toString('utf8')).toBe(WEBAUTHN.clientDataJSON);
     });
 
-    it('keeps the offsets pointing at what they claim', () => {
+    it('keeps the offsets pointing at the keys the verifier compares', () => {
+        // Solady reads 21 bytes at typeIndex and compares them to
+        // `"type":"webauthn.get"`, and the 13 bytes at challengeIndex to
+        // `"challenge":"`. Pointing either one at the value instead of the key
+        // fails verification on chain and nothing off chain would notice.
         const out = toWebAuthnSignature({ webauthn: WEBAUTHN, signature: P256_SIGNATURE });
         const [decoded] = decodeAbiParameters(WEBAUTHN_SIGNATURE, out);
         const json = Buffer.from(decoded.clientDataJSON.slice(2), 'hex').toString('utf8');
 
-        expect(json.slice(Number(decoded.typeIndex))).toMatch(/^"webauthn.get"/);
-        expect(json.slice(Number(decoded.challengeIndex))).toMatch(/^"9jEFijuhEWrM/);
+        expect(json.slice(Number(decoded.typeIndex))).toMatch(/^"type":"webauthn.get"/);
+        expect(json.slice(Number(decoded.challengeIndex))).toMatch(/^"challenge":"/);
     });
 
     it('pads a short r or s to a full 32 bytes', () => {
