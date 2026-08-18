@@ -121,6 +121,79 @@ describe('Communicator', () => {
         window.removeEventListener = originalRemoveEventListener;
     });
 
+    describe('two requests in flight at once', () => {
+        // Every other test here drives one request at a time, or rejects them
+        // all at once on disconnect. Nothing covered the case a dapp actually
+        // produces: a second call arriving while the first is still out. Both
+        // share the `inflight` map and one window listener each, so a mixed-up
+        // key hands a caller someone else's answer, and the caller has no way
+        // to tell.
+
+        async function openPopup() {
+            queueMessageEvent(popupLoadedMessage);
+            queueMessageEvent(popupReadyMessage);
+        }
+
+        it('answers each caller with its own response, whatever order they arrive in', async () => {
+            const first: Message & { id: MessageID } = { id: 'req-first-0000-0000-0000', data: {} };
+            const second: Message & { id: MessageID } = { id: 'req-second-0000-0000-0000', data: {} };
+
+            await openPopup();
+            const firstResponse = communicator.postRequestAndWaitForResponse(first);
+            const secondResponse = communicator.postRequestAndWaitForResponse(second);
+
+            // Deliberately backwards: the second request is answered first.
+            queueMessageEvent({ data: { requestId: second.id, result: 'for-second' } });
+            queueMessageEvent({ data: { requestId: first.id, result: 'for-first' } });
+
+            expect(await secondResponse).toMatchObject({
+                requestId: 'req-second-0000-0000-0000',
+                result: 'for-second',
+            });
+            expect(await firstResponse).toMatchObject({ requestId: 'req-first-0000-0000-0000', result: 'for-first' });
+        });
+
+        it('leaves both waiting when a response arrives for an id nobody asked about', async () => {
+            const first: Message & { id: MessageID } = { id: 'req-a-0000-0000-0000', data: {} };
+            const second: Message & { id: MessageID } = { id: 'req-b-0000-0000-0000', data: {} };
+
+            await openPopup();
+            let firstSettled = false;
+            let secondSettled = false;
+            const firstResponse = communicator.postRequestAndWaitForResponse(first).then(() => (firstSettled = true));
+            const secondResponse = communicator
+                .postRequestAndWaitForResponse(second)
+                .then(() => (secondSettled = true));
+
+            queueMessageEvent({ data: { requestId: 'req-nobody-sent-this', result: 'stray' } });
+            await new Promise((resolve) => setTimeout(resolve, 400));
+
+            expect(firstSettled).toBe(false);
+            expect(secondSettled).toBe(false);
+
+            // Settle them so the test does not leave promises hanging.
+            queueMessageEvent({ data: { requestId: first.id } });
+            queueMessageEvent({ data: { requestId: second.id } });
+            await Promise.all([firstResponse, secondResponse]);
+        });
+
+        it('rejects both when the popup goes away mid-flight, not just the first', async () => {
+            const first: Message & { id: MessageID } = { id: 'req-x-0000-0000-0000', data: {} };
+            const second: Message & { id: MessageID } = { id: 'req-y-0000-0000-0000', data: {} };
+
+            await openPopup();
+            const firstResponse = communicator.postRequestAndWaitForResponse(first);
+            const secondResponse = communicator.postRequestAndWaitForResponse(second);
+            // Let both reach the transport before it disappears.
+            await new Promise((resolve) => setTimeout(resolve, 300));
+
+            communicator.disconnect();
+
+            await expect(firstResponse).rejects.toThrow();
+            await expect(secondResponse).rejects.toThrow();
+        });
+    });
+
     describe('prewarm', () => {
         it('waits for the trusted-hosts refresh before delegating to the router', async () => {
             // The refresh can flip the routing decision from popup
