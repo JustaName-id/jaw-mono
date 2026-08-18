@@ -23,7 +23,7 @@ import { describe, it, expect, vi, beforeEach, Mock } from 'vitest';
 
 import { JAWProvider } from './JAWProvider.js';
 import { SILENT_METHODS, INTERACTIVE_METHODS } from '../method-policy.js';
-import { standardErrorCodes, standardErrors } from '../errors/index.js';
+import { standardErrorCodes, standardErrors, errorValues } from '../errors/index.js';
 import { createSigner, loadSignerType, storeSignerType, type Signer } from '../signer/index.js';
 import { handleGetCallsStatusRequest } from '../rpc/wallet_getCallStatus.js';
 import { handleGetAssetsRequest } from '../rpc/wallet_getAssets.js';
@@ -71,6 +71,9 @@ const WITHOUT_SESSION: Record<string, NoSessionOutcome> = {
     // Silent reads answered from local state. A wallet library probes these on
     // mount, so they resolve instead of prompting.
     eth_accounts: { kind: 'answers', expect: (r) => expect(r).toEqual([]) },
+    // null with no session. A signer that holds no accounts answers the same
+    // situation with a 4100 refusal, which CrossPlatformSigner.test.ts pins
+    // against a real signer.
     eth_coinbase: { kind: 'answers', expect: (r) => expect(r).toBeNull() },
     eth_chainId: { kind: 'answers', expect: (r) => expect(r).toBe('0x2105') },
     // A number, where JSON-RPC and every mainstream wallet return the decimal
@@ -109,12 +112,11 @@ const WITHOUT_SESSION: Record<string, NoSessionOutcome> = {
     eth_sendTransaction: { kind: 'rejects', code: standardErrorCodes.provider.unauthorized },
 };
 
-/** Every code this SDK can put in front of a dapp. */
-const EVERY_CODE: ReadonlyArray<[string, number]> = [
-    ...Object.entries(standardErrorCodes.rpc),
-    ...Object.entries(standardErrorCodes.provider),
-    ...Object.entries(standardErrorCodes.eip5792),
-];
+/** Every code this SDK can put in front of a dapp, read off the source so a
+ *  family added to `standardErrorCodes` is covered without editing this file. */
+const EVERY_CODE: ReadonlyArray<[string, number]> = Object.values(standardErrorCodes).flatMap((family) =>
+    Object.entries(family)
+);
 
 /** The methods whose outcome is of one kind, typed so the cases need no casts. */
 function casesOf<K extends NoSessionOutcome['kind']>(kind: K) {
@@ -220,6 +222,13 @@ describe('EIP-1193 conformance', () => {
             ([, outcome]) => outcome.code === standardErrorCodes.provider.unauthorized
         );
 
+        // vitest registers no tests at all for an empty it.each, so a table
+        // change that empties the filter would delete the assertion below
+        // without reddening anything.
+        it('the table still lists four methods that refuse with 4100', () => {
+            expect(refusesUnauthorized).toHaveLength(4);
+        });
+
         it.each(refusesUnauthorized)('stays quiet when %s is refused on a never-connected provider', async (method) => {
             const provider = newProvider();
             const events = recordEvents(provider);
@@ -273,6 +282,16 @@ describe('EIP-1193 conformance', () => {
             expect(signer.handshake).not.toHaveBeenCalled();
         });
 
+        it.each(EVERY_CODE)('%s (%i) resolves its message when the wallet sends none', async (_name, code) => {
+            const provider = connectedProvider();
+            (signer.request as Mock).mockRejectedValue({ code });
+
+            await expect(provider.request({ method: 'wallet_sign' })).rejects.toMatchObject({
+                code,
+                message: errorValues[String(code) as keyof typeof errorValues].message,
+            });
+        });
+
         it('reports a user rejection as 4001, not as an internal error', async () => {
             const provider = connectedProvider();
             (signer.request as Mock).mockRejectedValue(standardErrors.provider.userRejectedRequest('User denied'));
@@ -290,21 +309,6 @@ describe('EIP-1193 conformance', () => {
                 code: standardErrorCodes.rpc.internal,
                 message: 'boom',
             });
-        });
-    });
-
-    describe('answers that differ with and without a session', () => {
-        // eth_coinbase reports "no account" two different ways: null with no
-        // session (JAWProvider), undefined from a connected signer holding an
-        // empty account list (JAWSigner). A dapp branching on `=== null` gets
-        // different answers for the same situation. Pinned on both sides so the
-        // split is visible rather than folklore.
-        it('eth_coinbase answers null with no session and undefined when connected without accounts', async () => {
-            await expect(newProvider().request({ method: 'eth_coinbase' })).resolves.toBeNull();
-
-            const provider = connectedProvider();
-            (signer.request as Mock).mockResolvedValue(undefined);
-            await expect(provider.request({ method: 'eth_coinbase' })).resolves.toBeUndefined();
         });
     });
 
