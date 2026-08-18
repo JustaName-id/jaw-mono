@@ -150,6 +150,19 @@ export function createPaymasterFunctions(
     chainId: number,
     context?: Record<string, unknown>
 ) {
+    // `gas` rides along on an ERC-20 paymaster context to size the token
+    // approval; it is not a paymaster field and must never go on the wire.
+    // Stripping it here rather than at each call site is deliberate: this is the
+    // one boundary every path funnels through — the Account send paths, the
+    // gas-estimation paths that pass no override at all and so inherit the
+    // chain's own context, and the provider's chain-clients wiring — so no
+    // caller can reintroduce it by forgetting to strip.
+    const wireContext = ((): Record<string, unknown> | undefined => {
+        if (!context) return undefined;
+        const { gas: _gas, ...rest } = context;
+        return Object.keys(rest).length > 0 ? rest : undefined;
+    })();
+
     return {
         async getPaymasterStubData(userOperation: Parameters<PaymasterClient['getPaymasterStubData']>[0]) {
             // Fetch gas prices if not already present
@@ -168,7 +181,7 @@ export function createPaymasterFunctions(
                 maxPriorityFeePerGas,
                 chainId,
                 entryPointAddress: userOperation.entryPointAddress,
-                ...(context && { context }),
+                ...(wireContext && { context: wireContext }),
             });
 
             // Check if paymaster returned invalid gas limits (e.g., "0x1")
@@ -235,7 +248,7 @@ export function createPaymasterFunctions(
                 maxPriorityFeePerGas,
                 chainId,
                 entryPointAddress: userOperation.entryPointAddress,
-                ...(context && { context }),
+                ...(wireContext && { context: wireContext }),
             });
 
             // If paymaster returned invalid gas limits, use values from userOperation (from stub data)

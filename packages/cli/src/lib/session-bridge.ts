@@ -1,6 +1,7 @@
 import { loadSessionKey } from './keystore.js';
 import { loadSessionConfig, type SessionConfig } from './session-config.js';
 import { loadConfig } from './config.js';
+import { usdcForNetwork } from '../x402/asset-registry.js';
 
 // JAW's ERC-20 paymaster, mirrored from core's JAW_PAYMASTER_URL. Kept as a
 // local literal rather than an import because `@jaw.id/core` is lazy-loaded in
@@ -41,10 +42,18 @@ function resolvePaymaster(
   // sponsorship to offer; leaving it unset keeps the old unsponsored behaviour.
   if (!options.apiKey) return {};
 
+  // The ERC-20 paymaster has to be told which token it is being paid in: the SDK
+  // sizes and emits the `approve` it needs from this address, and without it the
+  // userOp reaches the paymaster with no allowance behind it and cannot settle.
+  // A chain the registry does not cover has no token to name, so fall back to
+  // the unsponsored path rather than engaging a paymaster that must fail.
+  const asset = usdcForNetwork(`eip155:${options.chainId}`);
+  if (!asset) return {};
+
   const url = new URL(JAW_ERC20_PAYMASTER_URL);
   url.searchParams.set('chainId', String(options.chainId));
   url.searchParams.set('api-key', options.apiKey);
-  return { paymasterUrl: url.toString() };
+  return { paymasterUrl: url.toString(), paymasterContext: { token: asset.address } };
 }
 
 export interface SessionBridgeOptions {

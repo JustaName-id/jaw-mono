@@ -103,3 +103,82 @@ describe('createPaymasterFunctions — estimation fallback', () => {
         expect(result.paymasterPostOpGasLimit).toBe(0x500n);
     });
 });
+
+// `gas` is carried on an ERC-20 paymaster context purely to size the token
+// approval. This is the one boundary every path reaches the paymaster through —
+// the Account send paths, the gas-estimation paths that pass no override and so
+// inherit the chain's own context, and the provider's chain-clients wiring — so
+// the field has to be dropped here or it goes out on the wire.
+describe('createPaymasterFunctions — context on the wire', () => {
+    function makeValidPaymasterClient() {
+        return {
+            // Valid limits, so the estimation fallback stays out of the way.
+            getPaymasterStubData: vi.fn().mockResolvedValue({
+                paymaster: '0x00000000000000000000000000000000000000aa',
+                paymasterData: '0x',
+                paymasterVerificationGasLimit: 0x1000n,
+                paymasterPostOpGasLimit: 0x2000n,
+            }),
+            getPaymasterData: vi.fn().mockResolvedValue({
+                paymaster: '0x00000000000000000000000000000000000000aa',
+                paymasterData: '0x',
+                paymasterVerificationGasLimit: 0x1000n,
+                paymasterPostOpGasLimit: 0x2000n,
+            }),
+            request: vi.fn(),
+        };
+    }
+
+    const TOKEN = '0x036CbD53842c5426634e7929541eC2318f3dCF7e';
+
+    it('strips gas from the context, keeping the rest', async () => {
+        const paymasterClient = makeValidPaymasterClient();
+        const functions = createPaymasterFunctions(
+            { request: vi.fn() } as unknown as Client,
+            paymasterClient as unknown as PaymasterClient,
+            84532,
+            { token: TOKEN, gas: '12345' }
+        );
+
+        await functions.getPaymasterStubData(baseUserOperation as never);
+        await functions.getPaymasterData(baseUserOperation as never);
+
+        for (const fn of [paymasterClient.getPaymasterStubData, paymasterClient.getPaymasterData]) {
+            expect(fn).toHaveBeenCalledWith(expect.objectContaining({ context: { token: TOKEN } }));
+            const { context } = fn.mock.calls[0][0] as { context: Record<string, unknown> };
+            expect(context).not.toHaveProperty('gas');
+        }
+    });
+
+    it('sends no context at all when gas was its only key', async () => {
+        const paymasterClient = makeValidPaymasterClient();
+        const functions = createPaymasterFunctions(
+            { request: vi.fn() } as unknown as Client,
+            paymasterClient as unknown as PaymasterClient,
+            84532,
+            { gas: '12345' }
+        );
+
+        await functions.getPaymasterStubData(baseUserOperation as never);
+
+        // An empty object is not the same as no context: a paymaster that
+        // validates its context shape would see a request it never had before.
+        expect(paymasterClient.getPaymasterStubData.mock.calls[0][0]).not.toHaveProperty('context');
+    });
+
+    it('forwards a context that carries no gas untouched', async () => {
+        const paymasterClient = makeValidPaymasterClient();
+        const functions = createPaymasterFunctions(
+            { request: vi.fn() } as unknown as Client,
+            paymasterClient as unknown as PaymasterClient,
+            84532,
+            { sponsorshipPolicyId: 'sp_my_policy' }
+        );
+
+        await functions.getPaymasterStubData(baseUserOperation as never);
+
+        expect(paymasterClient.getPaymasterStubData).toHaveBeenCalledWith(
+            expect.objectContaining({ context: { sponsorshipPolicyId: 'sp_my_policy' } })
+        );
+    });
+});

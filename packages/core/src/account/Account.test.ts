@@ -1202,3 +1202,110 @@ describe('Account', () => {
         });
     });
 });
+
+// `AccountConfig.paymasterContext` used to be accepted, documented and then
+// silently dropped: `buildChainConfig` kept only the url, and the approval
+// decision read only the override argument. A caller that configured the ERC-20
+// paymaster through config therefore got a userOp sent to that paymaster naming
+// no token, with no approval behind it — which it cannot settle, having no
+// allowance to draw its fee from. These pin the whole path, not the resolver.
+describe('Account — paymaster context from config', () => {
+    // Deliberately not the JAW ERC-20 paymaster: that base url sends
+    // createErc20ApprovalCall off to quote tokens and read an allowance over the
+    // network. Any other url short-circuits it, leaving the threading under test.
+    const PAYMASTER_URL = 'https://api.pimlico.io/v2/1/rpc?apikey=x';
+    const PERMISSION_ID = '0xabc123def456789012345678901234567890123456789012345678901234567890' as `0x${string}`;
+
+    async function makeAccount(config: Record<string, unknown>) {
+        const { createSmartAccount, sendCallsWithPermission } = await import('./smartAccount.js');
+        const mockSmartAccount = {
+            address: '0x1234567890123456789012345678901234567890',
+            signMessage: vi.fn(),
+            signTypedData: vi.fn(),
+            getAddress: vi.fn().mockResolvedValue('0x1234567890123456789012345678901234567890'),
+        };
+        vi.mocked(createSmartAccount).mockResolvedValue(mockSmartAccount as never);
+        vi.mocked(sendCallsWithPermission).mockResolvedValue({ id: '0xdeadbeef', chainId: 1 });
+
+        const mockLocalAccount = {
+            address: '0xabcdef1234567890abcdef1234567890abcdef12',
+            type: 'local',
+            publicKey: '0x04abc123',
+            sign: vi.fn(),
+            signMessage: vi.fn(),
+            signTypedData: vi.fn(),
+            signTransaction: vi.fn(),
+            source: 'privateKey',
+        };
+
+        const account = await Account.fromLocalAccount(
+            { chainId: 1, apiKey: 'test', ...config } as never,
+            mockLocalAccount as never
+        );
+        return { account, sendCallsWithPermission };
+    }
+
+    beforeEach(() => {
+        vi.clearAllMocks();
+    });
+
+    it('carries a configured context onto the chain alongside the url', async () => {
+        const { account } = await makeAccount({
+            paymasterUrl: PAYMASTER_URL,
+            paymasterContext: { sponsorshipPolicyId: 'sp_my_policy' },
+        });
+
+        expect(account.getChain().paymaster).toEqual({
+            url: PAYMASTER_URL,
+            context: { sponsorshipPolicyId: 'sp_my_policy' },
+        });
+    });
+
+    it('sends a configured paymaster and context on a userOp that passes no overrides', async () => {
+        const { account, sendCallsWithPermission } = await makeAccount({
+            paymasterUrl: PAYMASTER_URL,
+            paymasterContext: { token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' },
+        });
+
+        await account.sendCalls([{ to: '0x1234567890123456789012345678901234567890' }], {
+            permissionId: PERMISSION_ID,
+        });
+
+        // Args 6 and 7 are the paymaster url and context. Both were undefined
+        // before, so the userOp reached the paymaster with no token named.
+        const call = vi.mocked(sendCallsWithPermission).mock.calls[0];
+        expect(call[5]).toBe(PAYMASTER_URL);
+        expect(call[6]).toEqual({ token: '0x036CbD53842c5426634e7929541eC2318f3dCF7e' });
+    });
+
+    it('lets an explicit override win over the configured context', async () => {
+        const { account, sendCallsWithPermission } = await makeAccount({
+            paymasterUrl: PAYMASTER_URL,
+            paymasterContext: { token: '0xconfigured' },
+        });
+
+        await account.sendCalls(
+            [{ to: '0x1234567890123456789012345678901234567890' }],
+            { permissionId: PERMISSION_ID },
+            'https://override.example/rpc',
+            { token: '0xoverridden' }
+        );
+
+        const call = vi.mocked(sendCallsWithPermission).mock.calls[0];
+        expect(call[5]).toBe('https://override.example/rpc');
+        expect(call[6]).toEqual({ token: '0xoverridden' });
+    });
+
+    it('leaves the paymaster unset when config names none', async () => {
+        const { account, sendCallsWithPermission } = await makeAccount({});
+
+        await account.sendCalls([{ to: '0x1234567890123456789012345678901234567890' }], {
+            permissionId: PERMISSION_ID,
+        });
+
+        expect(account.getChain().paymaster).toBeUndefined();
+        const call = vi.mocked(sendCallsWithPermission).mock.calls[0];
+        expect(call[5]).toBeUndefined();
+        expect(call[6]).toBeUndefined();
+    });
+});

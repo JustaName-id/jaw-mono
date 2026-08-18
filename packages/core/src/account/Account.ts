@@ -196,7 +196,7 @@ export class Account {
      * ```
      */
     static async get(config: AccountConfig, credentialId?: string): Promise<Account> {
-        const { chainId, apiKey, paymasterUrl } = config;
+        const { chainId, apiKey, paymasterUrl, paymasterContext } = config;
 
         // Resolve native passkey functions into viem-compatible getFn
         const resolved = resolvePasskeyOptions({
@@ -230,7 +230,7 @@ export class Account {
                 rpId,
             });
 
-            const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+            const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl, paymasterContext);
             const bundlerClient = getBundlerClient(chain);
             const smartAccount = await createSmartAccount(
                 webAuthnAccount,
@@ -258,7 +258,7 @@ export class Account {
                     rpId,
                 });
 
-                const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+                const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl, paymasterContext);
                 const bundlerClient = getBundlerClient(chain);
                 const smartAccount = await createSmartAccount(
                     webAuthnAccount,
@@ -299,7 +299,7 @@ export class Account {
      * ```
      */
     static async restore(config: AccountConfig, credentialId: string, publicKey: `0x${string}`): Promise<Account> {
-        const { chainId, apiKey, paymasterUrl } = config;
+        const { chainId, apiKey, paymasterUrl, paymasterContext } = config;
 
         if (!credentialId || !publicKey) {
             throw new Error('credentialId and publicKey are required to restore an account');
@@ -330,7 +330,7 @@ export class Account {
             ...(config.rpId ? { rpId: config.rpId } : {}),
         });
 
-        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl, paymasterContext);
         const bundlerClient = getBundlerClient(chain);
         const smartAccount = await createSmartAccount(
             webAuthnAccount,
@@ -365,7 +365,7 @@ export class Account {
      * ```
      */
     static async create(config: AccountConfig, options: CreateAccountOptions): Promise<Account> {
-        const { chainId, apiKey, paymasterUrl } = config;
+        const { chainId, apiKey, paymasterUrl, paymasterContext } = config;
         const { username } = options;
 
         const resolved = resolvePasskeyOptions({
@@ -388,7 +388,7 @@ export class Account {
             resolved.getFn
         );
 
-        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl, paymasterContext);
 
         const bundlerClient = getBundlerClient(chain);
         const smartAccount = await createSmartAccount(
@@ -418,7 +418,7 @@ export class Account {
      * ```
      */
     static async import(config: AccountConfig): Promise<Account> {
-        const { chainId, apiKey, paymasterUrl } = config;
+        const { chainId, apiKey, paymasterUrl, paymasterContext } = config;
 
         const resolved = resolvePasskeyOptions({
             nativeGetFn: config.nativeGetFn,
@@ -438,7 +438,7 @@ export class Account {
             ...(config.rpId ? { rpId: config.rpId } : {}),
         });
 
-        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl, paymasterContext);
 
         const bundlerClient = getBundlerClient(chain);
         const smartAccount = await createSmartAccount(
@@ -498,10 +498,10 @@ export class Account {
         localAccount: LocalAccount,
         options?: { eip7702?: boolean }
     ): Promise<Account> {
-        const { chainId, apiKey, paymasterUrl } = config;
+        const { chainId, apiKey, paymasterUrl, paymasterContext } = config;
         const isEip7702 = options?.eip7702 ?? false;
 
-        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl);
+        const chain = Account.buildChainConfig(chainId, apiKey, paymasterUrl, paymasterContext);
 
         const bundlerClient = getBundlerClient(chain);
         const smartAccount = isEip7702
@@ -785,23 +785,21 @@ export class Account {
         }));
 
         // If using JAW ERC-20 paymaster, prepend approval call if needed
+        const paymaster = this.resolveEffectivePaymaster(paymasterUrlOverride, paymasterContextOverride);
         const approvalCall = await this.createErc20ApprovalCall(
-            paymasterUrlOverride,
-            paymasterContextOverride,
+            paymaster.url,
+            paymaster.context,
             formattedCalls,
             smartAccount
         );
         const finalCalls = approvalCall ? [approvalCall, ...formattedCalls] : formattedCalls;
 
-        // Remove gas field from context (only used for approval logic)
-        const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-
         return await sendSmartAccountTransaction(
             smartAccount,
             finalCalls,
             this._chain,
-            paymasterUrlOverride,
-            Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined,
+            paymaster.url,
+            paymaster.context,
             this._apiKey,
             isOverride ? undefined : (this._localAccount ?? undefined)
         );
@@ -850,16 +848,13 @@ export class Account {
         }));
 
         // If using JAW ERC-20 paymaster, create approval call if needed
+        const paymaster = this.resolveEffectivePaymaster(paymasterUrlOverride, paymasterContextOverride);
         const approvalCall = await this.createErc20ApprovalCall(
-            paymasterUrlOverride,
-            paymasterContextOverride,
+            paymaster.url,
+            paymaster.context,
             formattedCalls,
             smartAccount
         );
-
-        // Remove gas field from context (only used for approval logic)
-        const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-        const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
         // Don't pass localAccount when overriding address — target is a standard smart account, not EIP-7702
         const localAccount = isOverride ? undefined : (this._localAccount ?? undefined);
@@ -878,8 +873,8 @@ export class Account {
                 this._chain,
                 options.permissionId,
                 this._apiKey,
-                paymasterUrlOverride,
-                cleanedContext,
+                paymaster.url,
+                paymaster.context,
                 localAccount,
                 approvalCall ?? undefined
             );
@@ -890,8 +885,8 @@ export class Account {
                 smartAccount,
                 finalCalls,
                 this._chain,
-                paymasterUrlOverride,
-                cleanedContext,
+                paymaster.url,
+                paymaster.context,
                 localAccount
             );
         }
@@ -1065,16 +1060,13 @@ export class Account {
         const permissionCall = buildGrantPermissionCall(smartAccount.address, spender, expiry, permissions);
 
         // Check if we need an ERC-20 approval for the paymaster
+        const paymaster = this.resolveEffectivePaymaster(paymasterUrlOverride, paymasterContextOverride);
         const approvalCall = await this.createErc20ApprovalCall(
-            paymasterUrlOverride,
-            paymasterContextOverride,
+            paymaster.url,
+            paymaster.context,
             [permissionCall],
             smartAccount
         );
-
-        // Remove gas field from context (only used for approval logic)
-        const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-        const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
         return await grantSmartAccountPermissions(
             smartAccount,
@@ -1083,8 +1075,8 @@ export class Account {
             permissions,
             this._chain,
             this._apiKey,
-            paymasterUrlOverride,
-            cleanedContext,
+            paymaster.url,
+            paymaster.context,
             approvalCall || undefined
         );
     }
@@ -1123,24 +1115,21 @@ export class Account {
         }
 
         // Check if we need an ERC-20 approval for the paymaster
+        const paymaster = this.resolveEffectivePaymaster(paymasterUrlOverride, paymasterContextOverride);
         const approvalCall = await this.createErc20ApprovalCall(
-            paymasterUrlOverride,
-            paymasterContextOverride,
+            paymaster.url,
+            paymaster.context,
             revokeCalls,
             smartAccount
         );
-
-        // Remove gas field from context (only used for approval logic)
-        const { gas: _gas, ...contextWithoutGas } = paymasterContextOverride ?? {};
-        const cleanedContext = Object.keys(contextWithoutGas).length > 0 ? contextWithoutGas : undefined;
 
         return await revokeSmartAccountPermission(
             smartAccount,
             permissionId,
             this._chain,
             this._apiKey,
-            paymasterUrlOverride,
-            cleanedContext,
+            paymaster.url,
+            paymaster.context,
             approvalCall || undefined
         );
     }
@@ -1251,7 +1240,12 @@ export class Account {
      * chainId without needing the original Account instance.
      * @internal
      */
-    private static buildChainConfig(chainId: number, apiKey?: string, paymasterUrl?: string): Chain {
+    private static buildChainConfig(
+        chainId: number,
+        apiKey?: string,
+        paymasterUrl?: string,
+        paymasterContext?: Record<string, unknown>
+    ): Chain {
         const rpcUrl = apiKey
             ? `${JAW_RPC_URL}?chainId=${chainId}&api-key=${apiKey}`
             : `${JAW_RPC_URL}?chainId=${chainId}`;
@@ -1259,7 +1253,14 @@ export class Account {
         const chain: Chain = {
             id: chainId,
             rpcUrl,
-            ...(paymasterUrl && { paymaster: { url: paymasterUrl } }),
+            // The context has to ride on the chain alongside the url, the same
+            // way `createInitialChains` carries a whole `PaymasterConfig`.
+            // Keeping only the url is what stranded `AccountConfig.paymasterContext`:
+            // the field was accepted, documented and then silently dropped, so an
+            // ERC-20 paymaster was handed a userOp naming no token.
+            ...(paymasterUrl && {
+                paymaster: { url: paymasterUrl, ...(paymasterContext && { context: paymasterContext }) },
+            }),
         };
 
         const existingChains = chainStore.get() ?? [];
@@ -1300,6 +1301,36 @@ export class Account {
         // Remove query params and compare base URL
         const baseUrl = paymasterUrl.split('?')[0];
         return baseUrl === JAW_PAYMASTER_URL;
+    }
+
+    /**
+     * Resolve the paymaster a userOp will actually be sent to: an explicit
+     * override first, then the chain config this Account was built with.
+     *
+     * Mirrors `getBundlerClient`'s own precedence, `||` included, because the two
+     * must never disagree. They did: the approval decision read only the
+     * override while the userOp's paymaster was resolved from the chain, so a
+     * caller that configured the ERC-20 paymaster through `AccountConfig` got a
+     * userOp sent to it with no token in context and no approval behind it —
+     * which the paymaster cannot settle, since it has no allowance to draw its
+     * fee from.
+     *
+     * `gas` is deliberately left on the returned context: it sizes the approval.
+     * `createPaymasterFunctions` strips it before anything goes on the wire.
+     * @internal
+     */
+    private resolveEffectivePaymaster(
+        paymasterUrlOverride?: string,
+        paymasterContextOverride?: Record<string, unknown>
+    ): { url?: string; context?: Record<string, unknown> } {
+        const url = paymasterUrlOverride || this._chain.paymaster?.url;
+        const context = paymasterContextOverride || this._chain.paymaster?.context;
+        return {
+            url,
+            // An empty context is the same as none; normalising here keeps the
+            // downstream `context && …` spreads from emitting an empty object.
+            context: context && Object.keys(context).length > 0 ? context : undefined,
+        };
     }
 
     /**
