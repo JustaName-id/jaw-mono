@@ -122,6 +122,9 @@ export interface AccountMetadata {
 }
 
 // @public (undocumented)
+export type Address = `0x${string}`;
+
+// @public (undocumented)
 export const ANY_FN_SEL: Hex;
 
 // @public
@@ -204,6 +207,13 @@ export function calculateDisplayTokenCost(gas: UserOpGasFields, quote: TokenQuot
 export function calculateTokenCostFromGas(gas: UserOpGasFields, quote: TokenQuote): bigint;
 
 // @public
+export type CallPermission = {
+    target: Address_2;
+    selector: Hex;
+    checker: Address_2;
+};
+
+// @public
 export type CallPermissionDetail = {
     target: Address_2;
     selector?: Hex;
@@ -263,7 +273,7 @@ export type Chain = {
         symbol?: string;
         decimal?: number;
     };
-    paymaster?: PaymasterConfig_3;
+    paymaster?: PaymasterConfig;
 };
 
 // @public
@@ -355,7 +365,7 @@ export function createJAWProvider(options: CreateProviderOptions): JAWProvider;
 export type CreateJAWSDKOptions = Partial<AppMetadata> & {
     apiKey: string;
     preference?: Partial<JawProviderPreference>;
-    paymasters?: Record<number, PaymasterConfig_2>;
+    paymasters?: Record<number, PaymasterConfig>;
     ens?: string;
     theme?: JawTheme;
 };
@@ -372,6 +382,9 @@ export type CreateProviderOptions = ConstructorOptions;
 //
 // @public
 export function createSmartAccountForAddress(targetAddress: Address_2, account: WebAuthnAccount | LocalAccount, bundlerClient: JustanAccountImplementation['client']): Promise<SmartAccount>;
+
+// @public (undocumented)
+export type CustomErrorArg<T> = ServerErrorOptions<T>;
 
 // @public (undocumented)
 export function decrypt(sharedSecret: CryptoKey, input: EncryptedData): Promise<string>;
@@ -510,6 +523,31 @@ export function estimateErc20PaymasterCosts(smartAccount: SmartAccount, calls: A
     permissionId?: Hex;
     apiKey?: string;
 }): Promise<TokenEstimate[]>;
+
+// @public (undocumented)
+export interface EthereumErrorOptions<T> {
+    // (undocumented)
+    data?: T;
+    // (undocumented)
+    message?: string;
+}
+
+// @public (undocumented)
+export class EthereumProviderError<T> extends EthereumRpcError<T> {
+    constructor(code: number, message: string, data?: T);
+}
+
+// @public (undocumented)
+export class EthereumRpcError<T> extends Error {
+    constructor(code: number, message: string, data?: T);
+    // (undocumented)
+    code: number;
+    // (undocumented)
+    data?: T;
+}
+
+// @public (undocumented)
+export type EthErrorsArg<T> = EthereumErrorOptions<T> | string;
 
 // @public
 export function exportKeyToHexString(type: 'private' | 'public', key: CryptoKey): Promise<string>;
@@ -8237,6 +8275,11 @@ export interface SendCallsOptions {
     permissionId?: Hex;
 }
 
+// Warning: (ae-forgotten-export) The symbol "SUPPORTED_SEND_CALLS_VERSIONS" needs to be exported by the entry point index.d.ts
+//
+// @public (undocumented)
+export type SendCallsVersion = (typeof SUPPORTED_SEND_CALLS_VERSIONS)[number];
+
 // @public
 export interface SendTransactionUIRequest extends BaseUIRequest {
     // (undocumented)
@@ -8277,6 +8320,12 @@ export interface SerializedEthereumRpcError {
 // @public
 export function serializeError(error: unknown): SerializedEthereumRpcError;
 
+// @public (undocumented)
+export interface ServerErrorOptions<T> extends EthereumErrorOptions<T> {
+    // (undocumented)
+    code: number;
+}
+
 // @public
 export interface SignatureUIRequest extends BaseUIRequest {
     // (undocumented)
@@ -8316,6 +8365,14 @@ export type SignInWithEthereumCapabilityResponse = {
 
 // @public
 export const SILENT_METHODS: readonly string[];
+
+// @public
+export type SpendLimit = {
+    token: Address_2;
+    allowance: bigint;
+    unit: SpendPeriod;
+    multiplier: number;
+};
 
 // @public
 export type SpendPeriod = 'minute' | 'hour' | 'day' | 'week' | 'month' | 'year' | 'forever';
@@ -14996,20 +15053,6 @@ export interface WalletSignUIRequest extends BaseUIRequest {
     // (undocumented)
     type: 'wallet_sign';
 }
-
-// Warnings were encountered during analysis:
-//
-// src/errors/errors.ts:7:1 - (ae-forgotten-export) The symbol "EthErrorsArg" needs to be exported by the entry point index.d.ts
-// src/errors/errors.ts:7:1 - (ae-forgotten-export) The symbol "EthereumRpcError" needs to be exported by the entry point index.d.ts
-// src/errors/errors.ts:15:44 - (ae-forgotten-export) The symbol "ServerErrorOptions" needs to be exported by the entry point index.d.ts
-// src/errors/errors.ts:45:9 - (ae-forgotten-export) The symbol "EthereumProviderError" needs to be exported by the entry point index.d.ts
-// src/errors/errors.ts:86:9 - (ae-forgotten-export) The symbol "CustomErrorArg" needs to be exported by the entry point index.d.ts
-// src/rpc/permissions.ts:95:5 - (ae-forgotten-export) The symbol "CallPermission" needs to be exported by the entry point index.d.ts
-// src/rpc/permissions.ts:97:5 - (ae-forgotten-export) The symbol "SpendLimit" needs to be exported by the entry point index.d.ts
-// src/sdk/createJAWSDK.ts:19:5 - (ae-forgotten-export) The symbol "PaymasterConfig_2" needs to be exported by the entry point index.d.ts
-// src/store/types.ts:24:5 - (ae-forgotten-export) The symbol "PaymasterConfig_3" needs to be exported by the entry point index.d.ts
-// src/ui/interface.ts:87:9 - (ae-forgotten-export) The symbol "SendCallsVersion" needs to be exported by the entry point index.d.ts
-// src/ui/interface.ts:129:9 - (ae-forgotten-export) The symbol "Address" needs to be exported by the entry point index.d.ts
 
 // (No @packageDocumentation comment for this package)
 

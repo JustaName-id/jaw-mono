@@ -167,3 +167,16 @@ export type { JawTheme, JawThemeMode, JawBorderRadius, JawFontStack } from './ui
 
 /** Method policy (silent vs interactive RPC classification) **/
 export { SILENT_METHODS, INTERACTIVE_METHODS, isSilentMethod, requiresInteraction } from './method-policy.js';
+
+/** EXPERIMENTO: los 11 simbolos del footer de warnings **/
+export {
+    type EthereumErrorOptions,
+    type EthErrorsArg,
+    type ServerErrorOptions,
+    type CustomErrorArg,
+    EthereumRpcError,
+    EthereumProviderError,
+} from './errors/errors.js';
+export type { CallPermission, SpendLimit } from './rpc/permissions.js';
+export type { SendCallsVersion } from './rpc/sendCallsParams.js';
+export type { Address } from './provider/interface.js';
