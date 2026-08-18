@@ -207,29 +207,40 @@ describe('EIP-1193 conformance', () => {
     });
 
     describe('connection lifecycle events', () => {
-        /**
-         * Pinned as it behaves today, and it looks wrong.
-         *
-         * `_request` calls `disconnect()` whenever the code is 4100, and the
-         * no-session branch throws exactly 4100 for the sign methods. So a dapp
-         * that feature-detects by calling `personal_sign` before connecting
-         * makes a provider that was never connected emit `disconnect`, and
-         * `disconnect()` also runs `PasskeyManager.logout()` and tears down the
-         * iframe. In AppSpecific mode that wipes stored auth state, so the next
-         * connect needs a fresh ceremony.
-         *
-         * Left as-is because this file is about pinning the contract, and
-         * changing it is a behavior change that belongs in its own PR. If that
-         * happens, this test should flip to asserting no events.
-         */
-        it('emits accountsChanged and disconnect when a never-connected provider refuses with 4100', async () => {
-            const provider = newProvider();
+        function recordEvents(provider: JAWProvider): string[] {
             const events: string[] = [];
             provider.on('accountsChanged', () => events.push('accountsChanged'));
             provider.on('disconnect', () => events.push('disconnect'));
+            return events;
+        }
 
-            await expect(provider.request({ method: 'personal_sign' })).rejects.toMatchObject({ code: 4100 });
+        // Driven off the table so all four methods that refuse with 4100 stay
+        // honest, rather than personal_sign standing in for the rest.
+        const refusesUnauthorized = casesOf('rejects').filter(
+            ([, outcome]) => outcome.code === standardErrorCodes.provider.unauthorized
+        );
 
+        it.each(refusesUnauthorized)('stays quiet when %s is refused on a never-connected provider', async (method) => {
+            const provider = newProvider();
+            const events = recordEvents(provider);
+
+            await expect(provider.request({ method })).rejects.toMatchObject({ code: 4100 });
+
+            // "Connect first" is not a disconnection. A dapp that probes before
+            // connecting must not see a lifecycle event for a session it never
+            // had.
+            expect(events).toEqual([]);
+        });
+
+        it('disconnects when a live session comes back unauthorized', async () => {
+            const provider = connectedProvider();
+            const events = recordEvents(provider);
+            (signer.request as Mock).mockRejectedValue({ code: 4100, message: 'session expired' });
+
+            await expect(provider.request({ method: 'wallet_sign' })).rejects.toMatchObject({ code: 4100 });
+
+            // Same code, opposite meaning: the session died, so tearing it down
+            // locally and telling the dapp is right.
             expect(events).toEqual(['accountsChanged', 'disconnect']);
         });
     });
