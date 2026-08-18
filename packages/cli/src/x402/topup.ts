@@ -71,7 +71,12 @@ interface CallStatus {
   status?: number | string;
 }
 
-function isFinalStatus(s: CallStatus): 'ok' | 'failed' | 'pending' {
+function isFinalStatus(s: CallStatus | undefined): 'ok' | 'failed' | 'pending' {
+  // The bridge resolves to `undefined` when the in-memory store misses and the
+  // receipt lookup throws (Account.getCallStatus). This runs after the transfer
+  // is already broadcast, so a TypeError here loses the audit row that meters
+  // the period cap, and the next ceiling stays permissive.
+  if (!s) return 'pending';
   const v = s.status;
   // EIP-5792: 100 = pending, 200 = confirmed, >= 400 = failure.
   if (v === 200 || v === '200' || v === 'CONFIRMED') return 'ok';
@@ -149,7 +154,14 @@ export async function ensurePayerFunds(
     const sent = await executor.request('wallet_sendCalls', [{ calls: [{ to: asset.address, data }] }]);
     const id = typeof sent === 'string' ? sent : (sent as { id?: string } | null)?.id;
     if (!id) {
-      return { ok: false, reason: 'top-up submitted but no call id returned; cannot confirm it' };
+      // Broadcast already happened, so carry the amount even with no id to
+      // confirm it by: the caller gates its audit row on having one or the
+      // other, and funds that moved have to reach the ledger.
+      return {
+        ok: false,
+        reason: 'top-up submitted but no call id returned; cannot confirm it',
+        amount: amount.toString(),
+      };
     }
     batchId = id;
   } catch (err) {

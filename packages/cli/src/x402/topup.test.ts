@@ -248,3 +248,41 @@ describe('ensurePayerFunds', () => {
     expect(requests).toHaveLength(0);
   });
 });
+
+describe('ensurePayerFunds, statuses the bridge can actually return', () => {
+  it('keeps polling when the call status comes back undefined instead of throwing', async () => {
+    // Account.getCallStatus is typed `CallStatusResponse | undefined` and returns
+    // undefined when the in-memory store misses and the receipt lookup throws.
+    // This lands after the transfer is broadcast, so a TypeError here loses the
+    // ledger row that meters the period cap.
+    let call = 0;
+    const { executor } = fakeExecutor({
+      status: () => {
+        call += 1;
+        return call === 1 ? undefined : { status: 200 };
+      },
+    });
+
+    const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
+      balanceReader: async () => 250_000n,
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(true);
+    expect(call).toBe(2); // the undefined round counted as pending, not as a crash
+  });
+
+  it('reports the amount when the broadcast returns no call id', async () => {
+    const { executor } = fakeExecutor({ sendCalls: () => ({ chainId: 84532 }) });
+
+    const out = await ensurePayerFunds(requirement('1000000'), PAYER, executor, {
+      balanceReader: async () => 250_000n,
+      ...instantly,
+    });
+
+    expect(out.ok).toBe(false);
+    // Funds moved with no id to confirm them by, so the amount is the only
+    // thing the audit ledger can record.
+    expect(out.amount).toBeDefined();
+  });
+});

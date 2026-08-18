@@ -91,6 +91,10 @@ describe('withPaymentLock', () => {
 
   it('treats an unreadable lock as breakable, not as a permanent block', async () => {
     fs.writeFileSync(PATHS.paymentLock, '{ truncated mid-write');
+    // Aged past the torn grace: an unreadable file that is not advancing its
+    // mtime really is a leftover, unlike one being written right now.
+    const old = Date.now() - 10_000;
+    fs.utimesSync(PATHS.paymentLock, new Date(old), new Date(old));
     await expect(withPaymentLock(async () => 'ran', { timeoutMs: 500 })).resolves.toBe('ran');
   });
 
@@ -126,5 +130,48 @@ describe('withPaymentLock', () => {
     await withPaymentLock(async () => {
       expect(fs.statSync(PATHS.paymentLock).mode & 0o777).toBe(0o600);
     });
+  });
+});
+
+describe('withPaymentLock, unreadable and unbreakable locks', () => {
+  it('waits out a lock file that is still being written instead of breaking it', async () => {
+    // The winner creates the file with `wx` and writes a tick later, so there is
+    // a window where its own lock reads as null. Treating that as stale hands
+    // the critical section to a second payer, which is what the lock prevents.
+    fs.writeFileSync(PATHS.paymentLock, '');
+
+    await expect(withPaymentLock(async () => 'second payer got in', { timeoutMs: 300 })).rejects.toThrow(
+      /Another payment has been running/
+    );
+    expect(fs.existsSync(PATHS.paymentLock)).toBe(true);
+  });
+
+  it('still breaks a lock file that has been unreadable long enough to be torn', async () => {
+    fs.writeFileSync(PATHS.paymentLock, 'half a json');
+    const old = Date.now() - 10_000;
+    fs.utimesSync(PATHS.paymentLock, new Date(old), new Date(old));
+
+    await expect(withPaymentLock(async () => 'recovered', { timeoutMs: 2_000 })).resolves.toBe('recovered');
+  });
+
+  it('gives up on the deadline when the stale lock cannot be removed', async () => {
+    // A directory at the lock path: `wx` keeps returning EEXIST and unlink can
+    // never clear it. Retrying without checking the deadline or yielding spins
+    // at full CPU forever, which wedges the whole process in `jaw mcp`.
+    fs.mkdirSync(PATHS.paymentLock);
+    // Aged so it reads as torn, which is what sends the loop down the break
+    // path in the first place. Without this the run never gets there.
+    const aged = Date.now() - 10_000;
+    fs.utimesSync(PATHS.paymentLock, new Date(aged), new Date(aged));
+    const timer = vi.fn();
+    const handle = setTimeout(timer, 50);
+
+    const started = Date.now();
+    await expect(withPaymentLock(async () => 'never', { timeoutMs: 300 })).rejects.toThrow();
+
+    expect(Date.now() - started).toBeLessThan(3_000);
+    expect(timer).toHaveBeenCalled(); // the event loop kept turning
+    clearTimeout(handle);
+    fs.rmdirSync(PATHS.paymentLock);
   });
 });

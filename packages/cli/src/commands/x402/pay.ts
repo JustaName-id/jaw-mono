@@ -183,11 +183,13 @@ export default class X402Pay extends BaseCommand {
       // The reason can carry server text (an unknown network echoed back,
       // an on-chain revert string), so it is never printed raw.
       this.log(`Refused.\n\n  ${sanitizeLine(result.refusedReason)}`);
-      if (result.topUp?.batchId) {
+      if (result.topUp) {
         // Money moved before the refusal. Never let that scroll past silently.
-        this.log(
-          `\n  A top-up of ${formatUsdc(result.topUp.amount, topUpDecimals)} was sent first (${result.topUp.batchId}).`
-        );
+        // Gated on the record, not on the id: a broadcast that returned no call
+        // id has an amount and nothing else, and that is the case where the
+        // user most needs to be told their USDC left the owner account.
+        const where = result.topUp.batchId ? ` (${result.topUp.batchId})` : ' (no call id returned to confirm it)';
+        this.log(`\n  A top-up of ${formatUsdc(result.topUp.amount, topUpDecimals)} was sent first${where}.`);
       }
       this.exit(1);
     }

@@ -420,7 +420,22 @@ export async function payAndFetch(
   //     A refusal here is a policy-shaped outcome, not an error.
   let topUp: { amount?: string; batchId?: string } | undefined;
   if (opts.ensureFunds) {
-    const funded = await opts.ensureFunds(requirement, payer.address);
+    // Wrapped for the same reason `payer.pay` is below: this hook is what moves
+    // the funds, so a throw escaping here skips both front ends' audit log for
+    // money that already left. An RPC failure in the balance read or a missing
+    // call status is enough to trip it.
+    let funded;
+    try {
+      funded = await opts.ensureFunds(requirement, payer.address);
+    } catch (err) {
+      return {
+        status: 402,
+        body: first.body,
+        paid: false,
+        payer: payer.address,
+        refusedReason: `payer funding failed: ${errorMessage(err)}`,
+      };
+    }
     if (!funded.ok) {
       return {
         status: 402,
@@ -430,7 +445,8 @@ export async function payAndFetch(
         refusedReason: funded.reason ?? 'payer funding failed',
         // A refused funding may still have broadcast the transfer (e.g. a
         // confirmation timeout) — keep the trace so it can be reconciled.
-        ...(funded.batchId ? { topUp: { amount: funded.amount, batchId: funded.batchId } } : {}),
+        // Gated on either field: the no-call-id path has an amount and no id.
+        ...(funded.amount || funded.batchId ? { topUp: { amount: funded.amount, batchId: funded.batchId } } : {}),
       };
     }
     if (!funded.skipped) {
@@ -476,12 +492,30 @@ export async function payAndFetch(
     [X402_HEADERS.signature]: proof,
     'Idempotency-Key': idempotencyKey(),
   };
-  const paid = await fetchWithTimeout(resource, {
-    method,
-    headers: retryHeaders,
-    body: opts.body,
-    redirect: 'manual',
-  });
+  // Wrapped like `ensureFunds` and `payer.pay` above, and for more than either:
+  // by this point a top-up may have moved the user's USDC and the authorization
+  // is already signed, so a socket error escaping here loses both from the audit
+  // ledger. That ledger is what the period and session caps are rebuilt from, so
+  // the next payment would see a ceiling more permissive than it should.
+  let paid;
+  try {
+    paid = await fetchWithTimeout(resource, {
+      method,
+      headers: retryHeaders,
+      body: opts.body,
+      redirect: 'manual',
+    });
+  } catch (err) {
+    return {
+      status: 402,
+      body: '',
+      paid: false,
+      payer: payer.address,
+      attemptedPayment: details,
+      topUp,
+      refusedReason: `payment sent but the response never arrived: ${errorMessage(err)}`,
+    };
+  }
 
   // A settled x402 response carries the resource directly (never a redirect).
   // A 3xx here means the endpoint tried to bounce the signed proof elsewhere —

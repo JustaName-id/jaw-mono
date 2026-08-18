@@ -70,8 +70,30 @@ function isAlive(pid: number): boolean {
   }
 }
 
+/**
+ * How long an unreadable lock file has to stay unreadable before it counts as
+ * torn rather than newborn.
+ */
+const TORN_GRACE_MS = 2_000;
+
+/**
+ * A file that does not parse is either torn by a crash mid-write, or newborn:
+ * `withPaymentLock` creates it with `wx` and writes a tick later, so there is a
+ * real window where the winner's own lock reads as `null`. Breaking it there
+ * hands the same critical section to a second payer, which is the one thing
+ * this module exists to prevent. A torn file stops advancing its mtime, a
+ * newborn one is about to, so age separates them.
+ */
+function unreadableLockIsTorn(): boolean {
+  try {
+    return Date.now() - fs.statSync(PATHS.paymentLock).mtimeMs > TORN_GRACE_MS;
+  } catch {
+    return true; // already gone: nothing left to protect
+  }
+}
+
 function isStale(lock: LockFile | null, staleAfterMs: number): boolean {
-  if (!lock) return true; // unreadable: a leftover from a crash mid-write
+  if (!lock) return unreadableLockIsTorn(); // torn by a crash, or still being written
   if (!isAlive(lock.pid)) return true; // holder died without releasing
   return Date.now() - lock.at > staleAfterMs; // alive but wedged past any real payment
 }
@@ -89,6 +111,11 @@ function breakLock(observed: LockFile | null): void {
     (observed === null && current === null) ||
     (observed !== null && current !== null && current.token === observed.token && current.at === observed.at);
   if (!sameLock && current !== null) return;
+  // Same grace as `isStale`, for the door it does not cover: `current === null`
+  // also happens when the holder released and a third payer is mid-`wx`, its
+  // file created and not yet written. Unlinking there deletes a lock that payer
+  // believes it holds, and both of us end up inside the critical section.
+  if (current === null && !unreadableLockIsTorn()) return;
   try {
     fs.unlinkSync(PATHS.paymentLock);
   } catch {
@@ -127,10 +154,13 @@ export async function withPaymentLock<T>(fn: () => Promise<T>, options: LockOpti
 
       const holder = readLock();
       if (isStale(holder, staleAfterMs)) {
+        // Break it, then fall through to the deadline check and the sleep below
+        // rather than retrying straight away. If the unlink cannot succeed (an
+        // immutable file, or a directory at that path) its error is swallowed
+        // and `wx` keeps returning EEXIST, so looping without yielding spins at
+        // 100% CPU forever and wedges the whole process, not just the payment.
         breakLock(holder);
-        continue; // retry immediately; the winner of the next `wx` takes it
-      }
-      if (!notified && holder) {
+      } else if (!notified && holder) {
         notified = true;
         options.onWait?.(holder.pid);
       }

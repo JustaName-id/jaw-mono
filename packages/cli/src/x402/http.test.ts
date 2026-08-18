@@ -379,6 +379,44 @@ describe('payAndFetch', () => {
     expect(result.topUp).toEqual({ amount: '750000', batchId: '0xbatch9' });
   });
 
+  it('turns a throwing funding hook into a refusal instead of letting it escape', async () => {
+    // The hook is what moves the funds, so a bare throw skips both front ends'
+    // audit log for money that may already have left. An RPC failure in the
+    // balance read is enough to reach here.
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      ensureFunds: async () => {
+        throw new Error('rpc down');
+      },
+    });
+
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toBe('payer funding failed: rpc down');
+    expect(fetchMock).toHaveBeenCalledTimes(1); // never retried with a payment
+  });
+
+  it('keeps the top-up trace when the broadcast returned no call id to confirm', async () => {
+    fetchMock.mockResolvedValueOnce(
+      mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
+    );
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      ensureFunds: async () => ({
+        ok: false,
+        reason: 'top-up submitted but no call id returned; cannot confirm it',
+        amount: '750000',
+      }),
+    });
+
+    expect(result.paid).toBe(false);
+    // Funds moved with nothing to confirm them by, which is exactly when the
+    // ledger row matters most.
+    expect(result.topUp).toEqual({ amount: '750000', batchId: undefined });
+  });
+
   it('refuses to pay above the policy cap (no payment attempt)', async () => {
     fetchMock.mockResolvedValueOnce(
       mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' })
@@ -660,5 +698,27 @@ describe('payAndFetch — untrusted challenge fields', () => {
     );
     const result = await payAndFetch(URL_UNDER_TEST, payer, { dryRun: true });
     expect(result.wouldPay?.network).toBe(REQUIREMENT.network);
+  });
+});
+
+describe('payAndFetch, when the response to a signed payment never arrives', () => {
+  it('returns the trace instead of throwing, so the ledger still gets the row', async () => {
+    // Worst spot in the flow to throw: the top-up moved the user's USDC and the
+    // authorization is signed, so a socket error escaping here loses both from
+    // the ledger the caps are rebuilt from.
+    fetchMock
+      .mockResolvedValueOnce(mockRes({ status: 402, headers: { 'PAYMENT-REQUIRED': challengeHeader }, body: '{}' }))
+      .mockRejectedValueOnce(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }));
+
+    const result = await payAndFetch(URL_UNDER_TEST, payer, {
+      ensureFunds: async () => ({ ok: true, amount: '5000', batchId: '0xbatch7' }),
+    });
+
+    expect(result.paid).toBe(false);
+    expect(result.refusedReason).toContain('payment sent but the response never arrived');
+    expect(result.topUp).toEqual({ amount: '5000', batchId: '0xbatch7' });
+    // The nonce is the only way to reconcile an authorization the facilitator
+    // may still have broadcast.
+    expect(result.attemptedPayment).toBeDefined();
   });
 });
