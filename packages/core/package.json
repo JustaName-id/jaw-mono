@@ -72,7 +72,7 @@
         },
         "cache": true,
         "inputs": [
-          "production",
+          "withApiReport",
           "^production"
         ]
       },
