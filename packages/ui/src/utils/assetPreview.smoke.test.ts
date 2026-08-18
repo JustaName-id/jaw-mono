@@ -26,7 +26,9 @@ globalThis.fetch = (async (input: any, init: any) => {
   try {
     const b = JSON.parse(init?.body ?? '{}');
     method = Array.isArray(b) ? `jsonrpc-batch(${b.length})` : b.method;
-  } catch {}
+  } catch {
+    /* a non-JSON body is not a request we are timing; leave method as '?' */
+  }
   const start = performance.now() - t0;
   const res = await realFetch(input, init);
   recs.push({ method, start, end: performance.now() - t0 });
