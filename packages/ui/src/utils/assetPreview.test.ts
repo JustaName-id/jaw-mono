@@ -44,6 +44,11 @@ const AERO_POS = '0x827922686190790b37229fd06084350e74485b72';
 // falsy and reports as `undefined`.
 const ZERO_DEC = '0x0000000000000000000000000000000000000d00';
 
+const ACCOUNT = '0x1111111111111111111111111111111111111111' as Address;
+const BATCH_CALLDATA = '0xfeedface' as Hex;
+/** The batch `resolveTokenUnits` replays ahead of its probes, distinctive so it is recognisable. */
+const BATCH = { account: ACCOUNT, calls: [{ to: AERO_POS as Address, data: BATCH_CALLDATA }] };
+
 describe('mapAssetChanges', () => {
   it('splits a swap into an outgoing and an incoming row', () => {
     const deltas = mapAssetChanges([
@@ -130,6 +135,9 @@ describe('mapAssetChanges', () => {
 
 const SUPPORTS_INTERFACE = '0x01ffc9a7';
 const DECIMALS = '0x313ce567';
+// `supportsInterface(0x80ac58cd)`, written out rather than re-encoded from the source constant:
+// re-encoding would make any interface id agree with itself, including a wrong one.
+const ERC721_QUERY = `0x01ffc9a780ac58cd${'00'.repeat(28)}` as Hex;
 const BLOCK = 31_337n;
 const BLOCK_HEX = '0x7a69';
 
@@ -155,10 +163,13 @@ interface Probe {
  * Stubbing higher up (at `client.call`, say) would skip the seam where a request failure and a
  * contract's "no" have to stay distinguishable, which is the behaviour these tests exist for.
  *
- * `answer` receives the 4-byte selector and the target. Pass `transportError` to make the node
- * itself fail.
+ * `answer` receives the 4-byte selector and the target, and answers the probe block only — the
+ * batch `resolveTokenUnits` replays ahead of it always succeeds. `blocks` records every block's
+ * calls in the order the node saw them, so the replay's position is assertable and not assumed.
+ * Pass `transportError` to make the node itself fail.
  */
 function stubClient(answer: (selector: string, to: string) => Outcome, transportError?: Error) {
+  const blocks: Probe[][] = [];
   const probes: Probe[] = [];
   let requests = 0;
   const client = createPublicClient({
@@ -169,17 +180,22 @@ function stubClient(answer: (selector: string, to: string) => Outcome, transport
         requests++;
         if (transportError) throw transportError;
         const [{ blockStateCalls }, block] = params as [{ blockStateCalls: { calls: Probe[] }[] }, string];
-        return blockStateCalls.map((b) => ({
-          number: block,
-          calls: b.calls.map((c) => {
-            probes.push({ to: c.to, data: c.data, block });
-            return outcome(answer(c.data.slice(0, 10), c.to.toLowerCase()));
-          }),
-        }));
+        return blockStateCalls.map((b, blockIndex) => {
+          const recorded = b.calls.map((c) => ({ to: c.to, data: c.data, block }));
+          blocks.push(recorded);
+          return {
+            number: block,
+            calls: b.calls.map((c) => {
+              if (blockIndex === 0) return ok('0x'); // the replayed batch
+              probes.push({ to: c.to, data: c.data, block });
+              return outcome(answer(c.data.slice(0, 10), c.to.toLowerCase()));
+            }),
+          };
+        });
       },
     }),
   });
-  return { client, probes, requestCount: () => requests };
+  return { client, blocks, probes, requestCount: () => requests };
 }
 
 describe('resolveTokenUnits', () => {
@@ -187,7 +203,7 @@ describe('resolveTokenUnits', () => {
     const { client, probes } = stubClient(() => word(1));
     const changes = [change(BRZ, -1n, { decimals: 1, symbol: 'BRZ' })];
 
-    const units = await resolveTokenUnits(client, changes, BLOCK);
+    const units = await resolveTokenUnits(client, changes, BLOCK, BATCH);
 
     expect(units.erc721).toEqual(new Set([BRZ.toLowerCase()]));
     expect(units.changes).toEqual(changes);
@@ -199,7 +215,7 @@ describe('resolveTokenUnits', () => {
     const { client } = stubClient((selector) => (selector === SUPPORTS_INTERFACE ? 'revert' : word(0)));
     const changes = [change(ZERO_DEC, 42n, { symbol: 'ZERO' })];
 
-    const units = await resolveTokenUnits(client, changes, BLOCK);
+    const units = await resolveTokenUnits(client, changes, BLOCK, BATCH);
 
     expect(units.erc721.size).toBe(0);
     expect(units.changes[0].token.decimals).toBe(0);
@@ -214,7 +230,7 @@ describe('resolveTokenUnits', () => {
     // A contract can answer both. A confirmed NFT is a count whatever `decimals()` claims.
     const { client } = stubClient((selector) => (selector === SUPPORTS_INTERFACE ? word(1) : word(6)));
 
-    const units = await resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK);
+    const units = await resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK, BATCH);
 
     expect(units.erc721).toEqual(new Set([AERO_POS.toLowerCase()]));
     expect(units.changes[0].token.decimals).toBeUndefined();
@@ -226,7 +242,8 @@ describe('resolveTokenUnits', () => {
     await resolveTokenUnits(
       client,
       [change(AERO_POS, 1n, { symbol: 'POS' }), change(ZERO_DEC, 1n, { symbol: 'ZERO' })],
-      BLOCK
+      BLOCK,
+      BATCH
     );
 
     expect(requestCount()).toBe(1);
@@ -238,7 +255,7 @@ describe('resolveTokenUnits', () => {
   it('reads the probes at the block the balances were measured against', async () => {
     const { client, probes } = stubClient(() => word(1));
 
-    await resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1, symbol: 'BRZ' })], BLOCK);
+    await resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1, symbol: 'BRZ' })], BLOCK, BATCH);
 
     expect(probes.every((p) => p.block === BLOCK_HEX)).toBe(true);
   });
@@ -248,7 +265,7 @@ describe('resolveTokenUnits', () => {
     // NFTs and unreadable-decimals tokens from the preview and show no error for it.
     const { client } = stubClient(() => word(1), new Error('503 Service Unavailable'));
 
-    await expect(resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1 })], BLOCK)).rejects.toThrow();
+    await expect(resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1 })], BLOCK, BATCH)).rejects.toThrow();
   });
 
   it('rejects rather than degrading when the node reverts the probe request wholesale', async () => {
@@ -259,7 +276,7 @@ describe('resolveTokenUnits', () => {
     const { client } = stubClient(() => word(1), new Error('execution reverted'));
 
     await expect(
-      resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1 }), change(AERO_POS, 1n, {})], BLOCK)
+      resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1 }), change(AERO_POS, 1n, {})], BLOCK, BATCH)
     ).rejects.toThrow();
   });
 
@@ -275,7 +292,8 @@ describe('resolveTokenUnits', () => {
     const units = await resolveTokenUnits(
       client,
       [change(ZERO_DEC, 42n, { symbol: 'HUGE' }), change(AERO_POS, 7n, { symbol: 'FINE' })],
-      BLOCK
+      BLOCK,
+      BATCH
     );
 
     expect(units.changes[0].token.decimals).toBeUndefined();
@@ -292,7 +310,7 @@ describe('resolveTokenUnits', () => {
     const huge = `0x${(2n ** 200n).toString(16).padStart(64, '0')}` as const;
     const { client } = stubClient((selector) => (selector === SUPPORTS_INTERFACE ? 'revert' : huge));
 
-    const units = await resolveTokenUnits(client, [change(ZERO_DEC, 42n, { symbol: 'HUGE' })], BLOCK);
+    const units = await resolveTokenUnits(client, [change(ZERO_DEC, 42n, { symbol: 'HUGE' })], BLOCK, BATCH);
 
     expect(units.changes[0].token.decimals).toBeUndefined();
     expect(mapAssetChanges(units.changes, units.erc721)).toEqual([]);
@@ -302,7 +320,7 @@ describe('resolveTokenUnits', () => {
     // Not the same shape as `0x`: there are bytes, just not 32 of them.
     const { client } = stubClient(() => `0x${'00'.repeat(16)}` as const);
 
-    const units = await resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK);
+    const units = await resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK, BATCH);
 
     expect(units.erc721.size).toBe(0);
     expect(units.changes[0].token.decimals).toBeUndefined();
@@ -312,7 +330,7 @@ describe('resolveTokenUnits', () => {
     // A candidate with no code: the call succeeds and returns nothing at all.
     const { client } = stubClient(() => '0x');
 
-    const units = await resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK);
+    const units = await resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK, BATCH);
 
     expect(units.erc721.size).toBe(0);
     expect(units.changes[0].token.decimals).toBeUndefined();
@@ -322,7 +340,7 @@ describe('resolveTokenUnits', () => {
     const { client } = stubClient(() => 'revert');
     const changes = [change(BRZ, -1n, { decimals: 1, symbol: 'BRZ' })];
 
-    const units = await resolveTokenUnits(client, changes, BLOCK);
+    const units = await resolveTokenUnits(client, changes, BLOCK, BATCH);
 
     expect(units.erc721.size).toBe(0);
     expect(units.changes).toEqual(changes);
@@ -331,7 +349,7 @@ describe('resolveTokenUnits', () => {
   it('reads a non-boolean supportsInterface answer as "not an NFT"', async () => {
     const { client } = stubClient((selector) => (selector === SUPPORTS_INTERFACE ? word(2) : word(6)));
 
-    const units = await resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK);
+    const units = await resolveTokenUnits(client, [change(AERO_POS, 1n, { symbol: 'POS' })], BLOCK, BATCH);
 
     expect(units.erc721.size).toBe(0);
     expect(units.changes[0].token.decimals).toBe(6);
@@ -348,7 +366,8 @@ describe('resolveTokenUnits', () => {
         change(ethAddress, 5n, {}), // native is measured directly, never probed
         change(AERO_POS, 1n, { decimals: 1, symbol: 'POS' }), // the only suspect
       ],
-      BLOCK
+      BLOCK,
+      BATCH
     );
 
     expect(probes.map((p) => p.to.toLowerCase())).toEqual([AERO_POS.toLowerCase()]);
@@ -365,17 +384,41 @@ describe('resolveTokenUnits', () => {
     await resolveTokenUnits(
       client,
       [change(BRZ, 1n, { decimals: 1, symbol: 'ONE' }), change(USDC, 1n, { decimals: 2, symbol: 'TWO' })],
-      BLOCK
+      BLOCK,
+      BATCH
     );
 
     expect(probes.map((p) => p.to.toLowerCase())).toEqual([BRZ.toLowerCase()]);
+  });
+
+  it('asks for the ERC-721 interface id and no other', async () => {
+    // `ERC721_QUERY` is written out in this file rather than re-encoded from the source constant,
+    // so changing the interface id under test fails here instead of agreeing with itself.
+    const { client, probes } = stubClient(() => 'revert');
+
+    await resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1, symbol: 'BRZ' })], BLOCK, BATCH);
+
+    expect(probes[0].data).toBe(ERC721_QUERY);
+  });
+
+  it('replays the batch in the block ahead of the probes', async () => {
+    // Why it matters: viem reads its own `decimals`/`tokenURI` after the batch, so a token the
+    // batch itself brings into existence answers viem but would revert on a probe against the
+    // bare base block — leaving viem's `1` in place and rendering one NFT as "0.1". Still one
+    // request; the batch just runs first inside it.
+    const { client, blocks, requestCount } = stubClient(() => word(1));
+
+    await resolveTokenUnits(client, [change(BRZ, -1n, { decimals: 1, symbol: 'BRZ' })], BLOCK, BATCH);
+
+    expect(requestCount()).toBe(1);
+    expect(blocks.map((b) => b.map((c) => c.data))).toEqual([[BATCH_CALLDATA], [ERC721_QUERY]]);
   });
 
   it('asks nothing when every token reported readable decimals', async () => {
     const { client, requestCount } = stubClient(() => word(1));
     const changes = [change(USDC, 5n, { decimals: 6, symbol: 'USDC' })];
 
-    const units = await resolveTokenUnits(client, changes, BLOCK);
+    const units = await resolveTokenUnits(client, changes, BLOCK, BATCH);
 
     expect(requestCount()).toBe(0);
     expect(units.changes).toEqual(changes);
@@ -383,7 +426,6 @@ describe('resolveTokenUnits', () => {
   });
 });
 
-const ACCOUNT = '0x1111111111111111111111111111111111111111' as Address;
 const TRANSFER_TOPIC = '0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef';
 const ETH_BALANCE = word(10n ** 18n);
 
@@ -392,10 +434,16 @@ const ETH_BALANCE = word(10n ** 18n);
  * `getBlockNumber`, viem's `traceAssetChanges` and `resolveTokenUnits` is covered rather than
  * assumed. The three `eth_simulateV1` requests are answered by ordinal: viem's log discovery,
  * viem's balance measurement (six blocks: batch, ETH post, asset post, decimals, tokenURI,
- * symbol), then ours.
+ * symbol — see `simulateCalls.js` upstream), then ours.
  *
- * The fixture is one ERC-721 with a reverting `decimals()` and an answering `tokenURI` — the
- * shape viem hands back as `decimals: 1`, which the preview must render as a count.
+ * The fixture is one ERC-721 the batch itself deploys, with a reverting `decimals()` and an
+ * answering `tokenURI` — the shape viem hands back as `decimals: 1`, which the preview must
+ * render as a count. Because it has no code at the base block, it answers our ERC-165 probe only
+ * when the batch was replayed ahead of it in the same request; a probe block on its own gets
+ * nothing, which is what rendered one NFT as "0.1".
+ *
+ * Answers are keyed off the exact calldata, not just "request 3", so a probe asking the wrong
+ * question — a different interface id, the two probe groups swapped — fails here.
  */
 function stubNode({ batchReverts = false } = {}) {
   const blockParams: unknown[] = [];
@@ -461,7 +509,17 @@ function stubNode({ batchReverts = false } = {}) {
           ];
         }
 
-        return [{ number: block, calls: blockStateCalls[0].calls.map(() => ok(word(1))) }];
+        // Ours: [batch replay, metadata probes]. A single block means the probes ran with nothing
+        // ahead of them, so the fixture's contract is not yet deployed and cannot answer.
+        const probeBlock = blockStateCalls.length - 1;
+        return blockStateCalls.map((b, i) => ({
+          number: block,
+          calls: b.calls.map((c) => {
+            if (i !== probeBlock) return ok('0x'); // the replayed batch
+            if (blockStateCalls.length === 1) return failed(); // no code at the base block
+            return (c as { data: Hex }).data === ERC721_QUERY ? ok(word(1)) : failed();
+          }),
+        }));
       },
     }),
   });
@@ -472,7 +530,7 @@ function stubNode({ batchReverts = false } = {}) {
 describe('simulateAssetChanges', () => {
   const calls = [{ to: AERO_POS as Address, data: '0x12345678' as Hex }];
 
-  it('renders a batch viem could only describe as "0.1" as a whole-token count', async () => {
+  it('renders an ERC-721 the batch deploys as a whole-token count, not "0.1"', async () => {
     const node = stubNode();
 
     const result = await simulateAssetChanges({ chainId: base.id, account: ACCOUNT, calls });

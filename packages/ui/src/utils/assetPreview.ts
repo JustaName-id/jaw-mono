@@ -141,6 +141,15 @@ function probeAnswer<T>(call: ProbeResult, decode: (data: Hex) => T): T | null {
   }
 }
 
+/** One call as `simulateAssetChanges` normalizes it, before viem widens it with `from`. */
+type NormalizedCall = { to: Address; value?: bigint | undefined; data?: Hex | undefined };
+
+/** The batch the changes were measured from, replayed ahead of the metadata probes. */
+export interface AssetBatch {
+  account: Address;
+  calls: readonly NormalizedCall[];
+}
+
 export interface ResolvedTokenUnits {
   /** `changes`, with the decimals viem left `undefined` filled in wherever they could be read. */
   changes: RawAssetChange[];
@@ -162,8 +171,15 @@ export interface ResolvedTokenUnits {
  *
  * Only those two shapes are suspects, so a batch of tokens with readable non-1 decimals asks
  * nothing extra. When it does ask, every probe rides in one `eth_simulateV1` — one request
- * whatever the candidate count — simulated on top of the block the balances were measured
- * against, with nothing ahead of it in that block to move state.
+ * whatever the candidate count — with `batch` replayed in the block ahead of them.
+ *
+ * That replay is what makes the answers match the amounts. viem reads its own `decimals` and
+ * `tokenURI` *after* the batch has run, so a token the batch itself brings into existence —
+ * deployed in the batch, or a proxy the batch initializes — answers viem and would revert on a
+ * probe against the base block. viem then reports `decimals: 1` (its `tokenURI` answered) while
+ * ERC-165 finds no code, and the NFT renders as "0.1": the exact defect this function exists to
+ * remove. Replaying costs the batch's execution a third time and nothing else — `blockNumber` is
+ * pinned, so the replay cannot diverge from the run the balances came from.
  *
  * A suspect viem reported as `1` is asked only the interface question. Its `1` is either a real
  * `decimals()` reading or viem's `?? 1` standing in for an NFT whose `tokenURI` answered, and
@@ -179,7 +195,8 @@ export interface ResolvedTokenUnits {
 export async function resolveTokenUnits(
   client: Client,
   changes: readonly RawAssetChange[],
-  blockNumber: bigint
+  blockNumber: bigint,
+  batch: AssetBatch
 ): Promise<ResolvedTokenUnits> {
   const suspects = changes.filter(
     (c) =>
@@ -198,17 +215,28 @@ export async function resolveTokenUnits(
   const decimalsData = encodeFunctionData({ abi: erc20DecimalsAbi, functionName: 'decimals' });
   // Raw calldata rather than `simulateBlocks`' `abi` shortcut: that shortcut decodes inside the
   // action, where a throw escapes as a node error and takes every other probe with it.
-  const [block] = await simulateBlocks(client, {
+  const [, block] = await simulateBlocks(client, {
     blockNumber,
     blocks: [
+      { calls: batch.calls.map((c) => ({ ...c, from: batch.account })) },
       {
+        // `from` is the account for the same reason the replay is here: these are the units the
+        // amounts are rendered in, so they are read as the account would read them.
         calls: [
-          ...suspects.map((c) => ({ to: c.token.address as Address, data: supportsInterfaceData })),
-          ...unknownDecimals.map((c) => ({ to: c.token.address as Address, data: decimalsData })),
+          ...suspects.map((c) => ({
+            from: batch.account,
+            to: c.token.address as Address,
+            data: supportsInterfaceData,
+          })),
+          ...unknownDecimals.map((c) => ({ from: batch.account, to: c.token.address as Address, data: decimalsData })),
         ],
       },
     ],
   });
+  // Every other "no answer" here is a contract's own, and is read as one (see `probeAnswer`). A
+  // node that returns fewer blocks than it was asked for is not that, so it must not read as a
+  // batch of silent tokens — it rejects, and the caller shows its fallback.
+  if (!block) throw new Error('eth_simulateV1 returned no metadata probe block');
 
   const erc721 = new Set<string>();
   const recovered = new Map<string, number>();
@@ -257,8 +285,8 @@ export async function resolveTokenUnits(
  * they cannot fold into a Multicall3. Four of those are *serial*, up from two, and that depth
  * is what the confirm screen waits on — the `N` pre-balance probes are parallel and nearly
  * free by comparison. Shrinking it is upstream's; what is ours is resolving the block once and
- * handing it to viem, so nothing here refetches it and the metadata probes read the same state
- * the balances were measured against.
+ * handing it to viem, so nothing here refetches it and every simulation starts from the same
+ * base block.
  */
 export async function simulateAssetChanges({
   chainId,
@@ -291,6 +319,9 @@ export async function simulateAssetChanges({
   const failed = results.find((r) => r.status !== 'success');
   if (failed) return { deltas: [], willRevert: true, revertCause: classifyRevert(failed.error) };
 
-  const { changes, erc721 } = await resolveTokenUnits(client, assetChanges, blockNumber);
+  const { changes, erc721 } = await resolveTokenUnits(client, assetChanges, blockNumber, {
+    account,
+    calls: normalizedCalls,
+  });
   return { deltas: mapAssetChanges(changes, erc721), willRevert: false };
 }
