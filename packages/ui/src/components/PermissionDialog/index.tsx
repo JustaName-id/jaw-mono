@@ -281,9 +281,9 @@ export const PermissionDialog = ({
 
           <div ref={scrollRef} className="jaw-scroll min-h-0 flex-1 space-y-3 overflow-y-auto px-6 pb-3 pt-6">
             {missingCalls && (
-              <div className="rounded-box flex items-start gap-2 bg-amber-500/10 p-3">
-                <TriangleAlert className="mt-px size-3.5 flex-none text-amber-500" strokeWidth={2} />
-                <p className="text-body-sm text-amber-600 dark:text-amber-500">
+              <div className="rounded-box bg-warning/10 flex items-start gap-2 p-3">
+                <TriangleAlert className="text-warning mt-px size-3.5 flex-none" strokeWidth={2} />
+                <p className="text-body-sm text-warning">
                   This permission has no allowed calls. A grant needs at least one call rule, so spend limits alone
                   can't be granted.
                 </p>

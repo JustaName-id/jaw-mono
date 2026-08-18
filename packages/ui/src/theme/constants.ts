@@ -35,6 +35,13 @@ export const DEFAULT_LIGHT_PALETTE: Readonly<Record<string, string>> = Object.fr
   '--jaw-color-warning-foreground': '0.205 0 0',
   '--jaw-color-info': '0.623 0.214 259.815',
   '--jaw-color-info-foreground': '0.985 0 0',
+  // New tokens pinned to the exact literals they replaced, so the stock look is unchanged.
+  '--jaw-color-positive': '0.8003 0.1821 151.711',
+  '--jaw-color-negative': '0.7106 0.1661 22.216',
+  '--jaw-color-scrim': '0 0 0',
+  '--jaw-color-halo': '0.9608 0.0058 264.532',
+  '--jaw-color-identicon-tile': '0.9666 0.0026 106.449',
+  '--jaw-color-shadow': '0 0 0',
 });
 
 // ---------------------------------------------------------------------------
@@ -68,6 +75,14 @@ export const DEFAULT_DARK_PALETTE: Readonly<Record<string, string>> = Object.fre
   '--jaw-color-warning-foreground': '0.920 0.150 80',
   '--jaw-color-info': '0.623 0.214 259.815',
   '--jaw-color-info-foreground': '0.985 0 0',
+  // New tokens pinned to the exact literals they replaced (same in both modes,
+  // matching the previous hardcoded classes), so the stock look is unchanged.
+  '--jaw-color-positive': '0.8003 0.1821 151.711',
+  '--jaw-color-negative': '0.7106 0.1661 22.216',
+  '--jaw-color-scrim': '0 0 0',
+  '--jaw-color-halo': '0.9608 0.0058 264.532',
+  '--jaw-color-identicon-tile': '0.9666 0.0026 106.449',
+  '--jaw-color-shadow': '0 0 0',
 });
 
 // ---------------------------------------------------------------------------

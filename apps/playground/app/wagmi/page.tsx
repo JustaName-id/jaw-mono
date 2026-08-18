@@ -556,9 +556,11 @@ function WagmiPageContent({
           </Card>
         )}
 
-        {/* AppSpecific: manual picker (applied via ReactUIHandler). CrossPlatform
-            auto-derives the theme from the playground's own tokens (see effect). */}
-        {mode === Mode.AppSpecific && <ThemePicker theme={theme} onThemeChange={onThemeChange} />}
+        {/* Manual picker for both modes: AppSpecific applies via ReactUIHandler,
+            CrossPlatform pushes to the keys dialog via connector.setTheme. Until
+            the user picks something, CrossPlatform auto-derives the theme from
+            the playground's own tokens (see effect in WagmiPageInner). */}
+        <ThemePicker theme={theme} onThemeChange={onThemeChange} />
 
         {/* Connection Status */}
         <Card className="p-4">
@@ -754,14 +756,19 @@ function WagmiPageInner() {
   // stale `{mode:'auto'}` that the later update never re-delivers.
   const [theme, setTheme] = useState<JawTheme | null>(null);
 
+  // CrossPlatform only: a manual ThemePicker change pauses the auto-derive
+  // below; picking "Default" resumes it.
+  const [themeCustomized, setThemeCustomized] = useState(false);
+
   // CrossPlatform: derive the JAW theme from the playground's OWN design
   // tokens so the embedded keys dialog matches the app automatically (theme
-  // sync). AppSpecific keeps the manual ThemePicker. We read the mode from the
-  // DOM (the `dark` class on <html>) and re-derive whenever it changes, so the
-  // dialog always tracks how the playground actually renders.
+  // sync) — until the user picks a theme manually. AppSpecific is always
+  // ThemePicker-driven. We read the mode from the DOM (the `dark` class on
+  // <html>) and re-derive whenever it changes, so the dialog always tracks how
+  // the playground actually renders.
   useEffect(() => {
-    if (mode !== Mode.CrossPlatform) {
-      // AppSpecific: initialise once, then let the ThemePicker drive it.
+    if (mode !== Mode.CrossPlatform || themeCustomized) {
+      // ThemePicker-driven: initialise once, then let the picker drive it.
       setTheme((current) => current ?? { mode: 'auto' });
       return;
     }
@@ -770,7 +777,27 @@ function WagmiPageInner() {
     const observer = new MutationObserver(update);
     observer.observe(document.documentElement, { attributes: true, attributeFilter: ['class'] });
     return () => observer.disconnect();
-  }, [mode]);
+  }, [mode, themeCustomized]);
+
+  const handleThemeChange = useCallback(
+    (next: JawTheme) => {
+      if (mode !== Mode.CrossPlatform) {
+        setTheme(next);
+        return;
+      }
+      // "Default" (nothing customized) hands control back to the auto-derive.
+      const isDefault =
+        (next.mode ?? 'auto') === 'auto' &&
+        !next.accentColor &&
+        !next.colors &&
+        !next.cssVariables &&
+        !next.borderRadius &&
+        !next.fontStack;
+      setThemeCustomized(!isDefault);
+      setTheme(isDefault ? derivePlaygroundTheme() : next);
+    },
+    [mode]
+  );
 
   const handlePaymasterApply = (config: PaymasterApplyConfig | null) => {
     if (config) {
@@ -807,7 +834,7 @@ function WagmiPageInner() {
         pmConfig={pmConfig}
         onPaymasterApply={handlePaymasterApply}
         theme={theme}
-        onThemeChange={setTheme}
+        onThemeChange={handleThemeChange}
       />
     </WagmiProviders>
   );

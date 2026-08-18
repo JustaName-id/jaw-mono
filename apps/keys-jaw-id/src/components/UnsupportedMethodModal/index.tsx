@@ -51,13 +51,8 @@ export const UnsupportedMethodModal = ({
 
         {/* Error Icon */}
         <div className="mb-6 flex justify-center">
-          <div className="flex h-16 w-16 items-center justify-center rounded-full bg-amber-100 dark:bg-amber-900/30">
-            <svg
-              className="h-8 w-8 text-amber-600 dark:text-amber-400"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
+          <div className="bg-warning/15 flex h-16 w-16 items-center justify-center rounded-full">
+            <svg className="text-warning h-8 w-8" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path
                 strokeLinecap="round"
                 strokeLinejoin="round"

@@ -48,7 +48,7 @@ function AssetRow({
 }) {
   const out = delta.direction === 'out';
   const sign = out ? '−' : '+';
-  const colorClass = out ? 'text-red-400' : 'text-green-400';
+  const colorClass = out ? 'text-negative' : 'text-positive';
   const symbol = symbolFor(delta, nativeSymbol);
   const rounded = formatAssetAmount(delta.amountFormatted);
   const hasMore = rounded !== delta.amountFormatted;
@@ -130,7 +130,7 @@ function DeltaColumn({
   return (
     <div className="border-border rounded-box min-w-0 flex-1 overflow-hidden border">
       <div className="border-border/40 bg-secondary/40 flex items-center gap-2 border-b p-3">
-        <Arrow className={`size-3 flex-none ${out ? 'text-red-400' : 'text-green-400'}`} strokeWidth={2.7} />
+        <Arrow className={`size-3 flex-none ${out ? 'text-negative' : 'text-positive'}`} strokeWidth={2.7} />
         <span className="text-foreground text-heading">
           {/* Under a permission the funds move from the granter, not the signer reading this —
               the subject is dropped and the "On behalf of" row above says whose they are. */}

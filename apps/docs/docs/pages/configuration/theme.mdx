@@ -12,7 +12,7 @@ Theming applies to **both** authentication modes. Pass `theme` in the constructo
 - **AppSpecific** — dialogs are rendered by `ReactUIHandler` inside your app and themed directly in the host DOM.
 - **CrossPlatform** — the theme rides the connection handshake to the keys.jaw.id dialog (embedded iframe or popup), so it re-themes to match your app instead of using its own default styling.
 
-The simple props and `cssVariables` overrides below work in both modes. The Layer 3 raw-CSS escape hatch only reaches **AppSpecific** dialogs, since the cross-platform dialog runs in a separate origin.
+The simple props and the semantic `colors` palette below work in both modes. The Layer 3 raw-CSS escape hatch only reaches **AppSpecific** dialogs, since the cross-platform dialog runs in a separate origin.
 :::
 
 ## Quick Start
@@ -59,7 +59,7 @@ const jaw = JAW.create({
 | `accentColorForeground` | `string`                          | auto-detected | Text color on accent backgrounds. Auto-detected from luminance if omitted.       |
 | `borderRadius`          | `'sm' \| 'md' \| 'lg'`            | `'md'`        | Corner rounding for cards, buttons, and inputs.                                  |
 | `fontStack`             | `'system' \| 'rounded' \| 'mono'` | `'system'`    | Font family preset.                                                              |
-| `cssVariables`          | `Record<string, string>`          | —             | Granular CSS variable overrides (see below).                                     |
+| `colors`                | `JawThemeColors`                  | —             | Semantic palette overrides as plain hex colors (see below).                      |
 
 ## Three Layers of Customization
 
@@ -78,36 +78,47 @@ const jaw = JAW.create({
 });
 ```
 
-### Layer 2: CSS Variable Overrides
+### Layer 2: Semantic Colors (full re-skins)
 
-For precise control, override individual CSS variables. These take highest priority.
+For a complete custom look, pass a `colors` palette — every value is an ordinary hex color. Any key you omit keeps its default, and explicit colors win over `accentColor`.
 
 ```typescript
 const jaw = JAW.create({
   apiKey: 'your-api-key',
   theme: {
     mode: 'dark',
-    accentColor: '#7b3fe4',
-    cssVariables: {
-      // Colors are bare OKLCH channels — `L C H`, no `oklch()` wrapper. The SDK wraps them
-      // as `oklch(var(--x) / <alpha-value>)` so opacity modifiers work. A complete color
-      // (`oklch(...)`, `hsl(...)`, hex) produces invalid CSS and is ignored, with a console warning.
-      '--jaw-color-background': '0.15 0.02 280',
-      '--jaw-color-card': '0.20 0.02 280',
-      '--jaw-font-family': '"Berkeley Mono", monospace',
+    borderRadius: 'lg',
+    colors: {
+      background: '#0E2F28',
+      card: '#123A31',
+      foreground: '#ECFDF5',
+      primary: '#34E3A0',
+      primaryForeground: '#052E22',
+      muted: '#17453B',
+      mutedForeground: '#93C0B1',
+      border: '#1F5449',
+      // Status colors are themeable too
+      warning: '#F5C24B',
+      positive: '#34E3A0',
+      negative: '#F0836E',
     },
   },
 });
 ```
 
+The full list of keys is in the [Color Reference](#color-reference) below.
+
+:::note
+`colors` works in **both modes** and every key is overridable.
+:::
+
 ### Layer 3: Raw CSS (escape hatch)
 
-Target `[data-jaw-modal-container]` in your own CSS. No SDK changes needed. This only applies to **AppSpecific** mode — the cross-platform dialog is served from keys.jaw.id in a separate origin, so use simple props or `cssVariables` to theme it.
+Target `[data-jaw-modal-container]` in your own CSS. No SDK changes needed. This only applies to **AppSpecific** mode — the cross-platform dialog is served from keys.jaw.id in a separate origin, so use the simple props or `colors` to theme it.
 
 ```css
 [data-jaw-modal-container] {
-  /* Bare OKLCH channels, no `oklch()` wrapper — this path bypasses the SDK, so nothing
-     unwraps it for you. A wrapped value nests to `oklch(oklch(...) / 1)` and is dropped. */
+  /* Color variables take bare OKLCH channels ("L C H"), not oklch(...) or hex */
   --jaw-color-primary: 0.65 0.25 270;
   --jaw-color-background: 0.12 0.01 260;
   font-family: 'Inter', sans-serif;
@@ -180,62 +191,52 @@ jaw?.setTheme?.({ mode: 'dark', accentColor: '#6366f1' });
 
 :::
 
-## Available CSS Variables
+## Color Reference
 
-Use these with `cssVariables` for granular overrides. All values use the [OKLCH](https://developer.mozilla.org/en-US/docs/Web/CSS/color_value/oklch) color space.
+Every key you can set in `colors`, with the CSS variable it maps to (only needed for the raw-CSS escape hatch).
 
-### Colors
+| Key                     | CSS variable                         | Description                           |
+| ----------------------- | ------------------------------------ | ------------------------------------- |
+| `background`            | `--jaw-color-background`             | Dialog backdrop                       |
+| `foreground`            | `--jaw-color-foreground`             | Primary text                          |
+| `card`                  | `--jaw-color-card`                   | Card/section backgrounds              |
+| `cardForeground`        | `--jaw-color-card-foreground`        | Card text                             |
+| `popover`               | `--jaw-color-popover`                | Popover backgrounds                   |
+| `popoverForeground`     | `--jaw-color-popover-foreground`     | Popover text                          |
+| `primary`               | `--jaw-color-primary`                | Buttons, links, key actions           |
+| `primaryForeground`     | `--jaw-color-primary-foreground`     | Text on primary backgrounds           |
+| `secondary`             | `--jaw-color-secondary`              | Secondary backgrounds                 |
+| `secondaryForeground`   | `--jaw-color-secondary-foreground`   | Secondary text                        |
+| `muted`                 | `--jaw-color-muted`                  | Muted/disabled backgrounds            |
+| `mutedForeground`       | `--jaw-color-muted-foreground`       | Muted text                            |
+| `accent`                | `--jaw-color-accent`                 | Hover/active state backgrounds        |
+| `accentForeground`      | `--jaw-color-accent-foreground`      | Accent text                           |
+| `border`                | `--jaw-color-border`                 | Borders and dividers                  |
+| `input`                 | `--jaw-color-input`                  | Input field borders                   |
+| `ring`                  | `--jaw-color-ring`                   | Focus ring color                      |
+| `destructive`           | `--jaw-color-destructive`            | Error/danger backgrounds              |
+| `destructiveForeground` | `--jaw-color-destructive-foreground` | Error/danger text                     |
+| `destructiveHover`      | `--jaw-color-destructive-hover`      | Destructive button hover state        |
+| `success`               | `--jaw-color-success`                | Success state                         |
+| `successForeground`     | `--jaw-color-success-foreground`     | Success text                          |
+| `warning`               | `--jaw-color-warning`                | Warning state                         |
+| `warningForeground`     | `--jaw-color-warning-foreground`     | Warning text                          |
+| `info`                  | `--jaw-color-info`                   | Info state                            |
+| `infoForeground`        | `--jaw-color-info-foreground`        | Info text                             |
+| `positive`              | `--jaw-color-positive`               | Incoming asset amounts ("You get")    |
+| `negative`              | `--jaw-color-negative`               | Outgoing asset amounts ("You send")   |
+| `scrim`                 | `--jaw-color-scrim`                  | Modal overlay backdrop                |
+| `halo`                  | `--jaw-color-halo`                   | Animated edge glow on the dialog card |
+| `identiconTile`         | `--jaw-color-identicon-tile`         | Tile behind account identicons        |
+| `shadow`                | `--jaw-color-shadow`                 | Elevation shadow color                |
 
-Color tokens hold bare OKLCH channels (`L C H`), not a complete `oklch(...)` color — the SDK
-wraps them so opacity modifiers like `bg-primary/90` work. Non-color tokens (`--jaw-radius`,
-`--jaw-font-family`) take ordinary CSS values.
-
-| Variable                             | Description                    |
-| ------------------------------------ | ------------------------------ |
-| `--jaw-color-background`             | Dialog backdrop                |
-| `--jaw-color-foreground`             | Primary text                   |
-| `--jaw-color-card`                   | Card/section backgrounds       |
-| `--jaw-color-card-foreground`        | Card text                      |
-| `--jaw-color-primary`                | Buttons, links, focus rings    |
-| `--jaw-color-primary-foreground`     | Text on primary backgrounds    |
-| `--jaw-color-secondary`              | Secondary backgrounds          |
-| `--jaw-color-secondary-foreground`   | Secondary text                 |
-| `--jaw-color-muted`                  | Muted/disabled backgrounds     |
-| `--jaw-color-muted-foreground`       | Muted text                     |
-| `--jaw-color-accent`                 | Hover/active state backgrounds |
-| `--jaw-color-accent-foreground`      | Accent text                    |
-| `--jaw-color-border`                 | Borders and dividers           |
-| `--jaw-color-input`                  | Input field borders            |
-| `--jaw-color-ring`                   | Focus ring color               |
-| `--jaw-color-destructive`            | Error/danger backgrounds       |
-| `--jaw-color-destructive-foreground` | Error/danger text              |
-| `--jaw-color-success`                | Success state                  |
-| `--jaw-color-success-foreground`     | Success text                   |
-| `--jaw-color-warning`                | Warning state                  |
-| `--jaw-color-warning-foreground`     | Warning text                   |
-| `--jaw-color-info`                   | Info state                     |
-| `--jaw-color-info-foreground`        | Info text                      |
-
-### Layout
-
-| Variable            | Description                          |
-| ------------------- | ------------------------------------ |
-| `--jaw-radius`      | Base border radius (e.g. `0.625rem`) |
-| `--jaw-font-family` | Font family string                   |
+Border radius and font come from the `borderRadius` and `fontStack` props (CSS variables `--jaw-radius` and `--jaw-font-family`).
 
 ## How Accent Color Works
 
-When you set `accentColor`, the SDK:
+When you set `accentColor`, the SDK colors the primary buttons, links, hover tints, and focus rings from it, and picks a contrasting text color automatically. Dark accents are lightened slightly in dark mode for visibility.
 
-1. Converts your hex color to OKLCH color space
-2. Sets it as `--jaw-color-primary` (buttons, links)
-3. Auto-detects a contrasting foreground color (light text for dark accents, dark text for light accents)
-4. Derives a subtle tint for hover states (`--jaw-color-accent`)
-5. Creates a desaturated variant for focus rings (`--jaw-color-ring`)
-
-In dark mode, dark accent colors are automatically lightened for better visibility.
-
-To override the auto-detected foreground, pass `accentColorForeground`:
+To override the auto-picked text color, pass `accentColorForeground`:
 
 ```typescript
 theme: {
